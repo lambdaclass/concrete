@@ -1,0 +1,12 @@
+// Ignored-result (Phase 6 #13): an `Option` produced by a statement expression is
+// silently discarded. Expected: rejected with E0286.
+mod m {
+    fn maybe(x: i32) -> Option<i32> {
+        if x > 0 { return Option::<i32>::Some { value: x }; }
+        return Option::<i32>::None {};
+    }
+    fn main() -> Int {
+        maybe(5);
+        return 0;
+    }
+}

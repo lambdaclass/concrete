@@ -1,0 +1,15 @@
+// Ignored-result (Phase 6 #13): handling the result with a `match` is not a
+// discard, so no diagnostic fires. Expected: compiles, prints 7.
+mod m {
+    fn maybe(x: i32) -> Option<i32> {
+        if x > 0 { return Option::<i32>::Some { value: x }; }
+        return Option::<i32>::None {};
+    }
+    fn main() -> Int {
+        match maybe(5) {
+            Option::Some { value } => { let _ = value; }
+            Option::None {} => {}
+        }
+        return 7;
+    }
+}

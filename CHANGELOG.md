@@ -10,6 +10,38 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Ignored-result diagnostics — discarding a fallible result is an error (2026-06-27)
+
+Phase 6 #13 (`docs/IGNORED_RESULT.md`). A `;`-terminated statement expression
+whose value is a fallible result — `Result<…>` or `Option<…>` — silently threw
+the value away, ignoring a possible failure/absence. That discard is now
+rejected with **E0286** unless explicitly acknowledged.
+
+- **The rule** (`Concrete/Check.lean`): `mustUseEnumName?` marks `Result`/`Option`
+  as must-use; `checkStmt`'s `Stmt.expr` case emits E0286 when such a value is
+  discarded (`isValue := false`). A trailing value expression (no `;`) flows out
+  as the block's value and is never flagged. This closes the daily-workflow twin
+  of linearity: the linear checker already caught a *named* value never consumed
+  (E0208); the gap was an *unnamed temporary* from a call, dropped on the floor.
+- **The acknowledgement**: `let _ = expr;` — explicit, greppable, auditable.
+  Implemented in the `letDecl` case: binding to `_` drops the value without a
+  live linear obligation, **except** for a `Destroy` type, which must still be
+  released with `destroy(…)` (so `let _ =` can never silence a leaked resource —
+  `let _ = open();` still errors E0208). `let _ = v;` also consumes an existing
+  linear `v`, so it is a true drop, not a dangling binding.
+- **Found real discards**: the sweep caught `vec_pop` results dropped on purpose
+  in `examples/vm/main.con` (the VM's POP/ADD/… opcodes) and a `truncate` loop in
+  `tests/programs/integration_data_structures.con` — all fixed to `let _ = …`.
+- **Gate**: `scripts/tests/check_ignored_result.sh` (Makefile `test-ignored-result`
+  + CI) over `tests/programs/ignored_result/` — discard rejected (E0286),
+  acknowledged/handled/non-must-use/value-position accepted, and the soundness
+  guard that `let _ =` does not silence a `Destroy` resource (E0208).
+
+With this, the Phase 6 roadmap's fully-shipped items (#1–#7, #10, #11, #13, #16,
+#17, #19, #33, #35a, #36) are folded out of the active list into a one-line index
+at the top of the phase; only deferred-with-pull-condition decisions and unbuilt
+tooling remain.
+
 ### Phase 6 Tier A sweep: style guide, memory model, target-conditional (2026-06-27)
 
 Three roadmap items closed by decision/doc/gate, shrinking Phase 6 without

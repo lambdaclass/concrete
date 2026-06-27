@@ -155,6 +155,10 @@ inductive CheckError where
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
   | intLiteralOutOfRange (value : Int) (tyName : String) (lo : Int) (hi : Int)
+  -- A `Result`/`Option` value produced by a statement expression (`expr;`) is
+  -- silently discarded. Phase 6 #13: discarding a fallible result is an error
+  -- unless explicitly acknowledged with `let _ = expr;`.
+  | discardedMustUse (tyName : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -239,6 +243,7 @@ def CheckError.message : CheckError → String
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -256,6 +261,7 @@ def CheckError.hint : CheckError → Option String
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
+  | .discardedMustUse _ => some "handle it (match / `?` / pass it on), or write `let _ = …;` to discard it explicitly"
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
@@ -345,6 +351,7 @@ def CheckError.code : CheckError → String
   | .reservedName _ => "E0283"
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"
+  | .discardedMustUse _ => "E0286"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -405,6 +412,16 @@ private def tyToString : Ty → String
   | .heap inner => "Heap<" ++ tyToString inner ++ ">"
   | .heapArray inner => "HeapArray<" ++ tyToString inner ++ ">"
   | .placeholder => "<unknown>"
+
+/-- Must-use types whose silent discard is flagged (Phase 6 #13). The canonical
+    fallible results — `Result<…>` and `Option<…>`, however spelled (`.named` when
+    written without type arguments, `.generic` with them). A discarded statement
+    expression of one of these types ignores a possible failure/absence, so it is
+    an error unless explicitly acknowledged. -/
+def mustUseEnumName? : Ty → Option String
+  | .named n => if n == resultEnumName || n == optionEnumName then some n else none
+  | .generic n _ => if n == resultEnumName || n == optionEnumName then some n else none
+  | _ => none
 
 /-- Is this a signed integer type? -/
 def isSignedInt : Ty → Bool
@@ -2179,17 +2196,36 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let finalTy ← match ty with
       | some t => resolveType t
       | none => pure valTy
-    addVar name finalTy mutable (declSpan := some stmt.getSpan)
-    match value with
-    | .borrow _ (.ident _ sourceName) =>
-      modify fun env =>
-        { env with vars := env.vars.map fun (n, info) =>
-            if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-    | .borrowMut _ (.ident _ sourceName) =>
-      modify fun env =>
-        { env with vars := env.vars.map fun (n, info) =>
-            if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-    | _ => pure ()
+    -- `let _ = expr;` is the explicit, auditable acknowledgement that a value is
+    -- intentionally discarded (Phase 6 #13). Binding to the wildcard `_` drops the
+    -- value without registering a live linear obligation — EXCEPT for types that
+    -- implement Destroy, which must still be released with destroy() so a dropped
+    -- resource is never silenced by `_`. Every other binder is tracked as usual.
+    if name == "_" then
+      let typeName := match finalTy with | .named n => n | .generic n _ => n | _ => ""
+      let hasDestroy ← if typeName == "" then pure false
+                       else do pure (← lookupFn (destroyFnNameFor typeName)).isSome
+      if hasDestroy then
+        -- A resource must be released explicitly; `_` does not silence Destroy.
+        addVar name finalTy mutable (declSpan := some stmt.getSpan)
+      else
+        -- Acknowledged discard: if the discarded value is an existing linear
+        -- variable, consume it so `let _ = v;` truly drops `v` (no-op for Copy).
+        match value with
+        | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
+        | _ => pure ()
+    else
+      addVar name finalTy mutable (declSpan := some stmt.getSpan)
+      match value with
+      | .borrow _ (.ident _ sourceName) =>
+        modify fun env =>
+          { env with vars := env.vars.map fun (n, info) =>
+              if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+      | .borrowMut _ (.ident _ sourceName) =>
+        modify fun env =>
+          { env with vars := env.vars.map fun (n, info) =>
+              if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+      | _ => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
@@ -2226,8 +2262,17 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
   | .return_ _ none =>
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
-  | .expr _ e _ =>
-    let _ ← checkExpr e
+  | .expr _ e isValue =>
+    let eTy ← checkExpr e
+    -- Phase 6 #13: a `;`-terminated statement expression (`isValue := false`)
+    -- discards its value. If that value is a fallible result (`Result`/`Option`),
+    -- the discard silently throws away a possible failure/absence — flag it. A
+    -- trailing value expression (`isValue := true`) is the block's value, not a
+    -- discard, so it is never flagged.
+    if !isValue then
+      match mustUseEnumName? eTy with
+      | some _ => throwCheck (.discardedMustUse (tyToString eTy)) (some stmt.getSpan)
+      | none => pure ()
     pure ()
   | .ifElse _ cond thenBody elseBody =>
     let _condTy ← checkExpr cond

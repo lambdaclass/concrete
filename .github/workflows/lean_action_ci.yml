@@ -359,6 +359,9 @@ jobs:
       - name: defer gate (Phase 6 #7 — LIFO cleanup on every exit path)
         run: bash scripts/tests/check_defer.sh
 
+      - name: Ignored-result gate (Phase 6 #13 — discarded Result/Option rejected unless acknowledged)
+        run: bash scripts/tests/check_ignored_result.sh
+
       - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
         run: bash scripts/tests/check_no_macros.sh
 

@@ -1,0 +1,13 @@
+// Ignored-result (Phase 6 #13) soundness guard: `let _ =` is an acknowledged drop
+// for plain data, but it must NOT silence a resource that implements Destroy — a
+// leak still has to be released explicitly with destroy(). Expected: rejected with
+// E0208 (linear variable never consumed), NOT silently accepted.
+mod m {
+    struct File { fd: i32 }
+    impl Destroy for File { fn destroy(self) { } }
+    fn open() -> File { return File { fd: 3 }; }
+    fn main() -> Int {
+        let _ = open();
+        return 0;
+    }
+}

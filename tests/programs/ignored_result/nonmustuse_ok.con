@@ -1,0 +1,9 @@
+// Ignored-result (Phase 6 #13): discarding a non-must-use value (a plain integer)
+// is harmless and must NOT be flagged. Expected: compiles, prints 7.
+mod m {
+    fn compute(x: i32) -> i32 { return x + 1; }
+    fn main() -> Int {
+        compute(5);
+        return 7;
+    }
+}

@@ -298,36 +298,48 @@ keeps grammar/control-flow ergonomics, daily commands, examples, docs, linting,
 profiling, and editor-adjacent usability separate from the smaller core-slab
 gate.
 
-1. Add `concrete fmt`: stable formatting for source files, examples, docs
-   snippets, and generated fixtures. Formatting must not churn semantic
-   fingerprints.
-   STATUS (2026-06-21, done + gated): the formatter (Concrete/Format.lean) is
-   promoted from the legacy `--fmt` flag to a real `concrete fmt` subcommand —
-   `concrete fmt <file>` (stdout), `--check` (exit nonzero if reformatting would
-   change the file), `--write` (rewrite in place), `--stdin` (stdin→stdout). The
-   legacy `--fmt` flag is kept (golden baselines use it) and documented as
-   deprecated. Gated by `scripts/tests/check_concrete_fmt.sh` (Makefile
-   `test-concrete-fmt` + CI): tool contract (stdout/--check/--write idempotence/
-   --stdin), and the load-bearing property that formatting is SEMANTICS-PRESERVING
-   — `--report fingerprints` is byte-identical before/after formatting, so running
-   `fmt` cannot invalidate proof links/manifests. This is CLI promotion only; the
-   broader CLI normalization (init/new/clean, help/exit-code matrix) stays in #28.
-2. Add `docs/GRAMMAR.md`: LL(1) grammar, reserved keywords, attribute syntax,
-   contract syntax, `ghost`/`assert`/`assume`, iteration syntax, and negative
-   parser fixtures. This is a syntax reference, not a language-design
-   committee. As part of this grammar pass, model the distinction between
-   expression statements (`expr;`) and trailing value expressions in
-   blocks/match arms.
-   DONE (2026-06-23): the canonical grammar is `grammar/concrete.ebnf` (LL(1),
-   verified by three independent checkers — `scripts/check_ll1.{py,c,rs}` — in
-   CI). It was brought back in sync with the parser for this session's syntax
-   (range patterns, OR patterns, match guards, `if let`/`while let`, struct
-   functional update `..base`, field punning). `docs/GRAMMAR.md` is the reference
-   page: it points at the canonical EBNF and indexes reserved keywords, attribute
-   syntax (fixed compiler set; no user attrs/macros — see MACRO_STANCE.md),
-   contract/`ghost`/`assert`/`assume` syntax, and the negative-parser-fixture
-   gates. The statement-vs-trailing-expression distinction is implemented (#36:
-   `isValue` on `Stmt.expr`/`CStmt.expr`; fixes the spurious E0225 class).
+### Completed in Phase 6 (folded out of the active list)
+
+Fully done + gated; kept here as a one-line index. See CHANGELOG.md and the
+linked docs/gates for detail. Decisions that are *deferred with a pull-condition*
+(e.g. #9, #15, #26, #27) stay in the active list below — only fully-shipped items
+are folded out.
+
+- **#1 `concrete fmt`** — subcommand, semantics-preserving (fingerprints
+  byte-identical across format). `check_concrete_fmt.sh`.
+- **#2 grammar** — canonical `grammar/concrete.ebnf` (LL(1), 3 checkers) +
+  `docs/GRAMMAR.md`.
+- **#3 type aliases** — transparent, deeply expanded; `docs/TYPE_ALIASES.md`,
+  `check_type_alias.sh`.
+- **#4 loop control** — `break`/`continue`/labels/while-expr value + linear
+  cleanup; `docs/LOOP_CONTROL.md`, `check_loop_control.sh`.
+- **#5 pattern ergonomics** — ranges, `if let`/`while let`, guards, OR-patterns,
+  match-on-`&T`, struct update `..base`, `_` in destructuring. No anonymous
+  tuples and nested patterns deferred (workload-gated). `docs/PATTERN_ERGONOMICS.md`.
+- **#6 numeric model** — de-facto integer model locked; out-of-range literals
+  rejected (E0227). Literal suffixes deferred. `check_numeric_literals.sh`.
+- **#7 `defer`** — LIFO, runs on every exit path; block-form rejected.
+  `docs/DEFER.md`, `check_defer.sh`.
+- **#10 build profiles + checked arithmetic** — `--profile`, full checked
+  `+ - * / % << >>` with trapping, `wrapping_*`/`saturating_*`, float→int H2
+  closed, `--report arithmetic`. `docs/ARITHMETIC_POLICY.md` + the arith gates.
+- **#11 macro stance** — permanent decision: no v1 macros. `docs/MACRO_STANCE.md`,
+  `check_no_macros.sh`.
+- **#13 ignored-result diagnostics** — discarding a `Result`/`Option` statement
+  is E0286 unless acknowledged with `let _ = …;`; `let _` does not silence a
+  `Destroy` resource. `docs/IGNORED_RESULT.md`, `check_ignored_result.sh`.
+- **#16 style guide** — `docs/STYLE.md` (advisory; mechanical layout owned by
+  `concrete fmt`).
+- **#17 iteration protocol** — blessed traversal forms, no `Iterator` trait;
+  `docs/ITERATION_PROTOCOL.md`.
+- **#19 stdlib handoff** — required surfaces stable/provisional, none blocked;
+  `docs/STDLIB_HANDOFF.md`, `check_stdlib_handoff.sh`.
+- **#33 memory model** — user-facing narrative; "no uninitialized reads" is a
+  grammar-level guarantee. `docs/MEMORY_MODEL.md`, `check_memory_model.sh`.
+- **#35a semantic-darkness / red-team gate** — `check_phase6_redteam.sh`.
+- **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
+  `docs/STATEMENT_EXPRESSION_MODEL.md`.
+
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
    a namespace gap: if two imported modules export the same public name, the
@@ -346,252 +358,6 @@ gate.
    proved_by_lean)`: aliases never grant authority, and a dependency capability
    or evidence widening must remain a build/audit fact rather than being hidden
    by the alias.
-3. Add plain type aliases before the larger stdlib/examples slab:
-   `type Digest = [u8; 32]`, `type Tag = [u8; 16]`, etc. Aliases must be
-   transparent to layout, extraction, and proof unless explicitly declared as a
-   future opaque/newtype form. This is an ordinary readability feature, not a
-   proof abstraction.
-   STATUS (2026-06-22, done + gated): type aliases were already parsed and
-   resolved; documented in `docs/TYPE_ALIASES.md` and locked by
-   `scripts/tests/check_type_alias.sh` (Makefile `test-type-alias` + CI) over
-   `tests/programs/type_alias/`. Aliases are transparent over arrays/structs/
-   generic-instantiations/fn-signatures, both directions, and the gate proves
-   `--report layout` + `--report fingerprints` are byte-identical to the
-   underlying type (no new layout/proof identity). The audit FOUND AND FIXED four
-   real transparency gaps (see CHANGELOG): (a) alias targets weren't validated —
-   `type A = Nope` was silently accepted (now E0108); (b) recursive aliases gave a
-   confusing downstream error (now a dedicated E0112); (c) alias chains and
-   aliases nested in other types only expanded one level (now expanded deeply +
-   transitively via `closeAliasMap`/`expandAliasDeep`); (d) a `Copy` struct field
-   typed by an alias to a `Copy` type was wrongly rejected as non-Copy (alias now
-   expanded in field types before the CoreCheck Copy/repr check). Opaque/distinct
-   aliases remain `newtype`'s job; alias type parameters are not in V1.
-4. Decide user-facing loop control before broad parser/service examples:
-    `break`, `continue`, and whether labeled loops exist. The decision must
-    state how each interacts with bounded-loop analysis, cleanup/defer,
-    contracts, and runtime-safety obligations. Write
-    `docs/LOOP_CONTROL.md`, add fixtures under `tests/programs/loop_control/`,
-    and wire `scripts/tests/check_loop_control.sh`. If `break`/`continue` are
-    admitted, the gate must cover single loop, nested loop, early cleanup,
-    invariant preservation, variant/decrease, and runtime-safety facts. If they
-    are deferred, the gate must pin the rejection diagnostics and show the
-    explicit-state alternative in `examples/daily/packet_decoder`.
-    STATUS (2026-06-21, done + gated): `break`/`continue` ARE admitted (they were
-    already implemented); the decision is documented in `docs/LOOP_CONTROL.md` and
-    locked by `scripts/tests/check_loop_control.sh` (Makefile `test-loop-control`
-    + CI) over `tests/programs/loop_control/`. Behavior: unlabeled break/continue
-    act on the innermost loop; labeled `break 'l`/`continue 'l` act on the named
-    loop; `for` supports both; while-as-expression yields a value via `break <v>`
-    or the `else` block (types must agree — E0222). Cleanup: a break/continue that
-    would skip an unconsumed linear value is rejected (E0210/E0211); runtime-safety
-    obligations and `#[invariant]`/`#[variant]` loop contracts are unaffected by
-    break/continue edges. The gate audit also FOUND AND FIXED a real miscompile:
-    while-expression break/else values at non-i64 widths were stored as i64 into a
-    narrower result slot (an `i32` while-expr read back 0); now coerced to the
-    result type before the store (see CHANGELOG).
-5. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
-   protocol-decoder work. This is one compound usability block: algebraic data
-   types are already in the language, so the pattern language must be
-   expressive enough to use them without stacks of boilerplate matches.
-
-   **Current baseline:** `_` wildcard *match arms*
-   (`tests/programs/wildcard_pattern.con`); integer/value patterns (`litArm`)
-   and variable patterns (`varArm`); `let`-destructuring including `let … else`
-   (`letDestructure` with `elseBody`); struct destructuring
-   (`let Struct { fields } = expr;`, `letStructDestructure`).
-
-   **STATUS (2026-06-22): integer range patterns LANDED + gated.** First #5
-   increment: lexer `..`/`..=`, `MatchArm.rangeArm`/`CMatchArm.rangeArm` threaded
-   through the whole pipeline (parse → check → elab → mono → corecheck → lower →
-   interp), lowered to a `lo <= scr && scr (<=|<) hi` comparison-branch with
-   signedness following the scrutinee type (u8 → unsigned). Inclusive/exclusive,
-   value-position arms, negative bounds, and the exhaustiveness rule (a range is
-   not a catch-all; range-only match needs `_`, E0534) are documented in
-   `docs/PATTERN_ERGONOMICS.md` and locked by
-   `scripts/tests/check_pattern_ergonomics.sh` (Makefile `test-pattern-ergonomics`
-   + CI) over `tests/programs/patterns/` + `examples/patterns/byte_ranges/`. Range
-   patterns are not yet in the proof path (disclosed as an unsupported construct,
-   not silently mis-modelled).
-
-   **STATUS (2026-06-22, increment 2): `if let` / `while let` LANDED + gated.**
-   Both desugar to a `match` at parse time (`parseIfLet`/`parseWhileLet` in
-   `Concrete/Parser.lean`) — no new AST/Core/lowering, reusing all match
-   machinery. `if let Enum::Variant { binds } = e { … } [else { … }]` →
-   `match e { Variant { binds } => …, _ => … }`; `while let … = e { … }` →
-   `while true { match e { Variant { binds } => …, _ => break; } }` (scrutinee
-   re-evaluated each iteration). Fixtures in `tests/programs/patterns/` and the
-   `if let / while let` section of `scripts/tests/check_pattern_ergonomics.sh`.
-
-   **STATUS (2026-06-22, increment 3): match guards LANDED + gated.**
-   `guard : Option Expr`/`Option CExpr` on each arm; parsed as `pattern if cond
-   => …`; lowered as a test after the pattern's bindings, branching to the next
-   arm on failure (`finishMatchArmBody`, `Concrete/Lower.lean`). Guards work on
-   every arm shape + value position, see the pattern bindings, and — critically —
-   a guarded arm is NOT a catch-all (CoreCheck: guarded var arm isn't a wildcard,
-   guarded enum arm doesn't cover its variant or count as a duplicate). Not in the
-   proof path yet (disclosed as unsupported `match guard`). Fixtures +
-   `match guards` section of `scripts/tests/check_pattern_ergonomics.sh`.
-
-   **STATUS (2026-06-22, increment 4): OR patterns LANDED + gated.** `P1 | P2 |
-   … [if g] => body` is a parse-time desugar (`parsePatternHead` returns an arm
-   builder; `parseMatchArm` collects `|`-separated heads and emits one ordinary
-   arm per alternative sharing the guard+body) — no new AST/Core/lowering.
-   Alternatives may be literals/ranges/enum-variants/bools; standard OR rule (all
-   alternatives bind the same body-referenced names). Fixtures + `OR patterns`
-   section of `scripts/tests/check_pattern_ergonomics.sh`.
-
-   **Still open (each: implement, or explicitly defer with examples):**
-   - ~~match guards~~ — DONE (increment 3)
-   - ~~OR patterns~~ — DONE (increment 4)
-   - ~~integer range patterns~~ — DONE (increment 1)
-   - ~~`if let`~~ — DONE (increment 2)
-   - ~~`while let`~~ — DONE (increment 2)
-   - ~~match-on-reference (`&T`/`&mut T`)~~ — DONE (increment 5): match
-     auto-derefs a reference scrutinee. Enum-behind-`&E` already read tag/payload
-     through the pointer; the value-pattern branch now derefs a `&scalar`
-     scrutinee once (`Concrete/Lower.lean`) so literals/ranges/var-bindings see
-     the value (fixed an E0715 ptr-vs-int miscompile). Auto-deref is on the
-     scrutinee (matching Check); a borrowed non-Copy value stays linear (E0208 if
-     unconsumed). Fixtures + `match on &T` gate section.
-   - ~~struct update syntax — `Struct { field: x, ..base }`~~ — DONE
-     (increment 6): optional `base : Option Expr` on `AST.structLit`; parsed by
-     `parseStructLitFields`; desugared in Elab to `base.field` for each omitted
-     field (no new Core/lowering); base must be the same struct type (E0220).
-     Use a variable as the base (complex base re-reads per copied field).
-     Fixtures + `scripts/tests/check_struct_update.sh`.
-   - ~~tuple types, or a deliberate no-tuples decision~~ — DECIDED: NO anonymous
-     tuples in V1; named structs are the one product type (`docs/TUPLES.md`).
-     Tuple type/literal/index syntax stays a clean parse error (use a `struct`);
-     newtype `.0` extraction is unaffected. Gated by
-     `scripts/tests/check_no_tuples.sh`. Workload-driven — reconsidered only if a
-     real workload proves named structs insufficient.
-   - ~~`_` wildcard *inside destructuring bindings*~~ — DONE (increment 7): a
-     field binding named `_` is now a true wildcard — positional (other fields
-     still bind), not added to scope (reading it is E0100), field not loaded in
-     codegen. Fixed in Resolve/Check/Elab/Lower (skip binding `_`); previously it
-     was a readable binding named `_`. Fixtures + `_ wildcard in destructuring`
-     gate section.
-   - ~~nested patterns (e.g. `Some(Pair { x, y })`)~~ — DEFERRED (workload-gated;
-     `docs/NESTED_PATTERNS.md`). One level of destructure per arm; deeper nesting
-     stays a clean parse error. Fully expressive via the one-level + field-access
-     / nested-`match` workaround. A recursive `Pattern` type is a large pipeline
-     refactor for pure sugar with no forcing workload — same call as const
-     generics / tuples. Gated by `scripts/tests/check_nested_patterns.sh`.
-
-   **#5 CLOSED (2026-06-22):** the compound pattern-ergonomics block is done.
-   BUILT + gated: range patterns, `if let`/`while let`, match guards, OR
-   patterns, match-on-`&T`, struct-update `..base`, `_`-wildcard destructuring.
-   DECIDED (workload-gated): no anonymous tuples, nested patterns deferred. The
-   pattern language is complete for decoder/parser/interpreter work; the two
-   deferrals are sugar with clean, equally-expressive workarounds and recorded
-   forcing conditions.
-   KNOWN DIAGNOSTIC FOLLOW-UP (fail-closed, not a soundness gap; recorded in
-   `docs/PATTERN_ERGONOMICS.md`): a range arm on a non-integer (e.g. enum)
-   scrutinee — `match someEnum { 0..=9 => … }` — is type-nonsensical but is not
-   rejected with a clean Check diagnostic today; it is handled defensively in
-   lowering. Add a dedicated "range pattern on non-integer scrutinee" diagnostic
-   and a negative fixture in the pattern-ergonomics gate.
-
-   **Suggested order:** integer range patterns and match-on-`&T` first (they
-   immediately improve decoders, parsers, and interpreter-shaped workloads),
-   then `if let` / `let … else` documentation and examples (they exercise the
-   existing destructuring with the least new machinery), then OR patterns or
-   struct update — whichever hurts more in practice (parser/service code tends
-   to want OR patterns; SHA-style state updates tend to want `..base`). Add
-   `examples/patterns/{byte_ranges,ref_enum_match,parser_token_match}/` and
-   extend `scripts/tests/check_pattern_ergonomics.sh`; the gate must cover
-   range exhaustiveness, unreachable-arm diagnostics, reference-pattern
-   behavior, and negative ambiguity cases.
-6. Define numeric literal and cast rules: suffixes, inference/default integer
-   type, signed/unsigned comparisons, narrowing, widening, checked/proved/
-   wrapping overflow profiles, and diagnostics for ambiguous or lossy casts.
-   HEADLINE GAP — RESOLVED (2026-06-23, verified; landed during #5 churn): an
-   integer literal now infers its type from the expected/annotated element type
-   inside an array literal. `let a: [i32; 3] = [7, 0, 0];` compiles with no
-   `as`-casts (previously E0220 because `[7,0,0]` defaulted to `[i64; 3]`). The
-   element hint is pushed into each element in both Check (`.arrayLit`, ~L1966)
-   and Elab (`.arrayLit`, ~L711); verified across let-binding, sub-word widths
-   (u8/u16/i16), negative literals, nested arrays, function-arg, and struct-field
-   contexts. Locked by `tests/programs/regress_array_literal_elem_infer.con`
-   (main suite). This was the single most pervasive papercut.
-   REMAINING for #6 (re-scoped by probe, 2026-06-23):
-
-   **Track A — lock the de-facto numeric model.** DONE (2026-06-23):
-   `docs/NUMERIC_MODEL.md` documents default-`i64`, hex/binary bases, type-driven
-   comparison signedness (`u8` compares unsigned), explicit-`as`-only conversion
-   (no implicit widen/narrow, E0220), out-of-range literal rejection (E0227), and
-   the overflow semantics. Pinned by `scripts/tests/check_numeric_literals.sh`
-   (the model-invariant section: implicit-conversion rejected, u8-comparison
-   unsigned, explicit-`as` truncation).
-
-   **Track B — build the genuine gaps.**
-   - ~~Out-of-range integer literal in a typed context~~ — DONE (2026-06-23):
-     `let a: u8 = 300;` (and any literal exceeding its target int type) is now
-     rejected at Check with **E0227** (`integer literal N is out of range for
-     type 'T' (lo..=hi)`) instead of silently truncating to 44. In-range literals
-     at every width still compile; explicit `as` casts may still truncate (the
-     opt-in lossy path). Closes the "semantically dark construct" footgun. Gated by
-     `scripts/tests/check_numeric_literals.sh` (Makefile `test-numeric-literals` +
-     CI); fixtures in `tests/programs/numeric/`. Negative literals are covered too:
-     `let a: u8 = -1` / `let a: i8 = -129` are rejected (the `unaryOp neg` case
-     range-checks the *negated* value `-N`, so the signed minimum `i8 = -128`
-     still compiles even though its inner literal 128 exceeds i8's positive max).
-   - Literal suffixes (`7u8`, `5i32`, `0xFFu8`) — DEFERRED (workload-gated):
-     pure convenience (annotations already cover the need); needs lexer+token+
-     parser work to attach the suffix at lex time. Revisit if a workload shows
-     annotations are too noisy. (`docs/NUMERIC_MODEL.md`.)
-   - Lossy/ambiguous cast diagnostics — ROUTED to #21 (lint/vet): `as` is the
-     explicit opt-in lossy escape, so a blanket warning would be noise; the right
-     shape is a lint on *provably* lossy casts, which belongs in `concrete
-     lint`/`vet`, not as a type error here.
-   - Signed/unsigned comparison rule is incomplete (probed 2026-06-23): a
-     same-WIDTH mixed-sign comparison (`i32 < u32`, `i64 < u64`) compiles
-     SILENTLY today, and its truth depends on signed-vs-unsigned interpretation
-     (e.g. `-1` as i32 vs a u32) — a latent footgun; a different-WIDTH comparison
-     (`u8 < i32`) is already rejected (E0715). Decide the same-width mixed-sign
-     case — reject it and require an explicit cast, or define+document the
-     interpretation — and gate it. ROUTED to #21 (lint/vet): same-width
-     mixed-sign comparison is a lint candidate, not a silent reinterpretation
-     (both sides keep their declared types today). Recorded in
-     `docs/NUMERIC_MODEL.md`.
-
-   **Track C — overflow policy is a real design fork, not a quick checker patch.**
-   Arithmetic already produces overflow obligations and proven overflow should
-   stay a hard error. But unproven overflow currently wraps at runtime unless
-   policy/reporting catches it; no user-facing checked/wrapping/saturating
-   profile exists, and helper functions such as `wrapping_add` are absent. Decide
-   this together with #10 build profiles: strict/provable/predictable profiles
-   should reject or require runtime checks for unproven overflow; ordinary builds
-   must report the evidence class honestly; intentional wrapping and saturation
-   should be explicit (`wrapping_*` / `saturating_*` or equivalent), never hidden
-   in the default arithmetic story.
-
-   **#6 CORE-COMPLETE (2026-06-23).** The numeric model is documented
-   (`docs/NUMERIC_MODEL.md`) and gated (`scripts/tests/check_numeric_literals.sh`,
-   8 checks). BUILT: out-of-range literal rejection (E0227, pos+neg — the one
-   soundness footgun), and the model invariants (default-i64, type-driven
-   signedness, no-implicit-conversion, explicit-`as`). ROUTED to their natural
-   homes (recorded in the doc): overflow runtime profiles + `wrapping_*`/
-   `saturating_*` helpers + proven-overflow folder completion → **#10** (build
-   profiles); lossy-cast and same-width mixed-sign-comparison lints → **#21**
-   (lint/vet). DEFERRED workload-gated: literal suffixes. Overflow obligations
-   already exist and proven overflow is an E0900 hard error (folder partial);
-   unproven overflow wraps, consistent with unproven bounds/division.
-7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
-    early-return cleanup, failure during cleanup, move-after-defer behavior, and
-    linear-value interaction.
-    **CORE-COMPLETE (2026-06-23).** `defer <call>;` is implemented with the core
-    cleanup semantics, documented (`docs/DEFER.md`) and gated
-    (`scripts/tests/check_defer.sh` + `examples/defer/cleanup_order/`): deferred
-    calls run **LIFO**, at scope exit, on **every exit path** (fall-through, early
-    `return`, `break`/`continue`, `?`/`Err` propagation), per-scope inner-to-outer.
-    V1 boundaries (documented): the defer body must be a **call** (block form
-    `defer { … }` rejected), and a deferred call does not apply the literal/
-    auto-borrow argument coercion a normal call site does (defer a no-arg cleanup
-    fn, or pass typed values). DEFERRED design (recorded in the doc, need their
-    own pass): failure-during-cleanup, move-after-defer / linear-value
-    interaction, and explicit-`defer`-vs-implicit-drop ordering — revisit when a
-    workload exercises cleanup on error paths or over linear resources.
 8. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
@@ -601,146 +367,11 @@ gate.
     boundary rules, capability/trust labels, source spans, and reproducible
     output. Blocked on the FFI language surface (#8) — not built before #8 is
     settled; implemented against it then, with an `examples/ffi_glue/` + gate.
-10. Define language-visible build profiles: debug/release, assertions, runtime
-    checks, optimization assumptions, and proof/audit compatibility.
-
-    **Governing principle (decided): a build profile is a policy bundle, never
-    an arithmetic mode.** Profiles select check *enforcement*, diagnostics,
-    optimization assumptions, evidence floors, and reporting — they MUST NOT
-    change what a source program *means*. A reviewer must never need to know the
-    build mode to know whether `a + b` wraps. (No Rust-style debug-trap /
-    release-wrap split — that breaks the audit thesis.)
-
-    Arithmetic semantics are therefore profile-invariant and already decided in
-    `docs/ARITHMETIC_POLICY.md` (§14 Commitments): ordinary `+ - *` are
-    checked/trapping in every profile; intentional modular arithmetic is the
-    explicit `wrapping_*`; intentional clamping is the explicit `saturating_*`;
-    div/mod-by-zero and over-width shifts trap. The arithmetic-lowering rollout
-    is the staged sequence in ARITHMETIC_POLICY.md §13.
-
-    Implementation status: the arithmetic semantics core is landed. Ordinary
-    integer `+ - * / % << >>` and unary `-` are checked/trapping; intentional
-    modular arithmetic is explicit `wrapping_*`; intentional clamping is explicit
-    `saturating_*`; float→int `as` is a checked conversion (NaN/inf/out-of-range
-    abort; in-range truncates toward zero). The remaining #10 work is reporting
-    and proof/audit wiring, not source meaning. Build history:
-      - Stage 1: [DONE — 2026-06-24; Concrete/Profile.lean, `--profile` +
-        `[profile]` + `--report profile` in Main.lean,
-        scripts/tests/check_build_profiles.sh (make test-build-profiles + CI
-        step)] profile *mechanism* only — a `--profile` CLI flag + `[profile]` in
-        Concrete.toml (precedence CLI > manifest > default=debug) + a
-        `--report profile` that makes the active profile, its selection source,
-        and the policy bundle visible. At the time of this stage, the arithmetic
-        line was profile-invariant and explicitly disclosed the then-current
-        wrapping-lowering gap. No codegen/semantic change.
-      - Stage 2.1: [DONE — 2026-06-24; BinOp.wrappingAdd/Sub/Mul + intrinsics in
-        Intrinsic/Check/Elab + plain-LLVM lowering in EmitSSA + signed/unsigned
-        interp wrap; scripts/tests/check_wrapping_arith.sh] explicit `wrapping_*`
-        — the visible spelling for intentional modular arithmetic. Behavior-
-        preserving (plain add/sub/mul); the prerequisite escape hatch before the
-        flip.
-      - Stage 2.2: [DONE — 2026-06-24; BinOp.saturatingAdd/Sub →
-        `llvm.{s,u}{add,sub}.sat.iW` (single-value intrinsics, statically
-        declared) + interp clamp; scripts/tests/check_saturating_arith.sh]
-        `saturating_add`/`saturating_sub` — explicit clamping. Used the simple
-        `.sat` intrinsic path (no overflow-struct infra needed).
-      - Stage 2.2b: [DONE — 2026-06-24; BinOp.saturatingMul → raw
-        `*.with.overflow` ({iW,i1} + extractvalue) + sign-aware clamp `select` in
-        EmitSSA + interp clamp; gate extended] `saturating_mul`. This BUILT the
-        shared overflow infrastructure (struct-returning intrinsic via raw IR +
-        extractvalue; LLVM auto-declares) and validated it interp==compiled.
-      - Stage 2.3a: [DONE — 2026-06-24] checked `+` LANDED green. Ordinary `+`
-        traps on overflow (compiled SIGABRT, interp errors); codegen = per-type
-        `internal` helper fns (`*.with.overflow`+`condBr`→abort in the module
-        header; `+` is a single-value `call`, no mid-expr block split; blast radius
-        is user `+` only — internal index/offset uses GEP); interp =
-        `checkedToType`. The ~127-failure "blast" was a CASCADE from a SINGLE root
-        cause: SHA-256's intentional mod-2^32 additions (`std/src/sha256.con`)
-        aborting the std test binary. Migrated those to `wrapping_add` (the correct
-        explicit spelling — SHA-256 IS modular) and everything went green:
-        std 265/0, fast suite 1576/0, golden 54/0. The check did its job — it found
-        real intentional-wrap that was relying on silence. Gated by
-        `scripts/tests/check_checked_arith.sh` (incl. a modular-wrap regression).
-      - Stage 2.3b/c: [DONE — 2026-06-24] checked `-` and `*` LANDED green. Same
-        per-op helper + interp `checkedToType` mechanism. Migrations (all genuine
-        intentional-modular, → `wrapping_mul`): `hash.con` FNV-1a + Fibonacci/
-        splitmix multiplicative hashing, and `tests/programs/test_generic_fnptr_map`
-        (inline multiplicative hash). `-` needed no migration. All `+ - *` now
-        checked; PREDICTABLE_BOUNDARIES.md updated (overflow: silent-wrap → trap).
-        std 265/0, fast 1576/0, golden 54/0; gate `check_checked_arith.sh` covers
-        all three.
-      - Stage 2.4/2.5: [DONE — 2026-06-24] div/mod-by-zero and over-width shift now
-        ABORT (were UB: SIGFPE / poison) via per-type `@__cc_{sdiv,udiv,srem,urem}`
-        and `@__cc_{shl,ashr,lshr}` helpers (signed div also checks MIN/-1); interp
-        traps to match. So ALL integer arithmetic UB is now a defined abort. Gate
-        extended (10/0).
-      - Stage 2.x soundness fixes: [DONE — 2026-06-24] closed three holes the flip
-        opened: (a) `SSACleanup.foldBinOpConst` folded overflowing constants
-        (wrap) instead of leaving them for the checked helper — now folds only
-        when `fitsType`; (b) the `mul → shl` strength reduction silently dropped
-        the overflow trap (shift helper checks only the amount) — removed; (c)
-        `binOpToPBinOp` modeled checked `u32 +` as `addw 32` (wrap) — moved that
-        mapping to `.wrappingAdd`, so `wrapping_add@u32` is the provable mod-2³²
-        operator and checked `+` extracts to mathematical `add`. SHA-256 example
-        migrated to `wrapping_add` (6 proofs still verify; oracle 200/0).
-      - Stage 2.6 reports/audit classification: [DONE — 2026-06-26]
-        `--report arithmetic` classifies every site as proved / runtime-checked /
-        explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2/§9.1);
-        `proved` is 0 until overflow proofs land. Gate
-        `scripts/tests/check_report_arithmetic.sh`. **#10 is now complete.**
-      - H2 float→int cast overflow: [DONE — 2026-06-26; checked helpers +
-        `scripts/tests/check_float_cast.sh`] `f as iN/uN` aborts on NaN, ±inf, or
-        out-of-range and truncates toward zero in range. The gate is compiled-only
-        until float literals run in the interpreter; upgrade to interp-vs-compiled
-        once float interp lands.
-
-    End-state model (the destination, profile-INVARIANT):
-      - `a + b` → checked: overflow is a bug, in every profile.
-      - `wrapping_add(a, b)` → modular (DONE, Stage 2.1).
-      - `saturating_add(a, b)` → clamping (DONE, Stage 2.2/2.2b).
-    Profiles choose only how the checked guarantee is *enforced/reported*, never
-    its meaning — the per-profile enforcement matrix (Safe runtime-checks,
-    Release proof-omits-or-checks-never-wraps, Provable/high-integrity
-    rejects-unproved) and the per-site audit classification (proved /
-    runtime-checked / explicit-wrapping / explicit-saturating) are specified in
-    ARITHMETIC_POLICY.md §3.1–§3.2.
-
-    Still-missing deliverables for "done":
-      - `--report arithmetic` (per-function mode + op counts; ARITHMETIC_POLICY
-        §9.1) and the §3.2 per-site classification in `--report effects`: every
-        arithmetic site must be classified as `proved`, `runtime-checked`,
-        `explicit-wrapping`, or `explicit-saturating`;
-      - `#[overflow_checked]` obligation generation wired to the checked default
-        (§13 step 11), so audit distinguishes proved-no-overflow from
-        runtime-checked;
-      - keep `scripts/tests/check_arith_redteam.sh` and
-        `scripts/tests/check_float_cast.sh` in the CI gate set as the regression
-        floor for arithmetic semantics; do not rely on `run_tests.sh` alone.
-11. **DONE / PERMANENT DECISION (2026-06-23).** State the
-    macro/metaprogramming stance: **no language macros**. Concrete
-    does not admit hygienic macros, proc macros, syntax macros, derive helpers,
-    compile-time code generation, or arbitrary `comptime` evaluation in the
-    language. Repetition is handled by ordinary functions, generics, explicit
-    stdlib APIs, or external build-time generators whose generated files are
-    audited as ordinary source. This is a permanent auditability decision, not a
-    missing v1 convenience feature. Locked by `docs/MACRO_STANCE.md` and
-    `scripts/tests/check_no_macros.sh`, which rejects macro declarations, bang
-    invocations, and derive-like attributes so macro-shaped proposals do not
-    re-enter as "derive" or "helper" exceptions.
-    DECIDED (2026-06-23): `docs/MACRO_STANCE.md` records the permanent non-goal
-    (no `macro`/`macro_rules`, proc/syntax macros, `foo!()`, `#[derive]`, or
-    in-language comptime generation); repetition uses functions/generics/explicit
-    stdlib APIs/external generators (output audited as ordinary source). Pinned by
-    `scripts/tests/check_no_macros.sh` (Makefile `test-no-macros` + CI): macro
-    definition, bang invocation, and `#[derive(...)]` all stay clean parse errors.
 12. Define handle-relative filesystem APIs as the preferred capability shape:
     directory/file handles are capabilities; privileged code should operate
     relative to opened handles rather than repeated ambient path lookup. The
     design must address TOCTOU risks, path normalization, symlinks, temp files,
     and byte-preserving OS boundary behavior.
-13. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
-    `Option`, or runtime-check results is a warning/error unless explicitly
-    acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
 14. Track accumulating error sets for `Result`-heavy code, without adopting row
     effects. V1 is report-only: `concrete audit --report error-sets` and
     `concrete inspect --error-sets --json` over existing enum-returning
@@ -760,30 +391,6 @@ gate.
     Kept research/workload-gated: if a real workload keeps hitting unit bugs, the
     first step is a report-only prototype (`examples/units_probe/` + gate),
     annotations optional and erased only after audit records the conversion.
-16. [DONE — 2026-06-27; docs/STYLE.md] Source style guidance alongside
-    `concrete fmt`: naming, function/module structure, pattern/error-handling
-    idioms, arithmetic spelling, and proof-bearing-code layout. Mechanical layout
-    is owned by `concrete fmt` (gated by `check_concrete_fmt.sh`); STYLE.md covers
-    the advisory rest (idiomatic layout for functions, modules, contracts,
-    matches, error handling, examples, and proof-bearing code).
-17. [DONE — 2026-06-24; docs/ITERATION_PROTOCOL.md +
-    scripts/tests/check_iteration_protocol.sh (make test-iteration-protocol + CI
-    step). Audit-and-gate: documented the fixed traversal hierarchy (for/indexed,
-    cursor structs, cap-polymorphic for_each/fold/map, explicit for_each_ctx
-    context threading) and gated the existing forms + the exclusions (no Iterator
-    trait, no dyn trait-objects, no closures, allocation visible — map carries
-    Alloc, for_each/fold do not). Iteration promoted to stable_for_stdlib in
-    STDLIB_HANDOFF.md.] Decide the v1 iteration protocol before broad stdlib work.
-    Evaluate and document the replacement for closures/trait-object iterators in
-    `docs/ITERATION_PROTOCOL.md`:
-    index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
-    with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
-    decision must cover `Vec`, slices, maps, parser cursors, and interpreter
-    workloads, and must explain how authority and allocation remain visible.
-    Add `examples/iteration_protocol/{slice_cursor,vec_iter,map_iter,parser_cursor}/`
-    and `scripts/tests/check_iteration_protocol.sh`; the gate must report
-    allocation/capability behavior for each iteration form and prove bounded
-    loops stay visible to runtime-safety obligations.
 18. Finish only the remaining callable-values implementation work that real
     workloads pull. The design checkpoint is DONE and recorded in
     `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` plus the changelog; H1 is closed
@@ -803,22 +410,6 @@ gate.
     ordinary function pointers instead. Reopen only with a concrete workload and
     a separate design note proving the capture/type-parameter/mangling story is
     worth the added surface.
-19. [DONE — 2026-06-24; docs/STDLIB_HANDOFF.md + scripts/tests/check_stdlib_handoff.sh
-    (make test-stdlib-handoff + CI step). 12 required surfaces: 9 stable_for_stdlib,
-    3 provisional_with_gate (const-generics #6a, iteration #17, build-profiles #10),
-    0 blocked → Phase 7 not gate-blocked. Gate parses the contract table, asserts
-    valid status + existing backing artifact per surface, and fails on any blocked
-    required surface.] Define the stdlib handoff contract for Phase 7. Phases 5-6
-    decide the language surfaces the stdlib depends on — modules/imports, project model,
-    tests, diagnostics, bytes/text/path types, collections, narrow const
-    generics for fixed-capacity APIs, iteration, explicit callable values,
-    capability-polymorphic callbacks, build profiles, and CLI verbs — but the
-    actual library APIs are built in the dedicated stdlib phase. Write
-    `docs/STDLIB_HANDOFF.md` and gate it with
-    `scripts/tests/check_stdlib_handoff.sh`; the gate must assert each required
-    Phase 5/6 surface has a status of `stable_for_stdlib`,
-    `provisional_with_gate`, or `blocked`, and Phase 7 may not start while any
-    required surface is `blocked`.
 20. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
@@ -914,16 +505,6 @@ gate.
     obvious generated-code regressions. This is separate from the compiler
     performance-budget gates (a closed-Phase-4 deferral, now folded into
     Phase 17's artifact/stability hardening).
-33. [DONE — 2026-06-27; docs/MEMORY_MODEL.md + check_memory_model.sh] User-facing
-    memory model: move/copy/drop, cleanup, borrows, linear values, trusted/Unsafe
-    escape hatches, definite initialization, and what is rejected — a narrative
-    overview linking the canonical references (MEMORY_SEMANTICS / VALUE_MODEL /
-    MEMORY_GUARANTEES). The invariant is stated explicitly and now backed by a
-    gate: safe Concrete has **no uninitialized reads by construction** — `let`
-    requires an initializer (`let x: T;` is a parse error), so there is no
-    uninitialized state and no need for definite-assignment dataflow. Found that
-    the guarantee is grammar-level (stronger than dataflow analysis); added the
-    invariant to MEMORY_SEMANTICS.md §1.
 34. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
@@ -936,52 +517,6 @@ gate.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
-35a. [DONE — 2026-06-24; scripts/tests/check_phase6_redteam.sh (make
-    test-phase6-redteam + CI step). Found+fixed a real interp/compiled
-    disagreement while writing it: the interpreter did not deref a `&T` match
-    scrutinee, so a var/guard arm bound the reference instead of the pointee
-    (lowering already derefed via the E0715 fix). All five classes covered;
-    11/11 green.] After the resurrected CI gate suite is green, add targeted
-    red-team coverage for the failure classes it exposed. Do **not** add these
-    while the baseline is red; first fix/classify the deterministic
-    `phase1_contracts`,
-    `trust-gate`, ProofCore, and match/lowering failures. Then add
-    `scripts/tests/check_phase6_redteam.sh` with fixtures for:
-    parser recovery and duplicate attributes (`#[spec]`/proof-link duplicates
-    must keep the intended diagnostic rather than degrading to generic
-    `unexpected token`);
-    match linear-consumption agreement across range/guard/OR/desugared arms;
-    match lowering correctness for width coercions, match-on-reference,
-    guarded arms, OR desugaring, and struct-update-in-arm values;
-    ProofCore/fingerprint stability for new arm forms (semantic changes must
-    change fingerprints; formatting-only changes must not);
-    and trust/proof fixtures whose deliberately stale state must remain stale
-    after any regeneration tool. The gate becomes the reusable
-    "new syntax feature red-team checklist": every future parser/lowering
-    feature needs positive parse, negative parse, type/check negative, linear
-    ownership edge, lowering execution oracle, formatter round-trip,
-    ProofCore/fingerprint assertion, and report/snapshot coverage if it affects
-    evidence.
-36. [DONE (core) — implemented 2026-06-20; see docs/STATEMENT_EXPRESSION_MODEL.md
-    and LANGUAGE_GAPS #12] Model the statement-vs-trailing-expression distinction
-    in blocks and match arms. `AST.Stmt.expr` / `Core.CStmt.expr` now carry an
-    `isValue` flag: a trailing expression with no `;` is the block/arm value, a
-    `;`-terminated one is a discarded statement (Unit). The parser sets it
-    (`parseExprBlock` + the direct `=> expr` arm; the while-expression else branch
-    was made value-bearing too), and the checker, elaborator, lowering, and
-    formatter all respect it. Fixes the spurious `E0225` statement-match-arm class
-    (`=> { side(); }` is now Unit and agrees with a unit arm `{ }`). Done in 3
-    implementation stages plus the docs update (flag threading → semantics flip
-    → formatter → docs), each full-suite green; locked by
-    `tests/programs/regress_stmt_match_arm_unit.con`.
-    REMAINING (deliberately deferred, separate follow-ups, not the bug):
-    - braced block-as-value in arbitrary expression position (`let x = { …; v }`)
-      is still not parsed (additive grammar feature);
-    - implicit trailing-return function bodies remain out of scope; function
-      bodies still require explicit `return`;
-    - the formatter block-wraps a direct value-arm containing an if-expression
-      (`=> if c {1} else {2}`) so it does not round-trip — fix by rendering
-      single-value-expr arms directly instead of `=> { … }`.
 
 ## Phase 7: Standard Library And Core APIs
 

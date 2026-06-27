@@ -93,7 +93,7 @@ mod fcheck {
                             let path_part: String = string_slice(manifest, line_start + 65, pos);
                             let hash_part: String = string_slice(manifest, line_start, line_start + 64);
                             let path_copy: String = path_part.clone();
-                            map.insert(path_part, hash_part);
+                            let _ = map.insert(path_part, hash_part);
                             paths.push(path_copy);
                         }
                     }
