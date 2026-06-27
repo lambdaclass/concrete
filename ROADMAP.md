@@ -1869,6 +1869,18 @@ and incremental build contracts are explicit enough for release evidence.
    obligations, diagnostics, reports, and codegen must agree.
 6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
    calling conventions.
+6a. Design and, if pulled by a workload, implement first-class alignment facts.
+   Start from `docs/ALIGNMENT_FACTS.md`: compare Zig, Rust, Odin, C, C++, and
+   SPARK/Ada; distinguish type/layout alignment from object/place alignment and
+   pointer/reference/slice alignment facts; decide whether Concrete uses
+   declaration attributes, fact/contract syntax, type-like pointer qualifiers, or
+   a staged mix. No implementation should start until a forcing workload exists
+   (SIMD/autovectorized slices, C ABI over-aligned buffers, freestanding DMA/MMIO,
+   allocator contracts, or an optimization/audit gap). If implemented, gates must
+   prove stronger alignment satisfies weaker requirements, offset/field/slice
+   projections conservatively weaken facts, runtime checked refinement records the
+   fact, unchecked assumptions are `unsafe`/trusted and reported, and backend IR
+   alignment metadata is emitted only from Concrete facts.
 7. Add C/ABI glue validation: generated headers, imported declarations, host
    stubs, symbol names, calling conventions, ownership transfer, capability
    labels, and trust assumptions must round-trip through at least one C
@@ -1924,7 +1936,8 @@ and incremental build contracts are explicit enough for release evidence.
     backend-trusted in the audit bundle.
 19. Add the Phase 15 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, C/ABI glue generation/import checks,
-    the C ABI classification matrix, backend-IR emission/verifier checks,
+    the C ABI classification matrix, alignment-fact fixtures if Phase 15 #6a is
+    pulled into implementation, backend-IR emission/verifier checks,
     translation-validation checks, sanitizer runs, compiled-oracle differential
     tests, native debug/source-map smoke tests, clean-vs-incremental fact
     equivalence, and stdlib authority/allocation/evidence gates.
