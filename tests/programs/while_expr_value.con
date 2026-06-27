@@ -1,0 +1,17 @@
+// Oracle regression: a `while`-EXPRESSION used as a value. The loop value is the
+// `break <v>` value when it breaks, or the `else` block value when the condition
+// becomes false. The interpreter must agree with compiled code on both. Expected:
+// 63  (loop breaks with 60 once i > 5, plus the else-path probe 3).
+mod m {
+    fn loop_break() -> i32 {
+        let mut i: i32 = 0;
+        return while true { if i > 5 { break i * 10; } i = i + 1; } else { -1 };
+    }
+    fn loop_else() -> i32 {
+        let mut i: i32 = 0;
+        return while i < 3 { i = i + 1; } else { 3 };
+    }
+    fn main() -> Int {
+        return (loop_break() + loop_else()) as Int;
+    }
+}

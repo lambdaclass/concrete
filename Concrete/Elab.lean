@@ -676,8 +676,26 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           let cBody ← elabStmts body
           cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
       setEnv envBefore
-    -- Result type comes from the arm bodies (checked by Check), not the scrutinee
-    let resultTy := match hint with | some t => t | none => .unit
+    -- Result type: prefer the caller's hint; otherwise infer it from the arm
+    -- bodies' trailing value expressions. A nested match used as a statement
+    -- expression (e.g. another match's arm body) is elaborated with no hint, and
+    -- defaulting to `.unit` made its value vanish — the arm literals were cast to
+    -- `void` and the outer match collapsed to a single non-dominating value
+    -- (an SSA dominance error / miscompile). Check verifies the arms agree.
+    let armBodyStmts : CMatchArm → List CStmt := fun a => match a with
+      | .enumArm _ _ _ _ b => b
+      | .litArm _ _ b => b
+      | .varArm _ _ _ b => b
+      | .rangeArm _ _ _ _ b => b
+    let armValueTy : List CStmt → Ty := fun body => match body.getLast? with
+      | some (.expr e true) => e.ty
+      | _ => .unit
+    let resultTy := match hint with
+      | some t => t
+      | none =>
+        let armTys := (cArms.map (fun a => armValueTy (armBodyStmts a))).filter
+          (fun t => t != .unit && t != .never)
+        armTys.head?.getD .unit
     return .match_ cScrut cArms resultTy
 
   | .borrow _ inner =>

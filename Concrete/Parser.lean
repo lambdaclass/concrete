@@ -420,8 +420,19 @@ partial def parsePrimary : ParseM Expr := do
     let cond ← parseExpr
     let then_ ← parseExprBlock
     expect .else_
-    let else_ ← parseExprBlock
-    return .ifExpr sp cond then_ else_
+    -- `else if ...` chains in value position: the trailing `if` is itself an
+    -- if-expression that becomes the else block's value, so
+    -- `if a {..} else if b {..} else {..}` parses (mirrors the statement-form
+    -- `else if` in parseIf). Without this the else block `expect .lbrace` would
+    -- reject the `if` token.
+    let elseTk ← peek
+    if elseTk == .if_ then
+      let elseSp ← peekSpan
+      let elseIf ← parsePrimary
+      return .ifExpr sp cond then_ [Stmt.expr elseSp elseIf true]
+    else
+      let else_ ← parseExprBlock
+      return .ifExpr sp cond then_ else_
   | .cap_ =>
     -- `cap` used as a variable/field name in expression position
     let sp ← peekSpan

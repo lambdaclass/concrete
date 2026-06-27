@@ -64,7 +64,10 @@ inductive IVal where
 inductive Flow where
   | val (v : IVal)
   | ret (v : IVal)
-  | brk
+  -- `break` carries an optional value: `break v` in a while-EXPRESSION yields `v`
+  -- as the loop's value; a bare `break` (and any break in a while-STATEMENT)
+  -- carries `none`.
+  | brk (v : Option IVal)
   | cont
   deriving Repr
 
@@ -124,15 +127,6 @@ private def arrayGet (elems : Array IVal) (n : Nat) : Option IVal :=
 -- Binary operations
 -- ============================================================
 
-private def intXor (a b : Int) : Int :=
-  Int.ofNat (Nat.xor a.toNat b.toNat)
-
-private def intAnd (a b : Int) : Int :=
-  Int.ofNat (Nat.land a.toNat b.toNat)
-
-private def intOr (a b : Int) : Int :=
-  Int.ofNat (Nat.lor a.toNat b.toNat)
-
 /-- Bit width of an unsigned fixed-width integer type, if any. -/
 private def unsignedBitWidth : Ty → Option Nat
   | .uint => some 64
@@ -168,6 +162,20 @@ private def wrapToType (ty : Ty) (n : Int) : Int :=
   match intBitWidth ty with
   | some (w, signed) => if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
   | none             => n
+
+/-- Bitwise op on the two's-complement bit patterns at `ty`'s width, matching the
+    compiled LLVM `and`/`or`/`xor`. Must NOT go through `Int.toNat`, which clamps a
+    negative operand to 0 (so `-1 & 255` wrongly became 0 instead of 255). Convert
+    each operand to its `w`-bit pattern, apply `opNat`, then reinterpret per `ty`'s
+    signedness. -/
+private def bitwiseAtWidth (ty : Ty) (opNat : Nat → Nat → Nat) (a b : Int) : Int :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let an := (BitVec.ofInt w a).toNat
+    let bn := (BitVec.ofInt w b).toNat
+    let rv := BitVec.ofNat w (opNat an bn)
+    if signed then rv.toInt else Int.ofNat rv.toNat
+  | none => Int.ofNat (opNat a.toNat b.toNat)
 
 /-- Checked arithmetic (ROADMAP #10 Stage 2.3): `some n` if `n` fits `ty`'s range,
     else `none` (overflow → the interpreter traps, matching the compiled abort). -/
@@ -249,9 +257,9 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .neq, .bool a, .bool b => .ok (.bool (a != b))
   | .eq, .string a, .string b => .ok (.bool (a == b))
   | .neq, .string a, .string b => .ok (.bool (a != b))
-  | .bitxor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intXor a b)) ty)
-  | .bitand, .int a ty, .int b _ => .ok (.int (maskWidth ty (intAnd a b)) ty)
-  | .bitor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intOr a b)) ty)
+  | .bitxor, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.xor a b) ty)
+  | .bitand, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.land a b) ty)
+  | .bitor, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.lor a b) ty)
   -- checked shift: amount >= bit width traps (matches the compiled abort).
   | .shl, .int a ty, .int b _ =>
     match intBitWidth ty with
@@ -646,14 +654,15 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
             return (env, .ret (.enum_ enumName variant fields))
     | _ => .error "interp: try: inner expression did not evaluate to an enum"
   | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
-  | .whileExpr _ _ _ _ => .error "interp: while expressions not yet supported"
+  | .whileExpr cond body elseBody _ =>
+    evalWhileExpr fns enums env.length env cond body elseBody 10000000
 
 partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
   let (env, f) ← evalExpr fns enums env e
   match f with
   | .val v => return (env, v)
   | .ret _ => .error "interp: unexpected return in value position"
-  | .brk => .error "interp: unexpected break in value position"
+  | .brk _ => .error "interp: unexpected break in value position"
   | .cont => .error "interp: unexpected continue in value position"
 
 partial def evalCallArgs (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
@@ -770,7 +779,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     match f with
     | .val v => return (envBind env name v, .val .unit)
     | .ret v => return (env, .ret v)
-    | .brk => return (env, .brk)
+    | .brk v => return (env, .brk v)
     | .cont => return (env, .cont)
 
   | .assign name value => do
@@ -778,7 +787,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     match f with
     | .val v => return (envSet env name v, .val .unit)
     | .ret v => return (env, .ret v)
-    | .brk => return (env, .brk)
+    | .brk v => return (env, .brk v)
     | .cont => return (env, .cont)
 
   | .return_ (some expr) _ => do
@@ -790,12 +799,15 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
   | .return_ none _ =>
     return (env, .ret .unit)
 
-  | .expr e _ => do
+  | .expr e isValue => do
     let (env, f) ← evalExpr fns enums env e
     match f with
-    | .val _ => return (env, .val .unit)
+    -- `isValue` (Phase 5 #42 / #36): a trailing value expression (no `;`) is the
+    -- block's value, so propagate it; a `;`-terminated statement discards it.
+    -- Without this, a value-bearing `if`/`match` block evaluated to `unit`.
+    | .val v => return (env, .val (if isValue then v else .unit))
     | .ret v => return (env, .ret v)
-    | .brk => return (env, .brk)
+    | .brk v => return (env, .brk v)
     | .cont => return (env, .cont)
 
   | .ifElse cond thenBody elseBody => do
@@ -816,7 +828,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
       | none => return (env, .val .unit)
     | .val _ => .error "interp: if condition is not a boolean"
     | .ret v => return (env, .ret v)
-    | .brk => return (env, .brk)
+    | .brk v => return (env, .brk v)
     | .cont => return (env, .cont)
 
   | .while_ cond body _label step =>
@@ -867,7 +879,12 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
         return (env', .val .unit)
     | _ => .error "interp: deref-assign on non-ref value"
 
-  | .break_ _ _ => return (env, .brk)
+  | .break_ value _ => do
+    match value with
+    | some e =>
+      let (env, v) ← evalExprVal fns enums env e
+      return (env, .brk (some v))
+    | none => return (env, .brk none)
   | .continue_ _ => return (env, .cont)
   | .defer _ => .error "interp: defer not yet supported"
   | .borrowIn var ref _region isMut _refTy body => do
@@ -881,7 +898,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     let restored := postEnv.drop (postEnv.length - outerLen)
     match flow with
     | .ret v => return (restored, .ret v)
-    | .brk => return (restored, .brk)
+    | .brk v => return (restored, .brk v)
     | .cont => return (restored, .cont)
     | .val _ => return (restored, .val .unit)
 
@@ -892,9 +909,16 @@ partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
     let (env', flow) ← evalStmt fns enums env s
     match flow with
     | .ret v => return (env', .ret v)
-    | .brk => return (env', .brk)
+    | .brk v => return (env', .brk v)
     | .cont => return (env', .cont)
-    | .val _ => evalStmts fns enums env' rest
+    | .val v =>
+      -- Propagate the LAST statement's value as the block's value (so a
+      -- value-bearing `if`/`match`/block yields its trailing expression);
+      -- intervening statements still discard their `.unit`. Pairs with the
+      -- `isValue` handling in `evalStmt .expr`.
+      match rest with
+      | [] => return (env', .val v)
+      | _  => evalStmts fns enums env' rest
 
 partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
   if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
@@ -906,7 +930,7 @@ partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (c
       let (bodyEnv, flow) ← evalStmts fns enums env body
       match flow with
       | .ret v => return (bodyEnv, .ret v)
-      | .brk => return (bodyEnv, .val .unit)
+      | .brk _ => return (bodyEnv, .val .unit)
       | .val _ =>
         -- Step is already included in body (for-loop desugaring appends it).
         -- Only run step explicitly on continue (where body was cut short).
@@ -915,6 +939,31 @@ partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (c
         -- Continue skips the rest of body, so run step before looping.
         let (stepEnv, _) ← evalStmts fns enums bodyEnv step
         evalWhile fns enums stepEnv cond body step (fuel - 1)
+    | _ => .error "interp: while condition is not a boolean"
+
+/-- `while cond { body } else { elseBody }` as a value-producing expression
+    (loop-control #4). The value is `break v` when the loop breaks with a value,
+    or the `else` block's value when the condition becomes false. A bare `break`
+    (no value) yields unit. `baseLen` is the env length at loop entry; each return
+    restores the env to it so body-local bindings don't leak past the loop. -/
+partial def evalWhileExpr (fns : List CFnDef) (enums : List CEnumDef) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
+  if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
+  else
+    let (env, cv) ← evalExprVal fns enums env cond
+    let restore := fun (e : Env) => e.drop (e.length - baseLen)
+    match cv with
+    | .bool false =>
+      -- Loop finished without break: the value is the else block's value.
+      let (branchEnv, flow) ← evalStmts fns enums env elseBody
+      return (restore branchEnv, flow)
+    | .bool true =>
+      let (bodyEnv, flow) ← evalStmts fns enums env body
+      match flow with
+      | .ret v        => return (restore bodyEnv, .ret v)
+      | .brk (some v) => return (restore bodyEnv, .val v)
+      | .brk none     => return (restore bodyEnv, .val .unit)
+      | .val _        => evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
+      | .cont         => evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
     | _ => .error "interp: while condition is not a boolean"
 
 end -- mutual

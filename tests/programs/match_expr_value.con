@@ -1,0 +1,17 @@
+// Oracle regression: a `match`-EXPRESSION used as a value, with a payload binding
+// used in the arm's trailing expression. The interpreter must propagate the arm
+// value (not unit), so the enum payload arithmetic agrees with compiled code.
+// Expected: 130  (A:11 + B:20 + C:99).
+mod m {
+    enum Copy E { A { v: i32 }, B { v: i32 }, C {} }
+    fn f(e: E) -> i32 {
+        return match e {
+            E::A { v } => v + 1,
+            E::B { v } => v * 2,
+            E::C {} => 99
+        };
+    }
+    fn main() -> Int {
+        return (f(E::A { v: 10 }) + f(E::B { v: 10 }) + f(E::C {})) as Int;
+    }
+}

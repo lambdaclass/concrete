@@ -337,6 +337,9 @@ are folded out.
 - **#33 memory model** — user-facing narrative; "no uninitialized reads" is a
   grammar-level guarantee. `docs/MEMORY_MODEL.md`, `check_memory_model.sh`.
 - **#35a semantic-darkness / red-team gate** — `check_phase6_redteam.sh`.
+- **#35b differential oracle bug-hunt** — six interp-vs-compiled fixes for
+  mutable place borrows, value expressions, `while` values, `else if` value
+  parsing, and negative bitwise ops; `tests/oracle/vectors.txt`.
 - **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
   `docs/STATEMENT_EXPRESSION_MODEL.md`.
 

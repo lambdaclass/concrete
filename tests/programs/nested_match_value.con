@@ -1,0 +1,19 @@
+// Oracle regression: a `match`-EXPRESSION used as another match's arm value.
+// The inner match's result type must be inferred from its arm bodies (not default
+// to unit) — otherwise the inner arms were cast to `void` and the outer match
+// collapsed to a single value from a non-dominating block (SSA dominance error
+// E0703 / miscompile). Expected: 16  (AA:1 + AB:2 + BA:3 + BB:3 + extra 7).
+mod m {
+    enum Copy E { A {}, B {} }
+    fn f(e1: E, e2: E) -> i32 {
+        return match e1 {
+            E::A {} => match e2 { E::A {} => 1, E::B {} => 2 },
+            E::B {} => 3
+        };
+    }
+    fn main() -> Int {
+        let s: i32 = f(E::A {}, E::A {}) + f(E::A {}, E::B {})
+                   + f(E::B {}, E::A {}) + f(E::B {}, E::B {});
+        return (s + 7) as Int;
+    }
+}

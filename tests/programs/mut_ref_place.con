@@ -1,0 +1,21 @@
+// Oracle regression: `&mut <place>` for an array element / struct field passed to
+// a function must alias the original storage so the callee's write is visible.
+// Previously the borrow materialized a pointer to a COPY (GEP into a loaded value)
+// and the write was silently lost — `&mut a[i]` returned the array unchanged, and
+// `&mut o.f` left the field unchanged. Expected: 1 (all writes observed).
+mod m {
+    struct Copy P { x: i32, y: i32 }
+    fn bump(r: &mut i32, d: i32) { *r = *r + d; }
+    fn main() -> Int {
+        let mut a: [i32; 3] = [10, 20, 30];
+        bump(&mut a[1], 5);            // a[1] -> 25
+        let mut p: P = P { x: 1, y: 2 };
+        bump(&mut p.x, 100);          // p.x -> 101
+        let mut g: [P; 2] = [P { x: 7, y: 8 }, P { x: 9, y: 10 }];
+        bump(&mut g[1].x, 1000);      // g[1].x -> 1009
+        let ok: bool = a[1] == 25 && a[0] == 10 && p.x == 101 && p.y == 2
+                    && g[1].x == 1009 && g[0].x == 7;
+        if ok { return 1; }
+        return 0;
+    }
+}

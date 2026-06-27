@@ -593,16 +593,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.store curVal (.reg slot innerTy))
           aVals := aVals ++ [.reg slot (.refMut innerTy)]
           mutBorrows := mutBorrows ++ [(varName, slot, innerTy)]
-      | .borrowMut (.fieldAccess obj field fieldTy) _ =>
-        -- For &mut borrows of struct fields: GEP directly into the parent struct
-        -- to get a pointer to the field, avoiding copy + lost write-back.
-        let oVal ← lowerExpr obj
-        let tyName ← structNameFromTy obj.ty
-        let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
-        let gepDst ← freshReg "fieldmut."
-        emit (.gep gepDst oVal [.intConst (Int.ofNat byteOff) .int] .i8)
-        aVals := aVals ++ [.reg gepDst (.refMut fieldTy)]
       | _ =>
+        -- All other borrow/place args (incl. `&mut o.f`, `&mut a[i]`,
+        -- `&mut a[i].f`) lower through `borrowMut`/`placeAddr`, which GEPs into a
+        -- STABLE base address (promoted local or pointer) — never a loaded copy.
+        -- The old `&mut field` special case GEP'd into `lowerExpr obj`, a loaded
+        -- struct VALUE, so the field write was silently lost.
         let v ← lowerExpr arg
         aVals := aVals ++ [v]
     -- Resolve fn-pointer variables: if the call target is a local variable
@@ -1019,8 +1015,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- storage, not a fresh copy — otherwise a pointer/ref to a local does not
     -- alias the local (ROADMAP Phase 4 #44d / H5). Promote the local to a
     -- stable alloca; `lookupVar`/`setVar` then route all reads/writes through
-    -- it, so the returned pointer aliases the variable.
-    match ← addrOfLocal inner ty with
+    -- it, so the returned pointer aliases the variable. `placeAddr` also covers
+    -- element/field places (`&a[i]`, `&o.f`) by GEP, not a copy.
+    match ← placeAddr inner ty with
     | some p => return p
     | none =>
     let iVal ← lowerExpr inner
@@ -1059,7 +1056,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       emit (.cast dst rVal ty)
       return .reg dst ty
     | _ =>
-    match ← addrOfLocal inner ty with
+    match ← placeAddr inner ty with
     | some p => return p
     | none =>
     let iVal ← lowerExpr inner
@@ -1447,6 +1444,42 @@ private partial def emitDeferredUntilLoop : LowerM Unit := do
     match frame.kind with
     | .loop | .function => break
     | .block => emitFrameDeferredCalls frame
+
+/-- Address of a place expression, for `&place` / `&mut place`. Returns the
+    pointer to the actual storage so the borrow ALIASES it (a write through the
+    borrow updates the original). Handles array elements (`&mut a[i]`) and struct
+    fields (`&mut o.f`) by GEP-ing into a stable base address, recursing for
+    nested places (`&mut a[i].f`, `&mut grid[i][j]`). `.ident`/scalar promotion is
+    delegated to `addrOfLocal`. Without this, an element/field borrow fell through
+    to `addrOfLocal`'s `none` path and was materialized as a pointer to a throwaway
+    COPY — so the callee mutated the copy and the write was silently lost. -/
+partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
+  match place with
+  | .arrayIndex arr index _ =>
+    let elemTy := match refTy with
+      | .ref t | .refMut t | .ptrMut t | .ptrConst t => t
+      | _ => refTy
+    -- A stable base pointer to the array storage: recurse for a nested place,
+    -- else `lowerExpr arr` (an array ident / `&[T;N]` already lowers to a pointer).
+    let baseAddr ← match ← placeAddr arr (.ptrMut arr.ty) with
+      | some p => pure p
+      | none => lowerExpr arr
+    let iVal ← lowerExpr index
+    let gepDst ← freshReg
+    emit (.gep gepDst baseAddr [iVal] elemTy)
+    return some (.reg gepDst refTy)
+  | .fieldAccess obj field _ =>
+    let tyName ← structNameFromTy obj.ty
+    let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
+    let baseAddr ← match obj.ty with
+      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => lowerExpr obj
+      | _ => match ← placeAddr obj (.ptrMut obj.ty) with
+             | some p => pure p
+             | none => lowerExpr obj
+    let gepDst ← freshReg
+    emit (.gep gepDst baseAddr [.intConst (Int.ofNat byteOff) .int] .i8)
+    return some (.reg gepDst refTy)
+  | _ => addrOfLocal place refTy
 
 /-- Store `newVal` into the location denoted by the place expression `place`.
     This is the unified lvalue path: it recurses into compound places

@@ -10,6 +10,48 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Differential bug-hunt: six interp/compiler fixes via interp-vs-compiled probing (2026-06-27)
+
+A workload-driven differential pass (writing real programs, comparing `--interp`
+vs compiled output, then minimizing each divergence) surfaced and fixed six bugs
+— two of them silent miscompiles in *compiled* code. Each fix carries a permanent
+regression vector in `tests/oracle/vectors.txt`.
+
+- **Miscompile — `&mut <place>` aliased a copy, not storage** (`Concrete/Lower.lean`).
+  Passing `&mut a[i]` (array element) or `&mut o.f` (struct field) to a function
+  GEP'd into a *loaded value* (a throwaway copy), so the callee's write was
+  silently lost — the array/struct was unchanged on return. Now a new `placeAddr`
+  computes a stable base address (promoted local / pointer) and GEPs into it;
+  `borrow`/`borrowMut` and the call-argument path both route through it, including
+  nested places (`&mut a[i].f`, `&mut grid[i][j]`). The old `&mut field` call-arg
+  special case (the source of the copy) is gone. Fixtures: `mut_ref_place.con`.
+- **Miscompile — nested `match`-expression produced invalid SSA** (`Concrete/Elab.lean`).
+  A `match` used as another match's arm value got result type `unit` (the type was
+  read only from a hint, defaulting to unit), so its arm literals were cast to
+  `void` and the outer match collapsed to a single value from a non-dominating
+  block (`E0703`). Match result type is now inferred from the arm bodies when no
+  hint is present. Fixtures: `nested_match_value.con`.
+- **Interp — value-bearing `if`/`match` blocks evaluated to unit** (`Concrete/Interp.lean`).
+  `evalStmts` discarded the final statement's value and `evalStmt`'s `.expr` arm
+  ignored `isValue`, so a value-bearing `if`/`match` block returned unit (the cast
+  then failed, or a downstream `unit + unit` errored). Both now propagate the
+  trailing value (#36 semantics). Fixtures: `if_expr_value.con`, `match_expr_value.con`.
+- **Interp — `while`-expression as a value was unsupported.** `Flow.brk` now
+  carries an optional value, `break v` yields it, and a new `evalWhileExpr`
+  evaluates the loop/`else` value. Fixtures: `while_expr_value.con`.
+- **Parser — `else if` chains rejected in value position** (`Concrete/Parser.lean`).
+  The if-expression parser required `else {`; a trailing `else if` now parses as
+  the else block's value. Fixtures: `else_if_chain.con`.
+- **Interp — bitwise `& | ^` wrong on negative operands** (`Concrete/Interp.lean`).
+  `Int.toNat` clamps negatives to 0, so `-1 & 255` gave 0 instead of 255. Now
+  computed on the two's-complement bit pattern at the operand width. Fixtures:
+  `bitops_negative.con`.
+
+Still open (documented-deferred, not a silent bug): a block-expression
+(`if`/`match`/`while`) as the *trailing value* of a `{ }` block (e.g.
+`if c { match e { … } } else { … }`) is rejected — the "block-as-value" parser
+work. Workarounds: `else if`, or `let x = …; x`.
+
 ### Ignored-result diagnostics — discarding a fallible result is an error (2026-06-27)
 
 Phase 6 #13 (`docs/IGNORED_RESULT.md`). A `;`-terminated statement expression
@@ -38,9 +80,9 @@ rejected with **E0286** unless explicitly acknowledged.
   guard that `let _ =` does not silence a `Destroy` resource (E0208).
 
 With this, the Phase 6 roadmap's fully-shipped items (#1–#7, #10, #11, #13, #16,
-#17, #19, #33, #35a, #36) are folded out of the active list into a one-line index
-at the top of the phase; only deferred-with-pull-condition decisions and unbuilt
-tooling remain.
+#17, #19, #33, #35a, #35b, #36) are folded out of the active list into a one-line
+index at the top of the phase; only deferred-with-pull-condition decisions and
+unbuilt tooling remain.
 
 ### Phase 6 Tier A sweep: style guide, memory model, target-conditional (2026-06-27)
 

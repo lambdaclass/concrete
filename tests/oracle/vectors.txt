@@ -39,6 +39,18 @@ tests/programs/struct_destructure.con
 tests/programs/array_basic.con
 tests/programs/array_assign.con
 
+# --- Value-bearing expressions (if/match/while used as values; #36 + loop-control
+#     #4). Regression guard for the interpreter's trailing-value propagation —
+#     these were previously PENDING ("interp: unsupported ...") before the
+#     evalStmts/evalStmt/while-expr fixes. ---
+tests/programs/if_expr_value.con
+tests/programs/match_expr_value.con
+tests/programs/while_expr_value.con
+tests/programs/nested_match_value.con
+tests/programs/else_if_chain.con
+tests/programs/mut_ref_place.con
+tests/programs/bitops_negative.con
+
 # --- Enums ---
 tests/programs/enum_basic.con
 tests/programs/enum_fields.con

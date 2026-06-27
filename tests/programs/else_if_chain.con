@@ -1,0 +1,17 @@
+// Oracle regression: `else if` chaining in an if-EXPRESSION (value position). The
+// trailing `if` after `else` is the else block's value, so a multi-way chain
+// parses without explicit nested braces. Expected: 10  (4+3+2+1+0).
+mod m {
+    fn grade(n: i32) -> i32 {
+        let g: i32 =
+            if n >= 90 { 4 }
+            else if n >= 80 { 3 }
+            else if n >= 70 { 2 }
+            else if n >= 60 { 1 }
+            else { 0 };
+        return g;
+    }
+    fn main() -> Int {
+        return (grade(95) + grade(85) + grade(72) + grade(61) + grade(40)) as Int;
+    }
+}
