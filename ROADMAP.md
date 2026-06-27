@@ -340,6 +340,59 @@ are folded out.
 - **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
   `docs/STATEMENT_EXPRESSION_MODEL.md`.
 
+13a. **URGENT regression fix before the next Phase 6 feature: wildcard/discard
+   must not bypass linearity.** The Phase 6 #13 ignored-result implementation
+   made `let _ = expr;` an acknowledgement form, but the checker currently skips
+   registering `_` bindings for any non-`Destroy` type. That creates a linearity
+   escape hatch: `let _ = LinearStruct { ... };` compiles even though the same
+   value bound to a name is E0208, and `let _ = Result<Resource, E>` drops the
+   outer result without proving/consuming the payload. Tracked as
+   `docs/KNOWN_HOLES.md` **H6**. Broader probe (2026-06-27) found the root class
+   is **missing nested-scope exit checking**: a bare expression statement like
+   `LinearStruct { ... };` compiles because `Stmt.expr` only rejects
+   `Result`/`Option`; `if`/`if`-expression branches can create branch-local
+   linear values that disappear when the checker restores the pre-branch env;
+   match/enum destructuring arms do not scope-check arm-local linear fields
+   introduced by variant bindings or skipped by `_`; enum `let ... else`
+   destructuring over a linear payload can bind-and-drop the payload; `return`
+   inside a nested branch can skip checking locals created earlier in that branch;
+   `?` propagation inside a nested branch can do the same;
+   and returned linear values in statement position (`make_resource();`,
+   `receiver.method_returning_resource();`, `Type::make_resource();`) compile.
+   Deferred calls are another discard site: `defer risky_result();` and
+   `defer make_resource();` currently ignore the call result. Required fix:
+   - Define one checker helper for "may be explicitly discarded" and use it for
+     `let _ =`, `Stmt.expr` discard, match arm wildcard/value bindings, and
+     destructuring desugar output; Copy values are discardable, but linear values
+     must be consumed, returned, or reserved exactly as MEMORY_GUARANTEES says.
+   - Refactor checker block handling so every statement list is checked as a
+     lexical scope with a known entry environment, exit mode, and local-variable
+     set; before an env is restored or a branch result is merged, all locals
+     introduced inside that block/arm must pass `checkScopeExit` unless the block
+     exits by a path that transfers ownership (`return`, typed `break`, etc.) and
+     that path has checked the same local set. Do not rely on the final
+     function-level `checkScopeExit` to catch locals from branches/arms whose envs
+     are thrown away.
+   - Reject or force explicit handling for `Result<T, E>` / `Option<T>` when `T`
+     or `E` can carry a linear value; do not treat the outer enum as a proof that
+     payload ownership disappeared.
+   - Add red-team fixtures to `scripts/tests/check_ignored_result.sh` or a new
+     linear-discard gate: ordinary `let _ = Linear`, bare `Linear;`, returned
+     linear temporary in statement position, branch-local linear in `if` /
+     `if`-expression including return/`?` propagation paths, empty/copy-only `else` branches,
+     enum `E::A { _ }` over a linear payload, enum arm `E::A { x }` fallthrough
+     with `x` unconsumed, enum `let E::A { x } = e else { ... };` with `x`
+     unconsumed, calls/methods/static methods returning linear values in statement
+     position, deferred calls returning `Result`/`Option` or linear values, and
+     `Result<Resource, E>` acknowledgement must all fail. Keep the existing
+     loop/break/continue/borrow-block positives green; probes show those paths
+     already reject locals correctly.
+   - Register E0286 in `--report diagnostic-codes` while touching the diagnostic
+     surface.
+   - Update `docs/IGNORED_RESULT.md`, `docs/MEMORY_GUARANTEES.md`, and
+     `docs/KNOWN_HOLES.md` when fixed; the closing gate must prove the previous
+     false-green `check_ignored_result.sh` coverage hole is sealed.
+
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
    a namespace gap: if two imported modules export the same public name, the

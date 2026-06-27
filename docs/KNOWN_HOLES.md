@@ -19,12 +19,68 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**No soundness holes are currently open.** H2 (float→int cast overflow) was
-fixed and closed 2026-06-26 — see below. The H1 / C9 / C10 entries are closed
-and retained here (with `CLOSED` markers and regression gates) so the thread is
-legible and the fixes cannot silently regress; the longer-standing closed set is
-under "CLOSED this session" further down. Deferred *design* items that are not
-holes are listed under "Open design decisions" near the end.
+### H6. Wildcard / discarded expression bypasses linearity — OPEN 2026-06-27
+
+**Current state:** OPEN, confirmed locally. The Phase 6 #13 ignored-result
+implementation introduced `let _ = expr;` as an acknowledgement form for
+discarded `Result`/`Option`, but the checker currently skips registering `_`
+bindings for any non-`Destroy` type. That silently permits default-linear values
+to disappear:
+
+- `let _ = LinearStruct { ... };` compiles, while `let x = LinearStruct { ... };`
+  correctly errors E0208 when `x` is not consumed.
+- `let _ = Result<Resource, E>` compiles if the outer `Result` itself has no
+  `Destroy` impl, even though a payload arm may own a resource.
+- Bare statement expressions such as `LinearStruct { ... };` and
+  `make_resource();` compile because `Stmt.expr` only rejects discarded
+  `Result`/`Option`.
+- Branch-local linear values can disappear in `if` / `if`-expression paths whose
+  environments are restored before function-level scope-exit checking sees the
+  locals, including nested `return` or `?` propagation paths that create a local
+  and then leave.
+- Match/enum destructuring arm locals and `_` payload fields are affected too:
+  confirmed probes show enum arms with linear payload bindings (or wildcard
+  payloads) can fall through without an E0208 for the arm-local value.
+- Enum `let ... else` destructuring over a linear payload can bind the payload and
+  then fall through without consuming it.
+- Calls, method calls, and static method calls returning a linear value in
+  statement position (`make_resource();`, `r.id();`, `R::make();`) compile
+  instead of requiring the returned owner to be bound/consumed or rejected as a
+  discarded linear temporary.
+- Deferred calls discard their return value too: `defer risky_result();` and
+  `defer make_resource();` currently compile, hiding ignored fallible results or
+  linear owners behind cleanup syntax.
+
+Why this matters: it contradicts the public memory guarantee that every linear
+value is consumed or reserved by scope exit. This is a soundness/linearity claim
+hole, not only a diagnostic papercut.
+
+Reproducing fixtures: not yet checked in. Scratch repros used during review:
+`let _ = Token { x: 1 };`, `Token { x: 1 };`, `make_resource();`,
+`if true { let r = Token { ... }; }`,
+`if true { let r = Token { ... }; return 0; }`, `let _ = open_result_file();`,
+`if true { let r = Token { ... }; fallible()?; }`,
+`match e { E::A { b } => { ... } }` where `b` is linear and falls through
+unconsumed, `let E::A { b } = e else { return 0; };`, and call/method/static
+call statement discards of linear return values, plus deferred calls returning
+fallible or linear values.
+
+Gate to add: extend `scripts/tests/check_ignored_result.sh` or add a dedicated
+linear-discard red-team gate covering ordinary `_` bindings, bare expression
+statements, returned linear temporaries, branch-local linear values,
+`Result`/`Option` with linear payloads, enum-arm bindings, and enum wildcard
+payloads, enum `let ... else` destructuring, and call/method/static call linear
+returns in statement position, plus deferred-call return discards. The fix lives
+in ROADMAP Phase 6 #13a. The
+implementation should refactor checker block handling around explicit lexical
+scopes and exit modes so new discard sites cannot bypass linearity by restoring
+an older environment.
+
+The H1 / H2 / C9 / C10 entries are closed and retained here (with `CLOSED`
+markers and regression gates) so the thread is legible and the fixes cannot
+silently regress; the longer-standing closed set is under "CLOSED this session"
+further down. Deferred *design* items that are not holes are listed under
+"Open design decisions" near the end.
 
 ### H2. Float→int cast overflow — CLOSED 2026-06-26
 
