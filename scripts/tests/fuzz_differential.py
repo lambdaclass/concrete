@@ -41,8 +41,8 @@ class Gen:
         self.arrs = ["a0"]
         self.structs = ["s0"]
         self.ctr = 0  # for unique loop-counter names (no bare-block wrapper)
-        self.loops = True  # generate while-loops (off exposes a known, separate
-                           # loop-SSA codegen bug — see docs/KNOWN_HOLES.md)
+        self.loops = True  # generate while-loops (off available for debugging; the
+                           # H7 loop-SSA bug it once exposed is now fixed)
 
     def lit(self):
         return str(self.rng.randint(0, 9))
@@ -227,8 +227,8 @@ def main():
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--no-loops", action="store_true",
-                    help="don't generate while-loops (they expose a known, separate "
-                         "loop-SSA codegen bug — see docs/KNOWN_HOLES.md)")
+                    help="don't generate while-loops (debugging aid; the H7 loop-SSA bug "
+                         "it once exposed is now fixed)")
     args = ap.parse_args()
     if not os.access(CC, os.X_OK):
         print(f"error: build first ({CC} missing)", file=sys.stderr); sys.exit(2)

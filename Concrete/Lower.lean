@@ -1650,7 +1650,12 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       | _ => pure false
     if promote then
       let allocaReg ← freshReg s!"{name}.agg."
-      emit (.alloca allocaReg ty)
+      -- Hoist the alloca to the ENTRY block so it dominates every later use: a
+      -- `let mut` inside a branch would otherwise put the alloca in that branch
+      -- block, and a read at the post-branch merge would not be dominated by it
+      -- (E0703). Entry-hoisting also avoids per-iteration stack growth in loops.
+      -- The initializing store stays here, at the declaration site.
+      emitEntryAlloca (.alloca allocaReg ty)
       emit (.store val (.reg allocaReg ty))
       addPromotedAlloca name allocaReg ty
     else
@@ -1781,6 +1786,19 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
             match incoming.head? with
             | some (v, _) => setVar name v
             | none => pure ()
+      -- Drop branch-local declarations (e.g. a loop counter `let mut k` declared
+      -- inside a branch) so they do not leak into a later construct's variable
+      -- snapshot. A leaked branch-local would make the next loop/merge build a
+      -- spurious header phi whose pre-value is defined inside the branch and does
+      -- not dominate the merge (H7: E0708). Keep the merged values for names that
+      -- existed before the `if`; restrict the live set to exactly those names —
+      -- the same scope cleanup the match lowering does (WC-0004).
+      let st ← getState
+      let cleaned := preIfVars.map fun (n, preVal) =>
+        match st.vars.find? fun (vn, _) => vn == n with
+        | some (_, v) => (n, v)
+        | none => (n, preVal)
+      setState { st with vars := cleaned }
 
   | .while_ cond body whileLabel step =>
     let headerLabel ← freshLabel "while.hdr"

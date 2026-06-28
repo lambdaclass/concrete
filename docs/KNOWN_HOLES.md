@@ -19,96 +19,46 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — OPEN 2026-06-28
+**No soundness or codegen holes are currently open.** The most recent — H6
+(linear-discard) and H7 (loop-SSA) — were both closed 2026-06-28; their CLOSED
+entries (with reproducers and regression gates) are retained below so the fixes
+cannot silently regress.
 
-**Current state:** OPEN, found by `scripts/tests/fuzz_differential.py` (the random
-interp-vs-compiled fuzzer) and minimized. A `while`-loop whose header phi reconciles
-a variable that was last updated inside a *previous* loop sitting in an `if`/`else`
-branch references that earlier loop's header phi from a non-dominating block, so SSA
-verification rejects the program (E0708). This is a **compile-time codegen bug
-(valid program wrongly rejected)**, not a silent miscompile — the interpreter runs
-it fine and the SSA verifier catches the bad lowering before any binary is produced.
+### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — CLOSED 2026-06-28
 
-Minimal reproducer (rejected with E0708; `--no-loops` avoids the family):
-```
-mod m {
-  fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }
-  fn main() -> Int {
-    let mut v1: i32 = 1; let mut v2: i32 = 0;
-    if v1 < 8 { v1 = 1; }
-    else { let mut k1: i32 = 0; while k1 < 3 { addv(&mut v1, 5); k1 = k1 + 1; } }
-    let mut k2: i32 = 0; while k2 < 3 { addv(&mut v2, 4); k2 = k2 + 1; }
-    return v1 as Int;
-  }
-}
-```
-Notes: a loop in the `then` branch, or two *plain* sequential loops, both compile —
-the trigger is specifically a loop reached via the merge of an enclosing `if` whose
-exit value feeds the next loop's header phi. Root area: loop-exit value propagation
-into an enclosing scope and the subsequent loop's header-phi construction in
-`Concrete/Lower.lean` (`while_`/`whileExpr` header phis over `preLoopVars`).
+**Fixed.** A `while`-loop following an `if` whose branch contained another loop
+rejected with E0708: a loop counter declared inside the branch leaked into the
+env, so the next loop's header phi referenced the first loop's counter from a
+non-dominating block. Found by `scripts/tests/fuzz_differential.py` and minimized.
+Fix (`Concrete/Lower.lean`): after an if-statement merges, restrict the live
+variable set to the names that existed before the `if` — the scope cleanup the
+`match` lowering already did (WC-0004) — so branch-local declarations don't leak
+into a later construct's phi reconciliation. The fuzzer now runs WITH loops (the
+`--no-loops` flag is dropped) and is clean across many seeds at depth 4.
+Regression: `tests/programs/loop_after_branch_loop.con` (oracle vector).
 
-Gate to add: a dedicated loop-SSA red-team gate (and re-enable the fuzzer's loop
-generation — drop the `--no-loops` flag on `make test-fuzz-differential`) once the
-loop-exit/header-phi reconciliation is fixed. Until then the fuzzer gate runs
-`--no-loops` so it stays green over the (fixed) value-bearing / ref / match shapes.
+### H6. Silent discard of a linear (non-Copy) value — CLOSED 2026-06-28
 
-### H6. Wildcard / discarded expression bypasses linearity — OPEN 2026-06-27
+**Fixed.** A non-Copy value that was discarded without being consumed silently
+vanished, contradicting the guarantee that every linear value is consumed. Closed
+across the discard sites (`Concrete/Check.lean`):
 
-**Current state:** OPEN, confirmed locally. The Phase 6 #13 ignored-result
-implementation introduced `let _ = expr;` as an acknowledgement form for
-discarded `Result`/`Option`, but the checker currently skips registering `_`
-bindings for any non-`Destroy` type. That silently permits default-linear values
-to disappear:
+- a bare statement expression (`make_resource();`, `Token { .. };`, a discarded
+  linear call/method result) → **E0287** (`discardedLinear`);
+- a linear value declared inside an `if`/`else` branch and left unconsumed →
+  **E0208** at the branch merge (new `checkBlockLocalsConsumed`, run per branch);
+- a matched payload binding left unconsumed in an arm (`E::A { t } => { }`) →
+  **E0208** (same check, per arm);
+- a deferred call whose return is a linear value (`defer make_resource();`) →
+  **E0287**;
+- (`while`-body locals and enum `let … else` payloads were already caught by the
+  function-scope-exit check.)
 
-- `let _ = LinearStruct { ... };` compiles, while `let x = LinearStruct { ... };`
-  correctly errors E0208 when `x` is not consumed.
-- `let _ = Result<Resource, E>` compiles if the outer `Result` itself has no
-  `Destroy` impl, even though a payload arm may own a resource.
-- Bare statement expressions such as `LinearStruct { ... };` and
-  `make_resource();` compile because `Stmt.expr` only rejects discarded
-  `Result`/`Option`.
-- Branch-local linear values can disappear in `if` / `if`-expression paths whose
-  environments are restored before function-level scope-exit checking sees the
-  locals, including nested `return` or `?` propagation paths that create a local
-  and then leave.
-- Match/enum destructuring arm locals and `_` payload fields are affected too:
-  confirmed probes show enum arms with linear payload bindings (or wildcard
-  payloads) can fall through without an E0208 for the arm-local value.
-- Enum `let ... else` destructuring over a linear payload can bind the payload and
-  then fall through without consuming it.
-- Calls, method calls, and static method calls returning a linear value in
-  statement position (`make_resource();`, `r.id();`, `R::make();`) compile
-  instead of requiring the returned owner to be bound/consumed or rejected as a
-  discarded linear temporary.
-- Deferred calls discard their return value too: `defer risky_result();` and
-  `defer make_resource();` currently compile, hiding ignored fallible results or
-  linear owners behind cleanup syntax.
-
-Why this matters: it contradicts the public memory guarantee that every linear
-value is consumed or reserved by scope exit. This is a soundness/linearity claim
-hole, not only a diagnostic papercut.
-
-Reproducing fixtures: not yet checked in. Scratch repros used during review:
-`let _ = Token { x: 1 };`, `Token { x: 1 };`, `make_resource();`,
-`if true { let r = Token { ... }; }`,
-`if true { let r = Token { ... }; return 0; }`, `let _ = open_result_file();`,
-`if true { let r = Token { ... }; fallible()?; }`,
-`match e { E::A { b } => { ... } }` where `b` is linear and falls through
-unconsumed, `let E::A { b } = e else { return 0; };`, and call/method/static
-call statement discards of linear return values, plus deferred calls returning
-fallible or linear values.
-
-Gate to add: extend `scripts/tests/check_ignored_result.sh` or add a dedicated
-linear-discard red-team gate covering ordinary `_` bindings, bare expression
-statements, returned linear temporaries, branch-local linear values,
-`Result`/`Option` with linear payloads, enum-arm bindings, and enum wildcard
-payloads, enum `let ... else` destructuring, and call/method/static call linear
-returns in statement position, plus deferred-call return discards. The fix lives
-in ROADMAP Phase 6 #13a. The
-implementation should refactor checker block handling around explicit lexical
-scopes and exit modes so new discard sites cannot bypass linearity by restoring
-an older environment.
+`free(box);` is exempt — `free` IS the consumption (it hands back the moved-out
+pointee, idiomatically dropped). `let _ = expr;` remains the **intended explicit
+discard** (the user opts in by typing `_`); it is Destroy-gated, so a resource
+still cannot be silenced through it. Regression gate:
+`scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
 
 The H1 / H2 / C9 / C10 entries are closed and retained here (with `CLOSED`
 markers and regression gates) so the thread is legible and the fixes cannot

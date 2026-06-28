@@ -10,6 +10,33 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Close the last two holes: H6 (silent linear discard) and H7 (loop-SSA) (2026-06-28)
+
+With these, **no soundness or codegen holes remain open** in KNOWN_HOLES.
+
+- **H7 — loop after a loop-bearing `if`-branch produced invalid SSA (E0708).** A
+  loop counter declared inside an `if`/`else` branch leaked into the env, so the
+  *next* loop's header phi referenced the first loop's counter from a
+  non-dominating block. Found by the differential fuzzer. Fix (`Concrete/Lower.lean`):
+  after an if-statement merges, restrict the live variable set to the names that
+  existed before the `if` (the scope cleanup the `match` lowering already did). The
+  fuzzer now runs **with loops re-enabled** and is clean. Regression:
+  `loop_after_branch_loop.con`.
+- **H6 — silent discard of a linear (non-Copy) value.** A non-Copy value dropped
+  without being consumed silently vanished, contradicting the linearity guarantee.
+  Closed across every discard site (`Concrete/Check.lean`): a bare statement value
+  / discarded call result → **E0287**; a branch-local declared in an `if`/`else`
+  branch and left unconsumed → **E0208** (new `checkBlockLocalsConsumed`); an
+  unconsumed match-arm payload → **E0208**; a deferred call returning a linear
+  value → **E0287**. `free(box);` is exempt (it *is* the consumption); `let _ =
+  expr;` remains the intended explicit discard (Destroy-gated, so resources can't
+  be silenced). Gate: `scripts/tests/check_linear_discard.sh`.
+- **Bonus regression fix.** Investigating the examples gate surfaced that the H8
+  struct-promotion used `emit (.alloca)` (current block) instead of
+  `emitEntryAlloca`, so a promoted `let mut <struct>` inside a branch produced a
+  non-dominating alloca (E0703 in `lox`). Hoisted to the entry block (also avoids
+  per-iteration stack growth in loops); examples gate back to 129/0.
+
 ### Array indexing is now runtime bounds-checked — closes memory-safety hole H8 (2026-06-28)
 
 Raw `a[i]` / `a[i] = v` on a fixed array previously lowered to a raw `gep` with no

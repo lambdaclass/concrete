@@ -1,0 +1,21 @@
+// Oracle regression (KNOWN_HOLES H7): a `while`-loop that follows an `if` whose
+// branch contains another loop. The loop counter declared inside the branch must
+// be scoped out at the if-merge, or the second loop's header phi references the
+// first loop's counter from a non-dominating block (E0708, invalid SSA). Expected:
+// 13  (v1<8 true -> v1=1; second loop: v2 = 4*3 = 12; 1+12 = 13).
+mod m {
+    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }
+    fn main() -> Int {
+        let mut v1: i32 = 1;
+        let mut v2: i32 = 0;
+        if v1 < 8 {
+            v1 = 1;
+        } else {
+            let mut k1: i32 = 0;
+            while k1 < 3 { addv(&mut v1, 5); k1 = k1 + 1; }
+        }
+        let mut k2: i32 = 0;
+        while k2 < 3 { addv(&mut v2, 4); k2 = k2 + 1; }
+        return (v1 + v2) as Int;
+    }
+}

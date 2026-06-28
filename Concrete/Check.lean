@@ -159,6 +159,11 @@ inductive CheckError where
   -- silently discarded. Phase 6 #13: discarding a fallible result is an error
   -- unless explicitly acknowledged with `let _ = expr;`.
   | discardedMustUse (tyName : String)
+  -- A non-Copy (linear) value produced by a statement expression (`expr;`) is
+  -- silently discarded without being consumed — e.g. `make_resource();` or
+  -- `Token { .. };`. H6: every linear value must be consumed; a silent drop is an
+  -- error. Acknowledge an intentional discard with `let _ = expr;`.
+  | discardedLinear (tyName : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -244,6 +249,7 @@ def CheckError.message : CheckError → String
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
+  | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -262,6 +268,7 @@ def CheckError.hint : CheckError → Option String
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
   | .discardedMustUse _ => some "handle it (match / `?` / pass it on), or write `let _ = …;` to discard it explicitly"
+  | .discardedLinear _ => some "consume it (bind, pass it on, destroy()), or write `let _ = …;` to discard it explicitly"
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
@@ -352,6 +359,7 @@ def CheckError.code : CheckError → String
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"
   | .discardedMustUse _ => "E0286"
+  | .discardedLinear _ => "E0287"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -738,6 +746,20 @@ def checkScopeExit (varNames : List String) (span : Option Span := none) : Check
         -- spanless); fall back to the scope-exit span.
         throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
     | none => pure ()
+
+/-- After a nested block scope (an `if`/`else` branch) exits, every non-Copy value
+    DECLARED INSIDE that block must already be consumed — otherwise it silently
+    leaks when the block's bindings go out of scope (H6 branch-local discard). A
+    block-local is a name present at block exit (`after`) but not at block entry
+    (`before`). The function-level `checkScopeExit` cannot catch these because the
+    branch environment is restored/merged before it runs. -/
+def checkBlockLocalsConsumed (before after : List (String × VarInfo))
+    (span : Option Span := none) : CheckM Unit := do
+  let beforeNames := before.map (·.1)
+  for (name, info) in after do
+    if !(beforeNames.contains name) && !info.isCopy
+        && info.state != .consumed && info.state != .reserved then
+      throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
 
 -- ============================================================
 -- Type substitution for generics
@@ -1831,6 +1853,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               checkStmt other curEnv.currentRetTy
               pure Ty.unit
             | none => pure Ty.unit
+          -- H6: arm-local bindings (the matched payload, plus any `let` in the arm)
+          -- are non-Copy linear values that must be consumed before the arm ends —
+          -- they go out of scope at the match merge. Catch a leaked payload such as
+          -- `E::A { t } => { }` where `t` is never used.
+          let armEndEnv ← getEnv
+          checkBlockLocalsConsumed envBefore.vars armEndEnv.vars (some e.getSpan)
           -- Unify arm types
           if !firstArmDone then
             matchResultTy := armTy
@@ -2269,10 +2297,24 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- the discard silently throws away a possible failure/absence — flag it. A
     -- trailing value expression (`isValue := true`) is the block's value, not a
     -- discard, so it is never flagged.
-    if !isValue then
-      match mustUseEnumName? eTy with
-      | some _ => throwCheck (.discardedMustUse (tyToString eTy)) (some stmt.getSpan)
-      | none => pure ()
+    -- H6: a discarded statement value that is non-Copy (linear) is silently
+    -- dropped without being consumed — an error. `Result`/`Option` get the
+    -- must-use message; other linear values get the general one. Copy values,
+    -- `unit`, and `never` (diverging, e.g. `abort()`) are fine to discard.
+    -- `free(box)` is itself the consumption (it deallocates the Heap and hands
+    -- back the moved-out pointee); discarding that returned pointee is the
+    -- established free-and-drop idiom, so it is exempt from the discard check.
+    let isFreeCall := match e with
+      | .call _ fn _ _ => resolveIntrinsic fn == some .free
+      | _ => false
+    if !isValue && !isFreeCall then
+      match eTy with
+      | .unit | .never | .placeholder => pure ()
+      | _ =>
+        if !(← isCopyType eTy) then
+          match mustUseEnumName? eTy with
+          | some _ => throwCheck (.discardedMustUse (tyToString eTy)) (some stmt.getSpan)
+          | none => throwCheck (.discardedLinear (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
     let _condTy ← checkExpr cond
@@ -2281,12 +2323,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Check then branch
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
+    -- Linear values declared inside the then-branch must be consumed before the
+    -- branch ends (H6 branch-local discard); they go out of scope at the merge.
+    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
     -- Restore env and check else branch
     setEnv envBefore
     match elseBody with
     | some stmts =>
       checkStmts stmts retTy
       let envAfterElse ← getEnv
+      checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (some stmt.getSpan)
       -- Merge: both branches must agree on consumption state of linear vars
       mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars (some stmt.getSpan)
     | none =>
@@ -2374,7 +2420,21 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     match body with
     | .call _ _ _ _ => pure ()
     | _ => throwCheck .deferBodyNotCall (some stmt.getSpan)
-    let _ ← checkExpr body
+    let bodyTy ← checkExpr body
+    -- H6: a deferred call's return value is discarded at scope exit, exactly like
+    -- a bare statement expression — a non-Copy result leaks. (`free()` is exempt,
+    -- as in the statement-discard check.)
+    let isFreeCall := match body with
+      | .call _ fn _ _ => resolveIntrinsic fn == some .free
+      | _ => false
+    if !isFreeCall then
+      match bodyTy with
+      | .unit | .never | .placeholder => pure ()
+      | _ =>
+        if !(← isCopyType bodyTy) then
+          match mustUseEnumName? bodyTy with
+          | some _ => throwCheck (.discardedMustUse (tyToString bodyTy)) (some stmt.getSpan)
+          | none => throwCheck (.discardedLinear (tyToString bodyTy)) (some stmt.getSpan)
     -- Any variable consumed by the deferred call should be reserved, not consumed.
     -- The actual consumption happens at scope exit.
     match body with

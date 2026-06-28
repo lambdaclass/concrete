@@ -365,6 +365,9 @@ jobs:
       - name: Array-bounds gate (KNOWN_HOLES H8 — raw a[i] runtime-checked; OOB read/write/negative/nested/&mut trap)
         run: bash scripts/tests/check_array_bounds.sh
 
+      - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
+        run: bash scripts/tests/check_linear_discard.sh
+
       - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
         run: bash scripts/tests/check_no_macros.sh
 

@@ -112,14 +112,13 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **Open soundness hole: H6** (wildcard /
-discarded expression bypasses linearity). The arithmetic/cast/bounds holes are
-closed: H2 (float→int cast overflow) closed 2026-06-26; H8 (array indexing) closed
-2026-06-28 — raw `a[i]`/`a[i] = v` now traps at runtime on out-of-bounds, matching
-the interpreter. Overflow, div/mod-zero, over-width shift, `MIN` negation, the
-float→int cast, and array bounds all abort by default (ROADMAP #10 Stage 2.x +
-H8). (H7 is an invalid-SSA codegen bug — a valid program wrongly rejected at
-compile time — not a runtime soundness hole.)
+it in sync when a hole is added or fixed. **No soundness or codegen holes are
+currently open** (as of 2026-06-28): H6 (silent linear discard) and H7 (loop-SSA)
+were the last two and are both closed and gated. Overflow, div/mod-zero,
+over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
+all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
+enforced at every discard site (H6); `let _ = expr;` is the intended explicit
+discard.
 
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
