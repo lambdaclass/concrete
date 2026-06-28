@@ -277,6 +277,21 @@ private def checkedF2IHelper (srcf llft : String) (signed : Bool) (w : Nat) : St
     ++ "trap:\n  call void @abort()\n  unreachable\n"
     ++ "conv:\n  %r = " ++ conv ++ " " ++ llft ++ " %f to " ++ wt ++ "\n  ret " ++ wt ++ " %r\n}"
 
+/-- A checked array-index helper (KNOWN_HOLES H8): aborts if the index is out of
+    bounds, otherwise returns. A SINGLE unsigned compare `(u64)i < n` rejects both
+    a negative index (it wraps to a huge unsigned value) and `i >= n` at once — the
+    same one-test trick the float-cast range check uses. The length is an operand,
+    so `[T; N]` (constant) and a future Vec/slice (runtime length field) share one
+    abort block. Same `@abort()` trap as checked arithmetic, so compiled and
+    interpreter agree (both abort) on out-of-bounds. `internal` linkage → LLVM DCEs
+    it if unused, and folds the compare away when the index is provably in range. -/
+private def boundsCheckHelperDef : String :=
+  "define internal void @__cc_bounds_check(i64 %i, i64 %n) {\n"
+    ++ "  %ok = icmp ult i64 %i, %n\n"
+    ++ "  br i1 %ok, label %cont, label %trap\n"
+    ++ "trap:\n  call void @abort()\n  unreachable\n"
+    ++ "cont:\n  ret void\n}"
+
 private def checkedF2IHelperDefs : List String :=
   ([("f32", "float"), ("f64", "double")] : List (String × String)).flatMap fun p =>
     ([8, 16, 32, 64] : List Nat).flatMap fun w =>
@@ -1562,6 +1577,8 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let s := checkedDivHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   let s := checkedShiftHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   let s := checkedF2IHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
+  -- Array-bounds check helper (KNOWN_HOLES H8): raw `a[i]` traps on out-of-bounds.
+  let s := { s with moduleHeader := s.moduleHeader.push boundsCheckHelperDef }
   -- Well-known struct types (String, Vec)
   let s := Layout.builtinTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark builtins as emitted so user-defined versions don't duplicate them

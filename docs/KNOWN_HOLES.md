@@ -19,44 +19,6 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-### H8. Array indexing is not bounds-checked at runtime — OPEN 2026-06-28
-
-**Current state:** OPEN, confirmed locally. Compiled code performs **no runtime
-bounds check** on array access: `Concrete/Lower.lean` lowers `a[i]` to a raw
-`gep`+`load` and `a[i] = v` (via `storeToPlace`) to a raw `gep`+`store`, with no
-length guard anywhere in codegen (`Lower`/`EmitSSA`/`Backend`). So a dynamic
-out-of-bounds index **silently reads or writes out-of-bounds memory** at runtime
-(exit 0), while the interpreter correctly traps. This is a **memory-safety hole in
-compiled code**, and an interp-vs-compiled divergence.
-
-Reproducer (compiled: silent; interp: `array index 10 out of bounds`):
-```
-mod m { fn main() -> Int {
-  let a: [i32; 4] = [10,20,30,40];
-  let mut i: i32 = 0; while i < 10 { i = i + 1; }   // i = 10, OOB
-  return a[i as Int] as Int;                         // compiled returns 0; OOB write corrupts memory
-} }
-```
-
-Why it matters: every other runtime-safety obligation now traps by default —
-overflow, div/mod-zero, over-width shift, `MIN` negation, and the H2 float→int cast
-all abort (ROADMAP #10 Stage 2.x). Array bounds is the one obligation left
-unenforced at runtime. The intended model (see `Concrete/Profile.lean`) is static
-bounds obligations (`Report.boundsObligations`, constant OOB already rejected) plus
-checked accessor APIs (`vec_get` → `Option`); but raw `a[i]` on an *unproven* index
-neither proves nor traps — it just runs unsafely. This contradicts the project's
-memory-safety framing.
-
-Fuzzer note: `scripts/tests/fuzz_differential.py` cannot currently catch this — it
-emits only constant in-bounds indices, and treats an `interp:` error (which OOB
-produces) as PENDING rather than a divergence. Both need fixing to mine this class.
-
-Fix (ROADMAP, runtime-safety policy): emit a checked index (compare against the
-known/derived length, abort on failure) for any `a[i]`/`a[i] = v` whose bounds
-obligation is not discharged — the bounds analogue of the checked-arithmetic flip —
-or require checked accessor APIs and reject raw unproven indexing. Until then,
-disclosed here.
-
 ### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — OPEN 2026-06-28
 
 **Current state:** OPEN, found by `scripts/tests/fuzz_differential.py` (the random
@@ -153,6 +115,31 @@ markers and regression gates) so the thread is legible and the fixes cannot
 silently regress; the longer-standing closed set is under "CLOSED this session"
 further down. Deferred *design* items that are not holes are listed under
 "Open design decisions" near the end.
+
+### H8. Array indexing is not bounds-checked at runtime — CLOSED 2026-06-28
+
+**Fixed.** Raw `a[i]` / `a[i] = v` on a fixed array is now runtime bounds-checked:
+`Concrete/Lower.lean` emits a call to the shared `@__cc_bounds_check` helper
+(`Concrete/EmitSSA.lean`) before every array GEP — the read path (`arrayIndex`),
+the write path (`storeToPlace`), and the borrow/place path (`placeAddr`, covering
+`&a[i]`/`&mut a[i]` and nested `m[i][j]` / `a[i].f`). A single unsigned compare
+`(u64)i < len` rejects both a negative index and `i >= len`; on failure the helper
+calls `@abort()` — the same exit-134 trap as checked arithmetic, so compiled code
+and the interpreter now agree (both abort) on out-of-bounds. The check is always
+emitted; LLVM folds it away when the index is provably in range, and a proven
+constant OOB remains a hard compile error (C7). The intended next step (static
+bounds-obligation elision and a named `get_unchecked`-style opt-out behind
+trusted/Unsafe, parallel to `wrapping_*`) is an optimization/ergonomics follow-up,
+not a safety precondition.
+
+**Reproducer (now both abort):** `let a:[i32;4]=…; while i<10 {…}; a[i]` — compiled
+exit 134, interp `array index 10 out of bounds`.
+
+**Gates:** `scripts/tests/check_array_bounds.sh` (Makefile `test-array-bounds` + CI)
+asserts in-bounds works and OOB read/write/negative/nested/`&mut` all trap;
+`tests/programs/array_bounds_inbounds.con` is an oracle vector for the in-bounds
+value; and `scripts/tests/fuzz_differential.py` now generates dynamic/out-of-range
+indices and asserts interp-trap ⟺ compiled-trap (so a regression re-opens loudly).
 
 ### H2. Float→int cast overflow — CLOSED 2026-06-26
 

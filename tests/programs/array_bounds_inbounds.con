@@ -1,0 +1,13 @@
+// Oracle regression (KNOWN_HOLES H8): a dynamic IN-BOUNDS array access must still
+// work after the runtime bounds-check landed — interp and compiled agree on the
+// value, the check does not trap a valid access. (Out-of-bounds trapping is
+// asserted by scripts/tests/check_array_bounds.sh, since an abort is not a value
+// the stdout-comparison oracle can check.) Expected: 30.
+mod m {
+    fn main() -> Int {
+        let a: [i32; 4] = [10, 20, 30, 40];
+        let mut i: i32 = 0;
+        while i < 2 { i = i + 1; }   // i = 2, in bounds
+        return a[i as Int] as Int;
+    }
+}

@@ -112,13 +112,13 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **Open soundness holes: H6** (wildcard /
-discarded expression bypasses linearity) **and H8** (array indexing is not
-bounds-checked at runtime — compiled OOB silently reads/writes memory). The
-arithmetic/cast holes are closed: H2 (float→int cast overflow) was closed
-2026-06-26 by making `f as iN` a checked conversion (NaN/±inf/out-of-range abort);
-overflow, div/mod-zero, over-width shift, and `MIN` negation all trap (ROADMAP #10
-Stage 2.x). (H7 is an invalid-SSA codegen bug — a valid program wrongly rejected at
+it in sync when a hole is added or fixed. **Open soundness hole: H6** (wildcard /
+discarded expression bypasses linearity). The arithmetic/cast/bounds holes are
+closed: H2 (float→int cast overflow) closed 2026-06-26; H8 (array indexing) closed
+2026-06-28 — raw `a[i]`/`a[i] = v` now traps at runtime on out-of-bounds, matching
+the interpreter. Overflow, div/mod-zero, over-width shift, `MIN` negation, the
+float→int cast, and array bounds all abort by default (ROADMAP #10 Stage 2.x +
+H8). (H7 is an invalid-SSA codegen bug — a valid program wrongly rejected at
 compile time — not a runtime soundness hole.)
 
 Governing frame: **no semantically dark constructs.** Every language

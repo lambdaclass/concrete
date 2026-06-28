@@ -52,20 +52,22 @@ interpreter agree by construction (verified by the differential oracle).
   unrepresentable), exactly like the `0 - x` checked subtraction. (Was previously
   `sub 0, x` wrapping silently.) The interpreter traps to match.
 
-> **Not yet checked at runtime: array indexing.** Unlike the arithmetic above, a
-> raw `a[i]` / `a[i] = v` with an index the compiler cannot prove in-bounds emits a
-> raw `gep` with no bounds guard, so an out-of-bounds access silently reads/writes
-> memory in compiled code (the interpreter traps). See KNOWN_HOLES **H8**. The
-> intended model is static bounds obligations + checked accessor APIs, but until a
-> runtime bounds-trap exists this is a memory-safety gap, not a checked operation.
+- **Array indexing**: checked — a raw `a[i]` / `a[i] = v` whose index is out of
+  bounds traps (abort) at runtime. A single unsigned compare `(u64)i < len` catches
+  both negative and `>= len`; the `@__cc_bounds_check` helper aborts on failure (the
+  same trap as the arithmetic above), so compiled code and the interpreter agree.
+  Constant-OOB is a hard compile error (C7); a provably in-bounds index folds the
+  check away. (KNOWN_HOLES H8, closed 2026-06-28; gate `check_array_bounds.sh`.) A
+  named `get_unchecked`-style opt-out behind trusted/Unsafe is a future ergonomic
+  addition, parallel to `wrapping_*` — there is no global "disable bounds checks".
 
 ### Current interpreter behavior
 
 The source-level interpreter (`Interp.lean`) uses Lean's arbitrary-precision `Int`
 and traps on overflow / div-zero / over-width shift / `MIN` negation, matching the
 compiled aborts (the earlier interp-vs-compiled arithmetic divergence is closed).
-It also traps on out-of-bounds array access — which compiled code does **not** yet
-do (H8).
+It also traps on out-of-bounds array access — which compiled code now does too
+(H8, closed 2026-06-28).
 
 ### Current proof behavior
 

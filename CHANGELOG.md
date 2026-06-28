@@ -10,6 +10,33 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Array indexing is now runtime bounds-checked — closes memory-safety hole H8 (2026-06-28)
+
+Raw `a[i]` / `a[i] = v` on a fixed array previously lowered to a raw `gep` with no
+bounds guard, so a dynamic out-of-bounds index **silently read or wrote
+out-of-bounds memory** in compiled code (the interpreter trapped) — a real
+memory-safety hole, and the one runtime-safety obligation left unenforced while
+overflow/div-zero/shift/`MIN`-neg/float-cast all trap. Now closed:
+
+- **Checked by default** (`Concrete/Lower.lean` + `Concrete/EmitSSA.lean`): every
+  array GEP — read (`arrayIndex`), write (`storeToPlace`), and borrow/place
+  (`placeAddr`, covering `&a[i]`/`&mut a[i]` and nested `m[i][j]` / `a[i].f`) —
+  emits a call to a shared `@__cc_bounds_check` helper. A single unsigned compare
+  `(u64)i < len` catches both negative and `>= len`; on failure it `@abort()`s, the
+  same exit-134 trap as checked arithmetic, so compiled code and the interpreter now
+  agree (both abort) on out-of-bounds. LLVM folds the check away when the index is
+  provably in range; constant OOB stays a hard compile error (C7).
+- **Fail-closed**: safety does not depend on the obligation engine. Static
+  bounds-obligation elision and a named `get_unchecked` opt-out (behind
+  trusted/Unsafe, parallel to `wrapping_*`) are future follow-ups, not preconditions.
+- **Regression-gated**: `scripts/tests/check_array_bounds.sh` (Makefile
+  `test-array-bounds` + CI) asserts in-bounds works and OOB read/write/negative/
+  nested/`&mut` all trap; `array_bounds_inbounds.con` is an oracle vector; and the
+  differential fuzzer (`fuzz_differential.py`) now generates dynamic/out-of-range
+  indices and asserts interp-trap ⟺ compiled-trap, so the hole can't silently reopen.
+
+Full suite 3028/0.
+
 ### Fuzzer hardening: enums/nested-match + SSA-error detection, two more codegen fixes (2026-06-28)
 
 Extended the differential fuzzer (`scripts/tests/fuzz_differential.py`) to generate

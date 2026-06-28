@@ -52,6 +52,7 @@ tests/programs/mut_ref_place.con
 tests/programs/mut_ref_field_in_branch.con
 tests/programs/binop_literal_width.con
 tests/programs/value_block_then_match.con
+tests/programs/array_bounds_inbounds.con
 tests/programs/bitops_negative.con
 
 # --- Enums ---

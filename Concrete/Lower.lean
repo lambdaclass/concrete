@@ -117,6 +117,25 @@ private def coerceVal (val : SVal) (ty : Ty) (pfx : String := "cast.") : LowerM 
     pure (.reg castReg ty)
   else pure val
 
+/-- Static length of an array type, peeling one ref/ptr/heap layer (so `&[T; N]`
+    and `[T; N]` both yield `N`). `none` for non-array types. -/
+private def arrayLenOfTy : Ty → Option Nat
+  | .array _ n => some n
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => arrayLenOfTy t
+  | _ => none
+
+/-- Emit a runtime bounds check for an array access at `idxVal` against length
+    `len` (KNOWN_HOLES H8). Calls the shared `@__cc_bounds_check` helper, which
+    aborts (exit 134, same trap as checked arithmetic) when `(u64)idx >= len` —
+    catching both negative and `>= len` in one unsigned compare. ALWAYS emitted:
+    memory safety must not depend on the obligation engine; a provably in-bounds
+    index folds the compare away, and a provably constant OOB is already a hard
+    compile error. The index is widened to i64 for the check; the original `idxVal`
+    is still used for the GEP. -/
+private def emitBoundsCheck (idxVal : SVal) (len : Nat) : LowerM Unit := do
+  let idxI64 ← coerceVal idxVal .int "boundsidx."
+  emit (.call none "__cc_bounds_check" [idxI64, .intConst (Int.ofNat len) .int] .unit)
+
 /-- Emit an alloca that will be hoisted to the function entry block.
     This prevents dynamic stack growth when allocas occur inside loops. -/
 private def emitEntryAlloca (inst : SInst) : LowerM Unit := do
@@ -1104,6 +1123,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
   | .arrayIndex arr index ty =>
     let aVal ← lowerExpr arr
     let iVal ← lowerExpr index
+    match arrayLenOfTy arr.ty with        -- H8: bounds-check the read
+    | some n => emitBoundsCheck iVal n
+    | none => pure ()
     let gepDst ← freshReg
     emit (.gep gepDst aVal [iVal] ty)
     let loadDst ← freshReg
@@ -1471,6 +1493,9 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
       | some p => pure p
       | none => lowerExpr arr
     let iVal ← lowerExpr index
+    match arrayLenOfTy arr.ty with        -- H8: bounds-check `&a[i]` / `&mut a[i]`
+    | some n => emitBoundsCheck iVal n
+    | none => pure ()
     let gepDst ← freshReg
     emit (.gep gepDst baseAddr [iVal] elemTy)
     return some (.reg gepDst refTy)
@@ -1541,6 +1566,9 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
       | .heap (.array t _) => t
       | _ => SVal.ty newVal
     let iVal ← lowerExpr index
+    match arrayLenOfTy arr.ty with        -- H8: bounds-check the write
+    | some n => emitBoundsCheck iVal n
+    | none => pure ()
     let storeVal ← if SVal.ty newVal == elemTy then pure newVal else do
       let castDst ← freshReg
       emit (.cast castDst newVal elemTy)

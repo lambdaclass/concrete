@@ -47,10 +47,21 @@ class Gen:
     def lit(self):
         return str(self.rng.randint(0, 9))
 
+    def idx(self):
+        # Array index: half in-bounds constants, half DYNAMIC (a variable, which
+        # often exceeds the array size) — so out-of-bounds accesses are generated
+        # and the H8 runtime bounds-trap is exercised (interp-trap must match
+        # compiled-trap). A constant OOB is a compile error (proven), so dynamic
+        # indices are how OOB reaches runtime.
+        r = self.rng
+        if r.random() < 0.5:
+            return str(r.randint(0, 3))
+        return f"({r.choice(self.ivars)}) as Int"
+
     def place(self):
         r = self.rng
         return r.choice([lambda: r.choice(self.ivars),
-                         lambda: f"{r.choice(self.arrs)}[{r.randint(0,3)}]",
+                         lambda: f"{r.choice(self.arrs)}[{self.idx()}]",
                          lambda: f"{r.choice(self.structs)}.{r.choice(['x','y'])}"])()
 
     def simple(self, d):
@@ -100,7 +111,7 @@ class Gen:
         if k == 0:
             return f"{r.choice(self.ivars)} = {self.valueRHS(d)};"
         if k == 1:
-            return f"{r.choice(self.arrs)}[{r.randint(0,3)}] = {self.valueRHS(d)};"
+            return f"{r.choice(self.arrs)}[{self.idx()}] = {self.valueRHS(d)};"
         if k == 2:
             return f"{r.choice(self.structs)}.{r.choice(['x','y'])} = {self.valueRHS(d)};"
         if k == 3:  # &mut place mutation; delta is a literal (no borrow conflict)
@@ -158,13 +169,23 @@ def run(path, mode):
                     return ("compiler_bug", out)
                 return ("rejected", out)
             r = subprocess.run([b], capture_output=True, text=True, timeout=20)
-            return ("ran", r.stdout.strip() + (f"|exit{r.returncode}" if r.returncode else ""))
+            # A non-zero exit (abort/signal — e.g. a bounds or overflow trap) is a
+            # TRAP, distinct from a normal value return.
+            if r.returncode != 0:
+                return ("trap", f"exit{r.returncode}")
+            return ("value", r.stdout.strip())
         else:
             r = subprocess.run([CC, path, "--interp"], capture_output=True, text=True, timeout=60)
             out = (r.stdout + r.stderr).strip()
-            if out.startswith("interp:") or "interp:" in out.split("\n")[0]:
-                return ("pending", out)
-            return ("ran", out + (f"|exit{r.returncode}" if r.returncode else ""))
+            first = out.split("\n")[0] if out else ""
+            if "interp:" in first:
+                # Distinguish a genuine interpreter GAP (construct not implemented —
+                # skip as pending) from an intentional TRAP (out-of-bounds, overflow,
+                # div-by-zero, ...) which compiled code must match with its own trap.
+                if any(u in out for u in ("not yet supported", "unsupported", "not supported")):
+                    return ("pending", out)
+                return ("trap", first)
+            return ("value", out)
     except subprocess.TimeoutExpired:
         return ("timeout", "")
 
@@ -180,17 +201,24 @@ def check(src, tmp):
     if cstat == "compiler_bug":
         return ("COMPILER-BUG", cout, "")
     istat, iout = run(path, "interp")
-    # Only compare when BOTH ran to a value. rejected-by-checker / interp-pending
-    # are not differential failures (both consistently decline).
+    # rejected-by-checker / interp-pending / timeout are not differential failures.
     if cstat == "rejected":
         STATS["rejected"] += 1; return None
-    if istat == "pending":
+    if istat == "pending" or cstat == "timeout" or istat == "timeout":
         STATS["pending"] += 1; return None
-    if cstat == "ran" and istat == "ran":
-        STATS["compared"] += 1
+    # Both sides now resolved to a "value" or a "trap". Compare:
+    #   value vs value  → outputs must match
+    #   trap  vs trap   → agree (both aborted: bounds/overflow/div-zero/…)
+    #   value vs trap   → DIVERGENCE (e.g. interp traps OOB but compiled returns —
+    #                     the H8 regression signal, or vice versa)
+    STATS["compared"] += 1
+    if cstat == "value" and istat == "value":
         if cout != iout:
             return ("MISMATCH", cout, iout)
-    return None
+        return None
+    if cstat == "trap" and istat == "trap":
+        return None
+    return ("TRAP-DIVERGENCE", f"compiled={cstat}:{cout}", f"interp={istat}:{iout}")
 
 def main():
     ap = argparse.ArgumentParser()
