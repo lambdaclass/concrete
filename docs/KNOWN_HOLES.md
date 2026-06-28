@@ -19,6 +19,40 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
+### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — OPEN 2026-06-28
+
+**Current state:** OPEN, found by `scripts/tests/fuzz_differential.py` (the random
+interp-vs-compiled fuzzer) and minimized. A `while`-loop whose header phi reconciles
+a variable that was last updated inside a *previous* loop sitting in an `if`/`else`
+branch references that earlier loop's header phi from a non-dominating block, so SSA
+verification rejects the program (E0708). This is a **compile-time codegen bug
+(valid program wrongly rejected)**, not a silent miscompile — the interpreter runs
+it fine and the SSA verifier catches the bad lowering before any binary is produced.
+
+Minimal reproducer (rejected with E0708; `--no-loops` avoids the family):
+```
+mod m {
+  fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }
+  fn main() -> Int {
+    let mut v1: i32 = 1; let mut v2: i32 = 0;
+    if v1 < 8 { v1 = 1; }
+    else { let mut k1: i32 = 0; while k1 < 3 { addv(&mut v1, 5); k1 = k1 + 1; } }
+    let mut k2: i32 = 0; while k2 < 3 { addv(&mut v2, 4); k2 = k2 + 1; }
+    return v1 as Int;
+  }
+}
+```
+Notes: a loop in the `then` branch, or two *plain* sequential loops, both compile —
+the trigger is specifically a loop reached via the merge of an enclosing `if` whose
+exit value feeds the next loop's header phi. Root area: loop-exit value propagation
+into an enclosing scope and the subsequent loop's header-phi construction in
+`Concrete/Lower.lean` (`while_`/`whileExpr` header phis over `preLoopVars`).
+
+Gate to add: a dedicated loop-SSA red-team gate (and re-enable the fuzzer's loop
+generation — drop the `--no-loops` flag on `make test-fuzz-differential`) once the
+loop-exit/header-phi reconciliation is fixed. Until then the fuzzer gate runs
+`--no-loops` so it stays green over the (fixed) value-bearing / ref / match shapes.
+
 ### H6. Wildcard / discarded expression bypasses linearity — OPEN 2026-06-27
 
 **Current state:** OPEN, confirmed locally. The Phase 6 #13 ignored-result

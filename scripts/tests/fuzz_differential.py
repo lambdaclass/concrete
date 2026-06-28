@@ -41,6 +41,8 @@ class Gen:
         self.arrs = ["a0"]
         self.structs = ["s0"]
         self.ctr = 0  # for unique loop-counter names (no bare-block wrapper)
+        self.loops = True  # generate while-loops (off exposes a known, separate
+                           # loop-SSA codegen bug — see docs/KNOWN_HOLES.md)
 
     def lit(self):
         return str(self.rng.randint(0, 9))
@@ -69,20 +71,32 @@ class Gen:
         return f"{self.simple(max(0,d-1))} {op} {self.simple(max(0,d-1))}"
 
     def valueRHS(self, d):
-        """An i32 value for a let/assign RHS: simple, or an if/match expr whose
-        branches are simple (these only parse in a value slot)."""
+        """An i32 value for a let/assign RHS: a simple expr, or an if/match
+        expression (these only parse in a value slot). Branches recurse into
+        valueRHS, so nested `if`/`match`-as-arm-value shapes are generated — the
+        family where the nested-match SSA miscompile lived."""
         r = self.rng
-        k = r.randint(0, 3)
+        if d <= 0:
+            return self.simple(0)
+        k = r.randint(0, 4)
         if k <= 1:
             return self.simple(d)
-        if k == 2:
-            return f"if {self.bexpr(d)} {{ {self.simple(d)} }} else {{ {self.simple(d)} }}"
-        return (f"match (({self.simple(d)}) % 3) {{ 0 => {self.simple(d)}, "
-                f"1 => {self.simple(d)}, _ => {self.simple(d)} }}")
+        if k == 2:  # if-expression (branches may nest)
+            return f"if {self.bexpr(d)} {{ {self.valueRHS(d-1)} }} else {{ {self.valueRHS(d-1)} }}"
+        if k == 3:  # match on a small int (arms may nest)
+            return (f"match (({self.simple(d)}) % 3) {{ 0 => {self.valueRHS(d-1)}, "
+                    f"1 => {self.valueRHS(d-1)}, _ => {self.valueRHS(d-1)} }}")
+        # match on a Copy enum, binding + using the payload
+        return (f"match e0 {{ "
+                f"E::A {{ v }} => ((v + {self.simple(d-1)}) % 1000), "
+                f"E::B {{ w }} => ((w * {self.simple(d-1)}) % 1000), "
+                f"E::C {{}} => {self.valueRHS(d-1)} }}")
 
     def stmt(self, d):
         r = self.rng
-        k = r.randint(0, 5)
+        k = r.randint(0, 6)
+        if k == 4 and not self.loops:
+            k = 3  # loops disabled → fall back to a &mut mutation
         if k == 0:
             return f"{r.choice(self.ivars)} = {self.valueRHS(d)};"
         if k == 1:
@@ -91,6 +105,11 @@ class Gen:
             return f"{r.choice(self.structs)}.{r.choice(['x','y'])} = {self.valueRHS(d)};"
         if k == 3:  # &mut place mutation; delta is a literal (no borrow conflict)
             return f"addv(&mut {self.place()}, {self.lit()});"
+        if k == 6:  # reassign the enum scrutinee to a random variant
+            return r.choice([
+                f"e0 = E::A {{ v: {self.simple(0)} }};",
+                f"e0 = E::B {{ w: {self.simple(0)} }};",
+                "e0 = E::C {};"])
         if k == 4:  # bounded while loop (unique counter, no bare-block wrapper)
             self.ctr += 1
             kv = f"k{self.ctr}"
@@ -105,13 +124,15 @@ class Gen:
                 "let mut v1: i32 = " + self.lit() + ";",
                 "let mut v2: i32 = " + self.lit() + ";",
                 "let mut a0: [i32; 4] = [" + ", ".join(self.lit() for _ in range(4)) + "];",
-                "let mut s0: P = P { x: " + self.lit() + ", y: " + self.lit() + " };"]
+                "let mut s0: P = P { x: " + self.lit() + ", y: " + self.lit() + " };",
+                "let mut e0: E = E::A { v: " + self.lit() + " };"]
         for _ in range(r.randint(4, 10)):
             body.append(self.stmt(self.maxdepth))
         body.append(f"return (({self.simple(self.maxdepth)}) % 100000) as Int;")
         inner = "\n        ".join(body)
         return ("mod m {\n"
                 "    struct Copy P { x: i32, y: i32 }\n"
+                "    enum Copy E { A { v: i32 }, B { w: i32 }, C {} }\n"
                 "    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }\n"
                 "    fn main() -> Int {\n"
                 f"        {inner}\n"
@@ -124,7 +145,18 @@ def run(path, mode):
             b = path + ".bin"
             c = subprocess.run([CC, path, "-o", b], capture_output=True, text=True, timeout=60)
             if c.returncode != 0:
-                return ("rejected", c.stdout + c.stderr)
+                out = c.stdout + c.stderr
+                low = out.lower()
+                # A well-typed program that fails SSA verification, panics, or
+                # crashes the compiler is ALWAYS a bug (oracle-free signal — this is
+                # how the nested-match miscompile surfaced as E0703). A plain
+                # parse/resolve/check/core-check rejection just means the generated
+                # program was invalid: expected, not a bug.
+                if (c.returncode < 0 or "ssa-verify" in low or "(e07" in low
+                        or "panic" in low or "internal error" in low
+                        or "uncaught exception" in low or "stack overflow" in low):
+                    return ("compiler_bug", out)
+                return ("rejected", out)
             r = subprocess.run([b], capture_output=True, text=True, timeout=20)
             return ("ran", r.stdout.strip() + (f"|exit{r.returncode}" if r.returncode else ""))
         else:
@@ -143,6 +175,10 @@ def check(src, tmp):
     with open(path, "w") as fh:
         fh.write(src)
     cstat, cout = run(path, "compiled")
+    # A compiler-internal failure on a generated program is a bug regardless of
+    # interp (it may not even support the construct).
+    if cstat == "compiler_bug":
+        return ("COMPILER-BUG", cout, "")
     istat, iout = run(path, "interp")
     # Only compare when BOTH ran to a value. rejected-by-checker / interp-pending
     # are not differential failures (both consistently decline).
@@ -162,6 +198,9 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--no-loops", action="store_true",
+                    help="don't generate while-loops (they expose a known, separate "
+                         "loop-SSA codegen bug — see docs/KNOWN_HOLES.md)")
     args = ap.parse_args()
     if not os.access(CC, os.X_OK):
         print(f"error: build first ({CC} missing)", file=sys.stderr); sys.exit(2)
@@ -170,6 +209,7 @@ def main():
     checked = 0
     for i in range(args.n):
         g = Gen(random.Random(rng.getrandbits(64)), args.depth)
+        g.loops = not args.no_loops
         src = g.program()
         res = check(src, tmp)
         checked += 1

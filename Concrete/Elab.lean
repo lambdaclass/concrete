@@ -381,17 +381,21 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     let lTy := cLhs.ty
     let cRhs ← elabExpr rhs (some lTy)
     let rTy := cRhs.ty
-    -- If one operand is a default-typed literal (Int/i64) and the other has a concrete
-    -- smaller integer type, re-elaborate the literal with the concrete type as hint.
-    -- This fixes `0 - x` where x: i32 producing `sub i64 0, %i32_val`.
+    -- If one operand has the default integer type (`int`/i64) and the other has a
+    -- concrete fixed-width integer type, re-elaborate the default-typed side with
+    -- the concrete type as the hint so its literals fold to that width. This covers
+    -- a bare literal (`0 - x`, x: i32) AND a literal-only sub-expression
+    -- (`(8 + 5) + x`): without it the latter stayed `int + i32` and codegen emitted
+    -- a mismatched binop (E0715). A genuine `Int` value does not change type under a
+    -- hint, so the re-elaboration is only adopted when it actually yields the
+    -- concrete width — a real `Int`-vs-i32 width mismatch still surfaces as before.
     let (cLhs, cRhs, opTy) ← do
-      let lhsIsDefaultInt := lTy == .int && isIntLit lhs
-      let rhsIsDefaultInt := rTy == .int && isIntLit rhs
-      if lhsIsDefaultInt && isIntegerType rTy && rTy != .int then do
+      if lTy == .int && isIntegerType rTy && rTy != .int then do
         let cLhs' ← elabExpr lhs (some rTy)
-        pure (cLhs', cRhs, rTy)
-      else if rhsIsDefaultInt && isIntegerType lTy && lTy != .int then
-        pure (cLhs, cRhs, lTy)
+        if cLhs'.ty == rTy then pure (cLhs', cRhs, rTy) else pure (cLhs, cRhs, lTy)
+      else if rTy == .int && isIntegerType lTy && lTy != .int then do
+        let cRhs' ← elabExpr rhs (some lTy)
+        if cRhs'.ty == lTy then pure (cLhs, cRhs', lTy) else pure (cLhs, cRhs, lTy)
       else
         pure (cLhs, cRhs, lTy)
     let resultTy := match op with

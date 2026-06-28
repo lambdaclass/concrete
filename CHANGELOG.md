@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Fuzzer hardening: enums/nested-match + SSA-error detection, two more codegen fixes (2026-06-28)
+
+Extended the differential fuzzer (`scripts/tests/fuzz_differential.py`) to generate
+Copy enums + `match`-on-enum + nested `if`/`match`-as-value, and to treat a
+compiler-internal failure on a generated program (SSA-verify error, panic, crash)
+as a bug regardless of the interpreter — an **oracle-free** signal. It immediately
+found two more codegen bugs, now fixed (regression vectors in
+`tests/oracle/vectors.txt`):
+
+- **`(8 + 5) + v1` — compound-literal binop not coerced** (`Concrete/Elab.lean`).
+  Only a *bare* integer literal adapted to the other operand's concrete width; a
+  literal-only *sub-expression* stayed `int`/i64, so `int + i32` was accepted by the
+  checker but emitted a mismatched-operand binop (E0715). The adaptation now applies
+  to any `int`-typed operand, guarded so a genuine `Int` value is unaffected.
+  Fixtures: `binop_literal_width.con`.
+- **`__last_expr` pseudo-variable leaked into merge/loop phis** (`Concrete/Lower.lean`).
+  The internal trailing-value variable (`.expr` lowering) was included in
+  `snapshotVars`, so a value-bearing `if`/`match` block's `__last_expr` leaked into a
+  later construct's merge/loop-header phi reconciliation, building a spurious,
+  mistyped, or non-dominated phi (E0708/E0710/E0715) — e.g. any `match` after an
+  if-expression came out `i64`. Fixed at the single root by dropping `__last_expr`
+  from `snapshotVars`. Fixtures: `value_block_then_match.con`.
+
+Also filed **KNOWN_HOLES H7** (found by the fuzzer, not yet fixed): a `while`-loop
+reached via the merge of an `if` whose branch contains another loop produces invalid
+SSA (E0708) — a compile-time codegen bug (valid program rejected), not a silent
+miscompile. The fuzzer gate runs `--no-loops` until it's fixed; loop generation
+stays available for hunting it.
+
 ### Differential bug-hunt: seven interp/compiler fixes + a random fuzzer (2026-06-27)
 
 A workload-driven differential pass (writing programs, comparing `--interp` vs

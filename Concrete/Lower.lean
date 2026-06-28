@@ -398,7 +398,13 @@ private def prependInstsToBlock (label : String) (newInsts : List SInst) : Lower
 /-- Get current var map snapshot. -/
 private def snapshotVars : LowerM (List (String × SVal)) := do
   let s ← getState
-  return s.vars
+  -- `__last_expr` is the internal trailing-value pseudo-variable (set by `.expr`
+  -- lowering); it is not a real local. It must never participate in merge/loop phi
+  -- reconciliation — a leaked `__last_expr` from a previous value block would build
+  -- a spurious, mistyped, or non-dominated phi (E0708/E0710/E0715). Snapshots feed
+  -- exactly that reconciliation, so drop it here at the single source. The trailing
+  -- value is read separately via `lookupVar "__last_expr"` (lastExprVal).
+  return s.vars.filter fun (n, _) => n != "__last_expr"
 
 -- ============================================================
 -- Expression and statement lowering
