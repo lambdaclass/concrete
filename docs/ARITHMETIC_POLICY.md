@@ -32,22 +32,40 @@ Float types (`Float64`/`f64`, `Float32`/`f32`) exist but are outside the scope o
 
 ### Current overflow behavior
 
-**As of ROADMAP #10 Stage 2.3, ordinary `+ - *` are CHECKED** (this section's
-"current state" header predates that and is retained for the div/shift notes below):
+**As of ROADMAP #10 Stage 2.x, every ordinary integer operation is CHECKED and
+traps (abort) at runtime on the unsafe case, in every profile.** Codegen and the
+interpreter agree by construction (verified by the differential oracle).
 
-- **Addition, subtraction, multiplication**: **checked — trap (abort) on signed or
-  unsigned overflow**, in every profile. Codegen routes `+ - *` through per-type
-  `*.with.overflow`→abort helpers; the interpreter traps to match. Intentional
-  modular arithmetic uses the explicit `wrapping_*`; clamping uses `saturating_*`.
-  (Historically these wrapped silently; that was the implementation gap Stage 2.3
-  closed.)
-- **Division, modulo**: the compiler emits `sdiv`/`udiv`/`srem`/`urem` depending on signedness. Division by zero is undefined behavior in LLVM IR. On x86-64 it triggers a hardware SIGFPE. On other architectures it may produce garbage or trap.
-- **Shift**: `shl`, `ashr`, `lshr` with shift amount >= bitwidth produce an LLVM poison value, which is undefined behavior if consumed.
-- **Negation**: emitted as `sub 0, x` — wraps silently for `Int.MIN`.
+- **Addition, subtraction, multiplication**: checked — trap on signed or unsigned
+  overflow. Codegen routes `+ - *` through per-type `*.with.overflow`→abort
+  helpers; the interpreter traps to match. Intentional modular arithmetic uses the
+  explicit `wrapping_*`; clamping uses `saturating_*`. (Historically these wrapped
+  silently; Stage 2.3 closed that gap.)
+- **Division, modulo**: checked — division/modulo by zero traps (abort), and the
+  signed `MIN / -1` (and `MIN % -1`) overflow traps. (Stage 2.4/2.5; was previously
+  `sdiv`/`udiv`/`srem`/`urem` with div-by-zero left as LLVM UB.) The interpreter
+  traps to match.
+- **Shift**: checked — a shift amount `>= bitwidth` (or negative) traps (abort).
+  (Stage 2.4/2.5; was previously an LLVM poison value / UB.) The interpreter traps
+  to match.
+- **Negation**: checked — `-x` traps when `x` is the type's `MIN` (the result is
+  unrepresentable), exactly like the `0 - x` checked subtraction. (Was previously
+  `sub 0, x` wrapping silently.) The interpreter traps to match.
+
+> **Not yet checked at runtime: array indexing.** Unlike the arithmetic above, a
+> raw `a[i]` / `a[i] = v` with an index the compiler cannot prove in-bounds emits a
+> raw `gep` with no bounds guard, so an out-of-bounds access silently reads/writes
+> memory in compiled code (the interpreter traps). See KNOWN_HOLES **H8**. The
+> intended model is static bounds obligations + checked accessor APIs, but until a
+> runtime bounds-trap exists this is a memory-safety gap, not a checked operation.
 
 ### Current interpreter behavior
 
-The source-level interpreter (`Interp.lean`) uses Lean's arbitrary-precision `Int`. It has no overflow and explicitly traps division by zero with `"interp: division by zero"`. This creates a semantic divergence: the interpreter and compiled code disagree on overflow behavior and division-by-zero handling.
+The source-level interpreter (`Interp.lean`) uses Lean's arbitrary-precision `Int`
+and traps on overflow / div-zero / over-width shift / `MIN` negation, matching the
+compiled aborts (the earlier interp-vs-compiled arithmetic divergence is closed).
+It also traps on out-of-bounds array access — which compiled code does **not** yet
+do (H8).
 
 ### Current proof behavior
 

@@ -19,6 +19,44 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
+### H8. Array indexing is not bounds-checked at runtime — OPEN 2026-06-28
+
+**Current state:** OPEN, confirmed locally. Compiled code performs **no runtime
+bounds check** on array access: `Concrete/Lower.lean` lowers `a[i]` to a raw
+`gep`+`load` and `a[i] = v` (via `storeToPlace`) to a raw `gep`+`store`, with no
+length guard anywhere in codegen (`Lower`/`EmitSSA`/`Backend`). So a dynamic
+out-of-bounds index **silently reads or writes out-of-bounds memory** at runtime
+(exit 0), while the interpreter correctly traps. This is a **memory-safety hole in
+compiled code**, and an interp-vs-compiled divergence.
+
+Reproducer (compiled: silent; interp: `array index 10 out of bounds`):
+```
+mod m { fn main() -> Int {
+  let a: [i32; 4] = [10,20,30,40];
+  let mut i: i32 = 0; while i < 10 { i = i + 1; }   // i = 10, OOB
+  return a[i as Int] as Int;                         // compiled returns 0; OOB write corrupts memory
+} }
+```
+
+Why it matters: every other runtime-safety obligation now traps by default —
+overflow, div/mod-zero, over-width shift, `MIN` negation, and the H2 float→int cast
+all abort (ROADMAP #10 Stage 2.x). Array bounds is the one obligation left
+unenforced at runtime. The intended model (see `Concrete/Profile.lean`) is static
+bounds obligations (`Report.boundsObligations`, constant OOB already rejected) plus
+checked accessor APIs (`vec_get` → `Option`); but raw `a[i]` on an *unproven* index
+neither proves nor traps — it just runs unsafely. This contradicts the project's
+memory-safety framing.
+
+Fuzzer note: `scripts/tests/fuzz_differential.py` cannot currently catch this — it
+emits only constant in-bounds indices, and treats an `interp:` error (which OOB
+produces) as PENDING rather than a divergence. Both need fixing to mine this class.
+
+Fix (ROADMAP, runtime-safety policy): emit a checked index (compare against the
+known/derived length, abort on failure) for any `a[i]`/`a[i] = v` whose bounds
+obligation is not discharged — the bounds analogue of the checked-arithmetic flip —
+or require checked accessor APIs and reject raw unproven indexing. Until then,
+disclosed here.
+
 ### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — OPEN 2026-06-28
 
 **Current state:** OPEN, found by `scripts/tests/fuzz_differential.py` (the random
