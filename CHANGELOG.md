@@ -10,12 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Differential bug-hunt: six interp/compiler fixes via interp-vs-compiled probing (2026-06-27)
+### Differential bug-hunt: seven interp/compiler fixes + a random fuzzer (2026-06-27)
 
-A workload-driven differential pass (writing real programs, comparing `--interp`
-vs compiled output, then minimizing each divergence) surfaced and fixed six bugs
-— two of them silent miscompiles in *compiled* code. Each fix carries a permanent
-regression vector in `tests/oracle/vectors.txt`.
+A workload-driven differential pass (writing programs, comparing `--interp` vs
+compiled output, minimizing each divergence) surfaced and fixed seven bugs —
+**three silent miscompiles** in *compiled* code. The last one was found by a new
+**random differential fuzzer** (`scripts/tests/fuzz_differential.py`, Makefile
+`test-fuzz-differential`) that auto-generates well-typed Copy-only programs over
+the bug-prone shapes and flags any interp-vs-compiled divergence — the automated
+form of the hand-written probes (ROADMAP Phase 14 #13, v1). Each fix carries a
+permanent regression vector in `tests/oracle/vectors.txt`.
+
+- **Miscompile — `&mut o.f` inside a conditional branch applied on the wrong path**
+  (`Concrete/Lower.lean`; found by the fuzzer). A mutable struct local wasn't
+  promoted to stable storage at declaration, so a field borrow inside an `if`
+  branch forced an unsound mid-branch promotion; the post-merge read saw the
+  write applied even when that branch wasn't taken. Mutable value aggregates
+  (arrays — already — plus user structs/enums) are now promoted to a stable alloca
+  at declaration. Fixtures: `mut_ref_field_in_branch.con`.
 
 - **Miscompile — `&mut <place>` aliased a copy, not storage** (`Concrete/Lower.lean`).
   Passing `&mut a[i]` (array element) or `&mut o.f` (struct field) to a function

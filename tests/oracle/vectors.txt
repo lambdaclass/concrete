@@ -49,6 +49,7 @@ tests/programs/while_expr_value.con
 tests/programs/nested_match_value.con
 tests/programs/else_if_chain.con
 tests/programs/mut_ref_place.con
+tests/programs/mut_ref_field_in_branch.con
 tests/programs/bitops_negative.con
 
 # --- Enums ---

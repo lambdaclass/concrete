@@ -1598,16 +1598,28 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
   | .letDecl name mutable ty value =>
     let val ← lowerExpr value
-    -- Mutable arrays need a stable alloca so index-assignment works on a pointer.
-    -- Without this, `let mut d = b.data; d[0] = 99;` would try to GEP/store
-    -- into a value register instead of a stack allocation.
-    match mutable, ty with
-    | true, .array _ _ =>
-      let allocaReg ← freshReg s!"{name}.arr."
+    -- A mutable VALUE aggregate (array, or a user struct/enum) needs a stable
+    -- alloca so in-place element/field assignment AND `&mut place` borrows operate
+    -- on real storage. This must happen at the declaration, not lazily mid-
+    -- function: a borrow taken inside a conditional branch would otherwise promote
+    -- the local there, and the post-branch merge would read an alloca only
+    -- initialized on one path (a write applied on the wrong path). Heap handles
+    -- (Vec/String/HashMap) are excluded — they are pointer-like and are not
+    -- promoted today. (Was arrays-only; structs/enums joined once `&mut o.f`
+    -- started GEP-ing into storage.)
+    let promote ← if !mutable then pure false else
+      match ty with
+      | .array _ _ => pure true
+      | .named n | .generic n _ => do
+        let ctx ← getLayoutCtx
+        pure ((Layout.lookupStruct ctx n).isSome || (Layout.lookupEnum ctx n).isSome)
+      | _ => pure false
+    if promote then
+      let allocaReg ← freshReg s!"{name}.agg."
       emit (.alloca allocaReg ty)
       emit (.store val (.reg allocaReg ty))
       addPromotedAlloca name allocaReg ty
-    | _, _ =>
+    else
       setVar name val
 
   | .assign name value =>

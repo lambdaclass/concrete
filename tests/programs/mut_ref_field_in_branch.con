@@ -1,0 +1,24 @@
+// Oracle regression (found by scripts/tests/fuzz_differential.py): taking
+// `&mut o.f` (a struct-field borrow) INSIDE a conditional branch must respect the
+// branch — the write only happens on the taken path. A mutable struct local is
+// now promoted to a stable alloca at declaration (like a mutable array), so the
+// field borrow GEPs into real storage instead of forcing an unsound mid-branch
+// promotion whose post-merge read saw a write applied on the wrong path.
+// Here the condition is false, so the `addv` must NOT run. Expected: 168.
+mod m {
+    struct Copy P { x: i32, y: i32 }
+    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }
+    fn main() -> Int {
+        let mut v0: i32 = 9;
+        let mut v2: i32 = 5;
+        let mut s0: P = P { x: 0, y: 3 };
+        s0.x = if 0 < 10 { 168 } else { s0.x };
+        // 5 >= 485 is false -> else branch -> s0.x stays 168 (no +6)
+        if v2 >= ((((v0 * s0.x) % 1000) - ((s0.y * v0) % 1000)) % 1000) {
+            addv(&mut s0.x, 6);
+        } else {
+            v0 = 1;
+        }
+        return s0.x as Int;
+    }
+}
