@@ -19,9 +19,11 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**No open holes.** H9 (named linear bound in a nested scope) is now closed and
-gated — see below. The `_`/`let _`/bare-discard half of the old H6 (H6 below), H7
+**None.** There are no open soundness or semantic-darkness holes. The most recently
+closed (H9, below) is gated; the `_`/`let _`/bare-discard half of the old H6, H7
 (loop-SSA), and H8 (array bounds) are all closed and gated.
+
+## Recently closed
 
 ### H9. Named linear bound in a nested scope, left unconsumed — CLOSED 2026-06-28
 
