@@ -2288,6 +2288,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         modify fun env =>
           { env with vars := env.vars.map fun (n, info) =>
               if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+      | .ident _ sourceName =>
+        -- Move-through-let: `let g = f;` over a linear `f` MOVES it — `f` is
+        -- consumed and ownership transfers to `g`. Without this, `f` stayed
+        -- live (usable after the move, and counted as unconsumed at scope exit),
+        -- which both allowed use-after-move and made the per-block linearity
+        -- check below false-positive on `let local = payload;` (KNOWN_HOLES H9).
+        -- consumeVar is a no-op for Copy sources (incl. `&T`), so a reborrow of
+        -- an immutable reference does not move.
+        consumeVarIfExists sourceName (some stmt.getSpan)
       | _ => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
