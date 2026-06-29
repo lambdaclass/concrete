@@ -19,31 +19,43 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**One open hole: H9** (a *named* linear value bound in a nested `if`/`match` scope
-and left unconsumed). The `_`/`let _`/bare-discard half of the old H6 is closed
-soundly (see H6 below); H7 (loop-SSA) and H8 (array bounds) are closed and gated.
+**No open holes.** H9 (named linear bound in a nested scope) is now closed and
+gated — see below. The `_`/`let _`/bare-discard half of the old H6 (H6 below), H7
+(loop-SSA), and H8 (array bounds) are all closed and gated.
 
-### H9. Named linear bound in a nested scope, left unconsumed — OPEN 2026-06-28
+### H9. Named linear bound in a nested scope, left unconsumed — CLOSED 2026-06-28
 
-**Current state:** OPEN. A non-Copy value bound to a NAMED binding inside a nested
-non-returning scope — an `if`/`else` branch (`if c { let r = make(); }`) or a
-matched payload (`match e { E::A { t } => { } }`) — and not consumed before that
-scope exits silently leaks: the checker restores/merges the branch environment
-before the function-level `checkScopeExit` runs, so the local is never seen.
+**Fixed.** A non-Copy value bound to a NAMED binding inside a nested scope — an
+`if`/`else` branch (`if c { let r = make(); }`) or a matched payload
+(`match e { E::A { t } => { } }`) — and not consumed before that scope exited used
+to leak: the branch/arm merge dropped the local before the function-level
+`checkScopeExit` ran, so it was never seen. Closed by the three pieces the H6
+thread always pointed at (ROADMAP Phase 6 #13a), in `Concrete/Check.lean`:
 
-A naive per-branch/per-arm "block-locals must be consumed" check (tried and
-reverted, 2026-06-28) is **unsound for real code**: it false-positives on
-legitimate patterns the example corpus uses — a payload moved into a local
-(`let listener = value;`, where the move isn't tracked as consuming `value`) and a
-resource held across a non-terminating loop (`let l = bind(); while true { l.accept() }`,
-where `l` is never "consumed" because control never exits). Closing this correctly
-needs the exit-mode / divergence-aware scope refactor the H6 thread always pointed
-at (ROADMAP Phase 6 #13a): track moves through `let x = y`, recognise diverging
-branches/loops, and run scope-exit per lexical block rather than once per function.
+1. **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is
+   consumed; no-op for Copy sources, incl. `&T`). Before, a bare-ident let-RHS only
+   marked the source *used*, so `let local = payload;` left the payload dangling —
+   the exact false-positive that sank an earlier naive attempt. (Also closed a
+   use-after-move-via-let: `let g = f; … use f` is now E0205.)
+2. **Per-block scope-exit.** A linear value DECLARED in an `if`/`else` branch or a
+   match arm (a payload binding or an arm-body `let`) must be consumed before the
+   block exits → **E0208**, including on a `return`/`break` path (control leaves the
+   scope, so a resource owned there genuinely leaks). A `return value;` inside an arm
+   now consumes the returned payload (it previously didn't — a latent bug the check
+   surfaced).
+3. **Divergence exemption.** A block whose textual end is *unreachable* — a
+   non-terminating `while true {}` (no break) or an `abort()` — is exempt: a server's
+   accept loop may legitimately hold a resource live forever (`blockNonTerminating`).
+   `return`/`break`/`continue` do NOT exempt (those exit the scope alive).
 
 NOTE: the `_` form of this leak is NOT here — `_` can never silently consume a
-resource owner at any site (H6/E0288), and `let _` is removed (E0289). H9 is only
-the *named*-binding case.
+resource owner at any site (H6/E0288), and `let _` is removed (E0289). H9 was only
+the *named*-binding case. Two value-view types the hole had been masking were
+corrected to `Copy` (`std` `Text`, structurally a `ByteView`; example `Header`/`Tlv`),
+and `Bytes::into_raw_parts(self)` was added as the explicit consume-and-take-the-buffer
+escape for trusted ownership transfer (so the wrapper's destructor is deliberately
+skipped without a silent forget). Gate: `scripts/tests/check_linear_nested_scope.sh`
+(Makefile `test-linear-nested-scope` + CI).
 
 ### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — CLOSED 2026-06-28
 

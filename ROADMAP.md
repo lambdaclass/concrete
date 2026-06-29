@@ -112,10 +112,11 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **One open hole: H9** — a *named* linear
-value bound in a nested `if`/`match` scope and left unconsumed (needs the exit-mode/
-divergence scope refactor, Phase 6 #13a). The `_`/`let _`/bare-discard half of H6
-is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
+it in sync when a hole is added or fixed. **No open holes.** H9 — a *named* linear
+value bound in a nested `if`/`match` scope and left unconsumed — is now closed
+(Phase 6 #13a: move-through-let + per-block scope-exit + divergence exemption,
+E0208/E0205, gated by `test-linear-nested-scope`). The `_`/`let _`/bare-discard
+half of H6 is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
 enforced at every discard site (H6); `let _ = expr;` is the intended explicit
@@ -346,8 +347,20 @@ are folded out.
 - **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
   `docs/STATEMENT_EXPRESSION_MODEL.md`.
 
-13a. **URGENT regression fix before the next Phase 6 feature: wildcard/discard
-   must not bypass linearity.** The Phase 6 #13 ignored-result implementation
+13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
+   bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
+   bare/deferred non-Copy discard, E0288 `_` over a transitive resource owner via
+   `ownsResource`, E0289 `let _` removed; gate `check_linear_discard.sh`). The
+   nested-scope half landed here (KNOWN_HOLES H9, gate `check_linear_nested_scope.sh`):
+   move-through-let (`let g = f` consumes `f`); per-block scope-exit so a linear
+   value declared in an `if`/`else` branch or match arm must be consumed before the
+   block exits, including on `return`/`break` paths (E0208); `return value;` in an
+   arm now consumes the payload; and a `blockNonTerminating` exemption (`while true {}`
+   / `abort()`) so an unreachable block end is not a false leak. Two value-view
+   types the hole had masked were corrected to `Copy` and `Bytes::into_raw_parts`
+   added for trusted ownership transfer. Original write-up retained below.
+
+   **(original)** The Phase 6 #13 ignored-result implementation
    made `let _ = expr;` an acknowledgement form, but the checker currently skips
    registering `_` bindings for any non-`Destroy` type. That creates a linearity
    escape hatch: `let _ = LinearStruct { ... };` compiles even though the same

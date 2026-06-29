@@ -8,6 +8,14 @@ mod bytes {
         cap: u64,
     }
 
+    // The raw parts of a `Bytes`, handed out by `into_raw_parts`. `Copy` and
+    // owns nothing — it is just a view onto a buffer the caller now owns.
+    pub struct Copy BytesRaw {
+        ptr: *mut u8,
+        len: u64,
+        cap: u64,
+    }
+
     trusted impl Bytes {
         pub fn new() -> Bytes {
             let b: Bytes = Bytes {
@@ -114,6 +122,17 @@ mod bytes {
         pub fn to_string(self) -> String {
             let s: String = String { ptr: self.ptr, len: self.len, cap: self.cap };
             return s;
+        }
+
+        /// Consume the `Bytes`, transferring ownership of its heap buffer to the
+        /// caller as raw parts. This is the explicit "I am taking the buffer; do
+        /// NOT run the destructor" escape — the caller is now responsible for the
+        /// allocation (e.g. `free(parts.ptr)`). Without it, building a raw view
+        /// over `bytes.ptr` and dropping `bytes` would either double-free (if you
+        /// also `free` the pointer) or leak (the H9 linearity check now rejects the
+        /// silent forget). The returned struct is `Copy` (it owns nothing itself).
+        pub fn into_raw_parts(self) -> BytesRaw {
+            return BytesRaw { ptr: self.ptr, len: self.len, cap: self.cap };
         }
 
         pub fn drop(self) with(Alloc) {

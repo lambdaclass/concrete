@@ -16,7 +16,8 @@ mod http_header_view {
     import std.numeric.{ByteView};
 
     // A parsed header: name and value are stored views into one buffer.
-    struct Header {
+    // A pair of ByteView fields — owns nothing, so it is `Copy` (like its fields).
+    struct Copy Header {
         name: ByteView,
         value: ByteView,
     }

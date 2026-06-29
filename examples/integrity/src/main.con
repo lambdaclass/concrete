@@ -6,7 +6,7 @@
 
 mod fcheck {
     import std.fs.{read_file, read_to_string, write_file, FsError};
-    import std.bytes.{Bytes};
+    import std.bytes.{Bytes, BytesRaw};
     import std.args.{count, get};
     import std.map.{HashMap};
     import std.set.{HashSet};
@@ -26,7 +26,10 @@ mod fcheck {
         let result: Result<Bytes, FsError> = read_file(path);
         match result {
             Result::Ok { value } => {
-                let fd: FileData = FileData { ptr: value.ptr, len: value.len };
+                // Take ownership of the buffer; the Bytes wrapper is consumed
+                // (its destructor must NOT run — free_file_data frees fd.ptr later).
+                let raw: BytesRaw = value.into_raw_parts();
+                let fd: FileData = FileData { ptr: raw.ptr, len: raw.len };
                 return fd;
             },
             Result::Err { error } => {

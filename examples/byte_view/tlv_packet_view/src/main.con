@@ -12,7 +12,8 @@ mod tlv_packet_view {
     import std.bytes.{Bytes};
     import std.numeric.{ByteView, ByteCursor, CursorError};
 
-    struct Tlv {
+    // A tag plus a ByteView — owns nothing, so it is `Copy` (like its fields).
+    struct Copy Tlv {
         tag: u8,
         value: ByteView,
     }

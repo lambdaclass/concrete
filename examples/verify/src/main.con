@@ -20,7 +20,7 @@
 
 mod conhash {
     import std.fs.{read_file, FsError};
-    import std.bytes.{Bytes};
+    import std.bytes.{Bytes, BytesRaw};
     import std.args.{count, get};
     import std.vec.{Vec};
     import std.sha256.{hash_raw};
@@ -37,7 +37,10 @@ mod conhash {
         let result: Result<Bytes, FsError> = read_file(path);
         match result {
             Result::Ok { value } => {
-                let fd: FileData = FileData { ptr: value.ptr, len: value.len };
+                // Take ownership of the buffer; the Bytes wrapper is consumed
+                // (its destructor must NOT run — the ptr is freed via FileData later).
+                let raw: BytesRaw = value.into_raw_parts();
+                let fd: FileData = FileData { ptr: raw.ptr, len: raw.len };
                 return fd;
             },
             Result::Err { error } => {

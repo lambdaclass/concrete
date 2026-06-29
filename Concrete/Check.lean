@@ -764,6 +764,108 @@ def checkScopeExit (varNames : List String) (span : Option Span := none) : Check
     | none => pure ()
 
 -- ============================================================
+-- Block divergence (KNOWN_HOLES H9 support)
+-- ============================================================
+
+/-- A literal `true` (through parens), for spotting a non-terminating `while true`. -/
+partial def isLitTrueExpr : Expr → Bool
+  | .boolLit _ b => b
+  | .paren _ inner => isLitTrueExpr inner
+  | _ => false
+
+-- Does a `break` appear directly in this block (not inside a nested loop, whose
+-- break targets that inner loop)? Distinguishes a truly infinite `while true {}`
+-- from one that can exit. Labeled breaks to an outer loop are treated as inner
+-- (conservative: at worst we under-report a leak, never false-positive).
+mutual
+partial def blockHasBreak (stmts : List Stmt) : Bool :=
+  stmts.any stmtHasBreak
+partial def stmtHasBreak : Stmt → Bool
+  | .break_ _ _ _ => true
+  | .ifElse _ _ t e => blockHasBreak t || (match e with | some es => blockHasBreak es | none => false)
+  | .while_ _ _ _ _ | .forLoop _ _ _ _ _ _ => false  -- break here targets the inner loop
+  | _ => false
+end
+
+-- Control cannot fall off the end of this block — it returns, breaks, continues,
+-- `abort()`s, or loops forever (`while true {}` with no break). When true, a
+-- block-local linear value left unconsumed at the block's textual end is exempt:
+-- that end is unreachable, so it is not a leak (KNOWN_HOLES H9). This is the
+-- conservative direction — we exempt on any non-fall-through exit, so a leak on a
+-- `return`/`break` path is *missed* rather than falsely flagged.
+mutual
+partial def blockDiverges (stmts : List Stmt) : Bool :=
+  match stmts.getLast? with
+  | none => false
+  | some s => stmtDiverges s
+partial def stmtDiverges : Stmt → Bool
+  | .return_ _ _ => true
+  | .break_ _ _ _ => true
+  | .continue_ _ _ => true
+  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .ifElse _ _ t (some e) => blockDiverges t && blockDiverges e
+  | .expr _ e _ => exprDiverges e
+  | _ => false
+partial def exprDiverges : Expr → Bool
+  | .paren _ inner => exprDiverges inner
+  | .call _ fnName _ _ => resolveIntrinsic fnName == some .abort
+  | .whileExpr _ cond _ _ => isLitTrueExpr cond
+  | .match_ _ _ arms => !arms.isEmpty && arms.all armDiverges
+  | _ => false
+partial def armDiverges : MatchArm → Bool
+  | .mk _ _ _ _ _ body => blockDiverges body
+  | .litArm _ _ _ body => blockDiverges body
+  | .varArm _ _ _ body => blockDiverges body
+  | .rangeArm _ _ _ _ _ body => blockDiverges body
+end
+
+-- Control NEVER leaves this block alive — it loops forever (`while true {}` with no
+-- break) or `abort()`s. Unlike `blockDiverges`, this EXCLUDES `return`/`break`/
+-- `continue`: those exit the scope, so a linear value still owned at that point
+-- genuinely leaks and must be consumed. This is the predicate that exempts a block
+-- from scope-exit: only a truly-unreachable end (the body of a server's accept loop,
+-- a `panic`) may leave a resource live. Fixes the `let l = bind(); while true {…}`
+-- false-positive without masking `let r = make(); return 0;` leaks (KNOWN_HOLES H9).
+mutual
+partial def blockNonTerminating (stmts : List Stmt) : Bool :=
+  match stmts.getLast? with
+  | none => false
+  | some s => stmtNonTerminating s
+partial def stmtNonTerminating : Stmt → Bool
+  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .ifElse _ _ t (some e) => blockNonTerminating t && blockNonTerminating e
+  | .expr _ e _ => exprNonTerminating e
+  | _ => false
+partial def exprNonTerminating : Expr → Bool
+  | .paren _ inner => exprNonTerminating inner
+  | .call _ fnName _ _ => resolveIntrinsic fnName == some .abort
+  | .whileExpr _ cond _ _ => isLitTrueExpr cond
+  | .match_ _ _ arms => !arms.isEmpty && arms.all armNonTerminating
+  | _ => false
+partial def armNonTerminating : MatchArm → Bool
+  | .mk _ _ _ _ _ body => blockNonTerminating body
+  | .litArm _ _ _ body => blockNonTerminating body
+  | .varArm _ _ _ body => blockNonTerminating body
+  | .rangeArm _ _ _ _ _ body => blockNonTerminating body
+end
+
+/-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
+    `after`, absent from `before` — must be consumed before the block exits. Skipped
+    when the block diverges (its textual end is unreachable). This is what the
+    function-level `checkScopeExit` could not see for `if`/`else` branch locals and
+    matched payload bindings, which are dropped at the branch/arm merge. -/
+def checkBlockLocalsConsumed
+    (before after : List (String × VarInfo))
+    (diverges : Bool)
+    (span : Option Span := none) : CheckM Unit := do
+  if diverges then return ()
+  for (name, info) in after do
+    if before.any (fun (n, _) => n == name) then continue  -- pre-existing, not block-local
+    if info.isCopy then continue
+    if info.state == .consumed || info.state == .reserved then continue
+    throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
+
+-- ============================================================
 -- Type substitution for generics
 -- ============================================================
 
@@ -1898,10 +2000,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
               | _ => pure ()
               pure ty
-            | some (.return_ _ v) =>
-              match v with
-              | some rv => let _ ← checkExpr rv; pure Ty.never
-              | none => pure Ty.never
+            | some (.return_ rsp v) =>
+              -- A `return` inside an arm consumes the returned value (and checks it
+              -- against the return type) exactly like a statement-level return —
+              -- reuse checkStmt so `return value;` moves `value`. Without this, the
+              -- returned payload looked unconsumed to the H9 block-local check.
+              checkStmt (.return_ rsp v) curEnv.currentRetTy
+              pure Ty.never
             | some other =>
               checkStmt other curEnv.currentRetTy
               pure Ty.unit
@@ -1915,6 +2020,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               throwCheck (.matchArmTypeMismatch (tyToString matchResultTy) (tyToString armTy)) (some e.getSpan)
             if matchResultTy == .never then matchResultTy := armTy
           let envAfterArm ← getEnv
+          -- H9: a linear value declared in this arm — a matched payload binding or
+          -- a `let` in the arm body — must be consumed before the arm exits (unless
+          -- the arm is non-terminating). This is the matched-payload half of H9.
+          checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
           match firstArmVars with
           | none => firstArmVars := some envAfterArm.vars
           | some firstVars =>
@@ -2367,20 +2476,30 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Check then branch
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
+    -- H9: a linear value declared in the then-branch must be consumed before the
+    -- branch exits — including on a `return`/`break` path (that's a real leak).
+    -- Only a truly non-terminating branch (infinite loop / abort) is exempt.
+    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating thenBody) (some stmt.getSpan)
     -- Restore env and check else branch
     setEnv envBefore
     match elseBody with
     | some stmts =>
       checkStmts stmts retTy
       let envAfterElse ← getEnv
+      -- H9: same for else-branch locals.
+      checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating stmts) (some stmt.getSpan)
       -- Merge: both branches must agree on consumption state of linear vars
       mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars (some stmt.getSpan)
+      -- Drop branch-locals — they are out of scope after the `if`. Only pre-existing
+      -- names survive (their merged consumption states were applied above). Without
+      -- this, else-branch locals leaked into the outer env (the accidental, lopsided
+      -- way they used to be caught at function scope).
+      let env ← getEnv
+      setEnv { env with vars := env.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n) }
     | none =>
       -- No else branch: then branch must not consume any linear var
-      -- Exception: if then-branch always returns, consumption is fine (control never falls through)
-      let thenDiverges := match thenBody.getLast? with
-        | some (.return_ _ _) => true
-        | _ => false
+      -- Exception: if then-branch diverges, consumption is fine (control never falls through)
+      let thenDiverges := blockDiverges thenBody
       if !thenDiverges then
         checkNoBranchConsumption envBefore.vars envAfterThen.vars "if-without-else" (some stmt.getSpan)
   | .while_ _ cond body lbl =>
@@ -2731,7 +2850,12 @@ def checkFn (f : FnDef) : CheckM Unit := do
         | none => false
       else true
   let localNames := localVars.map fun (name, _) => name
-  checkScopeExit localNames
+  -- H9: if the body never terminates (a server's `while true {…}` accept loop, an
+  -- unconditional abort), its textual end is unreachable, so a still-live linear
+  -- local there is not a leak. `return`/`break` do NOT exempt — those exit the
+  -- function and a resource owned at that point genuinely leaks.
+  if !(blockNonTerminating f.body) then
+    checkScopeExit localNames
   -- Restore env (remove this function's locals)
   setEnv envBefore
 

@@ -28,7 +28,11 @@ mod text {
         }
     }
 
-    pub struct Text {
+    // A non-owning UTF-8 view: a `*const u8` + length that borrows its bytes and
+    // owns nothing — structurally a `ByteView` (which is also `Copy`). It is `Copy`
+    // so it can be freely returned, stored, and dropped without a consume; the
+    // raw pointer it holds is itself `Copy`, and there is no resource to release.
+    pub struct Copy Text {
         ptr: *const u8,
         len: u64,
     }

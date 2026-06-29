@@ -10,6 +10,36 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Close H9: a linear value left unconsumed in a nested scope no longer leaks (2026-06-28)
+
+Closed the last tracked soundness hole (KNOWN_HOLES H9, ROADMAP #13a): a non-Copy
+value bound to a NAMED binding inside an `if`/`else` branch or a match arm and not
+consumed before that block exited used to leak — the branch/arm merge dropped the
+local before the function-level scope-exit check could see it. Fixed in
+`Concrete/Check.lean` with the three pieces the H6 thread always pointed at:
+
+- **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is consumed;
+  no-op for Copy sources incl. `&T`). A bare-ident let-RHS previously only marked the
+  source *used*, so `let local = payload;` stranded the payload — the precise
+  false-positive that sank an earlier naive attempt. (Also closed use-after-move via
+  `let`: `let g = f; … use f` is now E0205.)
+- **Per-block scope-exit.** A linear value declared in a branch or arm (a payload
+  binding or arm-body `let`) must be consumed before the block exits → **E0208**,
+  including on `return`/`break` paths (control leaves the scope, so a resource owned
+  there genuinely leaks). `return value;` inside an arm now consumes the returned
+  payload — a latent bug the check surfaced and fixed.
+- **Divergence exemption.** A block whose end is unreachable — a non-terminating
+  `while true {}` (no break) or `abort()` — is exempt (`blockNonTerminating`), so a
+  server's accept loop may hold a resource live forever. `return`/`break`/`continue`
+  do NOT exempt; the function-level check honours the same exemption.
+
+Two value-view types the hole had been masking were corrected to `Copy` (std `Text`,
+structurally a `ByteView`; example `Header`/`Tlv`), and `Bytes::into_raw_parts(self)`
+was added as the explicit consume-and-take-the-buffer escape for trusted ownership
+transfer (the wrapper's destructor is deliberately skipped without a silent forget).
+**No tracked soundness holes remain open.** Gate `check_linear_nested_scope.sh`
+(Makefile `test-linear-nested-scope` + CI). Full suite 3032/0, examples 129/0.
+
 ### `_` can never silently consume a resource owner; `let _` removed (2026-06-28)
 
 Made the linearity rule for `_` honest and complete, and retired the deceptive
