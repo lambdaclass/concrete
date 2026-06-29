@@ -57,7 +57,6 @@ mod constant_time_tag_catch {
     fn main() -> i32 {
         let a: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let b: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        let _ : i32 = ct_compare(a, b);
-        return 0;
+        match ct_compare(a, b) { _ => {} }        return 0;
     }
 }

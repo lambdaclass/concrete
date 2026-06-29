@@ -164,6 +164,16 @@ inductive CheckError where
   -- `Token { .. };`. H6: every linear value must be consumed; a silent drop is an
   -- error. Acknowledge an intentional discard with `let _ = expr;`.
   | discardedLinear (tyName : String)
+  -- A `_` pattern (a wildcard match arm, or a `_` payload field) silently consumes
+  -- a value that transitively owns a resource — it would leak. H6: `_` may ignore a
+  -- component only while you consume the whole; it may never make a resource owner
+  -- vanish. Bind it and `destroy()`/consume it instead.
+  | discardedResourceWildcard (tyName : String)
+  -- `let _ = e;` has been removed. `_` is only a pattern wildcard (ignore a
+  -- component while you consume the whole), never a device that makes an owned
+  -- value vanish. Ignore a non-resource value with `match e { _ => {} }`; consume
+  -- or `destroy()` anything that owns a resource.
+  | letUnderscoreRemoved
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -250,6 +260,8 @@ def CheckError.message : CheckError → String
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
+  | .discardedResourceWildcard tyName => s!"`_` cannot silently discard a value of type '{tyName}' that owns a resource"
+  | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -267,8 +279,10 @@ def CheckError.hint : CheckError → Option String
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
-  | .discardedMustUse _ => some "handle it (match / `?` / pass it on), or write `let _ = …;` to discard it explicitly"
-  | .discardedLinear _ => some "consume it (bind, pass it on, destroy()), or write `let _ = …;` to discard it explicitly"
+  | .discardedMustUse _ => some "handle it: match it, `?` it, or pass it on"
+  | .discardedLinear _ => some "consume it (bind, pass it on, destroy()), match it, or `?` it"
+  | .discardedResourceWildcard _ => some "bind the value/field (not `_`) and consume it — pass it on or destroy() its resource"
+  | .letUnderscoreRemoved => some "ignore a non-resource value with `match e { _ => {} }`; otherwise consume it or destroy() it"
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
@@ -360,6 +374,8 @@ def CheckError.code : CheckError → String
   | .notPublicInModule _ _ => "E0285"
   | .discardedMustUse _ => "E0286"
   | .discardedLinear _ => "E0287"
+  | .discardedResourceWildcard _ => "E0288"
+  | .letUnderscoreRemoved => "E0289"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -747,20 +763,6 @@ def checkScopeExit (varNames : List String) (span : Option Span := none) : Check
         throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
     | none => pure ()
 
-/-- After a nested block scope (an `if`/`else` branch) exits, every non-Copy value
-    DECLARED INSIDE that block must already be consumed — otherwise it silently
-    leaks when the block's bindings go out of scope (H6 branch-local discard). A
-    block-local is a name present at block exit (`after`) but not at block entry
-    (`before`). The function-level `checkScopeExit` cannot catch these because the
-    branch environment is restored/merged before it runs. -/
-def checkBlockLocalsConsumed (before after : List (String × VarInfo))
-    (span : Option Span := none) : CheckM Unit := do
-  let beforeNames := before.map (·.1)
-  for (name, info) in after do
-    if !(beforeNames.contains name) && !info.isCopy
-        && info.state != .consumed && info.state != .reserved then
-      throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
-
 -- ============================================================
 -- Type substitution for generics
 -- ============================================================
@@ -880,6 +882,48 @@ private def substTy (mapping : List (String × Ty)) : Ty → Ty
   | .heap inner => .heap (substTy mapping inner)
   | .heapArray inner => .heapArray (substTy mapping inner)
   | ty => ty
+
+/-- Does `ty` (transitively) own a resource — would silently dropping a value of
+    this type leak? True if it has a `Destroy` impl, is a heap-owning builtin
+    (String / Vec / HashMap / HashSet / Heap / HeapArray), or is a struct / enum /
+    array any of whose components owns a resource. False for Copy primitives,
+    borrows/pointers, and aggregates built only from trivially-droppable parts
+    (e.g. `Option<i32>`). A `_` pattern may silently consume a value ONLY when this
+    is false. `fuel` bounds recursion on recursive types (which necessarily reach a
+    heap handle and short-circuit to `true`); on exhaustion we answer `true`
+    (fail-closed). -/
+partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
+  match fuel with
+  | 0 => return true
+  | fuel + 1 =>
+    let ty ← resolveType ty
+    match ty with
+    | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32
+    | .bool | .float32 | .float64 | .char | .unit | .never | .placeholder
+    | .typeVar _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .fn_ _ _ _ =>
+      return false
+    | .string | .heap _ | .heapArray _ => return true
+    | .array elem _ => ownsResource fuel elem
+    | .named n =>
+      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      match ← lookupStruct n with
+      | some sd => sd.fields.anyM (fun f => ownsResource fuel f.ty)
+      | none => match ← lookupEnum n with
+        | some ed => ed.variants.anyM (fun v => v.fields.anyM (fun f => ownsResource fuel f.ty))
+        | none => return false
+    | .generic n args =>
+      if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+        return true
+      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      match ← lookupStruct n with
+      | some sd =>
+        let m := sd.typeParams.zip args
+        sd.fields.anyM (fun f => ownsResource fuel (substTy m f.ty))
+      | none => match ← lookupEnum n with
+        | some ed =>
+          let m := ed.typeParams.zip args
+          ed.variants.anyM (fun v => v.fields.anyM (fun f => ownsResource fuel (substTy m f.ty)))
+        | none => return false
 
 /-- Check trait/`Copy` bounds: each bound type param's concrete instantiation
     must satisfy the bound. `Copy` is the builtin marker (checked via
@@ -1818,7 +1862,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             let typeMapping := ed.typeParams.zip enumTypeArgs
             for (binding, sf) in bindings.zip ev.fields do
-              if binding != "_" then addVar binding (substTy typeMapping sf.ty)
+              let fieldTy := substTy typeMapping sf.ty
+              if binding != "_" then addVar binding fieldTy
+              -- H6: a `_` payload field silently consumes that field; it may not
+              -- discard a resource owner (it would leak — bind+destroy it instead).
+              else if ← ownsResource 64 fieldTy then
+                throwCheck (.discardedResourceWildcard (tyToString fieldTy)) (some e.getSpan)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           | .litArm _ _val guard body => do
@@ -1826,6 +1875,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             pure body
           | .varArm _ binding guard body => do
             if binding != "_" then addVar binding innerTyR
+            -- H6: a wildcard arm `_ => …` consumes the whole scrutinee without
+            -- binding it; it may not silently discard a resource owner.
+            else if ← ownsResource 64 innerTyR then
+              throwCheck (.discardedResourceWildcard (tyToString innerTyR)) (some e.getSpan)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           | .rangeArm _ lo hi _ guard body => do
@@ -1853,12 +1906,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               checkStmt other curEnv.currentRetTy
               pure Ty.unit
             | none => pure Ty.unit
-          -- H6: arm-local bindings (the matched payload, plus any `let` in the arm)
-          -- are non-Copy linear values that must be consumed before the arm ends —
-          -- they go out of scope at the match merge. Catch a leaked payload such as
-          -- `E::A { t } => { }` where `t` is never used.
-          let armEndEnv ← getEnv
-          checkBlockLocalsConsumed envBefore.vars armEndEnv.vars (some e.getSpan)
           -- Unify arm types
           if !firstArmDone then
             matchResultTy := armTy
@@ -2224,24 +2271,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let finalTy ← match ty with
       | some t => resolveType t
       | none => pure valTy
-    -- `let _ = expr;` is the explicit, auditable acknowledgement that a value is
-    -- intentionally discarded (Phase 6 #13). Binding to the wildcard `_` drops the
-    -- value without registering a live linear obligation — EXCEPT for types that
-    -- implement Destroy, which must still be released with destroy() so a dropped
-    -- resource is never silenced by `_`. Every other binder is tracked as usual.
+    -- `let _ = expr;` is removed: `_` is a pattern wildcard, not a discard device
+    -- that makes an owned value vanish. Ignore a non-resource value with
+    -- `match e { _ => {} }` (gated so it can't silently drop a resource owner);
+    -- consume or `destroy()` anything else.
     if name == "_" then
-      let typeName := match finalTy with | .named n => n | .generic n _ => n | _ => ""
-      let hasDestroy ← if typeName == "" then pure false
-                       else do pure (← lookupFn (destroyFnNameFor typeName)).isSome
-      if hasDestroy then
-        -- A resource must be released explicitly; `_` does not silence Destroy.
-        addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      else
-        -- Acknowledged discard: if the discarded value is an existing linear
-        -- variable, consume it so `let _ = v;` truly drops `v` (no-op for Copy).
-        match value with
-        | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
-        | _ => pure ()
+      throwCheck .letUnderscoreRemoved (some stmt.getSpan)
     else
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
       match value with
@@ -2323,16 +2358,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Check then branch
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
-    -- Linear values declared inside the then-branch must be consumed before the
-    -- branch ends (H6 branch-local discard); they go out of scope at the merge.
-    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
     -- Restore env and check else branch
     setEnv envBefore
     match elseBody with
     | some stmts =>
       checkStmts stmts retTy
       let envAfterElse ← getEnv
-      checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (some stmt.getSpan)
       -- Merge: both branches must agree on consumption state of linear vars
       mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars (some stmt.getSpan)
     | none =>

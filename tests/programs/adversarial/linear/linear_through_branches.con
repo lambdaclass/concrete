@@ -14,8 +14,7 @@ fn use_or_drop(r: Resource, flag: bool) -> i32 {
     if flag {
         return unwrap_id(r);
     } else {
-        let _: i32 = unwrap_id(r);
-        return 0;
+        match unwrap_id(r) { _ => {} }        return 0;
     }
 }
 

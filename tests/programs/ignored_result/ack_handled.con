@@ -7,7 +7,7 @@ mod m {
     }
     fn main() -> Int {
         match maybe(5) {
-            Option::Some { value } => { let _ = value; }
+            Option::Some { value } => { let keep: i32 = value; }
             Option::None {} => {}
         }
         return 7;

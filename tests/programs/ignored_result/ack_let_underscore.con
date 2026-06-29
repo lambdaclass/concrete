@@ -1,12 +1,12 @@
-// Ignored-result (Phase 6 #13): `let _ = expr;` is the explicit acknowledgement
-// that a fallible result is intentionally discarded. Expected: compiles, prints 7.
+// Ignored-result (Phase 6 #13): `match e { _ => {} }` acknowledges an intentional
+// ignore of a non-resource fallible result. Expected: compiles, prints 7.
 mod m {
     fn risky(x: i32) -> Result<i32, i32> {
         if x > 0 { return Result::<i32, i32>::Ok { value: x }; }
         return Result::<i32, i32>::Err { error: 0 - 1 };
     }
     fn main() -> Int {
-        let _ = risky(5);
+        match risky(5) { _ => {} }
         return 7;
     }
 }

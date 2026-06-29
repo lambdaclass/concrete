@@ -19,10 +19,31 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**No soundness or codegen holes are currently open.** The most recent — H6
-(linear-discard) and H7 (loop-SSA) — were both closed 2026-06-28; their CLOSED
-entries (with reproducers and regression gates) are retained below so the fixes
-cannot silently regress.
+**One open hole: H9** (a *named* linear value bound in a nested `if`/`match` scope
+and left unconsumed). The `_`/`let _`/bare-discard half of the old H6 is closed
+soundly (see H6 below); H7 (loop-SSA) and H8 (array bounds) are closed and gated.
+
+### H9. Named linear bound in a nested scope, left unconsumed — OPEN 2026-06-28
+
+**Current state:** OPEN. A non-Copy value bound to a NAMED binding inside a nested
+non-returning scope — an `if`/`else` branch (`if c { let r = make(); }`) or a
+matched payload (`match e { E::A { t } => { } }`) — and not consumed before that
+scope exits silently leaks: the checker restores/merges the branch environment
+before the function-level `checkScopeExit` runs, so the local is never seen.
+
+A naive per-branch/per-arm "block-locals must be consumed" check (tried and
+reverted, 2026-06-28) is **unsound for real code**: it false-positives on
+legitimate patterns the example corpus uses — a payload moved into a local
+(`let listener = value;`, where the move isn't tracked as consuming `value`) and a
+resource held across a non-terminating loop (`let l = bind(); while true { l.accept() }`,
+where `l` is never "consumed" because control never exits). Closing this correctly
+needs the exit-mode / divergence-aware scope refactor the H6 thread always pointed
+at (ROADMAP Phase 6 #13a): track moves through `let x = y`, recognise diverging
+branches/loops, and run scope-exit per lexical block rather than once per function.
+
+NOTE: the `_` form of this leak is NOT here — `_` can never silently consume a
+resource owner at any site (H6/E0288), and `let _` is removed (E0289). H9 is only
+the *named*-binding case.
 
 ### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — CLOSED 2026-06-28
 
@@ -37,28 +58,32 @@ into a later construct's phi reconciliation. The fuzzer now runs WITH loops (the
 `--no-loops` flag is dropped) and is clean across many seeds at depth 4.
 Regression: `tests/programs/loop_after_branch_loop.con` (oracle vector).
 
-### H6. Silent discard of a linear (non-Copy) value — CLOSED 2026-06-28
+### H6. `_` / discarded-expression silent drop of a linear value — CLOSED 2026-06-28
 
-**Fixed.** A non-Copy value that was discarded without being consumed silently
-vanished, contradicting the guarantee that every linear value is consumed. Closed
-across the discard sites (`Concrete/Check.lean`):
+**Fixed (the `_` / discard half; the named-binding remainder is tracked as H9).**
+The headline rule: **`_` can never silently consume a value that owns a resource,
+at any site, and `let _` is not a discard device.** Closed in `Concrete/Check.lean`:
 
+- `let _ = e;` is **removed** entirely → **E0289**. `_` is only a pattern wildcard
+  (ignore a component while you consume the whole), never a device that makes an
+  owned value vanish — one fewer special case, one honest meaning.
+- a `_` that would consume a value transitively owning a resource — a wildcard arm
+  (`match r { _ => {} }`) or a `_` payload field (`E::Has { _ }`) — → **E0288**,
+  gated by a transitive `ownsResource` predicate (Destroy impl, heap builtin —
+  String/Vec/HashMap/Heap/… — or any struct/enum/array component that does). A `_`
+  over a trivially-droppable value (`Option<i32>`) is still fine.
 - a bare statement expression (`make_resource();`, `Token { .. };`, a discarded
-  linear call/method result) → **E0287** (`discardedLinear`);
-- a linear value declared inside an `if`/`else` branch and left unconsumed →
-  **E0208** at the branch merge (new `checkBlockLocalsConsumed`, run per branch);
-- a matched payload binding left unconsumed in an arm (`E::A { t } => { }`) →
-  **E0208** (same check, per arm);
-- a deferred call whose return is a linear value (`defer make_resource();`) →
-  **E0287**;
-- (`while`-body locals and enum `let … else` payloads were already caught by the
-  function-scope-exit check.)
+  linear call result) → **E0287**; a deferred linear-returning call
+  (`defer make();`) → **E0287**.
 
 `free(box);` is exempt — `free` IS the consumption (it hands back the moved-out
-pointee, idiomatically dropped). `let _ = expr;` remains the **intended explicit
-discard** (the user opts in by typing `_`); it is Destroy-gated, so a resource
-still cannot be silenced through it. Regression gate:
-`scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
+pointee, idiomatically dropped). The ignore-on-purpose escape is now
+`match e { _ => {} }` over a NON-resource value — multi-token and visibly
+exhaustive, and the transitive rule makes it refuse a resource owner. Regression
+gate: `scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
+
+A naive "every linear bound in a branch/arm must be consumed" check was tried and
+**reverted** (it broke real code); that residual leak is **H9**, above.
 
 The H1 / H2 / C9 / C10 entries are closed and retained here (with `CLOSED`
 markers and regression gates) so the thread is legible and the fixes cannot

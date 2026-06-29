@@ -16,6 +16,5 @@ trusted fn store(p: *mut i64, val: i64) -> i64 { *p = val; return 0; }
 
 fn main() -> i64 {
     let mut x: i64 = 1;
-    let _: i64 = store(&mut x as *mut i64, 99);
-    return x;   // correct = 99; bug yields 1
+    match store(&mut x as *mut i64, 99) { _ => {} }    return x;   // correct = 99; bug yields 1
 }

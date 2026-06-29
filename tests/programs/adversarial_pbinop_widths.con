@@ -23,6 +23,5 @@ fn u16_xor_blocks(a: u16, b: u16) -> u16 {
 }
 
 fn main() -> i32 {
-    let _: u16 = u16_xor_blocks(1, 2);
-    return 0;
+    match u16_xor_blocks(1, 2) { _ => {} }    return 0;
 }

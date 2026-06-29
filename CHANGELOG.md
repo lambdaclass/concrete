@@ -10,6 +10,33 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `_` can never silently consume a resource owner; `let _` removed (2026-06-28)
+
+Made the linearity rule for `_` honest and complete, and retired the deceptive
+`let _ = e;` form. The leak found earlier (`let _ = Wrapper{File}`) was never a
+property of `let _` — it was `_` silently consuming a value that transitively owns
+a resource, and that survived at other `_` sites (`match x { _ => {} }`,
+`E::Has { _ }`). So:
+
+- **Transitive `_`-resource rule (the soundness fix, `Concrete/Check.lean`).** A new
+  `ownsResource` predicate (Destroy impl, heap builtin — String/Vec/HashMap/Heap/…
+  — or any struct/enum/array component that owns one) now gates every `_` site: a
+  wildcard arm or `_` payload field over a resource owner is rejected (**E0288**),
+  transitively (so `match opt { _ => {} }` is fine for `Option<i32>` but rejected
+  for `Option<String>`). A `_` may ignore a component only while you consume the
+  whole; it can never make a resource owner vanish.
+- **`let _ = e;` removed (E0289).** `_` collapses back to one honest meaning — a
+  pattern wildcard, never a discard device. The ignore-on-purpose escape is now
+  `match e { _ => {} }` over a non-resource value (multi-token, visibly exhaustive,
+  and gated by the rule above). Bare non-Copy discards and deferred linear returns
+  remain **E0287**. Migrated ~20 `let _` sites across std/examples/tests/fixtures.
+- **Honest scope correction.** The previous commit's per-branch/per-arm
+  "block-locals must be consumed" check (E0208) was **reverted** — it false-positived
+  on real code (a payload moved into a local; a resource held across a
+  non-terminating loop). That residual — a *named* linear bound in a nested scope
+  and left unconsumed — is now tracked as **KNOWN_HOLES H9** (needs the exit-mode /
+  divergence scope refactor), rather than masked. The `_`/discard half stays closed.
+
 ### Close the last two holes: H6 (silent linear discard) and H7 (loop-SSA) (2026-06-28)
 
 With these, **no soundness or codegen holes remain open** in KNOWN_HOLES.

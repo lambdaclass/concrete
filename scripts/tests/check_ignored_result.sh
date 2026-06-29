@@ -6,7 +6,7 @@
 # Concrete flags that discard with E0286 unless it is explicitly acknowledged.
 # This gate locks:
 #   - a discarded `Result`/`Option` statement is rejected with E0286,
-#   - `let _ = expr;` is the explicit acknowledgement (compiles),
+#   - `match e { _ => {} }` acknowledges an intentional ignore (compiles),
 #   - handling the value (`match`) is not a discard (compiles),
 #   - a non-must-use value (plain integer) discard is NOT flagged (compiles),
 #   - an `Option`/`Result` in trailing VALUE position is not a discard (compiles),
@@ -51,8 +51,8 @@ run_expect ack_handled 7
 run_expect nonmustuse_ok 7
 run_expect value_position_ok 7
 
-echo "=== soundness: \`let _ =\` does not silence a Destroy resource ==="
-reject_with resource_underscore_still_errors E0208
+echo "=== soundness: `_` cannot silently consume a resource owner (E0288) ==="
+reject_with resource_underscore_still_errors E0288
 
 echo ""
 echo "IGNORED-RESULT: PASS=$PASS  FAIL=$FAIL"

@@ -30,7 +30,6 @@ mod test_drift {
     }
 
     pub fn main() -> i32 {
-        let _: i32 = simple_add(1, 2);
-        return 0;
+        match simple_add(1, 2) { _ => {} }        return 0;
     }
 }

@@ -112,9 +112,10 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **No soundness or codegen holes are
-currently open** (as of 2026-06-28): H6 (silent linear discard) and H7 (loop-SSA)
-were the last two and are both closed and gated. Overflow, div/mod-zero,
+it in sync when a hole is added or fixed. **One open hole: H9** — a *named* linear
+value bound in a nested `if`/`match` scope and left unconsumed (needs the exit-mode/
+divergence scope refactor, Phase 6 #13a). The `_`/`let _`/bare-discard half of H6
+is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
 enforced at every discard site (H6); `let _ = expr;` is the intended explicit

@@ -1,13 +1,16 @@
-// Ignored-result (Phase 6 #13) soundness guard: `let _ =` is an acknowledged drop
-// for plain data, but it must NOT silence a resource that implements Destroy — a
-// leak still has to be released explicitly with destroy(). Expected: rejected with
-// E0208 (linear variable never consumed), NOT silently accepted.
+// Soundness guard (H6): `_` can never silently consume a value that owns a
+// resource — at any site. A wildcard match arm over a resource-owning enum is
+// rejected (E0288); the resource must be bound and destroy()'d. (`let _ = …` is
+// removed entirely — E0289 — so the surviving `_` sites are what the rule guards.)
+// Expected: rejected with E0288, NOT silently accepted.
 mod m {
     struct File { fd: i32 }
     impl Destroy for File { fn destroy(self) { } }
-    fn open() -> File { return File { fd: 3 }; }
+    enum Slot { Has { f: File }, Empty {} }
+    fn open() -> Slot { return Slot::Has { f: File { fd: 3 } }; }
     fn main() -> Int {
-        let _ = open();
+        let s: Slot = open();
+        match s { _ => { } }
         return 0;
     }
 }

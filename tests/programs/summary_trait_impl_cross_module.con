@@ -10,8 +10,7 @@ mod Lib {
     pub fn make_and_sum(x: Int, y: Int) -> Int {
         let p: Point = Point { x: x, y: y };
         let result: Int = p.total();
-        let _: Int = consume(p);
-        return result;
+        match consume(p) { _ => {} }        return result;
     }
 }
 mod Main {
