@@ -25,6 +25,19 @@ closed (H9, below) is gated; the `_`/`let _`/bare-discard half of the old H6, H7
 
 ## Recently closed
 
+### H10. Array literal duplicated linear elements — CLOSED 2026-07-01
+
+**Fixed.** `let arr = [a, b];` did not consume the element idents `a`/`b`, so a linear
+(resource-owning) element stayed live after being moved into the array — it could be
+`destroy()`'d *and* owned by the array: a double-free. Found by a systematic value-flow
+audit (does every site that receives a value *move* it exactly once?), not by a crash.
+Fixed in `Concrete/Check.lean` (`.arrayLit` now consumes linear ident elements; reuse
+is E0205). Locked by `scripts/tests/check_linear_conservation.sh`, which walks every
+value-flow site — let-binding, array-literal, struct-literal, struct destructure,
+function argument, return, match scrutinee — and asserts move-exactly-once. Same audit
+fixed linear struct destructure (was a fail-closed E0208 over-rejection); see
+`docs/OWNERSHIP_MODEL.md`.
+
 ### H9. Named linear bound in a nested scope, left unconsumed — CLOSED 2026-06-28
 
 **Fixed.** A non-Copy value bound to a NAMED binding inside a nested scope — an

@@ -10,6 +10,29 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Linear conservation: fix array-literal duplication + linear struct destructure (2026-07-01)
+
+A systematic audit of every value-flow site (does each one *move* a linear value
+exactly once?) turned up three issues; fixed with a standing conservation gate so the
+class can't recur.
+
+- **Array literals duplicated linear elements (soundness hole).** `let arr = [a, b];`
+  did not consume `a`/`b`, so they stayed live — you could `destroy(a)` *and* have the
+  array own it: a double-free. Now an array literal moves each element in (reuse is
+  **E0205**). This was a real duplication hole, not an over-rejection.
+- **Linear struct destructure was broken (fail-closed over-rejection).**
+  `let Wrap { f } = w;` desugared to a hidden `let __destr = w; let f = __destr.f`,
+  whose temp was never consumed → spurious **E0208** on `__destr_Wrap`. It now works as
+  a proper move-destructure: the source is consumed, each named field becomes an owned
+  binding (checked natively in `Check`; expanded to the temp+field form only at `Elab`,
+  past the linear checker). Errors now name the real binding, not the temp.
+- **let-else over a non-Copy enum stays rejected — by design.** `let E::A { f } = e
+  else { … }` desugars to a catch-all `_` arm, illegal under the linear `_` rule. Kept
+  consistent (no variant-sensitive weakening); for a non-Copy enum, use a full `match`.
+
+New gate `scripts/tests/check_linear_conservation.sh` (Makefile `test-linear-conservation`
++ CI) walks every value-flow site and asserts move-exactly-once. Full suite 3032/0.
+
 ### Concrete is linear, not affine: `_` may ignore only Copy values (2026-07-01)
 
 Closed the last incoherence in the ownership model. Two predicates had been
