@@ -53,7 +53,7 @@ run_expect ack_handled 7
 run_expect nonmustuse_ok 7
 run_expect value_position_ok 7
 
-echo "=== soundness: `_` cannot silently consume a resource owner (E0288) ==="
+echo '=== soundness: `_` cannot silently consume a resource owner (E0288) ==='
 reject_with resource_underscore_still_errors E0288
 
 echo ""
