@@ -164,15 +164,15 @@ inductive CheckError where
   -- `Token { .. };`. H6: every linear value must be consumed; a silent drop is an
   -- error. Acknowledge an intentional discard with `let _ = expr;`.
   | discardedLinear (tyName : String)
-  -- A `_` pattern (a wildcard match arm, or a `_` payload field) silently consumes
-  -- a value that transitively owns a resource — it would leak. H6: `_` may ignore a
-  -- component only while you consume the whole; it may never make a resource owner
-  -- vanish. Bind it and `destroy()`/consume it instead.
-  | discardedResourceWildcard (tyName : String)
-  -- `let _ = e;` has been removed. `_` is only a pattern wildcard (ignore a
-  -- component while you consume the whole), never a device that makes an owned
-  -- value vanish. Ignore a non-resource value with `match e { _ => {} }`; consume
-  -- or `destroy()` anything that owns a resource.
+  -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
+  -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
+  -- used exactly once, so `_` may ignore ONLY a Copy value. To get rid of a non-Copy
+  -- value, account for it — destructure it exhaustively and consume/hand off its
+  -- parts (a `_` on a *Copy* payload is fine); a resource owner ends at `destroy()`.
+  | wildcardDiscardsNonCopy (tyName : String)
+  -- `let _ = e;` has been removed. `_` is only a pattern wildcard for Copy data (or a
+  -- component you have already accounted for by matching), never a device that makes a
+  -- non-Copy value vanish. Consume it, move it, return it, or `destroy()` it.
   | letUnderscoreRemoved
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
@@ -260,7 +260,7 @@ def CheckError.message : CheckError → String
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
-  | .discardedResourceWildcard tyName => s!"`_` cannot silently discard a value of type '{tyName}' that owns a resource"
+  | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
@@ -280,9 +280,9 @@ def CheckError.hint : CheckError → Option String
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
   | .discardedMustUse _ => some "handle it: match it, `?` it, or pass it on"
-  | .discardedLinear _ => some "consume it (bind, pass it on, destroy()), match it, or `?` it"
-  | .discardedResourceWildcard _ => some "bind the value/field (not `_`) and consume it — pass it on or destroy() its resource"
-  | .letUnderscoreRemoved => some "ignore a non-resource value with `match e { _ => {} }`; otherwise consume it or destroy() it"
+  | .discardedLinear _ => some "consume it: bind and pass it on / return it / destroy() it, destructure it exhaustively, or `?` it"
+  | .wildcardDiscardsNonCopy _ => some "bind the value/field (not `_`) and consume it — pass it on, return it, or destroy() it; `_` may ignore only Copy values"
+  | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
@@ -374,7 +374,7 @@ def CheckError.code : CheckError → String
   | .notPublicInModule _ _ => "E0285"
   | .discardedMustUse _ => "E0286"
   | .discardedLinear _ => "E0287"
-  | .discardedResourceWildcard _ => "E0288"
+  | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
@@ -1966,10 +1966,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             for (binding, sf) in bindings.zip ev.fields do
               let fieldTy := substTy typeMapping sf.ty
               if binding != "_" then addVar binding fieldTy
-              -- H6: a `_` payload field silently consumes that field; it may not
-              -- discard a resource owner (it would leak — bind+destroy it instead).
-              else if ← ownsResource 64 fieldTy then
-                throwCheck (.discardedResourceWildcard (tyToString fieldTy)) (some e.getSpan)
+              -- Linear: a `_` payload field may ignore ONLY a Copy field. A non-Copy
+              -- field must be bound and consumed exactly once (destructure it, don't
+              -- drop it) — a resource owner ends at destroy().
+              else if !(← isCopyType fieldTy) then
+                throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           | .litArm _ _val guard body => do
@@ -1977,10 +1978,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             pure body
           | .varArm _ binding guard body => do
             if binding != "_" then addVar binding innerTyR
-            -- H6: a wildcard arm `_ => …` consumes the whole scrutinee without
-            -- binding it; it may not silently discard a resource owner.
-            else if ← ownsResource 64 innerTyR then
-              throwCheck (.discardedResourceWildcard (tyToString innerTyR)) (some e.getSpan)
+            -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
+            -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
+            -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
+            else if !(← isCopyType innerTyR) then
+              throwCheck (.wildcardDiscardsNonCopy (tyToString innerTyR)) (some e.getSpan)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           | .rangeArm _ lo hi _ guard body => do

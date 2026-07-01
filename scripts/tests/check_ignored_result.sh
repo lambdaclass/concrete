@@ -6,12 +6,14 @@
 # Concrete flags that discard with E0286 unless it is explicitly acknowledged.
 # This gate locks:
 #   - a discarded `Result`/`Option` statement is rejected with E0286,
-#   - `match e { _ => {} }` acknowledges an intentional ignore (compiles),
+#   - the intentional ignore is EXHAUSTIVE handling — `match e { Ok { _ } => {},
+#     Err { _ } => {} }` (Concrete is linear: a catch-all `_` arm over a non-Copy
+#     value is rejected E0288; `_` may ignore only the Copy payloads) (compiles),
 #   - handling the value (`match`) is not a discard (compiles),
 #   - a non-must-use value (plain integer) discard is NOT flagged (compiles),
 #   - an `Option`/`Result` in trailing VALUE position is not a discard (compiles),
-#   - SOUNDNESS: `let _ =` does NOT silence a Destroy resource — a leak still
-#     errors (E0208), so the acknowledgement can't be abused to drop resources.
+#   - SOUNDNESS: a `_` wildcard cannot drop a resource owner — a leak still
+#     errors (E0288), so the acknowledgement can't be abused to drop resources.
 #
 # Fixtures: tests/programs/ignored_result/.
 

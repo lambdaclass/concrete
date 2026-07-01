@@ -81,23 +81,28 @@ at any site, and `let _` is not a discard device.** Closed in `Concrete/Check.le
 - `let _ = e;` is **removed** entirely → **E0289**. `_` is only a pattern wildcard
   (ignore a component while you consume the whole), never a device that makes an
   owned value vanish — one fewer special case, one honest meaning.
-- a `_` that would consume a value transitively owning a resource — a wildcard arm
-  (`match r { _ => {} }`) or a `_` payload field (`E::Has { _ }`) — → **E0288**,
-  gated by a transitive `ownsResource` predicate (Destroy impl, heap builtin —
-  String/Vec/HashMap/Heap/… — or any struct/enum/array component that does). A `_`
-  over a trivially-droppable value (`Option<i32>`) is still fine.
+- a `_` that would drop a **non-Copy** value — a wildcard arm (`match r { _ => {} }`)
+  or a `_` payload field (`E::Has { _ }`) — → **E0288**, gated on `isCopy`. Concrete
+  is **linear**: a non-Copy value must be used exactly once, so `_` may ignore only a
+  Copy value. This includes resource-free non-Copy values like `Option<i32>`:
+  `match opt_i32 { _ => {} }` is rejected — you must destructure exhaustively
+  (`match opt { Some { _ } => {}, None => {} }`, where the Copy `i32` payload may be
+  `_`-ignored). *(Initially this rule was gated on `ownsResource` — affine, allowing
+  a non-resource non-Copy value to be dropped by `_`. It was tightened to `isCopy` on
+  2026-07-01 to make the language linear, not affine: the one law is "a non-Copy value
+  never silently disappears.")*
 - a bare statement expression (`make_resource();`, `Token { .. };`, a discarded
   linear call result) → **E0287**; a deferred linear-returning call
   (`defer make();`) → **E0287**.
 
 `free(box);` is exempt — `free` IS the consumption (it hands back the moved-out
-pointee, idiomatically dropped). The ignore-on-purpose escape is now
-`match e { _ => {} }` over a NON-resource value — multi-token and visibly
-exhaustive, and the transitive rule makes it refuse a resource owner. Regression
-gate: `scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
+pointee, idiomatically dropped). There is no catch-all discard escape: to get rid of
+a non-Copy value you account for it — destructure exhaustively and consume/hand off
+the parts (a `_` on a *Copy* payload is fine). Regression gate:
+`scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
 
 A naive "every linear bound in a branch/arm must be consumed" check was tried and
-**reverted** (it broke real code); that residual leak is **H9**, above.
+**reverted** (it broke real code); the sound version landed as **H9**, above.
 
 The H1 / H2 / C9 / C10 entries are closed and retained here (with `CLOSED`
 markers and regression gates) so the thread is legible and the fixes cannot

@@ -59,7 +59,7 @@ fn sorted_insert(keys: &mut Vec<Int>, vals: &mut Vec<Int>, key: Int, val: Int) w
 // Keep only first K elements
 fn truncate_to(v: &mut Vec<Int>, k: Int) with(Alloc) {
     while vec_len::<Int>(v) > k {
-        match vec_pop::<Int>(v) { _ => {} }
+        match vec_pop::<Int>(v) { Option::Some { _ } => {}, Option::None => {} }
     }
 }
 

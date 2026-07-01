@@ -682,7 +682,9 @@ mod numeric {
         let mut buf: [u8; 16] = [0; 16];
         let mut w: ByteWriter = ByteWriter::from_raw(&mut buf as *mut u8, 16);
 
-        match w.write_u16_be(0xCAFE as u16) { _ => {} }        match w.write_u32_le(100 as u32) { _ => {} }        match w.write_u8(2) { _ => {} }
+        match w.write_u16_be(0xCAFE as u16) { Result::Ok { _ } => {}, Result::Err { _ } => {} }
+        match w.write_u32_le(100 as u32) { Result::Ok { _ } => {}, Result::Err { _ } => {} }
+        match w.write_u8(2) { Result::Ok { _ } => {}, Result::Err { _ } => {} }
         // Parse it back
         let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 16);
 

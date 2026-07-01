@@ -10,6 +10,39 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Concrete is linear, not affine: `_` may ignore only Copy values (2026-07-01)
+
+Closed the last incoherence in the ownership model. Two predicates had been
+deciding "may this disappear": named bindings used `!isCopy` (linear), but the `_`
+wildcard used `ownsResource` (affine) — so a non-Copy value that owned no resource
+(`Option<i32>`, a plain view struct) could be silently dropped by `match e { _ => {} }`
+while the *same* value bound to a name required consumption. That middle band made
+the language affine in one corner and linear everywhere else.
+
+Resolved by making the whole discipline **linear**, with one law: **a non-Copy value
+never silently disappears.**
+
+- **`_` gating tightened from `ownsResource` to `isCopy`** (`Concrete/Check.lean`).
+  A wildcard arm (`match e { _ => {} }`) or `_` payload field over a **non-Copy**
+  value is now rejected (**E0288**, renamed `wildcardDiscardsNonCopy`) — including
+  resource-free non-Copy values like `Option<i32>`. `_` may ignore only a `Copy`
+  value (or a Copy payload inside an exhaustive match).
+- **The catch-all discard escape is gone.** To get rid of a non-Copy value you
+  account for it: destructure exhaustively and consume/hand off the parts; a `_` on a
+  *Copy* payload is fine (`match opt { Some { _ } => {}, None => {} }`). Migrated the
+  ~4 `match x { _ => {} }`-over-non-Copy sites (std `numeric`, a data-structures test,
+  two ignored-result fixtures) to exhaustive form.
+- **Model, stated once:** `Copy` = may duplicate (and therefore may ignore);
+  non-Copy = **linear**, must be used exactly once (consumed, moved, returned, handed
+  off); `Destroy` = a possible explicit consuming cleanup for resource owners. This
+  keeps affine-but-resourceless *tokens* (permits, witnesses) expressible — they are
+  simply linear values that own nothing and must be handed off, never dropped.
+
+Deliberately kept: conditional `Copy` for generic containers (so `Option<i32>` could
+become genuinely `Copy` and a catch-all `_` would be valid *for the right reason*) is
+a separate future convenience, not a foundation. Gate: `check_linear_discard.sh`
+(now locks the linear rule). Full suite 3032/0.
+
 ### Close H9: a linear value left unconsumed in a nested scope no longer leaks (2026-06-28)
 
 Closed the last tracked soundness hole (KNOWN_HOLES H9, ROADMAP #13a): a non-Copy
@@ -56,10 +89,11 @@ a resource, and that survived at other `_` sites (`match x { _ => {} }`,
   for `Option<String>`). A `_` may ignore a component only while you consume the
   whole; it can never make a resource owner vanish.
 - **`let _ = e;` removed (E0289).** `_` collapses back to one honest meaning — a
-  pattern wildcard, never a discard device. The ignore-on-purpose escape is now
-  `match e { _ => {} }` over a non-resource value (multi-token, visibly exhaustive,
-  and gated by the rule above). Bare non-Copy discards and deferred linear returns
-  remain **E0287**. Migrated ~20 `let _` sites across std/examples/tests/fixtures.
+  pattern wildcard, never a discard device. Bare non-Copy discards and deferred
+  linear returns remain **E0287**. Migrated ~20 `let _` sites across
+  std/examples/tests/fixtures. *(This entry's `_` rule was initially gated on
+  `ownsResource`; it was tightened to `isCopy` on 2026-07-01 — see the linear-not-affine
+  milestone above.)*
 - **Honest scope correction.** The previous commit's per-branch/per-arm
   "block-locals must be consumed" check (E0208) was **reverted** — it false-positived
   on real code (a payload moved into a local; a resource held across a

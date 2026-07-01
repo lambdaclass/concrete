@@ -8,7 +8,7 @@ mod m {
     }
     fn main() -> Int {
         let o: Option<i32> = if true { maybe(1) } else { maybe(2) };
-        match o { _ => {} }
+        match o { Option::Some { _ } => {}, Option::None => {} }
         return 7;
     }
 }

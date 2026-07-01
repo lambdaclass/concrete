@@ -29,12 +29,22 @@ shows a specific enum needs it, widen `mustUseEnumName?` in `Concrete/Check.lean
 
 ## How to acknowledge a deliberate discard
 
-`let _ = expr;` is the explicit, greppable acknowledgement that a fallible
-result is intentionally ignored:
+Concrete is **linear**: a non-Copy value must be used exactly once and can never
+silently disappear. `Result`/`Option` are non-Copy, so the acknowledgement is to
+**account for the value** — handle every variant and ignore only the Copy payloads:
 
 ```concrete
-let _ = vec_pop::<i32>(&mut stack);   // pop-and-drop, on purpose
+match vec_pop::<i32>(&mut stack) {   // pop-and-drop, on purpose
+    Option::Some { _ } => {},        // the i32 payload is Copy — `_` may ignore it
+    Option::None       => {},
+}
 ```
+
+There is **no catch-all discard**: `match e { _ => {} }` over a non-Copy value is
+rejected (**E0288**) — a bare `_` arm would drop the whole value without accounting
+for it. (`let _ = expr;` is likewise removed — **E0289**.) The intentional-ignore
+idiom is exhaustive matching, above; `_` inside it is allowed only where the thing
+it ignores is `Copy`.
 
 Other forms that are *not* discards and so never trip E0286:
 
@@ -45,31 +55,32 @@ Other forms that are *not* discards and so never trip E0286:
 - a **trailing value expression** (no `;`) — it is the block's value, not a
   discard, so `if c { maybe(1) } else { maybe(2) }` as a block value is fine.
 
-## Soundness: `let _ =` does not silence a resource
+## Soundness: `_` cannot silence a resource
 
-Binding to `_` drops the value *without* registering a live linear obligation —
-**except** for a type that implements `Destroy`. A resource must still be
-released explicitly with `destroy(…)`; `let _ = file;` keeps erroring (E0208) so
-the acknowledgement form can never be abused to leak a resource:
+`_` may ignore only a `Copy` value, so it can never drop a resource owner. A
+resource-bearing payload is non-Copy, so `Some { _ }` / `Ok { _ }` over it is
+rejected — you must bind and release it:
 
 ```concrete
-let _ = open();   // error[check]: (E0208) linear variable '_' was never consumed
-                  //   hint: pass it to a function, return it, or use destroy()
+match open_file() {          // Result<File, …>
+    Result::Ok { f }   => { f.destroy(); },   // `_` here would be E0288 — File is non-Copy
+    Result::Err { _ }  => {},                  // the error payload, if Copy, may be ignored
+}
 ```
 
-For plain data (`Result`/`Option` over Copy payloads, and other non-`Destroy`
-types) `let _ =` is a genuine drop. For a *resource-bearing* result
-(`Result<File, …>`), `let _ =` drops the outer enum without deep-destroying the
-payload — that is an explicit, auditable opt-in by the author, strictly better
-than the old silent temporary drop, but it does not run the payload's
-destructor. Handle such results explicitly.
+For plain data (`Result`/`Option` over Copy payloads) the exhaustive form with
+`_` payloads is a genuine, auditable drop. For a resource-bearing result you must
+bind the payload and consume it — the linear rule makes the silent-drop path
+impossible, not merely discouraged.
 
 ## Where it lives
 
-- Rule: `Concrete/Check.lean` — `mustUseEnumName?` (the must-use predicate), the
-  `Stmt.expr` discard check in `checkStmt` (emits `E0286`), and the `let _ =`
-  acknowledgement in the `letDecl` case (Destroy-gated).
-- Diagnostic: `CheckError.discardedMustUse` → **E0286**.
+- Rule: `Concrete/Check.lean` — `mustUseEnumName?` (the must-use predicate) and the
+  `Stmt.expr` discard check in `checkStmt` (emits `E0286`). The linear `_` rule (a
+  `_` may ignore only a Copy value) lives in the match-arm checks (emits `E0288`,
+  `wildcardDiscardsNonCopy`); `let _ =` is removed (`E0289`).
+- Diagnostic: `CheckError.discardedMustUse` → **E0286**;
+  `CheckError.wildcardDiscardsNonCopy` → **E0288**.
 - Fixtures: `tests/programs/ignored_result/`.
 - Gate: `scripts/tests/check_ignored_result.sh` (Makefile `test-ignored-result`
   + CI).

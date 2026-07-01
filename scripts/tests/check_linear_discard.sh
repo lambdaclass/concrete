@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Linear-discard gate — KNOWN_HOLES H6 (silent discard of a non-Copy value).
 #
-# Two rules, locked here:
+# Two rules, locked here (Concrete is LINEAR — a non-Copy value must be used exactly
+# once and can never silently disappear):
 #   1. A non-Copy value discarded as a bare statement / deferred call is rejected
 #      (E0287) — `make_resource();`, `Token { .. };`, `defer make();`.
-#   2. `_` is only a pattern wildcard, never a discard device: `let _ = e;` is
-#      removed (E0289), and a `_` that would silently consume a value transitively
-#      owning a resource — a wildcard arm or a `_` payload field — is rejected
-#      (E0288), at every site.
+#   2. `_` may ignore ONLY a Copy value: `let _ = e;` is removed (E0289), and a `_`
+#      that would drop a NON-COPY value — a wildcard arm `match e { _ => {} }` or a
+#      `_` payload field — is rejected (E0288), at every site. To get rid of a
+#      non-Copy value, account for it: destructure exhaustively (a `_` on a *Copy*
+#      payload is fine) and consume/hand off the parts.
 # Legitimate forms still compile:
-#   - `match e { _ => {} }` ignores a NON-resource value (the ack escape);
+#   - exhaustive `match e { V1 { _ } => {}, V2 => {} }` where the payloads are Copy;
 #   - `free(box);` is the free-and-drop idiom (free IS the consumption);
 #   - a consumed value (passed on / returned / destructured-and-destroyed) compiles;
 #   - discarding a Copy value as a bare statement compiles.
@@ -55,13 +57,14 @@ echo "=== let _ removed (E0289) ==="
 reject "let _ = make();"    E0289 'fn main() -> Int { let _ = make(); return 0; }'
 reject "let _ = 5; (Copy)"  E0289 'fn main() -> Int { let _ = 5; return 0; }'
 
-echo "=== \`_\` cannot consume a resource owner, at any site (E0288) ==="
-reject "wildcard arm/resource"    E0288 'fn f(r: Res) -> Int { match r { _ => { } } return 0; } fn main() -> Int { return f(openr()); }'
-reject "wildcard payload/resource" E0288 'fn f(r: Res) -> Int { match r { Res::Has { _ } => { }, Res::Empty {} => { } } return 0; } fn main() -> Int { return f(openr()); }'
+echo "=== \`_\` may ignore only Copy — dropping a non-Copy value is rejected (E0288) ==="
+reject "wildcard arm/resource"       E0288 'fn f(r: Res) -> Int { match r { _ => { } } return 0; } fn main() -> Int { return f(openr()); }'
+reject "wildcard payload/resource"   E0288 'fn f(r: Res) -> Int { match r { Res::Has { _ } => { }, Res::Empty {} => { } } return 0; } fn main() -> Int { return f(openr()); }'
+reject "wildcard arm/Option (non-Copy, no resource)" E0288 'fn main() -> Int { let o: Option<i32> = maybe(); match o { _ => { } } return 0; }'
 
 echo "=== legitimate forms still compile ==="
-accept "match opt { _ => {} } (non-resource)" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { _ => { } } return 0; }'
-accept "wildcard payload (non-resource)"      'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
+accept "exhaustive, Copy payloads ignored" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { Option::Some { _ } => { }, Option::None => { } } return 0; }'
+accept "wildcard payload (Copy field)"     'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
 accept "free(box)"          'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); free(b); return 0; }'
 accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return sink(t); }'
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'
