@@ -371,6 +371,9 @@ jobs:
       - name: Nested-scope linearity gate (KNOWN_HOLES H9 — branch/arm local must be consumed; move-through-let; while-true/abort exempt)
         run: bash scripts/tests/check_linear_nested_scope.sh
 
+      - name: Linear-conservation gate (every value-flow site moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/match; no duplication)
+        run: bash scripts/tests/check_linear_conservation.sh
+
       - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
         run: bash scripts/tests/check_no_macros.sh
 

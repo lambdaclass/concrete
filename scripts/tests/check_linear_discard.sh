@@ -31,10 +31,16 @@ HDR='mod m {
   struct Token { x: i32 }
   struct File { fd: i32 }
   impl Destroy for File { fn destroy(self) { } }
+  struct Wrap { f: File }
+  struct Pair { f: File, g: File }
   enum Data { A { v: i32 }, B {} }
   enum Res { Has { f: File }, Empty {} }
   fn make() -> Token { return Token { x: 1 }; }
   fn sink(t: Token) -> Int { return t.x as Int; }
+  fn make_file(n: i32) -> File { return File { fd: n }; }
+  fn make_wrap() -> Wrap { return Wrap { f: make_file(1) }; }
+  fn sink_file(f: File) -> Int { destroy(f); return 0; }
+  fn sink_arr(a: [File; 2]) -> Int { destroy(a[0]); destroy(a[1]); return 0; }
   fn maybe() -> Option<i32> { return Option::<i32>::None {}; }
   fn boxed() with(Alloc) -> Heap<Token> { return alloc(Token { x: 1 }); }
   fn openr() -> Res { return Res::Has { f: File { fd: 3 } }; }'
@@ -66,11 +72,15 @@ reject "value wildcard/Heap (non-enum non-Copy)" E0288 'fn main() with(Alloc) ->
 echo "=== non-enum value patterns move non-Copy scrutinees ==="
 reject "value pattern then original reuse" E0205 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } free(h); return 0; }'
 reject "value pattern binding unconsumed" E0208 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { } } return 0; }'
+reject "array literal then element reuse" E0205 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; destroy(a); destroy(b); return sink_arr(arr); }'
+reject "partial linear struct destructure" E0252 'fn main() -> Int { let p: Pair = Pair { f: make_file(1), g: make_file(2) }; let Pair { f } = p; return sink_file(f); }'
 
 echo "=== legitimate forms still compile ==="
 accept "exhaustive, Copy payloads ignored" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { Option::Some { _ } => { }, Option::None => { } } return 0; }'
 accept "wildcard payload (Copy field)"     'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
 accept "value pattern consumes Heap once" 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } return 0; }'
+accept "linear struct destructure moves field" 'fn main() -> Int { let w: Wrap = make_wrap(); let Wrap { f } = w; return sink_file(f); }'
+accept "array literal moves elements" 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; return sink_arr(arr); }'
 accept "free(box)"          'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); free(b); return 0; }'
 accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return sink(t); }'
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'

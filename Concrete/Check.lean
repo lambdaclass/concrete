@@ -2237,9 +2237,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | some (.array t _) => some t
         | _ => none
       let firstTy ← checkExpr first elemHint
+      -- An array literal MOVES each element into the array: consume a linear ident
+      -- element so `[a, b]` cannot duplicate `a`/`b`. Without this the elements stay
+      -- live and could be consumed a second time while the array also owns them
+      -- (a double-free / linearity-duplication soundness hole).
+      match first with | .ident _ n => consumeVarIfExists n (some first.getSpan) | _ => pure ()
       for e in rest do
         let eTy ← checkExpr e (some firstTy)
         expectTy firstTy eTy "array element" (some e.getSpan)
+        match e with | .ident _ n => consumeVarIfExists n (some e.getSpan) | _ => pure ()
       return .array firstTy elems.length
   | .arrayIndex _ arr index =>
     let arrTy ← checkExpr arr
@@ -2734,7 +2740,37 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     expectTy .bool t "assert/assume condition" (some stmt.getSpan)
   -- These are desugared before reaching Check; should never appear
   | .letDestructure _ _ _ _ _ _ => pure ()
-  | .letStructDestructure _ _ _ _ => pure ()
+  | .letStructDestructure _ structName bindings value =>
+    -- Linear move-destructure: `let Struct { a, b } = value` CONSUMES `value` and
+    -- moves each named field out into an owned binding. Checked natively (not via
+    -- `let __destr = value; let a = __destr.a`, which is unsound for a linear struct
+    -- — field access doesn't move, so the temp would leak). Elab expands it to the
+    -- temp+field form for codegen, past this checker. See docs/OWNERSHIP_MODEL.md.
+    let valTy ← checkExpr value (some (.named structName))
+    -- The destructure moves the source, so consume it if it is a linear binding.
+    match value with
+    | .ident _ srcName => consumeVarIfExists srcName (some stmt.getSpan)
+    | _ => pure ()
+    -- Resolve any generic type arguments so field types are concrete.
+    let typeArgs := match ← resolveType valTy with
+      | .generic _ args => args
+      | _ => []
+    let typeParams := match ← lookupStruct structName with
+      | some sd => sd.typeParams
+      | none => []
+    let mapping := typeParams.zip typeArgs
+    let structIsCopy ← isCopyType valTy
+    if !structIsCopy then
+      match ← lookupStruct structName with
+      | some sd =>
+        for sf in sd.fields do
+          if !(bindings.contains sf.name) then
+            throwCheck (.missingFieldInLiteral sf.name s!"struct destructure '{structName}'") (some stmt.getSpan)
+      | none => pure ()
+    for b in bindings do
+      match ← lookupStructField structName b with
+      | some fieldTy => addVar b (substTy mapping fieldTy) true (declSpan := some stmt.getSpan)
+      | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []

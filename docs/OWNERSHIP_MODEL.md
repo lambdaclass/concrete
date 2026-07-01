@@ -52,6 +52,27 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
   accept loop legitimately holds a resource live forever). `return`/`break`/`continue`
   do *not* exempt.
 
+### Conservation: a linear value flows to exactly one place
+
+Every site a value can flow *into* **moves** (consumes) a linear operand exactly once —
+duplicating one would let it be freed twice. Concretely:
+
+- **`let g = f;`**, **function argument**, **`return f;`**, **match scrutinee** — all
+  consume `f`; reuse afterward is **E0205**.
+- **Array literal** `[a, b]` moves each element in — `a`/`b` are consumed, the array
+  owns them (reuse is **E0205**). *(This was a real duplication hole — `[a, b]` used to
+  leave `a`/`b` live, so they could be freed while the array also owned them. Fixed and
+  locked by the conservation gate.)*
+- **Struct literal** `Wrap { f: x }` moves `x` in.
+- **Struct destructure** `let Wrap { f } = w;` moves the source `w` out and each named
+  field becomes an **owned** binding (must itself be consumed). It is checked natively
+  (a `let __destr = w; let f = __destr.f` desugaring would be unsound for a linear
+  struct — field access does not move — so the linear check runs on the destructure
+  form and it is expanded only at Elab, past the checker).
+- **`let X::V { .. } = e else { … }` (let-else)** desugars to a catch-all `_` match arm,
+  which is illegal over a **non-Copy** enum (the linear `_` rule). For a non-Copy /
+  resource-owning enum, **use a full explicit `match`** instead of let-else.
+
 ### How to intentionally get rid of a value
 
 - **Copy value:** just drop it (`_`, bare statement, ignore it) — free.
@@ -118,5 +139,8 @@ future convenience, **not a foundation**; the linear rule stands without it.
   (`wildcardDiscardsNonCopy`), `E0289` `let _` removed.
 - Gates: `scripts/tests/check_linear_discard.sh` (the `_`/discard rules),
   `scripts/tests/check_linear_nested_scope.sh` (nested-scope + move-through-let +
-  divergence), `scripts/tests/check_ignored_result.sh` (`Result`/`Option` must-use).
+  divergence), `scripts/tests/check_linear_conservation.sh` (every value-flow site
+  moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/
+  match; the anti-duplication backstop), `scripts/tests/check_ignored_result.sh`
+  (`Result`/`Option` must-use).
 - Related docs: `docs/KNOWN_HOLES.md` (H6 and H9 entries), `docs/IGNORED_RESULT.md`.

@@ -651,12 +651,12 @@ partial def desugarStmts : List Stmt → List Stmt
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant bindings none continuation
     [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
-  | (.letStructDestructure sp structName bindings value) :: rest =>
-    let tmpName := "__destr_" ++ structName
-    let tmpLet := Stmt.letDecl sp tmpName false none value false
-    let fieldLets := bindings.map fun b =>
-      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b) false
-    [tmpLet] ++ fieldLets ++ desugarStmts rest
+  -- NOTE: `letStructDestructure` is intentionally NOT desugared here. Desugaring it
+  -- to `let __destr = value; let a = __destr.a; …` is unsound for a LINEAR struct —
+  -- field access does not move, so `__destr` is left unconsumed (E0208) and the
+  -- fields would alias it. Instead it is linearity-checked natively in Check
+  -- (consume the source, move each field out) and expanded to the temp+field form
+  -- only at Elab time, past the linear checker. See docs/OWNERSHIP_MODEL.md.
   | s :: rest => s :: desugarStmts rest
 
 /-- Apply desugaring to all function bodies in a module. -/

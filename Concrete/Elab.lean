@@ -1344,8 +1344,16 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
   -- Catch-all for exhaustiveness — should never fire.
   | .letDestructure sp _ _ _ _ _ =>
     throwElab (.unknownEnumType "internal: letDestructure not desugared") (some sp)
-  | .letStructDestructure sp _ _ _ =>
-    throwElab (.unknownStructType "internal: letStructDestructure not desugared") (some sp)
+  | .letStructDestructure sp structName bindings value =>
+    -- Linear-checked natively in Check; expanded here (past the linear checker) to a
+    -- hidden temp + field-access binds. Sound at runtime: the source is moved into the
+    -- temp, each field value is copied into its binding, and the temp is dead storage
+    -- afterward (its resource has moved to the bindings). See docs/OWNERSHIP_MODEL.md.
+    let tmpName := "__destr_" ++ structName
+    let tmpLet := Stmt.letDecl sp tmpName false none value false
+    let fieldLets := bindings.map fun b =>
+      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b) false
+    elabStmts ([tmpLet] ++ fieldLets)
   -- assert(e)/assume(e): proof-only, ERASED before Core (like contracts/ghost).
   -- Not elaborated — the condition may legally read ghost bindings (it is a proof
   -- context), which elabExpr would otherwise reject as a runtime ghost leak. The
