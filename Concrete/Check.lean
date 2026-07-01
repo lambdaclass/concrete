@@ -2070,7 +2070,19 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
         | .varArm _ binding guard body => do
-          if binding != "_" then addVar binding scrTy
+          let scrCopy ← isCopyType scrTy
+          if binding != "_" then
+            -- A named value pattern over a non-Copy scrutinee is a move into the
+            -- arm-local binding. Without consuming the original identifier here,
+            -- `match h { y => free(y) } ; free(h);` aliases one linear handle
+            -- through two names.
+            if !scrCopy then
+              match scrutinee with
+              | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+              | _ => pure ()
+            addVar binding scrTy
+          else if !scrCopy then
+            throwCheck (.wildcardDiscardsNonCopy (tyToString scrTy)) (some e.getSpan)
           match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
         | .rangeArm _ lo hi _ guard body => do
@@ -2092,10 +2104,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
             | _ => pure ()
             pure ty
-          | some (.return_ _ v) =>
-            match v with
-            | some rv => let _ ← checkExpr rv; pure Ty.never
-            | none => pure Ty.never
+          | some (.return_ rsp v) =>
+            checkStmt (.return_ rsp v) envBefore.currentRetTy
+            pure Ty.never
           | some other =>
             checkStmt other envBefore.currentRetTy
             pure Ty.unit
@@ -2108,6 +2119,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             throwCheck (.matchArmTypeMismatch (tyToString matchResultTy) (tyToString armTy)) (some e.getSpan)
           if matchResultTy == .never then matchResultTy := armTy
         let envAfterArm ← getEnv
+        -- H9 for value-pattern arms too: a named arm binding over a non-Copy
+        -- scrutinee is an arm-local linear value and must be consumed before the
+        -- arm exits. Enum payload arms already enforce this above.
+        checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
         match firstArmVars with
         | none => firstArmVars := some envAfterArm.vars
         | some firstVars =>
