@@ -19,9 +19,43 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**None.** There are no open soundness or semantic-darkness holes. The most recently
-closed (H9, below) is gated; the `_`/`let _`/bare-discard half of the old H6, H7
-(loop-SSA), and H8 (array bounds) are all closed and gated.
+**One open hole: H11** — projecting a non-Copy value out of a place *by value*
+(`let g = w.f;` or `let g = arr[i];`) copies it instead of moving, so it can be owned
+twice (a duplication / double-free). Disclosed below; the fix needs position-aware
+place handling and is scheduled, not yet landed.
+
+### H11. Projecting a non-Copy value out of a place by value duplicates it — OPEN 2026-07-01
+
+**Current state:** OPEN (disclosed, repro below, fix scheduled). A field access `w.f`
+or an array index `arr[i]` that yields a **non-Copy** value in a *move* position
+(bound with `let`, passed as an argument, returned, stored) copies the value out of
+the place rather than moving it — the place still owns it, so the value is owned
+twice. If both are later consumed, that is a double-free.
+
+```concrete
+let w: Wrap = mkW();      // Wrap { f: File }
+let g: File = w.f;        // COPIES the File out of w.f (should be a move-out, or rejected)
+sink(g); useW(w);         // both consume the same File -> double-free
+```
+
+Found by the value-flow audit (2026-07-01) that fixed the array-literal duplication
+(H10). It is the *read* dual of that bug: H10 was moving a value INTO a container
+without consuming it; H11 is moving a value OUT of a place without invalidating it.
+
+**Why not fixed in the same change:** unlike the other conservation fixes it is
+*context-sensitive*. `w.f` / `arr[i]` are legal and must stay legal under a borrow
+(`&w.f`, `&mut arr[i]`), as a further projection (`w.f.g`), as a method receiver
+(`w.f.method()`), and on the left of an assignment (`arr[i] = v`). Only a bare
+*by-value move* of the whole non-Copy sub-place is unsound. A blanket rejection in
+`checkExpr` would break the legal cases, so the fix needs a move-vs-borrow position
+distinction (or per-consume-site detection of a non-Copy place projection). Concrete
+has no partial moves, so the intended rule is: **projecting a non-Copy sub-place by
+value is rejected — borrow it (`&w.f`) or destructure the whole place.** Corpus impact
+is nil (every corpus `w.f`/`arr[i]` value use is over a Copy type), so this is latent.
+
+**Gate:** the sound (Copy) and borrow forms are covered by
+`scripts/tests/check_linear_conservation.sh`; the buggy by-value non-Copy projection is
+noted there as the H11 gap (not yet asserted-reject, pending the fix).
 
 ## Recently closed
 

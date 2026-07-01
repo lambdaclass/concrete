@@ -31,13 +31,17 @@ HDR='mod m {
   struct File { fd: i32 }
   impl Destroy for File { fn destroy(self) { } }
   struct Wrap { f: File }
-  struct Pair { a: File, b: File }
+  struct Two { f: File, g: File }
+  struct Box { f: File }
+  struct Copy Pt { x: i32, y: i32 }
   enum E { A { f: File }, B {} }
   fn mk() -> File { return File { fd: 3 }; }
   fn mkW() -> Wrap { return Wrap { f: mk() }; }
   fn sink(f: File) -> Int { return f.fd as Int; }
   fn take2(x: [File; 2]) -> Int { return x[0].fd as Int; }
-  fn takeW(w: Wrap) -> Int { let Wrap { f } = w; return sink(f); }'
+  fn takeW(w: Wrap) -> Int { let Wrap { f } = w; return sink(f); }
+  fn useTwo(w: Two) -> Int { let Two { f, g } = w; return sink(f) + sink(g); }
+  fn useBox(b: Box) -> Int { let Box { f } = b; return sink(f); }'
 
 reject(){ printf '%s\n  %s\n}' "$HDR" "$3" > "$TMP/t.con"
   local out; out="$("$C" "$TMP/t.con" -o "$TMP/t.bin" 2>&1)"
@@ -73,8 +77,23 @@ reject "return moved; reuse"    E0205 'fn id(f: File) -> File { let g: File = f;
 echo "=== match scrutinee moves ==="
 reject "matched then reuse scrutinee" E0205 'fn main() -> Int { let e: E = E::B {}; match e { E::A { f } => { sink(f); }, E::B {} => { } } match e { E::A { f } => { return sink(f); }, E::B {} => { return 0; } } }'
 
+echo "=== assigning to a non-Copy field is rejected (overwrite would leak + dup RHS) ==="
+reject "b.f = n over non-Copy field"  E0219 'fn main() -> Int { let mut b: Box = Box { f: mk() }; let n: File = mk(); b.f = n; return sink(n) + useBox(b); }'
+accept "p.x = 5 over Copy field"      'fn main() -> Int { let mut p: Pt = Pt { x: 1, y: 2 }; p.x = 5; return p.x as Int; }'
+
+echo "=== functional update ..base cannot copy a non-Copy field (would duplicate) ==="
+reject "Two { f: mk(), ..base }"      E0220 'fn main() -> Int { let base: Two = Two { f: mk(), g: mk() }; let w2: Two = Two { f: mk(), ..base }; return useTwo(base) + useTwo(w2); }'
+accept "Pt { x: 9, ..a } over Copy"   'fn main() -> Int { let a: Pt = Pt { x: 1, y: 2 }; let b: Pt = Pt { x: 9, ..a }; return (a.y + b.x) as Int; }'
+
 echo "=== let-else over a non-Copy enum stays rejected (linear: use full match) ==="
 reject "let-else over resource enum" E0288 'fn main() -> Int { let e: E = E::B {}; let E::A { f } = e else { return 0; }; return sink(f); }'
+
+# KNOWN_HOLES H11 (OPEN): projecting a non-Copy value out of a place BY VALUE
+# (`let g = w.f;` / `let g = arr[i];`) currently copies instead of moving, so it can be
+# owned twice (double-free). The borrow form `&w.f` and Copy-element index are correct
+# (covered above). The buggy by-value non-Copy projection is NOT asserted-reject here
+# yet — the fix is context-sensitive (move-vs-borrow position). Add the reject rows
+# when H11 lands. Repro in docs/KNOWN_HOLES.md.
 
 echo ""
 echo "LINEAR-CONSERVATION: PASS=$PASS  FAIL=$FAIL"

@@ -112,10 +112,13 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **No open holes.** H9 — a *named* linear
-value bound in a nested `if`/`match` scope and left unconsumed — is now closed
-(Phase 6 #13a: move-through-let + per-block scope-exit + divergence exemption,
-E0208/E0205, gated by `test-linear-nested-scope`). The `_`/`let _`/bare-discard
+it in sync when a hole is added or fixed. **One open hole: H11** — projecting a
+non-Copy value out of a place by value (`let g = w.f;` / `let g = arr[i];`) copies
+instead of moving, so it can be owned twice (double-free); latent (no corpus use),
+fix is context-sensitive (move-vs-borrow position) and scheduled. H10 (array-literal
+duplication) is closed and gated (`test-linear-conservation`, E0205); H9 (nested-scope
+linear leak) closed (Phase 6 #13a: move-through-let + per-block scope-exit +
+divergence, E0208/E0205, `test-linear-nested-scope`). The `_`/`let _`/bare-discard
 half of H6 is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now

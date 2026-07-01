@@ -11,22 +11,56 @@
 
 </div>
 
-> Most ideas come from previous ideas. Alan C. Kay, *The Early History Of Smalltalk*
+**Concrete is an LL(1), linear, capability-oriented systems programming language
+designed for auditable and formally verifiable code. Non-`Copy` values are used
+exactly once, function headers expose required capabilities, and the
+compiler/tooling preserve a clear path from source code to evidence.**
 
-**Concrete is a small systems language with linear types, explicit capabilities,
-no garbage collector, and a compiler written in Lean 4.**
+Concrete combines a narrow no-GC systems-language core with an evidence ledger a
+reviewer can actually inspect. It puts systems control, explicit authority,
+runtime-safety obligations, tests, solver results, assumptions, and Lean-checked
+proofs in one toolchain without pretending they are all the same kind of
+evidence.
 
-The important part is the combination:
+That is Concrete's thesis: **systems control plus evidence accounting**.
 
-> Concrete is a C/Rust-shaped systems language where authority, runtime risk,
-> assumptions, tests, solver results, and Lean-checked proofs are visible in one
-> toolchain.
+## At a Glance
 
-Concrete is not trying to replace Rust, Zig, Lean, Dafny, SPARK, or C. It is
-trying to combine a narrow systems-language core with an evidence ledger that a
-reviewer can actually inspect.
+- **Simple syntax:** the grammar is LL(1) and checked as part of the project.
+- **Linear ownership:** non-`Copy` values are used exactly once; `_` may ignore
+  only `Copy` data.
+- **No garbage collector:** resource lifetimes are explicit and checked.
+- **Capability headers:** side effects and authority appear in function
+  signatures, such as `with(Console)`, `with(File)`, and `with(Alloc)`.
+- **Runtime safety:** array bounds, arithmetic traps, assertions, and
+  preconditions become visible obligations or checks.
+- **Formal verification path:** contracts can be connected to Lean proofs,
+  kernel decision procedures, SMT runs, oracle tests, or named assumptions.
+- **No single green badge:** reports keep proof, testing, runtime checking, and
+  trust boundaries separate.
 
-In Concrete, a function can say:
+## A Small Example
+
+Concrete code looks like systems code, but the authority and obligations are
+part of the language surface:
+
+```con
+#[requires(0 <= off && off + 1 < len && len <= 512)]
+fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -> i32 {
+    let hi: i32 = packet[off] as i32;
+    let lo: i32 = packet[off + 1] as i32;
+    return hi * 256 + lo;
+}
+
+fn report(result: i32) with(Console) {
+    if result == 0 { println("ok"); } else { println("fail"); }
+}
+```
+
+The first function is pure and creates bounds/arithmetic obligations. The
+second function can print because it declares `with(Console)`.
+
+In Concrete, a function can say, and the tools can report:
 
 - what authority it needs, such as `with(Console)`, `with(File)`, `with(Alloc)`;
 - what runtime risks it creates, such as array bounds, division, overflow, or
@@ -38,7 +72,19 @@ In Concrete, a function can say:
 - what was tested against an independent oracle;
 - what remains assumed, trusted, partial, stale, vacuous, or unproven.
 
-That is Concrete's thesis: **systems control plus evidence accounting**.
+## Try It
+
+Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html)
+(v4.28.0+) and clang.
+
+```bash
+make build
+make test
+
+.lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
+.lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
+.lake/build/bin/concrete examples/constant_time_tag/src/main.con --report audit
+```
 
 ## Why Concrete Exists
 
@@ -63,9 +109,10 @@ human memory of how the code was meant to be reviewed.
 Concrete's design bias is deliberately conservative:
 
 - no GC as the default runtime story;
+- linear ownership: non-`Copy` values are used exactly once;
+- compile-time borrowing for memory discipline;
+- explicit capabilities in function headers for side effects;
 - fixed arrays and explicit control flow as the easy path;
-- linear ownership and compile-time borrowing for memory discipline;
-- explicit capabilities for side effects;
 - source contracts for important claims;
 - source-linked proof evidence with body fingerprints;
 - audit reports that refuse to collapse different evidence classes into one
@@ -91,9 +138,10 @@ counterexample              source-level witness refutes the claim
 unproven                    obligation exists but was not discharged
 ```
 
-This is why Concrete does not say "verified" unless the report says what kind of
-verification, what theorem or decision procedure produced it, and what remains
-outside the claim.
+This is why Concrete does not use "formally verified" as a single undifferentiated
+badge. A Concrete report should say what was verified, which theorem, decision
+procedure, test oracle, runtime check, or trusted boundary supports the claim,
+and what remains outside it.
 
 ## Four Claim Shapes
 
@@ -301,12 +349,17 @@ that attach the finished theorem back to the Concrete function.
 
 ## Language Shape
 
+- **LL(1) surface.** The grammar is intentionally simple and mechanically
+  checked for predictable parsing.
 - **No garbage collector.** Ownership and borrowing are checked at compile time.
-- **Linear values.** Non-`Copy` values must be consumed exactly once.
-- **Explicit capabilities.** Side effects appear in signatures.
+- **Linear values.** Non-`Copy` values must be consumed exactly once; `Copy`
+  is the explicit escape for ordinary duplicable data.
+- **Explicit capabilities.** Side effects and authority appear in function
+  signatures.
 - **Fixed arrays and predictable loops.** The easy path is analyzable systems
   code.
-- **Source contracts.** Important claims can live next to the function.
+- **Source contracts.** Important claims can live next to the function and be
+  turned into proof obligations.
 - **Trusted boundaries are named.** FFI, unsafe code, backend assumptions, and
   machine timing do not disappear into a green check.
 - **Lean 4 substrate.** The compiler is written in Lean, and selected user
@@ -371,23 +424,22 @@ not trusted from prose.
 
 ## Nearby Systems
 
-Concrete is adjacent to several mature systems:
+Concrete is not trying to replace Rust, Zig, Odin, SPARK, Dafny, Austral, Lean,
+or C. Its claim is the composition: systems control, linear ownership, explicit
+authority, source contracts, Lean-checked proof links, drift detection,
+external-solver accounting, oracle evidence, and audit reports that refuse to
+hide trust.
 
-- **Rust** has excellent ownership and systems ergonomics, but proofs are mostly
-  external to the language/toolchain.
-- **Zig, Odin, C, and C++** provide explicit low-level control, but not the same
-  built-in evidence ledger.
-- **SPARK/Ada, Dafny, F*, and Why3** have strong verification stories, usually
-  SMT-heavy and not shaped like a small no-GC C/Rust-style systems language.
-- **Lean, Coq, and Isabelle** have excellent proof kernels, but ordinary systems
-  programming is not their primary path.
-- **Austral** is close on linearity and capability discipline, but does not have
-  Concrete's Lean-backed proof attachment and audit pipeline.
-
-Concrete's claim is not that it invented ownership or verification. The claim
-is the composition: systems control, explicit authority, source contracts,
-Lean-checked proof links, drift detection, external-solver accounting, oracle
-evidence, and audit reports that refuse to hide trust.
+| System | What Concrete learns from it | Where Concrete differs |
+| --- | --- | --- |
+| Rust | Ownership, memory safety, strong tooling | Concrete is linear rather than affine-by-default, has explicit capability headers, and treats proof/evidence as part of the toolchain. |
+| Zig | No hidden control flow, no hidden allocation, explicit systems control | Concrete adds linear ownership, capability signatures, and formal evidence accounting. |
+| Odin | Direct systems programming and data-oriented ergonomics | Concrete rejects ambient context authority and makes effects visible in function headers. |
+| C/C++ | Low-level control and ABI reality | Concrete removes undefined-behavior-shaped language holes from the safe core and reports trusted boundaries explicitly. |
+| Austral | Linear types, capabilities, no GC, no implicit cleanup | Concrete adds Lean-backed proof attachment, VC generation, oracle evidence, and audit reports. |
+| SPARK/Ada | Contracts, absence-of-runtime-error goals, high-assurance culture | Concrete aims at a smaller C/Rust-shaped systems core with explicit ownership and capability flow. |
+| Dafny/F*/Why3 | Verification-aware programming and proof obligations | Concrete keeps the systems-language surface and separates Lean proof, SMT trust, tests, runtime checks, and assumptions. |
+| Lean/Coq/Isabelle | Small trusted kernels and machine-checked proofs | Concrete uses theorem proving as evidence for systems code rather than making proof authoring the whole programming experience. |
 
 For the longer C/Rust-oriented argument, read
 [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).

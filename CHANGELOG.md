@@ -33,6 +33,20 @@ class can't recur.
 New gate `scripts/tests/check_linear_conservation.sh` (Makefile `test-linear-conservation`
 + CI) walks every value-flow site and asserts move-exactly-once. Full suite 3032/0.
 
+A follow-on sweep with the same gate found and fixed two more duplication holes, and
+disclosed one:
+
+- **Field assignment over a non-Copy field** (`b.f = n`) neither consumed the RHS nor
+  released the old value — a duplication *and* a leak. Now rejected (**E0219**): you
+  cannot overwrite a linear field (destructure and rebuild, or make the field `Copy`).
+- **Functional update `S { ..base }`** copied every non-overridden field from `base`,
+  duplicating a non-Copy field between `base` and the result. Copying a non-Copy field
+  via `..base` is now rejected (**E0220**); set it explicitly.
+- **H11 (open, disclosed):** projecting a non-Copy value out of a place *by value*
+  (`let g = w.f;` / `let g = arr[i];`) still copies instead of moving — a double-free.
+  Latent (no corpus use); the fix is context-sensitive (`&w.f` must stay legal), so it
+  is tracked in KNOWN_HOLES rather than rushed. See `docs/OWNERSHIP_MODEL.md`.
+
 ### Concrete is linear, not affine: `_` may ignore only Copy values (2026-07-01)
 
 Closed the last incoherence in the ownership model. Two predicates had been

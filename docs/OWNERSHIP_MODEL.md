@@ -72,6 +72,17 @@ duplicating one would let it be freed twice. Concretely:
 - **`let X::V { .. } = e else { … }` (let-else)** desugars to a catch-all `_` match arm,
   which is illegal over a **non-Copy** enum (the linear `_` rule). For a non-Copy /
   resource-owning enum, **use a full explicit `match`** instead of let-else.
+- **Assigning to a non-Copy field** (`o.f = v`) is rejected (**E0219**): overwriting
+  would leak the old linear value and cannot soundly move the new one in. Destructure
+  and rebuild, or make the field `Copy`.
+- **Functional update `S { ..base }`** may not *copy* a non-Copy field from `base`
+  (**E0220**) — the value would be owned by both `base` and the result. Set each
+  non-Copy field explicitly.
+- **Known gap (KNOWN_HOLES H11, open):** projecting a non-Copy value *out* of a place
+  by value — `let g = w.f;` or `let g = arr[i];` — currently copies instead of moving,
+  so it can be owned twice (double-free). The borrow form `&w.f` is correct. The intended
+  rule is "projecting a non-Copy sub-place by value is rejected — borrow it or
+  destructure the whole place"; the fix is position-sensitive and scheduled.
 
 ### How to intentionally get rid of a value
 

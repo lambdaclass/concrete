@@ -1,6 +1,6 @@
 base_url = "https://unbalancedparentheses.github.io/concrete2"
 title = "Concrete"
-description = "An experimental systems language for inspectable safety claims"
+description = "An LL(1), linear, capability-oriented systems language for auditable and formally verifiable code"
 compile_sass = false
 build_search_index = true
 generate_feeds = false

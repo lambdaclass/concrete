@@ -98,6 +98,12 @@ inductive CheckError where
   | assignToImmutable (name : String)
   | assignToFrozen (name : String)
   | assignOverwritesLinear (name : String)
+  -- Assigning to a NON-Copy field overwrites (and thus leaks) the old linear value,
+  -- and does not soundly move the RHS in — a linear value must be used exactly once.
+  | cannotOverwriteLinearField (field : String)
+  -- `S { ..base }` copies every non-overridden field from `base`. If a copied field
+  -- is non-Copy, the value would be owned by BOTH `base` and the result — a duplication.
+  | functionalUpdateCopiesNonCopy (field : String)
   -- Slice 2: Type mismatch / operator
   | typeMismatch (ctx : String) (expected : String) (actual : String)
   | cannotDerefNonRef
@@ -198,6 +204,8 @@ def CheckError.message : CheckError → String
   | .assignToImmutable name => s!"cannot assign to immutable variable '{name}'"
   | .assignToFrozen name => s!"cannot assign to '{name}': variable is frozen by borrow block"
   | .assignOverwritesLinear name => s!"cannot reassign linear variable '{name}'"
+  | .cannotOverwriteLinearField field => s!"cannot assign to non-Copy field '{field}' — overwriting would leak the old value"
+  | .functionalUpdateCopiesNonCopy field => s!"`..base` would duplicate non-Copy field '{field}' (owned by both `base` and the new value)"
   -- Slice 2
   | .typeMismatch ctx expected actual => s!"type mismatch in {ctx}: expected {expected}, got {actual}"
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
@@ -276,6 +284,8 @@ def CheckError.hint : CheckError → Option String
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
   | .assignOverwritesLinear _ => some "linear variables cannot be reassigned — use a new binding instead"
+  | .cannotOverwriteLinearField _ => some "consume the old field first (destructure and rebuild the struct), or make the field type Copy"
+  | .functionalUpdateCopiesNonCopy _ => some "set every non-Copy field explicitly instead of copying it from `..base`, or make the field type Copy"
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
@@ -316,6 +326,8 @@ def CheckError.code : CheckError → String
   | .assignToImmutable _ => "E0217"
   | .assignToFrozen _ => "E0218"
   | .assignOverwritesLinear _ => "E0219"
+  | .cannotOverwriteLinearField _ => "E0219"
+  | .functionalUpdateCopiesNonCopy _ => "E0220"
   -- Slice 2: Type mismatch (E0220–E0229)
   | .typeMismatch _ _ _ => "E0220"
   | .cannotDerefNonRef => "E0221"
@@ -1851,7 +1863,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | none =>
           -- A missing field is supplied by `..base` if present; otherwise it is a
           -- real omission (unions allow partial initialization).
-          if base.isNone && !sd.isUnion then
+          if base.isSome then
+            -- `..base` copies this field FROM base. If it is non-Copy, the value would
+            -- be owned by both `base` and the result — a duplication (double-free).
+            if !(← isCopyType fieldTy) then
+              throwCheck (.functionalUpdateCopiesNonCopy sf.name) (some e.getSpan)
+          else if !sd.isUnion then
             throwCheck (.missingFieldInLiteral sf.name s!"struct literal '{name}'") (some e.getSpan)
       for (fn, _) in fields do
         match sd.fields.find? fun sf => sf.name == fn with
@@ -2574,6 +2591,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | .named structName =>
       match ← lookupStructField structName field with
       | some fieldTy =>
+        -- Overwriting a non-Copy field would leak the old linear value AND cannot
+        -- soundly move the RHS in (a linear value must be used exactly once). Reject
+        -- it (mirrors the "linear variables cannot be reassigned" rule for places).
+        if !(← isCopyType fieldTy) then
+          throwCheck (.cannotOverwriteLinearField field) (some stmt.getSpan)
         let valTy ← checkExpr value (some fieldTy)
         expectTy fieldTy valTy s!"field assignment '{structName}.{field}'" (some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
