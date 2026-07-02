@@ -323,7 +323,10 @@ are folded out.
 - **#1 `concrete fmt`** — subcommand, semantics-preserving (fingerprints
   byte-identical across format). `check_concrete_fmt.sh`.
 - **#2 grammar** — canonical `grammar/concrete.ebnf` (LL(1), 3 checkers) +
-  `docs/GRAMMAR.md`.
+  `docs/GRAMMAR.md`. 2026-07-01: EBNF aligned with the implemented `as`-cast
+  precedence (postfix > unary > `as` > binop) and the unimplemented
+  `match_stmt_tail` removed; unknown string/char escapes and unterminated
+  literals are lex errors, never silently mangled (`check_lex_escapes.sh`).
 - **#3 type aliases** — transparent, deeply expanded; `docs/TYPE_ALIASES.md`,
   `check_type_alias.sh`.
 - **#4 loop control** — `break`/`continue`/labels/while-expr value + linear
@@ -331,8 +334,16 @@ are folded out.
 - **#5 pattern ergonomics** — ranges, `if let`/`while let`, guards, OR-patterns,
   match-on-`&T`, struct update `..base`, `_` in destructuring. No anonymous
   tuples and nested patterns deferred (workload-gated). `docs/PATTERN_ERGONOMICS.md`.
+  2026-07-01: `if let`/`while let` over a NON-Copy enum reject by design (E0288,
+  same rule as let-else; `neg_if_let_noncopy`); a variable arm over `&T` binds
+  the deref'd VALUE when the inner type is Copy.
 - **#6 numeric model** — de-facto integer model locked; out-of-range literals
   rejected (E0227). Literal suffixes deferred. `check_numeric_literals.sh`.
+  2026-07-01: mixed-width binop operands rejected at check time (E0228, exact
+  width+signedness; cast explicitly) — kills the accepted-then-E0715 class —
+  and literal-only operands unify with the sibling operand (matching Elab), so
+  `a[64 + i]` / literal match arms infer the right width.
+  `check_mixed_width_binops.sh`; LANGUAGE_INVARIANTS #19.
 - **#7 `defer`** — LIFO, runs on every exit path; block-form rejected.
   `docs/DEFER.md`, `check_defer.sh`.
 - **#10 build profiles + checked arithmetic** — `--profile`, full checked
@@ -356,9 +367,25 @@ are folded out.
 - **#35a semantic-darkness / red-team gate** — `check_phase6_redteam.sh`.
 - **#35b differential oracle bug-hunt** — six interp-vs-compiled fixes for
   mutable place borrows, value expressions, `while` values, `else if` value
-  parsing, and negative bitwise ops; `tests/oracle/vectors.txt`.
+  parsing, and negative bitwise ops; `tests/oracle/vectors.txt`. 2026-07-01:
+  the fuzzer generates across the full integer width lattice with explicit
+  casts (reject rate 61% -> 0%) and immediately found the interp `as`-cast
+  retag bug (`(-11) as u32` stayed -11); `evalCast` now wraps into the target
+  range and the codegen-differential EXPECTED_DIVERGE list is EMPTY.
 - **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
-  `docs/STATEMENT_EXPRESSION_MODEL.md`.
+  `docs/STATEMENT_EXPRESSION_MODEL.md`. 2026-07-01: trailing `match`/`if-else`
+  in VALUE blocks (if-expression branches, while-else, match-arm blocks) are
+  the block's value when a branch/arm ends with a value; all-statement forms
+  stay statements. `check_trailing_value_blocks.sh`.
+
+**Highest-leverage next items (2026-07-02 checkpoint), in order:** #24a
+(diagnostic file attribution — every sub-file error now names the wrong file,
+and sub-file errors became common when submodule checking landed), Phase 7
+#38b (std front-end migration, the H12 burn-down — an unchecked stdlib
+undercuts every enforcement claim), 13b (H11, the last conservation hole),
+then #18 (callable-values implementation) and #35 (the validation project)
+as the phase's exit path. Everything else in the active list is
+pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
@@ -857,9 +884,11 @@ class and authority/allocation story.
      in function headers and reports.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
-   `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
-   builders, and tree/buffer builders inspired by Gleam's `BytesTree` and
-   `StringTree`. Do not hide allocation; builder APIs either carry
+   `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, REVERSE
+   traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a
+   manual index-decrement loop; extend `docs/ITERATION_PROTOCOL.md` when these
+   land), byte/text builders, and tree/buffer builders inspired by Gleam's
+   `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
 10. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
    checked/wrapping/saturating arithmetic helpers,
@@ -1268,6 +1297,13 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
+0a. Instrument the flagships with PROOF-EFFORT TELEMETRY before investing in
+   automation, so the external-validation gate's "was the proof discipline
+   worth the cost?" question has data instead of anecdotes: per proved
+   function, record Lean proof lines, tactic depth, solver/`bv_decide` time,
+   and the source complexity it covers (loops, branches, width casts). Publish
+   a small baseline table for hmac_sha256/constant_time_tag and refresh it per
+   flagship. Cheap to collect now; impossible to reconstruct later.
 1. Move example Lean proofs physically next to their Concrete examples. Target layout:
    `examples/<name>/src/main.con`, `examples/<name>/proofs/Proofs.lean`,
    `examples/<name>/snapshot/...`. Configure Lake/module discovery so these
@@ -2013,10 +2049,15 @@ machine-readable.
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
 13. [relocated from closed Phase 4 — #44f tail / #44g] Compiler-correctness
-    hardening: (a) a full interpreter-vs-compiled differential harness with a
-    random program GENERATOR over the through-reference / void-slot bug-prone
-    shapes (extends `check_codegen_differential.sh`; needs interpreter structured
-    diagnostics, the deferred Phase-4 #18a); and (b) the defense-in-depth
+    hardening: (a) ✅ largely DONE and still growing — the random differential
+    generator exists (`scripts/tests/fuzz_differential.py`, Makefile
+    `test-fuzz-differential`), covers the through-reference / void-slot shapes,
+    value-bearing if/match nesting, loops, enum payloads, and (2026-07-01) the
+    full integer width lattice with explicit casts; its taxonomy treats any
+    E07xx/panic on a generated well-typed program as a compiler bug
+    (LANGUAGE_INVARIANTS #19). Remaining (a) tail: string/linear-value shapes,
+    seed rotation in CI (nightly campaign, not just two fixed seeds), and
+    auto-minimization of failures. And (b) the defense-in-depth
     ref-return lowering fix — a reference-typed return materialized from a ref
     identifier / `&place` emits a spurious extra load. (b) is unreachable from
     safe code (reference returns are rejected at the type level — H1), so it is
