@@ -112,14 +112,19 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **One open hole: H11** — projecting a
-non-Copy value out of a place by value (`let g = w.f;` / `let g = arr[i];`) copies
-instead of moving, so it can be owned twice (double-free); latent (no corpus use),
-fix is context-sensitive (move-vs-borrow position) and scheduled. H10 (array-literal
-duplication) is closed and gated (`test-linear-conservation`, E0205); H9 (nested-scope
-linear leak) closed (Phase 6 #13a: move-through-let + per-block scope-exit +
-divergence, E0208/E0205, `test-linear-nested-scope`). The `_`/`let _`/bare-discard
-half of H6 is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
+it in sync when a hole is added or fixed. **Two open holes: H11 and H12.**
+H11: projecting a non-Copy value out of a place by value (`let g = w.f;` /
+`let g = arr[i];`) copies instead of moving, so it can be owned twice
+(double-free); latent (no corpus use), fix is context-sensitive
+(move-vs-borrow position) and scheduled. H12: `std` bodies are still exempt
+from front-end body checking while the migration burns down accumulated
+violations; user submodules are fully checked, but unchecked std would undercut
+the enforcement claim until the exemption is gone. H10 (array-literal
+duplication) is closed and gated (`test-linear-conservation`, E0205); H9
+(nested-scope linear leak) closed (Phase 6 #13a: move-through-let +
+per-block scope-exit + divergence, E0208/E0205, `test-linear-nested-scope`).
+The `_`/`let _`/bare-discard half of H6 is closed (E0287/E0288/E0289); H7
+(loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
 enforced at every discard site (H6); `let _ = expr;` is removed, and `_` may
@@ -468,6 +473,20 @@ are folded out.
    linear discard, use-after-move, immutable assignment, missing capability,
    mixed-width binop, and a sibling-submodule type reference that still checks.
 
+13e. **Run the final conservation sweep after H11.** Once by-value non-`Copy`
+   sub-place projection is rejected, do the remaining targeted probes for the
+   same class of bugs before calling the conservation story closed:
+   callable/callback values must not be able to capture a linear value and then
+   duplicate or leak it through repeated invocation, storage, or handoff; raw
+   pointer place writes (`derefAssign`, `arrayIndexAssign` through `*mut`, and
+   any trusted/unsafe helper built on them) must not silently duplicate or leak
+   non-`Copy` values in safe code. If a path is safe-only, gate it; if it is
+   trusted/unsafe-only, require an explicit boundary and report-visible
+   classification; if it is a real safe-code hole, disclose it in
+   `docs/KNOWN_HOLES.md` before fixing. Add rows to
+   `scripts/tests/check_linear_conservation.sh` or a dedicated
+   `check_linear_conservation_sweep.sh` so these probes remain permanent.
+
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
    a namespace gap: if two imported modules export the same public name, the
@@ -574,6 +593,17 @@ are folded out.
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
+24a. Fix diagnostic FILE attribution for sub-file modules: a diagnostic from a
+    `mod x;` file renders with the MAIN file's path (the span's line/col are
+    the sub-file's, so the shown snippet is wrong too — e.g. an error in
+    `src/helper.con:4` prints as `src/main.con:4` with main.con's line 4
+    quoted). The machinery exists (`Diagnostic.file` + the multi-file
+    `SourceMap` built by `runFrontend`); producers never stamp `file`. Thread
+    a source-file attribution through `Module` (set in
+    `Project.resolveModules`) and stamp module-scoped diagnostics in
+    Check/Elab/CoreCheck. Newly URGENT: submodule bodies are front-end checked
+    as of 2026-07-02 (H12), so sub-file errors are now common and every one of
+    them names the wrong file.
 25. Add basic LSP/editor diagnostics early: parse/type errors, capability
     summaries, hover for inferred types, and jump-to-definition. Deeper
     proof/evidence LSP features remain in the later editor phase.
@@ -704,7 +734,11 @@ class and authority/allocation story.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
-   for fallible returns. Include the small ergonomic floor before real workloads
+   for fallible returns. Evaluate CONDITIONAL COPY for generic instantiations
+   here (`Option<i32>` is Copy when the payload is Copy): it is the principled
+   path that restores `if let`/`while let` on `Option<Copy>` — rejected by
+   design under the linear `_` rule (see docs/OWNERSHIP_MODEL.md, decision
+   2026-07-01) — without bending that rule or adding variant-aware analysis. Include the small ergonomic floor before real workloads
    work around the canonical error types: `map_err`, `and_then`, `unwrap_or`,
    `ok_or`, and any `unwrap_or_else`/callback form that remains explicit about
    control flow and capabilities. If `?` gains conversion behavior, its
