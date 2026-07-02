@@ -153,6 +153,10 @@ structure CModule where
       erases newtypes inside struct/enum fields, but function bodies still
       carry the wrapper names (e.g. `Option<Port>`), so Layout needs them. -/
   newtypes : List NewtypeDef := []
+  /-- Source file this module was parsed from ("" = the main input file).
+      Set by Project.resolveModules for `mod x;` sub-files and threaded from
+      the AST Module so diagnostics name the RIGHT file (ROADMAP #24a). -/
+  sourceFile : String := ""
 
 -- ============================================================
 -- CExpr.ty accessor

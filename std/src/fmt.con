@@ -10,7 +10,7 @@ mod fmt {
 
         let buf: String = String::new();
         let negative: bool = value < 0;
-        let n: i64 = value;
+        let mut n: i64 = value;
         if negative {
             n = 0 - n;
         }
@@ -26,8 +26,8 @@ mod fmt {
         }
 
         // Reverse in place
-        let i: u64 = 0;
-        let j: u64 = buf.len - 1;
+        let mut i: u64 = 0;
+        let mut j: u64 = buf.len - 1;
         while i < j {
             let a: char = buf.get_unchecked(i);
             let b: char = buf.get_unchecked(j);
@@ -49,7 +49,7 @@ mod fmt {
         }
 
         let buf: String = String::new();
-        let n: u64 = value;
+        let mut n: u64 = value;
 
         while n > 0 {
             let digit: u64 = n - ((n / 10) * 10);
@@ -58,8 +58,8 @@ mod fmt {
         }
 
         // Reverse in place
-        let i: u64 = 0;
-        let j: u64 = buf.len - 1;
+        let mut i: u64 = 0;
+        let mut j: u64 = buf.len - 1;
         while i < j {
             let a: char = buf.get_unchecked(i);
             let b: char = buf.get_unchecked(j);
@@ -90,7 +90,7 @@ mod fmt {
         }
 
         let buf: String = String::new();
-        let n: u64 = value;
+        let mut n: u64 = value;
 
         while n > 0 {
             let digit: u64 = n & 15;
@@ -102,8 +102,8 @@ mod fmt {
         buf.push_char('0');
 
         // Reverse in place
-        let i: u64 = 0;
-        let j: u64 = buf.len - 1;
+        let mut i: u64 = 0;
+        let mut j: u64 = buf.len - 1;
         while i < j {
             let a: char = buf.get_unchecked(i);
             let b: char = buf.get_unchecked(j);
@@ -125,7 +125,7 @@ mod fmt {
         }
 
         let buf: String = String::new();
-        let n: u64 = value;
+        let mut n: u64 = value;
 
         while n > 0 {
             let digit: u64 = n & 1;
@@ -137,8 +137,8 @@ mod fmt {
         buf.push_char('0');
 
         // Reverse in place
-        let i: u64 = 0;
-        let j: u64 = buf.len - 1;
+        let mut i: u64 = 0;
+        let mut j: u64 = buf.len - 1;
         while i < j {
             let a: char = buf.get_unchecked(i);
             let b: char = buf.get_unchecked(j);
@@ -160,7 +160,7 @@ mod fmt {
         }
 
         let buf: String = String::new();
-        let n: u64 = value;
+        let mut n: u64 = value;
 
         while n > 0 {
             let digit: u64 = n & 7;
@@ -172,8 +172,8 @@ mod fmt {
         buf.push_char('0');
 
         // Reverse in place
-        let i: u64 = 0;
-        let j: u64 = buf.len - 1;
+        let mut i: u64 = 0;
+        let mut j: u64 = buf.len - 1;
         while i < j {
             let a: char = buf.get_unchecked(i);
             let b: char = buf.get_unchecked(j);
@@ -201,7 +201,7 @@ mod fmt {
         if s.len >= width {
             // Copy the string as-is
             let result: String = String::new();
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < s.len {
                 result.push_char(s.get_unchecked(i));
                 i = i + 1;
@@ -212,7 +212,7 @@ mod fmt {
         let result: String = String::new();
         let pad: u64 = width - s.len;
 
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < pad {
             result.push_char(fill);
             i = i + 1;
@@ -230,7 +230,7 @@ mod fmt {
     pub fn pad_right(s: &String, width: u64, fill: char) with(Alloc) -> String {
         let result: String = String::new();
 
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             result.push_char(s.get_unchecked(i));
             i = i + 1;
@@ -259,7 +259,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             if s.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();
@@ -282,7 +282,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             if s.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();
@@ -324,7 +324,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             if s.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();
@@ -347,7 +347,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             if s.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();
@@ -391,7 +391,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < padded.len {
             if padded.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();
@@ -418,7 +418,7 @@ mod fmt {
             expected.drop();
             return 1;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < padded.len {
             if padded.get_unchecked(i) != expected.get_unchecked(i) {
                 s.drop();

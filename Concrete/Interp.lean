@@ -92,6 +92,20 @@ partial def envSet (env : Env) (name : String) (val : IVal) : Env :=
     if n == name then (n, val) :: rest
     else (n, v) :: envSet rest name val
 
+/-- Reserved OUTERMOST binding accumulating interpreter stdout. Seeded by
+    `interpret` at the bottom of the env (so call-frame drops never remove it),
+    appended by the print_* intrinsics, and read back at the end — the pure
+    interpreter's stand-in for the compiled binary's stdout, which makes
+    printing programs differential-testable instead of PENDING. -/
+def stdoutVar : String := "__interp_stdout__"
+
+/-- Append to the interpreter's stdout buffer. If no buffer was seeded (a
+    harness driving eval functions directly), output is dropped, not an error. -/
+def emitOut (env : Env) (s : String) : Env :=
+  match envGet env stdoutVar with
+  | some (.string buf) => envSet env stdoutVar (.string (buf ++ s))
+  | _ => env
+
 -- ============================================================
 -- Collect all function definitions from module tree
 -- ============================================================
@@ -522,9 +536,9 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         | _ => return (restored, .val .unit)
     | none =>
       -- Builtins: a small allowlist of intrinsics whose semantics fit the
-      -- value-passing model. I/O (print, println, print_string, ...) is
-      -- intentionally left out — the interpreter cannot reproduce stdout
-      -- side effects, so any program that calls them is PENDING.
+      -- value-passing model. The print_* intrinsics append to the reserved
+      -- stdout buffer (see `stdoutVar`), byte-matching the compiled
+      -- binary's output, so printing programs are differential-testable.
       match fnName, argVals with
       | "string_length", [arg] => do
         let s ← (match arg with
@@ -541,12 +555,34 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         -- compiled binary; the interpreter has no heap, so the consume
         -- itself is enough. Return unit.
         return (env, .val .unit)
-      | "print", _ | "println", _ | "print_string", _ | "print_int", _
-      | "print_char", _ | "print_bool", _ =>
-        -- I/O intrinsics produce stdout side effects in the compiled
-        -- binary. The interpreter cannot reproduce those — its only
-        -- output is the `fn main() -> Int` return value. Programs that
-        -- call these are PENDING for the harness, not silent passes.
+      | "print_string", [arg] => do
+        let s ← (match arg with
+          | .string s => .ok s
+          | .ref p => do
+            let v ← lookupPath env p
+            match v with
+            | .string s => .ok s
+            | _ => .error "interp: print_string: ref does not point to a string"
+          | _ => .error "interp: print_string: argument is not a string")
+        return (emitOut env s, .val .unit)
+      | "print_int", [arg] => do
+        let v ← autoDeref env arg
+        match v with
+        | .int n _ => return (emitOut env s!"{n}", .val .unit)
+        | _ => .error "interp: print_int: argument is not an integer"
+      | "print_char", [arg] => do
+        let v ← autoDeref env arg
+        match v with
+        | .int n _ => return (emitOut env (String.singleton (Char.ofNat n.toNat)), .val .unit)
+        | _ => .error "interp: print_char: argument is not a char code"
+      | "print_bool", [arg] => do
+        let v ← autoDeref env arg
+        match v with
+        | .bool b => return (emitOut env (if b then "true" else "false"), .val .unit)
+        | _ => .error "interp: print_bool: argument is not a bool"
+      | "print", _ | "println", _ =>
+        -- Desugared to the print_* intrinsics by Elab; reaching Core means
+        -- a desugar gap, so stay loud instead of guessing a format.
         .error s!"interp: print/IO intrinsic '{fnName}' not yet supported"
       | _, _ => .error s!"interp: undefined function '{fnName}'"
 
@@ -980,17 +1016,23 @@ end -- mutual
 
 /-- Interpret a program from its validated Core modules.
     Finds and runs `main`, returns exit code. -/
-def interpret (modules : List CModule) : Except String Int := do
+def interpret (modules : List CModule) : Except String (Int × String) := do
   let fns := collectFns modules
   let enums := collectEnums modules
   match fns.find? (fun f => f.name == "main") with
   | none => .error "interp: no 'main' function found"
   | some mainFn =>
-    let (_, flow) ← evalStmts fns enums [] mainFn.body
+    -- Seed the stdout buffer at the BOTTOM of the env so call-frame drops
+    -- (which keep the last outerLen entries) never remove it.
+    let initEnv : Env := [(stdoutVar, .string "")]
+    let (finalEnv, flow) ← evalStmts fns enums initEnv mainFn.body
+    let out := match envGet finalEnv stdoutVar with
+      | some (.string buf) => buf
+      | _ => ""
     match flow with
-    | .ret (.int n _) => return n
-    | .ret _ => return 0
-    | .val _ => return 0
+    | .ret (.int n _) => return (n, out)
+    | .ret _ => return (0, out)
+    | .val _ => return (0, out)
     | _ => .error "interp: main did not return normally"
 
 -- ============================================================

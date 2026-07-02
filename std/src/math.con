@@ -9,7 +9,7 @@ mod math {
     pub trusted extern fn floor(x: Float64) -> Float64;
     pub trusted extern fn ceil(x: Float64) -> Float64;
 
-    pub fn max<T>(a: T, b: T) -> T {
+    pub fn max<T: Copy>(a: T, b: T) -> T {
         if a >= b {
             return a;
         }
@@ -18,7 +18,7 @@ mod math {
         }
     }
 
-    pub fn min<T>(a: T, b: T) -> T {
+    pub fn min<T: Copy>(a: T, b: T) -> T {
         if a < b {
             return a;
         }
@@ -34,7 +34,7 @@ mod math {
         return value;
     }
 
-    pub fn clamp<T>(value: T, lo: T, hi: T) -> T {
+    pub fn clamp<T: Copy>(value: T, lo: T, hi: T) -> T {
         if value < lo {
             return lo;
         }

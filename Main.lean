@@ -188,8 +188,10 @@ def interpProgram (inputPath : String) : IO UInt32 := do
     | .error msg =>
       IO.eprintln msg
       return 1
-    | .ok exitCode =>
-      -- Match compiled binary contract: print return value, exit 0
+    | .ok (exitCode, out) =>
+      -- Match compiled binary contract byte-for-byte: program output first
+      -- (the print_* buffer), then the return value on its own line, exit 0.
+      IO.print out
       IO.println s!"{exitCode}"
       return 0
 

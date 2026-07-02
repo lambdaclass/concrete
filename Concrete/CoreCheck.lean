@@ -903,8 +903,8 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let subErrors := m.submodules.foldl (fun acc sub =>
-    acc ++ (ccCheckModule sub allStructs allEnums).map fun d =>
-      { d with message := s!"[{sub.name}] {d.message}" }
+    acc ++ Diagnostics.stampFile ((ccCheckModule sub allStructs allEnums).map fun d =>
+      { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile
   ) ([] : Diagnostics)
   declErrors ++ finalEnv.errors ++ subErrors
 

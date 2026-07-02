@@ -46,7 +46,7 @@ mod rand {
     #[test]
     fn test_random_range_bounds() with(Unsafe, Random) -> i32 {
         seed(123);
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 100 {
             let r: i32 = random_range(10, 20);
             if r < 10 {

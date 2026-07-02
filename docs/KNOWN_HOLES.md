@@ -87,15 +87,24 @@ pub fn addx(a: u32) -> u32 {
 (sibling types injected, imports resolved against the global table). User sub-files
 get the full front-end: types, linearity, borrows, mutability.
 
-**The remaining hole:** the `std` subtree is exempted by name. Running the checker
-over std surfaces **~384 violations** accumulated while it was unchecked — ~90
-immutable assignments, ~58 discarded `Option` results (E0286), dozens of
-match-arm-consumption disagreements and linear leaks in error paths, plus ~45
-E0254 field-access errors that may be *checker* limitations on std's
-generic/pointer-heavy shapes rather than std bugs. Migrating std is a burn-down:
-fix the real violations file by file, distinguish and fix any checker
-false-positives, then delete the exemption (the gate fails loudly if the exemption
-outlives its disclosure).
+**The remaining hole (burn-down in progress):** std submodules NOT on the
+`stdMigratedSubmodules` list (`Concrete/Check.lean`) are exempt; listed ones are
+fully checked. **Tranche 1 (2026-07-02): 384 -> 145 remaining violations; 17 of
+~30 modules migrated** (alloc ascii bitset bytes env fs hash libc math mem
+ordered_set ptr rand sha256 string test writer). The tranche split cleanly into
+CHECKER fixes it forced — divergence-aware consumption merges (a diverging
+branch/arm cannot disagree at the merge point; killed the spurious
+E0209/E0212/E0205 class, ~63 errors) and field assignment on generic-struct /
+std-`String` receivers (`self.len = …` in `impl<T> Vec<T>`, wrong E0254, ~45
+errors) — and std fixes (115 `let` -> `let mut` declarations, u64/Int counter
+types). Remaining violations in UNMIGRATED
+modules are semantic — E0286 discarded fallible results in tests, E0208 linear
+leaks in error paths, E0207 consume-inside-loop shapes (need restructure or a
+consume-then-diverge exemption) — measured at ~130-145 when tranche 1 closed;
+the new return-path consumption rule (leak on an early `return`) may surface
+more, so re-inventory at tranche 2 start. The gate pins the migrated set (it
+only grows) and fails loudly if the exemption machinery outlives this
+disclosure.
 
 **Gate:** `scripts/tests/check_submodule_check_coverage.sh` — asserts user
 sub-files are rejected for immutable-assign/type/linearity violations, a valid

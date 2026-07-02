@@ -10,6 +10,59 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H12 tranche 1, divergence-aware linearity merges, interp print, sub-file diagnostics (2026-07-02)
+
+The "do the backlog" batch: implementation work on the four highest-leverage
+items plus the checker fixes the std migration immediately forced.
+
+- **Divergence-aware consumption merges (checker fix).** A branch or match arm
+  that DIVERGES (return/break/continue/abort) never reaches the merge point,
+  so it cannot disagree with the other branches and contributes nothing to the
+  merged state. The old merge ignored divergence and mis-fired E0209/E0212 on
+  sound code (`Some{v} => { … }, None => { drop(x); return 1 }`), and an
+  if-without-else with a diverging consuming branch leaked the consumed state
+  into the fall-through path (spurious E0205). ~63 spurious errors in std
+  alone. All-diverging matches fall back to the first arm's state (the code
+  after is unreachable).
+- **Return-path consumption rule (checker fix, closes a never-checked leak
+  class).** The divergence exemption above surfaced its own dual: a branch or
+  arm that exits the FUNCTION must have consumed every live linear value —
+  `if c { return 0; } … drop(s);` leaks `s` on the early-return path, and
+  nothing had ever checked it (the old E0212 merge caught one shape by
+  accident). `blockExitsFunction` (returns only — break/continue keep values
+  live at the loop boundary; abort/infinite-loop stay exempt like H9) +
+  `checkReturnPathConsumed` at all four branch/arm sites, aware of `defer`
+  reservations and exempting borrows (&/&mut are aliasing-exclusive, not
+  consumption obligations). Fallout fixed honestly: `math.max/min/clamp` and
+  the `std.test` assert helpers now require `T: Copy` (returning one of two
+  linear values always leaked the other), and the `option_heap` fixture
+  destructures its node and moves out of the heap box instead of leaking every
+  node.
+- **Field assignment on generic-struct and std-String receivers (checker
+  fix).** `self.len = …` inside `impl<T> Vec<T>` (or std's `impl String`)
+  threw a wrong E0254 "field access on non-struct type": the field-ASSIGN path
+  matched only `.named`, while the field-READ path already handled `.generic`
+  (with type-arg substitution) and `.string`. Now mirrored (~45 errors).
+- **H12 tranche 1: std burn-down 384 -> 145; 17 of ~30 modules migrated.** The
+  all-of-std exemption became a `stdMigratedSubmodules` burn-down list (only
+  grows; gate-pinned). Mechanical fixes: 115 `let` -> `let mut` declarations.
+  Remaining 145 are semantic (E0286 discarded fallible results in tests, E0208
+  leaks in error paths, E0207 consume-inside-loop shapes).
+- **Sub-file diagnostics name the right file (#24a).** `Module.sourceFile` is
+  stamped by the project loader (incl. dependencies) and threaded through
+  Check/Elab/CoreCheck via `Diagnostics.stampFile`; the renderer already keyed
+  location AND snippet off `Diagnostic.file`. An error in `src/helper.con:4`
+  now says so, instead of quoting `src/main.con`'s line 4.
+- **Interpreter print support.** print_string/print_int/print_char/print_bool
+  append to a reserved stdout buffer (seeded at the env bottom, surviving
+  call-frame drops); `--interp` prints it before the return value,
+  byte-matching the compiled binary. Printing programs — i.e. realistic
+  examples — are now differential-testable instead of PENDING.
+- **CI:** nightly fuzz campaign with a date-derived rotating seed (2000 cases
+  depth 3 + 500 depth 4, failing case uploaded as artifact); the weekly
+  clean-checkout proof replay is guarded to its own cron. The fast suite
+  gained a gate-smoke section (lex escapes, mixed-width, trailing values).
+
 ### Submodule bodies are now front-end checked; std exempted and disclosed (H12) (2026-07-02)
 
 `checkProgram` consumed submodule *signatures* but never checked their function

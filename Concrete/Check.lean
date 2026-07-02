@@ -892,6 +892,57 @@ partial def armNonTerminating : MatchArm → Bool
   | .rangeArm _ _ _ _ _ body => blockNonTerminating body
 end
 
+-- Control leaves this block by EXITING THE FUNCTION: a `return` on every path
+-- (directly, or through an if/else or match whose arms all return). A
+-- returning path is a function exit — every linear value still owned there
+-- leaks. EXCLUDES `break`/`continue` (the value stays live at the loop
+-- boundary) and abort/infinite-loop (process never proceeds; exempt exactly
+-- like H9's scope-exit).
+mutual
+partial def blockExitsFunction (stmts : List Stmt) : Bool :=
+  match stmts.getLast? with
+  | none => false
+  | some s => stmtExitsFunction s
+partial def stmtExitsFunction : Stmt → Bool
+  | .return_ _ _ => true
+  | .ifElse _ _ t (some e) => blockExitsFunction t && blockExitsFunction e
+  | .expr _ e _ => exprExitsFunction e
+  | _ => false
+partial def exprExitsFunction : Expr → Bool
+  | .paren _ inner => exprExitsFunction inner
+  | .match_ _ _ arms => !arms.isEmpty && arms.all armExitsFunction
+  | _ => false
+partial def armExitsFunction : MatchArm → Bool
+  | .mk _ _ _ _ _ body => blockExitsFunction body
+  | .litArm _ _ _ body => blockExitsFunction body
+  | .varArm _ _ _ body => blockExitsFunction body
+  | .rangeArm _ _ _ _ _ body => blockExitsFunction body
+end
+
+/-- A branch or arm that EXITS THE FUNCTION must have consumed every linear
+    value that was live when it started — `if c { return 0; } … drop(s);`
+    leaks `s` on the returning path even though the fall-through is fine.
+    Enforced wherever a diverging branch is exempted from the consumption
+    MERGE: the exemption is about agreement at the merge point, not about the
+    exit itself. -/
+def checkReturnPathConsumed (before after : List (String × VarInfo))
+    (span : Option Span := none) : CheckM Unit := do
+  for (name, infoBefore) in before do
+    if infoBefore.isCopy then continue
+    -- References are BORROWS: letting one go out of scope on a return path is
+    -- not a leak (&mut is non-Copy only for aliasing exclusivity).
+    match infoBefore.ty with
+    | .ref _ | .refMut _ => continue
+    | _ => pure ()
+    if infoBefore.state == .consumed || infoBefore.state == .reserved then continue
+    let afterState := match after.lookup name with
+      | some info => info.state
+      | none => infoBefore.state
+    -- `.consumed` = moved on this path; `.reserved` = a pending `defer` will
+    -- consume it when this return unwinds — both are accounted for.
+    if afterState != .consumed && afterState != .reserved then
+      throwCheck (.linearVariableNeverConsumed name) span
+
 /-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
     `after`, absent from `before` — must be consumed before the block exits. Skipped
     when the block diverges (its textual end is unreachable). This is what the
@@ -2021,6 +2072,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         -- Linearity across arms: snapshot env, check each arm, ensure all agree
         let envBefore ← getEnv
         let mut firstArmVars : Option (List (String × VarInfo)) := none
+        let mut divergingArmVars : Option (List (String × VarInfo)) := none
         let mut matchResultTy : Ty := .unit
         let mut firstArmDone := false
         for arm in arms do
@@ -2093,24 +2145,38 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           -- a `let` in the arm body — must be consumed before the arm exits (unless
           -- the arm is non-terminating). This is the matched-payload half of H9.
           checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
-          match firstArmVars with
-          | none => firstArmVars := some envAfterArm.vars
-          | some firstVars =>
-            -- Check agreement on pre-existing variables
-            for (name, infoBefore) in envBefore.vars do
-              if infoBefore.isCopy then continue
-              let state1 := match firstVars.lookup name with
-                | some info => info.state
-                | none => infoBefore.state
-              let state2 := match envAfterArm.vars.lookup name with
-                | some info => info.state
-                | none => infoBefore.state
-              let consumed1 := state1 == .consumed
-              let consumed2 := state2 == .consumed
-              if consumed1 != consumed2 then
-                throwCheck (.matchConsumptionDisagreement name) (some e.getSpan)
-        -- Apply the final state from first arm (they all agree)
-        match firstArmVars with
+          -- A DIVERGING arm (return/break/continue/abort) never reaches the
+          -- code after the match: it cannot disagree with the other arms and
+          -- contributes nothing to the merged state. Only fall-through arms
+          -- participate — `Some{v} => { use(v) }, None => { drop(x); return 1 }`
+          -- is sound. An arm that exits the FUNCTION must still have consumed
+          -- everything live (the exit is a leak point, not a merge point).
+          if blockExitsFunction body then
+            checkReturnPathConsumed envBefore.vars envAfterArm.vars (some e.getSpan)
+          if !(blockDiverges body) then
+            match firstArmVars with
+            | none => firstArmVars := some envAfterArm.vars
+            | some firstVars =>
+              -- Check agreement on pre-existing variables
+              for (name, infoBefore) in envBefore.vars do
+                if infoBefore.isCopy then continue
+                let state1 := match firstVars.lookup name with
+                  | some info => info.state
+                  | none => infoBefore.state
+                let state2 := match envAfterArm.vars.lookup name with
+                  | some info => info.state
+                  | none => infoBefore.state
+                let consumed1 := state1 == .consumed
+                let consumed2 := state2 == .consumed
+                if consumed1 != consumed2 then
+                  throwCheck (.matchConsumptionDisagreement name) (some e.getSpan)
+          else if divergingArmVars.isNone then
+            divergingArmVars := some envAfterArm.vars
+        -- Apply the final state from the first FALL-THROUGH arm (they all
+        -- agree). If EVERY arm diverges, the code after the match is
+        -- unreachable — apply the first (diverging) arm's state so values it
+        -- consumed don't re-surface as spurious E0208 at function exit.
+        match firstArmVars.orElse (fun () => divergingArmVars) with
         | some vars =>
           let env ← getEnv
           let vars' := env.vars.map fun (n, vi) =>
@@ -2130,6 +2196,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       let mut matchResultTy : Ty := .unit
       let mut firstArmDone := false
       let mut firstArmVars : Option (List (String × VarInfo)) := none
+      let mut divergingArmVars : Option (List (String × VarInfo)) := none
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
@@ -2198,24 +2265,35 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         -- scrutinee is an arm-local linear value and must be consumed before the
         -- arm exits. Enum payload arms already enforce this above.
         checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
-        match firstArmVars with
-        | none => firstArmVars := some envAfterArm.vars
-        | some firstVars =>
-          -- Check agreement on pre-existing variables
-          for (name, infoBefore) in envBefore.vars do
-            if infoBefore.isCopy then continue
-            let state1 := match firstVars.lookup name with
-              | some info => info.state
-              | none => infoBefore.state
-            let state2 := match envAfterArm.vars.lookup name with
-              | some info => info.state
-              | none => infoBefore.state
-            let consumed1 := state1 == .consumed
-            let consumed2 := state2 == .consumed
-            if consumed1 != consumed2 then
-              throwCheck (.matchConsumptionDisagreement name) (some e.getSpan)
-      -- Apply the final state from first arm (they all agree)
-      match firstArmVars with
+        -- Diverging arms never reach the code after the match — only
+        -- fall-through arms participate in the consumption merge (see the
+        -- enum-path comment above); a function-exiting arm must still have
+        -- consumed everything live.
+        if blockExitsFunction body then
+          checkReturnPathConsumed envBefore.vars envAfterArm.vars (some e.getSpan)
+        if !(blockDiverges body) then
+          match firstArmVars with
+          | none => firstArmVars := some envAfterArm.vars
+          | some firstVars =>
+            -- Check agreement on pre-existing variables
+            for (name, infoBefore) in envBefore.vars do
+              if infoBefore.isCopy then continue
+              let state1 := match firstVars.lookup name with
+                | some info => info.state
+                | none => infoBefore.state
+              let state2 := match envAfterArm.vars.lookup name with
+                | some info => info.state
+                | none => infoBefore.state
+              let consumed1 := state1 == .consumed
+              let consumed2 := state2 == .consumed
+              if consumed1 != consumed2 then
+                throwCheck (.matchConsumptionDisagreement name) (some e.getSpan)
+        else if divergingArmVars.isNone then
+          divergingArmVars := some envAfterArm.vars
+      -- Apply the final state from the first FALL-THROUGH arm (they all
+      -- agree); if EVERY arm diverges, fall back to the first diverging
+      -- arm's state (code after the match is unreachable).
+      match firstArmVars.orElse (fun () => divergingArmVars) with
       | some vars =>
         let env ← getEnv
         let vars' := env.vars.map fun (n, vi) =>
@@ -2586,8 +2664,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let envAfterElse ← getEnv
       -- H9: same for else-branch locals.
       checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating stmts) (some stmt.getSpan)
-      -- Merge: both branches must agree on consumption state of linear vars
-      mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars (some stmt.getSpan)
+      -- A branch that exits the function must consume everything live — the
+      -- divergence exemption below is about merge AGREEMENT, not the exit.
+      if blockExitsFunction thenBody then
+        checkReturnPathConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
+      if blockExitsFunction stmts then
+        checkReturnPathConsumed envBefore.vars envAfterElse.vars (some stmt.getSpan)
+      -- Merge: the branches that FALL THROUGH must agree on consumption state
+      -- of linear vars (a diverging branch never reaches the merge point).
+      mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars
+        (blockDiverges thenBody) (blockDiverges stmts) (some stmt.getSpan)
       -- Drop branch-locals — they are out of scope after the `if`. Only pre-existing
       -- names survive (their merged consumption states were applied above). Without
       -- this, else-branch locals leaked into the outer env (the accidental, lopsided
@@ -2600,6 +2686,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let thenDiverges := blockDiverges thenBody
       if !thenDiverges then
         checkNoBranchConsumption envBefore.vars envAfterThen.vars "if-without-else" (some stmt.getSpan)
+      else
+        -- Exiting the function inside the branch requires everything live to
+        -- be consumed on that path (`if bad { return 1; }` with a live linear
+        -- `s` leaks it on the early-return path).
+        if blockExitsFunction thenBody then
+          checkReturnPathConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
+        -- The then-branch never falls through, so the code AFTER the `if` sees
+        -- the pre-branch state — a consume inside the diverging branch must
+        -- not poison the fall-through path (`if bad { drop(s); return 1; }
+        -- use(s)` is sound). Without this restore, the consumed state leaked
+        -- and the later use was a spurious E0205.
+        setEnv envBefore
   | .while_ _ cond body lbl =>
     let _condTy ← checkExpr cond
     -- Increment loop depth for the body, push label if present
@@ -2645,19 +2743,33 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | .ref t => t
       | .refMut t => t
       | t => t
-    match innerTy with
-    | .named structName =>
-      match ← lookupStructField structName field with
-      | some fieldTy =>
-        -- Overwriting a non-Copy field would leak the old linear value AND cannot
-        -- soundly move the RHS in (a linear value must be used exactly once). Reject
-        -- it (mirrors the "linear variables cannot be reassigned" rule for places).
-        if !(← isCopyType fieldTy) then
-          throwCheck (.cannotOverwriteLinearField field) (some stmt.getSpan)
-        let valTy ← checkExpr value (some fieldTy)
-        expectTy fieldTy valTy s!"field assignment '{structName}.{field}'" (some stmt.getSpan)
+    -- Extract struct name and type args, mirroring the field-READ path:
+    -- field assignment on a GENERIC struct (`self.len = …` in `impl<T> Vec<T>`)
+    -- substitutes the type args, and `String` is std's struct behind the
+    -- builtin type. The old `.named`-only match threw a wrong E0254
+    -- ("non-struct") for both — surfaced by the H12 std migration.
+    let (structName, typeArgs) := match innerTy with
+      | .named n => (n, ([] : List Ty))
+      | .generic n args => (n, args)
+      | .string => ("String", [])
+      | _ => ("", [])
+    if structName == "" then throwCheck .fieldAccessNonStruct (some stmt.getSpan)
+    else
+      match ← lookupStruct structName with
+      | some sd =>
+        match sd.fields.find? fun f => f.name == field with
+        | some f =>
+          let mapping := sd.typeParams.zip typeArgs
+          let fieldTy ← resolveType (substTy mapping f.ty)
+          -- Overwriting a non-Copy field would leak the old linear value AND cannot
+          -- soundly move the RHS in (a linear value must be used exactly once). Reject
+          -- it (mirrors the "linear variables cannot be reassigned" rule for places).
+          if !(← isCopyType fieldTy) then
+            throwCheck (.cannotOverwriteLinearField field) (some stmt.getSpan)
+          let valTy ← checkExpr value (some fieldTy)
+          expectTy fieldTy valTy s!"field assignment '{structName}.{field}'" (some stmt.getSpan)
+        | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
-    | _ => throwCheck .fieldAccessNonStruct (some stmt.getSpan)
   | .derefAssign _ target value =>
     let targetTy ← checkExpr target
     match targetTy with
@@ -2873,11 +2985,17 @@ partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   if !accumulated.isEmpty then
     throw accumulated
 
-/-- After if/else, check both branches agree on linear var consumption. -/
+/-- After if/else, check both branches agree on linear var consumption.
+    A DIVERGING branch (ends in return/break/continue/abort) never reaches the
+    merge point: it cannot disagree with the other branch, and it contributes
+    nothing to the merged state — `if c { consume(x); return 1; } else { … }
+    use(x)` is sound. Only the fall-through branches must agree. -/
 partial def mergeVarStates
     (before : List (String × VarInfo))
     (afterThen : List (String × VarInfo))
     (afterElse : List (String × VarInfo))
+    (thenDiverges : Bool := false)
+    (elseDiverges : Bool := false)
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do
     if infoBefore.isCopy then continue
@@ -2890,10 +3008,15 @@ partial def mergeVarStates
     -- Both consumed or both not-consumed (used/unconsumed are equivalent here)
     let thenConsumed := thenState == .consumed
     let elseConsumed := elseState == .consumed
-    if thenConsumed != elseConsumed then
+    if !thenDiverges && !elseDiverges && thenConsumed != elseConsumed then
       throwCheck (.linearConsumedOneBranchNotOther name) span
-    -- Apply the most progressed state (consumed > used > unconsumed)
-    let mergedState := if thenState == .consumed then .consumed
+    -- Apply the most progressed state (consumed > used > unconsumed) of the
+    -- branches that actually FALL THROUGH to the merge point.
+    let mergedState :=
+      if thenDiverges && elseDiverges then thenState  -- unreachable after; arbitrary
+      else if thenDiverges then elseState
+      else if elseDiverges then thenState
+      else if thenState == .consumed then .consumed
       else if thenState == .used || elseState == .used then .used
       else infoBefore.state
     if mergedState != infoBefore.state then
@@ -3131,6 +3254,17 @@ def checkModule (m : Module) (summary : FileSummary)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
 
+/-- KNOWN_HOLES H12 burn-down list: std submodules MIGRATED under the
+    front-end checker. std bodies were never front-end checked and accumulated
+    ~384 violations; instead of exempting all of std, only the submodules NOT
+    yet on this list are exempt. The list only grows — one std file at a time,
+    fixing its violations (and any checker limitation it exposes) — until it
+    covers all of std and this machinery is deleted. Removing an entry is a
+    regression (`check_submodule_check_coverage.sh` pins the set). -/
+def stdMigratedSubmodules : List String :=
+  ["alloc", "ascii", "bitset", "bytes", "env", "fs", "hash", "libc", "math",
+   "mem", "ordered_set", "ptr", "rand", "sha256", "string", "test", "writer"]
+
 /-- Check every submodule's function BODIES, recursively, mirroring Elab's
     submodule context (sibling submodule types injected, imports resolved
     against the global table). Submodule bodies — every `mod x;` file in a
@@ -3140,12 +3274,6 @@ def checkModule (m : Module) (summary : FileSummary)
     compiled silently (CoreCheck's coarser Core-level rules were the only net). -/
 partial def checkSubmodules (m : Module) (summary : FileSummary)
     (summaryTable : List (String × FileSummary)) : Diagnostics :=
-  -- KNOWN_HOLES H12: the `std` subtree is EXEMPT for now. Its bodies have
-  -- never been front-end checked and carry ~384 violations (immutable
-  -- assignments, discarded Options, linearity in error paths) plus shapes the
-  -- checker may not yet handle; migrating it is tracked work with a countable
-  -- burn-down. User submodules get full enforcement immediately.
-  if m.name == "std" then [] else
   let siblingStructs := summary.submoduleSummaries.foldl (fun acc (_, s) =>
     acc ++ s.structs) ([] : List StructDef)
   let siblingEnums := summary.submoduleSummaries.foldl (fun acc (_, s) =>
@@ -3153,7 +3281,12 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
   let siblingImplMethodSigs := summary.submoduleSummaries.foldl (fun acc (_, s) =>
     acc ++ (s.implMethodSigs.filter fun (name, _) =>
       s.publicNames.contains name)) ([] : List (String × FnSummary))
-  m.submodules.foldl (fun errs sub =>
+  -- H12: inside `std`, only migrated submodules are checked (burn-down list
+  -- above); everywhere else, every submodule is.
+  let subsToCheck := if m.name == "std"
+    then m.submodules.filter fun sub => stdMigratedSubmodules.contains sub.name
+    else m.submodules
+  subsToCheck.foldl (fun errs sub =>
     let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
       | some (_, s) => s
       | none => buildFileSummary sub
@@ -3161,7 +3294,7 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
         (fun modName => CheckError.message (.unknownModule modName))
         (fun sym modName => CheckError.message (.notPublicInModule sym modName))
         (pass := "check") with
-    | .error ds => errs ++ ds.addContext s!"while checking module '{sub.name}'"
+    | .error ds => errs ++ (ds.addContext s!"while checking module '{sub.name}'").stampFile sub.sourceFile
     | .ok subImports =>
       -- Inject sibling submodule types (filtered against local names), exactly
       -- like Elab does, so cross-submodule type references check.
@@ -3175,7 +3308,7 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
         implMethodSigs := subImports.implMethodSigs ++ siblingImplMethodSigs }
       let subErrs := match checkModule sub subSummary subImports with
         | .ok () => ([] : Diagnostics)
-        | .error ds => ds.addContext s!"while checking module '{sub.name}'"
+        | .error ds => (ds.addContext s!"while checking module '{sub.name}'").stampFile sub.sourceFile
       errs ++ subErrs ++ checkSubmodules sub subSummary summaryTable
   ) ([] : Diagnostics)
 

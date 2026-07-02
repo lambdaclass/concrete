@@ -195,6 +195,14 @@ def Diagnostic.addContext (d : Diagnostic) (ctx : String) : Diagnostic :=
 def Diagnostics.addContext (ds : Diagnostics) (ctx : String) : Diagnostics :=
   ds.map (·.addContext ctx)
 
+/-- Stamp a source-file attribution onto diagnostics that don't have one.
+    Used for module-scoped diagnostics from `mod x;` sub-files, so the
+    rendered location (and snippet, via the SourceMap) names the file the
+    span actually points into instead of the main input file (ROADMAP #24a). -/
+def Diagnostics.stampFile (ds : Diagnostics) (f : String) : Diagnostics :=
+  if f.isEmpty then ds
+  else ds.map fun d => if d.file.isEmpty then { d with file := f } else d
+
 /-- Run a fallible computation; on error, prepend context to all diagnostics. -/
 def withContext [Monad m] (ctx : String) (action : ExceptT Diagnostics m α) : ExceptT Diagnostics m α :=
   ExceptT.mk do

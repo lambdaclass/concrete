@@ -1,7 +1,7 @@
 mod test {
     import std.io.{println};
 
-    pub fn assert_eq<T>(expected: T, result: T, message: String) with(Console) -> bool {
+    pub fn assert_eq<T: Copy>(expected: T, result: T, message: String) with(Console) -> bool {
         if expected != result {
             let msg: String = "Assert error:";
             println(&msg);
@@ -14,7 +14,7 @@ mod test {
         return true;
     }
 
-    pub fn assert_ne<T>(a: T, b: T, message: String) with(Console) -> bool {
+    pub fn assert_ne<T: Copy>(a: T, b: T, message: String) with(Console) -> bool {
         if a == b {
             let msg: String = "Assert error (expected not equal):";
             println(&msg);
@@ -53,7 +53,7 @@ mod test {
         return true;
     }
 
-    pub fn assert_gt<T>(a: T, b: T, message: String) with(Console) -> bool {
+    pub fn assert_gt<T: Copy>(a: T, b: T, message: String) with(Console) -> bool {
         if a <= b {
             let msg: String = "Assert error (expected a > b):";
             println(&msg);
@@ -66,7 +66,7 @@ mod test {
         return true;
     }
 
-    pub fn assert_lt<T>(a: T, b: T, message: String) with(Console) -> bool {
+    pub fn assert_lt<T: Copy>(a: T, b: T, message: String) with(Console) -> bool {
         if a >= b {
             let msg: String = "Assert error (expected a < b):";
             println(&msg);
@@ -79,7 +79,7 @@ mod test {
         return true;
     }
 
-    pub fn assert_ge<T>(a: T, b: T, message: String) with(Console) -> bool {
+    pub fn assert_ge<T: Copy>(a: T, b: T, message: String) with(Console) -> bool {
         if a < b {
             let msg: String = "Assert error (expected a >= b):";
             println(&msg);
@@ -92,7 +92,7 @@ mod test {
         return true;
     }
 
-    pub fn assert_le<T>(a: T, b: T, message: String) with(Console) -> bool {
+    pub fn assert_le<T: Copy>(a: T, b: T, message: String) with(Console) -> bool {
         if a > b {
             let msg: String = "Assert error (expected a <= b):";
             println(&msg);
@@ -109,7 +109,7 @@ mod test {
         if a.len != b.len {
             return false;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < a.len {
             if a.get_unchecked(i) != b.get_unchecked(i) {
                 return false;

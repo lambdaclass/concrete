@@ -101,7 +101,7 @@ mod vec {
         /// the callback's caps at the call site. CALLABLE_VALUES §6.
         pub fn fold<A, cap C>(&self, init: A, f: fn(A, &T) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
                 acc = f(acc, target_ptr as &T);
@@ -112,7 +112,7 @@ mod vec {
 
         /// Call a function for each element in the vec (capability-polymorphic).
         pub fn for_each<cap C>(&self, f: fn(&T) with(C)) with(C) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
                 f(target_ptr as &T);
@@ -125,7 +125,7 @@ mod vec {
         /// a sink and use its capabilities, with no value returned. The element
         /// borrow is confined to each call (never returned). CALLABLE_VALUES §3.
         pub fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &T) with(C)) with(C) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
                 f(&mut *ctx, target_ptr as &T);
@@ -137,7 +137,7 @@ mod vec {
         /// `with(Alloc)`; capability-polymorphic over the callback's `cap C`).
         pub fn map<U, cap C>(&self, f: fn(&T) with(C) -> U) with(C, Alloc) -> Vec<U> {
             let mut result: Vec<U> = Vec::<U>::new();
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
                 result.push(f(target_ptr as &T));
@@ -382,7 +382,7 @@ mod vec {
     fn test_vec_push_growth() with(Alloc) -> i32 {
         // Push enough elements to force multiple growth cycles
         let mut v: Vec<i32> = Vec::<i32>::new();
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 100 {
             v.push(i);
             i = i + 1;

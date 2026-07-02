@@ -74,11 +74,11 @@ mod bitset {
 
         /// Count the number of set bits (popcount).
         pub fn count(&self) -> u64 {
-            let total: u64 = 0;
-            let i: u64 = 0;
+            let mut total: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap_words {
                 let word_ptr: *mut u64 = self.data + i;
-                let w: u64 = *word_ptr;
+                let mut w: u64 = *word_ptr;
                 // Kernighan's bit counting
                 while w != 0 {
                     w = w & (w - 1);
@@ -97,7 +97,7 @@ mod bitset {
             if other.n_bits > self.n_bits {
                 self.n_bits = other.n_bits;
             }
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < other.cap_words {
                 let self_ptr: *mut u64 = self.data + i;
                 let other_ptr: *mut u64 = other.data + i;
@@ -108,11 +108,11 @@ mod bitset {
 
         /// In-place intersection: self &= other.
         pub fn intersect(&mut self, other: &BitSet) {
-            let min_words: u64 = self.cap_words;
+            let mut min_words: u64 = self.cap_words;
             if other.cap_words < min_words {
                 min_words = other.cap_words;
             }
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < min_words {
                 let self_ptr: *mut u64 = self.data + i;
                 let other_ptr: *mut u64 = other.data + i;
@@ -293,7 +293,7 @@ mod bitset {
     #[test]
     fn test_loop_set_small() with(Alloc, Unsafe) -> i32 {
         let mut b: BitSet = BitSet::new();
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < 50 {
             b.set(i * 7);
             i = i + 1;
@@ -334,7 +334,7 @@ mod bitset {
     fn test_bitset_large_stress() with(Alloc, Unsafe) -> i32 {
         let mut b: BitSet = BitSet::new();
         // Set every 3rd bit up to 300
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < 100 {
             b.set(i * 3);
             i = i + 1;

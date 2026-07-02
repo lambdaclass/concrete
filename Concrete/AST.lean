@@ -455,6 +455,10 @@ structure Module where
   specFns : List SpecFnDecl := []
   newtypes : List NewtypeDef := []
   submodules : List Module := []
+  /-- Source file this module was parsed from ("" = the main input file). Set
+      by Project.resolveModules for `mod x;` sub-files; used to stamp
+      diagnostics with the RIGHT file (ROADMAP #24a). -/
+  sourceFile : String := ""
 
 -- ============================================================
 -- Capability Alias Expansion

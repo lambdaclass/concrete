@@ -1751,8 +1751,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
         enums := subImports.enums ++ filteredEnums
         implMethodSigs := subImports.implMethodSigs ++ siblingImplMethodSigs }
       match elabModule sub subSummary subImports summaryTable (prefixSubs := false) with
-      | .ok csub => .ok (lst ++ [csub])
-      | .error ds => .error (ds.map fun d => { d with message := s!"in submodule '{sub.name}': {d.message}" })
+      | .ok csub => .ok (lst ++ [{ csub with sourceFile := sub.sourceFile }])
+      | .error ds => .error (Diagnostics.stampFile (ds.map fun d => { d with message := s!"in submodule '{sub.name}': {d.message}" }) sub.sourceFile)
   match cSubmodules with
   | .error e => .error e
   | .ok rawSubs =>

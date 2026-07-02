@@ -9,6 +9,10 @@ on:
     # Weekly clean-checkout proof replay (see the proof-replay job below).
     # The regular jobs also run, giving a weekly full-CI signal.
     - cron: "17 4 * * 1"
+    # Nightly differential fuzz campaign with a rotating (date-derived) seed
+    # (see the fuzz-campaign job below). Fixed CI seeds re-test the same
+    # programs forever; every fuzzer-found bug came from a fresh seed.
+    - cron: "23 3 * * *"
 
 jobs:
   grammar:
@@ -111,7 +115,8 @@ jobs:
     name: Weekly clean-checkout proof replay
     # Fresh checkout with no build caches: rebuild everything and re-run the
     # proof/theorem gates so a stale cache can never produce a false green.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Guarded to the WEEKLY cron so the nightly fuzz cron does not trigger it.
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,6 +141,36 @@ jobs:
 
       - name: Axiom-inventory gate (docs/AXIOMS.md stays honest)
         run: bash scripts/tests/check_axiom_inventory.sh
+
+  fuzz-campaign:
+    name: Nightly differential fuzz (rotating seed)
+    if: (github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Fuzz campaign (date-derived seed, depth 3 + depth 4)
+        run: |
+          SEED=$(date -u +%Y%m%d)
+          echo "seed: $SEED"
+          python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
+          python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
+
+      - name: Upload failing case (if any)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-fail-${{ github.run_id }}
+          path: fuzz_fail.con
+          if-no-files-found: ignore
 
   ssa-tests:
     name: SSA test suite

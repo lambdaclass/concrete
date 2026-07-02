@@ -31,7 +31,7 @@ mod path {
                 cap: cap,
             };
 
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < s.len {
                 let src: *mut u8 = s.ptr + i;
                 let dst: *mut u8 = p.ptr + i;
@@ -67,7 +67,7 @@ mod path {
                 }
             }
 
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < segment.len {
                 let src: *mut u8 = segment.ptr + i;
                 self.push_byte(*src);
@@ -96,7 +96,7 @@ mod path {
         };
 
         // Copy base
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < base.len {
             let src: *const u8 = base.ptr + i;
             result.push_byte(*(src as *mut u8));

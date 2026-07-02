@@ -85,7 +85,7 @@ mod deque {
             let new_ptr: *mut T = grow::<T>(0 as *mut T, new_cap);
 
             // Copy elements in logical order to new buffer
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let src_idx: u64 = (self.head + i) & (self.cap - 1);
                 let src: *mut T = self.ptr + src_idx;
@@ -262,7 +262,7 @@ mod deque {
         let mut d: Deque<i32> = Deque::<i32>::new();
 
         // Push 20 elements, forcing multiple grows
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 20 {
             d.push_back(i);
             i = i + 1;
@@ -274,7 +274,7 @@ mod deque {
         }
 
         // Pop from front and verify order
-        let j: i32 = 0;
+        let mut j: i32 = 0;
         while j < 20 {
             let r: Option<i32> = d.pop_front();
             match r {
@@ -304,8 +304,8 @@ mod deque {
         d.push_front(1);
         // Logical order: 1, 2, 3, 4
 
-        let sum: i32 = 0;
-        let i: u64 = 0;
+        let mut sum: i32 = 0;
+        let mut i: u64 = 0;
         while i < d.len() {
             sum = sum + (d.get_unchecked(i));
             i = i + 1;
@@ -327,20 +327,20 @@ mod deque {
 
         // Fill initial capacity (4 after first grow), then pop front several
         // times to advance head, then push_back to wrap tail around.
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 6 {
             d.push_back(i);
             i = i + 1;
         }
         // Pop 4 from front using get_unchecked to verify, then pop
-        let j: u64 = 0;
+        let mut j: u64 = 0;
         while j < 4 {
             if (d.get_unchecked(0)) != j as i32 { d.drop(); return 1; }
             d.pop_front();
             j = j + 1;
         }
         // Push 10 more — forces growth while head is non-zero
-        let k: i32 = 100;
+        let mut k: i32 = 100;
         while k < 110 {
             d.push_back(k);
             k = k + 1;
@@ -353,7 +353,7 @@ mod deque {
         // Verify order using get_unchecked: [4, 5, 100..109]
         if (d.get_unchecked(0)) != 4 { d.drop(); return 1; }
         if (d.get_unchecked(1)) != 5 { d.drop(); return 1; }
-        let m: u64 = 0;
+        let mut m: u64 = 0;
         while m < 10 {
             if (d.get_unchecked(m + 2)) != (100 + m) as i32 { d.drop(); return 1; }
             m = m + 1;

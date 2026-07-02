@@ -28,7 +28,7 @@ mod ordered_map {
         fn find_index(&self, key: &K) -> u64 {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             let lo: u64 = 0;
-            let hi: u64 = self.len;
+            let mut hi: u64 = self.len;
             while lo < hi {
                 let mid: u64 = lo + (hi - lo) / 2;
                 let mid_key: *mut K = self.keys + mid;
@@ -109,7 +109,7 @@ mod ordered_map {
             }
 
             // Shift keys and values from idx..len one position right
-            let i: u64 = self.len;
+            let mut i: u64 = self.len;
             while i > idx {
                 let src_k: *mut K = self.keys + (i - 1);
                 let dst_k: *mut K = self.keys + i;
@@ -149,7 +149,7 @@ mod ordered_map {
             let old: V = *val_ptr;
 
             // Shift elements left
-            let i: u64 = idx;
+            let mut i: u64 = idx;
             while i + 1 < self.len {
                 let src_k: *mut K = self.keys + (i + 1);
                 let dst_k: *mut K = self.keys + i;

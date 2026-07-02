@@ -17,7 +17,7 @@ mod net {
         // Allocate 1280 to be safe on both
         let buf: *mut u8 = grow::<u8>(0 as *mut u8, 1280);
         let ret: i32 = uname(buf);
-        let result: bool = false;
+        let mut result: bool = false;
         if ret == 0 {
             // sysname is at offset 0: "Darwin" on macOS, "Linux" on Linux
             let ch: u8 = *buf;
@@ -100,7 +100,7 @@ mod net {
 
             // Build sockaddr_in (16 bytes, zeroed)
             let sa: *mut u8 = grow::<u8>(0 as *mut u8, 16);
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < 16 {
                 let p: *mut u8 = sa + i;
                 *p = 0;
@@ -162,7 +162,7 @@ mod net {
 
             // Build sockaddr_in (16 bytes, zeroed)
             let sa: *mut u8 = grow::<u8>(0 as *mut u8, 16);
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < 16 {
                 let p: *mut u8 = sa + i;
                 *p = 0;
@@ -198,7 +198,7 @@ mod net {
         }
 
         pub fn write_all(&self, data: *const u8, len: u64) with(Unsafe, Network) -> bool {
-            let sent: u64 = 0;
+            let mut sent: u64 = 0;
             while sent < len {
                 let src: *const u8 = data + sent;
                 let remaining: u64 = len - sent;
@@ -214,7 +214,7 @@ mod net {
         pub fn read_all(&self, buf: &mut Bytes) with(Unsafe, Alloc, Network) -> i64 {
             let total: i64 = 0;
             let tmp: [u8; 4096] = [0; 4096];
-            let reading: bool = true;
+            let mut reading: bool = true;
             while reading {
                 let n: i64 = recv(self.fd, &tmp as *mut u8, 4096, 0);
                 if n <= 0 {

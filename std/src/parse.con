@@ -6,8 +6,8 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let result: u64 = 0;
-        let i: u64 = 0;
+        let mut result: u64 = 0;
+        let mut i: u64 = 0;
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {
@@ -27,8 +27,8 @@ mod parse {
             return Option::<i64>::None;
         }
 
-        let negative: bool = false;
-        let start: u64 = 0;
+        let mut negative: bool = false;
+        let mut start: u64 = 0;
         let first: char = s.get_unchecked(0);
         if first == '-' {
             negative = true;
@@ -38,8 +38,8 @@ mod parse {
             }
         }
 
-        let result: i64 = 0;
-        let i: u64 = start;
+        let mut result: i64 = 0;
+        let mut i: u64 = start;
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {
@@ -82,7 +82,7 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let start: u64 = 0;
+        let mut start: u64 = 0;
         // Skip optional 0x prefix
         if s.len >= 2 {
             if s.get_unchecked(0) == '0' {
@@ -100,8 +100,8 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let result: u64 = 0;
-        let i: u64 = start;
+        let mut result: u64 = 0;
+        let mut i: u64 = start;
         while i < s.len {
             let val: i64 = hex_char_value(s.get_unchecked(i));
             if val < 0 {
@@ -118,7 +118,7 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let start: u64 = 0;
+        let mut start: u64 = 0;
         // Skip optional 0b prefix
         if s.len >= 2 {
             if s.get_unchecked(0) == '0' {
@@ -136,8 +136,8 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let result: u64 = 0;
-        let i: u64 = start;
+        let mut result: u64 = 0;
+        let mut i: u64 = start;
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c == '0' {
@@ -159,7 +159,7 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let start: u64 = 0;
+        let mut start: u64 = 0;
         // Skip optional 0o prefix
         if s.len >= 2 {
             if s.get_unchecked(0) == '0' {
@@ -177,8 +177,8 @@ mod parse {
             return Option::<u64>::None;
         }
 
-        let result: u64 = 0;
-        let i: u64 = start;
+        let mut result: u64 = 0;
+        let mut i: u64 = start;
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {

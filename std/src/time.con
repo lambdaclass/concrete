@@ -39,7 +39,7 @@ mod time {
             let buf: *mut u8 = grow::<u8>(0 as *mut u8, 16);
 
             // Zero the buffer
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < 16 {
                 let p: *mut u8 = buf + i;
                 *p = 0;
@@ -65,8 +65,8 @@ mod time {
 
         pub fn elapsed(&self) with(Unsafe, Alloc) -> Duration {
             let current: Instant = Instant::now();
-            let sec_diff: i64 = current.secs - self.secs;
-            let nsec_diff: i64 = current.nanos - self.nanos;
+            let mut sec_diff: i64 = current.secs - self.secs;
+            let mut nsec_diff: i64 = current.nanos - self.nanos;
 
             if nsec_diff < 0 {
                 sec_diff = sec_diff - 1;
@@ -117,8 +117,8 @@ mod time {
     fn test_elapsed_nonnegative() with(Unsafe, Alloc) -> i32 {
         let start: Instant = Instant::now();
         // Do a small amount of work
-        let x: i64 = 0;
-        let i: i64 = 0;
+        let mut x: i64 = 0;
+        let mut i: i64 = 0;
         while i < 1000 {
             x = x + i;
             i = i + 1;

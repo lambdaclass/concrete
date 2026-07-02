@@ -54,6 +54,14 @@ mkproj "$TMPDIR/imm" 'mod helper {
     }
 }'
 rejects "immutable assignment in sub-file (E0217)" "$TMPDIR/imm" "E0217"
+# #24a: the diagnostic must NAME the sub-file (and quote ITS source line),
+# not the main file the build started from.
+OUT="$(cd "$TMPDIR/imm" && "$COMPILER" build 2>&1)"
+if printf '%s' "$OUT" | grep -q "helper.con:4" && printf '%s' "$OUT" | grep -qF 'c = c + 1'; then
+  ok "sub-file diagnostics name the sub-file with its own snippet (#24a)"
+else
+  no "sub-file diagnostics misattributed (got: $(printf '%s' "$OUT" | head -1))"
+fi
 
 mkproj "$TMPDIR/ty" 'mod helper {
     pub fn addx(a: u32) -> u32 {
@@ -149,6 +157,17 @@ if grep -q 'KNOWN_HOLES H12' Concrete/Check.lean; then
   ok "std exemption is marked H12 in Check.lean"
 else
   no "std exemption marker missing from Check.lean (removed? then close H12 and delete this check)"
+fi
+# The burn-down list only GROWS: every migrated module must stay migrated.
+MIGRATED="alloc ascii bitset bytes env fs hash libc math mem ordered_set ptr rand sha256 string test writer"
+MISSING=""
+for m in $MIGRATED; do
+  grep -q "\"$m\"" Concrete/Check.lean || MISSING="$MISSING $m"
+done
+if [ -z "$MISSING" ]; then
+  ok "all $(echo $MIGRATED | wc -w | tr -d ' ') migrated std modules stay on the burn-down list"
+else
+  no "migrated std modules REMOVED from stdMigratedSubmodules:$MISSING (regression — the list only grows)"
 fi
 if grep -q '^### H12' docs/KNOWN_HOLES.md; then
   ok "H12 disclosed in KNOWN_HOLES.md"

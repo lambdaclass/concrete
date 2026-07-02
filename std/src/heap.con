@@ -56,7 +56,7 @@ mod heap {
 
         fn sift_up(&mut self, idx: u64) {
             let cmp: fn(&T, &T) -> bool = self.cmp_fn;
-            let i: u64 = idx;
+            let mut i: u64 = idx;
             while i > 0 {
                 let parent: u64 = (i - 1) / 2;
                 let i_ptr: *mut T = self.data + i;
@@ -75,11 +75,11 @@ mod heap {
 
         fn sift_down(&mut self, idx: u64) {
             let cmp: fn(&T, &T) -> bool = self.cmp_fn;
-            let i: u64 = idx;
+            let mut i: u64 = idx;
             while true {
                 let left: u64 = 2 * i + 1;
                 let right: u64 = 2 * i + 2;
-                let best: u64 = i;
+                let mut best: u64 = i;
 
                 if left < self.len {
                     let best_ptr: *mut T = self.data + best;
@@ -249,7 +249,7 @@ mod heap {
         let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
 
         // Push 50 elements in scrambled order
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 50 {
             h.push((i * 37) & 127);
             i = i + 1;
@@ -261,7 +261,7 @@ mod heap {
         }
 
         // Pop all and verify we get 50 elements
-        let count: u64 = 0;
+        let mut count: u64 = 0;
         while h.len() > 0 {
             h.pop();
             count = count + 1;
@@ -293,7 +293,7 @@ mod heap {
         }
 
         // Pop all 10 and count
-        let count: u64 = 0;
+        let mut count: u64 = 0;
         while h.len() > 0 {
             h.pop();
             count = count + 1;

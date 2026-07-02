@@ -6,10 +6,10 @@ mod hash {
     // FNV prime: 1099511628211 = 0x100000001b3
 
     pub fn fnv1a_bytes(data: &Bytes) -> u64 {
-        let hash: u64 = 0xcbf29ce484222325;
+        let mut hash: u64 = 0xcbf29ce484222325;
         let prime: u64 = 0x100000001b3;
 
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < data.len {
             let byte: u8 = data.get_unchecked(i);
             hash = hash ^ (byte as u64);
@@ -21,10 +21,10 @@ mod hash {
     }
 
     pub fn fnv1a_string(data: &String) -> u64 {
-        let hash: u64 = 0xcbf29ce484222325;
+        let mut hash: u64 = 0xcbf29ce484222325;
         let prime: u64 = 0x100000001b3;
 
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < data.len {
             let byte: u8 = data.get_unchecked(i) as u8;
             hash = hash ^ (byte as u64);
@@ -41,21 +41,21 @@ mod hash {
 
     pub trusted fn hash_u64(key: &u64) -> u64 {
         let k: u64 = *key;
-        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
+        let mut h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }
 
     pub trusted fn hash_i32(key: &i32) -> u64 {
         let k: u64 = *key as u64;
-        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
+        let mut h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }
 
     pub trusted fn hash_i64(key: &i64) -> u64 {
         let k: u64 = *key as u64;
-        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
+        let mut h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }
@@ -80,7 +80,7 @@ mod hash {
         if a.len != b.len {
             return false;
         }
-        let i: u64 = 0;
+        let mut i: u64 = 0;
         while i < a.len {
             if a.get_unchecked(i) != b.get_unchecked(i) {
                 return false;

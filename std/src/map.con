@@ -115,7 +115,7 @@ mod map {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(&key);
             let mask: u64 = self.cap - 1;
-            let idx: u64 = h & mask;
+            let mut idx: u64 = h & mask;
 
             while true {
                 let flag_ptr: *mut u8 = self.flags + idx;
@@ -185,7 +185,7 @@ mod map {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(key);
             let mask: u64 = self.cap - 1;
-            let idx: u64 = h & mask;
+            let mut idx: u64 = h & mask;
 
             while true {
                 let flag_ptr: *mut u8 = self.flags + idx;
@@ -228,7 +228,7 @@ mod map {
             self.len = 0;
 
             // Rehash all occupied entries
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < old_cap {
                 let flag_ptr: *mut u8 = old_flags + i;
                 let flag: u8 = *flag_ptr;
@@ -248,7 +248,7 @@ mod map {
         /// Fold over all key-value pairs, threading an accumulator.
         pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -264,7 +264,7 @@ mod map {
 
         /// Call a function for each key-value pair in the map.
         pub fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -280,7 +280,7 @@ mod map {
         /// Fold over keys only, threading an accumulator.
         pub fn keys_fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -296,7 +296,7 @@ mod map {
         /// Fold over values only, threading an accumulator.
         pub fn values_fold<A, cap C>(&self, init: A, f: fn(A, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -311,7 +311,7 @@ mod map {
 
         /// Call a function for each key in the map.
         pub fn keys_for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -325,7 +325,7 @@ mod map {
 
         /// Call a function for each value in the map.
         pub fn values_for_each<cap C>(&self, f: fn(&V) with(C)) with(C) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -340,7 +340,7 @@ mod map {
         /// Collect all keys into a Vec.
         pub fn keys(&self) with(Alloc) -> Vec<K> {
             let mut result: Vec<K> = vec_new::<K>();
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -356,7 +356,7 @@ mod map {
         /// Collect all values into a Vec.
         pub fn values(&self) with(Alloc) -> Vec<V> {
             let mut result: Vec<V> = vec_new::<V>();
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
                 let flag: u8 = *flag_ptr;
@@ -373,7 +373,7 @@ mod map {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(&key);
             let mask: u64 = self.cap - 1;
-            let idx: u64 = h & mask;
+            let mut idx: u64 = h & mask;
 
             while true {
                 let flag_ptr: *mut u8 = self.flags + idx;
@@ -603,7 +603,7 @@ mod map {
     fn test_map_growth() with(Alloc, Unsafe) -> i32 {
         // Insert enough to force rehash (initial cap=16, grows at 75% = 12)
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        let i: i32 = 0;
+        let mut i: i32 = 0;
         while i < 50 {
             m.insert(i, i * 10);
             i = i + 1;

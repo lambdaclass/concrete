@@ -64,7 +64,7 @@ mod text {
                 return false;
             }
 
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 let pa: *const u8 = self.ptr + i;
                 let pb: *const u8 = other.ptr + i;

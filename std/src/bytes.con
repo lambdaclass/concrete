@@ -98,7 +98,7 @@ mod bytes {
             if self.len != other.len {
                 return false;
             }
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < self.len {
                 if self.get_unchecked(i) != other.get_unchecked(i) {
                     return false;
@@ -109,7 +109,7 @@ mod bytes {
         }
 
         pub fn append_bytes(&mut self, other: &Bytes) with(Alloc) {
-            let i: u64 = 0;
+            let mut i: u64 = 0;
             while i < other.len {
                 self.push(other.get_unchecked(i));
                 i = i + 1;

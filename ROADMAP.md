@@ -1089,15 +1089,16 @@ class and authority/allocation story.
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
 38b. [KNOWN_HOLES H12] Migrate `std` under the front-end checker. Submodule
-    bodies were never Check-pass checked until 2026-07-02; user submodules now
-    get full enforcement, but the `std` subtree is exempted by name in
-    `Concrete/Check.lean` (`checkSubmodules`) because checking it surfaces
-    ~384 accumulated violations: ~90 immutable assignments, ~58 discarded
-    `Option` results, match-arm-consumption disagreements and linear leaks in
-    error paths, plus ~45 E0254 field-access errors that may be CHECKER
-    limitations on std's generic/pointer-heavy shapes rather than std bugs.
-    Burn down file by file (fix real violations; diagnose and fix checker
-    false-positives), then remove the exemption — the
+    bodies were never Check-pass checked until 2026-07-02; user submodules get
+    full enforcement, and std burns down via the `stdMigratedSubmodules` list
+    in `Concrete/Check.lean`. **Tranche 1 done (2026-07-02): 384 -> 145
+    violations, 17/~30 modules migrated**; it forced two real checker fixes
+    (divergence-aware consumption merges; field assignment on generic/String
+    receivers) plus 115 mechanical `let mut` fixes in std. Remaining 145 are
+    semantic (E0286 discarded fallible results in tests, E0208 leaks in error
+    paths, E0207 consume-inside-loop shapes — the last may deserve a
+    consume-then-diverge exemption instead of restructuring). Continue file by
+    file, then remove the exemption machinery — the
     `check_submodule_check_coverage.sh` gate fails loudly if the exemption
     outlives its H12 disclosure. This must complete before Phase 7 declares
     stdlib surfaces stable AND before the external-validation trial runs: an

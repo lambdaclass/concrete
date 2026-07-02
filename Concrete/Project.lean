@@ -71,7 +71,7 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
         match subModules with
         | [subMod] =>
           paths := paths ++ [filePath]
-          match ← resolveModules subBaseDir { subMod with name := sub.name } paths sources with
+          match ← resolveModules subBaseDir { subMod with name := sub.name, sourceFile := filePath } paths sources with
           | .ok (resolved, newPaths, newSources) =>
             paths := newPaths
             sources := newSources
@@ -243,6 +243,10 @@ partial def loadDependency (depName : String) (depPath : String)
     | .error e => return .error s!"dependency '{depName}': {e}"
     | .ok (resolved, srcMap) =>
       let srcMap := [(libPath, source)] ++ srcMap
+      -- The dependency's root modules were parsed from ITS lib.con, not the
+      -- project's main file — stamp them so their diagnostics say so (#24a).
+      let resolved := resolved.map fun m =>
+        if m.sourceFile.isEmpty then { m with sourceFile := libPath } else m
       return .ok (resolved, srcMap)
 
 

@@ -241,8 +241,8 @@ resolve_affected_sections() {
 
 # Resolve which sections are active based on MODE
 case "$MODE" in
-    full)    SECTION="passlevel,positive,negative,testflag,report,codegen,O2,stdlib,collection,xtarget,perf,determinism,consistency,terminology,verify,evidence,malformed,query,desync,bugaudit,apiversioning,errorcodes,policy,taxonomy,workflow,bundle,proofgate,fixedcap,parsevalidate,serviceerrors,stackdepth,interp" ;;
-    fast)    SECTION="passlevel,positive,negative,testflag,report,codegen,O2,stdlib,collection" ;;
+    full)    SECTION="passlevel,positive,negative,testflag,gatesmoke,report,codegen,O2,stdlib,collection,xtarget,perf,determinism,consistency,terminology,verify,evidence,malformed,query,desync,bugaudit,apiversioning,errorcodes,policy,taxonomy,workflow,bundle,proofgate,fixedcap,parsevalidate,serviceerrors,stackdepth,interp" ;;
+    fast)    SECTION="passlevel,positive,negative,testflag,gatesmoke,report,codegen,O2,stdlib,collection" ;;
     stdlib)  SECTION="stdlib,collection" ;;
     stdlib-module) SECTION="stdlib" ;;
     O2)      SECTION="O2" ;;
@@ -1349,7 +1349,7 @@ run_err "$TESTDIR/pressure_err_defer_then_move.con" "reserved by defer"
 run_err "$TESTDIR/pressure_err_heap_leak.con" "was never consumed"
 run_err "$TESTDIR/pressure_err_linear_no_destroy.con" "was never consumed"
 run_err "$TESTDIR/pressure_err_destroy_then_use.con" "used after move"
-run_err "$TESTDIR/pressure_err_branch_leak.con" "consumed in one branch"
+run_err "$TESTDIR/pressure_err_branch_leak.con" "was never consumed"  # leak on the returning else-path (return-path consumption rule)
 # Bitwise errors
 run_err "$TESTDIR/error_bitwise_float.con" "type mismatch"
 # Print errors
@@ -1719,6 +1719,23 @@ run_err "$TESTDIR/error_test_wrong_return.con" "must return i32"
 run_err "$TESTDIR/error_test_on_struct.con" "can only be applied to function"
 
 fi # end section: testflag
+
+# === gate smoke (fast per-feature gates, so regressions surface in the edit
+# loop instead of at push time; the full gate set stays in CI / test-ci-gates) ===
+echo ""
+flush_jobs
+if section_active gatesmoke; then
+echo "=== gate smoke (lex escapes, mixed-width, trailing values) ==="
+for g in check_lex_escapes check_mixed_width_binops check_trailing_value_blocks; do
+    if bash "scripts/tests/$g.sh" >/dev/null 2>&1; then
+        echo "  ok  $g"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $g (run: bash scripts/tests/$g.sh)"
+        FAIL=$((FAIL + 1))
+    fi
+done
+fi # end section: gatesmoke
 
 # === Report output tests ===
 echo ""
