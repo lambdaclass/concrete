@@ -7,17 +7,20 @@ open Concrete
 /-! ## Source-level interpreter for the predictable/core subset
 
     Currently supported (oracle subset, see `docs/INTERPRETER_TRUST.md`):
-    integer/bool, structs, enums, arrays, match, bounded loops, calls,
-    immutable/mutable borrows of locals, fields, and array elements.
+    integer/bool/char/string, structs, enums, arrays, match, bounded loops,
+    calls, immutable/mutable borrows of locals, fields, and array elements,
+    and the print_* intrinsics (buffered into a reserved stdout binding so
+    `--interp` output byte-matches the compiled binary — printing programs
+    are differential-testable).
 
     Unsupported constructs fail with explicit "interp: ..." diagnostics
     so the differential harness in `tests/oracle/` records them as
     PENDING rather than silently mismatching.
 
     Limitations:
-    - No I/O (print/println), no capabilities
-    - No float, char, string values
-    - No overflow/truncation (arbitrary-precision integers)
+    - No floats, no function pointers, no alloc expressions, no defer
+    - Fixed-width arithmetic is CHECKED (traps as the compiled binary does);
+      casts wrap into the target range (silent-truncation policy)
 -/
 
 -- ============================================================
@@ -480,7 +483,10 @@ partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : 
     let name := s!"__interp_str_lit_{env.length}"
     let env := envBind env name (.string s)
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
-  | .charLit _ => .error "interp: char literals not yet supported"
+  | .charLit c => do
+    let name := s!"__interp_char_lit_{env.length}"
+    let env := envBind env name (.int (Int.ofNat c.toNat) .char)
+    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .floatLit _ _ => .error "interp: float literals not yet supported"
   | _ => .error "interp: unsupported borrow target shape"
 
@@ -489,7 +495,9 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
   | .intLit val ty => return (env, .val (.int val ty))
   | .boolLit val => return (env, .val (.bool val))
   | .strLit s => return (env, .val (.string s))
-  | .charLit _ => .error "interp: char literals not yet supported"
+  -- A char is its code point carried at type .char (exactly how the compiled
+  -- path treats it: casts and print_char operate on the code).
+  | .charLit c => return (env, .val (.int (Int.ofNat c.toNat) .char))
   | .floatLit _ _ => .error "interp: float literals not yet supported"
 
   | .ident name _ =>

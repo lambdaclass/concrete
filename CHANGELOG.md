@@ -43,6 +43,14 @@ items plus the checker fixes the std migration immediately forced.
   threw a wrong E0254 "field access on non-struct type": the field-ASSIGN path
   matched only `.named`, while the field-READ path already handled `.generic`
   (with type-arg substitution) and `.string`. Now mirrored (~45 errors).
+- **Consume-then-exit exemption for E0207 (tranche 2).** Consuming an outer
+  linear inside a loop is legal inside a branch that EXITS THE FUNCTION —
+  no iteration follows a return, and the return-path rule guarantees the
+  branch consumed everything. A loop nested inside the exiting branch resets
+  the exemption (it iterates before the return; fixture pair pins both
+  sides). This erased the whole E0207 class in std (21 sites) and, with
+  per-site fixes (args/hex/set/text/numeric), brought the burn-down to
+  **23/30 modules migrated, 155 violations remaining**.
 - **H12 tranche 1: std burn-down 384 -> 145; 17 of ~30 modules migrated.** The
   all-of-std exemption became a `stdMigratedSubmodules` burn-down list (only
   grows; gate-pinned). Mechanical fixes: 115 `let` -> `let mut` declarations.

@@ -59,11 +59,14 @@ lowering, SSA emission, LLVM, clang, or any linker.
   length so successive borrows do not collide
 - Selected pure builtins: `string_length(&s)` returns byte length;
   `drop_string(s)` is a no-op (the interpreter has no heap, so the
-  linear consume itself is enough). I/O intrinsics (`print`,
-  `println`, `print_string`, `print_int`, `print_char`,
-  `print_bool`) are explicitly **not** supported — the interpreter
-  cannot reproduce stdout side effects, and any program that calls
-  them is PENDING
+  linear consume itself is enough)
+- The print intrinsics (`print_string`, `print_int`, `print_char`,
+  `print_bool`) append to a reserved stdout buffer seeded at the
+  bottom of the env; `--interp` prints the buffer before the return
+  value, byte-matching the compiled binary — printing programs are
+  differential-testable (2026-07-02). `print`/`println` themselves
+  are desugared to those intrinsics by Elab; reaching Core with them
+  is a desugar gap and stays a loud PENDING
 
 ### Supported statements
 
@@ -105,9 +108,7 @@ classify a vector as PENDING rather than FAIL.
 
 | Construct | Diagnostic |
 |---|---|
-| Char literal | `interp: char literals not yet supported` |
 | Float literal | `interp: float literals not yet supported` |
-| Print / IO intrinsic | `interp: print/IO intrinsic '<name>' not yet supported` |
 | Undefined function call | `interp: undefined function '<name>'` |
 | Function reference | `interp: function references not yet supported` |
 | Heap `alloc` | `interp: alloc expressions not yet supported` |

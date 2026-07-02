@@ -385,15 +385,16 @@ are folded out.
   the block's value when a branch/arm ends with a value; all-statement forms
   stay statements. `check_trailing_value_blocks.sh`.
 
-**Highest-leverage next items (2026-07-02 checkpoint), in order:** #24a
-(diagnostic file attribution — every sub-file error now names the wrong file,
-and sub-file errors became common when submodule checking landed), Phase 7
-#38b (std front-end migration, the H12 burn-down — an unchecked stdlib
-undercuts every enforcement claim), 13b (H11, the last conservation hole),
-conditional Copy (Phase 7 #3 — promoted to a pre-trial prerequisite, see the
+**Highest-leverage next items (updated 2026-07-02 EOD), in order:** Phase 7
+#38b tranche 3 (std burn-down at 23/30 modules; the remaining 155 violations
+are E0286 test discards and E0208 error-path leaks in the collection/IO
+modules — consider a consuming `std.test` assert helper for the ~58
+insert-discard sites), 13b (H11, the last conservation hole), conditional
+Copy (Phase 7 #3 — promoted to a pre-trial prerequisite, see the
 external-validation gate), then #18 (callable-values implementation) and #35
-(the validation project) as the phase's exit path. Everything else in the active list is
-pull-condition-gated or polish.
+(the validation project) as the phase's exit path. ✅ #24a (sub-file
+diagnostic file attribution) landed 2026-07-02. Everything else in the active
+list is pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
@@ -638,7 +639,11 @@ pull-condition-gated or polish.
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-24a. Fix diagnostic FILE attribution for sub-file modules: a diagnostic from a
+24a. ✅ **DONE (2026-07-02)** — sub-file diagnostics name the right file:
+    `Module.sourceFile` stamped by the project loader (incl. dependency roots),
+    threaded through Check/Elab/CoreCheck via `Diagnostics.stampFile`; the
+    renderer keys location AND snippet off `Diagnostic.file`; gate row in
+    `check_submodule_check_coverage.sh`. Original item: a diagnostic from a
     `mod x;` file renders with the MAIN file's path (the span's line/col are
     the sub-file's, so the shown snippet is wrong too — e.g. an error in
     `src/helper.con:4` prints as `src/main.con:4` with main.con's line 4

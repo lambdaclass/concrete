@@ -92,6 +92,34 @@ duplicating one would let it be freed twice. Concretely:
   rule is "projecting a non-Copy sub-place by value is rejected — borrow it or
   destructure the whole place"; the fix is position-sensitive and scheduled.
 
+### Control flow: how branches, arms, and loops account for consumption
+
+Refined 2026-07-02 (the H12 std migration forced the checker to model these
+precisely; all four rules are as-built in `Concrete/Check.lean`):
+
+- **Fall-through branches must agree.** After `if`/`else` (or a `match`), the
+  branches that reach the merge point must agree on what was consumed
+  (E0212/E0209) — a value cannot be "maybe consumed" afterwards.
+- **A diverging branch/arm is exempt from the merge** — it never reaches the
+  merge point, so `Some { v } => { use(v) }, None => { drop(x); return 1 }` is
+  sound. If EVERY arm diverges, the code after the match is unreachable and
+  takes the first arm's state.
+- **A branch that exits the function must consume everything live.** An early
+  `return` is a function exit: `if c { return 0; } … drop(s);` leaks `s` on
+  the returning path (E0208). Pending `defer`s count as consumption
+  (they run on the unwind); borrows (`&`/`&mut`) are aliasing-exclusive, not
+  consumption obligations, so letting one lapse is fine. `break`/`continue`
+  keep values live at the loop boundary; `abort()`/infinite loops are exempt
+  (the process never proceeds).
+- **Consuming an outer linear inside a loop** is normally rejected (E0207 —
+  the next iteration would see a moved value), EXCEPT inside a branch that
+  exits the function: `while … { if bad { s.drop(); return 1; } }` is sound
+  because no iteration follows the return. A loop nested *inside* that branch
+  resets the exemption (it iterates before the return).
+- Consequence for APIs: a generic function returning one of two linear
+  arguments (`max<T>(a, b)`) always leaks the other — such helpers require
+  `T: Copy` (`std.math.max/min/clamp`, the `std.test` asserts).
+
 ### How to intentionally get rid of a value
 
 - **Copy value:** just drop it (`_`, bare statement, ignore it) — free.
