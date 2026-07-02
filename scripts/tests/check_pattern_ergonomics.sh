@@ -61,10 +61,14 @@ echo "=== match on &T (reference scrutinee) ==="
 run_expect match_ref_scalar 1   # &i32: literal/range/var all see the value
 run_expect match_ref_enum 1     # &enum: tag + payload through the reference
 
-echo "=== if let / while let (desugar to match) ==="
-run_expect if_let_some_else 7    # binds on Some, else on None
-run_expect if_let_no_else 5      # no-else leaves state unchanged on None
-run_expect while_let_drain 6     # loops while matching; re-evaluates scrutinee
+echo "=== if let / while let (desugar to match; Copy scrutinee only) ==="
+run_expect if_let_some_else 7    # binds on Some, else on None (Copy enum)
+run_expect if_let_no_else 5     # no-else leaves state unchanged on no-match (Copy enum)
+run_expect while_let_drain 6     # loops while matching; re-evaluates scrutinee (Copy enum)
+# By design (same rule as let-else): the desugared catch-all `_` arm may discard
+# only Copy data, so if-let/while-let over a NON-Copy enum (e.g. Option<i32>) is
+# rejected — write an explicit exhaustive match instead.
+reject_with neg_if_let_noncopy E0288
 
 echo "=== range patterns: end-to-end example builds, runs, exits 0 ==="
 ex="examples/patterns/byte_ranges"

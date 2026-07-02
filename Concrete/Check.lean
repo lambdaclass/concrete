@@ -2137,7 +2137,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
         | .varArm _ binding guard body => do
-          let scrCopy ← isCopyType scrTy
+          -- Value-pattern match auto-derefs the scrutinee (see innerTy above),
+          -- and the runtime loads the value through the reference — so a
+          -- variable arm over `&i32` binds the VALUE (i32), not `&i32`. Only a
+          -- Copy inner type binds by value: binding a non-Copy value out from
+          -- behind a reference would duplicate it, so those keep the ref type.
+          let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
+          let bindTy ← do
+            if isRefScrutinee && (← isCopyType innerTyR) then pure innerTyR else pure scrTy
+          let scrCopy ← isCopyType bindTy
           if binding != "_" then
             -- A named value pattern over a non-Copy scrutinee is a move into the
             -- arm-local binding. Without consuming the original identifier here,
@@ -2147,9 +2155,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               match scrutinee with
               | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
               | _ => pure ()
-            addVar binding scrTy
+            addVar binding bindTy
           else if !scrCopy then
-            throwCheck (.wildcardDiscardsNonCopy (tyToString scrTy)) (some e.getSpan)
+            throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
           match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
         | .rangeArm _ lo hi _ guard body => do

@@ -72,6 +72,14 @@ duplicating one would let it be freed twice. Concretely:
 - **`let X::V { .. } = e else { … }` (let-else)** desugars to a catch-all `_` match arm,
   which is illegal over a **non-Copy** enum (the linear `_` rule). For a non-Copy /
   resource-owning enum, **use a full explicit `match`** instead of let-else.
+- **`if let` / `while let`** desugar the same way and follow the same rule (decision
+  re-confirmed 2026-07-01): over a **non-Copy** enum — including `Option<i32>`, since
+  the discard rule keys on the TYPE's Copy-ness, not on whether the uncovered variants
+  happen to own resources — they are rejected (**E0288**); write an explicit exhaustive
+  `match`. Over a `Copy` enum they work as expected. If generic instantiations ever get
+  conditional Copy (`Option<i32>` Copy when the payload is Copy — a natural part of
+  stabilizing `std.option`), these shapes become legal for Copy payloads without
+  bending the rule. Gated by `check_pattern_ergonomics.sh` (`neg_if_let_noncopy`).
 - **Assigning to a non-Copy field** (`o.f = v`) is rejected (**E0219**): overwriting
   would leak the old linear value and cannot soundly move the new one in. Destructure
   and rebuild, or make the field `Copy`.

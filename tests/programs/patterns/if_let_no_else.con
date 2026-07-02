@@ -1,10 +1,11 @@
-// Pattern: `if let` with no else leaves state unchanged on the None path.
-// Expected: 5
+// Pattern: `if let` with no else leaves state unchanged on the no-match path.
+// Copy scrutinee (see if_let_some_else). Expected: 5
 mod m {
+    enum Copy OptI { Some { value: i32 }, None {} }
     fn main() -> Int {
         let mut acc: i32 = 5;
-        let n: Option<i32> = Option::<i32>::None;
-        if let Option::Some { value } = n { acc = value; }
+        let n: OptI = OptI::None {};
+        if let OptI::Some { value } = n { acc = value; }
         return acc as Int;
     }
 }

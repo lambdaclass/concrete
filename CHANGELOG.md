@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### CI re-greened: stale SSA goldens, &T match binding, if-let linearity decision (2026-07-01)
+
+CI had been red for 15 pushes (since 2026-06-27) on two accumulated failures;
+both resolved:
+
+- **Stale SSA goldens** (`ssa/array_basic`, `ssa/borrow_mut`, `ssa/defer_basic`)
+  regenerated: the diffs were Lower register renames plus the linear-conservation
+  aggregate-alloca changes, all behavior-verified by the execution, differential,
+  and example gates.
+- **`match` over `&T` bound variable arms as `&T`** instead of the deref'd value
+  (`match x { n => n + 1000 }` with `x: &i32` typed `n` as `&i32`, contradicting
+  the runtime, which loads through the ref). A variable arm over a reference now
+  binds the VALUE when the inner type is Copy; non-Copy inner types keep the
+  reference (binding a non-Copy out from behind a ref would duplicate it).
+- **if-let/while-let over non-Copy enums: rejected by design (E0288).** Same
+  rule as let-else — the desugared catch-all `_` arm may discard only Copy data,
+  keyed on the type, not the uncovered variants' contents ("always linear").
+  The pattern fixtures now use a `Copy` enum for the positive cases and pin the
+  `Option<i32>` rejection (`neg_if_let_noncopy`). Conditional Copy for generic
+  instantiations would restore these shapes for Copy payloads without bending
+  the rule, if ever adopted.
+
 ### Front-end/back-end agreement sweep: mixed widths, value blocks, cast semantics, lexer escapes (2026-07-01)
 
 An audit pass over "the front-end and the back-end must accept the same

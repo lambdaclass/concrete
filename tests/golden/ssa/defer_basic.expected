@@ -2,12 +2,14 @@
 ; source: use_resource @ line 8
 define i64 @use_resource() {
 entry:
+  %r.agg.3 = alloca %Resource
   %t0 = alloca %Resource
   store i64 10, %t0
   %t2 = load %Resource, %t0
-  %t4 = load i64, %t2
+  store %Resource %t2, %r.agg.3
+  %t6 = load i64, %t2
   call void @Resource_destroy(%Resource %t2)
-  ret i64 %t4
+  ret i64 %t6
 }
 
 ; source: main @ line 14

@@ -1,12 +1,15 @@
-// Pattern: `if let` binds on match, else runs otherwise. Expected: 7 (Some) then
-// verified None-path returns 0 via a second call. Expected: 7
+// Pattern: `if let` binds on match, else runs otherwise. The scrutinee enum is
+// Copy: the desugared catch-all `_` arm discards the no-match value, and `_`
+// may discard only Copy data (linear rule; see neg_if_let_noncopy for the
+// non-Copy rejection). Expected: 7
 mod m {
-    fn unwrap_or(o: Option<i32>, d: i32) -> i32 {
-        if let Option::Some { value } = o { return value; } else { return d; }
+    enum Copy OptI { Some { value: i32 }, None {} }
+    fn unwrap_or(o: OptI, d: i32) -> i32 {
+        if let OptI::Some { value } = o { return value; } else { return d; }
     }
     fn main() -> Int {
-        let s: Option<i32> = Option::<i32>::Some { value: 7 };
-        let n: Option<i32> = Option::<i32>::None;
+        let s: OptI = OptI::Some { value: 7 };
+        let n: OptI = OptI::None {};
         if unwrap_or(s, 99) == 7 && unwrap_or(n, 0) == 0 { return 7; }
         return 1;
     }

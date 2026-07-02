@@ -16,13 +16,13 @@ entry:
 ; source: main @ line 9
 define i64 @main() {
 entry:
-  %mutref.3 = alloca %Box
+  %b.agg.3 = alloca %Box
   %t0 = alloca %Box
   store i64 0, %t0
   %t2 = load %Box, %t0
-  store %Box %t2, %mutref.3
-  call void @set_value(ptr(mut %Box) %mutref.3, i64 99)
-  %wb.4 = load %Box, %mutref.3
-  %t5 = call i64 @consume(%Box %wb.4)
+  store %Box %t2, %b.agg.3
+  call void @set_value(ptr(mut %Box) %b.agg.3, i64 99)
+  %pload.4 = load %Box, %b.agg.3
+  %t5 = call i64 @consume(%Box %pload.4)
   ret i64 %t5
 }
