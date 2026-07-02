@@ -3131,6 +3131,54 @@ def checkModule (m : Module) (summary : FileSummary)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
 
+/-- Check every submodule's function BODIES, recursively, mirroring Elab's
+    submodule context (sibling submodule types injected, imports resolved
+    against the global table). Submodule bodies — every `mod x;` file in a
+    project, including the whole stdlib, and inline `mod x { … }` nests — were
+    previously NEVER front-end checked: only their signatures were consumed, so
+    type errors, linearity violations, and immutable assignments in them
+    compiled silently (CoreCheck's coarser Core-level rules were the only net). -/
+partial def checkSubmodules (m : Module) (summary : FileSummary)
+    (summaryTable : List (String × FileSummary)) : Diagnostics :=
+  -- KNOWN_HOLES H12: the `std` subtree is EXEMPT for now. Its bodies have
+  -- never been front-end checked and carry ~384 violations (immutable
+  -- assignments, discarded Options, linearity in error paths) plus shapes the
+  -- checker may not yet handle; migrating it is tracked work with a countable
+  -- burn-down. User submodules get full enforcement immediately.
+  if m.name == "std" then [] else
+  let siblingStructs := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ s.structs) ([] : List StructDef)
+  let siblingEnums := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ s.enums) ([] : List EnumDef)
+  let siblingImplMethodSigs := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ (s.implMethodSigs.filter fun (name, _) =>
+      s.publicNames.contains name)) ([] : List (String × FnSummary))
+  m.submodules.foldl (fun errs sub =>
+    let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
+      | some (_, s) => s
+      | none => buildFileSummary sub
+    match resolveImports sub.imports summaryTable
+        (fun modName => CheckError.message (.unknownModule modName))
+        (fun sym modName => CheckError.message (.notPublicInModule sym modName))
+        (pass := "check") with
+    | .error ds => errs ++ ds.addContext s!"while checking module '{sub.name}'"
+    | .ok subImports =>
+      -- Inject sibling submodule types (filtered against local names), exactly
+      -- like Elab does, so cross-submodule type references check.
+      let localStructNames := sub.structs.map (·.name)
+      let localEnumNames := sub.enums.map (·.name)
+      let subImports := { subImports with
+        structs := subImports.structs ++ (siblingStructs.filter fun sd =>
+          !(localStructNames.contains sd.name))
+        enums := subImports.enums ++ (siblingEnums.filter fun ed =>
+          !(localEnumNames.contains ed.name))
+        implMethodSigs := subImports.implMethodSigs ++ siblingImplMethodSigs }
+      let subErrs := match checkModule sub subSummary subImports with
+        | .ok () => ([] : Diagnostics)
+        | .error ds => ds.addContext s!"while checking module '{sub.name}'"
+      errs ++ subErrs ++ checkSubmodules sub subSummary summaryTable
+  ) ([] : Diagnostics)
+
 /-- Check a multi-module program. Consumes resolved modules (proving name resolution
     happened) and uses summary table for import resolution. -/
 def checkProgram (resolved : List ResolvedModule)
@@ -3161,9 +3209,10 @@ def checkProgram (resolved : List ResolvedModule)
             (sibName ++ "_" ++ name, fs)
       ) []
       let imports := { imports with functions := imports.functions ++ siblingFns }
-      match checkModule m summary imports with
-      | .ok () => errs
-      | .error ds => errs ++ ds.addContext s!"while checking module '{m.name}'"
+      let topErrs := match checkModule m summary imports with
+        | .ok () => ([] : Diagnostics)
+        | .error ds => ds.addContext s!"while checking module '{m.name}'"
+      errs ++ topErrs ++ checkSubmodules m summary summaryTable
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok () else .error allErrors
 

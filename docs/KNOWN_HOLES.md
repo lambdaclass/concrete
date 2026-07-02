@@ -19,10 +19,16 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**One open hole: H11** — projecting a non-Copy value out of a place *by value*
+**Two open holes: H11, H12.**
+
+**H11** — projecting a non-Copy value out of a place *by value*
 (`let g = w.f;` or `let g = arr[i];`) copies it instead of moving, so it can be owned
 twice (a duplication / double-free). Disclosed below; the fix needs position-aware
 place handling and is scheduled, not yet landed.
+
+**H12** — the `std` subtree is exempt from front-end (Check-pass) body checking,
+pending a migration with a countable burn-down; user submodules are fully checked
+(this was a much larger hole, fixed 2026-07-02 — see below).
 
 ### H11. Projecting a non-Copy value out of a place by value duplicates it — OPEN 2026-07-01
 
@@ -56,6 +62,45 @@ is nil (every corpus `w.f`/`arr[i]` value use is over a Copy type), so this is l
 **Gate:** the sound (Copy) and borrow forms are covered by
 `scripts/tests/check_linear_conservation.sh`; the buggy by-value non-Copy projection is
 noted there as the H11 gap (not yet asserted-reject, pending the fix).
+
+### H12. `std` bodies are exempt from front-end checking — OPEN 2026-07-02
+
+**Current state:** OPEN (disclosed, gated, migration scheduled). Until 2026-07-02,
+NO submodule body was ever front-end checked: `checkProgram` consumed submodule
+*signatures* but never checked their function *bodies*, so every `mod x;` file in a
+multi-file project — user code and the whole stdlib — compiled with the Check pass
+silently skipped. Type errors, **immutable assignments**, and **linearity
+violations** (leaks, double-consumes) in sub-files were accepted; only CoreCheck's
+coarser Core-level rules (capabilities, operator sanity) applied.
+
+```concrete
+// src/helper.con — before 2026-07-02 this COMPILED AND RAN:
+pub fn addx(a: u32) -> u32 {
+    let c: u32 = 5;
+    c = c + 1;        // assignment to immutable — never checked
+    return a + c;
+}
+```
+
+**Fixed for user code:** `checkProgram` now recurses into submodules
+(`checkSubmodules` in `Concrete/Check.lean`), mirroring Elab's submodule context
+(sibling types injected, imports resolved against the global table). User sub-files
+get the full front-end: types, linearity, borrows, mutability.
+
+**The remaining hole:** the `std` subtree is exempted by name. Running the checker
+over std surfaces **~384 violations** accumulated while it was unchecked — ~90
+immutable assignments, ~58 discarded `Option` results (E0286), dozens of
+match-arm-consumption disagreements and linear leaks in error paths, plus ~45
+E0254 field-access errors that may be *checker* limitations on std's
+generic/pointer-heavy shapes rather than std bugs. Migrating std is a burn-down:
+fix the real violations file by file, distinguish and fix any checker
+false-positives, then delete the exemption (the gate fails loudly if the exemption
+outlives its disclosure).
+
+**Gate:** `scripts/tests/check_submodule_check_coverage.sh` — asserts user
+sub-files are rejected for immutable-assign/type/linearity violations, a valid
+project still builds, and the std exemption stays marked (`KNOWN_HOLES H12` in
+`Concrete/Check.lean`) and disclosed here.
 
 ## Recently closed
 

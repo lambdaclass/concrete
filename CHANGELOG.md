@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Submodule bodies are now front-end checked; std exempted and disclosed (H12) (2026-07-02)
+
+`checkProgram` consumed submodule *signatures* but never checked their function
+*bodies*: every `mod x;` file in a multi-file project — user code and the whole
+stdlib — compiled with the Check pass silently skipped. Type errors, immutable
+assignments, and linearity violations in sub-files were accepted (an
+`i = i + 1` on a non-`mut` binding in a sub-file compiled and ran); only
+CoreCheck's coarser Core-level rules applied. Found while chasing a diagnostics
+misattribution during the front-end/back-end agreement sweep.
+
+- **Fixed for user code**: `checkSubmodules` recurses into submodules mirroring
+  Elab's context (sibling types injected, imports resolved against the global
+  table). User sub-files now get the full front-end: types, linearity, borrows,
+  mutability. Gate: `check_submodule_check_coverage.sh`.
+- **`std` is exempted and disclosed as KNOWN_HOLES H12**: checking it surfaces
+  ~384 accumulated violations (real bugs and possible checker limitations on
+  its generic/pointer-heavy shapes). Migration is ROADMAP Phase 7 #38b with a
+  countable burn-down; the gate fails loudly if the exemption outlives its
+  disclosure.
+
 ### CI re-greened: stale SSA goldens, &T match binding, if-let linearity decision (2026-07-01)
 
 CI had been red for 15 pushes (since 2026-06-27) on two accumulated failures;

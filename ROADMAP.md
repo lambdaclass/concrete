@@ -977,6 +977,20 @@ class and authority/allocation story.
     `http_headers` against checked-in vectors, `path_normalizer` against
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
+38b. [KNOWN_HOLES H12] Migrate `std` under the front-end checker. Submodule
+    bodies were never Check-pass checked until 2026-07-02; user submodules now
+    get full enforcement, but the `std` subtree is exempted by name in
+    `Concrete/Check.lean` (`checkSubmodules`) because checking it surfaces
+    ~384 accumulated violations: ~90 immutable assignments, ~58 discarded
+    `Option` results, match-arm-consumption disagreements and linear leaks in
+    error paths, plus ~45 E0254 field-access errors that may be CHECKER
+    limitations on std's generic/pointer-heavy shapes rather than std bugs.
+    Burn down file by file (fix real violations; diagnose and fix checker
+    false-positives), then remove the exemption — the
+    `check_submodule_check_coverage.sh` gate fails loudly if the exemption
+    outlives its H12 disclosure. This must complete before Phase 7 declares
+    stdlib surfaces stable: an unchecked stdlib undercuts every enforcement
+    claim the docs make.
 38a. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
     checked-arithmetic flip exposed syscall/sentinel-style code that relied on
     silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,
