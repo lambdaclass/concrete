@@ -113,17 +113,20 @@ Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
 it in sync when a hole is added or fixed. **Two open holes: H11 and H12.**
-H11: projecting a non-Copy value out of a place by value (`let g = w.f;` /
+H11: the remaining narrow place-projection conservation hole — projecting a
+non-Copy value out of a field or array element by value (`let g = w.f;` /
 `let g = arr[i];`) copies instead of moving, so it can be owned twice
 (double-free); latent (no corpus use), fix is context-sensitive
 (move-vs-borrow position) and scheduled. H12: `std` bodies are still exempt
 from front-end body checking while the migration burns down accumulated
 violations; user submodules are fully checked, but unchecked std would undercut
-the enforcement claim until the exemption is gone. H10 (array-literal
-duplication) is closed and gated (`test-linear-conservation`, E0205); H9
-(nested-scope linear leak) closed (Phase 6 #13a: move-through-let +
-per-block scope-exit + divergence, E0208/E0205, `test-linear-nested-scope`).
-The `_`/`let _`/bare-discard half of H6 is closed (E0287/E0288/E0289); H7
+the enforcement claim until the exemption is gone. The broad linearity and
+conservation model is otherwise enforced and gated: H10 (array-literal
+duplication) is closed (`test-linear-conservation`, E0205); non-Copy field
+assignment and `S { ..base }` duplication are rejected (E0219/E0220); H9
+(nested-scope linear leak) is closed (Phase 6 #13a: move-through-let +
+per-block scope-exit + divergence, E0208/E0205, `test-linear-nested-scope`);
+the `_`/`let _`/bare-discard half of H6 is closed (E0287/E0288/E0289). H7
 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
@@ -425,20 +428,23 @@ are folded out.
      false-green `check_ignored_result.sh` coverage hole is sealed.
 
 13b. **Close H11: by-value projection of a non-`Copy` sub-place must not copy.**
-   This is the remaining open conservation hole. Today `let g = w.f;` and
-   `let g = arr[i];` over a non-`Copy` field/element project a value out of a
-   place without invalidating the original owner, so the same linear value can
-   be owned twice. The fix must be position-aware, not a blanket field/index
-   rejection: `&w.f`, `&mut w.f`, `w.f.copy_method()`, `arr[i] = v`, and reads
-   of `Copy` fields/elements stay legal; only a by-value move of a non-`Copy`
-   sub-place is rejected. Concrete has no partial moves, so the source-level
-   rule is: move the whole owner through destructuring or an explicit
-   ownership-transfer API; borrow sub-places when you need scoped access. Extend
-   `scripts/tests/check_linear_conservation.sh` with rejecting rows for
-   non-`Copy` field/index projection and positive rows for Copy reads, borrows,
-   method calls that do not move the sub-place, and assignment forms. Close
-   `docs/KNOWN_HOLES.md` H11 only when the gate asserts the previous reproducer
-   fails.
+   The broad Copy/linearity conservation work has landed: array literals move
+   their elements, struct literals and destructuring conserve ownership,
+   non-Copy field overwrite is rejected, `S { ..base }` cannot duplicate a
+   non-Copy field, and discard/scope paths are gated. H11 is the remaining
+   narrow read-side exception. Today `let g = w.f;` and `let g = arr[i];` over a
+   non-`Copy` field/element project a value out of a place without invalidating
+   the original owner, so the same linear value can be owned twice. The fix must
+   be position-aware, not a blanket field/index rejection: `&w.f`, `&mut w.f`,
+   `w.f.copy_method()`, `arr[i] = v`, and reads of `Copy` fields/elements stay
+   legal; only a by-value move of a non-`Copy` sub-place is rejected. Concrete
+   has no partial moves, so the source-level rule is: move the whole owner
+   through destructuring or an explicit ownership-transfer API; borrow sub-places
+   when you need scoped access. Extend `scripts/tests/check_linear_conservation.sh`
+   with rejecting rows for non-`Copy` field/index projection and positive rows
+   for Copy reads, borrows, method calls that do not move the sub-place, and
+   assignment forms. Close `docs/KNOWN_HOLES.md` H11 only when the gate asserts
+   the previous reproducer fails.
 
 13c. **Write the value-flow conservation spec and make it a feature gate
    requirement.** The linearity work has three distinct failure classes:
@@ -460,22 +466,26 @@ are folded out.
    `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
    `check_linear_conservation.sh`, and `check_linear_nested_scope.sh`.
 
-13d. **Front-end checker coverage must include every module body.** A program is
-   not checked if only the root module body goes through `Check` while `mod x;`
-   files, inline submodules, nested submodules, or stdlib modules contribute only
-   signatures before `Elab`/`CoreCheck`. That creates a semantic-darkness lane:
-   type errors, capability violations, linearity violations, immutable
-   assignment, and mixed-width operations can hide until a coarser Core-level
-   backstop catches them, or worse, can receive poorer diagnostics than the same
-   code in the root file. Mirror Elab's submodule context in `Check`, recursively
-   check every submodule body, and add a gate proving that a bad submodule cannot
-   bypass the primary front-end checks. The gate must include at least: bad
-   linear discard, use-after-move, immutable assignment, missing capability,
-   mixed-width binop, and a sibling-submodule type reference that still checks.
+13d. ✅ **DONE for user code (2026-07-02) — front-end checker coverage includes
+   user module bodies.** The root bug was that `Check` consumed submodule
+   signatures but skipped submodule function bodies, so `mod x;` files and
+   nested modules could bypass source-level type, mutability, capability, and
+   linearity diagnostics until a coarser Core-level backstop caught them. This
+   is fixed for user code: `checkProgram` mirrors Elab's submodule context,
+   recursively checks submodule bodies, and
+   `scripts/tests/check_submodule_check_coverage.sh` proves that bad user
+   submodules cannot bypass the primary front-end checks: linear leak (E0208),
+   use-after-move (E0205), immutable assignment (E0217), missing capability
+   (E0520), mixed-width binop (E0228), and a sibling-submodule type-reference
+   positive case. The remaining open part is **KNOWN_HOLES H12**: the `std`
+   subtree is temporarily exempt while accumulated never-checked violations are
+   burned down. That migration is tracked in Phase 7 #38b; do not close H12
+   until the exemption is removed and the gate's disclosure checks flip.
 
-13e. **Run the final conservation sweep after H11.** Once by-value non-`Copy`
-   sub-place projection is rejected, do the remaining targeted probes for the
-   same class of bugs before calling the conservation story closed:
+13e. **Run the final conservation audit sweep after H11.** This is an audit,
+   not a known bug bucket. Once by-value non-`Copy` sub-place projection is
+   rejected, do the remaining targeted probes for the same class of bugs before
+   calling the conservation story closed:
    callable/callback values must not be able to capture a linear value and then
    duplicate or leak it through repeated invocation, storage, or handoff; raw
    pointer place writes (`derefAssign`, `arrayIndexAssign` through `*mut`, and

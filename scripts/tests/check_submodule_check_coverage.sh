@@ -71,6 +71,34 @@ mkproj "$TMPDIR/lin" 'mod helper {
 }'
 rejects "linear leak in sub-file (E0208)" "$TMPDIR/lin" "E0208"
 
+mkproj "$TMPDIR/uam" 'mod helper {
+    pub fn addx(a: u32) -> u32 {
+        let s: String = "moved";
+        drop_string(s);
+        drop_string(s);
+        return a;
+    }
+}'
+rejects "use-after-move in sub-file (E0205)" "$TMPDIR/uam" "E0205"
+
+mkproj "$TMPDIR/mw" 'mod helper {
+    pub fn addx(a: u32) -> u32 {
+        let mut b: i8 = 1;
+        let mut c: i32 = 2;
+        if b < c { return a; }
+        return a;
+    }
+}'
+rejects "mixed-width binop in sub-file (E0228)" "$TMPDIR/mw" "E0228"
+
+mkproj "$TMPDIR/cap" 'mod helper {
+    pub fn addx(a: u32) -> u32 {
+        let t: i64 = clock_monotonic_ns();
+        return a + ((t % 2) as u32);
+    }
+}'
+rejects "missing capability in sub-file (E0520)" "$TMPDIR/cap" "E0520"
+
 mkproj "$TMPDIR/okc" 'mod helper {
     pub fn addx(a: u32) -> u32 {
         let mut c: u32 = 5;
@@ -82,6 +110,37 @@ if (cd "$TMPDIR/okc" && "$COMPILER" build >/dev/null 2>&1); then
   ok "valid sub-file still builds"
 else
   no "valid sub-file failed to build"
+fi
+
+# Sibling-submodule TYPE reference still checks (positive case): helper uses a
+# struct defined in a sibling sub-file, mirroring Elab's sibling-type injection.
+mkdir -p "$TMPDIR/sib/src"
+printf '[package]\nname = "subcheck"\n' > "$TMPDIR/sib/Concrete.toml"
+cat > "$TMPDIR/sib/src/main.con" <<'EOF'
+mod subcheck {
+    mod shapes;
+    mod helper;
+    import helper.{area};
+    pub fn main() -> u32 { return area(); }
+}
+EOF
+cat > "$TMPDIR/sib/src/shapes.con" <<'EOF'
+mod shapes {
+    pub struct Copy Rect { w: u32, h: u32 }
+}
+EOF
+cat > "$TMPDIR/sib/src/helper.con" <<'EOF'
+mod helper {
+    pub fn area() -> u32 {
+        let r: Rect = Rect { w: 3, h: 4 };
+        return r.w * r.h;
+    }
+}
+EOF
+if (cd "$TMPDIR/sib" && "$COMPILER" build >/dev/null 2>&1); then
+  ok "sibling-submodule type reference checks and builds"
+else
+  no "sibling-submodule type reference failed"
 fi
 
 echo "=== the std exemption stays tracked and disclosed (H12) ==="
