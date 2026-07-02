@@ -114,3 +114,24 @@ Same source plus same compiler should yield the same binary. No timestamps, rand
 ## 18. Diagnostics Stay Structured
 
 The compiler keeps diagnostics structured through the main semantic pipeline. It may accumulate multiple errors across functions or modules, but it does not rely on broad recovery or ambiguous parse fallback to continue.
+
+## 19. Front-End Acceptance Implies Back-End Compilation
+
+A program the checker accepts must reach a binary (or fail only at a
+*documented* runtime trap). The front end (Check/CoreCheck) and the back end
+(Lower/SSA-verify/Emit) must agree on what the language is: an internal-error
+rejection (the E07xx SSA-verify family) on checker-accepted code is ALWAYS a
+compiler bug, never a user error. The same agreement extends to the
+interpreter — `--interp` must not run programs the compiler cannot compile.
+
+This rule exists because it was violated in practice: `typesCompatible` let
+mixed-width binops (`i8 < i32`) through check and the interpreter, and they
+died at SSA-verify with E0715 (fixed 2026-07-01, E0228 now rejects at check
+time). Shared predicates are the mechanism: when a type rule lives in ONE
+definition used by every pass (`binOpOperandsAgree` in `Shared.lean`), the
+passes cannot drift.
+
+Enforced by: the differential fuzzer's taxonomy (`fuzz_differential.py`
+classifies any E07xx/panic/crash on a generated well-typed program as
+`compiler_bug`, never `rejected`) and `check_mixed_width_binops.sh`.
+

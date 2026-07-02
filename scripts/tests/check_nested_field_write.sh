@@ -52,7 +52,7 @@ run two_d_array 'fn main() -> i64 { let mut m: [[i64;2];2] = [[1,2],[3,4]]; m[1]
 
 run nested_via_mut_ref 'struct Copy I { v: i64 } struct Copy O { i: I }
 fn setv(p: &mut O) -> i64 { p.i.v = 42; return 0; }
-fn main() -> i64 { let mut o: O = O { i: I{v:1} }; borrow mut o as r in R { let _: i64 = setv(r); } return o.i.v; }' 42
+fn main() -> i64 { let mut o: O = O { i: I{v:1} }; borrow mut o as r in R { setv(r); } return o.i.v; }' 42
 
 echo "=== single-level writes still work (no regression) ==="
 run single_field 'struct Copy P { x: i64 }

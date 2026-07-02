@@ -37,13 +37,13 @@ if "$COMPILER" examples/known_holes/raw_ptr_to_local/src/main.con -o "$TMP/canon
 else no "canonical fixture failed to compile"; fi
 
 run raw_ptr_store 'trusted fn store(p: *mut i64, v: i64) -> i64 { *p = v; return 0; }
-fn main() -> i64 { let mut x: i64 = 1; let _: i64 = store(&mut x as *mut i64, 99); return x; }' 99
+fn main() -> i64 { let mut x: i64 = 1; store(&mut x as *mut i64, 99); return x; }' 99
 run mutref_via_fn 'fn setit(p: &mut i64) -> i64 { *p = 42; return 0; }
-fn main() -> i64 { let mut x: i64 = 1; let _: i64 = setit(&mut x); return x; }' 42
+fn main() -> i64 { let mut x: i64 = 1; setit(&mut x); return x; }' 42
 run repeated_mutate 'trusted fn bump(p: *mut i64) -> i64 { *p = *p + 10; return 0; }
-fn main() -> i64 { let mut x: i64 = 5; let _: i64 = bump(&mut x as *mut i64); let _: i64 = bump(&mut x as *mut i64); return x; }' 25
+fn main() -> i64 { let mut x: i64 = 5; bump(&mut x as *mut i64); bump(&mut x as *mut i64); return x; }' 25
 run writes_around_addrof 'fn setit(p: &mut i64) -> i64 { *p = 42; return 0; }
-fn main() -> i64 { let mut x: i64 = 1; x = x + 100; let _: i64 = setit(&mut x); x = x + 1; return x; }' 43
+fn main() -> i64 { let mut x: i64 = 1; x = x + 100; setit(&mut x); x = x + 1; return x; }' 43
 
 echo "=== deref store/load consistent (kept from the original isolation) ==="
 run deref_consistent 'trusted fn rw(p: *mut i64, v: i64) -> i64 { *p = v; return *p; }

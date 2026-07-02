@@ -344,6 +344,18 @@ jobs:
       - name: Pattern-ergonomics gate (Phase 6 #5 — range patterns)
         run: bash scripts/tests/check_pattern_ergonomics.sh
 
+      - name: Lex-escapes gate (unknown escapes are E0001, never silently mangled)
+        run: bash scripts/tests/check_lex_escapes.sh
+
+      - name: Mixed-width binop gate (E0228 + flexible literals + interp cast normalization)
+        run: bash scripts/tests/check_mixed_width_binops.sh
+
+      - name: Trailing-value gate (if/match as value-block trailing values)
+        run: bash scripts/tests/check_trailing_value_blocks.sh
+
+      - name: Submodule-checking gate (KNOWN_HOLES H12 — user sub-file bodies checked; std exemption disclosed)
+        run: bash scripts/tests/check_submodule_check_coverage.sh
+
       - name: Struct-update gate (Phase 6 #5 — S { ..base })
         run: bash scripts/tests/check_struct_update.sh
 
