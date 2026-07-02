@@ -279,7 +279,14 @@ user needs *some* slab to write anything real. So the gate is:
 1. **The minimum slab is the Phase 5 core slab**: modules/imports, minimal
    project model, `concrete test`, core diagnostics, bytes/text/path, and
    collections.
-2. **Build exactly that** — not the full back half.
+2. **Build exactly that** — not the full back half. Two additions promoted to
+   pre-trial prerequisites (2026-07-02): **conditional Copy for generic
+   instantiations** (Phase 7 #3) — a trial user writes `Option<i32>` in hour
+   one and today gets told to write a full match (`if let` on non-Copy enums
+   rejects by design; the fix is known, and without it the trial measures a
+   missing keystone as language friction) — and the **H12 std migration**
+   (Phase 7 #38b), since the trial evaluates enforcement claims that an
+   unchecked stdlib currently undercuts.
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
    of Phases 11-19.**
 
@@ -383,8 +390,9 @@ are folded out.
 and sub-file errors became common when submodule checking landed), Phase 7
 #38b (std front-end migration, the H12 burn-down — an unchecked stdlib
 undercuts every enforcement claim), 13b (H11, the last conservation hole),
-then #18 (callable-values implementation) and #35 (the validation project)
-as the phase's exit path. Everything else in the active list is
+conditional Copy (Phase 7 #3 — promoted to a pre-trial prerequisite, see the
+external-validation gate), then #18 (callable-values implementation) and #35
+(the validation project) as the phase's exit path. Everything else in the active list is
 pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
@@ -709,9 +717,19 @@ pull-condition-gated or polish.
     local fast-suite green was treated as done. Finalization ritual after any
     push: `gh run list --workflow CI --limit 1` (or the repo dashboard) and
     confirm the latest run's conclusion; a red run is a stop-the-line item
-    before the next feature push. Candidate automation: a `make ci-status`
-    target wrapping `gh run list`, and/or a scheduled job that notifies on
-    consecutive red runs.
+    before the next feature push. Landed 2026-07-02: `make test-ci-gates`
+    (`run_ci_gates_local.sh`) runs every workflow gate locally, extracted from
+    the workflow file so the list cannot drift; and the monolithic proof-gate
+    CI job was split into three parallel jobs (proof/VC/obligations,
+    language-surface, compiler-infra) so a red run reports all failures at
+    once instead of one per 46-minute cycle. Remaining: a scheduled job that
+    notifies on consecutive red runs.
+34b. Shared gate harness: `scripts/tests/lib/gate.sh` (ok/no counters,
+    `rejects`/`accepts`/`agree`/`agree_both` helpers, tmpdir lifecycle) so new
+    gates stop hand-rolling the same bash and fixtures stay greppable —
+    three stale-fixture CI failures on 2026-07-01/02 hid inside per-gate
+    heredocs. `check_cast_matrix.sh` is the first consumer; new gates should
+    source it, and existing gates migrate opportunistically when touched.
 35. Add the Phase 6 validation project: a small C/Rust-style CLI using the
     Phase 5 core slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, narrow const
@@ -1082,8 +1100,9 @@ class and authority/allocation story.
     false-positives), then remove the exemption — the
     `check_submodule_check_coverage.sh` gate fails loudly if the exemption
     outlives its H12 disclosure. This must complete before Phase 7 declares
-    stdlib surfaces stable: an unchecked stdlib undercuts every enforcement
-    claim the docs make.
+    stdlib surfaces stable AND before the external-validation trial runs: an
+    unchecked stdlib undercuts every enforcement claim the docs make, and the
+    trial exists precisely to test whether those claims feel trustworthy.
 38a. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
     checked-arithmetic flip exposed syscall/sentinel-style code that relied on
     silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,
@@ -2057,7 +2076,10 @@ machine-readable.
     E07xx/panic on a generated well-typed program as a compiler bug
     (LANGUAGE_INVARIANTS #19). Remaining (a) tail: string/linear-value shapes,
     seed rotation in CI (nightly campaign, not just two fixed seeds), and
-    auto-minimization of failures. And (b) the defense-in-depth
+    auto-minimization of failures. The per-claim differential companion landed
+    2026-07-02: `check_cast_matrix.sh` pins every (source width x edge value) ->
+    every-width cast against the interpreter, mechanically covering the
+    ARITHMETIC_POLICY truncation/reinterpretation claims. And (b) the defense-in-depth
     ref-return lowering fix — a reference-typed return materialized from a ref
     identifier / `&place` emits a spurious extra load. (b) is unreachable from
     safe code (reference returns are rejected at the type level — H1), so it is
@@ -2095,6 +2117,20 @@ machine-readable.
     lossy casts, div/mod-zero, shifts, returned-reference rejection, ByteView
     wrong-buffer guards, HMAC/SHA-256 modular arithmetic, and capability-bearing
     stdlib calls.
+13b. **One source of typing truth (typed AST).** Every 2026-07 front-end bug was
+    two passes holding different opinions about the same program: Check typed
+    literals from the hint while Elab typed them from the sibling operand;
+    `typesCompatible` was lenient where SSA-verify was strict (the E0715 class);
+    Elab carried a private int-vs-fixed-width re-elaboration Check knew nothing
+    about; std skipped Check entirely while Elab/CoreCheck ran (H12). Shared
+    predicates (`binOpOperandsAgree`) and LANGUAGE_INVARIANTS #19 gates DETECT
+    drift; the architecture still INVITES it — three semi-independent semantic
+    judgments over one program. Endgame: Check produces a TYPED AST that Elab
+    consumes (types computed once, threaded forward), deleting Elab's re-inference
+    and CoreCheck's overlapping rules down to genuine Core-shape validation.
+    Large refactor; do it as this phase's capstone, staged per expression family,
+    with the differential fuzzer + `test-ci-gates` as the safety net. Until then,
+    every new type rule MUST live in one shared predicate used by all passes.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and

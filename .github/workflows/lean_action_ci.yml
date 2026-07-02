@@ -308,11 +308,20 @@ jobs:
       - name: ObligationCore red-team gate (Phase 3 hardening)
         run: bash scripts/tests/check_obligation_redteam.sh
 
-      - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
-        run: bash scripts/tests/check_compiler_ledger.sh
+  language-gates:
+    name: Language-surface gates (Phase 5-6)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Docs-drift gate (Phase 4 #44 — present-tense docs reference only real artifacts)
-        run: bash scripts/tests/check_docs_drift.sh
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Module/import/visibility gate (Phase 5 #1)
         run: bash scripts/tests/check_module_visibility.sh
@@ -419,6 +428,27 @@ jobs:
       - name: Memory-model gate (Phase 6 #33 — no uninitialized reads by construction)
         run: bash scripts/tests/check_memory_model.sh
 
+  infra-gates:
+    name: Compiler-infra gates (ledger, diagnostics, codegen, CLI, known holes)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
+        run: bash scripts/tests/check_compiler_ledger.sh
+
+      - name: Docs-drift gate (Phase 4 #44 — present-tense docs reference only real artifacts)
+        run: bash scripts/tests/check_docs_drift.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
@@ -460,6 +490,9 @@ jobs:
 
       - name: Codegen differential gate (interpreter vs compiled agreement)
         run: bash scripts/tests/check_codegen_differential.sh
+
+      - name: Cast-matrix differential gate (every width pair x edge value, interp == compiled)
+        run: bash scripts/tests/check_cast_matrix.sh
 
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
