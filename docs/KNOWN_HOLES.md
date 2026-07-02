@@ -89,20 +89,23 @@ get the full front-end: types, linearity, borrows, mutability.
 
 **The remaining hole (burn-down in progress):** std submodules NOT on the
 `stdMigratedSubmodules` list (`Concrete/Check.lean`) are exempt; listed ones are
-fully checked. **Tranche 1 (2026-07-02): 384 -> 145 remaining violations; 17 of
-~30 modules migrated** (alloc ascii bitset bytes env fs hash libc math mem
-ordered_set ptr rand sha256 string test writer). The tranche split cleanly into
+fully checked. **Tranche 1+2 (2026-07-02): 384 -> 155 remaining violations; 23 of
+~30 modules migrated** (alloc args ascii bitset bytes env fmt fs hash hex libc
+math mem numeric ordered_set ptr rand set sha256 string test text writer). The tranche split cleanly into
 CHECKER fixes it forced — divergence-aware consumption merges (a diverging
 branch/arm cannot disagree at the merge point; killed the spurious
 E0209/E0212/E0205 class, ~63 errors) and field assignment on generic-struct /
 std-`String` receivers (`self.len = …` in `impl<T> Vec<T>`, wrong E0254, ~45
 errors) — and std fixes (115 `let` -> `let mut` declarations, u64/Int counter
-types). Remaining violations in UNMIGRATED
-modules are semantic — E0286 discarded fallible results in tests, E0208 linear
-leaks in error paths, E0207 consume-inside-loop shapes (need restructure or a
-consume-then-diverge exemption) — measured at ~130-145 when tranche 1 closed;
-the new return-path consumption rule (leak on an early `return`) may surface
-more, so re-inventory at tranche 2 start. The gate pins the migrated set (it
+types). Remaining 155 violations sit in 7
+unmigrated modules (map, ordered_map, slice, parse, net, result, process,
+option, time, heap, vec, path, deque, io) and are semantic: ~58 E0286
+discarded fallible results in tests and ~89 E0208 linear leaks in error
+paths. The E0207 consume-inside-loop class is GONE — tranche 2 added the
+consume-then-exit exemption (a function-exiting branch may consume outer
+linears inside a loop; a loop nested inside that branch resets it —
+`consume_then_return_in_loop.con` / `pressure_err_consume_in_inner_loop.con`
+pin both sides). The gate pins the migrated set (it
 only grows) and fails loudly if the exemption machinery outlives this
 disclosure.
 

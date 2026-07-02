@@ -1350,6 +1350,7 @@ run_err "$TESTDIR/pressure_err_heap_leak.con" "was never consumed"
 run_err "$TESTDIR/pressure_err_linear_no_destroy.con" "was never consumed"
 run_err "$TESTDIR/pressure_err_destroy_then_use.con" "used after move"
 run_err "$TESTDIR/pressure_err_branch_leak.con" "was never consumed"  # leak on the returning else-path (return-path consumption rule)
+run_err "$TESTDIR/pressure_err_consume_in_inner_loop.con" "inside a loop"  # E0207 survives inside a loop nested in a fn-exiting branch
 # Bitwise errors
 run_err "$TESTDIR/error_bitwise_float.con" "type mismatch"
 # Print errors

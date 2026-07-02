@@ -24,7 +24,7 @@ mod args {
         memcpy(buf, raw, n);
         let end: *mut u8 = buf + n;
         *end = 0;
-        let s: String = String { ptr: buf, len: n as Int, cap: (n + 1) as Int };
+        let s: String = String { ptr: buf, len: n, cap: n + 1 };
         return s;
     }
 }

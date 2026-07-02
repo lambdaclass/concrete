@@ -159,7 +159,7 @@ else
   no "std exemption marker missing from Check.lean (removed? then close H12 and delete this check)"
 fi
 # The burn-down list only GROWS: every migrated module must stay migrated.
-MIGRATED="alloc ascii bitset bytes env fs hash libc math mem ordered_set ptr rand sha256 string test writer"
+MIGRATED="alloc args ascii bitset bytes env fmt fs hash hex libc math mem numeric ordered_set ptr rand set sha256 string test text writer"
 MISSING=""
 for m in $MIGRATED; do
   grep -q "\"$m\"" Concrete/Check.lean || MISSING="$MISSING $m"

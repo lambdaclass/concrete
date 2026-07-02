@@ -914,10 +914,10 @@ mod numeric {
         let mut b: Bytes = Bytes::new();
         b.push(7); b.push(3); b.push(10); b.push(20); b.push(30);
         let mut cur: ByteCursor = ByteCursor::from_bytes(&b);
-        let _r0: Result<u8, CursorError> = cur.read_u8();
-        let _r1: Result<u8, CursorError> = cur.read_u8();
+        match cur.read_u8() { Result::Ok { value } => {}, Result::Err { error } => {} }
+        match cur.read_u8() { Result::Ok { value } => {}, Result::Err { error } => {} }
         let start: u64 = cur.pos();
-        let _sk: Result<u64, CursorError> = cur.skip(3);
+        match cur.skip(3) { Result::Ok { value } => {}, Result::Err { error } => {} }
         let v: ByteView = ByteView::of_cursor(start, &cur);
         let mut rc: i32 = 0;
         if !assert_eq::<u64>(v.off(), 2, "of_cursor off should be 2") { rc = 1; }

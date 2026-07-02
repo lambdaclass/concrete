@@ -1,0 +1,21 @@
+// Pressure error: a loop nested INSIDE a function-exiting branch iterates
+// BEFORE the return, so consuming an outer linear there is still a
+// double-consume hazard (the exiting-branch exemption resets at loop entry).
+// Should fail: E0207.
+fn main() with(Alloc) -> Int {
+    let s: String = "abc";
+    let mut i: Int = 0;
+    while i < 10 {
+        if i == 3 {
+            let mut j: Int = 0;
+            while j < 2 {
+                drop_string(s);
+                j = j + 1;
+            }
+            return 1;
+        }
+        i = i + 1;
+    }
+    drop_string(s);
+    return 0;
+}

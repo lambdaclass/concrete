@@ -1091,13 +1091,14 @@ class and authority/allocation story.
 38b. [KNOWN_HOLES H12] Migrate `std` under the front-end checker. Submodule
     bodies were never Check-pass checked until 2026-07-02; user submodules get
     full enforcement, and std burns down via the `stdMigratedSubmodules` list
-    in `Concrete/Check.lean`. **Tranche 1 done (2026-07-02): 384 -> 145
-    violations, 17/~30 modules migrated**; it forced two real checker fixes
-    (divergence-aware consumption merges; field assignment on generic/String
-    receivers) plus 115 mechanical `let mut` fixes in std. Remaining 145 are
-    semantic (E0286 discarded fallible results in tests, E0208 leaks in error
-    paths, E0207 consume-inside-loop shapes — the last may deserve a
-    consume-then-diverge exemption instead of restructuring). Continue file by
+    in `Concrete/Check.lean`. **Tranches 1+2 done (2026-07-02): 384 -> 155
+    violations, 23/~30 modules migrated**; they forced FOUR checker fixes
+    (divergence-aware consumption merges; the return-path leak rule; field
+    assignment on generic/String receivers; the consume-then-exit E0207
+    exemption) plus 115 mechanical `let mut` fixes, `T: Copy` bounds on
+    math/test generics, and per-site linear fixes. Remaining 155 are semantic
+    (E0286 discarded fallible results in tests, E0208 leaks in error paths)
+    concentrated in the collection/IO modules. Continue file by
     file, then remove the exemption machinery — the
     `check_submodule_check_coverage.sh` gate fails loudly if the exemption
     outlives its H12 disclosure. This must complete before Phase 7 declares

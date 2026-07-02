@@ -1,0 +1,17 @@
+// A branch that EXITS THE FUNCTION may consume an outer linear even inside a
+// loop: no iteration follows a return (E0207 exemption; the return-path rule
+// still requires everything live to be consumed there). Expected: 3
+fn main() with(Alloc) -> Int {
+    let s: String = "abc";
+    let mut i: Int = 0;
+    while i < 10 {
+        if i == 3 {
+            let n: Int = string_length(&s);
+            drop_string(s);
+            return n;
+        }
+        i = i + 1;
+    }
+    drop_string(s);
+    return 0;
+}

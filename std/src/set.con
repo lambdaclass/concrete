@@ -97,9 +97,9 @@ mod set {
         let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
         s.insert(10);
         s.insert(20);
-        s.remove(&10);
         let k10: i32 = 10;
         let k20: i32 = 20;
+        s.remove(&k10);
         if s.contains(&k10) { s.drop(); return 1; }
         if !(s.contains(&k20)) { s.drop(); return 1; }
         if s.len() != 1 { s.drop(); return 1; }

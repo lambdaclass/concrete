@@ -67,6 +67,12 @@ structure TypeEnv where
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
+  -- True while checking a branch/arm that EXITS THE FUNCTION (every path
+  -- returns): consuming an outer linear there is safe even inside a loop —
+  -- the loop can never re-iterate past a return. Reset on entering any new
+  -- loop (a loop nested INSIDE the exiting branch iterates before the return,
+  -- so it needs its own exiting branch).
+  inFnExitingBranch : Bool := false
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
@@ -778,8 +784,11 @@ def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
     | .frozen =>
       throwCheck (.variableFrozenByBorrow name) span
     | .unconsumed | .used =>
-      -- Loop depth check: linear values from outer scope cannot be consumed inside a loop
-      if info.loopDepth < env.loopDepth then
+      -- Loop depth check: linear values from outer scope cannot be consumed
+      -- inside a loop — except inside a branch that exits the function
+      -- (`while … { if bad { s.drop(); return 1; } }`): the return-path rule
+      -- then guarantees everything live is consumed, and no iteration follows.
+      if info.loopDepth < env.loopDepth && !env.inFnExitingBranch then
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
       let vars' := env.vars.map fun (n, vi) =>
@@ -1414,7 +1423,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     let env ← getEnv
     let savedLoopDepth := env.loopDepth
     let savedBreakTy := env.loopBreakTy
-    setEnv { env with loopDepth := env.loopDepth + 1, loopBreakTy := none }
+    setEnv { env with loopDepth := env.loopDepth + 1, loopBreakTy := none, inFnExitingBranch := false }
     -- Check body
     checkStmts body env.currentRetTy
     -- Get break type if any
@@ -2109,6 +2118,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             let _ ← checkExpr hi
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
+          -- Function-exiting arms relax the consume-inside-loop rule (see
+          -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
+          if blockExitsFunction body then
+            let cur ← getEnv
+            setEnv { cur with inFnExitingBranch := true }
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
           let curEnv ← getEnv
@@ -2235,6 +2249,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | .mk _ _ _ _ guard body => do
           match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
+        -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
+        if blockExitsFunction body then
+          let cur ← getEnv
+          setEnv { cur with inFnExitingBranch := true }
         -- Check all stmts except the last, then extract type from last
         let bodyInit := body.dropLast
         checkStmts bodyInit envBefore.currentRetTy
@@ -2649,7 +2667,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let _condTy ← checkExpr cond
     -- Snapshot variable states before branches
     let envBefore ← getEnv
-    -- Check then branch
+    -- Check then branch (flagging it if it exits the function, which relaxes
+    -- the consume-inside-loop rule — see TypeEnv.inFnExitingBranch)
+    if blockExitsFunction thenBody then
+      setEnv { envBefore with inFnExitingBranch := true }
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
     -- H9: a linear value declared in the then-branch must be consumed before the
@@ -2660,6 +2681,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     setEnv envBefore
     match elseBody with
     | some stmts =>
+      if blockExitsFunction stmts then
+        setEnv { envBefore with inFnExitingBranch := true }
       checkStmts stmts retTy
       let envAfterElse ← getEnv
       -- H9: same for else-branch locals.
@@ -2679,7 +2702,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- this, else-branch locals leaked into the outer env (the accidental, lopsided
       -- way they used to be caught at function scope).
       let env ← getEnv
-      setEnv { env with vars := env.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n) }
+      setEnv { env with vars := env.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n),
+                        inFnExitingBranch := envBefore.inFnExitingBranch }
     | none =>
       -- No else branch: then branch must not consume any linear var
       -- Exception: if then-branch diverges, consumption is fine (control never falls through)
@@ -2705,7 +2729,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels }
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
@@ -2722,7 +2746,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels }
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
     checkStmts body retTy
     match step with
     | some stepStmt => checkStmt stepStmt retTy
@@ -3262,8 +3286,9 @@ def checkModule (m : Module) (summary : FileSummary)
     covers all of std and this machinery is deleted. Removing an entry is a
     regression (`check_submodule_check_coverage.sh` pins the set). -/
 def stdMigratedSubmodules : List String :=
-  ["alloc", "ascii", "bitset", "bytes", "env", "fs", "hash", "libc", "math",
-   "mem", "ordered_set", "ptr", "rand", "sha256", "string", "test", "writer"]
+  ["alloc", "args", "ascii", "bitset", "bytes", "env", "fmt", "fs", "hash",
+   "hex", "libc", "math", "mem", "numeric", "ordered_set", "ptr", "rand",
+   "set", "sha256", "string", "test", "text", "writer"]
 
 /-- Check every submodule's function BODIES, recursively, mirroring Elab's
     submodule context (sibling submodule types injected, imports resolved

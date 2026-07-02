@@ -12,7 +12,7 @@ mod hex {
     /// Encode a byte buffer as a lowercase hex string.
     /// Each byte becomes two hex characters.
     pub fn encode_bytes(data: &Vec<u8>) with(Alloc) -> String {
-        let out: String = String::new();
+        let mut out: String = String::new();
         let mut i: u64 = 0;
         while i < data.len {
             let b: u8 = data.get_unchecked(i);
@@ -36,7 +36,7 @@ mod hex {
     /// Encode a Vec<u32> (e.g. SHA-256 hash words) as a hex string.
     /// Each u32 is encoded big-endian as 8 hex characters.
     pub fn encode_u32_vec(words: &Vec<u32>) with(Alloc) -> String {
-        let out: String = String::new();
+        let mut out: String = String::new();
         let mut i: u64 = 0;
         while i < words.len {
             let word: u32 = words.get_unchecked(i);
@@ -97,7 +97,7 @@ mod hex {
 
     #[test]
     fn test_encode_u32() with(Alloc) -> i32 {
-        let out: String = String::new();
+        let mut out: String = String::new();
         encode_u32(0xff, &mut out);
         let expected: String = "000000ff";
         let ok: bool = out.eq(&expected);

@@ -219,11 +219,13 @@ mod text {
         let s: String = "hello";
         match AsciiText::try_new(s) {
             Option::Some { value } => {
-                if !assert_eq::<u64>(value.0.len, 5, "AsciiText wraps String of len 5") {
-                    value.0.drop();
+                // `.0` is a move-out (no partial moves): unwrap ONCE, then use.
+                let inner: String = value.0;
+                if !assert_eq::<u64>(inner.len, 5, "AsciiText wraps String of len 5") {
+                    inner.drop();
                     return 1;
                 }
-                value.0.drop();
+                inner.drop();
                 return 0;
             }
             Option::None => { return 2; }
