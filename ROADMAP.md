@@ -616,6 +616,15 @@ are folded out.
 34. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
+34a. Process: CI health must be CHECKED before calling a branch green — twice
+    now (the dead-YAML episode greened 2026-06-24, and again 2026-06-27 to
+    2026-07-01) CI stayed red for 14-15 pushes with nobody noticing, because
+    local fast-suite green was treated as done. Finalization ritual after any
+    push: `gh run list --workflow CI --limit 1` (or the repo dashboard) and
+    confirm the latest run's conclusion; a red run is a stop-the-line item
+    before the next feature push. Candidate automation: a `make ci-status`
+    target wrapping `gh run list`, and/or a scheduled job that notifies on
+    consecutive red runs.
 35. Add the Phase 6 validation project: a small C/Rust-style CLI using the
     Phase 5 core slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, narrow const
