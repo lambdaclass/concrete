@@ -354,8 +354,10 @@ are folded out.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
-   bare/deferred non-Copy discard, E0288 `_` over a transitive resource owner via
-   `ownsResource`, E0289 `let _` removed; gate `check_linear_discard.sh`). The
+   bare/deferred non-Copy discard, E0288 `_` over a non-`Copy` value, E0289
+   `let _` removed; gate `check_linear_discard.sh`). `_` may ignore only
+   `Copy`; non-`Copy` values are linear and must be consumed, moved, returned,
+   borrowed, or explicitly destroyed. The
    nested-scope half landed here (KNOWN_HOLES H9, gate `check_linear_nested_scope.sh`):
    move-through-let (`let g = f` consumes `f`); per-block scope-exit so a linear
    value declared in an `if`/`else` branch or match arm must be consumed before the
@@ -444,9 +446,27 @@ are folded out.
    destructuring, field/index projection, field/index assignment, functional
    update, match scrutinees, `?`, `defer`, and wildcard patterns. Future syntax
    cannot land without adding a conservation/discard/scope row to the relevant
-   gate. Add `docs/VALUE_FLOW_CONSERVATION.md` and make it the canonical bridge
-   between `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
+   gate. Partial-pattern forms are conservation/discard sites too: `let-else`,
+   `if let`, and `while let` lower through an unmatched path, so over non-`Copy`
+   enums they reject by design (`E0288`) until the whole instantiated enum is
+   `Copy` (for example, after conditional `Copy` makes `Option<i32>` genuinely
+   `Copy`). Do not add variant-aware weakening as a special case. Add
+   `docs/VALUE_FLOW_CONSERVATION.md` and make it the canonical bridge between
+   `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
    `check_linear_conservation.sh`, and `check_linear_nested_scope.sh`.
+
+13d. **Front-end checker coverage must include every module body.** A program is
+   not checked if only the root module body goes through `Check` while `mod x;`
+   files, inline submodules, nested submodules, or stdlib modules contribute only
+   signatures before `Elab`/`CoreCheck`. That creates a semantic-darkness lane:
+   type errors, capability violations, linearity violations, immutable
+   assignment, and mixed-width operations can hide until a coarser Core-level
+   backstop catches them, or worse, can receive poorer diagnostics than the same
+   code in the root file. Mirror Elab's submodule context in `Check`, recursively
+   check every submodule body, and add a gate proving that a bad submodule cannot
+   bypass the primary front-end checks. The gate must include at least: bad
+   linear discard, use-after-move, immutable assignment, missing capability,
+   mixed-width binop, and a sibling-submodule type reference that still checks.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
