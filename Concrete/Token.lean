@@ -38,6 +38,7 @@ inductive TokenKind where
   | doubleColon  -- ::
   | question     -- ?
   -- Special
+  | lexError (msg : String)  -- malformed lexeme (e.g. unknown string escape); parse must reject
   | eof
   deriving Repr, BEq, Inhabited
 
@@ -132,6 +133,7 @@ def TokenKind.toString : TokenKind → String
   | .fatArrow => "=>"
   | .doubleColon => "::"
   | .question => "?"
+  | .lexError msg => s!"<lex error: {msg}>"
   | .eof => "<eof>"
 
 instance : ToString TokenKind := ⟨TokenKind.toString⟩

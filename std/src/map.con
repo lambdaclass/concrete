@@ -579,7 +579,7 @@ mod map {
         m.insert(3, 30);
         let mut sum: i32 = 0;
         let ks: Vec<i32> = m.keys();
-        let i: u64 = 0;
+        let mut i: Int = 0;
         while i < vec_len::<i32>(&ks) {
             sum = sum + vec_get::<i32>(&ks, i);
             i = i + 1;
@@ -588,7 +588,7 @@ mod map {
         if sum != 6 { m.drop(); return 1; }
         let vs: Vec<i32> = m.values();
         let mut vsum: i32 = 0;
-        let j: u64 = 0;
+        let mut j: Int = 0;
         while j < vec_len::<i32>(&vs) {
             vsum = vsum + vec_get::<i32>(&vs, j);
             j = j + 1;

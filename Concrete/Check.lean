@@ -112,6 +112,7 @@ inductive CheckError where
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
+  | binOpOperandMismatch (op : String) (lhsTy : String) (rhsTy : String)
   -- arrayLiteralEmpty, cannotAssignThroughNonMutRef moved to CoreCheck
   -- Slice 3: Borrow/escape/freeze
   | cannotBorrowMoved (name : String)
@@ -215,6 +216,7 @@ def CheckError.message : CheckError → String
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
+  | .binOpOperandMismatch op lhsTy rhsTy => s!"operands of '{op}' have different numeric types '{lhsTy}' and '{rhsTy}'"
   -- cannotAssignThroughNonMutRef, arrayLiteralEmpty moved to CoreCheck
   -- Slice 3
   | .cannotBorrowMoved name => s!"cannot borrow '{name}': already moved"
@@ -293,15 +295,22 @@ def CheckError.hint : CheckError → Option String
   | .discardedLinear _ => some "consume it: bind and pass it on / return it / destroy() it, destructure it exhaustively, or `?` it"
   | .wildcardDiscardsNonCopy _ => some "bind the value/field (not `_`) and consume it — pass it on, return it, or destroy() it; `_` may ignore only Copy values"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
+  | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
+  | .ifBranchTypeMismatch thenTy elseTy =>
+    if thenTy == "()" || elseTy == "()" then
+      some "a branch whose last item is a statement or `expr;` has value `()`; end the branch with a trailing expression (no `;`) to give it a value"
+    else none
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
     type-mismatch family carries an expected-vs-actual pair; the rest are `none`. -/
 def CheckError.expected : CheckError → Option String
   | .typeMismatch _ e _ => some e
+  | .binOpOperandMismatch _ e _ => some e
   | _ => none
 def CheckError.actual : CheckError → Option String
   | .typeMismatch _ _ a => some a
+  | .binOpOperandMismatch _ _ a => some a
   | _ => none
 
 def CheckError.code : CheckError → String
@@ -337,6 +346,7 @@ def CheckError.code : CheckError → String
   | .matchArmTypeMismatch _ _ => "E0225"
   | .breakTypeMismatch _ _ => "E0226"
   | .intLiteralOutOfRange _ _ _ _ => "E0227"
+  | .binOpOperandMismatch _ _ _ => "E0228"
   -- Slice 3: Borrow/escape (E0230–E0239)
   | .cannotBorrowMoved _ => "E0230"
   | .cannotBorrowMutablyBorrowed _ => "E0231"
@@ -394,6 +404,27 @@ def throwCheck (e : CheckError) (span : Option Span := none)
   throw [{ severity := .error, message := e.message, pass := "check", span := span,
            hint := e.hint, code := e.code, expected := e.expected, actual := e.actual,
            related := related }]
+
+/-- A literal-only expression is FLEXIBLE: it adopts its type from context (the
+    other binop operand, or the type hint), mirroring Core elaboration. Covers
+    bare int/float literals, negated or parenthesized ones, and arithmetic over
+    literals only (`(8 + 9) % 1000`). -/
+private partial def isFlexibleLit : Expr → Bool
+  | .intLit _ _ => true
+  | .floatLit _ _ => true
+  | .paren _ inner => isFlexibleLit inner
+  | .unaryOp _ .neg inner => isFlexibleLit inner
+  | .binOp _ _ l r => isFlexibleLit l && isFlexibleLit r
+  | _ => false
+
+/-- Source spelling of a binary operator, for diagnostics (E0228). -/
+private def binOpSymbol : BinOp → String
+  | .add => "+" | .sub => "-" | .mul => "*" | .div => "/" | .mod => "%"
+  | .eq => "==" | .neq => "!=" | .lt => "<" | .gt => ">" | .leq => "<=" | .geq => ">="
+  | .and_ => "&&" | .or_ => "||"
+  | .bitand => "&" | .bitor => "|" | .bitxor => "^" | .shl => "<<" | .shr => ">>"
+  | .wrappingAdd => "wrapping_add" | .wrappingSub => "wrapping_sub" | .wrappingMul => "wrapping_mul"
+  | .saturatingAdd => "saturating_add" | .saturatingSub => "saturating_sub" | .saturatingMul => "saturating_mul"
 
 private def throwCheckMsg (msg : String) (span : Option Span := none) : CheckM α :=
   throw [{ severity := .error, message := msg, pass := "check", span := span, hint := none }]
@@ -1223,13 +1254,32 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         return .fn_ paramTys sig.capSet sig.retTy
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
   | .binOp _ op lhs rhs =>
-    -- Check lhs first (with hint), then use its type as hint for rhs
-    let lTy ← checkExpr lhs hint
-    let lTyR ← resolveType lTy
-    let rTy ← checkExpr rhs (some lTyR)
-    let rTyR ← resolveType rTy
+    -- A literal-only side is flexible: it adopts the type of the OTHER operand
+    -- (mirroring Core elaboration), not the surrounding hint — `inner[64 + i]`
+    -- with i: i32 types 64 as i32 even though the index hint is Int. So type
+    -- the non-literal side first and use its type as the literal side's hint.
+    let (lTy, lTyR, rTyR) ←
+      if isFlexibleLit lhs && !(isFlexibleLit rhs) then do
+        let rTy ← checkExpr rhs hint
+        let rTyR ← resolveType rTy
+        let lTy ← checkExpr lhs (some rTyR)
+        let lTyR ← resolveType lTy
+        pure (lTy, lTyR, rTyR)
+      else do
+        let lTy ← checkExpr lhs hint
+        let lTyR ← resolveType lTy
+        let rTy ← checkExpr rhs (some lTyR)
+        let rTyR ← resolveType rTy
+        pure (lTy, lTyR, rTyR)
     let isTypeVarL := match lTyR with | .typeVar _ => true | _ => false
     let isTypeVarR := match rTyR with | .typeVar _ => true | _ => false
+    -- Concrete numeric operands must agree EXACTLY (width and signedness).
+    -- A mixed-width pair has no single-width SSA lowering; it used to slip
+    -- past check (and run under --interp) only to die at SSA-verify (E0715).
+    if isNumeric lTyR && isNumeric rTyR && lTyR != rTyR then
+      match op with
+      | .and_ | .or_ => pure ()  -- bool-only ops; the non-bool operand is the real error
+      | _ => throwCheck (.binOpOperandMismatch (binOpSymbol op) (tyToString lTyR) (tyToString rTyR)) (some e.getSpan)
     match op with
     | .add | .sub | .mul | .div | .mod =>
       if isInteger lTyR && lTyR == rTyR then return lTy

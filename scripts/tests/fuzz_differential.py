@@ -22,30 +22,44 @@ import argparse, os, random, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")
 
-# A generator tuned for HIGH VALID-PROGRAM YIELD. Everything is i32. To stay
-# inside the (current) grammar and the linear/borrow rules, the structure is
-# constrained:
-#   - `simple(d)`: a pure i32 expr with NO if/match (safe in any position),
-#     bounded with `% 1000` so checked overflow rarely traps.
-#   - if/match-EXPRESSIONS appear ONLY as a let/assignment RHS (a value slot the
-#     parser accepts) — never as a binop operand or a block's trailing value
-#     (those are the known parser gaps; emitting them would just yield rejects).
+# A generator tuned for HIGH VALID-PROGRAM YIELD across the INTEGER WIDTH
+# LATTICE (i8/i16/i32/i64/u8/u16/u32). Structure:
+#   - v0 is always i32 (it feeds the &mut i32 helper); v1/v2 get random widths.
+#     Every expression is built in ONE target width; reads of other-width places
+#     insert an explicit `as` cast (mixed-width binops are a compile error,
+#     E0228), so cast codegen is exercised on every width pair.
+#   - `simple(d, ty)`: a pure expr in `ty` with NO if/match. Arithmetic is
+#     bounded with `% B` (B per width) so products stay in range; unsigned
+#     types avoid `-` (negative intermediates would trap every other case).
+#     Residual traps (e.g. negative-to-unsigned casts) still compare: the
+#     interpreter trap must match the compiled trap.
+#   - if/match-EXPRESSIONS appear as let/assign RHS values AND as branch/arm
+#     trailing values (`if c { match .. } else { .. }`).
 #   - `&mut place` deltas are LITERALS (never another var read), to avoid
-#     borrow-vs-use conflicts.
+#     borrow-vs-use conflicts; &mut targets are i32-typed places only.
 # All locals are Copy, so nothing needs linear consumption.
+WIDTHS = ["i8", "i16", "i32", "i64", "u8", "u16", "u32"]
+# Arithmetic bound per width: keep lit*lit and place*place inside the range
+# after `% B` (worst product (B-1)^2 must fit the SIGNED range, since i8 is the
+# narrowest signed carrier of B=10 values: 9*9=81 <= 127).
+BOUND = {"i8": 10, "u8": 10, "i16": 100, "u16": 100,
+         "i32": 1000, "u32": 1000, "i64": 1000}
+
 class Gen:
     def __init__(self, rng, depth):
         self.rng = rng
         self.maxdepth = depth
         self.ivars = ["v0", "v1", "v2"]
+        # v0 stays i32 (the &mut helper is fn(&mut i32, i32)).
+        self.varty = {"v0": "i32", "v1": rng.choice(WIDTHS), "v2": rng.choice(WIDTHS)}
         self.arrs = ["a0"]
         self.structs = ["s0"]
         self.ctr = 0  # for unique loop-counter names (no bare-block wrapper)
         self.loops = True  # generate while-loops (off available for debugging; the
                            # H7 loop-SSA bug it once exposed is now fixed)
 
-    def lit(self):
-        return str(self.rng.randint(0, 9))
+    def lit(self, ty="i32"):
+        return str(self.rng.randint(0, min(9, BOUND[ty] - 1)))
 
     def idx(self):
         # Array index: half in-bounds constants, half DYNAMIC (a variable, which
@@ -58,50 +72,69 @@ class Gen:
             return str(r.randint(0, 3))
         return f"({r.choice(self.ivars)}) as Int"
 
-    def place(self):
+    def rd(self, srcty, expr, ty):
+        """Read a place of type `srcty` as `ty`, casting when they differ."""
+        return expr if srcty == ty else f"(({expr}) as {ty})"
+
+    def place(self, ty):
         r = self.rng
-        return r.choice([lambda: r.choice(self.ivars),
+        k = r.randint(0, 2)
+        if k == 0:
+            v = r.choice(self.ivars)
+            return self.rd(self.varty[v], v, ty)
+        if k == 1:
+            return self.rd("i32", f"{r.choice(self.arrs)}[{self.idx()}]", ty)
+        return self.rd("i32", f"{r.choice(self.structs)}.{r.choice(['x','y'])}", ty)
+
+    def placeMutI32(self):
+        """An i32-typed mutable place, for the &mut i32 helper."""
+        r = self.rng
+        return r.choice([lambda: "v0",
                          lambda: f"{r.choice(self.arrs)}[{self.idx()}]",
                          lambda: f"{r.choice(self.structs)}.{r.choice(['x','y'])}"])()
 
-    def simple(self, d):
-        """Pure i32 expression, no if/match. Safe in any position."""
+    def simple(self, d, ty="i32"):
+        """Pure expression of type `ty`, no if/match. Safe in any position."""
         r = self.rng
         if d <= 0:
-            return r.choice([self.lit, self.place])()
+            return r.choice([lambda: self.lit(ty), lambda: self.place(ty)])()
         k = r.randint(0, 4)
         if k == 0:
-            return self.lit()
+            return self.lit(ty)
         if k == 1:
-            return self.place()
-        op = r.choice(["+", "-", "*"])
-        return f"(({self.simple(d-1)} {op} {self.simple(d-1)}) % 1000)"
+            return self.place(ty)
+        ops = ["+", "*"] if ty.startswith("u") else ["+", "-", "*"]
+        op = r.choice(ops)
+        return f"(({self.simple(d-1, ty)} {op} {self.simple(d-1, ty)}) % {BOUND[ty]})"
 
     def bexpr(self, d):
+        ty = self.rng.choice(WIDTHS)
         op = self.rng.choice(["<", ">", "==", "<=", ">=", "!="])
-        return f"{self.simple(max(0,d-1))} {op} {self.simple(max(0,d-1))}"
+        return f"{self.simple(max(0,d-1), ty)} {op} {self.simple(max(0,d-1), ty)}"
 
-    def valueRHS(self, d):
-        """An i32 value for a let/assign RHS: a simple expr, or an if/match
-        expression (these only parse in a value slot). Branches recurse into
-        valueRHS, so nested `if`/`match`-as-arm-value shapes are generated — the
-        family where the nested-match SSA miscompile lived."""
+    def valueRHS(self, d, ty="i32"):
+        """A `ty` value for a let/assign RHS or a branch/arm trailing value: a
+        simple expr, or an if/match expression. Branches recurse into valueRHS,
+        so nested `if`/`match`-as-arm-value shapes are generated — the family
+        where the nested-match SSA miscompile lived."""
         r = self.rng
         if d <= 0:
-            return self.simple(0)
+            return self.simple(0, ty)
         k = r.randint(0, 4)
         if k <= 1:
-            return self.simple(d)
-        if k == 2:  # if-expression (branches may nest)
-            return f"if {self.bexpr(d)} {{ {self.valueRHS(d-1)} }} else {{ {self.valueRHS(d-1)} }}"
+            return self.simple(d, ty)
+        if k == 2:  # if-expression (branches may nest, incl. trailing match)
+            return f"if {self.bexpr(d)} {{ {self.valueRHS(d-1, ty)} }} else {{ {self.valueRHS(d-1, ty)} }}"
         if k == 3:  # match on a small int (arms may nest)
-            return (f"match (({self.simple(d)}) % 3) {{ 0 => {self.valueRHS(d-1)}, "
-                    f"1 => {self.valueRHS(d-1)}, _ => {self.valueRHS(d-1)} }}")
-        # match on a Copy enum, binding + using the payload
+            return (f"match (({self.simple(d)}) % 3) {{ 0 => {self.valueRHS(d-1, ty)}, "
+                    f"1 => {self.valueRHS(d-1, ty)}, _ => {self.valueRHS(d-1, ty)} }}")
+        # match on a Copy enum, binding + using the payload (payloads are small
+        # literals, so the cast to any width never traps)
+        b = BOUND[ty]
         return (f"match e0 {{ "
-                f"E::A {{ v }} => ((v + {self.simple(d-1)}) % 1000), "
-                f"E::B {{ w }} => ((w * {self.simple(d-1)}) % 1000), "
-                f"E::C {{}} => {self.valueRHS(d-1)} }}")
+                f"E::A {{ v }} => (({self.rd('i32', 'v', ty)} + {self.lit(ty)}) % {b}), "
+                f"E::B {{ w }} => (({self.rd('i32', 'w', ty)} * {self.lit(ty)}) % {b}), "
+                f"E::C {{}} => {self.valueRHS(d-1, ty)} }}")
 
     def stmt(self, d):
         r = self.rng
@@ -109,37 +142,43 @@ class Gen:
         if k == 4 and not self.loops:
             k = 3  # loops disabled → fall back to a &mut mutation
         if k == 0:
-            return f"{r.choice(self.ivars)} = {self.valueRHS(d)};"
+            v = r.choice(self.ivars)
+            return f"{v} = {self.valueRHS(d, self.varty[v])};"
         if k == 1:
             return f"{r.choice(self.arrs)}[{self.idx()}] = {self.valueRHS(d)};"
         if k == 2:
             return f"{r.choice(self.structs)}.{r.choice(['x','y'])} = {self.valueRHS(d)};"
         if k == 3:  # &mut place mutation; delta is a literal (no borrow conflict)
-            return f"addv(&mut {self.place()}, {self.lit()});"
-        if k == 6:  # reassign the enum scrutinee to a random variant
+            return f"addv(&mut {self.placeMutI32()}, {self.lit()});"
+        if k == 6:  # reassign the enum scrutinee to a random variant (literal
+            # payloads keep later payload-to-narrow-width casts trap-free)
             return r.choice([
-                f"e0 = E::A {{ v: {self.simple(0)} }};",
-                f"e0 = E::B {{ w: {self.simple(0)} }};",
+                f"e0 = E::A {{ v: {self.lit()} }};",
+                f"e0 = E::B {{ w: {self.lit()} }};",
                 "e0 = E::C {};"])
         if k == 4:  # bounded while loop (unique counter, no bare-block wrapper)
             self.ctr += 1
             kv = f"k{self.ctr}"
             return (f"let mut {kv}: i32 = 0; while {kv} < 3 {{ "
-                    f"addv(&mut {r.choice(self.ivars)}, {self.lit()}); {kv} = {kv} + 1; }}")
+                    f"addv(&mut {self.placeMutI32()}, {self.lit()}); {kv} = {kv} + 1; }}")
         return (f"if {self.bexpr(d)} {{ {self.stmt(max(0,d-1))} }} "
                 f"else {{ {self.stmt(max(0,d-1))} }}")
 
     def program(self):
         r = self.rng
-        body = ["let mut v0: i32 = " + self.lit() + ";",
-                "let mut v1: i32 = " + self.lit() + ";",
-                "let mut v2: i32 = " + self.lit() + ";",
+        body = [f"let mut v0: i32 = {self.lit()};",
+                f"let mut v1: {self.varty['v1']} = {self.lit(self.varty['v1'])};",
+                f"let mut v2: {self.varty['v2']} = {self.lit(self.varty['v2'])};",
                 "let mut a0: [i32; 4] = [" + ", ".join(self.lit() for _ in range(4)) + "];",
                 "let mut s0: P = P { x: " + self.lit() + ", y: " + self.lit() + " };",
                 "let mut e0: E = E::A { v: " + self.lit() + " };"]
         for _ in range(r.randint(4, 10)):
             body.append(self.stmt(self.maxdepth))
-        body.append(f"return (({self.simple(self.maxdepth)}) % 100000) as Int;")
+        # Digest EVERY mutable location (all widths sign/zero-extend to Int), so
+        # a miscompile in any of them changes the printed value.
+        body.append("return ((((v0) as Int) + ((v1) as Int) * 3 + ((v2) as Int) * 5"
+                    " + ((a0[0]) as Int) * 7 + ((a0[3]) as Int) * 11"
+                    " + ((s0.x) as Int) * 13 + ((s0.y) as Int) * 17) % 100000);")
         inner = "\n        ".join(body)
         return ("mod m {\n"
                 "    struct Copy P { x: i32, y: i32 }\n"

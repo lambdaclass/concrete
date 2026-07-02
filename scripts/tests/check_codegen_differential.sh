@@ -9,11 +9,11 @@
 # compile/reject-only suite.
 #
 # Three honest exclusion lists (never silent):
-#   EXPECTED_DIVERGE — the interpreter uses unbounded Int; the compiled binary
-#     uses fixed-width values. CASTS (`as`) truncate/sign-extend, so they
-#     legitimately differ (interp keeps the unbounded value). (The deeper #18
-#     fix gives the interpreter a fixed-width mode so these agree; until then
-#     they are documented.)
+#   EXPECTED_DIVERGE — divergences with a documented cause. (Now EMPTY: the
+#     historical entries were the `as`-cast class — the interpreter retagged a
+#     cast value's type without normalizing it into the target range. Fixed
+#     2026-07-01: `evalCast` wraps into the target width, matching the
+#     compiled trunc/zext/sext, so casts agree on both sides.)
 #   EXPECTED_TRAP — checked arithmetic (ROADMAP #10): overflow is a defined
 #     abort on BOTH sides, so neither produces a value. interp must exit nonzero
 #     AND the compiled binary must abort. (Pre-#10 these wrapped and were listed
@@ -32,8 +32,8 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-# unbounded-Int vs fixed-width casts: legitimately differ (no trap).
-EXPECTED_DIVERGE=" cast_signext cast_truncate "
+# no documented divergences remain (casts agree since the evalCast fix).
+EXPECTED_DIVERGE=" "
 # checked-arithmetic overflow: both sides trap (no value on either side).
 EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap "
 # interpreter cannot execute these shapes yet.

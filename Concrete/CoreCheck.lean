@@ -328,7 +328,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
         if !isNumeric lTy && !hasTypeVar lTy then
           addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
-        if !typesCompatible lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
+        -- Operands must agree EXACTLY (width and signedness): a mixed-width
+        -- binop has no single-width SSA lowering (E0715). Check.lean rejects
+        -- this first (E0228) with a source span; this is the Core-level backstop.
+        if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
           addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
     | .wrappingAdd | .wrappingSub | .wrappingMul
     | .saturatingAdd | .saturatingSub | .saturatingMul =>
@@ -337,10 +340,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
       if !isInteger lTy && !hasTypeVar lTy then
         addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
-      if !typesCompatible lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
+      if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
         addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
     | .eq | .neq | .lt | .gt | .leq | .geq =>
-      if !typesCompatible lTy rTy then
+      if !binOpOperandsAgree lTy rTy then
         addCCError (.comparisonOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
       if ty != .bool then
         addCCError (.comparisonResultNotBool (toString (repr ty)))
@@ -350,6 +353,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     | .bitand | .bitor | .bitxor | .shl | .shr =>
       if !isInteger lTy then
         addCCError (.bitwiseOnNonInteger (toString (repr lTy)))
+      -- Bitwise/shift operands previously had NO agreement check at all and
+      -- mixed widths escaped to SSA-verify (E0715).
+      let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+      if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
+        addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
 
   | .unaryOp op operand _ty =>
     ccCheckExpr operand

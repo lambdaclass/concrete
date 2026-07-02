@@ -7390,6 +7390,8 @@ def diagnosticCodesReport : String :=
     entry "E0224" "check" "error" "if branch type mismatch",
     entry "E0225" "check" "error" "match arm type mismatch",
     entry "E0226" "check" "error" "break value type mismatch",
+    entry "E0227" "check" "error" "integer literal out of range",
+    entry "E0228" "check" "error" "binary operand type mismatch",
     -- Check: borrow/escape (E0230–E0235)
     entry "E0230" "check" "error" "cannot borrow: already moved",
     entry "E0231" "check" "error" "cannot borrow: already mutably borrowed",

@@ -388,6 +388,15 @@ partial def parseWithCaps : ParseM CapSet := do
   else
     return .empty
 
+/-- Demote a value block's trailing value marker. Used when an `if` parsed with
+    value-block branches turns out to be a STATEMENT `if` (mid-block, or no
+    `else`): its branch values go nowhere, so the trailing expression becomes an
+    ordinary expression statement (same meaning as `expr;`). -/
+private def demoteTrailingValue (stmts : List Stmt) : List Stmt :=
+  match stmts.getLast? with
+  | some (.expr sp e true) => stmts.dropLast ++ [.expr sp e false]
+  | _ => stmts
+
 mutual
 
 partial def parsePrimary : ParseM Expr := do
@@ -852,16 +861,36 @@ partial def parseExprBlock : ParseM (List Stmt) := do
     -- we accept it without a semicolon.
     let sp ← peekSpan
     let stmtTk ← peek
-    -- If the token starts a keyword statement (let, return, if, while, etc.), parse normally
+    -- If the token starts a keyword statement (let, return, while, etc.), parse normally
     match stmtTk with
-    | .«let» | .return_ | .while_ | .for_ | .match_ | .break_ | .continue_
+    | .«let» | .return_ | .while_ | .for_ | .break_ | .continue_
     | .defer_ | .borrow_ | .label _ | .assert_ | .assume_ =>
       let stmt ← parseStmt
       stmts := stmts ++ [stmt]
-    | .if_ =>
-      -- In an expr block, `if` before `}` is an if-expression (trailing value)
-      -- Otherwise parse as statement
+    | .match_ =>
+      -- A `match` that closes the block (no `;` after `}`) AND has an arm that
+      -- ends with a value is the block's trailing VALUE:
+      -- `let v = if c { match x { .. } } else { .. }`. parseStmt marks match
+      -- statements non-value, so flip the flag when it turns out to be a
+      -- trailing value. A trailing match whose arms are all statements stays a
+      -- statement (its lowering has no value merge).
+      let armEndsWithValue := fun (body : List Stmt) => match body.getLast? with
+        | some (.expr _ _ true) => true
+        | _ => false
       let stmt ← parseStmt
+      let stmt := match stmt, (← peek) with
+        | .expr msp (.match_ mmsp scrut arms) false, .rbrace =>
+          let anyValueArm := arms.any fun a => match a with
+            | .mk _ _ _ _ _ body | .litArm _ _ _ body
+            | .varArm _ _ _ body | .rangeArm _ _ _ _ _ body => armEndsWithValue body
+          if anyValueArm then Stmt.expr msp (.match_ mmsp scrut arms) true
+          else Stmt.expr msp (.match_ mmsp scrut arms) false
+        | s, _ => s
+      stmts := stmts ++ [stmt]
+    | .if_ =>
+      -- An `if` here may be the block's trailing value (if-expression) or an
+      -- ordinary statement `if`; parseIfInExprBlock decides after parsing.
+      let stmt ← parseIfInExprBlock
       stmts := stmts ++ [stmt]
     | _ =>
       -- Parse as expression
@@ -1121,6 +1150,53 @@ partial def parseIfLet (sp : Span) : ParseM Stmt := do
   let successArm := MatchArm.mk sp enumName variant bindings none thenBody
   let wildcardArm := MatchArm.varArm sp "_" none elseBody
   return .expr sp (.match_ sp scrutinee [successArm, wildcardArm]) false
+
+/-- An `if` inside a VALUE block (if-expression branch, while-else block, match
+    arm block). It may be the block's trailing value — `if a { match .. } else
+    if b { .. } else { .. }` closing the block — or an ordinary statement `if`.
+    Both parse branch blocks as value blocks; which one it was is decided AFTER
+    parsing: an `if` with an `else` that closes the enclosing block is the
+    block's value (an if-expression, isValue=true); anything else is a
+    statement `if` whose branch value markers are demoted. `if let` keeps its
+    statement form. This implements the trailing-no-`;`-is-a-value rule (#36)
+    for `if`/`match` in value blocks; previously they always parsed as
+    statements, so the branch typed as `()` (a confusing E0224) or the nested
+    branch failed to parse at all ("expected ';', got }"). -/
+partial def parseIfInExprBlock : ParseM Stmt := do
+  let sp ← peekSpan
+  expect .if_
+  if (← peek) == .«let» then
+    return ← parseIfLet sp
+  let cond ← parseExpr
+  let thenBody ← parseExprBlock
+  -- Value-form only if a branch actually ENDS with a value (a trailing
+  -- expression, value match, or nested value if). A trailing `if c { a(); }
+  -- else { b(); }` whose branches are all statements stays a statement `if` —
+  -- its lowering differs (no value merge), so flipping it would change the
+  -- SSA of existing programs for no gain.
+  let endsWithValue := fun (ss : List Stmt) => match ss.getLast? with
+    | some (.expr _ _ true) => true
+    | _ => false
+  if (← peek) == .else_ then
+    advance
+    if (← peek) == .if_ then
+      -- else-if: recurse; the inner result's shape (value vs statement) was
+      -- decided by the same criteria, so chain levels agree.
+      let elseStmt ← parseIfInExprBlock
+      match elseStmt with
+      | .expr esp eExpr true =>
+        return .expr sp (.ifExpr sp cond thenBody [.expr esp eExpr true]) true
+      | _ =>
+        return .ifElse sp cond (demoteTrailingValue thenBody) (some [elseStmt])
+    else
+      let elseBody ← parseExprBlock
+      if (← peek) == .rbrace && (endsWithValue thenBody || endsWithValue elseBody) then
+        return .expr sp (.ifExpr sp cond thenBody elseBody) true
+      else
+        return .ifElse sp cond (demoteTrailingValue thenBody) (some (demoteTrailingValue elseBody))
+  else
+    -- No else: an if-expression needs both branches, so this is a statement.
+    return .ifElse sp cond (demoteTrailingValue thenBody) none
 
 partial def parseIf : ParseM Stmt := do
   let sp ← peekSpan
@@ -2307,6 +2383,16 @@ partial def parseProgram : ParseM (List Module) := do
     feed proof/codegen use `parse` and must reject a non-empty diagnostics list. -/
 def parseProgramPartial (source : String) : (List Module × Diagnostics) :=
   let tokens := tokenize source
+  -- A lex error (unknown escape, unterminated literal) poisons the whole
+  -- token stream; report it directly instead of a misleading downstream
+  -- "expected X" at whatever token the garbage happened to produce.
+  match tokens.find? (fun t => match t.kind with | .lexError _ => true | _ => false) with
+  | some t =>
+    let msg := match t.kind with | .lexError m => m | _ => ""
+    let hint := if msg.startsWith "unknown" then some "use \\\\ for a literal backslash" else none
+    ([], [{ severity := .error, message := msg, pass := "parse", span := some t.span,
+            hint := hint, code := "E0001" }])
+  | none =>
   let st := mkParserState tokens
   let (res, finalSt) := parseProgram.run.run st
   match res with

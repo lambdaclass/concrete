@@ -184,15 +184,16 @@ impl_method = [ 'pub' ] 'fn' IDENT [ type_params ] '(' [ method_params ] ')' [ c
 (* Statements                                                       *)
 (* ================================================================ *)
 
-(* 'match' is consumed here; it may be a statement or expression.   *)
-(* The parser tries match-as-statement first; if followed by '='    *)
-(* or ';' it falls through to expr_or_assign handling.              *)
+(* 'match' in statement position is a statement; there is NO        *)
+(* postfix/binop continuation after the closing '}'. A match used   *)
+(* as a value appears in a value position (let/assign RHS, or the   *)
+(* trailing expression of a value block).                           *)
 stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
      | 'return' [ expr ] ';'
      | 'if' if_tail
      | 'while' while_tail
      | 'for' for_tail
-     | 'match' expr '{' { match_arm } '}' [ match_stmt_tail ]
+     | 'match' expr '{' { match_arm } '}'
      | 'break' [ LABEL | expr ] ';'
      | 'continue' [ LABEL ] ';'
      | 'defer' expr ';'
@@ -200,9 +201,6 @@ stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
      | LABEL ':' labeled_tail
      | expr_or_assign ';'
      ;
-
-(* After match expr { arms }: optional postfix/binop/assign then ';' *)
-match_stmt_tail = { postfix_op } { binop unary_expr } [ '=' expr ] ';' ;
 
 (* After 'if'/'while', peek for 'let' (destructuring conditional, which     *)
 (* desugars to a match) vs. an ordinary boolean condition.                   *)
@@ -285,8 +283,16 @@ match_body = block | stmt ;
 (*   8. << >>                                                       *)
 (*   9. + -                                                         *)
 (*  10. * / %                                                       *)
+(*  11. 'as' type          (cast)                                   *)
+(*  12. - ! ~ & *          (unary prefix)                           *)
+(*  13. . [] -> ?          (postfix)                                *)
+(*                                                                  *)
+(* So postfix binds tighter than unary (`-c.n` is `-(c.n)`), and    *)
+(* unary binds tighter than 'as' (`-x as i32` is `(-x) as i32`;     *)
+(* write `-(x as i32)` to cast first). Casts chain and may be       *)
+(* followed by further postfix ops: `x as u8 as i32`.               *)
 
-expr = unary_expr { binop unary_expr } ;
+expr = cast_expr { binop cast_expr } ;
 
 binop = '||' | '&&'
       | '==' | '!='
@@ -296,6 +302,8 @@ binop = '||' | '&&'
       | '+' | '-'
       | '*' | '/' | '%'
       ;
+
+cast_expr = unary_expr { 'as' type { postfix_op } } ;
 
 unary_expr = '-' unary_expr
            | '!' unary_expr
@@ -314,7 +322,6 @@ postfix_op = '.' postfix_dot
            | '[' expr ']'
            | '->' IDENT
            | '?'
-           | 'as' type
            ;
 
 postfix_dot = IDENT [ dot_ident_tail ]
@@ -325,9 +332,19 @@ dot_ident_tail = '::' type_args call_args
                | call_args
                ;
 
-(* 'match' as expression is parsed at stmt level to avoid          *)
-(* FIRST/FIRST conflict; the match_stmt_tail rule handles the      *)
-(* expression continuation case.                                    *)
+(* VALUE FORMS OF STATEMENT KEYWORDS — described here, not encoded  *)
+(* as rules: in expression (value) position the parser also accepts *)
+(*                                                                  *)
+(*   'if' expr block 'else' ( block | if-expression )               *)
+(*   'while' expr block 'else' block                                *)
+(*   'match' expr '{' { match_arm } '}'                             *)
+(*                                                                  *)
+(* (if requires 'else'; the while 'else' block provides the value   *)
+(* when the loop never breaks; match arms provide the value.) In    *)
+(* STATEMENT position the same keywords parse as statements (see    *)
+(* stmt). The dispatch is by position, which the position-blind     *)
+(* FIRST/FIRST checker cannot express, so these alternatives are    *)
+(* deliberately left out of primary_expr.                           *)
 primary_expr = INT
              | FLOAT
              | STRING

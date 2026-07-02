@@ -141,7 +141,7 @@ mod set {
         if vec_len::<i32>(&elems) != 3 { vec_free::<i32>(elems); s.drop(); return 1; }
         // Sum elements to verify all are present (order not guaranteed)
         let mut sum: i32 = 0;
-        let mut i: u64 = 0;
+        let mut i: Int = 0;
         while i < vec_len::<i32>(&elems) {
             sum = sum + vec_get::<i32>(&elems, i);
             i = i + 1;

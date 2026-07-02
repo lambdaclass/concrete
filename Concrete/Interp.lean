@@ -298,7 +298,13 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
 
 def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   match v with
-  | .int n _ => .ok (.int n targetTy)
+  -- `as` keeps the low bits (ARITHMETIC_POLICY: silent truncation /
+  -- bit-pattern reinterpretation), so the value must be NORMALIZED into the
+  -- target type's range, exactly like the compiled trunc/zext/sext. Merely
+  -- retagging the type kept e.g. `(-11) as u32` at -11, so later unsigned
+  -- arithmetic computed on the wrong value (spurious checked-add traps,
+  -- wrong `%` results) and diverged from the compiled binary.
+  | .int n _ => .ok (.int (wrapToType targetTy n) targetTy)
   | .bool true => .ok (.int 1 targetTy)
   | .bool false => .ok (.int 0 targetTy)
   | _ => .error "interp: unsupported cast"

@@ -42,6 +42,17 @@ def typesCompatible (a b : Ty) : Bool :=
    | .ptrMut t1, .ptrConst t2 | .ptrConst t1, .ptrMut t2 => t1 == t2
    | _, _ => false)
 
+/-- Strict operand agreement for binary operators: exactly the same type, or the
+    mut/const pointer pairing. Unlike `typesCompatible`, numeric operands must
+    match in BOTH width and signedness — a mixed pair (i8 + i32, u8 < Int, ...)
+    has no single-width SSA lowering and used to escape the front-end only to
+    die at SSA-verify (E0715). -/
+def binOpOperandsAgree (a b : Ty) : Bool :=
+  a == b ||
+  (match a, b with
+   | .ptrMut t1, .ptrConst t2 | .ptrConst t1, .ptrMut t2 => t1 == t2
+   | _, _ => false)
+
 /-- Check if capSet `caller` is a superset of `callee`. -/
 def capsContain (caller callee : CapSet) : Bool :=
   match callee with

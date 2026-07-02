@@ -177,7 +177,8 @@ where
         (s, .floatLit acc)
     | none => (s, .floatLit acc)
 
-/-- Lex a string literal (after opening quote). -/
+/-- Lex a string literal (after opening quote). Only the escapes listed here
+    exist; anything else after `\` is an error token (never silently dropped). -/
 partial def lexStringLoop (s : LexerState) (acc : String) : LexerState × TokenKind :=
   match s.peek with
   | some '"' => (s.advance, .strLit acc)
@@ -190,10 +191,11 @@ partial def lexStringLoop (s : LexerState) (acc : String) : LexerState × TokenK
     | some '\\' => lexStringLoop s.advance (acc.push '\\')
     | some '"' => lexStringLoop s.advance (acc.push '"')
     | some '0' => lexStringLoop s.advance (acc.push (Char.ofNat 0))
-    | some c => lexStringLoop s.advance (acc.push c)
-    | none => (s, .strLit acc)
+    | some c =>
+      (s.advance, .lexError s!"unknown string escape '\\{c}' (valid escapes: \\n \\t \\r \\0 \\\\ \\\")")
+    | none => (s, .lexError "unterminated string literal")
   | some c => lexStringLoop s.advance (acc.push c)
-  | none => (s, .strLit acc)
+  | none => (s, .lexError "unterminated string literal")
 
 /-- Lex a char literal (after opening single quote). -/
 def lexCharLit (s : LexerState) : LexerState × TokenKind :=
@@ -231,7 +233,9 @@ def lexCharLit (s : LexerState) : LexerState × TokenKind :=
       match s.peek with
       | some '\'' => (s.advance, .charLit (Char.ofNat 0))
       | _ => (s, .eof)
-    | _ => (s, .eof)
+    | some c =>
+      (s.advance, .lexError s!"unknown character escape '\\{c}' (valid escapes: \\n \\t \\r \\0 \\\\ \\')")
+    | none => (s, .lexError "unterminated character literal")
   | some c =>
     let s := s.advance
     match s.peek with
@@ -349,6 +353,10 @@ where
     let tok : Token := { kind, span := sp }
     match kind with
     | .eof => acc ++ [tok]
+    -- Stop at the first malformed lexeme: the rest of the stream would be
+    -- garbage, and some error states (unterminated literal at end of input)
+    -- cannot advance, so continuing would not terminate.
+    | .lexError _ => acc ++ [tok]
     | _ => go s' (acc ++ [tok])
 
 end Concrete
