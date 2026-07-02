@@ -2,7 +2,7 @@ mod process {
     import std.libc.{exit as libc_exit, getpid as libc_getpid, fork as libc_fork, kill as libc_kill, waitpid as libc_waitpid, execvp as libc_execvp};
     import std.alloc.{grow,dealloc};
 
-    pub enum ProcessError {
+    pub enum Copy ProcessError {
         ForkFailed,
         KillFailed,
         WaitFailed,
@@ -14,13 +14,13 @@ mod process {
     pub fn sig_kill() -> i32 { return 9; }
     pub fn sig_term() -> i32 { return 15; }
 
-    pub enum ForkResult {
+    pub enum Copy ForkResult {
         Parent { child_pid: i32 },
         Child,
         Err { error: ProcessError },
     }
 
-    pub enum ExitStatus {
+    pub enum Copy ExitStatus {
         Exited { code: i32 },
         Signaled { raw: i32 },
     }
@@ -66,10 +66,14 @@ mod process {
             return self.pid;
         }
 
-        pub fn wait(&self) with(Unsafe, Process) -> Result<ExitStatus, ProcessError> {
+        // Consuming: a process is waited on exactly once — the Child handle
+        // IS the obligation, and wait() discharges it (linear process API).
+        pub fn wait(self) with(Unsafe, Process) -> Result<ExitStatus, ProcessError> {
+            // Destructure = consume the handle up front (it owns only the pid).
+            let Child { pid } = self;
             let status: i32 = 0;
             let status_ptr: *mut i32 = &status as *mut i32;
-            let ret: i32 = libc_waitpid(self.pid, status_ptr as *mut i32, 0);
+            let ret: i32 = libc_waitpid(pid, status_ptr as *mut i32, 0);
             if ret < 0 {
                 return Result::<ExitStatus, ProcessError>::Err { error: ProcessError::WaitFailed };
             }

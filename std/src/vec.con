@@ -52,15 +52,8 @@ mod vec {
             return self.ptr + at;
         }
 
-        /// Bounds-checked set. Returns false if index is out of bounds.
-        pub fn set(&mut self, at: u64, value: T) -> bool {
-            if at >= self.len {
-                return false;
-            }
-            let target_ptr: *mut T = self.ptr + at;
-            *target_ptr = value;
-            return true;
-        }
+        // Bounds-checked `set` lives in the Copy-bounded impl below: its
+        // early `return false` must be free to drop the rejected value.
 
         /// Unchecked set. Caller must ensure index is within bounds.
         pub fn set_unchecked(&mut self, at: u64, value: T) {
@@ -165,6 +158,16 @@ mod vec {
 
     // Value reader for Copy elements (the Copy cell of the value model).
     trusted impl<T: Copy> Vec<T> {
+        /// Bounds-checked set. Returns false if index is out of bounds.
+        pub fn set(&mut self, at: u64, value: T) -> bool {
+            if at >= self.len {
+                return false;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+            return true;
+        }
+
         /// Unchecked access (no bounds check). Caller must ensure index is valid.
         pub fn get_unchecked(&self, at: u64) -> T {
             return *(self.ptr + at);

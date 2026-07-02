@@ -2,7 +2,7 @@ mod time {
     import std.libc.{time as libc_time, clock_gettime, nanosleep};
     import std.alloc.{grow,dealloc};
 
-    pub struct Duration {
+    pub struct Copy Duration {
         secs: i64,
         nanos: i64,
     }
@@ -28,7 +28,7 @@ mod time {
         }
     }
 
-    pub struct Instant {
+    pub struct Copy Instant {
         secs: i64,
         nanos: i64,
     }

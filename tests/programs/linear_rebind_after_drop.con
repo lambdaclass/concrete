@@ -1,0 +1,10 @@
+// Linear REBIND: a `let mut` linear variable may be reassigned once its old
+// value is consumed; the new value is then consumed normally. Expected: 5
+fn main() with(Alloc) -> Int {
+    let mut s: String = "hello";
+    drop_string(s);
+    s = "world";
+    let n: Int = string_length(&s);
+    drop_string(s);
+    return n;
+}

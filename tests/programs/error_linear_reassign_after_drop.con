@@ -1,4 +1,6 @@
-// Tests that even after dropping, linear variables cannot be reassigned
+// Linear REBIND is legal: after the old value is consumed, the binding may be
+// reassigned (`acc = f(acc, x)` — the fold pattern). But the REBOUND value is
+// a new live linear value and must itself be consumed — this program leaks it.
 mod test {
     fn main() with(Alloc) -> i32 {
         let mut s: String = "hello";

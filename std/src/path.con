@@ -130,6 +130,7 @@ mod path {
 
         let seg1: String = "home";
         p.push(&seg1);
+        seg1.drop();
 
         if !assert_eq::<u64>(p.len, 4, "len should be 4 after pushing 'home'") {
             p.drop();
@@ -138,6 +139,7 @@ mod path {
 
         let seg2: String = "user";
         p.push(&seg2);
+        seg2.drop();
 
         // "home" + "/" + "user" = 9
         if !assert_eq::<u64>(p.len, 9, "len should be 9 after pushing 'user'") {

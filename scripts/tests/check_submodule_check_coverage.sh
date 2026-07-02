@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
-# Submodule front-end-checking gate (KNOWN_HOLES H12).
+# Submodule front-end-checking gate (KNOWN_HOLES H12 — CLOSED 2026-07-02).
 #
 # Submodule function BODIES — every `mod x;` file in a project and inline
 # `mod x { … }` nests — were historically NEVER front-end checked: only their
 # signatures were consumed, so type errors, IMMUTABLE ASSIGNMENTS, and
 # LINEARITY violations in them compiled silently (CoreCheck's coarser
-# Core-level rules were the only net). Fixed for user code: checkProgram now
-# recurses into submodules mirroring Elab's context.
-#
-# The `std` subtree is EXEMPT for now (H12, OPEN): its bodies carry ~384
-# never-checked violations and possibly checker-unsupported shapes; migrating
-# it is tracked burn-down work. This gate (a) locks user-submodule
-# enforcement, (b) keeps the exemption HONEST — it must stay disclosed in
-# KNOWN_HOLES and visible in Check.lean until the migration removes it.
+# Core-level rules were the only net). Fixed: checkProgram recurses into
+# EVERY submodule (std included — the 384-violation burn-down completed and
+# the exemption machinery was deleted). This gate locks the enforcement
+# matrix and asserts std itself stays clean under the full front-end.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -151,26 +147,21 @@ else
   no "sibling-submodule type reference failed"
 fi
 
-echo "=== the std exemption stays tracked and disclosed (H12) ==="
+echo "=== std stays fully front-end checked (H12 closed; no exemption returns) ==="
 
-if grep -q 'KNOWN_HOLES H12' Concrete/Check.lean; then
-  ok "std exemption is marked H12 in Check.lean"
+if grep -q 'stdMigratedSubmodules' Concrete/Check.lean; then
+  no "exemption machinery is BACK in Check.lean (H12 regression)"
 else
-  no "std exemption marker missing from Check.lean (removed? then close H12 and delete this check)"
+  ok "no std exemption machinery in Check.lean"
 fi
-# The burn-down list only GROWS: every migrated module must stay migrated.
-MIGRATED="alloc args ascii bitset bytes env fmt fs hash hex libc math mem numeric ordered_set ptr rand set sha256 string test text writer"
-MISSING=""
-for m in $MIGRATED; do
-  grep -q "\"$m\"" Concrete/Check.lean || MISSING="$MISSING $m"
-done
-if [ -z "$MISSING" ]; then
-  ok "all $(echo $MIGRATED | wc -w | tr -d ' ') migrated std modules stay on the burn-down list"
+STDERRS="$("$COMPILER" std/src/lib.con --test 2>&1 | grep -cE 'error\[')"
+if [ "$STDERRS" = "0" ]; then
+  ok "std carries zero front-end violations under the full checker"
 else
-  no "migrated std modules REMOVED from stdMigratedSubmodules:$MISSING (regression — the list only grows)"
+  no "std has $STDERRS front-end violations (was zero when H12 closed)"
 fi
 if grep -q '^### H12' docs/KNOWN_HOLES.md; then
-  ok "H12 disclosed in KNOWN_HOLES.md"
+  ok "H12 recorded in KNOWN_HOLES.md"
 else
   no "H12 entry missing from KNOWN_HOLES.md"
 fi

@@ -1,6 +1,25 @@
 mod test {
     import std.io.{println};
 
+    /// Consume-and-ignore a Copy-payload fallible result. The blessed way for
+    /// a test to say "this insert/pop result is intentionally unused" — a bare
+    /// discard is E0286, and `_` may ignore only Copy values, but the OPTION
+    /// itself is linear and must be consumed.
+    pub fn ignore_opt<T: Copy>(o: Option<T>) {
+        match o {
+            Option::Some { value } => {},
+            Option::None => {},
+        }
+    }
+
+    /// Result companion of `ignore_opt`.
+    pub fn ignore_res<T: Copy, E: Copy>(r: Result<T, E>) {
+        match r {
+            Result::Ok { value } => {},
+            Result::Err { error } => {},
+        }
+    }
+
     pub fn assert_eq<T: Copy>(expected: T, result: T, message: String) with(Console) -> bool {
         if expected != result {
             let msg: String = "Assert error:";

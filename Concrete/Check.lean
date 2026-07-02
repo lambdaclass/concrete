@@ -73,6 +73,11 @@ structure TypeEnv where
   -- loop (a loop nested INSIDE the exiting branch iterates before the return,
   -- so it needs its own exiting branch).
   inFnExitingBranch : Bool := false
+  -- Set to `some name` while checking the RHS of `name = RHS`: consuming
+  -- `name` there is a REBIND (`acc = f(acc, x)` in a fold loop) — the
+  -- assignment restores the binding before the next iteration, so the
+  -- consume-inside-loop rule (E0207) does not apply to it.
+  rebindingVar : Option String := none
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
@@ -291,7 +296,7 @@ def CheckError.hint : CheckError → Option String
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
-  | .assignOverwritesLinear _ => some "linear variables cannot be reassigned — use a new binding instead"
+  | .assignOverwritesLinear _ => some "the current value is still live — consume it first (move/destroy), then reassignment is a legal rebind (`acc = f(acc, x)`)"
   | .cannotOverwriteLinearField _ => some "consume the old field first (destructure and rebuild the struct), or make the field type Copy"
   | .functionalUpdateCopiesNonCopy _ => some "set every non-Copy field explicitly instead of copying it from `..base`, or make the field type Copy"
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
@@ -655,6 +660,13 @@ def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option
   let env ← getEnv
   setEnv { env with vars := (name, info) :: env.vars }
 
+/-- Look up the LAST (outermost) binding with this name. Branch/arm envs
+    PREPEND their locals, so a shadowing local — e.g. a nested match's
+    field-named `value` binding over an outer `value` — must not be mistaken
+    for the pre-existing variable during consumption merges. -/
+def lookupOutermost (vars : List (String × VarInfo)) (name : String) : Option VarInfo :=
+  vars.foldl (fun acc (n, vi) => if n == name then some vi else acc) none
+
 private def activeBorrowRefs (env : TypeEnv) (varName : String) : List VarInfo :=
   env.vars.foldl (fun acc (_, info) =>
     match info.borrowedFrom with
@@ -788,7 +800,8 @@ def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
       -- inside a loop — except inside a branch that exits the function
       -- (`while … { if bad { s.drop(); return 1; } }`): the return-path rule
       -- then guarantees everything live is consumed, and no iteration follows.
-      if info.loopDepth < env.loopDepth && !env.inFnExitingBranch then
+      if info.loopDepth < env.loopDepth && !env.inFnExitingBranch
+          && env.rebindingVar != some name then
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
       let vars' := env.vars.map fun (n, vi) =>
@@ -944,7 +957,7 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     | .ref _ | .refMut _ => continue
     | _ => pure ()
     if infoBefore.state == .consumed || infoBefore.state == .reserved then continue
-    let afterState := match after.lookup name with
+    let afterState := match lookupOutermost after name with
       | some info => info.state
       | none => infoBefore.state
     -- `.consumed` = moved on this path; `.reserved` = a pending `defer` will
@@ -2091,13 +2104,21 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             -- Bind variant fields in scope (substitute generic type args)
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             let typeMapping := ed.typeParams.zip enumTypeArgs
+            let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
             for (binding, sf) in bindings.zip ev.fields do
               let fieldTy := substTy typeMapping sf.ty
-              if binding != "_" then addVar binding fieldTy
-              -- Linear: a `_` payload field may ignore ONLY a Copy field. A non-Copy
-              -- field must be bound and consumed exactly once (destructure it, don't
-              -- drop it) — a resource owner ends at destroy().
-              else if !(← isCopyType fieldTy) then
+              -- Matching THROUGH a reference must not move payloads out of the
+              -- borrow: a non-Copy payload binds as a borrowed view (&T — Copy,
+              -- freely droppable), a Copy payload binds by value. An OWNED
+              -- scrutinee binds payloads owned, as before.
+              let bindTy ← do
+                if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
+                else pure fieldTy
+              if binding != "_" then addVar binding bindTy
+              -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
+              -- borrowed view). A non-Copy OWNED field must be bound and consumed
+              -- exactly once (destructure it, don't drop it).
+              else if !isRefScrutinee && !(← isCopyType fieldTy) then
                 throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
@@ -2174,10 +2195,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
               -- Check agreement on pre-existing variables
               for (name, infoBefore) in envBefore.vars do
                 if infoBefore.isCopy then continue
-                let state1 := match firstVars.lookup name with
+                let state1 := match lookupOutermost firstVars name with
                   | some info => info.state
                   | none => infoBefore.state
-                let state2 := match envAfterArm.vars.lookup name with
+                let state2 := match lookupOutermost envAfterArm.vars name with
                   | some info => info.state
                   | none => infoBefore.state
                 let consumed1 := state1 == .consumed
@@ -2194,7 +2215,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | some vars =>
           let env ← getEnv
           let vars' := env.vars.map fun (n, vi) =>
-            match vars.lookup n with
+            match lookupOutermost vars n with
             | some info => (n, { vi with state := info.state })
             | none => (n, vi)
           setEnv { envBefore with vars := vars' }
@@ -2296,10 +2317,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             -- Check agreement on pre-existing variables
             for (name, infoBefore) in envBefore.vars do
               if infoBefore.isCopy then continue
-              let state1 := match firstVars.lookup name with
+              let state1 := match lookupOutermost firstVars name with
                 | some info => info.state
                 | none => infoBefore.state
-              let state2 := match envAfterArm.vars.lookup name with
+              let state2 := match lookupOutermost envAfterArm.vars name with
                 | some info => info.state
                 | none => infoBefore.state
               let consumed1 := state1 == .consumed
@@ -2315,7 +2336,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       | some vars =>
         let env ← getEnv
         let vars' := env.vars.map fun (n, vi) =>
-          match vars.lookup n with
+          match lookupOutermost vars n with
           | some info => (n, { vi with state := info.state })
           | none => (n, vi)
         setEnv { envBefore with vars := vars' }
@@ -2615,11 +2636,35 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.assignToImmutable name) (some stmt.getSpan)
       if info.state == .frozen then
         throwCheck (.assignToFrozen name) (some stmt.getSpan)
-      -- Linear variables cannot be reassigned. One binding, one resource.
-      if !info.isCopy then
-        throwCheck (.assignOverwritesLinear name) (some stmt.getSpan)
+      -- Check the RHS FIRST: `acc = f(acc, x)` consumes `acc` while
+      -- evaluating the RHS, which is exactly what makes the rebind legal.
+      -- While doing so, mark `name` as the rebind target so consuming it in
+      -- the RHS is exempt from the consume-inside-loop rule (the assignment
+      -- restores the binding within the same statement).
+      let envPre ← getEnv
+      setEnv { envPre with rebindingVar := some name }
       let valTy ← checkExpr value (some info.ty)
+      let envPost ← getEnv
+      setEnv { envPost with rebindingVar := envPre.rebindingVar }
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
+      -- Linear REBIND rule: a linear variable may be reassigned only once its
+      -- OLD value has been consumed (one binding, one LIVE resource) — the
+      -- fold/accumulate pattern `acc = f(acc, x)` requires it. Overwriting a
+      -- still-live linear value stays E0219 (it would leak the old value).
+      if !info.isCopy then
+        let infoNow ← lookupVarInfo name
+        match infoNow with
+        | some inf =>
+          if inf.state != .consumed then
+            throwCheck (.assignOverwritesLinear name) (some stmt.getSpan)
+          else
+            -- The binding now holds a NEW live value.
+            let env ← getEnv
+            let vars' := env.vars.map fun (n, vi) =>
+              if n == name then (n, { vi with state := .unconsumed, movedAt := none })
+              else (n, vi)
+            setEnv { env with vars := vars' }
+        | none => pure ()
     | none => throwCheck (.assignToUndeclaredVariable name) (some stmt.getSpan)
   | .return_ _ (some value) =>
     -- Escape analysis: prevent returning a borrow ref
@@ -2804,6 +2849,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let valTy ← checkExpr value (some inner)
       expectTy inner valTy "deref assignment" (some stmt.getSpan)
     | _ => pure ()  -- CoreCheck validates deref-assign target type
+    -- Conservation: `*p = v` MOVES a linear `v` into the slot (this is how
+    -- trusted collection code stores owned values through *mut V). Without
+    -- the consume, the stored value stayed live and was re-flagged E0208.
+    match value with
+    | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
+    | _ => pure ()
   | .arrayIndexAssign _ arr index value =>
     let arrTy ← checkExpr arr
     let _idxTy ← checkExpr index
@@ -2813,6 +2864,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let valTy ← checkExpr value (some elemTy)
       expectTy elemTy valTy "array element assignment" (some stmt.getSpan)
     | _ => let _ ← checkExpr value; pure ()
+    -- Conservation: `arr[i] = v` moves a linear `v` in, same as above.
+    match value with
+    | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
+    | _ => pure ()
   | .defer _ body =>
     -- Verify body is a call expression
     match body with
@@ -3023,10 +3078,10 @@ partial def mergeVarStates
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do
     if infoBefore.isCopy then continue
-    let thenState := match afterThen.lookup name with
+    let thenState := match lookupOutermost afterThen name with
       | some info => info.state
       | none => infoBefore.state
-    let elseState := match afterElse.lookup name with
+    let elseState := match lookupOutermost afterElse name with
       | some info => info.state
       | none => infoBefore.state
     -- Both consumed or both not-consumed (used/unconsumed are equivalent here)
@@ -3278,18 +3333,6 @@ def checkModule (m : Module) (summary : FileSummary)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
 
-/-- KNOWN_HOLES H12 burn-down list: std submodules MIGRATED under the
-    front-end checker. std bodies were never front-end checked and accumulated
-    ~384 violations; instead of exempting all of std, only the submodules NOT
-    yet on this list are exempt. The list only grows — one std file at a time,
-    fixing its violations (and any checker limitation it exposes) — until it
-    covers all of std and this machinery is deleted. Removing an entry is a
-    regression (`check_submodule_check_coverage.sh` pins the set). -/
-def stdMigratedSubmodules : List String :=
-  ["alloc", "args", "ascii", "bitset", "bytes", "env", "fmt", "fs", "hash",
-   "hex", "libc", "math", "mem", "numeric", "ordered_set", "ptr", "rand",
-   "set", "sha256", "string", "test", "text", "writer"]
-
 /-- Check every submodule's function BODIES, recursively, mirroring Elab's
     submodule context (sibling submodule types injected, imports resolved
     against the global table). Submodule bodies — every `mod x;` file in a
@@ -3308,10 +3351,10 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
       s.publicNames.contains name)) ([] : List (String × FnSummary))
   -- H12: inside `std`, only migrated submodules are checked (burn-down list
   -- above); everywhere else, every submodule is.
-  let subsToCheck := if m.name == "std"
-    then m.submodules.filter fun sub => stdMigratedSubmodules.contains sub.name
-    else m.submodules
-  subsToCheck.foldl (fun errs sub =>
+  -- Every submodule is checked — std included. (H12 CLOSED 2026-07-02: the
+  -- burn-down list that lived here is gone; std carries zero front-end
+  -- violations and stays that way like any other code.)
+  m.submodules.foldl (fun errs sub =>
     let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
       | some (_, s) => s
       | none => buildFileSummary sub

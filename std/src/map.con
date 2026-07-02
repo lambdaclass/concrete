@@ -1,5 +1,6 @@
 mod map {
     import std.mem.{sizeof};
+    import std.test.{ignore_opt};
     import std.alloc.{grow, dealloc};
     import std.libc.{memset};
     import std.hash.{hash_i32, eq_i32};
@@ -149,9 +150,6 @@ mod map {
 
                 idx = (idx + 1) & mask;
             }
-
-            // Unreachable, but needed for type checker
-            return Option::<V>::None;
         }
 
         pub fn remove(&mut self, key: &K) -> Option<V> {
@@ -416,7 +414,7 @@ mod map {
     #[test]
     fn test_map_with_value() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(7, 35);
+        ignore_opt::<i32>(m.insert(7, 35));
         let c: WvCtx = WvCtx { add: 5, calls: 0 };
         let k: i32 = 7;
         let r: Option<i64> = m.with_value(&k, &c, wv_read);   // 35 + 5 = 40
@@ -432,7 +430,7 @@ mod map {
     #[test]
     fn test_map_with_value_missing() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
+        ignore_opt::<i32>(m.insert(1, 10));
         let c: WvCtx = WvCtx { add: 0, calls: 0 };
         let k: i32 = 99;
         let r: Option<i64> = m.with_value(&k, &c, wv_read);
@@ -448,9 +446,9 @@ mod map {
     #[test]
     fn test_map_insert_len() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
-        m.insert(2, 20);
-        m.insert(3, 30);
+        ignore_opt::<i32>(m.insert(1, 10));
+        ignore_opt::<i32>(m.insert(2, 20));
+        ignore_opt::<i32>(m.insert(3, 30));
         if m.len() != 3 { m.drop(); return 1; }
         m.drop();
         return 0;
@@ -459,7 +457,7 @@ mod map {
     #[test]
     fn test_map_contains() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(42, 100);
+        ignore_opt::<i32>(m.insert(42, 100));
         let k1: i32 = 42;
         let k2: i32 = 99;
         if !(m.contains(&k1)) { m.drop(); return 1; }
@@ -471,8 +469,8 @@ mod map {
     #[test]
     fn test_map_overwrite() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 100);
-        m.insert(1, 200);
+        ignore_opt::<i32>(m.insert(1, 100));
+        ignore_opt::<i32>(m.insert(1, 200));
         if m.len() != 1 { m.drop(); return 1; }
         m.drop();
         return 0;
@@ -481,11 +479,11 @@ mod map {
     #[test]
     fn test_map_remove() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 100);
-        m.insert(2, 200);
-        m.remove(&1);
+        ignore_opt::<i32>(m.insert(1, 100));
+        ignore_opt::<i32>(m.insert(2, 200));
         let k1: i32 = 1;
         let k2: i32 = 2;
+        ignore_opt::<i32>(m.remove(&k1));
         if m.contains(&k1) { m.drop(); return 1; }
         if !(m.contains(&k2)) { m.drop(); return 1; }
         if m.len() != 1 { m.drop(); return 1; }
@@ -496,7 +494,7 @@ mod map {
     #[test]
     fn test_map_remove_nonexistent() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 100);
+        ignore_opt::<i32>(m.insert(1, 100));
         let k: i32 = 99;
         let r: Option<i32> = m.remove(&k);
         match r {
@@ -511,8 +509,8 @@ mod map {
     #[test]
     fn test_map_get() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(5, 500);
-        m.insert(10, 1000);
+        ignore_opt::<i32>(m.insert(5, 500));
+        ignore_opt::<i32>(m.insert(10, 1000));
         let k5: i32 = 5;
         let k99: i32 = 99;
         let r: Option<i32> = m.get(&k5);
@@ -535,13 +533,13 @@ mod map {
     #[test]
     fn test_map_clear() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
-        m.insert(2, 20);
+        ignore_opt::<i32>(m.insert(1, 10));
+        ignore_opt::<i32>(m.insert(2, 20));
         m.clear();
         if m.len() != 0 { m.drop(); return 1; }
         if m.is_empty() == false { m.drop(); return 1; }
         // reuse after clear
-        m.insert(3, 30);
+        ignore_opt::<i32>(m.insert(3, 30));
         if m.len() != 1 { m.drop(); return 1; }
         let k: i32 = 3;
         if !(m.contains(&k)) { m.drop(); return 1; }
@@ -553,11 +551,11 @@ mod map {
     fn test_map_insert_reinsert_after_remove() with(Alloc, Unsafe) -> i32 {
         // Remove a key, then re-insert with different value — tombstone reuse
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 100);
-        m.remove(&1);
+        ignore_opt::<i32>(m.insert(1, 100));
         let k: i32 = 1;
+        ignore_opt::<i32>(m.remove(&k));
         if m.contains(&k) { m.drop(); return 1; }
-        m.insert(1, 999);
+        ignore_opt::<i32>(m.insert(1, 999));
         if !(m.contains(&k)) { m.drop(); return 1; }
         let r: Option<i32> = m.get(&k);
         match r {
@@ -574,9 +572,9 @@ mod map {
     #[test]
     fn test_map_for_each() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
-        m.insert(2, 20);
-        m.insert(3, 30);
+        ignore_opt::<i32>(m.insert(1, 10));
+        ignore_opt::<i32>(m.insert(2, 20));
+        ignore_opt::<i32>(m.insert(3, 30));
         let mut sum: i32 = 0;
         let ks: Vec<i32> = m.keys();
         let mut i: Int = 0;
@@ -605,7 +603,7 @@ mod map {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
         let mut i: i32 = 0;
         while i < 50 {
-            m.insert(i, i * 10);
+            ignore_opt::<i32>(m.insert(i, i * 10));
             i = i + 1;
         }
         if m.len() != 50 { m.drop(); return 1; }
@@ -635,7 +633,7 @@ mod map {
     #[test]
     fn test_map_update() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(7, 70);
+        ignore_opt::<i32>(m.insert(7, 70));
         let k: i32 = 7;
         let present: bool = m.update(&k, set_to_777);
         if !present { m.drop(); return 1; }
@@ -652,7 +650,7 @@ mod map {
     #[test]
     fn test_map_update_missing() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
+        ignore_opt::<i32>(m.insert(1, 10));
         let k: i32 = 99;
         let present: bool = m.update(&k, set_to_777);
         if present { m.drop(); return 1; }
@@ -693,9 +691,9 @@ mod map {
     #[test]
     fn test_map_fold() with(Alloc, Unsafe) -> i32 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
-        m.insert(1, 10);
-        m.insert(2, 20);
-        m.insert(3, 30);
+        ignore_opt::<i32>(m.insert(1, 10));
+        ignore_opt::<i32>(m.insert(2, 20));
+        ignore_opt::<i32>(m.insert(3, 30));
         let vsum: i32 = m.fold::<i32>(0, sum_values);
         if vsum != 60 { m.drop(); return 1; }
         let ksum: i32 = m.keys_fold::<i32>(0, sum_keys);

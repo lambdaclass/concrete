@@ -222,7 +222,7 @@ mod parse {
     }
 
     // Cursor for structured parsing
-    pub struct Cursor {
+    pub struct Copy Cursor {
         data: *const u8,
         len: u64,
         pos: u64,
@@ -790,8 +790,6 @@ mod parse {
         let s: String = "ab";
         let mut cur: Cursor = Cursor::new(&s);
         let c1: Option<char> = cur.advance();
-        let c2: Option<char> = cur.advance();
-        let c3: Option<char> = cur.advance();
         match c1 {
             Option::Some { value } => {
                 if value != 'a' {
@@ -804,6 +802,7 @@ mod parse {
                 return 1;
             }
         }
+        let c2: Option<char> = cur.advance();
         match c2 {
             Option::Some { value } => {
                 if value != 'b' {
@@ -817,6 +816,7 @@ mod parse {
             }
         }
         // c3 should be None (past end)
+        let c3: Option<char> = cur.advance();
         match c3 {
             Option::Some { value } => {
                 s.drop();

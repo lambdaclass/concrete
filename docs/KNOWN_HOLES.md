@@ -19,16 +19,10 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**Two open holes: H11, H12.**
-
-**H11** — projecting a non-Copy value out of a place *by value*
+**One open hole: H11** — projecting a non-Copy value out of a place *by value*
 (`let g = w.f;` or `let g = arr[i];`) copies it instead of moving, so it can be owned
 twice (a duplication / double-free). Disclosed below; the fix needs position-aware
 place handling and is scheduled, not yet landed.
-
-**H12** — the `std` subtree is exempt from front-end (Check-pass) body checking,
-pending a migration with a countable burn-down; user submodules are fully checked
-(this was a much larger hole, fixed 2026-07-02 — see below).
 
 ### H11. Projecting a non-Copy value out of a place by value duplicates it — OPEN 2026-07-01
 
@@ -63,58 +57,38 @@ is nil (every corpus `w.f`/`arr[i]` value use is over a Copy type), so this is l
 `scripts/tests/check_linear_conservation.sh`; the buggy by-value non-Copy projection is
 noted there as the H11 gap (not yet asserted-reject, pending the fix).
 
-### H12. `std` bodies are exempt from front-end checking — OPEN 2026-07-02
-
-**Current state:** OPEN (disclosed, gated, migration scheduled). Until 2026-07-02,
-NO submodule body was ever front-end checked: `checkProgram` consumed submodule
-*signatures* but never checked their function *bodies*, so every `mod x;` file in a
-multi-file project — user code and the whole stdlib — compiled with the Check pass
-silently skipped. Type errors, **immutable assignments**, and **linearity
-violations** (leaks, double-consumes) in sub-files were accepted; only CoreCheck's
-coarser Core-level rules (capabilities, operator sanity) applied.
-
-```concrete
-// src/helper.con — before 2026-07-02 this COMPILED AND RAN:
-pub fn addx(a: u32) -> u32 {
-    let c: u32 = 5;
-    c = c + 1;        // assignment to immutable — never checked
-    return a + c;
-}
-```
-
-**Fixed for user code:** `checkProgram` now recurses into submodules
-(`checkSubmodules` in `Concrete/Check.lean`), mirroring Elab's submodule context
-(sibling types injected, imports resolved against the global table). User sub-files
-get the full front-end: types, linearity, borrows, mutability.
-
-**The remaining hole (burn-down in progress):** std submodules NOT on the
-`stdMigratedSubmodules` list (`Concrete/Check.lean`) are exempt; listed ones are
-fully checked. **Tranche 1+2 (2026-07-02): 384 -> 155 remaining violations; 23 of
-~30 modules migrated** (alloc args ascii bitset bytes env fmt fs hash hex libc
-math mem numeric ordered_set ptr rand set sha256 string test text writer). The tranche split cleanly into
-CHECKER fixes it forced — divergence-aware consumption merges (a diverging
-branch/arm cannot disagree at the merge point; killed the spurious
-E0209/E0212/E0205 class, ~63 errors) and field assignment on generic-struct /
-std-`String` receivers (`self.len = …` in `impl<T> Vec<T>`, wrong E0254, ~45
-errors) — and std fixes (115 `let` -> `let mut` declarations, u64/Int counter
-types). Remaining 155 violations sit in 7
-unmigrated modules (map, ordered_map, slice, parse, net, result, process,
-option, time, heap, vec, path, deque, io) and are semantic: ~58 E0286
-discarded fallible results in tests and ~89 E0208 linear leaks in error
-paths. The E0207 consume-inside-loop class is GONE — tranche 2 added the
-consume-then-exit exemption (a function-exiting branch may consume outer
-linears inside a loop; a loop nested inside that branch resets it —
-`consume_then_return_in_loop.con` / `pressure_err_consume_in_inner_loop.con`
-pin both sides). The gate pins the migrated set (it
-only grows) and fails loudly if the exemption machinery outlives this
-disclosure.
-
-**Gate:** `scripts/tests/check_submodule_check_coverage.sh` — asserts user
-sub-files are rejected for immutable-assign/type/linearity violations, a valid
-project still builds, and the std exemption stays marked (`KNOWN_HOLES H12` in
-`Concrete/Check.lean`) and disclosed here.
-
 ## Recently closed
+
+### H12. Submodule bodies (incl. all of std) were never front-end checked — CLOSED 2026-07-02
+
+**Fixed, fully.** `checkProgram` consumed submodule *signatures* but never checked
+their function *bodies*: every `mod x;` file — user code and the whole stdlib —
+compiled with the Check pass silently skipped (type errors, immutable
+assignments, linearity violations all accepted; an `i = i + 1` on a non-`mut`
+binding in a sub-file compiled AND RAN). Fixed in two stages the same day:
+user submodules first (`checkSubmodules` mirrors Elab's context), then a
+three-tranche std burn-down (384 violations → 0) that ended with the exemption
+machinery **deleted** — std is now checked like any other code.
+
+The burn-down forced SEVEN checker fixes, each a real front-end gap:
+divergence-aware consumption merges; the return-path leak rule; field
+assignment on generic/`String` receivers; the consume-then-exit E0207
+exemption (with its nested-loop reset); raw-pointer/array stores consuming
+their linear RHS (conservation); the linear REBIND rule (`acc = f(acc, x)`,
+incl. inside loops); and outermost-binding consumption merges (a nested
+match's field-named `value` no longer masks the outer variable). Plus std API
+decisions: value-selecting generics behind `T: Copy`
+(`math.max/min/clamp`, `std.test` asserts, `Option/Result.unwrap_or/ok/err`),
+`Child.wait(self)` consuming (a process is waited on exactly once), value-view
+types marked `Copy` (`Slice`, `MutSlice`, `Cursor`, `Duration`, `Instant`,
+payload-free error enums), and `std.test.ignore_opt/ignore_res` as the blessed
+consume-and-ignore for fallible results in tests.
+
+**Gate:** `scripts/tests/check_submodule_check_coverage.sh` — the user-sub-file
+rejection matrix (E0208/E0205/E0217/E0520/E0228 + sibling-type positive +
+`#24a` attribution), plus: the exemption machinery must never return, and std
+must stay at zero front-end violations.
+
 
 ### H10. Array literal duplicated linear elements — CLOSED 2026-07-01
 

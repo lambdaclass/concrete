@@ -153,7 +153,7 @@ mod heap {
         return *a < *b;
     }
 
-    import std.test.{assert_eq};
+    import std.test.{assert_eq, ignore_opt};
 
     #[test]
     fn test_max_heap_basic() with(Alloc) -> i32 {
@@ -263,7 +263,7 @@ mod heap {
         // Pop all and verify we get 50 elements
         let mut count: u64 = 0;
         while h.len() > 0 {
-            h.pop();
+            ignore_opt::<i32>(h.pop());
             count = count + 1;
         }
 
@@ -295,7 +295,7 @@ mod heap {
         // Pop all 10 and count
         let mut count: u64 = 0;
         while h.len() > 0 {
-            h.pop();
+            ignore_opt::<i32>(h.pop());
             count = count + 1;
         }
 

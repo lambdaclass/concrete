@@ -1,7 +1,7 @@
 mod io {
     import std.libc.{fopen, fclose, fwrite, fread, fflush, write as libc_write, read as libc_read};
 
-    pub enum IoError {
+    pub enum Copy IoError {
         OpenFailed,
     }
 

@@ -1394,7 +1394,7 @@ run_err "$TESTDIR/error_resolve_unknown_enum.con" "unknown enum 'Phantom'"
 # Check error variants
 run_err "$TESTDIR/error_assign_immutable.con" "cannot assign to immutable"
 run_err "$TESTDIR/error_assign_overwrites_linear.con" "cannot reassign linear variable"
-run_err "$TESTDIR/error_linear_reassign_after_drop.con" "cannot reassign linear variable"
+run_err "$TESTDIR/error_linear_reassign_after_drop.con" "was never consumed"  # rebind is legal; the REBOUND value leaks
 run_ok  "$TESTDIR/copy_reassign.con" 0
 # Match-as-expression
 run_ok  "$TESTDIR/match_expr.con" 0

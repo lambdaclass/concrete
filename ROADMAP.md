@@ -385,16 +385,15 @@ are folded out.
   the block's value when a branch/arm ends with a value; all-statement forms
   stay statements. `check_trailing_value_blocks.sh`.
 
-**Highest-leverage next items (updated 2026-07-02 EOD), in order:** Phase 7
-#38b tranche 3 (std burn-down at 23/30 modules; the remaining 155 violations
-are E0286 test discards and E0208 error-path leaks in the collection/IO
-modules — consider a consuming `std.test` assert helper for the ~58
-insert-discard sites), 13b (H11, the last conservation hole), conditional
-Copy (Phase 7 #3 — promoted to a pre-trial prerequisite, see the
-external-validation gate), then #18 (callable-values implementation) and #35
-(the validation project) as the phase's exit path. ✅ #24a (sub-file
-diagnostic file attribution) landed 2026-07-02. Everything else in the active
-list is pull-condition-gated or polish.
+**Highest-leverage next items (updated 2026-07-02 EOD), in order:** 13b (H11 —
+now the ONLY open hole and the last conservation gap), conditional Copy
+(Phase 7 #3 — pre-trial prerequisite, see the external-validation gate; it
+also lets the `T: Copy`-bounded std helpers serve `Option<i32>`-class types
+naturally), then #18 (callable-values implementation) and #35 (the validation
+project) as the phase's exit path. ✅ Landed 2026-07-02: #24a (sub-file
+diagnostic attribution) and Phase 7 #38b / H12 (std fully front-end checked,
+exemption deleted). Everything else in the active list is
+pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
@@ -1093,7 +1092,14 @@ class and authority/allocation story.
     `http_headers` against checked-in vectors, `path_normalizer` against
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
-38b. [KNOWN_HOLES H12] Migrate `std` under the front-end checker. Submodule
+38b. ✅ **DONE (2026-07-02) — H12 CLOSED.** std migrated fully under the
+    front-end checker in three same-day tranches (384 violations → 0) and the
+    exemption machinery was deleted; std is checked like any other code and
+    `check_submodule_check_coverage.sh` pins it at zero. The burn-down forced
+    seven checker fixes (divergence merges, return-path leaks, generic
+    field-assign, consume-then-exit, store-conservation, linear rebind,
+    outermost-binding merges) and the std API decisions recorded in
+    KNOWN_HOLES H12 (closed) and docs/OWNERSHIP_MODEL.md. Original item: Migrate `std` under the front-end checker. Submodule
     bodies were never Check-pass checked until 2026-07-02; user submodules get
     full enforcement, and std burns down via the `stdMigratedSubmodules` list
     in `Concrete/Check.lean`. **Tranches 1+2 done (2026-07-02): 384 -> 155

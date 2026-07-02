@@ -27,7 +27,7 @@ mod ordered_map {
         /// Binary search. Returns the index where key is or should be inserted.
         fn find_index(&self, key: &K) -> u64 {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
-            let lo: u64 = 0;
+            let mut lo: u64 = 0;
             let mut hi: u64 = self.len;
             while lo < hi {
                 let mid: u64 = lo + (hi - lo) / 2;
@@ -96,6 +96,9 @@ mod ordered_map {
             if idx < self.len {
                 let existing: *mut K = self.keys + idx;
                 if cmp(&key, existing as &K) == 0 {
+                    // Overwrite the stored key too (consumes the new key, same
+                    // as HashMap.insert) — otherwise it leaks on this path.
+                    *existing = key;
                     let old_val_ptr: *mut V = self.values + idx;
                     let old: V = *old_val_ptr;
                     *old_val_ptr = value;
@@ -239,14 +242,14 @@ mod ordered_map {
         return 0;
     }
 
-    import std.test.{assert_eq, assert_true};
+    import std.test.{assert_eq, assert_true, ignore_opt};
 
     #[test]
     fn test_insert_and_get() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(30, 300);
-        m.insert(10, 100);
-        m.insert(20, 200);
+        ignore_opt::<i32>(m.insert(30, 300));
+        ignore_opt::<i32>(m.insert(10, 100));
+        ignore_opt::<i32>(m.insert(20, 200));
 
         if !assert_eq::<u64>(m.len(), 3, "len should be 3") {
             m.drop();
@@ -269,9 +272,9 @@ mod ordered_map {
     #[test]
     fn test_sorted_order() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(50, 5);
-        m.insert(10, 1);
-        m.insert(30, 3);
+        ignore_opt::<i32>(m.insert(50, 5));
+        ignore_opt::<i32>(m.insert(10, 1));
+        ignore_opt::<i32>(m.insert(30, 3));
 
         // min_key should be 10
         let mn: Option<i32> = m.min_key();
@@ -298,7 +301,7 @@ mod ordered_map {
     #[test]
     fn test_overwrite() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(10, 100);
+        ignore_opt::<i32>(m.insert(10, 100));
         let old: Option<i32> = m.insert(10, 999);
         match old {
             Option::Some { value } => {
@@ -324,9 +327,9 @@ mod ordered_map {
     #[test]
     fn test_omap_remove() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(10, 100);
-        m.insert(20, 200);
-        m.insert(30, 300);
+        ignore_opt::<i32>(m.insert(10, 100));
+        ignore_opt::<i32>(m.insert(20, 200));
+        ignore_opt::<i32>(m.insert(30, 300));
 
         let k: i32 = 20;
         let old: Option<i32> = m.remove(&k);
@@ -355,7 +358,7 @@ mod ordered_map {
     #[test]
     fn test_get_missing() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(10, 100);
+        ignore_opt::<i32>(m.insert(10, 100));
         let k: i32 = 99;
         let r: Option<i32> = m.get(&k);
         match r {
@@ -399,12 +402,12 @@ mod ordered_map {
     #[test]
     fn test_omap_clear_reuse() with(Alloc) -> i32 {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(10, 100);
-        m.insert(20, 200);
+        ignore_opt::<i32>(m.insert(10, 100));
+        ignore_opt::<i32>(m.insert(20, 200));
         m.clear();
         if m.len() != 0 { m.drop(); return 1; }
         if m.is_empty() == false { m.drop(); return 1; }
-        m.insert(30, 300);
+        ignore_opt::<i32>(m.insert(30, 300));
         if m.len() != 1 { m.drop(); return 1; }
         let k: i32 = 30;
         if !(m.contains(&k)) { m.drop(); return 1; }
@@ -416,16 +419,16 @@ mod ordered_map {
     fn test_omap_insert_remove_stress() with(Alloc) -> i32 {
         // Insert many elements, remove some, verify structure
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        m.insert(50, 500);
-        m.insert(10, 100);
-        m.insert(30, 300);
-        m.insert(20, 200);
-        m.insert(40, 400);
-        m.insert(5, 50);
-        m.insert(25, 250);
-        m.insert(35, 350);
-        m.insert(15, 150);
-        m.insert(45, 450);
+        ignore_opt::<i32>(m.insert(50, 500));
+        ignore_opt::<i32>(m.insert(10, 100));
+        ignore_opt::<i32>(m.insert(30, 300));
+        ignore_opt::<i32>(m.insert(20, 200));
+        ignore_opt::<i32>(m.insert(40, 400));
+        ignore_opt::<i32>(m.insert(5, 50));
+        ignore_opt::<i32>(m.insert(25, 250));
+        ignore_opt::<i32>(m.insert(35, 350));
+        ignore_opt::<i32>(m.insert(15, 150));
+        ignore_opt::<i32>(m.insert(45, 450));
 
         if !assert_eq::<u64>(m.len(), 10, "len should be 10") {
             m.drop();
@@ -437,10 +440,10 @@ mod ordered_map {
         let k40: i32 = 40;
         let k5: i32 = 5;
         let k35: i32 = 35;
-        m.remove(&k20);
-        m.remove(&k40);
-        m.remove(&k5);
-        m.remove(&k35);
+        ignore_opt::<i32>(m.remove(&k20));
+        ignore_opt::<i32>(m.remove(&k40));
+        ignore_opt::<i32>(m.remove(&k5));
+        ignore_opt::<i32>(m.remove(&k35));
 
         if !assert_eq::<u64>(m.len(), 6, "len should be 6 after removes") {
             m.drop();

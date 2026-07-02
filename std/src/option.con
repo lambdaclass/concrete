@@ -15,14 +15,9 @@ mod option {
             return !(self.is_some());
         }
 
-        pub fn unwrap_or(self, default: T) -> T {
-            match self {
-                Option::Some { value } => { return value; },
-                Option::None => { return default; },
-            }
-        }
-
-        pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        pub fn ok_or<E: Copy>(self, err: E) -> Result<T, E> {
+            // E: Copy — the Some arm returns Ok{value} and must be free to
+            // drop `err`; a non-Copy error would leak on that path.
             match self {
                 Option::Some { value } => { return Result::<T, E>::Ok { value: value }; },
                 Option::None => { return Result::<T, E>::Err { error: err }; },
@@ -30,21 +25,37 @@ mod option {
         }
     }
 
-    import std.test.{assert_true, assert_eq};
+    // Value-selecting helpers return ONE of two owned values; the loser must
+    // be freely droppable, so they live behind `T: Copy` (same decision as
+    // std.math max/min — see docs/OWNERSHIP_MODEL.md control-flow rules).
+    // Non-Copy users write the explicit match; consuming variants are Phase 7
+    // #3 work.
+    impl<T: Copy> Option<T> {
+        pub fn unwrap_or(self, default: T) -> T {
+            match self {
+                Option::Some { value } => { return value; },
+                Option::None => { return default; },
+            }
+        }
+    }
+
+    import std.test.{assert_true, assert_eq, ignore_opt};
 
     #[test]
     fn test_option_some() -> i32 {
         let o: Option<i32> = Option::<i32>::Some { value: 42 };
-        if !assert_true(o.is_some(), "should be some") { return 1; }
-        if !assert_true(!(o.is_none()), "should not be none") { return 1; }
+        if !assert_true(o.is_some(), "should be some") { ignore_opt::<i32>(o); return 1; }
+        if !assert_true(!(o.is_none()), "should not be none") { ignore_opt::<i32>(o); return 1; }
+        ignore_opt::<i32>(o);
         return 0;
     }
 
     #[test]
     fn test_option_none() -> i32 {
         let o: Option<i32> = Option::<i32>::None;
-        if !assert_true(o.is_none(), "should be none") { return 1; }
-        if !assert_true(!(o.is_some()), "should not be some") { return 1; }
+        if !assert_true(o.is_none(), "should be none") { ignore_opt::<i32>(o); return 1; }
+        if !assert_true(!(o.is_some()), "should not be some") { ignore_opt::<i32>(o); return 1; }
+        ignore_opt::<i32>(o);
         return 0;
     }
 

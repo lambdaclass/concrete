@@ -15,6 +15,14 @@ mod result {
             return !(self.is_ok());
         }
 
+    }
+
+    // Value-selecting helpers return one branch's owned value and drop the
+    // other's; both payloads must be freely droppable, so they live behind
+    // Copy bounds (same decision as std.math max/min — see
+    // docs/OWNERSHIP_MODEL.md control-flow rules). Non-Copy users write the
+    // explicit match; consuming variants are Phase 7 #3 work.
+    impl<T: Copy, E: Copy> Result<T, E> {
         pub fn unwrap_or(self, default: T) -> T {
             match self {
                 Result::Ok { value } => { return value; },
@@ -37,21 +45,23 @@ mod result {
         }
     }
 
-    import std.test.{assert_true, assert_eq};
+    import std.test.{assert_true, assert_eq, ignore_res};
 
     #[test]
     fn test_result_ok() -> i32 {
         let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 42 };
-        if !assert_true(r.is_ok(), "should be ok") { return 1; }
-        if !assert_true(!(r.is_err()), "should not be err") { return 1; }
+        if !assert_true(r.is_ok(), "should be ok") { ignore_res::<i32, i32>(r); return 1; }
+        if !assert_true(!(r.is_err()), "should not be err") { ignore_res::<i32, i32>(r); return 1; }
+        ignore_res::<i32, i32>(r);
         return 0;
     }
 
     #[test]
     fn test_result_err() -> i32 {
         let r: Result<i32, i32> = Result::<i32, i32>::Err { error: 99 };
-        if !assert_true(r.is_err(), "should be err") { return 1; }
-        if !assert_true(!(r.is_ok()), "should not be ok") { return 1; }
+        if !assert_true(r.is_err(), "should be err") { ignore_res::<i32, i32>(r); return 1; }
+        if !assert_true(!(r.is_ok()), "should not be ok") { ignore_res::<i32, i32>(r); return 1; }
+        ignore_res::<i32, i32>(r);
         return 0;
     }
 

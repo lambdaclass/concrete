@@ -1,5 +1,5 @@
 mod slice {
-    pub struct Slice<T> {
+    pub struct Copy Slice<T> {
         ptr: *const T,
         len: u64,
     }
@@ -17,7 +17,7 @@ mod slice {
         }
     }
 
-    pub struct MutSlice<T> {
+    pub struct Copy MutSlice<T> {
         ptr: *mut T,
         len: u64,
     }
@@ -26,14 +26,8 @@ mod slice {
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
         // Unchecked value reader lives in the Copy-bounded impl below.
 
-        pub fn set(&mut self, at: u64, value: T) -> bool {
-            if at >= self.len {
-                return false;
-            }
-            let target_ptr: *mut T = self.ptr + at;
-            *target_ptr = value;
-            return true;
-        }
+        // Bounds-checked `set` lives in the Copy-bounded impl below: its
+        // early `return false` must be free to drop the rejected value.
 
         pub fn set_unchecked(&mut self, at: u64, value: T) {
             let target_ptr: *mut T = self.ptr + at;
@@ -65,6 +59,15 @@ mod slice {
     }
 
     trusted impl<T: Copy> MutSlice<T> {
+        pub fn set(&mut self, at: u64, value: T) -> bool {
+            if at >= self.len {
+                return false;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+            return true;
+        }
+
         pub fn get_unchecked(&self, at: u64) -> T {
             return *(self.ptr + at);
         }

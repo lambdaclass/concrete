@@ -58,7 +58,16 @@ Every site a value can flow *into* **moves** (consumes) a linear operand exactly
 duplicating one would let it be freed twice. Concretely:
 
 - **`let g = f;`**, **function argument**, **`return f;`**, **match scrutinee** — all
-  consume `f`; reuse afterward is **E0205**.
+  consume `f`; reuse afterward is **E0205**. **Stores consume too:** `*p = v` and
+  `arr[i] = v` move a linear `v` into the slot (2026-07-02).
+- **Linear rebind:** `acc = f(acc, x)` is legal — a `let mut` linear variable may be
+  reassigned once its OLD value has been consumed (the fold/accumulate pattern),
+  including inside loops (the binding is restored within the same statement).
+  Overwriting a still-LIVE linear value stays **E0219**.
+- **Matching through a reference borrows payloads:** `match &e { E::A { p } => … }`
+  binds a non-Copy payload `p` as `&T` (a Copy, droppable view), never moving it out
+  of the borrow; `_` may ignore any payload behind a reference. An owned scrutinee
+  binds payloads owned, as before.
 - **Array literal** `[a, b]` moves each element in — `a`/`b` are consumed, the array
   owns them (reuse is **E0205**). *(This was a real duplication hole — `[a, b]` used to
   leave `a`/`b` live, so they could be freed while the array also owned them. Fixed and

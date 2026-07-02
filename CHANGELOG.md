@@ -10,6 +10,37 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H12 CLOSED: std fully front-end checked; four more checker fixes (2026-07-02)
+
+Tranche 3 finished the same-day burn-down (384 violations → 0) and DELETED the
+exemption machinery — std is now checked like any other code, pinned at zero
+by the gate. Four more checker gaps surfaced and fixed:
+
+- **Stores consume (conservation):** `*p = v` and `arr[i] = v` MOVE a linear
+  `v` into the slot — the trusted collection idiom (`*val_ptr = value`) no
+  longer re-flags the stored value as unconsumed.
+- **Linear rebind:** `acc = f(acc, x)` is legal — a linear variable may be
+  reassigned once its OLD value is consumed (the fold/accumulate pattern),
+  including inside loops (the RHS-of-self-assignment is exempt from E0207;
+  the binding is restored within the same statement). Overwriting a
+  still-live linear value stays E0219.
+- **Payload borrows:** matching an enum THROUGH a reference binds non-Copy
+  payloads as borrowed views (`&T`, Copy, droppable) instead of moving them
+  out of the borrow; `_` may ignore any payload behind a reference.
+- **Outermost-binding merges:** consumption merges resolved bindings by NAME
+  from the head of a flat env, so a nested match's mandatory field-named
+  `value` binding masked the outer `value` (spurious E0209/E0208 in
+  nested-Result code). Merges now resolve the outermost binding.
+
+std API decisions the model forced: value-selecting helpers behind `T: Copy`
+(`Option/Result.unwrap_or/ok/err` join `math.max/min`); `Child.wait(self)`
+consumes (a process is waited on exactly once); value-view types are `Copy`
+(`Slice`, `MutSlice`, `Cursor`, `Duration`, `Instant`, payload-free error
+enums); `std.test.ignore_opt/ignore_res` are the blessed consume-and-ignore
+for fallible results in tests; fork children close their inherited listener
+(`libc_exit` never returns, but the checker cannot know — and it is correct
+Unix hygiene anyway).
+
 ### H12 tranche 1, divergence-aware linearity merges, interp print, sub-file diagnostics (2026-07-02)
 
 The "do the backlog" batch: implementation work on the four highest-leverage

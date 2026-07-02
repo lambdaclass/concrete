@@ -67,7 +67,7 @@ mod net {
         return pton_ret;
     }
 
-    pub enum NetError {
+    pub enum Copy NetError {
         SocketFailed,
         SetsockoptFailed,
         AddressFailed,
@@ -212,7 +212,7 @@ mod net {
         }
 
         pub fn read_all(&self, buf: &mut Bytes) with(Unsafe, Alloc, Network) -> i64 {
-            let total: i64 = 0;
+            let mut total: i64 = 0;
             let tmp: [u8; 4096] = [0; 4096];
             let mut reading: bool = true;
             while reading {
@@ -220,7 +220,7 @@ mod net {
                 if n <= 0 {
                     reading = false;
                 } else {
-                    let i: i64 = 0;
+                    let mut i: i64 = 0;
                     while i < n {
                         let p: *const u8 = (&tmp as *const u8) + (i as u64);
                         buf.push(*(p as *mut u8));
@@ -248,14 +248,21 @@ mod net {
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
             Result::Ok { value } => {
+                // Move to a fresh name: nested Result matches bind their own
+                // field-named `value`, which collides in consumption accounting.
+                let listener: TcpListener = value;
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
-                    value.close();
+                    listener.close();
                     return 1;
                 }
                 if pid == 0 {
-                    // Child: connect, write "Hi", close, exit
+                    // Child: close its copy of the listener (fork duplicated
+                    // the fd; also satisfies the return-path rule — libc_exit
+                    // never returns but the checker cannot know that), then
+                    // connect, write "Hi", close, exit.
+                    listener.close();
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
@@ -271,8 +278,8 @@ mod net {
                     return 0;
                 }
                 // Parent: accept, read, verify
-                let accept_result: Result<TcpStream, NetError> = value.accept();
-                value.close();
+                let accept_result: Result<TcpStream, NetError> = listener.accept();
+                listener.close();
                 addr.drop();
                 match accept_result {
                     Result::Ok { value } => {
@@ -319,14 +326,19 @@ mod net {
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
             Result::Ok { value } => {
+                // Move to a fresh name: nested Result matches bind their own
+                // field-named `value`, which collides in consumption accounting.
+                let listener: TcpListener = value;
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
-                    value.close();
+                    listener.close();
                     return 1;
                 }
                 if pid == 0 {
-                    // Child: connect, write_all 10 bytes, close, exit
+                    // Child: close the inherited listener fd (see above), then
+                    // connect, write_all 10 bytes, close, exit.
+                    listener.close();
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
@@ -341,8 +353,8 @@ mod net {
                     return 0;
                 }
                 // Parent: accept, read_all, verify
-                let accept_result: Result<TcpStream, NetError> = value.accept();
-                value.close();
+                let accept_result: Result<TcpStream, NetError> = listener.accept();
+                listener.close();
                 addr.drop();
                 match accept_result {
                     Result::Ok { value } => {
@@ -388,11 +400,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>::Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>::Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -404,11 +416,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>::Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>::Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -437,11 +449,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>::Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>::Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }

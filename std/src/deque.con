@@ -126,7 +126,7 @@ mod deque {
         }
     }
 
-    import std.test.{assert_eq, assert_true};
+    import std.test.{assert_eq, assert_true, ignore_opt};
 
     #[test]
     fn test_push_back_pop_front() with(Alloc) -> i32 {
@@ -336,7 +336,7 @@ mod deque {
         let mut j: u64 = 0;
         while j < 4 {
             if (d.get_unchecked(0)) != j as i32 { d.drop(); return 1; }
-            d.pop_front();
+            ignore_opt::<i32>(d.pop_front());
             j = j + 1;
         }
         // Push 10 more — forces growth while head is non-zero
