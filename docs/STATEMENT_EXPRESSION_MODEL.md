@@ -16,6 +16,15 @@ Date: 2026-06-20
 > formatter fix to render single-value-expr arms directly (it currently
 > block-wraps `=> if …`, breaking round-trip). The design below is the as-built
 > plan.
+>
+> **Update (2026-07-01)**: trailing `match` and `if/else` inside VALUE blocks
+> (if-expression branches, while-else, match-arm blocks) are now value-bearing
+> when their arms/branches end with values —
+> `let v = if c { match x { .. } } else { 0 };` works. An all-statement
+> trailing `if`/`match` stays a statement (its lowering has no value merge, so
+> existing programs' SSA is unchanged). Locked by
+> `scripts/tests/check_trailing_value_blocks.sh`. The braced-block and
+> implicit-return follow-ups above remain out.
 
 ## Problem
 

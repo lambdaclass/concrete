@@ -10,6 +10,53 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Front-end/back-end agreement sweep: mixed widths, value blocks, cast semantics, lexer escapes (2026-07-01)
+
+An audit pass over "the front-end and the back-end must accept the same
+language" turned up five issues; all fixed and gated.
+
+- **Mixed-width numeric binops are now E0228 at check time.** `typesCompatible`
+  treated any two numeric types as compatible, so `i8 < i32`, `u8 & i64`, etc.
+  passed check and ran under `--interp` — then died at SSA-verify (E0715, an
+  internal-error class) because a mixed pair has no single-width lowering.
+  Check now requires exact width+signedness agreement per operand (cast one
+  side explicitly); CoreCheck's binop rules use the same strict predicate as a
+  post-mono backstop (bitwise ops previously had NO agreement check at all).
+  Gate: `check_mixed_width_binops.sh`.
+- **Literal operands unify with the sibling operand, matching Elab.**
+  Check used to type a literal from the surrounding hint, so `inner[64 + i]`
+  (i: i32) typed `64` as `Int` from the index hint and spuriously mismatched;
+  Elab typed the same literal `i32`. Check now types the non-literal side
+  first and hints the literal side (covers literal-only subtrees like
+  `(8 + 9) % 1000`). This also removed the i64-vs-i32 E0224/E0225 class that
+  rejected ~33% of differential-fuzzer programs.
+- **`if`/`match` as trailing values of value blocks.** In an if-expression
+  branch, while-else, or match-arm block, a trailing `match`/`if-else` whose
+  arms end with values is now the block's value:
+  `let v = if c { match x { .. } } else { 0 };` parses and evaluates instead
+  of E0224-with-`()`-branch or "expected ';', got }". All-statement trailing
+  forms stay statements (no SSA change for existing programs). Gate:
+  `check_trailing_value_blocks.sh`.
+- **The interpreter normalizes `as`-cast values.** `evalCast` retagged the
+  type but kept the mathematical value, so `(-11) as u32` stayed −11 inside
+  the interpreter: later unsigned arithmetic spuriously trapped (checked +) or
+  produced wrong `%` results while the compiled binary was correct. Casts now
+  wrap into the target range (the documented silent-truncation semantics).
+  Found by the width-extended differential fuzzer on its second case.
+- **Unknown string/char escapes are lex errors.** `"test\x"` silently lexed
+  as `testx` (dropped backslash — silent data corruption); unterminated
+  literals were silently accepted too. Both are now E0001 with the valid
+  escape set named. Gate: `check_lex_escapes.sh`.
+
+Supporting changes: the differential fuzzer now generates programs across the
+full integer width lattice (i8..i64/u8..u32) with explicit casts at width
+boundaries — its compile-reject rate dropped from 61% to 0%, and every reject
+class it had was one of the bugs above. The EBNF was aligned with the
+implemented `as`-cast precedence (`-x as i32` is `(-x) as i32`; postfix >
+unary > `as` > binops), the unimplemented `match_stmt_tail` rule was removed,
+and `vec_len`-vs-`u64` counter mismatches in std's own tests (never
+front-end-checked; caught by the new CoreCheck backstop) were fixed.
+
 ### Linear conservation: fix array-literal duplication + linear struct destructure (2026-07-01)
 
 A systematic audit of every value-flow site (does each one *move* a linear value
