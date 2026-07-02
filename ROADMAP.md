@@ -122,8 +122,8 @@ divergence, E0208/E0205, `test-linear-nested-scope`). The `_`/`let _`/bare-disca
 half of H6 is closed (E0287/E0288/E0289); H7 (loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
 over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
 all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
-enforced at every discard site (H6); `let _ = expr;` is the intended explicit
-discard.
+enforced at every discard site (H6); `let _ = expr;` is removed, and `_` may
+ignore only `Copy` values.
 
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
@@ -333,8 +333,10 @@ are folded out.
 - **#11 macro stance** — permanent decision: no v1 macros. `docs/MACRO_STANCE.md`,
   `check_no_macros.sh`.
 - **#13 ignored-result diagnostics** — discarding a `Result`/`Option` statement
-  is E0286 unless acknowledged with `let _ = …;`; `let _` does not silence a
-  `Destroy` resource. `docs/IGNORED_RESULT.md`, `check_ignored_result.sh`.
+  is E0286 unless handled explicitly. The later linearity tightening removed
+  `let _ = …;`; `_` may ignore only `Copy` values, and non-`Copy` fallible
+  values must be destructured, consumed, returned, or otherwise handled.
+  `docs/IGNORED_RESULT.md`, `check_ignored_result.sh`.
 - **#16 style guide** — `docs/STYLE.md` (advisory; mechanical layout owned by
   `concrete fmt`).
 - **#17 iteration protocol** — blessed traversal forms, no `Iterator` trait;
@@ -414,6 +416,37 @@ are folded out.
    - Update `docs/IGNORED_RESULT.md`, `docs/MEMORY_GUARANTEES.md`, and
      `docs/KNOWN_HOLES.md` when fixed; the closing gate must prove the previous
      false-green `check_ignored_result.sh` coverage hole is sealed.
+
+13b. **Close H11: by-value projection of a non-`Copy` sub-place must not copy.**
+   This is the remaining open conservation hole. Today `let g = w.f;` and
+   `let g = arr[i];` over a non-`Copy` field/element project a value out of a
+   place without invalidating the original owner, so the same linear value can
+   be owned twice. The fix must be position-aware, not a blanket field/index
+   rejection: `&w.f`, `&mut w.f`, `w.f.copy_method()`, `arr[i] = v`, and reads
+   of `Copy` fields/elements stay legal; only a by-value move of a non-`Copy`
+   sub-place is rejected. Concrete has no partial moves, so the source-level
+   rule is: move the whole owner through destructuring or an explicit
+   ownership-transfer API; borrow sub-places when you need scoped access. Extend
+   `scripts/tests/check_linear_conservation.sh` with rejecting rows for
+   non-`Copy` field/index projection and positive rows for Copy reads, borrows,
+   method calls that do not move the sub-place, and assignment forms. Close
+   `docs/KNOWN_HOLES.md` H11 only when the gate asserts the previous reproducer
+   fails.
+
+13c. **Write the value-flow conservation spec and make it a feature gate
+   requirement.** The linearity work has three distinct failure classes:
+   discard (a value vanishes), conservation (a value duplicates or aliases), and
+   scope (a value falls out of nested control flow). Turn that into a small
+   normative spec, not a prose afterthought: every expression/statement form
+   must say whether it copies, moves, borrows, consumes, initializes storage,
+   overwrites storage, or rejects. The spec must cover at least identifiers,
+   calls, method receivers, returns, array literals, struct literals,
+   destructuring, field/index projection, field/index assignment, functional
+   update, match scrutinees, `?`, `defer`, and wildcard patterns. Future syntax
+   cannot land without adding a conservation/discard/scope row to the relevant
+   gate. Add `docs/VALUE_FLOW_CONSERVATION.md` and make it the canonical bridge
+   between `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
+   `check_linear_conservation.sh`, and `check_linear_nested_scope.sh`.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
@@ -642,7 +675,22 @@ class and authority/allocation story.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
-   for fallible returns.
+   for fallible returns. Include the small ergonomic floor before real workloads
+   work around the canonical error types: `map_err`, `and_then`, `unwrap_or`,
+   `ok_or`, and any `unwrap_or_else`/callback form that remains explicit about
+   control flow and capabilities. If `?` gains conversion behavior, its
+   lowering and reports must remain explicit: no hidden allocation, no hidden
+   capability gain, and no silent conversion of one error set into another.
+3a. Add **conditional `Copy` for generic containers** without weakening
+   linearity. `Option<T>` is `Copy` iff `T` is `Copy`; `Result<T, E>` is `Copy`
+   iff both `T` and `E` are `Copy`; future generic containers must state their
+   rule structurally and reject any instantiation that would make a resource
+   owner `Copy`. This is a convenience and correctness-of-classification item,
+   not an affine escape hatch: non-`Copy` values still cannot be silently
+   discarded, and `_` may ignore a generic value only when the instantiated
+   whole type is actually `Copy`. Gate with positives for `Option<i32>` /
+   `Result<i32, i32>` Copy behavior and negatives for `Option<String>`,
+   `Result<String, E>`, and nested resource-owning payloads.
 4. Build raw-data APIs in `std.bytes` and `std.slice`: `Bytes`, byte slices,
    fixed buffers, parser cursors,
    byte-preserving formatting, and no implicit UTF-8 or lossy conversions.
@@ -724,6 +772,16 @@ class and authority/allocation story.
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      comptime/reflection/runtime-bound forms are rejected.
+   - 8g. Research **allocator-as-value** before allocator-backed collections,
+     arenas, or freestanding APIs harden. Keep the distinction sharp:
+     `with(Alloc)` is permission to allocate; an allocator value names which
+     allocator/arena/pool is used. Do not replace capabilities with allocator
+     parameters, and do not add an ambient implicit allocator. The research
+     note should compare Zig-style explicit allocators, arena/test allocators,
+     embedded/freestanding pools, allocation failure policy, and audit output
+     that records both the capability and the allocator identity/strategy. If
+     admitted, every allocator-taking API must keep allocation authority visible
+     in function headers and reports.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
@@ -832,6 +890,15 @@ class and authority/allocation story.
 30. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported.
+30a. Define the canonical **consume / destroy / handoff** conventions for
+    linear code. The guide must distinguish explicit cleanup (`destroy(x)` or
+    the type's consuming `.drop()`/Destroy verb), ownership transfer by
+    by-value call, ownership transfer by return, destructuring into owned
+    fields, `defer` as explicit scheduled cleanup, and the forbidden cases
+    (bare non-`Copy` statement, `_` over non-`Copy`, `let _`, non-`Copy`
+    sub-place projection by value). This is documentation plus examples and
+    diagnostics, not automatic `Drop`: no hidden cleanup and no hidden control
+    flow.
 31. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
@@ -871,6 +938,15 @@ class and authority/allocation story.
     `examples/stdlib_recipes/pipeline_shape/` with a tiny byte-oriented CLI and
     a no-alloc parser variant; both must include the source, expected
     `--report caps`, `--report contracts`, and `--report profile` snippets.
+    Include a small **stdlib style-coherence pass** in this item: each module
+    must choose and document when an operation is a method versus a free
+    function. Do not mix `s.len()`, `string_length(s)`, and
+    `string_push_char(&mut s, c)` arbitrarily in the same public surface. The
+    rule should serve explicitness and capability visibility: methods are fine
+    for operations whose receiver clearly owns/borrows the authority; free
+    functions are fine for cross-type operations or functions whose capability
+    story would be clearer outside a receiver. Add examples that teach the
+    chosen style instead of preserving accidental historical names.
 37. Add a stdlib compatibility/oracle corpus under
     `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
     `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
@@ -1166,7 +1242,9 @@ lemmas, and actionable failure diagnostics.
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants. These items enrich what `--emit-lean` produces; they do
-    not introduce a second stub generator.
+    not introduce a second stub generator. Provide a friendly alias such as
+    `concrete prove <file> <fn> --stub` only if it is the same artifact path and
+    schema as `--emit-lean`, not a second proof surface.
 12. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
 13. Add generated loop-invariant templates for common proof shapes:
@@ -1176,8 +1254,12 @@ lemmas, and actionable failure diagnostics.
     `--minimize` exist: classify common failures into actionable categories
     such as missing callee theorem, stale source link, missing table entry,
     failed arithmetic bridge, insufficient frame fact, and spec/extraction
-    mismatch. Diagnostics should point to the already-generated artifact or
-    next action instead of introducing another parallel proof surface.
+    mismatch. Add `concrete prove <file> <fn> --why <obligation_id>` (or an
+    equivalent `--show-obligation --why` form) to explain why the obligation
+    exists, which source span generated it, which facts are in scope, what
+    evidence classes are allowed, and why automation did not close it.
+    Diagnostics should point to the already-generated artifact or next action
+    instead of introducing another parallel proof surface.
 15. Add proof-result caching once proof artifacts and fingerprints are stable.
     Cache key: toolchain version, source fingerprint, spec/proof link,
     obligation id, ProofKit version, backend engine version, and policy mode.
@@ -1264,7 +1346,10 @@ lemmas, and actionable failure diagnostics.
     `scripts/tests/check_proof_repair_plan.sh` with missing theorem, stale
     proof, missing frame fact, arithmetic bridge failure, and spec mismatch.
     No repair suggestion may change a proof status until `--check` or
-    `check-proofs` verifies it.
+    `check-proofs` verifies it. A convenience spelling such as
+    `concrete prove <file> <fn> --repair` may exist only as an alias for the
+    same repair-plan artifact; it must not edit source by default and must never
+    upgrade evidence without replay.
 20. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
@@ -1335,6 +1420,19 @@ five graduated flagships and one package-scale example.
    assumption widening.
 7. Add `concrete audit --json`: machine-readable audit output for CI,
    dashboards, editor tooling, and release bundles.
+7a. Add a **verified profile** command/policy surface that makes "formally
+    verifiable code" operational without overclaiming. Candidate spellings:
+    `concrete check --profile verified` and/or
+    `concrete audit --profile verified`. The profile rejects or fails the
+    policy when a selected target contains stale proofs, unresolved proof
+    obligations, unapproved `assumed` facts, unapproved `solver_trusted` facts,
+    unreviewed `trusted`/extern/`Unsafe` boundaries, unchecked runtime-safety
+    obligations, open known holes, or missing replay commands. It must preserve
+    evidence classes rather than upgrading them: `tested_by_oracle` remains
+    testing, `solver_trusted` remains trusted unless separately replayed in
+    Lean, and runtime checks remain runtime checks. Add a gate with one clean
+    verified fixture and negatives for stale proof, assumption, SMT-only claim,
+    unchecked unsafe, and unresolved runtime obligation.
 8. Add an artifact viewer CLI/TUI over facts, obligations, proofs,
    assumptions, release bundles, and diffs.
 9. Ensure every release bundle includes an evidence replay command.
@@ -1580,6 +1678,17 @@ promises.
    `public`, `secret`, `timing-sensitive`.
 8. Define source-level memory-safety claims precisely: what linearity, borrows,
    cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
+8a. Define the **Unsafe island** rule for unchecked operations. Any operation
+    that bypasses a safe runtime check, borrow/linearity rule, raw-pointer
+    restriction, layout proof, or FFI ownership boundary must be exposed through
+    a deliberately small surface requiring `with(Unsafe)` or an explicitly
+    named `trusted` boundary. Examples include future `get_unchecked`, raw
+    pointer place writes, unchecked casts/conversions, inline asm, and
+    unchecked FFI wrappers. There is no global unsafe mode and no silent
+    trusted wrapper that hides authority: audit output must show the safe
+    wrapper, the underlying trusted/Unsafe operation, and the assumption being
+    accepted. Add a red-team gate proving safe code cannot reach the unchecked
+    operation without the capability or trusted boundary.
 9. Decide the proof class for references and borrows. A function using `&` or
    `&mut` must be classified as one of: value-only/borrow-free,
    proved over read-only references, proved over mutable references with
@@ -2053,6 +2162,9 @@ audience):**
   must remain absent.
 - Release bundles have stable schemas, replay commands, assumption/trust
   reports, and proof-link provenance.
+- A verified-profile policy gate exists and is used by every release-facing
+  proof/audit claim; public examples cannot bypass it with stale proofs,
+  unapproved assumptions, or hidden trusted/Unsafe boundaries.
 - The stdlib/runtime boundary is stable enough for daily examples.
 - At least one external user completes the first-user tutorial and a useful
   audit/proof workflow without compiler-author intervention.
@@ -2079,7 +2191,8 @@ audience):**
    `proved_by_lean` and `proved_by_kernel_decision` are strong evidence;
    `tested_by_oracle` is supporting evidence; `proved_by_smt` /
    `solver_trusted` require explicit policy approval; `open` and unreviewed
-   `assumed` are forbidden for release claims.
+   `assumed` are forbidden for release claims. The policy must be executable by
+   the Phase 10 verified-profile command, not just written in prose.
 8. Add public examples policy: public-facing examples, website copy, README
    snippets, paper examples, and showcase manifests must not outclaim their
    proof status. Active candidates can be shown as active work, but cannot be
