@@ -112,15 +112,14 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **Two open holes: H11 and H12.**
-H11: the remaining narrow place-projection conservation hole — projecting a
-non-Copy value out of a field or array element by value (`let g = w.f;` /
-`let g = arr[i];`) copies instead of moving, so it can be owned twice
-(double-free); latent (no corpus use), fix is context-sensitive
-(move-vs-borrow position) and scheduled. H12: `std` bodies are still exempt
-from front-end body checking while the migration burns down accumulated
-violations; user submodules are fully checked, but unchecked std would undercut
-the enforcement claim until the exemption is gone. The broad linearity and
+it in sync when a hole is added or fixed. **One open hole: H11.** H11 is the
+remaining narrow place-projection conservation hole — projecting a non-Copy value
+out of a field or array element by value (`let g = w.f;` / `let g = arr[i];`)
+copies instead of moving, so it can be owned twice (double-free); latent (no
+corpus use), fix is context-sensitive (move-vs-borrow position) and scheduled.
+H12 is closed: user submodules and the entire `std` subtree are now checked by
+the full front-end, the exemption machinery is deleted, and
+`check_submodule_check_coverage.sh` pins the all-source rule at zero. The broad linearity and
 conservation model is otherwise enforced and gated: H10 (array-literal
 duplication) is closed (`test-linear-conservation`, E0205); non-Copy field
 assignment and `S { ..base }` duplication are rejected (E0219/E0220); H9
@@ -284,9 +283,9 @@ user needs *some* slab to write anything real. So the gate is:
    instantiations** (Phase 7 #3) — a trial user writes `Option<i32>` in hour
    one and today gets told to write a full match (`if let` on non-Copy enums
    rejects by design; the fix is known, and without it the trial measures a
-   missing keystone as language friction) — and the **H12 std migration**
-   (Phase 7 #38b), since the trial evaluates enforcement claims that an
-   unchecked stdlib currently undercuts.
+   missing keystone as language friction). The former **H12 std migration**
+   prerequisite is now complete (Phase 7 #38b): the trial evaluates enforcement
+   claims against a stdlib that is checked like user code.
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
    of Phases 11-19.**
 
@@ -501,21 +500,20 @@ pull-condition-gated or polish.
    `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
    `check_linear_conservation.sh`, and `check_linear_nested_scope.sh`.
 
-13d. ✅ **DONE for user code (2026-07-02) — front-end checker coverage includes
-   user module bodies.** The root bug was that `Check` consumed submodule
+13d. ✅ **DONE (2026-07-02) — front-end checker coverage includes every source
+   body, including std.** The root bug was that `Check` consumed submodule
    signatures but skipped submodule function bodies, so `mod x;` files and
    nested modules could bypass source-level type, mutability, capability, and
-   linearity diagnostics until a coarser Core-level backstop caught them. This
-   is fixed for user code: `checkProgram` mirrors Elab's submodule context,
-   recursively checks submodule bodies, and
+   linearity diagnostics until a coarser Core-level backstop caught them. This is
+   fixed for all source: `checkProgram` mirrors Elab's submodule context,
+   recursively checks user and std submodule bodies, and
    `scripts/tests/check_submodule_check_coverage.sh` proves that bad user
    submodules cannot bypass the primary front-end checks: linear leak (E0208),
    use-after-move (E0205), immutable assignment (E0217), missing capability
    (E0520), mixed-width binop (E0228), and a sibling-submodule type-reference
-   positive case. The remaining open part is **KNOWN_HOLES H12**: the `std`
-   subtree is temporarily exempt while accumulated never-checked violations are
-   burned down. That migration is tracked in Phase 7 #38b; do not close H12
-   until the exemption is removed and the gate's disclosure checks flip.
+   positive case. H12 closed when the `std` exemption was removed after the
+   384 -> 0 std burn-down; the gate now asserts the exemption machinery cannot
+   quietly return and std stays at zero front-end violations.
 
 13e. **Run the final conservation audit sweep after H11.** This is an audit,
    not a known bug bucket. Once by-value non-`Copy` sub-place projection is
@@ -1099,23 +1097,9 @@ class and authority/allocation story.
     seven checker fixes (divergence merges, return-path leaks, generic
     field-assign, consume-then-exit, store-conservation, linear rebind,
     outermost-binding merges) and the std API decisions recorded in
-    KNOWN_HOLES H12 (closed) and docs/OWNERSHIP_MODEL.md. Original item: Migrate `std` under the front-end checker. Submodule
-    bodies were never Check-pass checked until 2026-07-02; user submodules get
-    full enforcement, and std burns down via the `stdMigratedSubmodules` list
-    in `Concrete/Check.lean`. **Tranches 1+2 done (2026-07-02): 384 -> 155
-    violations, 23/~30 modules migrated**; they forced FOUR checker fixes
-    (divergence-aware consumption merges; the return-path leak rule; field
-    assignment on generic/String receivers; the consume-then-exit E0207
-    exemption) plus 115 mechanical `let mut` fixes, `T: Copy` bounds on
-    math/test generics, and per-site linear fixes. Remaining 155 are semantic
-    (E0286 discarded fallible results in tests, E0208 leaks in error paths)
-    concentrated in the collection/IO modules. Continue file by
-    file, then remove the exemption machinery — the
-    `check_submodule_check_coverage.sh` gate fails loudly if the exemption
-    outlives its H12 disclosure. This must complete before Phase 7 declares
-    stdlib surfaces stable AND before the external-validation trial runs: an
-    unchecked stdlib undercuts every enforcement claim the docs make, and the
-    trial exists precisely to test whether those claims feel trustworthy.
+    KNOWN_HOLES H12 (closed) and docs/OWNERSHIP_MODEL.md. This completed the
+    pre-trial requirement that the stdlib not undercut Concrete's enforcement
+    claims: std is now checked by the same front-end rules as user code.
 38a. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
     checked-arithmetic flip exposed syscall/sentinel-style code that relied on
     silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,

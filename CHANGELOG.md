@@ -14,7 +14,9 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 Tranche 3 finished the same-day burn-down (384 violations → 0) and DELETED the
 exemption machinery — std is now checked like any other code, pinned at zero
-by the gate. Four more checker gaps surfaced and fixed:
+by the gate. With H12 closed, the known-holes index is back to one open hole:
+H11 (the narrow non-Copy sub-place projection conservation gap). Four more
+checker gaps surfaced and fixed:
 
 - **Stores consume (conservation):** `*p = v` and `arr[i] = v` MOVE a linear
   `v` into the slot — the trusted collection idiom (`*val_ptr = value`) no
