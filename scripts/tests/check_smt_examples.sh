@@ -21,7 +21,7 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== kernel_preferred: omega/bv own it → NO SMT query ==="
-printf '%s' "$("$COMPILER" "$KP" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+grep -qiF "no SMT-eligible" <<<"$("$COMPILER" "$KP" --report vcs --emit-smt 2>/dev/null)" \
   && ok "linear + bounded bv product → no SMT query" || no "kernel-owned facts produced an SMT query"
 kv="$("$COMPILER" "$KP" --report vcs --json 2>/dev/null)"
 printf '%s' "$kv" | python3 -c "
@@ -34,26 +34,26 @@ sys.exit(0 if have_omega and have_bv else 1)" \
 
 echo "=== range_block_count: HMAC summary is a KERNEL fact (omega), not SMT ==="
 RBC="examples/smt/teaching/range_block_count.con"
-printf '%s' "$("$COMPILER" "$RBC" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+grep -qiF "no SMT-eligible" <<<"$("$COMPILER" "$RBC" --report vcs --emit-smt 2>/dev/null)" \
   && ok "block-count summary → no SMT query" || no "block-count produced an SMT query"
-printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | grep -A2 "nblocks#aa0\]" | grep -qF "proved_by_kernel_decision (omega)" \
+grep -A2 "nblocks#aa0\]" <<<"$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision (omega)" \
   && ok "nblocks (len+72)/64 <= 6 → proved_by_kernel_decision (omega)" || no "block-count not omega-proved"
 # soundness: a possibly-negative dividend is NEVER mis-proved (no kernel proof).
-printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | awk '/signed_div#aa0\]/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
+awk '/signed_div#aa0\]/{f=1} f{print} f&&/^$/{exit}' <<<"$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision" \
   && no "signed division (negative dividend) was mis-proved — UNSOUND" || ok "signed division (possibly negative) is NOT mis-proved (sound gate)"
 
 echo "=== path_feasibility: branch facts are a KERNEL fact (omega), not SMT ==="
 PF="examples/smt/teaching/path_feasibility.con"
-printf '%s' "$("$COMPILER" "$PF" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+grep -qiF "no SMT-eligible" <<<"$("$COMPILER" "$PF" --report vcs --emit-smt 2>/dev/null)" \
   && ok "clamp guards → no SMT query" || no "path_feasibility produced an SMT query"
-printf '%s' "$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | awk '/clamp.clamp#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision (omega)" \
+awk '/clamp.clamp#aa0/{f=1} f{print} f&&/^$/{exit}' <<<"$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision (omega)" \
   && ok "clamp safety assert → proved_by_kernel_decision (omega) via threaded path conditions" || no "clamp assert not omega-proved"
 # negative: a claim the path conditions don't establish stays unproven (not mis-proved).
-printf '%s' "$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | awk '/over_claim#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
+awk '/over_claim#aa0/{f=1} f{print} f&&/^$/{exit}' <<<"$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision" \
   && no "over_claim (x==50) was mis-proved from weaker path facts — UNSOUND" || ok "over_claim (x==50) stays unproven (path facts don't imply it)"
 
 echo "=== unsupported_theory: out-of-fragment VC is VISIBLE (unproven), no query ==="
-printf '%s' "$("$COMPILER" "$UN" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+grep -qiF "no SMT-eligible" <<<"$("$COMPILER" "$UN" --report vcs --emit-smt 2>/dev/null)" \
   && ok "nonlinear array-bounds index → no SMT query" || no "out-of-fragment VC produced an SMT query"
 printf '%s' "$("$COMPILER" "$UN" --report vcs --json 2>/dev/null)" | python3 -c "
 import json,sys

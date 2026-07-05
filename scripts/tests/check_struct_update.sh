@@ -31,9 +31,9 @@ run_expect(){ local n="$1" e="$2"
 
 reject_with(){ local n="$1" c="$2"
   local out; out="$("$C" "$D/$n.con" -o "$TMP/$n.bin" 2>&1)"
-  if echo "$out" | grep -qE 'error\['; then
-    echo "$out" | grep -q "($c)" && ok "$n rejected with $c" \
-      || { no "$n rejected, wrong code"; echo "$out" | grep -oE '\([A-Z0-9]+\)' | head -1 | sed 's/^/        got: /'; }
+  if grep <<<"$out" -qE 'error\['; then
+    grep <<<"$out" -q "($c)" && ok "$n rejected with $c" \
+      || { no "$n rejected, wrong code"; grep <<<"$out" -oE '\([A-Z0-9]+\)' | head -1 | sed 's/^/        got: /'; }
   else no "$n: expected rejection ($c), compiled"; fi; }
 
 echo "=== struct functional update (..base) ==="

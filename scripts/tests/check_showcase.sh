@@ -102,7 +102,7 @@ while IFS=$'\t' read -r name path claimed_conf; do
   #    breaks ProvableV1 conformance surfaces here.
   if [ -n "$claimed_conf" ] && [ -f "$path/src/main.con" ]; then
     audit_out=$("$COMPILER" "$path/src/main.con" --report audit 2>/dev/null || true)
-    runtime_conf=$(echo "$audit_out" | grep -m1 "^Status: " | awk '{print $2}')
+    runtime_conf=$(grep <<<"$audit_out" -m1 "^Status: " | awk '{print $2}')
     if [ -z "$runtime_conf" ]; then
       echo "  FAIL ProvableV1 conformance: runtime audit produced no Status line"
       errs=$((errs + 1))

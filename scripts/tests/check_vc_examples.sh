@@ -17,19 +17,19 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # status of a specific obligation's first status line
-st(){ "$COMPILER" "$1" --report vcs 2>/dev/null | awk -v a="$2" 'index($0,a){f=1} f&&/status:/{print; exit}'; }
-proved(){ printf '%s' "$(st "$1" "$2")" | grep -qF "proved_by_kernel_decision (omega)" && ok "$3" || no "$3 (got: $(st "$1" "$2" | sed 's/^ *//'))"; }
-unproven(){ printf '%s' "$(st "$1" "$2")" | grep -qF "unproven" && ok "$3" || no "$3 (expected unproven)"; }
-no_query(){ "$COMPILER" "$1" --report vcs --emit-smt 2>/dev/null | grep -qiF "no SMT-eligible" && ok "$2" || no "$2 (unexpected SMT query)"; }
+st(){ awk -v a="$2" 'index($0,a){f=1} f&&/status:/{print; exit}' <<<"$("$COMPILER" "$1" --report vcs 2>/dev/null)"; }
+proved(){ grep -qF "proved_by_kernel_decision (omega)" <<<"$(st "$1" "$2")" && ok "$3" || no "$3 (got: $(st "$1" "$2" | sed 's/^ *//'))"; }
+unproven(){ grep -qF "unproven" <<<"$(st "$1" "$2")" && ok "$3" || no "$3 (expected unproven)"; }
+no_query(){ grep -qiF "no SMT-eligible" <<<"$("$COMPILER" "$1" --report vcs --emit-smt 2>/dev/null)" && ok "$2" || no "$2 (unexpected SMT query)"; }
 
 echo "=== #5 packet_window: mixed bounds; bad length stays unproven ==="
 proved   "$D/packet_window.con" "payload_end#aa0"   "payload_end → omega (bounds line up)"
 unproven "$D/packet_window.con" "unchecked_end#aa0" "unchecked_end → unproven (bad length)"
 
 echo "=== #6 fixed_point_filter: linear=omega, signed product=SMT ==="
-"$COMPILER" "$D/fixed_point_filter.con" --report vcs 2>/dev/null | awk '/accumulate#ovf0/{f=1} f&&/status:/{print;exit}' | grep -qF "proved_by_kernel_decision (omega)" \
+awk '/accumulate#ovf0/{f=1} f&&/status:/{print;exit}' <<<"$("$COMPILER" "$D/fixed_point_filter.con" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision (omega)" \
   && ok "accumulate (linear) → omega, not SMT" || no "accumulate not omega-proved"
-"$COMPILER" "$D/fixed_point_filter.con" --report vcs --emit-smt 2>/dev/null | grep -qF "scale#ovf0" \
+grep -qF "scale#ovf0" <<<"$("$COMPILER" "$D/fixed_point_filter.con" --report vcs --emit-smt 2>/dev/null)" \
   && ok "scale (signed nonlinear product) → SMT-eligible (query emitted)" || no "scale not SMT-eligible"
 
 echo "=== #7 chunked_hash_padding: block-count division summary = omega (#21) ==="

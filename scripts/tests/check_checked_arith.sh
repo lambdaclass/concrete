@@ -43,7 +43,7 @@ if [ "$tc" -ne 0 ]; then ok "compiled: u8 255+1 aborts (exit $tc)"; else no "com
 # NB: the interp EXITS NONZERO when it traps, so capture first (pipefail would
 # otherwise propagate that nonzero and defeat the grep).
 itrap="$("$C" "$TMP/trap.con" --interp 2>&1 || true)"
-if echo "$itrap" | grep -qi "overflow"; then ok "interp: u8 255+1 traps (overflow)"; else no "interp: u8 255+1 did NOT trap"; fi
+if grep <<<"$itrap" -qi "overflow"; then ok "interp: u8 255+1 traps (overflow)"; else no "interp: u8 255+1 did NOT trap"; fi
 
 # `-` underflow (unsigned) and `*` overflow also trap.
 cat > "$TMP/subtrap.con" <<'EOF'
@@ -67,7 +67,7 @@ EOF
 "$C" "$TMP/dz.con" -o "$TMP/dz.bin" >/dev/null 2>&1; "$TMP/dz.bin" >/dev/null 2>&1; dc=$?
 if [ "$dc" -ne 0 ]; then ok "compiled: div-by-zero aborts (exit $dc, was UB)"; else no "compiled: div-by-zero did NOT trap"; fi
 dzi="$("$C" "$TMP/dz.con" --interp 2>&1 || true)"
-if echo "$dzi" | grep -qi "division by zero"; then ok "interp: div-by-zero traps"; else no "interp: div-by-zero did NOT trap"; fi
+if grep <<<"$dzi" -qi "division by zero"; then ok "interp: div-by-zero traps"; else no "interp: div-by-zero did NOT trap"; fi
 cat > "$TMP/sh.con" <<'EOF'
 fn sh(a: u32, b: u32) -> u32 { return a << b; }
 pub fn main() -> Int { let x: u32 = sh(1, 40); return 0; }

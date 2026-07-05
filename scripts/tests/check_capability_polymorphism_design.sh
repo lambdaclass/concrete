@@ -23,7 +23,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== fn-pointer capability smuggling stays rejected ==="
 OUT="$("$COMPILER" tests/programs/adversarial_neg_cap_fnptr_smuggle.con 2>&1)"
-echo "$OUT" | grep -q "requires capability 'Network' but 'smuggle' does not declare it" \
+grep <<<"$OUT" -q "requires capability 'Network' but 'smuggle' does not declare it" \
   && ok "pure caller invoking with(Network) fn pointer is rejected (E0240)" \
   || no "smuggling fixture no longer rejected — the #24a hole reopened"
 

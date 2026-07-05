@@ -725,7 +725,12 @@ pull-condition-gated or polish.
     CI job was split into three parallel jobs (proof/VC/obligations,
     language-surface, compiler-infra) so a red run reports all failures at
     once instead of one per 46-minute cycle. Remaining: a scheduled job that
-    notifies on consecutive red runs.
+    notifies on consecutive red runs. Lesson (2026-07-05, false-red nightly
+    plus false-green SSA job): avoid `pipefail` + `echo "$big" | grep -q` on
+    large captured output — `grep -q` exits at the first match and SIGPIPEs
+    the producer when the output outgrows the runner's pipe buffer (use
+    `grep -q ... <<<"$big"`); and every gate script must exit nonzero from
+    its own internal FAIL count, or CI reports it green regardless.
 34b. Shared gate harness: `scripts/tests/lib/gate.sh` (ok/no counters,
     `rejects`/`accepts`/`agree`/`agree_both` helpers, tmpdir lifecycle) so new
     gates stop hand-rolling the same bash and fixtures stay greppable —

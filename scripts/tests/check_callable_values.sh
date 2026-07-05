@@ -67,7 +67,7 @@ fn twice(ctx: &mut Sum, a: &i64, b: &i64, f: fn(&mut Sum, &i64)) { f(&mut *ctx, 
 fn main() -> i64 { let mut s: Sum = Sum { total: 0 }; let x: i64 = 1; let y: i64 = 2; twice(&mut s, &x, &y, addto); return s.total; }
 EOF
 TWICE_IR="$("$COMPILER" "$TMP/rb.con" --emit-llvm 2>/dev/null | awk '/define.*@twice/,/^}/')"
-if echo "$TWICE_IR" | grep -q "alloca"; then
+if grep <<<"$TWICE_IR" -q "alloca"; then
   no "reborrow still allocates a temp in twice() — the copy-to-temp miscompile reappeared:"
   echo "$TWICE_IR" | sed 's/^/       /'
 else
@@ -115,10 +115,10 @@ fn main() -> i64 { let h: H = H { v: 1 }; return h.run(nf); }' > "$TMP/method_ca
 ERR="$("$COMPILER" "$TMP/method_cap_no.con" -o "$TMP/method_cap_no" 2>&1)"
 if "$COMPILER" "$TMP/method_cap_no.con" -o "$TMP/method_cap_no" >/dev/null 2>&1; then
   no "cap-poly method invoked without the required capability was NOT rejected"
-elif echo "$ERR" | grep -q "E0240"; then
+elif grep <<<"$ERR" -q "E0240"; then
   ok "cap-poly method without required cap rejected with E0240 (capability, not type mismatch)"
 else
-  no "cap-poly method rejected, but not with E0240: $(echo "$ERR" | grep -i error | head -1)"
+  no "cap-poly method rejected, but not with E0240: $(grep <<<"$ERR" -i error | head -1)"
 fi
 
 echo "=== references are second-class: no function/callback may RETURN a reference ==="

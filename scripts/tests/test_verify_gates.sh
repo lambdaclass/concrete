@@ -39,7 +39,7 @@ run_one() {
     VERIFY-GATES:\ warn*)
       PASS=$((PASS + 1))
       local wcount
-      wcount=$(echo "$first" | grep -oE '[0-9]+' | head -1)
+      wcount=$(grep <<<"$first" -oE '[0-9]+' | head -1)
       WARN_TOTAL=$((WARN_TOTAL + ${wcount:-0}))
       ;;
     VERIFY-GATES:\ FAIL*)

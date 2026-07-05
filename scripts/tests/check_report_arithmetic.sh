@@ -20,7 +20,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # want_total <file> <substring>  — the report's Totals line must contain substring.
 totals(){ local n="$1" want="$2"
   local line; line="$("$C" "$TMP/$n.con" --report arithmetic 2>&1 | grep '^Totals:')"
-  if echo "$line" | grep -qF "$want"; then ok "$n: Totals has '$want'"
+  if grep <<<"$line" -qF "$want"; then ok "$n: Totals has '$want'"
   else no "$n: Totals='$line' missing '$want'"; fi; }
 
 echo "=== every spelling classifies into the right class ==="
@@ -76,7 +76,7 @@ totals flt "0 arithmetic sites"
 
 echo "=== wrapping migration shows up: hmac_sha256 has explicit-wrapping sites ==="
 hm="$("$C" examples/hmac_sha256/src/main.con --report arithmetic 2>&1 | grep '^Totals:')"
-wc="$(echo "$hm" | grep -oE '[0-9]+ explicit-wrapping' | grep -oE '^[0-9]+')"
+wc="$(grep <<<"$hm" -oE '[0-9]+ explicit-wrapping' | grep -oE '^[0-9]+')"
 if [ "${wc:-0}" -ge 20 ]; then ok "hmac_sha256: $wc explicit-wrapping sites (mod-2^32 migration visible)"
 else no "hmac_sha256: expected >=20 explicit-wrapping, got '${wc:-0}' ($hm)"; fi
 

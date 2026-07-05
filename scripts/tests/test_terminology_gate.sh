@@ -72,7 +72,7 @@ if [ -x "$COMPILER" ]; then
         for canonical in missing ineligible; do
             # These should appear in proof_status or obligation facts
             # (at least one function should have this status)
-            if echo "$json" | grep -q "\"$canonical\""; then
+            if grep <<<"$json" -q "\"$canonical\""; then
                 echo "  ok  canonical term '$canonical' found in diagnostics-json output"
             fi
         done

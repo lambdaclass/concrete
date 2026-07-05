@@ -362,7 +362,7 @@ check_report() {
     local output
     output=$(cached_output "$file" "--report $mode")
     local matched=0
-    if echo "$output" | grep -q "$pattern"; then
+    if grep <<<"$output" -q "$pattern"; then
         matched=1
     fi
     if [ "$negate" = "!" ]; then
@@ -398,7 +398,7 @@ check_report_multi() {
     output=$(cached_output "$file" "--report $mode")
     local all_match=1
     for pattern in "$@"; do
-        if ! echo "$output" | grep -q "$pattern"; then
+        if ! grep <<<"$output" -q "$pattern"; then
             all_match=0
             break
         fi
@@ -425,7 +425,7 @@ check_profile() {
     local output
     output=$($COMPILER "$file" --check "$profile" 2>&1 || true)
     local matched=0
-    if echo "$output" | grep -q "$pattern"; then
+    if grep <<<"$output" -q "$pattern"; then
         matched=1
     fi
     if [ "$negate" = "!" ]; then
@@ -460,7 +460,7 @@ check_profile_multi() {
     output=$($COMPILER "$file" --check "$profile" 2>&1 || true)
     local all_match=1
     for pattern in "$@"; do
-        if ! echo "$output" | grep -q "$pattern"; then
+        if ! grep <<<"$output" -q "$pattern"; then
             all_match=0
             break
         fi
@@ -1765,7 +1765,7 @@ check_report_multi "$TESTDIR/trusted_extern_basic.con" caps \
 # --report unsafe should show regular extern under "Extern functions" (not "Trusted")
 # This needs a custom check because it combines match + no-match
 report_output=$(cached_output "$TESTDIR/ffi_basic.con" "--report unsafe")
-if echo "$report_output" | grep -q "Extern functions:" && echo "$report_output" | grep -q "extern fn abs" && ! echo "$report_output" | grep -q "Trusted extern"; then
+if grep <<<"$report_output" -q "Extern functions:" && grep <<<"$report_output" -q "extern fn abs" && ! grep <<<"$report_output" -q "Trusted extern"; then
     echo "  ok  ffi_basic.con --report unsafe shows regular extern (not trusted)"
     PASS=$((PASS + 1))
 else
@@ -1819,8 +1819,8 @@ check_report_multi "$TESTDIR/report_layout_check.con" layout \
 
 # --- report layout: cross-validate sizes against runtime sizeof ---
 report_output=$(cached_output "$TESTDIR/report_layout_check.con" "--report layout")
-padded_size=$(echo "$report_output" | grep "struct Padded" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
-packed_size=$(echo "$report_output" | grep "struct Packed" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
+padded_size=$(grep <<<"$report_output" "struct Padded" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
+packed_size=$(grep <<<"$report_output" "struct Packed" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
 expected_sum=$((padded_size + packed_size))
 $COMPILER "$TESTDIR/report_layout_check.con" -o "$TMPDIR/report_layout_check" > /dev/null 2>&1
 runtime_sum=$("$TMPDIR/report_layout_check" 2>&1) || true
@@ -2022,7 +2022,7 @@ check_report_multi "$TESTDIR/integration_collection_pipeline.con" interface \
 
 # Interface: private exclusion (custom check — need both to NOT match)
 report_output=$(cached_output "$TESTDIR/integration_collection_pipeline.con" "--report interface")
-if ! echo "$report_output" | grep -q "map_vec" && ! echo "$report_output" | grep -q "collect_classified"; then
+if ! grep <<<"$report_output" -q "map_vec" && ! grep <<<"$report_output" -q "collect_classified"; then
     echo "  ok  integration_collection_pipeline.con --report interface excludes private functions"
     PASS=$((PASS + 1))
 else
@@ -2252,9 +2252,9 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
 # === Phase 3: Diagnostic quality assertions ===
 # Multi-error: all 3 independent type errors reported
 output=$($COMPILER "$TESTDIR/phase3_diag_multi_error.con" --emit-llvm 2>&1 || true)
-if echo "$output" | grep -q "type mismatch in let binding 'a'" \
-   && echo "$output" | grep -q "type mismatch in let binding 'b'" \
-   && echo "$output" | grep -q "type mismatch in let binding 'c'"; then
+if grep <<<"$output" -q "type mismatch in let binding 'a'" \
+   && grep <<<"$output" -q "type mismatch in let binding 'b'" \
+   && grep <<<"$output" -q "type mismatch in let binding 'c'"; then
     echo "  ok  phase3_diag_multi_error.con reports all 3 independent errors"
     PASS=$((PASS + 1))
 else
@@ -2264,7 +2264,7 @@ fi
 
 # Specific location: error on correct line
 output=$($COMPILER "$TESTDIR/phase3_diag_specific_location.con" --emit-llvm 2>&1 || true)
-if echo "$output" | grep -q "^.*:9:.*error"; then
+if grep <<<"$output" -q "^.*:9:.*error"; then
     echo "  ok  phase3_diag_specific_location.con error points to line 9"
     PASS=$((PASS + 1))
 else
@@ -2274,7 +2274,7 @@ fi
 
 # No cascade: single root cause produces < 5 errors
 output=$($COMPILER "$TESTDIR/phase3_diag_no_cascade.con" --emit-llvm 2>&1 || true)
-error_count=$(echo "$output" | grep -c "error\[" || true)
+error_count=$(grep <<<"$output" -c "error\[" || true)
 if [ "$error_count" -lt 5 ]; then
     echo "  ok  phase3_diag_no_cascade.con $error_count error(s) (< 5, no cascade)"
     PASS=$((PASS + 1))
@@ -2285,7 +2285,7 @@ fi
 
 # Hint quality: capability error includes hint
 output=$($COMPILER "$TESTDIR/phase3_diag_hint_quality.con" --emit-llvm 2>&1 || true)
-if echo "$output" | grep -q "requires File" && echo "$output" | grep -qi "hint:"; then
+if grep <<<"$output" -q "requires File" && grep <<<"$output" -qi "hint:"; then
     echo "  ok  phase3_diag_hint_quality.con capability error with hint"
     PASS=$((PASS + 1))
 else
@@ -2875,7 +2875,7 @@ for fact in data['facts']:
     local actual_status="${actual%%|*}"
     local actual_unsup="${actual#*|}"
     if [ "$actual_status" = "$expect_status" ]; then
-        if [ -z "$expect_unsup" ] || echo "$actual_unsup" | grep -q "$expect_unsup"; then
+        if [ -z "$expect_unsup" ] || grep <<<"$actual_unsup" -q "$expect_unsup"; then
             echo "  ok  $ok_msg"
             PASS=$((PASS + 1))
             return
@@ -2922,9 +2922,9 @@ check_report "$PCEXT" extraction \
 # silently bypassable.
 PCDRIFT="$TESTDIR/adversarial_spec_drift/test_drift.con"
 drift_out=$($COMPILER "$PCDRIFT" --report proof-status 2>&1 || true)
-if echo "$drift_out" | grep -q "spec drift for 'test_drift.simple_add'" && \
-   echo "$drift_out" | grep -q "registered spec 'Concrete.Proof.driftTestSpec'" && \
-   echo "$drift_out" | grep -q "does not match the source-extracted PExpr"; then
+if grep <<<"$drift_out" -q "spec drift for 'test_drift.simple_add'" && \
+   grep <<<"$drift_out" -q "registered spec 'Concrete.Proof.driftTestSpec'" && \
+   grep <<<"$drift_out" -q "does not match the source-extracted PExpr"; then
     echo "  ok  spec_drift: gate fires with precise diagnostic"
     PASS=$((PASS + 1))
 else
@@ -2933,13 +2933,13 @@ else
     FAIL=$((FAIL + 1))
 fi
 # Obligation status must downgrade to stale (not stay proved).
-if echo "$drift_out" | grep -q "proof stale" && \
-   echo "$drift_out" | grep -E "Totals:.*1 stale.*0 proved|Totals:.*0 proved.*1 stale" >/dev/null; then
+if grep <<<"$drift_out" -q "proof stale" && \
+   grep <<<"$drift_out" -E "Totals:.*1 stale.*0 proved|Totals:.*0 proved.*1 stale" >/dev/null; then
     echo "  ok  spec_drift: obligation status downgrades to stale"
     PASS=$((PASS + 1))
 else
     echo "FAIL  spec_drift: status should downgrade to stale, not stay proved"
-    echo "$drift_out" | grep -E "Totals|proof stale|proved" | head -5
+    grep <<<"$drift_out" -E "Totals|proof stale|proved" | head -5
     FAIL=$((FAIL + 1))
 fi
 
@@ -2950,8 +2950,8 @@ fi
 # and the signedness fix that followed.
 PCWIDTHS="$TESTDIR/adversarial_pbinop_widths.con"
 widths_out=$($COMPILER "$PCWIDTHS" --report proof-status 2>&1 || true)
-if echo "$widths_out" | grep -q "u16_xor_blocks" && \
-   echo "$widths_out" | grep -q "Concrete.BinOp.bitxor at Concrete.Ty.u16"; then
+if grep <<<"$widths_out" -q "u16_xor_blocks" && \
+   grep <<<"$widths_out" -q "Concrete.BinOp.bitxor at Concrete.Ty.u16"; then
     echo "  ok  pbinop_widths: u16 ^ u16 blocks with precise diagnostic"
     PASS=$((PASS + 1))
 else
@@ -3549,7 +3549,7 @@ echo "=== Diagnostics JSON tests ==="
 
 # Predictable violation produces JSON with correct kind and fields
 json_output=$(cached_output "$TESTDIR/report_check_predictable_fail_loops.con" "--report diagnostics-json")
-if echo "$json_output" | grep -q '"kind": "predictable_violation"'; then
+if grep <<<"$json_output" -q '"kind": "predictable_violation"'; then
     echo "  ok  diagnostics-json: predictable_violation kind present"
     PASS=$((PASS + 1))
 else
@@ -3558,7 +3558,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$json_output" | grep -q '"reason": "unbounded loops"'; then
+if grep <<<"$json_output" -q '"reason": "unbounded loops"'; then
     echo "  ok  diagnostics-json: unbounded loops reason present"
     PASS=$((PASS + 1))
 else
@@ -3567,7 +3567,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$json_output" | grep -q '"function": "main.spin"'; then
+if grep <<<"$json_output" -q '"function": "main.spin"'; then
     echo "  ok  diagnostics-json: spin function name present"
     PASS=$((PASS + 1))
 else
@@ -3577,7 +3577,7 @@ else
 fi
 
 # Source location present in violation
-if echo "$json_output" | grep -q '"loc":.*"file":.*"line":'; then
+if grep <<<"$json_output" -q '"loc":.*"file":.*"line":'; then
     echo "  ok  diagnostics-json: source location present in violation"
     PASS=$((PASS + 1))
 else
@@ -3587,7 +3587,7 @@ else
 fi
 
 # Violation location present (offending construct)
-if echo "$json_output" | grep -q '"violation_loc":.*"file":.*"line":'; then
+if grep <<<"$json_output" -q '"violation_loc":.*"file":.*"line":'; then
     echo "  ok  diagnostics-json: violation_loc present"
     PASS=$((PASS + 1))
 else
@@ -3597,7 +3597,7 @@ else
 fi
 
 # Proof-status entries present
-if echo "$json_output" | grep -q '"kind": "proof_status"'; then
+if grep <<<"$json_output" -q '"kind": "proof_status"'; then
     echo "  ok  diagnostics-json: proof_status kind present"
     PASS=$((PASS + 1))
 else
@@ -3607,7 +3607,7 @@ else
 fi
 
 # Proof-status entry has fingerprint
-if echo "$json_output" | grep -q '"current_fingerprint":'; then
+if grep <<<"$json_output" -q '"current_fingerprint":'; then
     echo "  ok  diagnostics-json: current_fingerprint present"
     PASS=$((PASS + 1))
 else
@@ -3618,7 +3618,7 @@ fi
 
 # Recursion violation produces JSON
 json_rec=$(cached_output "$TESTDIR/report_check_predictable_fail_recursion.con" "--report diagnostics-json")
-if echo "$json_rec" | grep -q '"reason": "direct recursion"'; then
+if grep <<<"$json_rec" -q '"reason": "direct recursion"'; then
     echo "  ok  diagnostics-json: direct recursion reason present"
     PASS=$((PASS + 1))
 else
@@ -3629,7 +3629,7 @@ fi
 
 # Passing file produces no predictable violations but has proof-status
 json_pass=$(cached_output "$TESTDIR/report_check_predictable_pass.con" "--report diagnostics-json")
-if echo "$json_pass" | grep -q '"kind": "proof_status"' && ! echo "$json_pass" | grep -q '"kind": "predictable_violation"'; then
+if grep <<<"$json_pass" -q '"kind": "proof_status"' && ! grep <<<"$json_pass" -q '"kind": "predictable_violation"'; then
     echo "  ok  diagnostics-json: passing file has proof_status but no violations"
     PASS=$((PASS + 1))
 else
@@ -3655,7 +3655,7 @@ fi
 # --- Effects facts ---
 json_int=$(cached_output "$TESTDIR/report_integration.con" "--report diagnostics-json")
 
-if echo "$json_int" | grep -q '"kind": "effects"'; then
+if grep <<<"$json_int" -q '"kind": "effects"'; then
     echo "  ok  diagnostics-json: effects kind present"
     PASS=$((PASS + 1))
 else
@@ -3664,7 +3664,7 @@ else
 fi
 
 # Effects fact carries key fields
-if echo "$json_int" | grep -q '"is_pure":' && echo "$json_int" | grep -q '"evidence":'; then
+if grep <<<"$json_int" -q '"is_pure":' && grep <<<"$json_int" -q '"evidence":'; then
     echo "  ok  diagnostics-json: effects carries is_pure and evidence"
     PASS=$((PASS + 1))
 else
@@ -3673,7 +3673,7 @@ else
 fi
 
 # Pure function has is_pure: true
-if echo "$json_int" | grep -q '"function": "main.pure_add".*"is_pure": true'; then
+if grep <<<"$json_int" -q '"function": "main.pure_add".*"is_pure": true'; then
     echo "  ok  diagnostics-json: pure_add has is_pure true"
     PASS=$((PASS + 1))
 else
@@ -3682,7 +3682,7 @@ else
 fi
 
 # --- Capability facts ---
-if echo "$json_int" | grep -q '"kind": "capability"'; then
+if grep <<<"$json_int" -q '"kind": "capability"'; then
     echo "  ok  diagnostics-json: capability kind present"
     PASS=$((PASS + 1))
 else
@@ -3691,7 +3691,7 @@ else
 fi
 
 # Capability fact has why traces
-if echo "$json_int" | grep -q '"why":'; then
+if grep <<<"$json_int" -q '"why":'; then
     echo "  ok  diagnostics-json: capability facts have why traces"
     PASS=$((PASS + 1))
 else
@@ -3700,7 +3700,7 @@ else
 fi
 
 # --- Unsafe facts ---
-if echo "$json_int" | grep -q '"kind": "unsafe"'; then
+if grep <<<"$json_int" -q '"kind": "unsafe"'; then
     echo "  ok  diagnostics-json: unsafe kind present"
     PASS=$((PASS + 1))
 else
@@ -3709,7 +3709,7 @@ else
 fi
 
 # Trusted function has trust_boundary
-if echo "$json_int" | grep -q '"trust_boundary":'; then
+if grep <<<"$json_int" -q '"trust_boundary":'; then
     echo "  ok  diagnostics-json: trust_boundary present for trusted fn"
     PASS=$((PASS + 1))
 else
@@ -3718,7 +3718,7 @@ else
 fi
 
 # --- Alloc facts ---
-if echo "$json_int" | grep -q '"kind": "alloc"'; then
+if grep <<<"$json_int" -q '"kind": "alloc"'; then
     echo "  ok  diagnostics-json: alloc kind present"
     PASS=$((PASS + 1))
 else
@@ -3727,7 +3727,7 @@ else
 fi
 
 # Alloc fact has allocates and frees arrays
-if echo "$json_int" | grep -q '"allocates":.*\[' && echo "$json_int" | grep -q '"potential_leak":'; then
+if grep <<<"$json_int" -q '"allocates":.*\[' && grep <<<"$json_int" -q '"potential_leak":'; then
     echo "  ok  diagnostics-json: alloc fact carries allocates array and potential_leak"
     PASS=$((PASS + 1))
 else
@@ -3753,7 +3753,7 @@ rc_unsafe=$(cached_output "$RC_FILE" "--report unsafe")
 
 # 1a. Effects says pure_add is_pure:true → capability fact should have empty capabilities
 # (grep the JSON line for pure_add's capability fact and check for empty array)
-if echo "$rc_json" | grep -q '"kind": "capability".*"function": "main.pure_add".*"is_pure": true'; then
+if grep <<<"$rc_json" -q '"kind": "capability".*"function": "main.pure_add".*"is_pure": true'; then
     echo "  ok  consistency: capability fact agrees pure_add is pure"
     PASS=$((PASS + 1))
 else
@@ -3762,8 +3762,8 @@ else
 fi
 
 # 1b. Effects says uses_alloc allocates:true → an alloc fact for uses_alloc should exist
-if echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.uses_alloc".*"allocates": true' && \
-   echo "$rc_json" | grep -q '"kind": "alloc".*"function": "main.uses_alloc"'; then
+if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.uses_alloc".*"allocates": true' && \
+   grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.uses_alloc"'; then
     echo "  ok  consistency: effects allocates:true ↔ alloc fact exists for uses_alloc"
     PASS=$((PASS + 1))
 else
@@ -3772,8 +3772,8 @@ else
 fi
 
 # 1c. Effects says call_raw is_trusted:true → unsafe fact should have is_trusted:true
-if echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.call_raw".*"is_trusted": true' && \
-   echo "$rc_json" | grep -q '"kind": "unsafe".*"function": "main.call_raw".*"is_trusted": true'; then
+if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.call_raw".*"is_trusted": true' && \
+   grep <<<"$rc_json" -q '"kind": "unsafe".*"function": "main.call_raw".*"is_trusted": true'; then
     echo "  ok  consistency: effects/unsafe agree call_raw is trusted"
     PASS=$((PASS + 1))
 else
@@ -3782,8 +3782,8 @@ else
 fi
 
 # 1d. Effects says call_raw crosses_ffi:true → predictable_violation for call_raw should exist
-if echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.call_raw".*"crosses_ffi": true' && \
-   echo "$rc_json" | grep -q '"kind": "predictable_violation".*"function": "main.call_raw"'; then
+if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.call_raw".*"crosses_ffi": true' && \
+   grep <<<"$rc_json" -q '"kind": "predictable_violation".*"function": "main.call_raw"'; then
     echo "  ok  consistency: effects crosses_ffi ↔ predictable_violation for call_raw"
     PASS=$((PASS + 1))
 else
@@ -3793,8 +3793,8 @@ fi
 
 # 1e. Effects says pure_add evidence:enforced → proof_status should be eligible and waiting for proof
 # Note: JSON is one line, so we extract per-record to avoid cross-record grep matches
-pure_add_proof_state=$(echo "$rc_json" | grep -o '"kind": "proof_status"[^}]*"function": "main.pure_add"[^}]*' | grep -o '"state": "[^"]*"' | head -1)
-if echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"' && \
+pure_add_proof_state=$(grep <<<"$rc_json" -o '"kind": "proof_status"[^}]*"function": "main.pure_add"[^}]*' | grep -o '"state": "[^"]*"' | head -1)
+if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"' && \
    [ "$pure_add_proof_state" = '"state": "missing"' ]; then
     echo "  ok  consistency: effects enforced ↔ proof_status eligible/missing for pure_add"
     PASS=$((PASS + 1))
@@ -3804,8 +3804,8 @@ else
 fi
 
 # 1f. Effects says call_raw evidence:trusted-assumption → proof_status should be trusted
-if echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.call_raw".*"evidence": "trusted-assumption"' && \
-   echo "$rc_json" | grep -q '"kind": "proof_status".*"function": "main.call_raw".*"state": "trusted"'; then
+if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.call_raw".*"evidence": "trusted-assumption"' && \
+   grep <<<"$rc_json" -q '"kind": "proof_status".*"function": "main.call_raw".*"state": "trusted"'; then
     echo "  ok  consistency: effects trusted-assumption ↔ proof_status trusted for call_raw"
     PASS=$((PASS + 1))
 else
@@ -3814,13 +3814,13 @@ else
 fi
 
 # 1g. alloc_no_free has potential_leak:true (allocates, no free, no defer, returns heap)
-if echo "$rc_json" | grep -q '"kind": "alloc".*"function": "main.alloc_no_free".*"potential_leak": false'; then
+if grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.alloc_no_free".*"potential_leak": false'; then
     # returns_allocation is true so potential_leak should be false (caller responsible)
     echo "  ok  consistency: alloc_no_free returns allocation, no leak flagged"
     PASS=$((PASS + 1))
 else
     # Check the alternative: potential_leak true would also be consistent if returns_allocation false
-    if echo "$rc_json" | grep -q '"kind": "alloc".*"function": "main.alloc_no_free".*"returns_allocation": true'; then
+    if grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.alloc_no_free".*"returns_allocation": true'; then
         echo "  ok  consistency: alloc_no_free returns allocation, no leak flagged"
         PASS=$((PASS + 1))
     else
@@ -3832,8 +3832,8 @@ fi
 # --- Layer 2: JSON ↔ human report consistency ---
 
 # 2a. Human caps says "pure_add : (pure)" → JSON effects has is_pure:true
-if echo "$rc_caps" | grep -q "pure_add : (pure)" && \
-   echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.pure_add".*"is_pure": true'; then
+if grep <<<"$rc_caps" -q "pure_add : (pure)" && \
+   grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"is_pure": true'; then
     echo "  ok  consistency: --report caps (pure) ↔ JSON is_pure for pure_add"
     PASS=$((PASS + 1))
 else
@@ -3842,8 +3842,8 @@ else
 fi
 
 # 2b. Human caps says "uses_alloc : Alloc" → JSON capability has Alloc
-if echo "$rc_caps" | grep -q "uses_alloc : Alloc" && \
-   echo "$rc_json" | grep -q '"kind": "capability".*"function": "main.uses_alloc".*"Alloc"'; then
+if grep <<<"$rc_caps" -q "uses_alloc : Alloc" && \
+   grep <<<"$rc_json" -q '"kind": "capability".*"function": "main.uses_alloc".*"Alloc"'; then
     echo "  ok  consistency: --report caps Alloc ↔ JSON capability for uses_alloc"
     PASS=$((PASS + 1))
 else
@@ -3852,8 +3852,8 @@ else
 fi
 
 # 2c. Human effects says "call_raw ... ffi: yes" → JSON effects has crosses_ffi:true
-if echo "$rc_effects" | grep -A1 "call_raw" | grep -q "ffi: yes" && \
-   echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.call_raw".*"crosses_ffi": true'; then
+if grep <<<"$rc_effects" -A1 "call_raw" | grep -q "ffi: yes" && \
+   grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.call_raw".*"crosses_ffi": true'; then
     echo "  ok  consistency: --report effects ffi:yes ↔ JSON crosses_ffi for call_raw"
     PASS=$((PASS + 1))
 else
@@ -3862,8 +3862,8 @@ else
 fi
 
 # 2d. Human effects says "pure_add ... evidence: enforced" → JSON effects matches
-if echo "$rc_effects" | grep -A1 "pure_add" | grep -q "evidence: enforced" && \
-   echo "$rc_json" | grep -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"'; then
+if grep <<<"$rc_effects" -A1 "pure_add" | grep -q "evidence: enforced" && \
+   grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"'; then
     echo "  ok  consistency: --report effects evidence ↔ JSON evidence for pure_add"
     PASS=$((PASS + 1))
 else
@@ -3872,8 +3872,8 @@ else
 fi
 
 # 2e. Human alloc says "fn uses_alloc ... allocates: vec_new" → JSON alloc fact has vec_new
-if echo "$rc_alloc" | grep -A1 "fn uses_alloc" | grep -q "allocates: vec_new" && \
-   echo "$rc_json" | grep -q '"kind": "alloc".*"function": "main.uses_alloc".*"vec_new"'; then
+if grep <<<"$rc_alloc" -A1 "fn uses_alloc" | grep -q "allocates: vec_new" && \
+   grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.uses_alloc".*"vec_new"'; then
     echo "  ok  consistency: --report alloc vec_new ↔ JSON alloc for uses_alloc"
     PASS=$((PASS + 1))
 else
@@ -3882,8 +3882,8 @@ else
 fi
 
 # 2f. Human alloc says "fn alloc_with_defer ... cleanup: defer free" → JSON alloc has defers
-if echo "$rc_alloc" | grep -A3 "fn alloc_with_defer" | grep -q "defer free" && \
-   echo "$rc_json" | grep -q '"kind": "alloc".*"function": "main.alloc_with_defer".*"defers":.*\['; then
+if grep <<<"$rc_alloc" -A3 "fn alloc_with_defer" | grep -q "defer free" && \
+   grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.alloc_with_defer".*"defers":.*\['; then
     echo "  ok  consistency: --report alloc defer ↔ JSON alloc defers for alloc_with_defer"
     PASS=$((PASS + 1))
 else
@@ -3892,8 +3892,8 @@ else
 fi
 
 # 2g. Human unsafe says "trusted fn call_raw" → JSON unsafe has is_trusted:true
-if echo "$rc_unsafe" | grep -q "trusted fn call_raw" && \
-   echo "$rc_json" | grep -q '"kind": "unsafe".*"function": "main.call_raw".*"is_trusted": true'; then
+if grep <<<"$rc_unsafe" -q "trusted fn call_raw" && \
+   grep <<<"$rc_json" -q '"kind": "unsafe".*"function": "main.call_raw".*"is_trusted": true'; then
     echo "  ok  consistency: --report unsafe trusted ↔ JSON unsafe for call_raw"
     PASS=$((PASS + 1))
 else
@@ -3902,8 +3902,8 @@ else
 fi
 
 # 2h. Human unsafe says "wraps: extern raw_extern" → JSON unsafe has trust_boundary with raw_extern
-if echo "$rc_unsafe" | grep -q "wraps: extern raw_extern" && \
-   echo "$rc_json" | grep -q '"kind": "unsafe".*"function": "main.call_raw".*"trust_boundary":.*"extern raw_extern"'; then
+if grep <<<"$rc_unsafe" -q "wraps: extern raw_extern" && \
+   grep <<<"$rc_json" -q '"kind": "unsafe".*"function": "main.call_raw".*"trust_boundary":.*"extern raw_extern"'; then
     echo "  ok  consistency: --report unsafe wraps ↔ JSON trust_boundary for call_raw"
     PASS=$((PASS + 1))
 else
@@ -3912,8 +3912,8 @@ else
 fi
 
 # 2i. Human effects says "2 pure" in totals → JSON has exactly 2 effects facts with is_pure:true
-pure_count=$(echo "$rc_json" | grep -o '"kind": "effects"[^}]*"is_pure": true' | wc -l | tr -d ' ')
-if echo "$rc_effects" | grep -q "2 pure" && [ "$pure_count" = "2" ]; then
+pure_count=$(grep <<<"$rc_json" -o '"kind": "effects"[^}]*"is_pure": true' | wc -l | tr -d ' ')
+if grep <<<"$rc_effects" -q "2 pure" && [ "$pure_count" = "2" ]; then
     echo "  ok  consistency: --report effects 2 pure ↔ JSON has 2 pure effects facts"
     PASS=$((PASS + 1))
 else
@@ -3922,8 +3922,8 @@ else
 fi
 
 # 2j. Human alloc says "3 functions allocate" → JSON has exactly 3 alloc facts
-alloc_count=$(echo "$rc_json" | grep -o '"kind": "alloc"' | wc -l | tr -d ' ')
-if echo "$rc_alloc" | grep -q "3 functions allocate" && [ "$alloc_count" = "3" ]; then
+alloc_count=$(grep <<<"$rc_json" -o '"kind": "alloc"' | wc -l | tr -d ' ')
+if grep <<<"$rc_alloc" -q "3 functions allocate" && [ "$alloc_count" = "3" ]; then
     echo "  ok  consistency: --report alloc 3 allocating ↔ JSON has 3 alloc facts"
     PASS=$((PASS + 1))
 else
@@ -3935,8 +3935,8 @@ fi
 # Human --check predictable fails with "direct recursion" → JSON has matching violation
 rc_rec_json=$(cached_output "$TESTDIR/report_check_predictable_fail_recursion.con" "--report diagnostics-json")
 rc_rec_human=$($COMPILER "$TESTDIR/report_check_predictable_fail_recursion.con" --check predictable 2>&1) || true
-if echo "$rc_rec_human" | grep -q "direct recursion" && \
-   echo "$rc_rec_json" | grep -q '"kind": "predictable_violation".*"reason": "direct recursion"'; then
+if grep <<<"$rc_rec_human" -q "direct recursion" && \
+   grep <<<"$rc_rec_json" -q '"kind": "predictable_violation".*"reason": "direct recursion"'; then
     echo "  ok  consistency: --check predictable recursion ↔ JSON violation for countdown"
     PASS=$((PASS + 1))
 else
@@ -3952,9 +3952,9 @@ echo "=== Fact query CLI tests ==="
 
 # --query effects returns only effects facts
 q_effects=$(cached_output "$TESTDIR/report_integration.con" "--query effects")
-if echo "$q_effects" | grep -q '"kind": "effects"' && \
-   ! echo "$q_effects" | grep -q '"kind": "alloc"' && \
-   ! echo "$q_effects" | grep -q '"kind": "capability"'; then
+if grep <<<"$q_effects" -q '"kind": "effects"' && \
+   ! grep <<<"$q_effects" -q '"kind": "alloc"' && \
+   ! grep <<<"$q_effects" -q '"kind": "capability"'; then
     echo "  ok  --query effects: returns only effects kind"
     PASS=$((PASS + 1))
 else
@@ -3964,8 +3964,8 @@ fi
 
 # --query effects:pure_add returns exactly one fact
 q_pure=$(cached_output "$TESTDIR/report_integration.con" "--query effects:pure_add")
-if echo "$q_pure" | grep -q '"function": "main.pure_add"' && \
-   echo "$q_pure" | grep -q '"is_pure": true'; then
+if grep <<<"$q_pure" -q '"function": "main.pure_add"' && \
+   grep <<<"$q_pure" -q '"is_pure": true'; then
     echo "  ok  --query effects:pure_add returns pure_add effects fact"
     PASS=$((PASS + 1))
 else
@@ -3975,9 +3975,9 @@ fi
 
 # --query fn:call_raw returns facts from multiple kinds
 q_fn=$(cached_output "$TESTDIR/report_integration.con" "--query fn:call_raw")
-if echo "$q_fn" | grep -q '"kind": "effects"' && \
-   echo "$q_fn" | grep -q '"kind": "unsafe"' && \
-   echo "$q_fn" | grep -q '"kind": "capability"'; then
+if grep <<<"$q_fn" -q '"kind": "effects"' && \
+   grep <<<"$q_fn" -q '"kind": "unsafe"' && \
+   grep <<<"$q_fn" -q '"kind": "capability"'; then
     echo "  ok  --query fn:call_raw returns effects + unsafe + capability facts"
     PASS=$((PASS + 1))
 else
@@ -3987,8 +3987,8 @@ fi
 
 # --query alloc returns only alloc facts
 q_alloc=$(cached_output "$TESTDIR/report_integration.con" "--query alloc")
-if echo "$q_alloc" | grep -q '"kind": "alloc"' && \
-   ! echo "$q_alloc" | grep -q '"kind": "effects"'; then
+if grep <<<"$q_alloc" -q '"kind": "alloc"' && \
+   ! grep <<<"$q_alloc" -q '"kind": "effects"'; then
     echo "  ok  --query alloc: returns only alloc kind"
     PASS=$((PASS + 1))
 else
@@ -3998,8 +3998,8 @@ fi
 
 # --query unsafe returns only unsafe facts
 q_unsafe=$(cached_output "$TESTDIR/report_integration.con" "--query unsafe")
-if echo "$q_unsafe" | grep -q '"kind": "unsafe"' && \
-   ! echo "$q_unsafe" | grep -q '"kind": "effects"'; then
+if grep <<<"$q_unsafe" -q '"kind": "unsafe"' && \
+   ! grep <<<"$q_unsafe" -q '"kind": "effects"'; then
     echo "  ok  --query unsafe: returns only unsafe kind"
     PASS=$((PASS + 1))
 else
@@ -4009,8 +4009,8 @@ fi
 
 # --query capability returns only capability facts
 q_cap=$(cached_output "$TESTDIR/report_integration.con" "--query capability")
-if echo "$q_cap" | grep -q '"kind": "capability"' && \
-   ! echo "$q_cap" | grep -q '"kind": "effects"'; then
+if grep <<<"$q_cap" -q '"kind": "capability"' && \
+   ! grep <<<"$q_cap" -q '"kind": "effects"'; then
     echo "  ok  --query capability: returns only capability kind"
     PASS=$((PASS + 1))
 else
@@ -4020,8 +4020,8 @@ fi
 
 # --query proof_status returns only proof_status facts
 q_proof=$(cached_output "$TESTDIR/report_integration.con" "--query proof_status")
-if echo "$q_proof" | grep -q '"kind": "proof_status"' && \
-   ! echo "$q_proof" | grep -q '"kind": "effects"'; then
+if grep <<<"$q_proof" -q '"kind": "proof_status"' && \
+   ! grep <<<"$q_proof" -q '"kind": "effects"'; then
     echo "  ok  --query proof_status: returns only proof_status kind"
     PASS=$((PASS + 1))
 else
@@ -4031,8 +4031,8 @@ fi
 
 # --query predictable_violation on file with violations
 q_viol=$(cached_output "$TESTDIR/report_check_predictable_fail_loops.con" "--query predictable_violation")
-if echo "$q_viol" | grep -q '"function": "main.spin"' && \
-   echo "$q_viol" | grep -q '"reason": "unbounded loops"'; then
+if grep <<<"$q_viol" -q '"function": "main.spin"' && \
+   grep <<<"$q_viol" -q '"reason": "unbounded loops"'; then
     echo "  ok  --query predictable_violation: returns spin violation"
     PASS=$((PASS + 1))
 else
@@ -4042,8 +4042,8 @@ fi
 
 # --query predictable_violation on passing file returns envelope with fact_count 0
 q_noviol=$(cached_output "$TESTDIR/report_check_predictable_pass.con" "--query predictable_violation")
-if echo "$q_noviol" | grep -q '"fact_count": 0' && \
-   echo "$q_noviol" | grep -q '"facts": \[\]'; then
+if grep <<<"$q_noviol" -q '"fact_count": 0' && \
+   grep <<<"$q_noviol" -q '"facts": \[\]'; then
     echo "  ok  --query predictable_violation: empty for passing file"
     PASS=$((PASS + 1))
 else
@@ -4053,8 +4053,8 @@ fi
 
 # --query fn:pure_add returns proof_status (qualified name match)
 q_fn_pure=$(cached_output "$TESTDIR/report_integration.con" "--query fn:pure_add")
-if echo "$q_fn_pure" | grep -q '"kind": "proof_status"' && \
-   echo "$q_fn_pure" | grep -q '"kind": "effects"'; then
+if grep <<<"$q_fn_pure" -q '"kind": "proof_status"' && \
+   grep <<<"$q_fn_pure" -q '"kind": "effects"'; then
     echo "  ok  --query fn:pure_add returns proof_status + effects (qualified name match)"
     PASS=$((PASS + 1))
 else
@@ -4070,9 +4070,9 @@ echo "=== Authority trace query tests ==="
 
 # Transitive: main requires Alloc via uses_alloc → vec_new (intrinsic)
 q_alloc=$(cached_output "$TESTDIR/report_integration.con" "--query why-capability:main:Alloc")
-if echo "$q_alloc" | grep -q '"answer": "transitive"' && \
-   echo "$q_alloc" | grep -q '"callee": "uses_alloc"' && \
-   echo "$q_alloc" | grep -q '"origin": "intrinsic"'; then
+if grep <<<"$q_alloc" -q '"answer": "transitive"' && \
+   grep <<<"$q_alloc" -q '"callee": "uses_alloc"' && \
+   grep <<<"$q_alloc" -q '"origin": "intrinsic"'; then
     echo "  ok  why-capability:main:Alloc traces main → uses_alloc → intrinsic"
     PASS=$((PASS + 1))
 else
@@ -4083,8 +4083,8 @@ fi
 
 # Declared: main declares File via with(Std)
 q_file=$(cached_output "$TESTDIR/report_integration.con" "--query why-capability:main:File")
-if echo "$q_file" | grep -q '"answer": "declared"' && \
-   echo "$q_file" | grep -q '"origin": "declared"'; then
+if grep <<<"$q_file" -q '"answer": "declared"' && \
+   grep <<<"$q_file" -q '"origin": "declared"'; then
     echo "  ok  why-capability:main:File shows declared origin"
     PASS=$((PASS + 1))
 else
@@ -4095,9 +4095,9 @@ fi
 
 # Transitive via extern: call_raw requires Unsafe via raw_extern (extern)
 q_unsafe=$(cached_output "$TESTDIR/report_integration.con" "--query why-capability:call_raw:Unsafe")
-if echo "$q_unsafe" | grep -q '"answer": "transitive"' && \
-   echo "$q_unsafe" | grep -q '"callee": "raw_extern"' && \
-   echo "$q_unsafe" | grep -q '"origin": "extern"'; then
+if grep <<<"$q_unsafe" -q '"answer": "transitive"' && \
+   grep <<<"$q_unsafe" -q '"callee": "raw_extern"' && \
+   grep <<<"$q_unsafe" -q '"origin": "extern"'; then
     echo "  ok  why-capability:call_raw:Unsafe traces call_raw → raw_extern (extern)"
     PASS=$((PASS + 1))
 else
@@ -4108,8 +4108,8 @@ fi
 
 # Not required: pure_add does not require Alloc
 q_none=$(cached_output "$TESTDIR/report_integration.con" "--query why-capability:pure_add:Alloc")
-if echo "$q_none" | grep -q '"answer": "not_required"' && \
-   echo "$q_none" | grep -q '"trace": \[\]'; then
+if grep <<<"$q_none" -q '"answer": "not_required"' && \
+   grep <<<"$q_none" -q '"trace": \[\]'; then
     echo "  ok  why-capability:pure_add:Alloc returns not_required"
     PASS=$((PASS + 1))
 else
@@ -4119,7 +4119,7 @@ else
 fi
 
 # Answer-shaped output has query_answer kind
-if echo "$q_alloc" | grep -q '"kind": "query_answer"'; then
+if grep <<<"$q_alloc" -q '"kind": "query_answer"'; then
     echo "  ok  why-capability output has kind query_answer"
     PASS=$((PASS + 1))
 else
@@ -4128,7 +4128,7 @@ else
 fi
 
 # Declared origin includes source location
-if echo "$q_file" | grep -q '"loc":.*"file":.*"line":'; then
+if grep <<<"$q_file" -q '"loc":.*"file":.*"line":'; then
     echo "  ok  why-capability declared origin includes source location"
     PASS=$((PASS + 1))
 else
@@ -4141,9 +4141,9 @@ AT_FILE="$TESTDIR/adversarial_authority_trace.con"
 
 # Mutual recursion: ping→pong cycle detected, not infinite loop
 q_cycle=$(cached_output "$AT_FILE" "--query why-capability:ping:Alloc")
-if echo "$q_cycle" | grep -q '"answer": "transitive"' && \
-   echo "$q_cycle" | grep -q '"error": "cycle"' && \
-   echo "$q_cycle" | grep -q '"origin": "intrinsic"'; then
+if grep <<<"$q_cycle" -q '"answer": "transitive"' && \
+   grep <<<"$q_cycle" -q '"error": "cycle"' && \
+   grep <<<"$q_cycle" -q '"origin": "intrinsic"'; then
     echo "  ok  adversarial: mutual recursion cycle detected in authority trace"
     PASS=$((PASS + 1))
 else
@@ -4154,8 +4154,8 @@ fi
 
 # Diamond: both left_arm and right_arm traced
 q_diamond=$(cached_output "$AT_FILE" "--query why-capability:diamond:Alloc")
-if echo "$q_diamond" | grep -q '"callee": "left_arm"' && \
-   echo "$q_diamond" | grep -q '"callee": "right_arm"'; then
+if grep <<<"$q_diamond" -q '"callee": "left_arm"' && \
+   grep <<<"$q_diamond" -q '"callee": "right_arm"'; then
     echo "  ok  adversarial: diamond dependency traces both arms"
     PASS=$((PASS + 1))
 else
@@ -4166,10 +4166,10 @@ fi
 
 # Deep chain: entry → mid1 → mid2 → leaf → alloc (intrinsic)
 q_deep=$(cached_output "$AT_FILE" "--query why-capability:entry:Alloc")
-if echo "$q_deep" | grep -q '"callee": "mid1"' && \
-   echo "$q_deep" | grep -q '"callee": "mid2"' && \
-   echo "$q_deep" | grep -q '"callee": "leaf"' && \
-   echo "$q_deep" | grep -q '"origin": "intrinsic"'; then
+if grep <<<"$q_deep" -q '"callee": "mid1"' && \
+   grep <<<"$q_deep" -q '"callee": "mid2"' && \
+   grep <<<"$q_deep" -q '"callee": "leaf"' && \
+   grep <<<"$q_deep" -q '"origin": "intrinsic"'; then
     echo "  ok  adversarial: deep chain traces entry → mid1 → mid2 → leaf → intrinsic"
     PASS=$((PASS + 1))
 else
@@ -4180,7 +4180,7 @@ fi
 
 # Trusted extern: uses_trusted should NOT require Unsafe
 q_trusted=$(cached_output "$AT_FILE" "--query why-capability:uses_trusted:Unsafe")
-if echo "$q_trusted" | grep -q '"answer": "not_required"'; then
+if grep <<<"$q_trusted" -q '"answer": "not_required"'; then
     echo "  ok  adversarial: trusted extern does not contribute Unsafe"
     PASS=$((PASS + 1))
 else
@@ -4191,9 +4191,9 @@ fi
 
 # Untrusted extern: uses_raw traces to extern origin
 q_raw=$(cached_output "$AT_FILE" "--query why-capability:uses_raw:Unsafe")
-if echo "$q_raw" | grep -q '"answer": "transitive"' && \
-   echo "$q_raw" | grep -q '"callee": "raw_op"' && \
-   echo "$q_raw" | grep -q '"origin": "extern"'; then
+if grep <<<"$q_raw" -q '"answer": "transitive"' && \
+   grep <<<"$q_raw" -q '"callee": "raw_op"' && \
+   grep <<<"$q_raw" -q '"origin": "extern"'; then
     echo "  ok  adversarial: untrusted extern traces to extern origin"
     PASS=$((PASS + 1))
 else
@@ -4204,7 +4204,7 @@ fi
 
 # Nonexistent function returns not_required
 q_missing=$(cached_output "$AT_FILE" "--query why-capability:nonexistent:Alloc")
-if echo "$q_missing" | grep -q '"answer": "not_required"'; then
+if grep <<<"$q_missing" -q '"answer": "not_required"'; then
     echo "  ok  adversarial: nonexistent function returns not_required"
     PASS=$((PASS + 1))
 else
@@ -4223,8 +4223,8 @@ echo "=== Semantic query tests ==="
 
 # Passing function
 q_pred_pass=$(cached_output "$TESTDIR/report_integration.con" "--query predictable:pure_add")
-if echo "$q_pred_pass" | grep -q '"answer": "pass"' && \
-   echo "$q_pred_pass" | grep -q '"gates_failed": 0'; then
+if grep <<<"$q_pred_pass" -q '"answer": "pass"' && \
+   grep <<<"$q_pred_pass" -q '"gates_failed": 0'; then
     echo "  ok  predictable:pure_add answers pass with 0 gates failed"
     PASS=$((PASS + 1))
 else
@@ -4235,8 +4235,8 @@ fi
 
 # Failing function with multiple violations
 q_pred_fail=$(cached_output "$TESTDIR/report_integration.con" "--query predictable:main")
-if echo "$q_pred_fail" | grep -q '"answer": "fail"' && \
-   echo "$q_pred_fail" | grep -q '"gate":'; then
+if grep <<<"$q_pred_fail" -q '"answer": "fail"' && \
+   grep <<<"$q_pred_fail" -q '"gate":'; then
     echo "  ok  predictable:main answers fail with violation gates"
     PASS=$((PASS + 1))
 else
@@ -4246,7 +4246,7 @@ else
 fi
 
 # Violation includes hint
-if echo "$q_pred_fail" | grep -q '"hint":'; then
+if grep <<<"$q_pred_fail" -q '"hint":'; then
     echo "  ok  predictable:main violations include hints"
     PASS=$((PASS + 1))
 else
@@ -4256,8 +4256,8 @@ fi
 
 # Unbounded loop violation
 q_pred_loop=$(cached_output "$TESTDIR/report_check_predictable_fail_loops.con" "--query predictable:spin")
-if echo "$q_pred_loop" | grep -q '"answer": "fail"' && \
-   echo "$q_pred_loop" | grep -q '"gate": "unbounded loops"'; then
+if grep <<<"$q_pred_loop" -q '"answer": "fail"' && \
+   grep <<<"$q_pred_loop" -q '"gate": "unbounded loops"'; then
     echo "  ok  predictable:spin answers fail with unbounded loops gate"
     PASS=$((PASS + 1))
 else
@@ -4270,8 +4270,8 @@ fi
 
 # Pure function: missing (eligible but unproved)
 q_proof_pure=$(cached_output "$TESTDIR/report_integration.con" "--query proof:pure_add")
-if echo "$q_proof_pure" | grep -q '"answer": "missing"' && \
-   echo "$q_proof_pure" | grep -q '"current_fingerprint":'; then
+if grep <<<"$q_proof_pure" -q '"answer": "missing"' && \
+   grep <<<"$q_proof_pure" -q '"current_fingerprint":'; then
     echo "  ok  proof:pure_add answers missing with fingerprint"
     PASS=$((PASS + 1))
 else
@@ -4282,7 +4282,7 @@ fi
 
 # Trusted function: trusted
 q_proof_trusted=$(cached_output "$TESTDIR/report_integration.con" "--query proof:call_raw")
-if echo "$q_proof_trusted" | grep -q '"answer": "trusted"'; then
+if grep <<<"$q_proof_trusted" -q '"answer": "trusted"'; then
     echo "  ok  proof:call_raw answers trusted"
     PASS=$((PASS + 1))
 else
@@ -4293,7 +4293,7 @@ fi
 
 # Nonexistent function
 q_proof_missing=$(cached_output "$TESTDIR/report_integration.con" "--query proof:nonexistent")
-if echo "$q_proof_missing" | grep -q '"answer": "not_found"'; then
+if grep <<<"$q_proof_missing" -q '"answer": "not_found"'; then
     echo "  ok  proof:nonexistent answers not_found"
     PASS=$((PASS + 1))
 else
@@ -4306,9 +4306,9 @@ fi
 
 # Pure function: enforced (passes predictable, no proof yet)
 q_ev_pure=$(cached_output "$TESTDIR/report_integration.con" "--query evidence:pure_add")
-if echo "$q_ev_pure" | grep -q '"answer": "enforced"' && \
-   echo "$q_ev_pure" | grep -q '"passes_predictable": true' && \
-   echo "$q_ev_pure" | grep -q '"proof_state": "missing"'; then
+if grep <<<"$q_ev_pure" -q '"answer": "enforced"' && \
+   grep <<<"$q_ev_pure" -q '"passes_predictable": true' && \
+   grep <<<"$q_ev_pure" -q '"proof_state": "missing"'; then
     echo "  ok  evidence:pure_add answers enforced, passes predictable, no proof"
     PASS=$((PASS + 1))
 else
@@ -4319,8 +4319,8 @@ fi
 
 # Trusted function: trusted-assumption
 q_ev_trusted=$(cached_output "$TESTDIR/report_integration.con" "--query evidence:call_raw")
-if echo "$q_ev_trusted" | grep -q '"answer": "trusted-assumption"' && \
-   echo "$q_ev_trusted" | grep -q '"is_trusted": true'; then
+if grep <<<"$q_ev_trusted" -q '"answer": "trusted-assumption"' && \
+   grep <<<"$q_ev_trusted" -q '"is_trusted": true'; then
     echo "  ok  evidence:call_raw answers trusted-assumption"
     PASS=$((PASS + 1))
 else
@@ -4331,8 +4331,8 @@ fi
 
 # Failing function: reported (fails predictable)
 q_ev_fail=$(cached_output "$TESTDIR/report_integration.con" "--query evidence:main")
-if echo "$q_ev_fail" | grep -q '"answer": "reported"' && \
-   echo "$q_ev_fail" | grep -q '"passes_predictable": false'; then
+if grep <<<"$q_ev_fail" -q '"answer": "reported"' && \
+   grep <<<"$q_ev_fail" -q '"passes_predictable": false'; then
     echo "  ok  evidence:main answers reported, fails predictable"
     PASS=$((PASS + 1))
 else
@@ -4343,7 +4343,7 @@ fi
 
 # Not found
 q_ev_missing=$(cached_output "$TESTDIR/report_integration.con" "--query evidence:nonexistent")
-if echo "$q_ev_missing" | grep -q '"answer": "not_found"'; then
+if grep <<<"$q_ev_missing" -q '"answer": "not_found"'; then
     echo "  ok  evidence:nonexistent answers not_found"
     PASS=$((PASS + 1))
 else
@@ -4358,9 +4358,9 @@ echo "=== Audit query tests ==="
 
 # Pure function audit: enforced, pure, passes predictable, no alloc
 q_audit_pure=$(cached_output "$TESTDIR/report_integration.con" "--query audit:pure_add")
-if echo "$q_audit_pure" | grep -q '"evidence": "enforced"' && \
-   echo "$q_audit_pure" | grep -q '"is_pure": true' && \
-   echo "$q_audit_pure" | grep -q '"passes": true'; then
+if grep <<<"$q_audit_pure" -q '"evidence": "enforced"' && \
+   grep <<<"$q_audit_pure" -q '"is_pure": true' && \
+   grep <<<"$q_audit_pure" -q '"passes": true'; then
     echo "  ok  audit:pure_add shows enforced, pure, passes predictable"
     PASS=$((PASS + 1))
 else
@@ -4371,9 +4371,9 @@ fi
 
 # Trusted function audit: trusted-assumption, has authority traces, fails predictable
 q_audit_trusted=$(cached_output "$TESTDIR/report_integration.con" "--query audit:call_raw")
-if echo "$q_audit_trusted" | grep -q '"evidence": "trusted-assumption"' && \
-   echo "$q_audit_trusted" | grep -q '"is_trusted": true' && \
-   echo "$q_audit_trusted" | grep -q '"passes": false'; then
+if grep <<<"$q_audit_trusted" -q '"evidence": "trusted-assumption"' && \
+   grep <<<"$q_audit_trusted" -q '"is_trusted": true' && \
+   grep <<<"$q_audit_trusted" -q '"passes": false'; then
     echo "  ok  audit:call_raw shows trusted-assumption, trusted, fails predictable"
     PASS=$((PASS + 1))
 else
@@ -4383,8 +4383,8 @@ else
 fi
 
 # Audit includes authority traces
-if echo "$q_audit_trusted" | grep -q '"traces":' && \
-   echo "$q_audit_trusted" | grep -q '"origin": "extern"'; then
+if grep <<<"$q_audit_trusted" -q '"traces":' && \
+   grep <<<"$q_audit_trusted" -q '"origin": "extern"'; then
     echo "  ok  audit:call_raw includes authority trace to extern"
     PASS=$((PASS + 1))
 else
@@ -4393,8 +4393,8 @@ else
 fi
 
 # Audit includes proof state and fingerprint
-if echo "$q_audit_pure" | grep -q '"state": "missing"' && \
-   echo "$q_audit_pure" | grep -q '"fingerprint":'; then
+if grep <<<"$q_audit_pure" -q '"state": "missing"' && \
+   grep <<<"$q_audit_pure" -q '"fingerprint":'; then
     echo "  ok  audit:pure_add includes proof state and fingerprint"
     PASS=$((PASS + 1))
 else
@@ -4403,8 +4403,8 @@ else
 fi
 
 # Audit includes allocation info
-if echo "$q_audit_pure" | grep -q '"allocates": \[\]' && \
-   echo "$q_audit_pure" | grep -q '"returns_allocation": false'; then
+if grep <<<"$q_audit_pure" -q '"allocates": \[\]' && \
+   grep <<<"$q_audit_pure" -q '"returns_allocation": false'; then
     echo "  ok  audit:pure_add includes empty allocation info"
     PASS=$((PASS + 1))
 else
@@ -4414,8 +4414,8 @@ fi
 
 # Allocating function audit
 q_audit_alloc=$(cached_output "$TESTDIR/report_integration.con" "--query audit:uses_alloc")
-if echo "$q_audit_alloc" | grep -q '"evidence": "reported"' && \
-   echo "$q_audit_alloc" | grep -q '"allocates":.*"vec_new"'; then
+if grep <<<"$q_audit_alloc" -q '"evidence": "reported"' && \
+   grep <<<"$q_audit_alloc" -q '"allocates":.*"vec_new"'; then
     echo "  ok  audit:uses_alloc shows reported with vec_new allocation"
     PASS=$((PASS + 1))
 else
@@ -4426,7 +4426,7 @@ fi
 
 # Not found
 q_audit_missing=$(cached_output "$TESTDIR/report_integration.con" "--query audit:nonexistent")
-if echo "$q_audit_missing" | grep -q '"answer": "not_found"'; then
+if grep <<<"$q_audit_missing" -q '"answer": "not_found"'; then
     echo "  ok  audit:nonexistent answers not_found"
     PASS=$((PASS + 1))
 else
@@ -4443,8 +4443,8 @@ STALE_DIR="$TESTDIR/proof_registry_stale"
 
 # Registry-backed proof: correct fingerprint → proved
 reg_proof=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report proof-status")
-if echo "$reg_proof" | grep -q "1 proved" && \
-   echo "$reg_proof" | grep -q "pure_add.*proof matches"; then
+if grep <<<"$reg_proof" -q "1 proved" && \
+   grep <<<"$reg_proof" -q "pure_add.*proof matches"; then
     echo "  ok  registry proof: correct fingerprint → proved"
     PASS=$((PASS + 1))
 else
@@ -4455,7 +4455,7 @@ fi
 
 # Registry query: proof:pure_add → proved
 reg_query=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query proof:pure_add")
-if echo "$reg_query" | grep -q '"answer": "proved"'; then
+if grep <<<"$reg_query" -q '"answer": "proved"'; then
     echo "  ok  registry query: proof:pure_add → proved"
     PASS=$((PASS + 1))
 else
@@ -4466,8 +4466,8 @@ fi
 
 # Stale registry: wrong fingerprint → stale
 stale_proof=$(cached_output "$STALE_DIR/test_proof_registry.con" "--report proof-status")
-if echo "$stale_proof" | grep -q "1 stale" && \
-   echo "$stale_proof" | grep -q "body changed"; then
+if grep <<<"$stale_proof" -q "1 stale" && \
+   grep <<<"$stale_proof" -q "body changed"; then
     echo "  ok  registry stale: wrong fingerprint → stale"
     PASS=$((PASS + 1))
 else
@@ -4478,7 +4478,7 @@ fi
 
 # Stale registry query: proof:pure_add → stale
 stale_query=$(cached_output "$STALE_DIR/test_proof_registry.con" "--query proof:pure_add")
-if echo "$stale_query" | grep -q '"answer": "stale"'; then
+if grep <<<"$stale_query" -q '"answer": "stale"'; then
     echo "  ok  registry stale query: proof:pure_add → stale"
     PASS=$((PASS + 1))
 else
@@ -4489,7 +4489,7 @@ fi
 
 # Hardcoded proof still works (backward compatibility)
 hardcoded_proof=$(cached_output "$TESTDIR/proof_decode_header.con" "--report proof-status")
-if echo "$hardcoded_proof" | grep -q "proved"; then
+if grep <<<"$hardcoded_proof" -q "proved"; then
     echo "  ok  hardcoded proof still works during registry transition"
     PASS=$((PASS + 1))
 else
@@ -4503,10 +4503,10 @@ echo "=== Proof obligations report tests ==="
 
 # Obligations from registry: proved function shows spec, proof, source
 ob_proved=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report obligations")
-if echo "$ob_proved" | grep -q "status:.*proved" && \
-   echo "$ob_proved" | grep -q "spec:.*PureAdd.spec_add" && \
-   echo "$ob_proved" | grep -q "proof:.*PureAdd.add_comm" && \
-   echo "$ob_proved" | grep -q "source:.*registry"; then
+if grep <<<"$ob_proved" -q "status:.*proved" && \
+   grep <<<"$ob_proved" -q "spec:.*PureAdd.spec_add" && \
+   grep <<<"$ob_proved" -q "proof:.*PureAdd.add_comm" && \
+   grep <<<"$ob_proved" -q "source:.*registry"; then
     echo "  ok  obligations: proved function shows spec, proof, registry source"
     PASS=$((PASS + 1))
 else
@@ -4516,8 +4516,8 @@ else
 fi
 
 # Obligations: missing shows none for spec/proof
-if echo "$ob_proved" | grep -A5 "main.main" | grep -q "status:.*ineligible" && \
-   echo "$ob_proved" | grep -A5 "main.main" | grep -q "source:.*none"; then
+if grep <<<"$ob_proved" -A5 "main.main" | grep -q "status:.*ineligible" && \
+   grep <<<"$ob_proved" -A5 "main.main" | grep -q "source:.*none"; then
     echo "  ok  obligations: ineligible function shows source:none"
     PASS=$((PASS + 1))
 else
@@ -4527,7 +4527,7 @@ else
 fi
 
 # Obligations: dependencies show proved callees
-if echo "$ob_proved" | grep -A7 "main.main" | grep -q "dependencies:.*pure_add"; then
+if grep <<<"$ob_proved" -A7 "main.main" | grep -q "dependencies:.*pure_add"; then
     echo "  ok  obligations: main depends on proved helper pure_add"
     PASS=$((PASS + 1))
 else
@@ -4538,8 +4538,8 @@ fi
 
 # Obligations: stale fingerprint
 ob_stale=$(cached_output "$STALE_DIR/test_proof_registry.con" "--report obligations")
-if echo "$ob_stale" | grep -q "status:.*stale" && \
-   echo "$ob_stale" | grep -q "1 stale"; then
+if grep <<<"$ob_stale" -q "status:.*stale" && \
+   grep <<<"$ob_stale" -q "1 stale"; then
     echo "  ok  obligations: stale fingerprint → stale status"
     PASS=$((PASS + 1))
 else
@@ -4549,9 +4549,9 @@ else
 fi
 
 # Obligations: summary totals
-if echo "$ob_proved" | grep -q "1 proved" && \
-   echo "$ob_proved" | grep -q "0 missing" && \
-   echo "$ob_proved" | grep -q "1 ineligible"; then
+if grep <<<"$ob_proved" -q "1 proved" && \
+   grep <<<"$ob_proved" -q "0 missing" && \
+   grep <<<"$ob_proved" -q "1 ineligible"; then
     echo "  ok  obligations: summary shows 1 proved, 0 missing, 1 ineligible"
     PASS=$((PASS + 1))
 else
@@ -4562,9 +4562,9 @@ fi
 
 # Obligations JSON: query returns obligation facts
 ob_json=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query obligation")
-if echo "$ob_json" | grep -q '"kind": "obligation"' && \
-   echo "$ob_json" | grep -q '"status": "proved"' && \
-   echo "$ob_json" | grep -q '"spec": "PureAdd.spec_add"'; then
+if grep <<<"$ob_json" -q '"kind": "obligation"' && \
+   grep <<<"$ob_json" -q '"status": "proved"' && \
+   grep <<<"$ob_json" -q '"spec": "PureAdd.spec_add"'; then
     echo "  ok  obligations JSON: --query obligation returns obligation facts with spec"
     PASS=$((PASS + 1))
 else
@@ -4575,8 +4575,8 @@ fi
 
 # Obligations JSON: per-function filter
 ob_fn=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query obligation:pure_add")
-if echo "$ob_fn" | grep -q '"function": "main.pure_add"' && \
-   echo "$ob_fn" | grep -q '"source": "registry"'; then
+if grep <<<"$ob_fn" -q '"function": "main.pure_add"' && \
+   grep <<<"$ob_fn" -q '"source": "registry"'; then
     echo "  ok  obligations JSON: --query obligation:pure_add returns filtered fact"
     PASS=$((PASS + 1))
 else
@@ -4587,8 +4587,8 @@ fi
 
 # Obligations: ineligible for allocating functions
 ob_mixed=$(cached_output "$TESTDIR/report_integration.con" "--report obligations")
-if echo "$ob_mixed" | grep -q "ineligible" && \
-   echo "$ob_mixed" | grep -q "trusted"; then
+if grep <<<"$ob_mixed" -q "ineligible" && \
+   grep <<<"$ob_mixed" -q "trusted"; then
     echo "  ok  obligations: mixed program shows ineligible + trusted"
     PASS=$((PASS + 1))
 else
@@ -4599,7 +4599,7 @@ fi
 
 # Obligations: diagnostics-json includes obligation kind
 ob_diag=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report diagnostics-json")
-if echo "$ob_diag" | grep -q '"kind": "obligation"'; then
+if grep <<<"$ob_diag" -q '"kind": "obligation"'; then
     echo "  ok  obligations: diagnostics-json includes obligation facts"
     PASS=$((PASS + 1))
 else
@@ -4613,8 +4613,8 @@ echo "=== Source-to-ProofCore extraction tests ==="
 
 # Pure function: extracted with ProofCore form
 ext_pure=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report extraction")
-if echo "$ext_pure" | grep -q "status: extracted" && \
-   echo "$ext_pure" | grep -q "ProofCore: (a + b)"; then
+if grep <<<"$ext_pure" -q "status: extracted" && \
+   grep <<<"$ext_pure" -q "ProofCore: (a + b)"; then
     echo "  ok  extraction: pure_add extracted to (a + b)"
     PASS=$((PASS + 1))
 else
@@ -4624,8 +4624,8 @@ else
 fi
 
 # Entry point: excluded with reason
-if echo "$ext_pure" | grep -A3 "main.main" | grep -q "excluded" && \
-   echo "$ext_pure" | grep -A3 "main.main" | grep -q "entry point"; then
+if grep <<<"$ext_pure" -A3 "main.main" | grep -q "excluded" && \
+   grep <<<"$ext_pure" -A3 "main.main" | grep -q "entry point"; then
     echo "  ok  extraction: main excluded as entry point"
     PASS=$((PASS + 1))
 else
@@ -4636,7 +4636,7 @@ fi
 
 # Mixed program: capabilities excluded with reasons
 ext_mixed=$(cached_output "$TESTDIR/report_integration.con" "--report extraction")
-if echo "$ext_mixed" | grep -A3 "uses_alloc" | grep -q "has capabilities: Alloc"; then
+if grep <<<"$ext_mixed" -A3 "uses_alloc" | grep -q "has capabilities: Alloc"; then
     echo "  ok  extraction: uses_alloc excluded for Alloc capability"
     PASS=$((PASS + 1))
 else
@@ -4646,7 +4646,7 @@ else
 fi
 
 # Trusted function: excluded with trusted reason
-if echo "$ext_mixed" | grep -A3 "call_raw" | grep -q "marked trusted"; then
+if grep <<<"$ext_mixed" -A3 "call_raw" | grep -q "marked trusted"; then
     echo "  ok  extraction: call_raw excluded as trusted"
     PASS=$((PASS + 1))
 else
@@ -4657,7 +4657,7 @@ fi
 
 # Struct literal and match both extract (Phase 4 ProofCore extensions).
 ext_elig=$(cached_output "$TESTDIR/test_proof_eligible_pure.con" "--report extraction")
-if echo "$ext_elig" | grep -A2 "make_point" | grep -q "status: extracted"; then
+if grep <<<"$ext_elig" -A2 "make_point" | grep -q "status: extracted"; then
     echo "  ok  extraction: make_point extracts (struct literal supported)"
     PASS=$((PASS + 1))
 else
@@ -4666,7 +4666,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$ext_elig" | grep -A2 "color_value" | grep -q "status: extracted"; then
+if grep <<<"$ext_elig" -A2 "color_value" | grep -q "status: extracted"; then
     echo "  ok  extraction: color_value extracts (match expression supported)"
     PASS=$((PASS + 1))
 else
@@ -4676,8 +4676,8 @@ else
 fi
 
 # Summary totals
-if echo "$ext_pure" | grep -q "1 extracted" && \
-   echo "$ext_pure" | grep -q "1 excluded"; then
+if grep <<<"$ext_pure" -q "1 extracted" && \
+   grep <<<"$ext_pure" -q "1 excluded"; then
     echo "  ok  extraction: summary shows correct totals"
     PASS=$((PASS + 1))
 else
@@ -4688,8 +4688,8 @@ fi
 
 # JSON query: extraction facts with proof_core
 ext_json=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query extraction:pure_add")
-if echo "$ext_json" | grep -q '"status": "extracted"' && \
-   echo "$ext_json" | grep -q '"proof_core": "(a + b)"'; then
+if grep <<<"$ext_json" -q '"status": "extracted"' && \
+   grep <<<"$ext_json" -q '"proof_core": "(a + b)"'; then
     echo "  ok  extraction JSON: --query extraction:pure_add returns proof_core"
     PASS=$((PASS + 1))
 else
@@ -4699,7 +4699,7 @@ else
 fi
 
 # Diagnostics-json includes extraction kind
-if echo "$ob_diag" | grep -q '"kind": "extraction"'; then
+if grep <<<"$ob_diag" -q '"kind": "extraction"'; then
     echo "  ok  extraction: diagnostics-json includes extraction facts"
     PASS=$((PASS + 1))
 else
@@ -4709,8 +4709,8 @@ fi
 
 # Excluded function JSON shows excluded_reasons
 ext_excl=$(cached_output "$TESTDIR/report_integration.con" "--query extraction:call_raw")
-if echo "$ext_excl" | grep -q '"status": "excluded"' && \
-   echo "$ext_excl" | grep -q '"excluded_reasons"'; then
+if grep <<<"$ext_excl" -q '"status": "excluded"' && \
+   grep <<<"$ext_excl" -q '"excluded_reasons"'; then
     echo "  ok  extraction JSON: excluded function shows excluded_reasons"
     PASS=$((PASS + 1))
 else
@@ -4724,10 +4724,10 @@ echo "=== Source/Core/SSA/LLVM traceability tests ==="
 
 # Proved function: full pipeline trace
 tr_proved=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report traceability")
-if echo "$tr_proved" | grep -A10 "main.pure_add" | grep -q "evidence:.*proved" && \
-   echo "$tr_proved" | grep -A10 "main.pure_add" | grep -q "extraction:.*extracted" && \
-   echo "$tr_proved" | grep -A10 "main.pure_add" | grep -q "ssa:.*pure_add" && \
-   echo "$tr_proved" | grep -A10 "main.pure_add" | grep -q "llvm:.*pure_add"; then
+if grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "evidence:.*proved" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "extraction:.*extracted" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "ssa:.*pure_add" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "llvm:.*pure_add"; then
     echo "  ok  traceability: proved function traces through all pipeline stages"
     PASS=$((PASS + 1))
 else
@@ -4737,7 +4737,7 @@ else
 fi
 
 # Entry point: main → user_main in LLVM
-if echo "$tr_proved" | grep -A10 "main.main" | grep -q "llvm:.*user_main"; then
+if grep <<<"$tr_proved" -A10 "main.main" | grep -q "llvm:.*user_main"; then
     echo "  ok  traceability: main maps to user_main in LLVM"
     PASS=$((PASS + 1))
 else
@@ -4747,7 +4747,7 @@ else
 fi
 
 # Claim boundary: proved function shows ProofCore boundary
-if echo "$tr_proved" | grep -A10 "main.pure_add" | grep -q "boundary:.*ProofCore"; then
+if grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "boundary:.*ProofCore"; then
     echo "  ok  traceability: proved function boundary at ProofCore"
     PASS=$((PASS + 1))
 else
@@ -4758,7 +4758,7 @@ fi
 
 # Generic function: shows monomorphized specializations
 tr_generic=$(cached_output "$TESTDIR/report_integration.con" "--report traceability")
-if echo "$tr_generic" | grep -A10 "main.identity" | grep -q "identity_for_i32"; then
+if grep <<<"$tr_generic" -A10 "main.identity" | grep -q "identity_for_i32"; then
     echo "  ok  traceability: generic identity shows identity_for_i32 specialization"
     PASS=$((PASS + 1))
 else
@@ -4768,8 +4768,8 @@ else
 fi
 
 # Trusted function: trusted-assumption evidence, source boundary
-if echo "$tr_generic" | grep -A10 "main.call_raw" | grep -q "trusted-assumption" && \
-   echo "$tr_generic" | grep -A10 "main.call_raw" | grep -q "boundary:.*trusted"; then
+if grep <<<"$tr_generic" -A10 "main.call_raw" | grep -q "trusted-assumption" && \
+   grep <<<"$tr_generic" -A10 "main.call_raw" | grep -q "boundary:.*trusted"; then
     echo "  ok  traceability: trusted function shows trusted-assumption + boundary"
     PASS=$((PASS + 1))
 else
@@ -4779,8 +4779,8 @@ else
 fi
 
 # Reported function: fails predictable, source boundary
-if echo "$tr_generic" | grep -A10 "main.uses_alloc" | grep -q "evidence:.*reported" && \
-   echo "$tr_generic" | grep -A10 "main.uses_alloc" | grep -q "boundary:.*fails predictable"; then
+if grep <<<"$tr_generic" -A10 "main.uses_alloc" | grep -q "evidence:.*reported" && \
+   grep <<<"$tr_generic" -A10 "main.uses_alloc" | grep -q "boundary:.*fails predictable"; then
     echo "  ok  traceability: reported function shows fails predictable boundary"
     PASS=$((PASS + 1))
 else
@@ -4790,8 +4790,8 @@ else
 fi
 
 # Summary totals
-if echo "$tr_generic" | grep -q "2 enforced" && \
-   echo "$tr_generic" | grep -q "4 reported"; then
+if grep <<<"$tr_generic" -q "2 enforced" && \
+   grep <<<"$tr_generic" -q "4 reported"; then
     echo "  ok  traceability: summary totals correct"
     PASS=$((PASS + 1))
 else
@@ -4802,10 +4802,10 @@ fi
 
 # JSON query: traceability facts
 tr_json=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query traceability:pure_add")
-if echo "$tr_json" | grep -q '"kind": "traceability"' && \
-   echo "$tr_json" | grep -q '"evidence": "proved"' && \
-   echo "$tr_json" | grep -q '"proof_core": "(a + b)"' && \
-   echo "$tr_json" | grep -q '"boundary":.*ProofCore'; then
+if grep <<<"$tr_json" -q '"kind": "traceability"' && \
+   grep <<<"$tr_json" -q '"evidence": "proved"' && \
+   grep <<<"$tr_json" -q '"proof_core": "(a + b)"' && \
+   grep <<<"$tr_json" -q '"boundary":.*ProofCore'; then
     echo "  ok  traceability JSON: --query traceability:pure_add returns full trace"
     PASS=$((PASS + 1))
 else
@@ -4816,8 +4816,8 @@ fi
 
 # JSON query: generic function shows mono names
 tr_json_gen=$(cached_output "$TESTDIR/report_integration.con" "--query traceability:identity")
-if echo "$tr_json_gen" | grep -q '"mono":.*identity_for_i32' && \
-   echo "$tr_json_gen" | grep -q '"ssa":.*identity_for_i32'; then
+if grep <<<"$tr_json_gen" -q '"mono":.*identity_for_i32' && \
+   grep <<<"$tr_json_gen" -q '"ssa":.*identity_for_i32'; then
     echo "  ok  traceability JSON: identity shows mono/SSA specializations"
     PASS=$((PASS + 1))
 else
@@ -4828,7 +4828,7 @@ fi
 
 # JSON query: all traceability facts
 tr_json_all=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query traceability")
-if echo "$tr_json_all" | grep -q '"kind": "traceability"'; then
+if grep <<<"$tr_json_all" -q '"kind": "traceability"'; then
     echo "  ok  traceability JSON: --query traceability returns all facts"
     PASS=$((PASS + 1))
 else
@@ -4842,8 +4842,8 @@ echo "=== Named spec/proof identity tests ==="
 
 # Extraction report: registry-backed function shows spec/proof names
 ext_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report extraction")
-if echo "$ext_spec" | grep -A10 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
-   echo "$ext_spec" | grep -A10 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
+if grep <<<"$ext_spec" -A10 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
+   grep <<<"$ext_spec" -A10 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
     echo "  ok  named-spec: extraction report shows spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -4854,8 +4854,8 @@ fi
 
 # Extraction JSON: spec/proof fields present
 ext_spec_json=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query extraction:pure_add")
-if echo "$ext_spec_json" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$ext_spec_json" | grep -q '"proof": "PureAdd.add_comm"'; then
+if grep <<<"$ext_spec_json" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$ext_spec_json" -q '"proof": "PureAdd.add_comm"'; then
     echo "  ok  named-spec: extraction JSON includes spec/proof fields"
     PASS=$((PASS + 1))
 else
@@ -4866,8 +4866,8 @@ fi
 
 # Traceability report: shows spec/proof from registry
 tr_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report traceability")
-if echo "$tr_spec" | grep -A15 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
-   echo "$tr_spec" | grep -A15 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
+if grep <<<"$tr_spec" -A15 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
+   grep <<<"$tr_spec" -A15 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
     echo "  ok  named-spec: traceability report shows spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -4878,8 +4878,8 @@ fi
 
 # Traceability JSON: spec/proof fields present
 tr_spec_json=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query traceability:pure_add")
-if echo "$tr_spec_json" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$tr_spec_json" | grep -q '"proof": "PureAdd.add_comm"'; then
+if grep <<<"$tr_spec_json" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$tr_spec_json" -q '"proof": "PureAdd.add_comm"'; then
     echo "  ok  named-spec: traceability JSON includes spec/proof fields"
     PASS=$((PASS + 1))
 else
@@ -4890,8 +4890,8 @@ fi
 
 # Proof-status: shows spec/proof from registry
 ps_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query proof_status:pure_add")
-if echo "$ps_spec" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$ps_spec" | grep -q '"proof": "PureAdd.add_comm"'; then
+if grep <<<"$ps_spec" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$ps_spec" -q '"proof": "PureAdd.add_comm"'; then
     echo "  ok  named-spec: proof-status JSON includes spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -4902,8 +4902,8 @@ fi
 
 # Obligations: shows spec/proof from registry
 ob_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--query obligation:pure_add")
-if echo "$ob_spec" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$ob_spec" | grep -q '"proof": "PureAdd.add_comm"'; then
+if grep <<<"$ob_spec" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$ob_spec" -q '"proof": "PureAdd.add_comm"'; then
     echo "  ok  named-spec: obligations JSON includes spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -4913,9 +4913,9 @@ else
 fi
 
 # Spec identity consistent: same spec name across extraction, traceability, proof-status
-if echo "$ext_spec_json" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$tr_spec_json" | grep -q '"spec": "PureAdd.spec_add"' && \
-   echo "$ps_spec" | grep -q '"spec": "PureAdd.spec_add"'; then
+if grep <<<"$ext_spec_json" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$tr_spec_json" -q '"spec": "PureAdd.spec_add"' && \
+   grep <<<"$ps_spec" -q '"spec": "PureAdd.spec_add"'; then
     echo "  ok  named-spec: spec identity consistent across extraction/trace/proof-status"
     PASS=$((PASS + 1))
 else
@@ -4939,7 +4939,7 @@ echo "$diff_mixed" > /tmp/concrete_diff_mixed.json
 
 # No changes: diff against itself
 diff_same=$($COMPILER diff /tmp/concrete_diff_baseline.json /tmp/concrete_diff_baseline.json 2>&1) && diff_same_exit=0 || diff_same_exit=$?
-if echo "$diff_same" | grep -q "No trust-relevant changes" && [ "$diff_same_exit" -eq 0 ]; then
+if grep <<<"$diff_same" -q "No trust-relevant changes" && [ "$diff_same_exit" -eq 0 ]; then
     echo "  ok  diff: no changes when diffing against self"
     PASS=$((PASS + 1))
 else
@@ -4950,8 +4950,8 @@ fi
 
 # Proved → stale: trust weakened
 diff_stale_out=$($COMPILER diff /tmp/concrete_diff_baseline.json /tmp/concrete_diff_stale.json 2>&1) && diff_stale_exit=0 || diff_stale_exit=$?
-if echo "$diff_stale_out" | grep -q "TRUST WEAKENED" && \
-   echo "$diff_stale_out" | grep -q "state: proved.*stale" && \
+if grep <<<"$diff_stale_out" -q "TRUST WEAKENED" && \
+   grep <<<"$diff_stale_out" -q "state: proved.*stale" && \
    [ "$diff_stale_exit" -eq 1 ]; then
     echo "  ok  diff: proved→stale detected as trust weakened (exit 1)"
     PASS=$((PASS + 1))
@@ -4963,8 +4963,8 @@ fi
 
 # JSON output mode
 diff_json=$($COMPILER diff /tmp/concrete_diff_baseline.json /tmp/concrete_diff_stale.json --json 2>&1) && true || true
-if echo "$diff_json" | grep -q '"drift": "weakened"' && \
-   echo "$diff_json" | grep -q '"category": "changed"'; then
+if grep <<<"$diff_json" -q '"drift": "weakened"' && \
+   grep <<<"$diff_json" -q '"category": "changed"'; then
     echo "  ok  diff: JSON output includes drift and category"
     PASS=$((PASS + 1))
 else
@@ -4975,8 +4975,8 @@ fi
 
 # Different programs: detects added and changed facts
 diff_cross=$($COMPILER diff /tmp/concrete_diff_baseline.json /tmp/concrete_diff_mixed.json 2>&1) && true || true
-if echo "$diff_cross" | grep -q '\[+\]' && \
-   echo "$diff_cross" | grep -q '\[~\]'; then
+if grep <<<"$diff_cross" -q '\[+\]' && \
+   grep <<<"$diff_cross" -q '\[~\]'; then
     echo "  ok  diff: cross-program diff shows added and changed facts"
     PASS=$((PASS + 1))
 else
@@ -4986,8 +4986,8 @@ else
 fi
 
 # Evidence downgrade detected
-if echo "$diff_cross" | grep -q "evidence:.*enforced.*reported" || \
-   echo "$diff_cross" | grep -q "state:.*proved.*missing"; then
+if grep <<<"$diff_cross" -q "evidence:.*enforced.*reported" || \
+   grep <<<"$diff_cross" -q "state:.*proved.*missing"; then
     echo "  ok  diff: evidence downgrade detected in field changes"
     PASS=$((PASS + 1))
 else
@@ -4997,7 +4997,7 @@ else
 fi
 
 # Summary line present
-if echo "$diff_stale_out" | grep -q "Summary:.*changes"; then
+if grep <<<"$diff_stale_out" -q "Summary:.*changes"; then
     echo "  ok  diff: summary line present"
     PASS=$((PASS + 1))
 else
@@ -5007,7 +5007,7 @@ else
 fi
 
 # New predictable violations flagged as weakened
-if echo "$diff_cross" | grep -q '\[+\] predictable_violation'; then
+if grep <<<"$diff_cross" -q '\[+\] predictable_violation'; then
     echo "  ok  diff: new predictable violations flagged as trust weakened"
     PASS=$((PASS + 1))
 else
@@ -5017,8 +5017,8 @@ else
 fi
 
 # Spec/proof attachment changes visible
-if echo "$diff_cross" | grep -q "spec:.*PureAdd" || \
-   echo "$diff_cross" | grep -q "proof:.*PureAdd"; then
+if grep <<<"$diff_cross" -q "spec:.*PureAdd" || \
+   grep <<<"$diff_cross" -q "proof:.*PureAdd"; then
     echo "  ok  diff: spec/proof attachment changes visible in diff"
     PASS=$((PASS + 1))
 else
@@ -5042,7 +5042,7 @@ mkdir -p "$ADV_DIR"
 echo '[{"kind":"effects","function":"foo"' > "$ADV_DIR/truncated.json"
 echo '[]' > "$ADV_DIR/empty_arr.json"
 adv_trunc=$($COMPILER diff "$ADV_DIR/truncated.json" "$ADV_DIR/empty_arr.json" 2>&1) && true || true
-if echo "$adv_trunc" | grep -qi "error.*parse\|could not parse"; then
+if grep <<<"$adv_trunc" -qi "error.*parse\|could not parse"; then
     echo "  ok  adv-diff: truncated JSON rejected with parse error"
     PASS=$((PASS + 1))
 else
@@ -5054,7 +5054,7 @@ fi
 # Non-array root (bare object)
 echo '{"kind":"effects","function":"foo"}' > "$ADV_DIR/bare_obj.json"
 adv_bare=$($COMPILER diff "$ADV_DIR/bare_obj.json" "$ADV_DIR/empty_arr.json" 2>&1) && true || true
-if echo "$adv_bare" | grep -qi "error.*parse\|could not parse"; then
+if grep <<<"$adv_bare" -qi "error.*parse\|could not parse"; then
     echo "  ok  adv-diff: non-array JSON root rejected"
     PASS=$((PASS + 1))
 else
@@ -5066,7 +5066,7 @@ fi
 # Empty file
 echo -n "" > "$ADV_DIR/empty_file.json"
 adv_empty=$($COMPILER diff "$ADV_DIR/empty_file.json" "$ADV_DIR/empty_arr.json" 2>&1) && true || true
-if echo "$adv_empty" | grep -qi "error.*parse\|could not parse"; then
+if grep <<<"$adv_empty" -qi "error.*parse\|could not parse"; then
     echo "  ok  adv-diff: empty file rejected with parse error"
     PASS=$((PASS + 1))
 else
@@ -5079,7 +5079,7 @@ fi
 
 # Both empty → no changes
 adv_both_empty=$($COMPILER diff "$ADV_DIR/empty_arr.json" "$ADV_DIR/empty_arr.json" 2>&1) && adv_ee_exit=0 || adv_ee_exit=$?
-if echo "$adv_both_empty" | grep -q "No trust-relevant changes" && [ "$adv_ee_exit" -eq 0 ]; then
+if grep <<<"$adv_both_empty" -q "No trust-relevant changes" && [ "$adv_ee_exit" -eq 0 ]; then
     echo "  ok  adv-diff: both-empty diff reports no changes (exit 0)"
     PASS=$((PASS + 1))
 else
@@ -5099,7 +5099,7 @@ cat > "$ADV_DIR/normal_fact.json" << 'ADVEOF'
 ADVEOF
 adv_nofn=$($COMPILER diff "$ADV_DIR/no_function.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
 # The fact without function should be dropped, so "foo" appears as added
-if echo "$adv_nofn" | grep -q '\[+\].*effects.*foo'; then
+if grep <<<"$adv_nofn" -q '\[+\].*effects.*foo'; then
     echo "  ok  adv-diff: fact without function field dropped, counterpart shows as added"
     PASS=$((PASS + 1))
 else
@@ -5113,7 +5113,7 @@ cat > "$ADV_DIR/no_kind.json" << 'ADVEOF'
 [{"function":"foo","is_pure":true}]
 ADVEOF
 adv_nokind=$($COMPILER diff "$ADV_DIR/no_kind.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
-if echo "$adv_nokind" | grep -q '\[+\].*effects.*foo'; then
+if grep <<<"$adv_nokind" -q '\[+\].*effects.*foo'; then
     echo "  ok  adv-diff: fact without kind field dropped, counterpart shows as added"
     PASS=$((PASS + 1))
 else
@@ -5133,7 +5133,7 @@ cat > "$ADV_DIR/dupes_new.json" << 'ADVEOF'
 ADVEOF
 adv_dupes=$($COMPILER diff "$ADV_DIR/dupes_old.json" "$ADV_DIR/dupes_new.json" 2>&1) && adv_dupes_exit=0 || adv_dupes_exit=$?
 # Duplicate keys should be rejected as a structured error with exit code 2
-if echo "$adv_dupes" | grep -qi "error.*duplicate" && [ "$adv_dupes_exit" -eq 2 ]; then
+if grep <<<"$adv_dupes" -qi "error.*duplicate" && [ "$adv_dupes_exit" -eq 2 ]; then
     echo "  ok  adv-diff: duplicate (kind, function) keys rejected (exit 2)"
     PASS=$((PASS + 1))
 else
@@ -5152,8 +5152,8 @@ cat > "$ADV_DIR/fp_new.json" << 'ADVEOF'
 ADVEOF
 adv_fp=$($COMPILER diff "$ADV_DIR/fp_old.json" "$ADV_DIR/fp_new.json" 2>&1) && adv_fp_exit=0 || adv_fp_exit=$?
 # Fingerprint changed but state is still proved → should detect change, neutral drift
-if echo "$adv_fp" | grep -q "current_fingerprint:.*abc.*xyz" && \
-   echo "$adv_fp" | grep -q "OTHER CHANGES"; then
+if grep <<<"$adv_fp" -q "current_fingerprint:.*abc.*xyz" && \
+   grep <<<"$adv_fp" -q "OTHER CHANGES"; then
     echo "  ok  adv-diff: fingerprint change without state change detected as neutral"
     PASS=$((PASS + 1))
 else
@@ -5171,9 +5171,9 @@ cat > "$ADV_DIR/cap_new.json" << 'ADVEOF'
 [{"kind":"effects","function":"foo","capabilities":"[Alloc, Network]","is_pure":"false","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"reported"}]
 ADVEOF
 adv_cap=$($COMPILER diff "$ADV_DIR/cap_old.json" "$ADV_DIR/cap_new.json" 2>&1) && true || true
-if echo "$adv_cap" | grep -q "TRUST WEAKENED" && \
-   echo "$adv_cap" | grep -q "capabilities:" && \
-   echo "$adv_cap" | grep -q "evidence:.*enforced.*reported"; then
+if grep <<<"$adv_cap" -q "TRUST WEAKENED" && \
+   grep <<<"$adv_cap" -q "capabilities:" && \
+   grep <<<"$adv_cap" -q "evidence:.*enforced.*reported"; then
     echo "  ok  adv-diff: capability growth + evidence downgrade detected as weakened"
     PASS=$((PASS + 1))
 else
@@ -5192,8 +5192,8 @@ cat > "$ADV_DIR/new_weak_new.json" << 'ADVEOF'
 ADVEOF
 adv_newweak=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_weak_new.json" 2>&1) && adv_nw_exit=0 || adv_nw_exit=$?
 # New function with weak evidence should be flagged as weakened
-if echo "$adv_newweak" | grep -q '\[+\].*effects.*evil_fn' && \
-   echo "$adv_newweak" | grep -q "TRUST WEAKENED"; then
+if grep <<<"$adv_newweak" -q '\[+\].*effects.*evil_fn' && \
+   grep <<<"$adv_newweak" -q "TRUST WEAKENED"; then
     echo "  ok  adv-diff: new function with weak evidence flagged as trust weakened"
     PASS=$((PASS + 1))
 else
@@ -5208,8 +5208,8 @@ cat > "$ADV_DIR/removed_old.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"}]
 ADVEOF
 adv_removed=$($COMPILER diff "$ADV_DIR/removed_old.json" "$ADV_DIR/new_weak_old.json" 2>&1) && true || true
-if echo "$adv_removed" | grep -q "TRUST WEAKENED" && \
-   echo "$adv_removed" | grep -q '\[-\].*proof_status.*foo'; then
+if grep <<<"$adv_removed" -q "TRUST WEAKENED" && \
+   grep <<<"$adv_removed" -q '\[-\].*proof_status.*foo'; then
     echo "  ok  adv-diff: removed proof_status fact flagged as trust weakened"
     PASS=$((PASS + 1))
 else
@@ -5227,8 +5227,8 @@ cat > "$ADV_DIR/escape_new.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"mod.fn_with\"quotes","state":"stale","current_fingerprint":"abc"}]
 ADVEOF
 adv_esc=$($COMPILER diff "$ADV_DIR/escape_old.json" "$ADV_DIR/escape_new.json" 2>&1) && true || true
-if echo "$adv_esc" | grep -q "TRUST WEAKENED" && \
-   echo "$adv_esc" | grep -q "state:.*proved.*stale"; then
+if grep <<<"$adv_esc" -q "TRUST WEAKENED" && \
+   grep <<<"$adv_esc" -q "state:.*proved.*stale"; then
     echo "  ok  adv-diff: escaped quotes in function names handled correctly"
     PASS=$((PASS + 1))
 else
@@ -5244,8 +5244,8 @@ cat > "$ADV_DIR/new_noproof_new.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"bar","state":"missing","current_fingerprint":"xyz"}]
 ADVEOF
 adv_noproof=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_noproof_new.json" 2>&1) && true || true
-if echo "$adv_noproof" | grep -q "TRUST WEAKENED" && \
-   echo "$adv_noproof" | grep -q '\[+\].*proof_status.*bar'; then
+if grep <<<"$adv_noproof" -q "TRUST WEAKENED" && \
+   grep <<<"$adv_noproof" -q '\[+\].*proof_status.*bar'; then
     echo "  ok  adv-diff: new missing fact flagged as weakened"
     PASS=$((PASS + 1))
 else
@@ -5259,7 +5259,7 @@ cat > "$ADV_DIR/new_impure_new.json" << 'ADVEOF'
 [{"kind":"capability","function":"impure_fn","capabilities":"[Alloc]","is_pure":"false"}]
 ADVEOF
 adv_impure=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_impure_new.json" 2>&1) && true || true
-if echo "$adv_impure" | grep -q "TRUST WEAKENED"; then
+if grep <<<"$adv_impure" -q "TRUST WEAKENED"; then
     echo "  ok  adv-diff: new impure capability fact flagged as weakened"
     PASS=$((PASS + 1))
 else
@@ -5273,7 +5273,7 @@ cat > "$ADV_DIR/new_proved_new.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"good","state":"proved","current_fingerprint":"abc"}]
 ADVEOF
 adv_proved=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_proved_new.json" 2>&1) && adv_proved_exit=0 || adv_proved_exit=$?
-if echo "$adv_proved" | grep -q "OTHER CHANGES" && [ "$adv_proved_exit" -eq 0 ]; then
+if grep <<<"$adv_proved" -q "OTHER CHANGES" && [ "$adv_proved_exit" -eq 0 ]; then
     echo "  ok  adv-diff: new proved fact is neutral (exit 0)"
     PASS=$((PASS + 1))
 else
@@ -5287,7 +5287,7 @@ cat > "$ADV_DIR/dupes_old_bundle.json" << 'ADVEOF'
 [{"kind":"effects","function":"foo","evidence":"proved"},{"kind":"effects","function":"foo","evidence":"stale"}]
 ADVEOF
 adv_old_dupes=$($COMPILER diff "$ADV_DIR/dupes_old_bundle.json" "$ADV_DIR/new_weak_old.json" 2>&1) && true || true
-if echo "$adv_old_dupes" | grep -qi "error.*duplicate.*old"; then
+if grep <<<"$adv_old_dupes" -qi "error.*duplicate.*old"; then
     echo "  ok  adv-diff: duplicate keys in old bundle rejected"
     PASS=$((PASS + 1))
 else
@@ -5299,7 +5299,7 @@ fi
 # --- Nonexistent file path ---
 
 adv_nofile=$($COMPILER diff "/tmp/this_does_not_exist_12345.json" "$ADV_DIR/empty_arr.json" 2>&1) && true || true
-if echo "$adv_nofile" | grep -qi "error\|no such file\|does not exist"; then
+if grep <<<"$adv_nofile" -qi "error\|no such file\|does not exist"; then
     echo "  ok  adv-diff: nonexistent file produces error"
     PASS=$((PASS + 1))
 else
@@ -5317,8 +5317,8 @@ cat > "$ADV_DIR/strengthen_new.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]
 ADVEOF
 adv_strength=$($COMPILER diff "$ADV_DIR/strengthen_old.json" "$ADV_DIR/strengthen_new.json" 2>&1) && adv_str_exit=0 || adv_str_exit=$?
-if echo "$adv_strength" | grep -q "TRUST STRENGTHENED" && \
-   echo "$adv_strength" | grep -q "state:.*stale.*proved" && \
+if grep <<<"$adv_strength" -q "TRUST STRENGTHENED" && \
+   grep <<<"$adv_strength" -q "state:.*stale.*proved" && \
    [ "$adv_str_exit" -eq 0 ]; then
     echo "  ok  adv-diff: stale→proved detected as strengthened (exit 0)"
     PASS=$((PASS + 1))
@@ -5337,8 +5337,8 @@ cat > "$ADV_DIR/mixed_new.json" << 'ADVEOF'
 [{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"},{"kind":"proof_status","function":"bar","state":"stale","current_fingerprint":"xyz"}]
 ADVEOF
 adv_mixed=$($COMPILER diff "$ADV_DIR/mixed_old.json" "$ADV_DIR/mixed_new.json" 2>&1) && adv_mix_exit=0 || adv_mix_exit=$?
-if echo "$adv_mixed" | grep -q "TRUST WEAKENED" && \
-   echo "$adv_mixed" | grep -q "TRUST STRENGTHENED" && \
+if grep <<<"$adv_mixed" -q "TRUST WEAKENED" && \
+   grep <<<"$adv_mixed" -q "TRUST STRENGTHENED" && \
    [ "$adv_mix_exit" -eq 1 ]; then
     echo "  ok  adv-diff: mixed drift shows both weakened + strengthened (exit 1)"
     PASS=$((PASS + 1))
@@ -5355,7 +5355,7 @@ rt_json=$($COMPILER "$REGISTRY_DIR/test_proof_registry.con" --report diagnostics
 echo "$rt_json" > "$ADV_DIR/rt_a.json"
 echo "$rt_json" > "$ADV_DIR/rt_b.json"
 adv_rt=$($COMPILER diff "$ADV_DIR/rt_a.json" "$ADV_DIR/rt_b.json" 2>&1) && adv_rt_exit=0 || adv_rt_exit=$?
-if echo "$adv_rt" | grep -q "No trust-relevant changes" && [ "$adv_rt_exit" -eq 0 ]; then
+if grep <<<"$adv_rt" -q "No trust-relevant changes" && [ "$adv_rt_exit" -eq 0 ]; then
     echo "  ok  adv-diff: round-trip real diagnostics-json parses and self-diffs clean"
     PASS=$((PASS + 1))
 else
@@ -5369,7 +5369,7 @@ rt_json2=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostics-json
 echo "$rt_json2" > "$ADV_DIR/rt_c.json"
 echo "$rt_json2" > "$ADV_DIR/rt_d.json"
 adv_rt2=$($COMPILER diff "$ADV_DIR/rt_c.json" "$ADV_DIR/rt_d.json" 2>&1) && adv_rt2_exit=0 || adv_rt2_exit=$?
-if echo "$adv_rt2" | grep -q "No trust-relevant changes" && [ "$adv_rt2_exit" -eq 0 ]; then
+if grep <<<"$adv_rt2" -q "No trust-relevant changes" && [ "$adv_rt2_exit" -eq 0 ]; then
     echo "  ok  adv-diff: round-trip complex program JSON self-diffs clean"
     PASS=$((PASS + 1))
 else
@@ -5380,8 +5380,8 @@ fi
 
 # Cross-program diff on real compiler output (not hand-crafted)
 adv_rt_cross=$($COMPILER diff "$ADV_DIR/rt_a.json" "$ADV_DIR/rt_c.json" 2>&1) && true || true
-if echo "$adv_rt_cross" | grep -q "Summary:.*changes" && \
-   echo "$adv_rt_cross" | grep -q "TRUST WEAKENED"; then
+if grep <<<"$adv_rt_cross" -q "Summary:.*changes" && \
+   grep <<<"$adv_rt_cross" -q "TRUST WEAKENED"; then
     echo "  ok  adv-diff: cross-program diff on real JSON detects drift"
     PASS=$((PASS + 1))
 else
@@ -5401,7 +5401,7 @@ mkdir -p "$SNAP_DIR"
 
 # Basic snapshot generation
 snap_out=$($COMPILER snapshot "$REGISTRY_DIR/test_proof_registry.con" -o "$SNAP_DIR/proved.facts.json" 2>&1 || true)
-if echo "$snap_out" | grep -q "Snapshot written" && [ -f "$SNAP_DIR/proved.facts.json" ]; then
+if grep <<<"$snap_out" -q "Snapshot written" && [ -f "$SNAP_DIR/proved.facts.json" ]; then
     echo "  ok  snapshot: generates file with success message"
     PASS=$((PASS + 1))
 else
@@ -5474,8 +5474,8 @@ fi
 # Diff works with snapshot files (not just raw arrays)
 $COMPILER snapshot "$STALE_DIR/test_proof_registry.con" -o "$SNAP_DIR/stale.facts.json" 2>/dev/null
 snap_diff=$($COMPILER diff "$SNAP_DIR/proved.facts.json" "$SNAP_DIR/stale.facts.json" 2>&1) && snap_diff_exit=0 || snap_diff_exit=$?
-if echo "$snap_diff" | grep -q "TRUST WEAKENED" && \
-   echo "$snap_diff" | grep -q "state:.*proved.*stale" && \
+if grep <<<"$snap_diff" -q "TRUST WEAKENED" && \
+   grep <<<"$snap_diff" -q "state:.*proved.*stale" && \
    [ "$snap_diff_exit" -eq 1 ]; then
     echo "  ok  snapshot: diff works with snapshot files (detects proved→stale)"
     PASS=$((PASS + 1))
@@ -5486,7 +5486,7 @@ else
 fi
 
 # Snapshot diff catches traceability boundary drift (only visible with snapshots)
-if echo "$snap_diff" | grep -q "boundary:.*ProofCore.*source"; then
+if grep <<<"$snap_diff" -q "boundary:.*ProofCore.*source"; then
     echo "  ok  snapshot: diff catches traceability boundary drift"
     PASS=$((PASS + 1))
 else
@@ -5497,7 +5497,7 @@ fi
 
 # Self-diff on snapshot is clean
 snap_self=$($COMPILER diff "$SNAP_DIR/proved.facts.json" "$SNAP_DIR/proved.facts.json" 2>&1) && snap_self_exit=0 || snap_self_exit=$?
-if echo "$snap_self" | grep -q "No trust-relevant changes" && [ "$snap_self_exit" -eq 0 ]; then
+if grep <<<"$snap_self" -q "No trust-relevant changes" && [ "$snap_self_exit" -eq 0 ]; then
     echo "  ok  snapshot: self-diff on snapshot is clean"
     PASS=$((PASS + 1))
 else
@@ -5533,7 +5533,7 @@ fi
 
 # Complex program snapshot
 snap_complex=$($COMPILER snapshot "$TESTDIR/report_integration.con" -o "$SNAP_DIR/complex.facts.json" 2>&1 || true)
-if echo "$snap_complex" | grep -q "Snapshot written" && \
+if grep <<<"$snap_complex" -q "Snapshot written" && \
    python3 -c "
 import json
 with open('$SNAP_DIR/complex.facts.json') as f:
@@ -5563,7 +5563,7 @@ CRYPTO_SNAP_DIR=$(mktemp -d)
 
 # Snapshot generates correct fact count
 snap_crypto=$($COMPILER snapshot "$CRYPTO_DIR/main.con" -o "$CRYPTO_SNAP_DIR/good.facts.json" 2>&1 || true)
-if echo "$snap_crypto" | grep -q "36 facts"; then
+if grep <<<"$snap_crypto" -q "36 facts"; then
     echo "  ok  crypto_verify: snapshot produces 36 facts"
     PASS=$((PASS + 1))
 else
@@ -5684,7 +5684,7 @@ fi
 
 # Proof status report shows 3 proved
 report_out=$($COMPILER "$CRYPTO_DIR/main.con" --report proof-status 2>&1 || true)
-if echo "$report_out" | grep -q "4 proved" && echo "$report_out" | grep -q "0 unproved" && echo "$report_out" | grep -q "1 ineligible"; then
+if grep <<<"$report_out" -q "4 proved" && grep <<<"$report_out" -q "0 unproved" && grep <<<"$report_out" -q "1 ineligible"; then
     echo "  ok  crypto_verify: proof-status report shows 4 proved, 0 unproved, 1 ineligible"
     PASS=$((PASS + 1))
 else
@@ -5695,7 +5695,7 @@ fi
 
 # Each proved function shows checkmark
 for fn in compute_tag verify_tag check_nonce; do
-    if echo "$report_out" | grep -q "✓.*$fn"; then
+    if grep <<<"$report_out" -q "✓.*$fn"; then
         echo "  ok  crypto_verify: $fn shows proved checkmark"
         PASS=$((PASS + 1))
     else
@@ -5720,7 +5720,7 @@ else
 fi
 
 # Diff reports proved → stale for compute_tag
-if echo "$diff_out" | grep -q "proved.*stale" && echo "$diff_out" | grep -q "compute_tag"; then
+if grep <<<"$diff_out" -q "proved.*stale" && grep <<<"$diff_out" -q "compute_tag"; then
     echo "  ok  crypto_verify: drift shows compute_tag proved → stale"
     PASS=$((PASS + 1))
 else
@@ -5729,7 +5729,7 @@ else
 fi
 
 # Diff reports proved → stale for check_nonce
-if echo "$diff_out" | grep -q "check_nonce"; then
+if grep <<<"$diff_out" -q "check_nonce"; then
     echo "  ok  crypto_verify: drift shows check_nonce changed"
     PASS=$((PASS + 1))
 else
@@ -5814,7 +5814,7 @@ FIXTURE_DIR="$ROOT_DIR/tests/fixtures"
 # --- Snapshot tests ---
 
 snap_elf=$($COMPILER snapshot "$ELF_DIR/main.con" -o "$ELF_SNAP_DIR/good.json" 2>&1 || true)
-if echo "$snap_elf" | grep -q "76 facts"; then
+if grep <<<"$snap_elf" -q "76 facts"; then
     echo "  ok  elf_header: snapshot produces 76 facts"
     PASS=$((PASS + 1))
 else
@@ -5917,7 +5917,7 @@ fi
 # --- Report tests ---
 
 elf_report=$($COMPILER "$ELF_DIR/main.con" --report proof-status 2>&1 || true)
-if echo "$elf_report" | grep -q "5 proved" && echo "$elf_report" | grep -q "1 ineligible" && echo "$elf_report" | grep -q "2 trusted"; then
+if grep <<<"$elf_report" -q "5 proved" && grep <<<"$elf_report" -q "1 ineligible" && grep <<<"$elf_report" -q "2 trusted"; then
     echo "  ok  elf_header: proof-status report shows 5 proved, 1 ineligible, 2 trusted"
     PASS=$((PASS + 1))
 else
@@ -5927,7 +5927,7 @@ else
 fi
 
 for fn in check_magic check_class check_data check_version validate_header; do
-    if echo "$elf_report" | grep -q "✓.*$fn"; then
+    if grep <<<"$elf_report" -q "✓.*$fn"; then
         echo "  ok  elf_header: $fn shows proved checkmark"
         PASS=$((PASS + 1))
     else
@@ -5938,7 +5938,7 @@ done
 
 # Effects report shows correct evidence levels
 elf_effects=$($COMPILER "$ELF_DIR/main.con" --report effects 2>&1 || true)
-if echo "$elf_effects" | grep -q "5 proved" && echo "$elf_effects" | grep -q "2 trusted-assumption" && echo "$elf_effects" | grep -q "1 reported"; then
+if grep <<<"$elf_effects" -q "5 proved" && grep <<<"$elf_effects" -q "2 trusted-assumption" && grep <<<"$elf_effects" -q "1 reported"; then
     echo "  ok  elf_header: effects report evidence levels correct"
     PASS=$((PASS + 1))
 else
@@ -5948,7 +5948,7 @@ else
 fi
 
 # read_header_bytes shows File capability in effects
-if echo "$elf_effects" | grep -A1 "read_header_bytes" | grep -q "caps: File"; then
+if grep <<<"$elf_effects" -A1 "read_header_bytes" | grep -q "caps: File"; then
     echo "  ok  elf_header: read_header_bytes shows File capability"
     PASS=$((PASS + 1))
 else
@@ -5957,7 +5957,7 @@ else
 fi
 
 # read_byte is trusted but pure (no capabilities)
-if echo "$elf_effects" | grep -A1 "read_byte" | grep -q "caps: (pure)" && echo "$elf_effects" | grep -A1 "read_byte" | grep -q "trusted: yes"; then
+if grep <<<"$elf_effects" -A1 "read_byte" | grep -q "caps: (pure)" && grep <<<"$elf_effects" -A1 "read_byte" | grep -q "trusted: yes"; then
     echo "  ok  elf_header: read_byte is trusted + pure (pointer read only)"
     PASS=$((PASS + 1))
 else
@@ -5980,7 +5980,7 @@ else
 fi
 
 # Diff reports check_magic stale
-if echo "$elf_diff" | grep -q "check_magic" && echo "$elf_diff" | grep -q "proved.*stale"; then
+if grep <<<"$elf_diff" -q "check_magic" && grep <<<"$elf_diff" -q "proved.*stale"; then
     echo "  ok  elf_header: drift shows check_magic proved → stale"
     PASS=$((PASS + 1))
 else
@@ -5989,7 +5989,7 @@ else
 fi
 
 # Diff reports check_version stale
-if echo "$elf_diff" | grep -q "check_version"; then
+if grep <<<"$elf_diff" -q "check_version"; then
     echo "  ok  elf_header: drift shows check_version changed"
     PASS=$((PASS + 1))
 else
@@ -5998,7 +5998,7 @@ else
 fi
 
 # Unchanged functions NOT flagged as weakened (check [~] lines only, not fingerprint text)
-if ! echo "$elf_diff" | grep '^\s*\[~\]' | grep -q "check_class"; then
+if ! grep <<<"$elf_diff" '^\s*\[~\]' | grep -q "check_class"; then
     echo "  ok  elf_header: check_class not flagged as weakened (unchanged)"
     PASS=$((PASS + 1))
 else
@@ -6041,7 +6041,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run against valid ELF header fixture
     elf_run_valid=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/valid_elf_header.bin" 2>&1)
-    if echo "$elf_run_valid" | grep -q "Result: valid ELF header"; then
+    if grep <<<"$elf_run_valid" -q "Result: valid ELF header"; then
         echo "  ok  elf_header: run accepts valid ELF file"
         PASS=$((PASS + 1))
     else
@@ -6051,7 +6051,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Valid header reports correct field details
-    if echo "$elf_run_valid" | grep -q "magic:.*valid" && echo "$elf_run_valid" | grep -q "class:.*64-bit" && echo "$elf_run_valid" | grep -q "version:.*valid"; then
+    if grep <<<"$elf_run_valid" -q "magic:.*valid" && grep <<<"$elf_run_valid" -q "class:.*64-bit" && grep <<<"$elf_run_valid" -q "version:.*valid"; then
         echo "  ok  elf_header: run shows correct field details for valid header"
         PASS=$((PASS + 1))
     else
@@ -6061,7 +6061,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run against bad magic fixture
     elf_run_bad=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_magic.bin" 2>&1)
-    if echo "$elf_run_bad" | grep -q "INVALID ELF header" && echo "$elf_run_bad" | grep -q "magic:.*INVALID"; then
+    if grep <<<"$elf_run_bad" -q "INVALID ELF header" && grep <<<"$elf_run_bad" -q "magic:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad magic"
         PASS=$((PASS + 1))
     else
@@ -6072,7 +6072,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run against bad class fixture
     elf_run_badcls=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_class.bin" 2>&1)
-    if echo "$elf_run_badcls" | grep -q "INVALID ELF header" && echo "$elf_run_badcls" | grep -q "class:.*INVALID"; then
+    if grep <<<"$elf_run_badcls" -q "INVALID ELF header" && grep <<<"$elf_run_badcls" -q "class:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad class"
         PASS=$((PASS + 1))
     else
@@ -6083,7 +6083,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run against bad version fixture
     elf_run_badver=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_version.bin" 2>&1)
-    if echo "$elf_run_badver" | grep -q "INVALID ELF header" && echo "$elf_run_badver" | grep -q "version:.*INVALID"; then
+    if grep <<<"$elf_run_badver" -q "INVALID ELF header" && grep <<<"$elf_run_badver" -q "version:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad version"
         PASS=$((PASS + 1))
     else
@@ -6094,7 +6094,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run against too-short file
     elf_run_short=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/too_short.bin" 2>&1)
-    if echo "$elf_run_short" | grep -q "too short"; then
+    if grep <<<"$elf_run_short" -q "too short"; then
         echo "  ok  elf_header: run rejects too-short file"
         PASS=$((PASS + 1))
     else
@@ -6105,7 +6105,7 @@ if [ "$elf_build_exit" = "0" ]; then
 
     # Run with no args shows usage
     elf_run_usage=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run 2>&1)
-    if echo "$elf_run_usage" | grep -q "Usage:"; then
+    if grep <<<"$elf_run_usage" -q "Usage:"; then
         echo "  ok  elf_header: run with no args shows usage"
         PASS=$((PASS + 1))
     else
@@ -6135,7 +6135,7 @@ ADV_DIR="$TESTDIR"
 # This test DOCUMENTS the limitation — it asserts the current (wrong) behavior.
 
 fab_out=$($COMPILER "$ADV_DIR/adversarial_proof_fabricated/test_proof_registry.con" --report proof-status 2>&1 || true)
-if echo "$fab_out" | grep -q "1 proved"; then
+if grep <<<"$fab_out" -q "1 proved"; then
     echo "  ok  adversarial: fabricated proof name with valid fingerprint → proved (KNOWN LIMITATION: proof names are not validated against Lean)"
     PASS=$((PASS + 1))
 else
@@ -6144,7 +6144,7 @@ else
 fi
 
 # Verify the fake proof name appears in the report
-if echo "$fab_out" | grep -q "pure_add.*proof matches"; then
+if grep <<<"$fab_out" -q "pure_add.*proof matches"; then
     echo "  ok  adversarial: fabricated proof name still passes fingerprint check"
     PASS=$((PASS + 1))
 else
@@ -6179,7 +6179,7 @@ fi
 
 if [ -f "$ADV_DIR/adversarial_proof_cross_module.con" ]; then
     cross_out=$($COMPILER "$ADV_DIR/adversarial_proof_cross_module.con" --report proof-status 2>&1 || true)
-    if echo "$cross_out" | grep -q "main.parse_byte.*proof matches" 2>/dev/null; then
+    if grep <<<"$cross_out" -q "main.parse_byte.*proof matches" 2>/dev/null; then
         echo "  ok  adversarial: cross-module proof isolation — main.parse_byte proved"
         PASS=$((PASS + 1))
     else
@@ -6194,7 +6194,7 @@ fi
 
 if [ -f "$ADV_DIR/adversarial_proof_wrong_arity.con" ]; then
     arity_out=$($COMPILER "$ADV_DIR/adversarial_proof_wrong_arity.con" --report proof-status 2>&1 || true)
-    if echo "$arity_out" | grep -q "stale\|body changed"; then
+    if grep <<<"$arity_out" -q "stale\|body changed"; then
         echo "  ok  adversarial: wrong-arity function shows stale/body changed"
         PASS=$((PASS + 1))
     else
@@ -6209,7 +6209,7 @@ fi
 
 if [ -f "$ADV_DIR/adversarial_proof_wrong_semantics.con" ]; then
     sem_out=$($COMPILER "$ADV_DIR/adversarial_proof_wrong_semantics.con" --report proof-status 2>&1 || true)
-    if echo "$sem_out" | grep -q "stale\|body changed"; then
+    if grep <<<"$sem_out" -q "stale\|body changed"; then
         echo "  ok  adversarial: wrong-semantics function shows stale/body changed"
         PASS=$((PASS + 1))
     else
@@ -6226,7 +6226,7 @@ if [ -f "$ADV_DIR/adversarial_proof_impure.con" ]; then
     impure_out=$($COMPILER "$ADV_DIR/adversarial_proof_impure.con" --report proof-status 2>&1 || true)
     # Sentinel: report header must be present so a compiler crash (empty
     # output) doesn't satisfy the absence check below.
-    if echo "$impure_out" | grep -q "Proof Status Report" && ! echo "$impure_out" | grep -q "proved.*proof matches.*impure\|✓.*impure"; then
+    if grep <<<"$impure_out" -q "Proof Status Report" && ! grep <<<"$impure_out" -q "proved.*proof matches.*impure\|✓.*impure"; then
         echo "  ok  adversarial: impure function not granted proved status"
         PASS=$((PASS + 1))
     else
@@ -6249,7 +6249,7 @@ echo "=== Codegen differential tests ==="
 
 # Constant folding: 2 + 3 should be folded to 5
 ssa_output=$(cached_emit "$TESTDIR/codegen_constfold.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "ret i64 5"; then
+if grep <<<"$ssa_output" -q "ret i64 5"; then
     echo "  ok  codegen_constfold.con --emit-ssa constant folded to ret i64 5"
     PASS=$((PASS + 1))
 else
@@ -6258,7 +6258,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if ! echo "$ssa_output" | grep -q "add i64"; then
+if ! grep <<<"$ssa_output" -q "add i64"; then
     echo "  ok  codegen_constfold.con --emit-ssa no residual add i64"
     PASS=$((PASS + 1))
 else
@@ -6275,7 +6275,7 @@ fi
 # stays gone. (Unsigned `div` by a power of two → `shr` is still applied; it is
 # sound — the quotient always fits.)
 ssa_output=$(cached_emit "$TESTDIR/codegen_strength.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "mul i64"; then
+if grep <<<"$ssa_output" -q "mul i64"; then
     echo "  ok  codegen_strength.con --emit-ssa keeps mul (checked, no unsound *→shl)"
     PASS=$((PASS + 1))
 else
@@ -6284,7 +6284,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if ! echo "$ssa_output" | grep -q "shl i64 %x"; then
+if ! grep <<<"$ssa_output" -q "shl i64 %x"; then
     echo "  ok  codegen_strength.con --emit-ssa did NOT rewrite the mul to a shift"
     PASS=$((PASS + 1))
 else
@@ -6294,7 +6294,7 @@ else
 fi
 
 llvm_output=$(cached_emit "$TESTDIR/codegen_strength.con" "--emit-llvm")
-if echo "$llvm_output" | grep -q "@__cc_smul_i64"; then
+if grep <<<"$llvm_output" -q "@__cc_smul_i64"; then
     echo "  ok  codegen_strength.con --emit-llvm *8 lowers to the checked smul helper"
     PASS=$((PASS + 1))
 else
@@ -6307,7 +6307,7 @@ fi
 
 # Struct field access: second field at offset 8
 ssa_output=$(cached_emit "$TESTDIR/struct_basic.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "gep i8 %p, i64 8"; then
+if grep <<<"$ssa_output" -q "gep i8 %p, i64 8"; then
     echo "  ok  struct_basic.con --emit-ssa second field GEP at offset 8"
     PASS=$((PASS + 1))
 else
@@ -6318,7 +6318,7 @@ fi
 
 # Enum tag load and comparison
 ssa_output=$(cached_emit "$TESTDIR/enum_basic.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "load i32"; then
+if grep <<<"$ssa_output" -q "load i32"; then
     echo "  ok  enum_basic.con --emit-ssa tag loaded as i32"
     PASS=$((PASS + 1))
 else
@@ -6327,7 +6327,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$ssa_output" | grep -q "eq i1"; then
+if grep <<<"$ssa_output" -q "eq i1"; then
     echo "  ok  enum_basic.con --emit-ssa tag comparison with eq i1"
     PASS=$((PASS + 1))
 else
@@ -6338,7 +6338,7 @@ fi
 
 # Monomorphization: identity<T> specialized for Int and i32
 ssa_output=$(cached_emit "$TESTDIR/report_mono_check.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "define i64 @identity_for_Int"; then
+if grep <<<"$ssa_output" -q "define i64 @identity_for_Int"; then
     echo "  ok  report_mono_check.con --emit-ssa has identity_for_Int"
     PASS=$((PASS + 1))
 else
@@ -6347,7 +6347,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$ssa_output" | grep -q "define i32 @identity_for_i32"; then
+if grep <<<"$ssa_output" -q "define i32 @identity_for_i32"; then
     echo "  ok  report_mono_check.con --emit-ssa has identity_for_i32"
     PASS=$((PASS + 1))
 else
@@ -6358,7 +6358,7 @@ fi
 
 # LLVM struct type definition
 llvm_output=$(cached_emit "$TESTDIR/struct_basic.con" "--emit-llvm")
-if echo "$llvm_output" | grep -q "%struct.Point = type { i64, i64 }"; then
+if grep <<<"$llvm_output" -q "%struct.Point = type { i64, i64 }"; then
     echo "  ok  struct_basic.con --emit-llvm has %struct.Point = type { i64, i64 }"
     PASS=$((PASS + 1))
 else
@@ -6369,7 +6369,7 @@ fi
 
 # Mutable borrow generates store
 ssa_output=$(cached_emit "$TESTDIR/borrow_mut.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "store i64"; then
+if grep <<<"$ssa_output" -q "store i64"; then
     echo "  ok  borrow_mut.con --emit-ssa mutable borrow generates store i64"
     PASS=$((PASS + 1))
 else
@@ -6380,7 +6380,7 @@ fi
 
 # Struct-in-loop: aggregate promoted to stable alloca (no aggregate phi)
 ssa_output=$(cached_emit "$TESTDIR/struct_loop_field_assign.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "alloca %Point" && ! echo "$ssa_output" | grep -q "phi %Point"; then
+if grep <<<"$ssa_output" -q "alloca %Point" && ! grep <<<"$ssa_output" -q "phi %Point"; then
     echo "  ok  struct_loop_field_assign.con --emit-ssa aggregate promoted to alloca (no phi %Point)"
     PASS=$((PASS + 1))
 else
@@ -6391,7 +6391,7 @@ fi
 
 # Struct-in-if/else: aggregate merge via alloca (no aggregate phi)
 ssa_output=$(cached_emit "$TESTDIR/struct_if_else_merge.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "alloca %Pair" && ! echo "$ssa_output" | grep -q "phi %Pair"; then
+if grep <<<"$ssa_output" -q "alloca %Pair" && ! grep <<<"$ssa_output" -q "phi %Pair"; then
     echo "  ok  struct_if_else_merge.con --emit-ssa aggregate if/else merged via alloca (no phi %Pair)"
     PASS=$((PASS + 1))
 else
@@ -6402,7 +6402,7 @@ fi
 
 # Struct-in-match: aggregate merge via alloca (no aggregate phi)
 ssa_output=$(cached_emit "$TESTDIR/struct_match_merge.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "alloca %Pair" && ! echo "$ssa_output" | grep -q "phi %Pair"; then
+if grep <<<"$ssa_output" -q "alloca %Pair" && ! grep <<<"$ssa_output" -q "phi %Pair"; then
     echo "  ok  struct_match_merge.con --emit-ssa aggregate match merged via alloca (no phi %Pair)"
     PASS=$((PASS + 1))
 else
@@ -6581,7 +6581,7 @@ if section_active codegen; then
 
 # LLVM packed struct matches report layout
 llvm_output=$(cached_emit "$TESTDIR/report_layout_check.con" "--emit-llvm")
-if echo "$llvm_output" | grep -q "%struct.Packed = type <{"; then
+if grep <<<"$llvm_output" -q "%struct.Packed = type <{"; then
     echo "  ok  report_layout_check.con --emit-llvm packed struct uses <{ syntax"
     PASS=$((PASS + 1))
 else
@@ -6592,21 +6592,21 @@ fi
 
 # LLVM enum payload size matches report layout max_payload
 report_output=$(cached_output "$TESTDIR/report_layout_check.con" "--report layout")
-layout_max_payload=$(echo "$report_output" | grep -o "max_payload: [0-9]*" | grep -o "[0-9]*")
-if echo "$llvm_output" | grep -q "%enum.Shape = type { i32, \[$layout_max_payload x i8\] }"; then
+layout_max_payload=$(grep <<<"$report_output" -o "max_payload: [0-9]*" | grep -o "[0-9]*")
+if grep <<<"$llvm_output" -q "%enum.Shape = type { i32, \[$layout_max_payload x i8\] }"; then
     echo "  ok  report_layout_check.con --emit-llvm enum payload size matches --report layout max_payload ($layout_max_payload)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  report_layout_check.con --emit-llvm enum payload size does not match --report layout max_payload ($layout_max_payload)"
-    echo "  LLVM: $(echo "$llvm_output" | grep '%enum.Shape')"
-    echo "  Report: $(echo "$report_output" | grep 'max_payload')"
+    echo "  LLVM: $(grep <<<"$llvm_output" '%enum.Shape')"
+    echo "  Report: $(grep <<<"$report_output" 'max_payload')"
     FAIL=$((FAIL + 1))
 fi
 
 # Core-SSA consistency: function signature preserved across representations
 core_output=$(cached_emit "$TESTDIR/struct_basic.con" "--emit-core")
 ssa_output=$(cached_emit "$TESTDIR/struct_basic.con" "--emit-ssa")
-if echo "$core_output" | grep -q "fn sum_point(p: Point) -> Int"; then
+if grep <<<"$core_output" -q "fn sum_point(p: Point) -> Int"; then
     echo "  ok  struct_basic.con --emit-core preserves fn sum_point(p: Point) -> Int"
     PASS=$((PASS + 1))
 else
@@ -6615,7 +6615,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$ssa_output" | grep -q "define i64 @sum_point"; then
+if grep <<<"$ssa_output" -q "define i64 @sum_point"; then
     echo "  ok  struct_basic.con --emit-ssa maps sum_point to define i64 @sum_point"
     PASS=$((PASS + 1))
 else
@@ -6665,13 +6665,13 @@ if [ -n "$STDLIB_MODULE" ]; then
     # Single module mode: only run the requested module
     echo "  (targeting module: std.$STDLIB_MODULE)"
     mod_output=$($COMPILER std/src/lib.con --test --module "std.$STDLIB_MODULE" 2>&1) && mod_exit=0 || mod_exit=$?
-    mod_pass=$(echo "$mod_output" | grep -c "^PASS:" || true)
-    mod_fail=$(echo "$mod_output" | grep -c "^FAIL:" || true)
+    mod_pass=$(grep <<<"$mod_output" -c "^PASS:" || true)
+    mod_fail=$(grep <<<"$mod_output" -c "^FAIL:" || true)
     if [ "$mod_pass" -eq 0 ] && [ "$mod_fail" -eq 0 ]; then
         echo "  warn  std.$STDLIB_MODULE — no tests found (check module name)"
     elif [ "$mod_fail" -gt 0 ]; then
         echo "  FAIL  std.$STDLIB_MODULE — $mod_pass passed, $mod_fail failed"
-        echo "$mod_output" | grep "^FAIL:"
+        grep <<<"$mod_output" "^FAIL:"
     else
         echo "  ok    std.$STDLIB_MODULE — $mod_pass passed"
     fi
@@ -6682,13 +6682,13 @@ if [ -n "$STDLIB_MODULE" ]; then
 else
     # Full stdlib run with per-module breakdown
     stdlib_output=$($COMPILER std/src/lib.con --test 2>&1) && stdlib_exit=0 || stdlib_exit=$?
-    stdlib_pass=$(echo "$stdlib_output" | grep -c "^PASS:" || true)
-    stdlib_fail=$(echo "$stdlib_output" | grep -c "^FAIL:" || true)
+    stdlib_pass=$(grep <<<"$stdlib_output" -c "^PASS:" || true)
+    stdlib_fail=$(grep <<<"$stdlib_output" -c "^FAIL:" || true)
 
     echo "  Stdlib: $stdlib_pass passed, $stdlib_fail failed (exit $stdlib_exit)"
     echo "  (use --stdlib-module <name> to target a single module)"
     if [ "$stdlib_fail" -gt 0 ]; then
-        echo "$stdlib_output" | grep "^FAIL:"
+        grep <<<"$stdlib_output" "^FAIL:"
     fi
     PASS=$((PASS + stdlib_pass))
     FAIL=$((FAIL + stdlib_fail))
@@ -6708,7 +6708,7 @@ check_collection_tests() {
     shift
     local missing=0
     for test_name in "$@"; do
-        if ! echo "$stdlib_output" | grep -qF "PASS: $test_name"; then
+        if ! grep <<<"$stdlib_output" -qF "PASS: $test_name"; then
             echo "FAIL  collection/$name — missing or failing test: $test_name"
             missing=1
         fi
@@ -6804,7 +6804,7 @@ PIPELINE_TEST=".lake/build/bin/pipeline-test"
 if [ -x "$PIPELINE_TEST" ]; then
     output=$("$PIPELINE_TEST" 2>&1) || true
     # Parse the summary line: "=== N/M passed, F failed ==="
-    summary_line=$(echo "$output" | grep -E '^=== [0-9]+/[0-9]+ passed')
+    summary_line=$(grep <<<"$output" -E '^=== [0-9]+/[0-9]+ passed')
     if [ -n "$summary_line" ]; then
         pl_passed=$(echo "$summary_line" | sed 's/=== \([0-9]*\)\/.*/\1/')
         pl_total=$(echo "$summary_line" | sed 's/.*\/\([0-9]*\) passed.*/\1/')
@@ -6813,7 +6813,7 @@ if [ -x "$PIPELINE_TEST" ]; then
         FAIL=$((FAIL + pl_failed))
         echo "  $pl_passed/$pl_total pass-level tests passed"
         if [ "$pl_failed" -gt 0 ]; then
-            echo "$output" | grep "^FAIL:" >&2
+            grep <<<"$output" "^FAIL:" >&2
         fi
     else
         echo "  WARNING: could not parse pipeline-test output"
@@ -6888,10 +6888,10 @@ echo ""
 echo "=== Performance regression check ==="
 if [ -f "scripts/tests/test_perf.sh" ] && [ -f ".perf-baseline" ]; then
     perf_output=$(bash scripts/tests/test_perf.sh --compare 2>&1) || true
-    perf_warns=$(echo "$perf_output" | grep -c "WARNING" || true)
+    perf_warns=$(grep <<<"$perf_output" -c "WARNING" || true)
     if [ "$perf_warns" -gt 0 ]; then
         echo "  $perf_warns performance regression warning(s):"
-        echo "$perf_output" | grep "WARNING" | sed 's/^/    /'
+        grep <<<"$perf_output" "WARNING" | sed 's/^/    /'
     else
         echo "  No performance regressions detected"
     fi
@@ -6911,11 +6911,11 @@ echo ""
 echo "=== Determinism regression check ==="
 if [ -f "scripts/tests/test_determinism.sh" ]; then
     det_output=$(bash scripts/tests/test_determinism.sh --quick 2>&1) || det_exit=$?
-    det_pass=$(echo "$det_output" | grep "passed:" | awk '{print $2}')
-    det_fail=$(echo "$det_output" | grep "failed:" | awk '{print $2}')
+    det_pass=$(grep <<<"$det_output" "passed:" | awk '{print $2}')
+    det_fail=$(grep <<<"$det_output" "failed:" | awk '{print $2}')
     if [ "${det_fail:-0}" -gt 0 ]; then
         echo "  FAIL: $det_fail determinism regressions detected"
-        echo "$det_output" | grep "FAIL:" | sed 's/^/    /'
+        grep <<<"$det_output" "FAIL:" | sed 's/^/    /'
         FAIL=$((FAIL + det_fail))
     else
         echo "  All ${det_pass:-0} determinism checks passed"
@@ -6936,12 +6936,12 @@ consistency_fail=0
 for prog in "$TESTDIR"/*.con; do
     base=$(basename "$prog" .con)
     result=$($COMPILER "$prog" --report consistency 2>&1) || true
-    if echo "$result" | grep -q "All consistency checks passed"; then
+    if grep <<<"$result" -q "All consistency checks passed"; then
         consistency_pass=$((consistency_pass + 1))
-    elif echo "$result" | grep -q "consistency violation"; then
+    elif grep <<<"$result" -q "consistency violation"; then
         consistency_fail=$((consistency_fail + 1))
         echo "  FAIL: $base"
-        echo "$result" | grep -v "^$" | sed 's/^/    /'
+        grep <<<"$result" -v "^$" | sed 's/^/    /'
     fi
     # programs that fail compilation are silently skipped
 done
@@ -6961,7 +6961,7 @@ echo "=== Terminology gate ==="
 if [ -f "scripts/tests/test_terminology_gate.sh" ]; then
     term_output=$(bash scripts/tests/test_terminology_gate.sh 2>&1) || term_exit=$?
     if [ "${term_exit:-0}" -gt 0 ]; then
-        echo "$term_output" | grep "FAIL:" | sed 's/^/  /'
+        grep <<<"$term_output" "FAIL:" | sed 's/^/  /'
         FAIL=$((FAIL + 1))
     else
         echo "  Terminology gate passed"
@@ -6985,9 +6985,9 @@ for f in "$TESTDIR"/*.con; do
         error_*|adversarial_*|pressure_err_*|phase3_diag_*|bug_*) continue ;;
     esac
     output=$("$COMPILER" "$f" --report verify 2>&1) || true
-    if echo "$output" | grep -q "VERIFIER FAILED"; then
+    if grep <<<"$output" -q "VERIFIER FAILED"; then
         echo "  FAIL verify: $bn"
-        echo "$output" | grep "error:" | head -3 | sed 's/^/    /'
+        grep <<<"$output" "error:" | head -3 | sed 's/^/    /'
         verify_fail=$((verify_fail + 1))
     else
         verify_pass=$((verify_pass + 1))
@@ -7014,7 +7014,7 @@ MAL_DIR=$(mktemp -d)
 echo '[{"kind":"effects","function":"foo"' > "$MAL_DIR/truncated.json"
 echo '[]' > "$MAL_DIR/good.json"
 mal_out=$($COMPILER diff "$MAL_DIR/truncated.json" "$MAL_DIR/good.json" 2>&1) && mal_exit=0 || mal_exit=$?
-if [ "$mal_exit" -ne 0 ] && echo "$mal_out" | grep -q "error.*parse\|could not parse"; then
+if [ "$mal_exit" -ne 0 ] && grep <<<"$mal_out" -q "error.*parse\|could not parse"; then
     echo "  ok  malformed: truncated snapshot JSON produces explicit error"
     mal_pass=$((mal_pass + 1))
 else
@@ -7049,7 +7049,7 @@ unknown_future_key = true
 predictable = false
 TOMLEOF
 mal_toml=$(cd "$MAL_DIR/toml_bad" && $ROOT_DIR/$COMPILER build 2>&1) && toml_exit=0 || toml_exit=$?
-if echo "$mal_toml" | grep -q "warning.*Concrete.toml.*dependencies"; then
+if grep <<<"$mal_toml" -q "warning.*Concrete.toml.*dependencies"; then
     echo "  ok  malformed: bad Concrete.toml dependency line produces warning"
     mal_pass=$((mal_pass + 1))
 else
@@ -7059,7 +7059,7 @@ else
 fi
 
 # --- 7. Unrecognized Concrete.toml policy key → warning ---
-if echo "$mal_toml" | grep -q "warning.*Concrete.toml.*policy.*unrecognized"; then
+if grep <<<"$mal_toml" -q "warning.*Concrete.toml.*policy.*unrecognized"; then
     echo "  ok  malformed: unrecognized policy key produces warning"
     mal_pass=$((mal_pass + 1))
 else
@@ -7069,7 +7069,7 @@ fi
 
 # --- 8. Diff with non-existent file → explicit diagnostic ---
 mal_nofile=$($COMPILER diff "/tmp/nonexistent_file_12345.json" "$MAL_DIR/good.json" 2>&1) && nofile_exit=0 || nofile_exit=$?
-if [ "$nofile_exit" -ne 0 ] && echo "$mal_nofile" | grep -q "error: file not found"; then
+if [ "$nofile_exit" -ne 0 ] && grep <<<"$mal_nofile" -q "error: file not found"; then
     echo "  ok  malformed: diff with non-existent file produces explicit diagnostic"
     mal_pass=$((mal_pass + 1))
 else
@@ -7081,7 +7081,7 @@ fi
 # --- 9. Snapshot facts with missing required fields → warnings ---
 echo '[{"kind":"effects"},{"function":"bar"}]' > "$MAL_DIR/missing_fields.json"
 mal_fields=$($COMPILER diff "$MAL_DIR/missing_fields.json" "$MAL_DIR/good.json" 2>&1 || true)
-if echo "$mal_fields" | grep -q "warning.*missing required.*function" && echo "$mal_fields" | grep -q "warning.*missing required.*kind"; then
+if grep <<<"$mal_fields" -q "warning.*missing required.*function" && grep <<<"$mal_fields" -q "warning.*missing required.*kind"; then
     echo "  ok  malformed: snapshot facts with missing fields produce warnings"
     mal_pass=$((mal_pass + 1))
 else
@@ -7092,7 +7092,7 @@ fi
 # --- 10. Snapshot that is not an array/object → error ---
 echo '"just a string"' > "$MAL_DIR/bad_type.json"
 mal_type=$($COMPILER diff "$MAL_DIR/bad_type.json" "$MAL_DIR/good.json" 2>&1) && type_exit=0 || type_exit=$?
-if [ "$type_exit" -ne 0 ] && echo "$mal_type" | grep -q "error"; then
+if [ "$type_exit" -ne 0 ] && grep <<<"$mal_type" -q "error"; then
     echo "  ok  malformed: non-array snapshot JSON produces error"
     mal_pass=$((mal_pass + 1))
 else
@@ -7103,7 +7103,7 @@ fi
 # --- 11. Snapshot with duplicate fact keys → error ---
 echo '[{"kind":"effects","function":"foo","is_pure":true},{"kind":"effects","function":"foo","is_pure":false}]' > "$MAL_DIR/dupes.json"
 mal_dupe=$($COMPILER diff "$MAL_DIR/dupes.json" "$MAL_DIR/good.json" 2>&1) && dupe_exit=0 || dupe_exit=$?
-if [ "$dupe_exit" -ne 0 ] && echo "$mal_dupe" | grep -q "duplicate"; then
+if [ "$dupe_exit" -ne 0 ] && grep <<<"$mal_dupe" -q "duplicate"; then
     echo "  ok  malformed: snapshot with duplicate keys produces error"
     mal_pass=$((mal_pass + 1))
 else
@@ -7115,7 +7115,7 @@ fi
 mkdir -p "$MAL_DIR/bundle_no_manifest/source"
 echo 'fn main() -> i32 { return 0; }' > "$MAL_DIR/bundle_no_manifest/source/main.con"
 bun_no=$($COMPILER validate-bundle "$MAL_DIR/bundle_no_manifest" 2>&1) && bun_no_exit=0 || bun_no_exit=$?
-if [ "$bun_no_exit" -ne 0 ] && echo "$bun_no" | grep -q "error.*manifest.json missing"; then
+if [ "$bun_no_exit" -ne 0 ] && grep <<<"$bun_no" -q "error.*manifest.json missing"; then
     echo "  ok  malformed: bundle without manifest produces error"
     mal_pass=$((mal_pass + 1))
 else
@@ -7128,7 +7128,7 @@ mkdir -p "$MAL_DIR/bundle_bad_manifest/source"
 echo 'fn main() -> i32 { return 0; }' > "$MAL_DIR/bundle_bad_manifest/source/main.con"
 echo 'NOT JSON' > "$MAL_DIR/bundle_bad_manifest/manifest.json"
 bun_bad=$($COMPILER validate-bundle "$MAL_DIR/bundle_bad_manifest" 2>&1) && bun_bad_exit=0 || bun_bad_exit=$?
-if [ "$bun_bad_exit" -ne 0 ] && echo "$bun_bad" | grep -q "error.*not a valid JSON"; then
+if [ "$bun_bad_exit" -ne 0 ] && grep <<<"$bun_bad" -q "error.*not a valid JSON"; then
     echo "  ok  malformed: bundle with corrupted manifest produces error"
     mal_pass=$((mal_pass + 1))
 else
@@ -7141,7 +7141,7 @@ mkdir -p "$MAL_DIR/bundle_partial/source"
 echo 'fn main() -> i32 { return 0; }' > "$MAL_DIR/bundle_partial/source/main.con"
 echo '{"version": 1}' > "$MAL_DIR/bundle_partial/manifest.json"
 bun_part=$($COMPILER validate-bundle "$MAL_DIR/bundle_partial" 2>&1 || true)
-if echo "$bun_part" | grep -q "warning.*missing.*source_path" && echo "$bun_part" | grep -q "warning.*missing.*artifacts"; then
+if grep <<<"$bun_part" -q "warning.*missing.*source_path" && grep <<<"$bun_part" -q "warning.*missing.*artifacts"; then
     echo "  ok  malformed: bundle with partial manifest produces field warnings"
     mal_pass=$((mal_pass + 1))
 else
@@ -7152,7 +7152,7 @@ fi
 # --- 16. Bundle validation: valid bundle passes ---
 $COMPILER debug-bundle "$TESTDIR/bug_if_expression.con" -o "$MAL_DIR/valid_bundle" > /dev/null 2>&1
 bun_ok=$($COMPILER validate-bundle "$MAL_DIR/valid_bundle" 2>&1 || true)
-if echo "$bun_ok" | grep -q "is valid"; then
+if grep <<<"$bun_ok" -q "is valid"; then
     echo "  ok  malformed: valid bundle passes validation"
     mal_pass=$((mal_pass + 1))
 else
@@ -7168,7 +7168,7 @@ cat > "$MAL_DIR/toml_nopkg/Concrete.toml" << 'TOMLEOF'
 [dependencies]
 TOMLEOF
 mal_nopkg=$(cd "$MAL_DIR/toml_nopkg" && $ROOT_DIR/$COMPILER build 2>&1)
-if echo "$mal_nopkg" | grep -q "warning.*missing.*\[package\]"; then
+if grep <<<"$mal_nopkg" -q "warning.*missing.*\[package\]"; then
     echo "  ok  malformed: Concrete.toml without [package] produces warning"
     mal_pass=$((mal_pass + 1))
 else
@@ -7187,7 +7187,7 @@ name = "test"
 foo = "bar"
 TOMLEOF
 mal_unk=$(cd "$MAL_DIR/toml_unk" && $ROOT_DIR/$COMPILER build 2>&1)
-if echo "$mal_unk" | grep -q "warning.*unrecognized section"; then
+if grep <<<"$mal_unk" -q "warning.*unrecognized section"; then
     echo "  ok  malformed: Concrete.toml with unknown section produces warning"
     mal_pass=$((mal_pass + 1))
 else
@@ -7213,7 +7213,7 @@ cat > "$MAL_DIR/bundle_bad_types/manifest.json" << 'MEOF'
 }
 MEOF
 bun_types=$($COMPILER validate-bundle "$MAL_DIR/bundle_bad_types" 2>&1) && bun_types_exit=0 || bun_types_exit=$?
-if [ "$bun_types_exit" -ne 0 ] && echo "$bun_types" | grep -q "\"version\" must be a number" && echo "$bun_types" | grep -q "\"source_path\" must be a string" && echo "$bun_types" | grep -q "must be a boolean"; then
+if [ "$bun_types_exit" -ne 0 ] && grep <<<"$bun_types" -q "\"version\" must be a number" && grep <<<"$bun_types" -q "\"source_path\" must be a string" && grep <<<"$bun_types" -q "must be a boolean"; then
     echo "  ok  malformed: bundle with wrong field types produces type errors"
     mal_pass=$((mal_pass + 1))
 else
@@ -7226,7 +7226,7 @@ fi
 echo '[{"kind":"effects","function":"foo","is_pure":true,"evidence":"enforced","capabilities":"[]","crosses_ffi":false,"is_trusted":false}]' > "$MAL_DIR/diff_old.json"
 echo '[{"kind":"effects","function":"foo","evidence":"enforced"}]' > "$MAL_DIR/diff_new.json"
 diff_out=$($COMPILER diff "$MAL_DIR/diff_old.json" "$MAL_DIR/diff_new.json" 2>&1) || true
-if echo "$diff_out" | grep -q "<missing>"; then
+if grep <<<"$diff_out" -q "<missing>"; then
     echo "  ok  malformed: diff reports <missing> for absent fields"
     mal_pass=$((mal_pass + 1))
 else
@@ -7238,7 +7238,7 @@ fi
 echo '[]' > "$MAL_DIR/drift_old.json"
 echo '[{"kind":"totally_unknown_kind","function":"bar"}]' > "$MAL_DIR/drift_new.json"
 drift_out=$($COMPILER diff "$MAL_DIR/drift_old.json" "$MAL_DIR/drift_new.json" 2>&1) || true
-if echo "$drift_out" | grep -q "weakened"; then
+if grep <<<"$drift_out" -q "weakened"; then
     echo "  ok  malformed: unknown fact kind in new facts classified as weakened"
     mal_pass=$((mal_pass + 1))
 else
@@ -7266,7 +7266,7 @@ QUERY_PROG="$TESTDIR/fib.con"
 
 # --- 1. Empty query → explicit error ---
 q_empty=$($COMPILER "$QUERY_PROG" --query "" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_empty" | grep -q "error.*empty query"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_empty" -q "error.*empty query"; then
     echo "  ok  query: empty query produces explicit error"
     query_pass=$((query_pass + 1))
 else
@@ -7277,7 +7277,7 @@ fi
 
 # --- 2. Unknown single-word kind → error with known kinds listed ---
 q_bogus=$($COMPILER "$QUERY_PROG" --query "bogus_kind" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_bogus" | grep -q "error.*unknown query kind.*bogus_kind"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_bogus" -q "error.*unknown query kind.*bogus_kind"; then
     echo "  ok  query: unknown single-word kind produces error with suggestions"
     query_pass=$((query_pass + 1))
 else
@@ -7288,7 +7288,7 @@ fi
 
 # --- 3. Unknown two-part kind → error ---
 q_bogus2=$($COMPILER "$QUERY_PROG" --query "bogus:myfn" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_bogus2" | grep -q "error.*unknown query kind.*bogus"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_bogus2" -q "error.*unknown query kind.*bogus"; then
     echo "  ok  query: unknown two-part kind produces error"
     query_pass=$((query_pass + 1))
 else
@@ -7298,7 +7298,7 @@ fi
 
 # --- 4. Empty segment (leading colon) → error ---
 q_leading=$($COMPILER "$QUERY_PROG" --query ":fn:cap" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_leading" | grep -q "error.*empty segment"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_leading" -q "error.*empty segment"; then
     echo "  ok  query: leading colon produces empty-segment error"
     query_pass=$((query_pass + 1))
 else
@@ -7308,7 +7308,7 @@ fi
 
 # --- 5. Empty segment (trailing colon) → error ---
 q_trailing=$($COMPILER "$QUERY_PROG" --query "proof:" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_trailing" | grep -q "error.*empty segment"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_trailing" -q "error.*empty segment"; then
     echo "  ok  query: trailing colon produces empty-segment error"
     query_pass=$((query_pass + 1))
 else
@@ -7318,7 +7318,7 @@ fi
 
 # --- 6. Unknown three-part kind → error ---
 q_three=$($COMPILER "$QUERY_PROG" --query "bogus:fn:x" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_three" | grep -q "error.*unknown three-part"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_three" -q "error.*unknown three-part"; then
     echo "  ok  query: unknown three-part kind produces error"
     query_pass=$((query_pass + 1))
 else
@@ -7328,7 +7328,7 @@ fi
 
 # --- 7. Too many separators → error ---
 q_many=$($COMPILER "$QUERY_PROG" --query "a:b:c:d" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -ne 0 ] && echo "$q_many" | grep -q "error.*too many"; then
+if [ "$q_exit" -ne 0 ] && grep <<<"$q_many" -q "error.*too many"; then
     echo "  ok  query: too many separators produces error"
     query_pass=$((query_pass + 1))
 else
@@ -7338,7 +7338,7 @@ fi
 
 # --- 8. Valid single-word kind still works ---
 q_effects=$($COMPILER "$QUERY_PROG" --query "effects" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -eq 0 ] && echo "$q_effects" | grep -q '"kind".*"effects"'; then
+if [ "$q_exit" -eq 0 ] && grep <<<"$q_effects" -q '"kind".*"effects"'; then
     echo "  ok  query: valid single-word kind (effects) returns facts"
     query_pass=$((query_pass + 1))
 else
@@ -7348,7 +7348,7 @@ fi
 
 # --- 9. Valid semantic query still works ---
 q_pred=$($COMPILER "$QUERY_PROG" --query "predictable:main.fib" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -eq 0 ] && echo "$q_pred" | grep -q '"query_answer"'; then
+if [ "$q_exit" -eq 0 ] && grep <<<"$q_pred" -q '"query_answer"'; then
     echo "  ok  query: valid semantic query (predictable:fn) returns answer"
     query_pass=$((query_pass + 1))
 else
@@ -7358,7 +7358,7 @@ fi
 
 # --- 10. Valid kind:function filter still works ---
 q_filter=$($COMPILER "$QUERY_PROG" --query "effects:fib" 2>&1) && q_exit=0 || q_exit=$?
-if [ "$q_exit" -eq 0 ] && echo "$q_filter" | grep -q '"effects"'; then
+if [ "$q_exit" -eq 0 ] && grep <<<"$q_filter" -q '"effects"'; then
     echo "  ok  query: valid kind:function filter returns facts"
     query_pass=$((query_pass + 1))
 else
@@ -7367,7 +7367,7 @@ else
 fi
 
 # --- 11. Error messages list known kinds ---
-if echo "$q_bogus" | grep -q "predictable.*proof.*evidence.*audit"; then
+if grep <<<"$q_bogus" -q "predictable.*proof.*evidence.*audit"; then
     echo "  ok  query: error messages list known semantic query kinds"
     query_pass=$((query_pass + 1))
 else
@@ -7389,9 +7389,9 @@ echo "=== Bug-to-regression corpus audit ==="
 audit_out=$(bash "$ROOT_DIR/scripts/tests/audit_bug_corpus.sh" 2>&1)
 audit_exit=$?
 # Count pass/fail from audit output
-audit_pass=$(echo "$audit_out" | grep -c "^  ok " || true)
-audit_fail=$(echo "$audit_out" | grep -c "^  FAIL" || true)
-echo "$audit_out" | grep -E "^  (ok|FAIL|skip|warn)" | head -30
+audit_pass=$(grep <<<"$audit_out" -c "^  ok " || true)
+audit_fail=$(grep <<<"$audit_out" -c "^  FAIL" || true)
+grep <<<"$audit_out" -E "^  (ok|FAIL|skip|warn)" | head -30
 if [ "$audit_exit" -eq 0 ]; then
     echo "  bug corpus audit passed ($audit_pass mapped, 0 failures)"
     PASS=$((PASS + 1))
@@ -7410,7 +7410,7 @@ evidence_fail=0
 # --- Predictable check: crypto_verify must PASS ---
 if [ -f "examples/crypto_verify/src/main.con" ]; then
     pred_out=$("$COMPILER" examples/crypto_verify/src/main.con --check predictable 2>&1) || true
-    if echo "$pred_out" | grep -q "predictable profile: pass"; then
+    if grep <<<"$pred_out" -q "predictable profile: pass"; then
         echo "  ok  predictable: crypto_verify passes"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7423,7 +7423,7 @@ fi
 # --- Predictable check: thesis_demo must FAIL (has I/O) ---
 if [ -f "examples/thesis_demo/src/main.con" ]; then
     pred_out=$("$COMPILER" examples/thesis_demo/src/main.con --check predictable 2>&1) || true
-    if echo "$pred_out" | grep -q "predictable profile: FAIL"; then
+    if grep <<<"$pred_out" -q "predictable profile: FAIL"; then
         echo "  ok  predictable: thesis_demo correctly fails (has I/O)"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7440,9 +7440,9 @@ for main_file in examples/*/src/main.con; do
     example_name=$(basename "$(dirname "$(dirname "$main_file")")")
     [ "$example_name" = "proof_pressure" ] && continue
     ps_out=$("$COMPILER" "$main_file" --report proof-status 2>&1) || true
-    if echo "$ps_out" | grep -qE "^-- (proof )?stale"; then
+    if grep <<<"$ps_out" -qE "^-- (proof )?stale"; then
         echo "  FAIL stale-proof: $example_name has stale proofs"
-        echo "$ps_out" | grep "^-- stale" | head -3 | sed 's/^/    /'
+        grep <<<"$ps_out" "^-- stale" | head -3 | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
     else
         echo "  ok  stale-proof: $example_name — no stale proofs"
@@ -7453,7 +7453,7 @@ done
 # --- Proof-obligation status: thesis_demo has at least one proved obligation ---
 if [ -f "examples/thesis_demo/src/main.con" ]; then
     ob_out=$("$COMPILER" examples/thesis_demo/src/main.con --report obligations 2>&1) || true
-    if echo "$ob_out" | grep -q "status:.*proved"; then
+    if grep <<<"$ob_out" -q "status:.*proved"; then
         echo "  ok  obligations: thesis_demo has proved obligations"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7491,7 +7491,7 @@ for main_file in examples/*/src/main.con; do
     example_name=$(basename "$(dirname "$(dirname "$main_file")")")
     # Consistency
     con_out=$("$COMPILER" "$main_file" --report consistency 2>&1) || true
-    if echo "$con_out" | grep -q "All consistency checks passed"; then
+    if grep <<<"$con_out" -q "All consistency checks passed"; then
         echo "  ok  trust-drift: $example_name consistency passes"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7524,7 +7524,7 @@ drift_check() {
     diff_out=$("$COMPILER" diff "$orig_snap" "$drift_snap" 2>&1) || true
     local diff_exit=$?
     # diff exits 1 on weakening (but we captured output, check for TRUST WEAKENED)
-    if echo "$diff_out" | grep -q "TRUST WEAKENED"; then
+    if grep <<<"$diff_out" -q "TRUST WEAKENED"; then
         echo "  ok  drift-demo: $name — trust weakening detected"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7534,7 +7534,7 @@ drift_check() {
     fi
     # Check specific drift pattern
     if [ -n "$expect_pattern" ]; then
-        if echo "$diff_out" | grep -q "$expect_pattern"; then
+        if grep <<<"$diff_out" -q "$expect_pattern"; then
             echo "  ok  drift-demo: $name — $expect_pattern found"
             evidence_pass=$((evidence_pass + 1))
         else
@@ -7569,7 +7569,7 @@ if [ -f "examples/thesis_demo/src/main.con" ] && [ -f "examples/thesis_demo/src/
 
     # Also check authority escalation specifically
     diff_out=$("$COMPILER" diff "$TMPDIR/drift_thesis_demo_orig.json" "$TMPDIR/drift_thesis_demo_drift.json" 2>&1) || true
-    if echo "$diff_out" | grep -q "capabilities.*File"; then
+    if grep <<<"$diff_out" -q "capabilities.*File"; then
         echo "  ok  drift-demo: thesis_demo — authority escalation (File) detected"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7578,7 +7578,7 @@ if [ -f "examples/thesis_demo/src/main.con" ] && [ -f "examples/thesis_demo/src/
     fi
 
     # Check resource drift (bounded → unbounded)
-    if echo "$diff_out" | grep -q "loops.*bounded.*unbounded\|unbounded"; then
+    if grep <<<"$diff_out" -q "loops.*bounded.*unbounded\|unbounded"; then
         echo "  ok  drift-demo: thesis_demo — resource drift (unbounded loop) detected"
         evidence_pass=$((evidence_pass + 1))
     else
@@ -7591,7 +7591,7 @@ fi
 pp_out=$($COMPILER examples/proof_pressure/src/main.con --report proof-status 2>/dev/null)
 
 # 1. check_nonce is proved
-if echo "$pp_out" | grep -B5 "check_nonce" | grep -q "^-- proved"; then
+if grep <<<"$pp_out" -B5 "check_nonce" | grep -q "^-- proved"; then
     echo "  ok  pressure-set: check_nonce is proved"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7600,7 +7600,7 @@ else
 fi
 
 # 2. validate_header is proved
-if echo "$pp_out" | grep -B5 "validate_header" | grep -q "^-- proved"; then
+if grep <<<"$pp_out" -B5 "validate_header" | grep -q "^-- proved"; then
     echo "  ok  pressure-set: validate_header is proved"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7609,7 +7609,7 @@ else
 fi
 
 # 3. compute_checksum is stale
-if echo "$pp_out" | grep -B5 "compute_checksum" | grep -q "proof stale"; then
+if grep <<<"$pp_out" -B5 "compute_checksum" | grep -q "proof stale"; then
     echo "  ok  pressure-set: compute_checksum is stale"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7618,7 +7618,7 @@ else
 fi
 
 # 4. format_result is ineligible
-if echo "$pp_out" | grep -B5 "format_result" | grep -q "not eligible"; then
+if grep <<<"$pp_out" -B5 "format_result" | grep -q "not eligible"; then
     echo "  ok  pressure-set: format_result is ineligible"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7627,7 +7627,7 @@ else
 fi
 
 # 5. clamp_value is missing (no proof)
-if echo "$pp_out" | grep -B5 "clamp_value" | grep -q "no proof"; then
+if grep <<<"$pp_out" -B5 "clamp_value" | grep -q "no proof"; then
     echo "  ok  pressure-set: clamp_value is missing (no proof)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7636,7 +7636,7 @@ else
 fi
 
 # 6. classify_range is blocked
-if echo "$pp_out" | grep -B5 "classify_range" | grep -q "^-- blocked"; then
+if grep <<<"$pp_out" -B5 "classify_range" | grep -q "^-- blocked"; then
     echo "  ok  pressure-set: classify_range is blocked"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7645,12 +7645,12 @@ else
 fi
 
 # 7. Totals line has all 6 states accounted for
-if echo "$pp_out" | grep -q "2 proved.*1 stale.*1 unproved.*1 blocked.*2 ineligible"; then
+if grep <<<"$pp_out" -q "2 proved.*1 stale.*1 unproved.*1 blocked.*2 ineligible"; then
     echo "  ok  pressure-set: totals match expected (2 proved, 1 stale, 1 unproved, 1 blocked, 2 ineligible)"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL pressure-set: totals should be 2 proved, 1 stale, 1 unproved, 1 blocked, 2 ineligible"
-    echo "    got: $(echo "$pp_out" | grep "Totals:")"
+    echo "    got: $(grep <<<"$pp_out" "Totals:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -7660,7 +7660,7 @@ pp_ext=$($COMPILER examples/proof_pressure/src/main.con --report extraction 2>/d
 # 8. Extraction: check_nonce has correct ProofCore form
 # (Body was aligned to crypto_verify's shared spec in commit 8a53c3db: returns 1
 #  iff 0 < nonce <= max_nonce, else 0 — so it rides the registered spec/proof.)
-if echo "$pp_ext" | grep -A2 "check_nonce" | grep -q "if (nonce > 0) then if (nonce <= max_nonce) then 1 else 0 else 0"; then
+if grep <<<"$pp_ext" -A2 "check_nonce" | grep -q "if (nonce > 0) then if (nonce <= max_nonce) then 1 else 0 else 0"; then
     echo "  ok  pressure-ext: check_nonce ProofCore form correct"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7669,7 +7669,7 @@ else
 fi
 
 # 9. Extraction: clamp_value has correct ProofCore form
-if echo "$pp_ext" | grep -A2 "clamp_value" | grep -q "if (x < lo) then lo else if (x > hi) then hi else x"; then
+if grep <<<"$pp_ext" -A2 "clamp_value" | grep -q "if (x < lo) then lo else if (x > hi) then hi else x"; then
     echo "  ok  pressure-ext: clamp_value ProofCore form correct"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7678,7 +7678,7 @@ else
 fi
 
 # 10. Extraction: classify_range is eligible but extraction failed
-if echo "$pp_ext" | grep -A2 "classify_range" | grep -q "eligible (extraction failed)"; then
+if grep <<<"$pp_ext" -A2 "classify_range" | grep -q "eligible (extraction failed)"; then
     echo "  ok  pressure-ext: classify_range extraction failed (blocked)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7690,7 +7690,7 @@ fi
 # (Field access became extractable in e2ab5eef, so the blocker was repointed at
 #  integer division `/` in commit 8a53c3db — no PBinOp.div, durably unmodeled.
 #  The function still reads the Bounds struct, now as a supported construct.)
-if echo "$pp_ext" | grep -A5 "classify_range" | grep -q "Concrete.BinOp.div"; then
+if grep <<<"$pp_ext" -A5 "classify_range" | grep -q "Concrete.BinOp.div"; then
     echo "  ok  pressure-ext: classify_range blocked by integer division"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7699,7 +7699,7 @@ else
 fi
 
 # 12. Extraction: format_result is excluded with Console reason
-if echo "$pp_ext" | grep -A5 "format_result" | grep -q "has capabilities: Console"; then
+if grep <<<"$pp_ext" -A5 "format_result" | grep -q "has capabilities: Console"; then
     echo "  ok  pressure-ext: format_result excluded (Console capability)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7708,12 +7708,12 @@ else
 fi
 
 # 13. Extraction totals: 4 extracted, 1 not extractable, 2 excluded
-if echo "$pp_ext" | grep -q "4 extracted.*1 eligible but not extractable.*2 excluded"; then
+if grep <<<"$pp_ext" -q "4 extracted.*1 eligible but not extractable.*2 excluded"; then
     echo "  ok  pressure-ext: extraction totals correct (4/1/2)"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL pressure-ext: extraction totals should be 4/1/2"
-    echo "    got: $(echo "$pp_ext" | grep "Totals:")"
+    echo "    got: $(grep <<<"$pp_ext" "Totals:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -7721,7 +7721,7 @@ fi
 pp_obl=$($COMPILER examples/proof_pressure/src/main.con --report obligations 2>/dev/null)
 
 # 14. Obligations: validate_header depends on check_nonce
-if echo "$pp_obl" | grep -A8 "main.validate_header" | grep -q "dependencies: main.check_nonce"; then
+if grep <<<"$pp_obl" -A8 "main.validate_header" | grep -q "dependencies: main.check_nonce"; then
     echo "  ok  pressure-obl: validate_header depends on check_nonce"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7730,7 +7730,7 @@ else
 fi
 
 # 15. Obligations: proved functions cite registry as source
-if echo "$pp_obl" | grep -A5 "main.check_nonce" | grep -q "source:.*registry"; then
+if grep <<<"$pp_obl" -A5 "main.check_nonce" | grep -q "source:.*registry"; then
     echo "  ok  pressure-obl: check_nonce proof source is registry"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7739,7 +7739,7 @@ else
 fi
 
 # 16. Obligations: missing function has no spec
-if echo "$pp_obl" | grep -A5 "main.clamp_value" | grep -q "spec:.*(none)"; then
+if grep <<<"$pp_obl" -A5 "main.clamp_value" | grep -q "spec:.*(none)"; then
     echo "  ok  pressure-obl: clamp_value has no spec (missing)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7748,12 +7748,12 @@ else
 fi
 
 # 17. Obligations totals match proof-status totals
-if echo "$pp_obl" | grep -q "2 proved.*1 stale.*1 missing.*1 blocked.*2 ineligible"; then
+if grep <<<"$pp_obl" -q "2 proved.*1 stale.*1 missing.*1 blocked.*2 ineligible"; then
     echo "  ok  pressure-obl: obligation totals match proof-status"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL pressure-obl: obligation totals should match proof-status"
-    echo "    got: $(echo "$pp_obl" | grep "Totals:")"
+    echo "    got: $(grep <<<"$pp_obl" "Totals:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -7761,17 +7761,17 @@ fi
 pp_elig=$($COMPILER examples/proof_pressure/src/main.con --report eligibility 2>/dev/null)
 
 # 18. Eligibility: 5 eligible, 2 excluded
-if echo "$pp_elig" | grep -q "5 eligible.*2 excluded"; then
+if grep <<<"$pp_elig" -q "5 eligible.*2 excluded"; then
     echo "  ok  pressure-elig: eligibility totals correct (5/2)"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL pressure-elig: eligibility totals should be 5 eligible, 2 excluded"
-    echo "    got: $(echo "$pp_elig" | grep "Totals:")"
+    echo "    got: $(grep <<<"$pp_elig" "Totals:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
 # 19. Eligibility: main excluded as entry point
-if echo "$pp_elig" | grep -A2 "main.main" | grep -q "entry point"; then
+if grep <<<"$pp_elig" -A2 "main.main" | grep -q "entry point"; then
     echo "  ok  pressure-elig: main excluded as entry point"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7783,7 +7783,7 @@ fi
 pp_eff=$($COMPILER examples/proof_pressure/src/main.con --report effects 2>/dev/null)
 
 # 20. Effects: check_nonce evidence is proved (not enforced)
-if echo "$pp_eff" | grep -A1 "check_nonce" | grep -q "evidence: proved"; then
+if grep <<<"$pp_eff" -A1 "check_nonce" | grep -q "evidence: proved"; then
     echo "  ok  pressure-eff: check_nonce evidence is proved"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7792,7 +7792,7 @@ else
 fi
 
 # 21. Effects: compute_checksum evidence shows stale
-if echo "$pp_eff" | grep -A1 "compute_checksum" | grep -q "proof stale"; then
+if grep <<<"$pp_eff" -A1 "compute_checksum" | grep -q "proof stale"; then
     echo "  ok  pressure-eff: compute_checksum evidence shows stale"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7801,12 +7801,12 @@ else
 fi
 
 # 22. Effects: evidence totals show 2 proved
-if echo "$pp_eff" | grep -q "Evidence: 2 proved"; then
+if grep <<<"$pp_eff" -q "Evidence: 2 proved"; then
     echo "  ok  pressure-eff: effects evidence totals show 2 proved"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL pressure-eff: effects evidence should show 2 proved"
-    echo "    got: $(echo "$pp_eff" | grep "Evidence:")"
+    echo "    got: $(grep <<<"$pp_eff" "Evidence:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -7836,7 +7836,7 @@ fi
 pp_lean=$($COMPILER examples/proof_pressure/src/main.con --report lean-stubs 2>/dev/null)
 
 # 25. Lean stubs: generates 4 PExpr definitions (one per extractable function)
-stub_count=$(echo "$pp_lean" | grep -c "def .*Expr : PExpr")
+stub_count=$(grep <<<"$pp_lean" -c "def .*Expr : PExpr")
 if [ "$stub_count" -eq 4 ]; then
     echo "  ok  pressure-lean: 4 PExpr definitions generated"
     evidence_pass=$((evidence_pass + 1))
@@ -7846,7 +7846,7 @@ else
 fi
 
 # 26. Lean stubs: generates function table with all 4 entries
-if echo "$pp_lean" | grep -q "def generatedFns"; then
+if grep <<<"$pp_lean" -q "def generatedFns"; then
     echo "  ok  pressure-lean: function table generated"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7855,7 +7855,7 @@ else
 fi
 
 # 27. Lean stubs: check_nonce has .ifThenElse constructor
-if echo "$pp_lean" | grep -A5 "check_nonceExpr" | grep -q ".ifThenElse"; then
+if grep <<<"$pp_lean" -A5 "check_nonceExpr" | grep -q ".ifThenElse"; then
     echo "  ok  pressure-lean: check_nonce uses .ifThenElse constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7864,7 +7864,7 @@ else
 fi
 
 # 28. Lean stubs: validate_header has .letIn and .call constructors
-if echo "$pp_lean" | grep -A5 "validate_headerExpr" | grep -q ".letIn"; then
+if grep <<<"$pp_lean" -A5 "validate_headerExpr" | grep -q ".letIn"; then
     echo "  ok  pressure-lean: validate_header uses .letIn constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7873,7 +7873,7 @@ else
 fi
 
 # 29. Lean stubs: compute_checksum has .binOp .add constructor
-if echo "$pp_lean" | grep -A5 "compute_checksumExpr" | grep -q ".binOp .add"; then
+if grep <<<"$pp_lean" -A5 "compute_checksumExpr" | grep -q ".binOp .add"; then
     echo "  ok  pressure-lean: compute_checksum uses .binOp .add"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7882,7 +7882,7 @@ else
 fi
 
 # 30. Lean stubs: 4 theorem stubs generated
-thm_count=$(echo "$pp_lean" | grep -c "^theorem")
+thm_count=$(grep <<<"$pp_lean" -c "^theorem")
 if [ "$thm_count" -eq 4 ]; then
     echo "  ok  pressure-lean: 4 theorem stubs generated"
     evidence_pass=$((evidence_pass + 1))
@@ -7892,10 +7892,10 @@ else
 fi
 
 # 31. Lean stubs: theorem names match function names
-if echo "$pp_lean" | grep -q "theorem check_nonce_correct" && \
-   echo "$pp_lean" | grep -q "theorem validate_header_correct" && \
-   echo "$pp_lean" | grep -q "theorem compute_checksum_correct" && \
-   echo "$pp_lean" | grep -q "theorem clamp_value_correct"; then
+if grep <<<"$pp_lean" -q "theorem check_nonce_correct" && \
+   grep <<<"$pp_lean" -q "theorem validate_header_correct" && \
+   grep <<<"$pp_lean" -q "theorem compute_checksum_correct" && \
+   grep <<<"$pp_lean" -q "theorem clamp_value_correct"; then
     echo "  ok  pressure-lean: theorem names match function names"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7904,8 +7904,8 @@ else
 fi
 
 # 32. Lean stubs: excluded functions (format_result, main) are NOT in stubs
-if ! echo "$pp_lean" | grep -q "format_resultExpr" && \
-   ! echo "$pp_lean" | grep -q "classify_rangeExpr"; then
+if ! grep <<<"$pp_lean" -q "format_resultExpr" && \
+   ! grep <<<"$pp_lean" -q "classify_rangeExpr"; then
     echo "  ok  pressure-lean: excluded/blocked functions omitted from stubs"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7924,7 +7924,7 @@ else
 fi
 
 # 34. Lean stubs: eval helpers generated for each function
-eval_count=$(echo "$pp_lean" | grep -c "^def eval_")
+eval_count=$(grep <<<"$pp_lean" -c "^def eval_")
 if [ "$eval_count" -eq 4 ]; then
     echo "  ok  pressure-lean: 4 eval helpers generated"
     evidence_pass=$((evidence_pass + 1))
@@ -7937,7 +7937,7 @@ fi
 
 # 41. check-proofs: hardcoded proofs are kernel-verified
 cp_out=$($COMPILER tests/programs/proof_decode_header.con --report check-proofs 2>&1 || true)
-if echo "$cp_out" | grep -q "Kernel-verified" && echo "$cp_out" | grep -q "parse_byte"; then
+if grep <<<"$cp_out" -q "Kernel-verified" && grep <<<"$cp_out" -q "parse_byte"; then
     echo "  ok  check-proofs: hardcoded proofs kernel-verified"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7947,18 +7947,18 @@ fi
 
 # 42. check-proofs: pressure set shows verified + failed
 cp_pp=$($COMPILER examples/proof_pressure/src/main.con --report check-proofs 2>&1) || true
-if echo "$cp_pp" | grep -q "Kernel-verified (2)" && echo "$cp_pp" | grep -q "Failed (1)"; then
+if grep <<<"$cp_pp" -q "Kernel-verified (2)" && grep <<<"$cp_pp" -q "Failed (1)"; then
     echo "  ok  check-proofs: pressure set 2 verified, 1 failed"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL check-proofs: pressure set should have 2 verified, 1 failed"
-    echo "    got: $(echo "$cp_pp" | grep "Summary:")"
+    echo "    got: $(grep <<<"$cp_pp" "Summary:")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
 
 # 45. check-proofs: shows toolchain version
-if echo "$cp_out" | grep -q "Toolchain:.*lean4"; then
+if grep <<<"$cp_out" -q "Toolchain:.*lean4"; then
     echo "  ok  check-proofs: reports Lean toolchain version"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7982,7 +7982,7 @@ fi
 # 47. E2E: proved function has correct proof-status + obligations + check-proofs
 e2e_ps=$($COMPILER tests/programs/proof_decode_header.con --report proof-status 2>&1 || true)
 e2e_ob=$($COMPILER tests/programs/proof_decode_header.con --report obligations 2>&1 || true)
-if echo "$e2e_ps" | grep -q "proved" && echo "$e2e_ob" | grep -q "status:.*proved" && echo "$cp_out" | grep -q "Kernel-verified"; then
+if grep <<<"$e2e_ps" -q "proved" && grep <<<"$e2e_ob" -q "status:.*proved" && grep <<<"$cp_out" -q "Kernel-verified"; then
     echo "  ok  e2e-lean: proved function consistent across proof-status, obligations, and check-proofs"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7993,7 +7993,7 @@ fi
 # 48. E2E: stale function shows stale in proof-status + obligations
 e2e_pp_ps=$($COMPILER examples/proof_pressure/src/main.con --report proof-status 2>&1) || true
 e2e_pp_ob=$($COMPILER examples/proof_pressure/src/main.con --report obligations 2>&1) || true
-if echo "$e2e_pp_ps" | grep -B5 "compute_checksum" | grep -q "proof stale" && echo "$e2e_pp_ob" | grep -A3 "compute_checksum" | grep -q "status:.*stale"; then
+if grep <<<"$e2e_pp_ps" -B5 "compute_checksum" | grep -q "proof stale" && grep <<<"$e2e_pp_ob" -A3 "compute_checksum" | grep -q "status:.*stale"; then
     echo "  ok  e2e-lean: stale function consistent across proof-status and obligations"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8004,7 +8004,7 @@ fi
 # 49. E2E: source-linked proof name matches check-proofs theorem name
 # (Example proof theorems were migrated out of Concrete.Proof.* into
 #  Examples.CryptoVerify.Proofs.* — check_nonce rides crypto_verify's proof.)
-if echo "$cp_pp" | grep -q "check_nonce.*Examples.CryptoVerify.Proofs.check_nonce_correct"; then
+if grep <<<"$cp_pp" -q "check_nonce.*Examples.CryptoVerify.Proofs.check_nonce_correct"; then
     echo "  ok  e2e-lean: source-linked proof name matches kernel-checked theorem"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8014,8 +8014,8 @@ fi
 
 # 50. E2E: fingerprint in obligations matches extraction fingerprint
 e2e_ext=$($COMPILER examples/proof_pressure/src/main.con --report extraction 2>&1) || true
-e2e_ob_fp=$(echo "$e2e_pp_ob" | grep -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
-e2e_ext_fp=$(echo "$e2e_ext" | grep -A5 "check_nonce" | grep -o '\[.*\]' | head -1)
+e2e_ob_fp=$(grep <<<"$e2e_pp_ob" -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
+e2e_ext_fp=$(grep <<<"$e2e_ext" -A5 "check_nonce" | grep -o '\[.*\]' | head -1)
 if [ -n "$e2e_ob_fp" ] && [ "$e2e_ob_fp" = "$e2e_ext_fp" ]; then
     echo "  ok  e2e-lean: obligation fingerprint matches extraction fingerprint"
     evidence_pass=$((evidence_pass + 1))
@@ -8038,7 +8038,7 @@ blocked_ob=$($COMPILER "$BLOCKED_SRC" --report obligations 2>&1 || true)
 boundary_ps=$($COMPILER "$BOUNDARY_SRC" --report proof-status 2>&1 || true)
 
 # 57. Ineligible: File capability named in reasons
-if echo "$inelig_ps" | grep -A6 "caps_file" | grep -q "has capabilities: File"; then
+if grep <<<"$inelig_ps" -A6 "caps_file" | grep -q "has capabilities: File"; then
     echo "  ok  ineligible-pressure: File capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8047,7 +8047,7 @@ else
 fi
 
 # 58. Ineligible: Network capability named in reasons
-if echo "$inelig_ps" | grep -A6 "caps_network" | grep -q "has capabilities: Network"; then
+if grep <<<"$inelig_ps" -A6 "caps_network" | grep -q "has capabilities: Network"; then
     echo "  ok  ineligible-pressure: Network capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8056,7 +8056,7 @@ else
 fi
 
 # 59. Ineligible: Process capability named in reasons
-if echo "$inelig_ps" | grep -A6 "caps_process" | grep -q "has capabilities: Process"; then
+if grep <<<"$inelig_ps" -A6 "caps_process" | grep -q "has capabilities: Process"; then
     echo "  ok  ineligible-pressure: Process capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8065,7 +8065,7 @@ else
 fi
 
 # 60. Ineligible: Unsafe capability named in reasons
-if echo "$inelig_ps" | grep -A6 "caps_unsafe" | grep -q "has capabilities: Unsafe"; then
+if grep <<<"$inelig_ps" -A6 "caps_unsafe" | grep -q "has capabilities: Unsafe"; then
     echo "  ok  ineligible-pressure: Unsafe capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8074,7 +8074,7 @@ else
 fi
 
 # 61. Ineligible: trusted function shows trusted, not ineligible
-if echo "$inelig_ps" | grep -B5 "trusted_fn" | grep -q -- "-- trusted"; then
+if grep <<<"$inelig_ps" -B5 "trusted_fn" | grep -q -- "-- trusted"; then
     echo "  ok  ineligible-pressure: trusted function shows trusted status"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8083,7 +8083,7 @@ else
 fi
 
 # 62. Ineligible: direct recursion named in reasons
-if echo "$inelig_ps" | grep -A6 "recursive_fn" | grep -q "recursion (direct)"; then
+if grep <<<"$inelig_ps" -A6 "recursive_fn" | grep -q "recursion (direct)"; then
     echo "  ok  ineligible-pressure: direct recursion named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8092,7 +8092,7 @@ else
 fi
 
 # 63. Ineligible: mutual recursion named in reasons
-if echo "$inelig_ps" | grep -A6 "mutual_a" | grep -q "recursion (mutual)"; then
+if grep <<<"$inelig_ps" -A6 "mutual_a" | grep -q "recursion (mutual)"; then
     echo "  ok  ineligible-pressure: mutual recursion named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8101,7 +8101,7 @@ else
 fi
 
 # 64. Ineligible: FFI named in reasons
-if echo "$inelig_ps" | grep -A6 "ffi_fn" | grep -q "FFI"; then
+if grep <<<"$inelig_ps" -A6 "ffi_fn" | grep -q "FFI"; then
     echo "  ok  ineligible-pressure: FFI named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8110,7 +8110,7 @@ else
 fi
 
 # 65. Ineligible: allocation named in reasons
-if echo "$inelig_ps" | grep -A6 "alloc_fn" | grep -q "allocation"; then
+if grep <<<"$inelig_ps" -A6 "alloc_fn" | grep -q "allocation"; then
     echo "  ok  ineligible-pressure: allocation named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8119,7 +8119,7 @@ else
 fi
 
 # 66. Ineligible: combo shows multiple reasons
-if echo "$inelig_ps" | grep -A6 "combo_fn" | grep "has capabilities: File" | grep -q "recursion (direct)"; then
+if grep <<<"$inelig_ps" -A6 "combo_fn" | grep "has capabilities: File" | grep -q "recursion (direct)"; then
     echo "  ok  ineligible-pressure: combo function shows multiple reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8128,7 +8128,7 @@ else
 fi
 
 # 67. Ineligible: clean_fn is missing (eligible), not ineligible
-if echo "$inelig_ps" | grep -B5 "clean_fn" | grep -q -- "-- no proof"; then
+if grep <<<"$inelig_ps" -B5 "clean_fn" | grep -q -- "-- no proof"; then
     echo "  ok  ineligible-pressure: clean_fn correctly shows missing, not ineligible"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8137,7 +8137,7 @@ else
 fi
 
 # 68. Ineligible: entry point named in reasons
-if echo "$inelig_ps" | grep -A6 'main\.main' | grep -q "is entry point (main)"; then
+if grep <<<"$inelig_ps" -A6 'main\.main' | grep -q "is entry point (main)"; then
     echo "  ok  ineligible-pressure: entry point named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8146,8 +8146,8 @@ else
 fi
 
 # 69. Ineligible: obligations report matches proof-status
-inelig_ob_inelig=$(echo "$inelig_ob" | grep "status:.*ineligible" | wc -l | tr -d ' ')
-inelig_ps_inelig=$(echo "$inelig_ps" | grep "not eligible" | wc -l | tr -d ' ')
+inelig_ob_inelig=$(grep <<<"$inelig_ob" "status:.*ineligible" | wc -l | tr -d ' ')
+inelig_ps_inelig=$(grep <<<"$inelig_ps" "not eligible" | wc -l | tr -d ' ')
 if [ "$inelig_ob_inelig" = "$inelig_ps_inelig" ]; then
     echo "  ok  ineligible-pressure: obligations count ($inelig_ob_inelig) matches proof-status count"
     evidence_pass=$((evidence_pass + 1))
@@ -8157,7 +8157,7 @@ else
 fi
 
 # 70. Ineligible: hint does NOT say 'Remove is entry point'
-if ! echo "$inelig_ps" | grep -q "Remove.*is entry point"; then
+if ! grep <<<"$inelig_ps" -q "Remove.*is entry point"; then
     echo "  ok  ineligible-pressure: hint does not suggest removing entry point"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8168,7 +8168,7 @@ fi
 # 71. Blocked: integer division named in unsupported
 # (struct literal became extractable in e2ab5eef; repointed at integer division,
 #  which has no PBinOp.div and stays durably unmodeled — see fixture header.)
-if echo "$blocked_ps" | grep -A8 "uses_div" | grep -q "Concrete.BinOp.div"; then
+if grep <<<"$blocked_ps" -A8 "uses_div" | grep -q "Concrete.BinOp.div"; then
     echo "  ok  blocked-pressure: integer division named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8178,7 +8178,7 @@ fi
 
 # 72. Blocked: field assignment named in unsupported
 # (match expression became extractable in e2ab5eef; repointed at field assignment.)
-if echo "$blocked_ps" | grep -A8 "uses_field_assign" | grep -q "field assignment"; then
+if grep <<<"$blocked_ps" -A8 "uses_field_assign" | grep -q "field assignment"; then
     echo "  ok  blocked-pressure: field assignment named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8187,7 +8187,7 @@ else
 fi
 
 # 73. Blocked: mutable assignment named in unsupported
-if echo "$blocked_ps" | grep -A8 "uses_mut" | grep -q "mutable assignment"; then
+if grep <<<"$blocked_ps" -A8 "uses_mut" | grep -q "mutable assignment"; then
     echo "  ok  blocked-pressure: mutable assignment named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8196,7 +8196,7 @@ else
 fi
 
 # 74. Blocked: string literal named in unsupported
-if echo "$blocked_ps" | grep -A8 "uses_string" | grep -q "string literal"; then
+if grep <<<"$blocked_ps" -A8 "uses_string" | grep -q "string literal"; then
     echo "  ok  blocked-pressure: string literal named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8206,7 +8206,7 @@ fi
 
 # 75. Blocked: deref named in unsupported
 # (if-without-else became extractable in e2ab5eef; repointed at deref/borrow.)
-if echo "$blocked_ps" | grep -A8 "uses_deref" | grep -q "deref"; then
+if grep <<<"$blocked_ps" -A8 "uses_deref" | grep -q "deref"; then
     echo "  ok  blocked-pressure: deref named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8215,7 +8215,7 @@ else
 fi
 
 # 76. Blocked: extractable_fn is missing (extractable), not blocked
-if echo "$blocked_ps" | grep -B5 "extractable_fn" | grep -q -- "-- no proof"; then
+if grep <<<"$blocked_ps" -B5 "extractable_fn" | grep -q -- "-- no proof"; then
     echo "  ok  blocked-pressure: extractable_fn correctly shows missing, not blocked"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8224,8 +8224,8 @@ else
 fi
 
 # 77. Blocked: obligations report shows blocked status
-blocked_ob_count=$(echo "$blocked_ob" | grep "status:.*blocked" | wc -l | tr -d ' ')
-blocked_ps_count=$(echo "$blocked_ps" | grep "^-- blocked" | wc -l | tr -d ' ')
+blocked_ob_count=$(grep <<<"$blocked_ob" "status:.*blocked" | wc -l | tr -d ' ')
+blocked_ps_count=$(grep <<<"$blocked_ps" "^-- blocked" | wc -l | tr -d ' ')
 if [ "$blocked_ob_count" = "$blocked_ps_count" ]; then
     echo "  ok  blocked-pressure: obligations blocked count ($blocked_ob_count) matches proof-status"
     evidence_pass=$((evidence_pass + 1))
@@ -8235,7 +8235,7 @@ else
 fi
 
 # 78. Blocked: proof-status totals line shows blocked count
-if echo "$blocked_ps" | grep -q "5 blocked"; then
+if grep <<<"$blocked_ps" -q "5 blocked"; then
     echo "  ok  blocked-pressure: totals line shows 5 blocked"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8245,7 +8245,7 @@ fi
 
 
 # 81. Boundary: combo_profile shows both source and profile reasons
-if echo "$boundary_ps" | grep -A6 "combo_profile" | grep "has capabilities: Alloc" | grep -q "recursion (direct)"; then
+if grep <<<"$boundary_ps" -A6 "combo_profile" | grep "has capabilities: Alloc" | grep -q "recursion (direct)"; then
     echo "  ok  boundary-pressure: combo_profile shows both source and profile reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8255,23 +8255,23 @@ fi
 
 # 82. Boundary: consistency check passes for ineligible pressure set
 inelig_con=$($COMPILER "$INELIG_SRC" --report consistency 2>&1 || true)
-if echo "$inelig_con" | grep -q "All.*pass\|0 failures"; then
+if grep <<<"$inelig_con" -q "All.*pass\|0 failures"; then
     echo "  ok  boundary-pressure: consistency check passes for ineligible functions"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL boundary-pressure: consistency check should pass for ineligible functions"
-    echo "    $(echo "$inelig_con" | grep -i "fail" | head -3)"
+    echo "    $(grep <<<"$inelig_con" -i "fail" | head -3)"
     evidence_fail=$((evidence_fail + 1))
 fi
 
 # 83. Boundary: consistency check passes for blocked functions
 blocked_con=$($COMPILER "$BLOCKED_SRC" --report consistency 2>&1 || true)
-if echo "$blocked_con" | grep -q "All.*pass\|0 failures"; then
+if grep <<<"$blocked_con" -q "All.*pass\|0 failures"; then
     echo "  ok  boundary-pressure: consistency check passes for blocked functions"
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL boundary-pressure: consistency check should pass for blocked functions"
-    echo "    $(echo "$blocked_con" | grep -i "fail" | head -3)"
+    echo "    $(grep <<<"$blocked_con" -i "fail" | head -3)"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -8330,7 +8330,7 @@ api_fail=0
 api_env=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostics-json 2>/dev/null)
 
 # 1. diagnostics-json has schema_version = 1
-if echo "$api_env" | grep -q '"schema_version": 1'; then
+if grep <<<"$api_env" -q '"schema_version": 1'; then
     echo "  ok  api-versioning: diagnostics-json has schema_version 1"
     api_pass=$((api_pass + 1))
 else
@@ -8339,7 +8339,7 @@ else
 fi
 
 # 2. diagnostics-json has schema_kind = "facts"
-if echo "$api_env" | grep -q '"schema_kind": "facts"'; then
+if grep <<<"$api_env" -q '"schema_kind": "facts"'; then
     echo "  ok  api-versioning: diagnostics-json has schema_kind facts"
     api_pass=$((api_pass + 1))
 else
@@ -8378,7 +8378,7 @@ fi
 
 # 5. semantic query has schema_version
 q_pred=$($COMPILER "$TESTDIR/report_integration.con" --query "predictable:pure_add" 2>/dev/null)
-if echo "$q_pred" | grep -q '"schema_version": 1'; then
+if grep <<<"$q_pred" -q '"schema_version": 1'; then
     echo "  ok  api-versioning: query_answer has schema_version 1"
     api_pass=$((api_pass + 1))
 else
@@ -8388,8 +8388,8 @@ fi
 
 # 6. fact-filter query returns versioned envelope
 q_fn=$($COMPILER "$TESTDIR/report_integration.con" --query "fn:pure_add" 2>/dev/null)
-if echo "$q_fn" | grep -q '"schema_kind": "facts"' && \
-   echo "$q_fn" | grep -q '"schema_version": 1'; then
+if grep <<<"$q_fn" -q '"schema_kind": "facts"' && \
+   grep <<<"$q_fn" -q '"schema_version": 1'; then
     echo "  ok  api-versioning: fact-filter query returns versioned envelope"
     api_pass=$((api_pass + 1))
 else
@@ -8417,9 +8417,9 @@ fi
 
 # 8. kind-filter query returns envelope with fact_count > 0
 q_eff=$($COMPILER "$TESTDIR/report_integration.con" --query "effects" 2>/dev/null)
-if echo "$q_eff" | grep -q '"schema_version": 1' && \
-   echo "$q_eff" | grep -q '"fact_count":' && \
-   ! echo "$q_eff" | grep -q '"fact_count": 0'; then
+if grep <<<"$q_eff" -q '"schema_version": 1' && \
+   grep <<<"$q_eff" -q '"fact_count":' && \
+   ! grep <<<"$q_eff" -q '"fact_count": 0'; then
     echo "  ok  api-versioning: kind-filter query returns envelope with facts"
     api_pass=$((api_pass + 1))
 else
@@ -8429,8 +8429,8 @@ fi
 
 # 9. empty-result policy: unknown function returns envelope with fact_count 0
 q_empty=$($COMPILER "$TESTDIR/report_integration.con" --query "effects:nonexistent_function_xyz" 2>/dev/null)
-if echo "$q_empty" | grep -q '"schema_version": 1' && \
-   echo "$q_empty" | grep -q '"fact_count": 0'; then
+if grep <<<"$q_empty" -q '"schema_version": 1' && \
+   grep <<<"$q_empty" -q '"fact_count": 0'; then
     echo "  ok  api-versioning: empty result returns envelope with fact_count 0"
     api_pass=$((api_pass + 1))
 else
@@ -8515,7 +8515,7 @@ fi
 
 # 5. Rendered diagnostic includes error code
 err_out=$($COMPILER "$TESTDIR/error_resolve_undeclared_span.con" 2>&1) || true
-if echo "$err_out" | grep -q '(E0100)'; then
+if grep <<<"$err_out" -q '(E0100)'; then
     echo "  ok  error-codes: rendered diagnostic includes error code"
     ec_pass=$((ec_pass + 1))
 else
@@ -8526,7 +8526,7 @@ fi
 
 # 6. Proof diagnostic JSON fact includes code field
 pd_out=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostics-json 2>/dev/null)
-if echo "$pd_out" | grep -q '"code": "E080'; then
+if grep <<<"$pd_out" -q '"code": "E080'; then
     echo "  ok  error-codes: proof_diagnostic fact includes code field"
     ec_pass=$((ec_pass + 1))
 else
@@ -8572,7 +8572,7 @@ policy_err() {
     projname=$(basename "$projdir")
     local output
     output=$( cd "$projdir" && "$ROOT_DIR_ABS/$COMPILER" build 2>&1 ) && build_exit=0 || build_exit=$?
-    if [ "$build_exit" -ne 0 ] && echo "$output" | grep -qF -- "$expected"; then
+    if [ "$build_exit" -ne 0 ] && grep <<<"$output" -qF -- "$expected"; then
         echo "  ok  policy: $label"
         pol_pass=$((pol_pass + 1))
     else
@@ -8686,7 +8686,7 @@ policy_ok "$TESTDIR/adversarial_policy_empty" \
 
 # 14. Direct recursion fails predictable
 pred_direct=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_direct_recursion.con" --check predictable 2>&1) && pred_direct_exit=0 || pred_direct_exit=$?
-if [ "$pred_direct_exit" -ne 0 ] && echo "$pred_direct" | grep -q "direct recursion"; then
+if [ "$pred_direct_exit" -ne 0 ] && grep <<<"$pred_direct" -q "direct recursion"; then
     echo "  ok  policy: direct recursion fails predictable"
     pol_pass=$((pol_pass + 1))
 else
@@ -8696,7 +8696,7 @@ fi
 
 # 15. Mutual recursion fails predictable
 pred_mutual=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_mutual_recursion.con" --check predictable 2>&1) && pred_mutual_exit=0 || pred_mutual_exit=$?
-if [ "$pred_mutual_exit" -ne 0 ] && echo "$pred_mutual" | grep -q "mutual recursion"; then
+if [ "$pred_mutual_exit" -ne 0 ] && grep <<<"$pred_mutual" -q "mutual recursion"; then
     echo "  ok  policy: mutual recursion fails predictable"
     pol_pass=$((pol_pass + 1))
 else
@@ -8706,7 +8706,7 @@ fi
 
 # 16. Hidden allocation (3-level chain) fails predictable
 pred_alloc=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_hidden_alloc.con" --check predictable 2>&1) && pred_alloc_exit=0 || pred_alloc_exit=$?
-if [ "$pred_alloc_exit" -ne 0 ] && echo "$pred_alloc" | grep -q "Alloc capability"; then
+if [ "$pred_alloc_exit" -ne 0 ] && grep <<<"$pred_alloc" -q "Alloc capability"; then
     echo "  ok  policy: hidden alloc chain fails predictable"
     pol_pass=$((pol_pass + 1))
 else
@@ -8716,7 +8716,7 @@ fi
 
 # 17. Nested match (pure) passes predictable
 pred_match=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_nested_match.con" --check predictable 2>&1) && pred_match_exit=0 || pred_match_exit=$?
-if [ "$pred_match_exit" -eq 0 ] && echo "$pred_match" | grep -q "pass"; then
+if [ "$pred_match_exit" -eq 0 ] && grep <<<"$pred_match" -q "pass"; then
     echo "  ok  policy: deeply nested match passes predictable"
     pol_pass=$((pol_pass + 1))
 else
@@ -8726,7 +8726,7 @@ fi
 
 # 18. Copy enum chain (pure) passes predictable
 pred_chain=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_copy_enum_chain.con" --check predictable 2>&1) && pred_chain_exit=0 || pred_chain_exit=$?
-if [ "$pred_chain_exit" -eq 0 ] && echo "$pred_chain" | grep -q "pass"; then
+if [ "$pred_chain_exit" -eq 0 ] && grep <<<"$pred_chain" -q "pass"; then
     echo "  ok  policy: Copy enum chain passes predictable"
     pol_pass=$((pol_pass + 1))
 else
@@ -8736,7 +8736,7 @@ fi
 
 # 19. While loop fails predictable (unbounded)
 pred_while=$("$COMPILER" "$TESTDIR/adversarial_predict_bound_while_loop.con" --check predictable 2>&1) && pred_while_exit=0 || pred_while_exit=$?
-if [ "$pred_while_exit" -ne 0 ] && echo "$pred_while" | grep -q "unbounded loop"; then
+if [ "$pred_while_exit" -ne 0 ] && grep <<<"$pred_while" -q "unbounded loop"; then
     echo "  ok  policy: while loop fails predictable (unbounded)"
     pol_pass=$((pol_pass + 1))
 else
@@ -8768,8 +8768,8 @@ tx_text=$($COMPILER "$PP_FILE" --report proof-diagnostics 2>/dev/null)
 tx_json=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
 
 # 1. Text output: stale_proof shows failure: stale_proof, repair: theorem_update
-if echo "$tx_text" | grep -A3 "compute_checksum" | grep -q "failure:.*stale_proof" && \
-   echo "$tx_text" | grep -A4 "compute_checksum" | grep -q "repair:.*theorem_update"; then
+if grep <<<"$tx_text" -A3 "compute_checksum" | grep -q "failure:.*stale_proof" && \
+   grep <<<"$tx_text" -A4 "compute_checksum" | grep -q "repair:.*theorem_update"; then
     echo "  ok  taxonomy: stale_proof → failure=stale_proof, repair=theorem_update"
     tx_pass=$((tx_pass + 1))
 else
@@ -8778,8 +8778,8 @@ else
 fi
 
 # 2. Text output: missing_proof shows failure: missing_proof, repair: add_proof
-if echo "$tx_text" | grep -A3 "clamp_value" | grep -q "failure:.*missing_proof" && \
-   echo "$tx_text" | grep -A4 "clamp_value" | grep -q "repair:.*add_proof"; then
+if grep <<<"$tx_text" -A3 "clamp_value" | grep -q "failure:.*missing_proof" && \
+   grep <<<"$tx_text" -A4 "clamp_value" | grep -q "repair:.*add_proof"; then
     echo "  ok  taxonomy: missing_proof → failure=missing_proof, repair=add_proof"
     tx_pass=$((tx_pass + 1))
 else
@@ -8788,8 +8788,8 @@ else
 fi
 
 # 3. Text output: ineligible with capabilities shows failure: effect_boundary, repair: policy_change
-if echo "$tx_text" | grep -A3 "format_result" | grep -q "failure:.*effect_boundary" && \
-   echo "$tx_text" | grep -A4 "format_result" | grep -q "repair:.*policy_change"; then
+if grep <<<"$tx_text" -A3 "format_result" | grep -q "failure:.*effect_boundary" && \
+   grep <<<"$tx_text" -A4 "format_result" | grep -q "repair:.*policy_change"; then
     echo "  ok  taxonomy: ineligible+caps → failure=effect_boundary, repair=policy_change"
     tx_pass=$((tx_pass + 1))
 else
@@ -8798,8 +8798,8 @@ else
 fi
 
 # 4. Text output: ineligible with entry point shows failure: entry_point, repair: none
-if echo "$tx_text" | grep -A3 'main.*cannot be proved' | grep -q "failure:.*entry_point" && \
-   echo "$tx_text" | grep -A4 'main.*cannot be proved' | grep -q "repair:.*none"; then
+if grep <<<"$tx_text" -A3 'main.*cannot be proved' | grep -q "failure:.*entry_point" && \
+   grep <<<"$tx_text" -A4 'main.*cannot be proved' | grep -q "repair:.*none"; then
     echo "  ok  taxonomy: ineligible+entry_point → failure=entry_point, repair=none"
     tx_pass=$((tx_pass + 1))
 else
@@ -8808,8 +8808,8 @@ else
 fi
 
 # 5. Text output: unsupported_construct shows failure: unsupported_construct, repair: code_rewrite
-if echo "$tx_text" | grep -A3 "classify_range" | grep -q "failure:.*unsupported_construct" && \
-   echo "$tx_text" | grep -A4 "classify_range" | grep -q "repair:.*code_rewrite"; then
+if grep <<<"$tx_text" -A3 "classify_range" | grep -q "failure:.*unsupported_construct" && \
+   grep <<<"$tx_text" -A4 "classify_range" | grep -q "repair:.*code_rewrite"; then
     echo "  ok  taxonomy: unsupported_construct → failure=unsupported_construct, repair=code_rewrite"
     tx_pass=$((tx_pass + 1))
 else
@@ -8875,7 +8875,7 @@ fi
 
 # 9. Schema includes failure_class and repair_class as required fields
 schema_out=$($COMPILER "$PP_FILE" --report schema 2>/dev/null)
-if echo "$schema_out" | grep -q "failure_class" && echo "$schema_out" | grep -q "repair_class"; then
+if grep <<<"$schema_out" -q "failure_class" && grep <<<"$schema_out" -q "repair_class"; then
     echo "  ok  taxonomy: schema includes failure_class and repair_class"
     tx_pass=$((tx_pass + 1))
 else
@@ -8902,7 +8902,7 @@ else
 fi
 
 # 11. Attachment integrity diagnostics appear for stale registry entries
-if echo "$tx_text" | grep -q "attachment_integrity"; then
+if grep <<<"$tx_text" -q "attachment_integrity"; then
     echo "  ok  taxonomy: attachment_integrity diagnostic appears for stale registry"
     tx_pass=$((tx_pass + 1))
 else
@@ -8911,7 +8911,7 @@ else
 fi
 
 # 12. Attachment integrity diagnostic has repair=registry_update
-if echo "$tx_text" | grep -A4 "attachment_integrity" | grep -q "repair:.*registry_update"; then
+if grep <<<"$tx_text" -A4 "attachment_integrity" | grep -q "repair:.*registry_update"; then
     echo "  ok  taxonomy: attachment_integrity → repair=registry_update"
     tx_pass=$((tx_pass + 1))
 else
@@ -8958,7 +8958,7 @@ fi
 tx_snap1=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
 tx_snap2=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
 tx_diff_out=$(echo "$tx_snap1" > /tmp/tx_snap1.json && echo "$tx_snap2" > /tmp/tx_snap2.json && $COMPILER diff /tmp/tx_snap1.json /tmp/tx_snap2.json 2>&1) || tx_diff_exit=$?
-if ! echo "$tx_diff_out" | grep -q "duplicate keys"; then
+if ! grep <<<"$tx_diff_out" -q "duplicate keys"; then
     echo "  ok  taxonomy: diff handles multiple diagnostics per function"
     tx_pass=$((tx_pass + 1))
 else
@@ -8989,7 +8989,7 @@ PP_SRC="examples/proof_pressure/src/main.con"
 
 # 1. Extraction report shows extracted/excluded/blocked status labels
 wf_ext=$($COMPILER "$PP_SRC" --report extraction 2>&1) || true
-if echo "$wf_ext" | grep -q "extracted" && echo "$wf_ext" | grep -q "excluded"; then
+if grep <<<"$wf_ext" -q "extracted" && grep <<<"$wf_ext" -q "excluded"; then
     echo "  ok  workflow: extraction report shows extracted and excluded status"
     wf_pass=$((wf_pass + 1))
 else
@@ -8998,7 +8998,7 @@ else
 fi
 
 # 2. Extraction report shows PExpr form for extracted functions
-if echo "$wf_ext" | grep -q "ProofCore\|PExpr\|ret\|binop\|if"; then
+if grep <<<"$wf_ext" -q "ProofCore\|PExpr\|ret\|binop\|if"; then
     echo "  ok  workflow: extraction report shows PExpr form"
     wf_pass=$((wf_pass + 1))
 else
@@ -9007,7 +9007,7 @@ else
 fi
 
 # 3. Extraction report shows fingerprint for extracted functions
-if echo "$wf_ext" | grep -q "fingerprint"; then
+if grep <<<"$wf_ext" -q "fingerprint"; then
     echo "  ok  workflow: extraction report shows fingerprint"
     wf_pass=$((wf_pass + 1))
 else
@@ -9017,7 +9017,7 @@ fi
 
 # 4. lean-stubs generates PExpr definitions and theorem stubs
 wf_stubs=$($COMPILER "$PP_SRC" --report lean-stubs 2>&1) || true
-if echo "$wf_stubs" | grep -q "Expr" && echo "$wf_stubs" | grep -q "theorem" && echo "$wf_stubs" | grep -q "sorry"; then
+if grep <<<"$wf_stubs" -q "Expr" && grep <<<"$wf_stubs" -q "theorem" && grep <<<"$wf_stubs" -q "sorry"; then
     echo "  ok  workflow: lean-stubs generates PExpr defs and theorem stubs with sorry"
     wf_pass=$((wf_pass + 1))
 else
@@ -9026,7 +9026,7 @@ else
 fi
 
 # 5. lean-stubs generates eval helpers
-if echo "$wf_stubs" | grep -q "eval_\|eval "; then
+if grep <<<"$wf_stubs" -q "eval_\|eval "; then
     echo "  ok  workflow: lean-stubs generates eval helpers"
     wf_pass=$((wf_pass + 1))
 else
@@ -9035,7 +9035,7 @@ else
 fi
 
 # 6. lean-stubs generates function table (generatedFns)
-if echo "$wf_stubs" | grep -q "generatedFns\|FnTable"; then
+if grep <<<"$wf_stubs" -q "generatedFns\|FnTable"; then
     echo "  ok  workflow: lean-stubs generates function table"
     wf_pass=$((wf_pass + 1))
 else
@@ -9044,7 +9044,7 @@ else
 fi
 
 # 7. lean-stubs excludes ineligible functions (no theorem for format_result)
-if ! echo "$wf_stubs" | grep -q "format_result.*correct\|format_resultExpr"; then
+if ! grep <<<"$wf_stubs" -q "format_result.*correct\|format_resultExpr"; then
     echo "  ok  workflow: lean-stubs excludes ineligible function format_result"
     wf_pass=$((wf_pass + 1))
 else
@@ -9054,7 +9054,7 @@ fi
 
 # 8. proof-status shows proved/stale/missing/blocked/ineligible states
 wf_ps=$($COMPILER "$PP_SRC" --report proof-status 2>&1) || true
-if echo "$wf_ps" | grep -q "proved" && echo "$wf_ps" | grep -q "stale\|proof stale" && echo "$wf_ps" | grep -q "missing\|unproved" && echo "$wf_ps" | grep -q "blocked" && echo "$wf_ps" | grep -q "ineligible"; then
+if grep <<<"$wf_ps" -q "proved" && grep <<<"$wf_ps" -q "stale\|proof stale" && grep <<<"$wf_ps" -q "missing\|unproved" && grep <<<"$wf_ps" -q "blocked" && grep <<<"$wf_ps" -q "ineligible"; then
     echo "  ok  workflow: proof-status shows all 5 obligation states"
     wf_pass=$((wf_pass + 1))
 else
@@ -9064,7 +9064,7 @@ fi
 
 # 9. proof-diagnostics shows failure_class and repair_class
 wf_diag=$($COMPILER "$PP_SRC" --report proof-diagnostics 2>&1) || true
-if echo "$wf_diag" | grep -q "failure:" && echo "$wf_diag" | grep -q "repair:"; then
+if grep <<<"$wf_diag" -q "failure:" && grep <<<"$wf_diag" -q "repair:"; then
     echo "  ok  workflow: proof-diagnostics shows failure and repair classes"
     wf_pass=$((wf_pass + 1))
 else
@@ -9074,7 +9074,7 @@ fi
 
 # 10. proof-deps shows dependency edges for proved functions
 wf_deps=$($COMPILER "$PP_SRC" --report proof-deps 2>&1) || true
-if echo "$wf_deps" | grep -q "validate_header" && echo "$wf_deps" | grep -q "check_nonce"; then
+if grep <<<"$wf_deps" -q "validate_header" && grep <<<"$wf_deps" -q "check_nonce"; then
     echo "  ok  workflow: proof-deps shows validate_header → check_nonce dependency"
     wf_pass=$((wf_pass + 1))
 else
@@ -9084,8 +9084,8 @@ fi
 
 # 11. End-to-end: fingerprint from extraction matches fingerprint in obligations
 wf_ob=$($COMPILER "$PP_SRC" --report obligations 2>&1) || true
-wf_ext_fp=$(echo "$wf_ext" | grep -A6 "check_nonce" | grep -o '\[.*\]' | head -1)
-wf_ob_fp=$(echo "$wf_ob" | grep -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
+wf_ext_fp=$(grep <<<"$wf_ext" -A6 "check_nonce" | grep -o '\[.*\]' | head -1)
+wf_ob_fp=$(grep <<<"$wf_ob" -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
 if [ -n "$wf_ext_fp" ] && [ "$wf_ext_fp" = "$wf_ob_fp" ]; then
     echo "  ok  workflow: extraction fingerprint matches obligation fingerprint"
     wf_pass=$((wf_pass + 1))
@@ -9096,7 +9096,7 @@ fi
 
 # 14. Workflow coherence: proof-status shows obligation totals
 wf_totals=$($COMPILER "$PP_SRC" --report proof-status 2>&1) || true
-if echo "$wf_totals" | grep -q "Totals\|proved\|functions"; then
+if grep <<<"$wf_totals" -q "Totals\|proved\|functions"; then
     echo "  ok  workflow: proof-status report shows obligation totals"
     wf_pass=$((wf_pass + 1))
 else
@@ -9106,7 +9106,7 @@ fi
 
 # 15. diagnostic-codes includes all proof error codes E0800-E0807
 wf_codes=$($COMPILER "$PP_SRC" --report diagnostic-codes 2>&1) || true
-if echo "$wf_codes" | grep -q "E0800" && echo "$wf_codes" | grep -q "E0805" && echo "$wf_codes" | grep -q "E0807"; then
+if grep <<<"$wf_codes" -q "E0800" && grep <<<"$wf_codes" -q "E0805" && grep <<<"$wf_codes" -q "E0807"; then
     echo "  ok  workflow: diagnostic-codes registers E0800-E0807"
     wf_pass=$((wf_pass + 1))
 else
@@ -9391,7 +9391,7 @@ else
 fi
 
 # 3. Proof gate reports all 20 checks
-if echo "$pg_out" | grep -q "passed: 20 / 20"; then
+if grep <<<"$pg_out" -q "passed: 20 / 20"; then
     echo "  ok  proofgate: runs all 20 checks"
     pg_pass=$((pg_pass + 1))
 else
@@ -9400,14 +9400,14 @@ else
 fi
 
 # 4. Proof gate covers all 8 sections
-if echo "$pg_out" | grep -q "Extraction" && \
-   echo "$pg_out" | grep -q "Registry" && \
-   echo "$pg_out" | grep -q "Proof-status" && \
-   echo "$pg_out" | grep -q "Proof diagnostics" && \
-   echo "$pg_out" | grep -q "Proof dependencies" && \
-   echo "$pg_out" | grep -q "Evidence bundle" && \
-   echo "$pg_out" | grep -q "Determinism" && \
-   echo "$pg_out" | grep -q "Lean theorem"; then
+if grep <<<"$pg_out" -q "Extraction" && \
+   grep <<<"$pg_out" -q "Registry" && \
+   grep <<<"$pg_out" -q "Proof-status" && \
+   grep <<<"$pg_out" -q "Proof diagnostics" && \
+   grep <<<"$pg_out" -q "Proof dependencies" && \
+   grep <<<"$pg_out" -q "Evidence bundle" && \
+   grep <<<"$pg_out" -q "Determinism" && \
+   grep <<<"$pg_out" -q "Lean theorem"; then
     echo "  ok  proofgate: covers all 8 check sections"
     pg_pass=$((pg_pass + 1))
 else
@@ -9416,7 +9416,7 @@ else
 fi
 
 # 5. Proof gate shows compiler identity
-if echo "$pg_out" | grep -q "compiler:.*concrete"; then
+if grep <<<"$pg_out" -q "compiler:.*concrete"; then
     echo "  ok  proofgate: shows compiler identity"
     pg_pass=$((pg_pass + 1))
 else
@@ -9474,7 +9474,7 @@ fi
 # 2. Fixed-capacity example runs and all tests pass (exit 0)
 if $fc_build_ok; then
     fc_run_out=$( "$FC_DIR/fixed_capacity" 2>&1 ) && fc_run_exit=0 || fc_run_exit=$?
-    if [ "$fc_run_exit" -eq 0 ] && echo "$fc_run_out" | grep -q "All 8 tests passed"; then
+    if [ "$fc_run_exit" -eq 0 ] && grep <<<"$fc_run_out" -q "All 8 tests passed"; then
         echo "  ok  fixedcap: runs with all 8 tests passing"
         fc_pass=$((fc_pass + 1))
     else
@@ -9488,7 +9488,7 @@ fi
 
 # 3. All functions pass --check predictable
 fc_pred=$("$COMPILER" "$FC_SRC" --check predictable 2>&1) && fc_pred_exit=0 || fc_pred_exit=$?
-if [ "$fc_pred_exit" -eq 0 ] && echo "$fc_pred" | grep -q "pass"; then
+if [ "$fc_pred_exit" -eq 0 ] && grep <<<"$fc_pred" -q "pass"; then
     echo "  ok  fixedcap: all functions pass --check predictable"
     fc_pass=$((fc_pass + 1))
 else
@@ -9500,7 +9500,7 @@ fi
 fc_effects=$("$COMPILER" "$FC_SRC" --report effects 2>&1)
 pure_enforced=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag; do
-    if ! echo "$fc_effects" | grep -A1 "$fn" | grep -q "evidence: enforced"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "evidence: enforced"; then
         pure_enforced=false
     fi
 done
@@ -9515,7 +9515,7 @@ fi
 # 5. Pure validation functions are not trusted
 pure_not_trusted=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag; do
-    if echo "$fc_effects" | grep -A1 "$fn" | grep -q "trusted: yes"; then
+    if grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
         pure_not_trusted=false
     fi
 done
@@ -9530,13 +9530,13 @@ fi
 # 6. Only test-packet builders are trusted (build_msg, build_bad_version, build_bad_type, build_payload_overflow)
 trusted_ok=true
 for fn in build_msg build_bad_version build_bad_type build_payload_overflow; do
-    if ! echo "$fc_effects" | grep -A1 "$fn" | grep -q "trusted: yes"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
         trusted_ok=false
     fi
 done
 # Validation core must NOT be trusted
 for fn in read_u8 read_u16_be ring_contains ring_push compute_tag validate_message; do
-    if echo "$fc_effects" | grep -A1 "$fn" | grep -q "trusted: yes"; then
+    if grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
         trusted_ok=false
     fi
 done
@@ -9549,7 +9549,7 @@ else
 fi
 
 # 7. Ring buffer loop is bounded
-if echo "$fc_effects" | grep -A1 "ring_contains" | grep -q "loops: bounded"; then
+if grep <<<"$fc_effects" -A1 "ring_contains" | grep -q "loops: bounded"; then
     echo "  ok  fixedcap: ring buffer scan has bounded loops"
     fc_pass=$((fc_pass + 1))
 else
@@ -9558,7 +9558,7 @@ else
 fi
 
 # 8. Zero allocation in all functions
-if ! echo "$fc_effects" | grep -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$fc_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
     echo "  ok  fixedcap: zero allocation across all functions"
     fc_pass=$((fc_pass + 1))
 else
@@ -9570,7 +9570,7 @@ fi
 # Since struct-literal + if-without-else extraction landed (e2ab5eef) the
 # validators now fully EXTRACT (a strict superset of "eligible") — accept either.
 fc_extract=$("$COMPILER" "$FC_SRC" --report extraction 2>&1)
-if echo "$fc_extract" | grep -A2 "validate_version" | grep -qE "eligible|extracted"; then
+if grep <<<"$fc_extract" -A2 "validate_version" | grep -qE "eligible|extracted"; then
     echo "  ok  fixedcap: pure validators are proof-eligible"
     fc_pass=$((fc_pass + 1))
 else
@@ -9581,7 +9581,7 @@ fi
 # 10. Struct literal + if-without-else became proof-EXTRACTABLE (e2ab5eef), so
 # the former "known gaps" are closed: the validators that use them now extract
 # and the example has zero eligible-but-not-extractable functions.
-if echo "$fc_extract" | grep -q "0 eligible but not extractable"; then
+if grep <<<"$fc_extract" -q "0 eligible but not extractable"; then
     echo "  ok  fixedcap: struct-literal/if-without-else gaps closed (0 not-extractable)"
     fc_pass=$((fc_pass + 1))
 else
@@ -9602,7 +9602,7 @@ fi
 # 12. No capabilities on validation core (pure functions)
 pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag ok_result err_result; do
-    if ! echo "$fc_effects" | grep -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
         pure_caps=false
     fi
 done
@@ -9657,7 +9657,7 @@ fi
 
 # 3. All functions pass --check predictable
 pv_pred=$("$COMPILER" "$PV_SRC" --check predictable 2>&1) && pv_pred_exit=0 || pv_pred_exit=$?
-if [ "$pv_pred_exit" -eq 0 ] && echo "$pv_pred" | grep -q "pass"; then
+if [ "$pv_pred_exit" -eq 0 ] && grep <<<"$pv_pred" -q "pass"; then
     echo "  ok  parsevalidate: all functions pass --check predictable"
     pv_pass=$((pv_pass + 1))
 else
@@ -9670,7 +9670,7 @@ fi
 # extraction landed (e2ab5eef); the remainder stay `enforced`. The "0 reported"
 # check is the invariant: every pure function carries enforced-or-stronger evidence.
 pv_effects=$("$COMPILER" "$PV_SRC" --report effects 2>&1)
-if echo "$pv_effects" | grep -q "10 pure" && echo "$pv_effects" | grep -q "0 reported"; then
+if grep <<<"$pv_effects" -q "10 pure" && grep <<<"$pv_effects" -q "0 reported"; then
     echo "  ok  parsevalidate: all 10 functions are pure with evidence (proved/enforced)"
     pv_pass=$((pv_pass + 1))
 else
@@ -9679,7 +9679,7 @@ else
 fi
 
 # 5. Zero trusted functions
-if echo "$pv_effects" | grep -q "0 trusted"; then
+if grep <<<"$pv_effects" -q "0 trusted"; then
     echo "  ok  parsevalidate: zero trusted functions"
     pv_pass=$((pv_pass + 1))
 else
@@ -9688,7 +9688,7 @@ else
 fi
 
 # 6. Zero allocation across all functions
-if ! echo "$pv_effects" | grep -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$pv_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
     echo "  ok  parsevalidate: zero allocation across all functions"
     pv_pass=$((pv_pass + 1))
 else
@@ -9697,7 +9697,7 @@ else
 fi
 
 # 7. ParseError enum and Result<Header, ParseError> compile
-if echo "$pv_effects" | grep -q "parse_header" && echo "$pv_effects" | grep -q "error_code"; then
+if grep <<<"$pv_effects" -q "parse_header" && grep <<<"$pv_effects" -q "error_code"; then
     echo "  ok  parsevalidate: ParseError enum and stdlib Result work"
     pv_pass=$((pv_pass + 1))
 else
@@ -9706,7 +9706,7 @@ else
 fi
 
 # 8. compute_checksum has bounded loop (the only loop in the example)
-if echo "$pv_effects" | grep -A1 "compute_checksum" | grep -q "loops: bounded"; then
+if grep <<<"$pv_effects" -A1 "compute_checksum" | grep -q "loops: bounded"; then
     echo "  ok  parsevalidate: compute_checksum has bounded loop"
     pv_pass=$((pv_pass + 1))
 else
@@ -9726,7 +9726,7 @@ fi
 # 10. All core validators are capability-free (pure)
 pv_pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_checksum compute_checksum parse_header error_code; do
-    if ! echo "$pv_effects" | grep -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$pv_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
         pv_pure_caps=false
     fi
 done
@@ -9781,7 +9781,7 @@ fi
 
 # 3. All functions pass --check predictable
 se_pred=$("$COMPILER" "$SE_SRC" --check predictable 2>&1) && se_pred_exit=0 || se_pred_exit=$?
-if [ "$se_pred_exit" -eq 0 ] && echo "$se_pred" | grep -q "pass"; then
+if [ "$se_pred_exit" -eq 0 ] && grep <<<"$se_pred" -q "pass"; then
     echo "  ok  serviceerrors: all functions pass --check predictable"
     se_pass=$((se_pass + 1))
 else
@@ -9791,7 +9791,7 @@ fi
 
 # 4. All 12 functions are pure with evidence=enforced
 se_effects=$("$COMPILER" "$SE_SRC" --report effects 2>&1)
-if echo "$se_effects" | grep -q "12 pure" && echo "$se_effects" | grep -q "12 enforced"; then
+if grep <<<"$se_effects" -q "12 pure" && grep <<<"$se_effects" -q "12 enforced"; then
     echo "  ok  serviceerrors: all 12 functions are pure with evidence=enforced"
     se_pass=$((se_pass + 1))
 else
@@ -9800,7 +9800,7 @@ else
 fi
 
 # 5. Zero trusted functions
-if echo "$se_effects" | grep -q "0 trusted"; then
+if grep <<<"$se_effects" -q "0 trusted"; then
     echo "  ok  serviceerrors: zero trusted functions"
     se_pass=$((se_pass + 1))
 else
@@ -9809,7 +9809,7 @@ else
 fi
 
 # 6. Zero allocation across all functions
-if ! echo "$se_effects" | grep -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$se_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
     echo "  ok  serviceerrors: zero allocation across all functions"
     se_pass=$((se_pass + 1))
 else
@@ -9818,7 +9818,7 @@ else
 fi
 
 # 7. Custom error enums compile and appear in effects
-if echo "$se_effects" | grep -q "validate_error_code" && echo "$se_effects" | grep -q "auth_error_code" && echo "$se_effects" | grep -q "rate_error_code"; then
+if grep <<<"$se_effects" -q "validate_error_code" && grep <<<"$se_effects" -q "auth_error_code" && grep <<<"$se_effects" -q "rate_error_code"; then
     echo "  ok  serviceerrors: stage-specific error code functions exist"
     se_pass=$((se_pass + 1))
 else
@@ -9827,7 +9827,7 @@ else
 fi
 
 # 8. Pipeline handler functions exist (handle_request, handle_validated, handle_authorized)
-if echo "$se_effects" | grep -q "handle_request" && echo "$se_effects" | grep -q "handle_validated" && echo "$se_effects" | grep -q "handle_authorized"; then
+if grep <<<"$se_effects" -q "handle_request" && grep <<<"$se_effects" -q "handle_validated" && grep <<<"$se_effects" -q "handle_authorized"; then
     echo "  ok  serviceerrors: 3-stage pipeline handler functions exist"
     se_pass=$((se_pass + 1))
 else
@@ -9847,7 +9847,7 @@ fi
 # 10. All core functions are capability-free (pure)
 se_pure_caps=true
 for fn in validate authorize check_rate_limit process_action handle_request handle_validated handle_authorized service_error_code; do
-    if ! echo "$se_effects" | grep -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$se_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
         se_pure_caps=false
     fi
 done
@@ -9872,7 +9872,7 @@ sd_fail=0
 
 # 1. --report stack-depth produces output on crypto_verify
 sd_crypto=$("$COMPILER" examples/crypto_verify/src/main.con --report stack-depth 2>&1)
-if echo "$sd_crypto" | grep -q "Stack-Depth Report"; then
+if grep <<<"$sd_crypto" -q "Stack-Depth Report"; then
     echo "  ok  stackdepth: crypto_verify produces report"
     sd_pass=$((sd_pass + 1))
 else
@@ -9881,7 +9881,7 @@ else
 fi
 
 # 2. Reports frame bytes for each function
-if echo "$sd_crypto" | grep -q "frame:.*bytes"; then
+if grep <<<"$sd_crypto" -q "frame:.*bytes"; then
     echo "  ok  stackdepth: reports frame bytes"
     sd_pass=$((sd_pass + 1))
 else
@@ -9890,7 +9890,7 @@ else
 fi
 
 # 3. Reports call depth
-if echo "$sd_crypto" | grep -q "depth:"; then
+if grep <<<"$sd_crypto" -q "depth:"; then
     echo "  ok  stackdepth: reports call depth"
     sd_pass=$((sd_pass + 1))
 else
@@ -9899,7 +9899,7 @@ else
 fi
 
 # 4. Reports stack bound
-if echo "$sd_crypto" | grep -q "stack:.*bytes"; then
+if grep <<<"$sd_crypto" -q "stack:.*bytes"; then
     echo "  ok  stackdepth: reports stack bound"
     sd_pass=$((sd_pass + 1))
 else
@@ -9908,7 +9908,7 @@ else
 fi
 
 # 5. Leaf functions have depth 0
-if echo "$sd_crypto" | grep -A1 "compute_tag" | grep -q "depth: 0"; then
+if grep <<<"$sd_crypto" -A1 "compute_tag" | grep -q "depth: 0"; then
     echo "  ok  stackdepth: leaf function has depth 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -9917,7 +9917,7 @@ else
 fi
 
 # 6. Callers have depth > 0
-if echo "$sd_crypto" | grep -A1 "main" | grep -q "depth: [1-9]"; then
+if grep <<<"$sd_crypto" -A1 "main" | grep -q "depth: [1-9]"; then
     echo "  ok  stackdepth: caller has depth > 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -9928,12 +9928,12 @@ fi
 # 7. Stack bound >= frame bytes for all functions
 sd_valid=true
 while IFS= read -r line; do
-    frame=$(echo "$line" | grep -o 'frame: [0-9]*' | grep -o '[0-9]*')
-    stack=$(echo "$line" | grep -o 'stack: [0-9]*' | grep -o '[0-9]*')
+    frame=$(grep <<<"$line" -o 'frame: [0-9]*' | grep -o '[0-9]*')
+    stack=$(grep <<<"$line" -o 'stack: [0-9]*' | grep -o '[0-9]*')
     if [ -n "$frame" ] && [ -n "$stack" ] && [ "$stack" -lt "$frame" ]; then
         sd_valid=false
     fi
-done <<< "$(echo "$sd_crypto" | grep "frame:")"
+done <<< "$(grep <<<"$sd_crypto" "frame:")"
 if $sd_valid; then
     echo "  ok  stackdepth: stack bound >= frame bytes for all functions"
     sd_pass=$((sd_pass + 1))
@@ -9943,7 +9943,7 @@ else
 fi
 
 # 8. Summary shows totals
-if echo "$sd_crypto" | grep -q "Totals:.*functions.*bounded"; then
+if grep <<<"$sd_crypto" -q "Totals:.*functions.*bounded"; then
     echo "  ok  stackdepth: summary shows totals"
     sd_pass=$((sd_pass + 1))
 else
@@ -9952,7 +9952,7 @@ else
 fi
 
 # 9. Summary shows max stack bound
-if echo "$sd_crypto" | grep -q "Max stack bound:.*bytes"; then
+if grep <<<"$sd_crypto" -q "Max stack bound:.*bytes"; then
     echo "  ok  stackdepth: summary shows max stack bound"
     sd_pass=$((sd_pass + 1))
 else
@@ -9962,7 +9962,7 @@ fi
 
 # 10. Fixed-capacity all functions bounded (no recursive)
 sd_fc=$("$COMPILER" examples/fixed_capacity/src/main.con --report stack-depth 2>&1)
-if echo "$sd_fc" | grep -q "0 recursive (unbounded)"; then
+if grep <<<"$sd_fc" -q "0 recursive (unbounded)"; then
     echo "  ok  stackdepth: fixed_capacity has 0 recursive functions"
     sd_pass=$((sd_pass + 1))
 else
@@ -9971,7 +9971,7 @@ else
 fi
 
 # 11. Fixed-capacity main has depth > 0 (calls validators)
-if echo "$sd_fc" | grep -A1 "  main" | grep -q "depth: [1-9]"; then
+if grep <<<"$sd_fc" -A1 "  main" | grep -q "depth: [1-9]"; then
     echo "  ok  stackdepth: fixed_capacity main has call depth > 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -9980,7 +9980,7 @@ else
 fi
 
 # 12. Source locations present
-if echo "$sd_crypto" | grep -q "@ examples/crypto_verify/src/main.con"; then
+if grep <<<"$sd_crypto" -q "@ examples/crypto_verify/src/main.con"; then
     echo "  ok  stackdepth: source locations present"
     sd_pass=$((sd_pass + 1))
 else
@@ -9992,7 +9992,7 @@ fi
 
 # 13. Deep chain: main has depth 12 (12-function chain)
 sd_deep=$("$COMPILER" tests/programs/adversarial_stackdepth_deep_chain.con --report stack-depth 2>&1)
-if echo "$sd_deep" | grep -A1 "  main" | grep -q "depth: 12"; then
+if grep <<<"$sd_deep" -A1 "  main" | grep -q "depth: 12"; then
     echo "  ok  stackdepth: deep chain main has depth 12"
     sd_pass=$((sd_pass + 1))
 else
@@ -10001,7 +10001,7 @@ else
 fi
 
 # 14. Deep chain: leaf (step_12) has depth 0
-if echo "$sd_deep" | grep -A1 "step_12" | grep -q "depth: 0"; then
+if grep <<<"$sd_deep" -A1 "step_12" | grep -q "depth: 0"; then
     echo "  ok  stackdepth: deep chain leaf has depth 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -10010,7 +10010,7 @@ else
 fi
 
 # 15. Deep chain: 13 bounded, 0 recursive
-if echo "$sd_deep" | grep -q "13 bounded, 0 recursive"; then
+if grep <<<"$sd_deep" -q "13 bounded, 0 recursive"; then
     echo "  ok  stackdepth: deep chain all 13 bounded, 0 recursive"
     sd_pass=$((sd_pass + 1))
 else
@@ -10020,7 +10020,7 @@ fi
 
 # 16. Wide fan: main has depth 1 (not 8 — max not sum)
 sd_wide=$("$COMPILER" tests/programs/adversarial_stackdepth_wide_fan.con --report stack-depth 2>&1)
-if echo "$sd_wide" | grep -A1 "  main" | grep -q "depth: 1"; then
+if grep <<<"$sd_wide" -A1 "  main" | grep -q "depth: 1"; then
     echo "  ok  stackdepth: wide fan main has depth 1 (max not sum)"
     sd_pass=$((sd_pass + 1))
 else
@@ -10029,7 +10029,7 @@ else
 fi
 
 # 17. Wide fan: all 8 leaves have depth 0
-sd_wide_leaves=$(echo "$sd_wide" | grep "depth: 0" | wc -l | tr -d ' ')
+sd_wide_leaves=$(grep <<<"$sd_wide" "depth: 0" | wc -l | tr -d ' ')
 if [ "$sd_wide_leaves" -eq 8 ]; then
     echo "  ok  stackdepth: wide fan has 8 leaves with depth 0"
     sd_pass=$((sd_pass + 1))
@@ -10040,7 +10040,7 @@ fi
 
 # 18. Mixed recursion: 3 bounded, 3 recursive (unbounded)
 sd_mixed=$("$COMPILER" tests/programs/adversarial_stackdepth_mixed_recursion.con --report stack-depth 2>&1)
-if echo "$sd_mixed" | grep -q "3 bounded, 3 recursive (unbounded)"; then
+if grep <<<"$sd_mixed" -q "3 bounded, 3 recursive (unbounded)"; then
     echo "  ok  stackdepth: mixed has 3 bounded, 3 recursive"
     sd_pass=$((sd_pass + 1))
 else
@@ -10049,7 +10049,7 @@ else
 fi
 
 # 19. Mixed recursion: recurse shows unbounded
-if echo "$sd_mixed" | grep -A1 "  recurse" | grep -q "unbounded"; then
+if grep <<<"$sd_mixed" -A1 "  recurse" | grep -q "unbounded"; then
     echo "  ok  stackdepth: direct recursion shows unbounded"
     sd_pass=$((sd_pass + 1))
 else
@@ -10058,7 +10058,7 @@ else
 fi
 
 # 20. Mixed recursion: mutual_a shows unbounded
-if echo "$sd_mixed" | grep -A1 "mutual_a" | grep -q "unbounded"; then
+if grep <<<"$sd_mixed" -A1 "mutual_a" | grep -q "unbounded"; then
     echo "  ok  stackdepth: mutual recursion shows unbounded"
     sd_pass=$((sd_pass + 1))
 else
@@ -10067,7 +10067,7 @@ else
 fi
 
 # 21. Mixed recursion: pure_caller has real depth (bounded)
-if echo "$sd_mixed" | grep -A1 "pure_caller" | grep -q "depth: 1"; then
+if grep <<<"$sd_mixed" -A1 "pure_caller" | grep -q "depth: 1"; then
     echo "  ok  stackdepth: non-recursive in mixed file has real depth"
     sd_pass=$((sd_pass + 1))
 else
@@ -10077,7 +10077,7 @@ fi
 
 # 22. Large frame: big_frame has frame > 100 bytes
 sd_large=$("$COMPILER" tests/programs/adversarial_stackdepth_large_frame.con --report stack-depth 2>&1)
-sd_big_frame=$(echo "$sd_large" | grep -A1 "big_frame" | grep -o 'frame: [0-9]*' | grep -o '[0-9]*')
+sd_big_frame=$(grep <<<"$sd_large" -A1 "big_frame" | grep -o 'frame: [0-9]*' | grep -o '[0-9]*')
 if [ -n "$sd_big_frame" ] && [ "$sd_big_frame" -gt 100 ]; then
     echo "  ok  stackdepth: large frame function has frame > 100 bytes ($sd_big_frame)"
     sd_pass=$((sd_pass + 1))
@@ -10088,7 +10088,7 @@ fi
 
 # 23. Diamond: node_a has depth 2 (A->B->D or A->C->D)
 sd_diamond=$("$COMPILER" tests/programs/adversarial_stackdepth_diamond.con --report stack-depth 2>&1)
-if echo "$sd_diamond" | grep -A1 "node_a" | grep -q "depth: 2"; then
+if grep <<<"$sd_diamond" -A1 "node_a" | grep -q "depth: 2"; then
     echo "  ok  stackdepth: diamond node_a has depth 2"
     sd_pass=$((sd_pass + 1))
 else
@@ -10097,8 +10097,8 @@ else
 fi
 
 # 24. Diamond: B and C both have depth 1
-sd_b_depth=$(echo "$sd_diamond" | grep -A1 "node_b" | grep -o 'depth: [0-9]*' | grep -o '[0-9]*')
-sd_c_depth=$(echo "$sd_diamond" | grep -A1 "node_c" | grep -o 'depth: [0-9]*' | grep -o '[0-9]*')
+sd_b_depth=$(grep <<<"$sd_diamond" -A1 "node_b" | grep -o 'depth: [0-9]*' | grep -o '[0-9]*')
+sd_c_depth=$(grep <<<"$sd_diamond" -A1 "node_c" | grep -o 'depth: [0-9]*' | grep -o '[0-9]*')
 if [ "$sd_b_depth" = "1" ] && [ "$sd_c_depth" = "1" ]; then
     echo "  ok  stackdepth: diamond B and C both have depth 1"
     sd_pass=$((sd_pass + 1))
@@ -10109,7 +10109,7 @@ fi
 
 # 25. Zero params: bare_leaf has minimum frame (8 bytes)
 sd_zero=$("$COMPILER" tests/programs/adversarial_stackdepth_zero_params.con --report stack-depth 2>&1)
-if echo "$sd_zero" | grep -A1 "bare_leaf" | grep -q "frame: 8 bytes"; then
+if grep <<<"$sd_zero" -A1 "bare_leaf" | grep -q "frame: 8 bytes"; then
     echo "  ok  stackdepth: zero-param leaf has minimum frame (8 bytes)"
     sd_pass=$((sd_pass + 1))
 else
@@ -10275,7 +10275,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 unsup_out=$("$COMPILER" /tmp/interp_test_unsup.con --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
-if [ "$unsup_exit" -ne 0 ] && echo "$unsup_out" | grep -q "interp:.*not yet supported"; then
+if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not yet supported"; then
     echo "  ok  interp: unsupported construct gives clear diagnostic"
     interp_pass=$((interp_pass + 1))
 else
@@ -10328,7 +10328,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 negidx_out=$("$COMPILER" /tmp/interp_test_negidx.con --interp 2>&1) && negidx_exit=0 || negidx_exit=$?
-if [ "$negidx_exit" -ne 0 ] && echo "$negidx_out" | grep -qi "negative\|out of bounds"; then
+if [ "$negidx_exit" -ne 0 ] && grep <<<"$negidx_out" -qi "negative\|out of bounds"; then
     echo "  ok  interp: negative array index produces error diagnostic"
     interp_pass=$((interp_pass + 1))
 else
@@ -10344,7 +10344,7 @@ pub fn main() -> Int {
 TESTEOF
 contract_out=$("$COMPILER" /tmp/interp_test_contract.con --interp 2>/dev/null)
 contract_exit=$?
-if [ "$contract_exit" -eq 0 ] && echo "$contract_out" | grep -q "^7$"; then
+if [ "$contract_exit" -eq 0 ] && grep <<<"$contract_out" -q "^7$"; then
     echo "  ok  interp: prints return value and exits 0 (matches compiled contract)"
     interp_pass=$((interp_pass + 1))
 else
@@ -10367,7 +10367,7 @@ pub fn main() -> Int {
 TESTEOF
 match_mut_out=$("$COMPILER" /tmp/interp_test_match_mut.con --interp 2>/dev/null)
 match_mut_exit=$?
-if [ "$match_mut_exit" -eq 0 ] && echo "$match_mut_out" | grep -q "^0$"; then
+if [ "$match_mut_exit" -eq 0 ] && grep <<<"$match_mut_out" -q "^0$"; then
     echo "  ok  interp: match-arm mutations to outer variables persist"
     interp_pass=$((interp_pass + 1))
 else
@@ -10406,7 +10406,7 @@ echo "=== Project-mode per-file scoping ==="
 # examples/project: main.con declares the package's top-level module
 # (sees all 3 user functions); sibling files scope to their own count.
 ep_main=$($COMPILER examples/project/src/main.con --check predictable 2>&1 || true)
-if echo "$ep_main" | grep -q "pass (3 functions checked)"; then
+if grep <<<"$ep_main" -q "pass (3 functions checked)"; then
     echo "  ok  scoping: main.con sees all 3 package functions"
     PASS=$((PASS + 1))
 else
@@ -10415,7 +10415,7 @@ else
 fi
 
 ep_other=$($COMPILER examples/project/src/other.con --check predictable 2>&1 || true)
-if echo "$ep_other" | grep -q "pass (1 functions checked)"; then
+if grep <<<"$ep_other" -q "pass (1 functions checked)"; then
     echo "  ok  scoping: other.con scopes to its 1 function"
     PASS=$((PASS + 1))
 else
@@ -10424,7 +10424,7 @@ else
 fi
 
 ep_sub=$($COMPILER examples/project/src/mymod/submodule.con --check predictable 2>&1 || true)
-if echo "$ep_sub" | grep -q "pass (1 functions checked)"; then
+if grep <<<"$ep_sub" -q "pass (1 functions checked)"; then
     echo "  ok  scoping: nested submodule.con (3 levels deep) finds project + scopes to its 1 function"
     PASS=$((PASS + 1))
 else
@@ -10436,7 +10436,7 @@ fi
 # `mod foo`. Path-derived scoping must distinguish them — bare-name
 # matching merges both into 2 functions per file (regression).
 db_a=$($COMPILER tests/programs/duplicate_basename/src/a/foo.con --check predictable 2>&1 || true)
-if echo "$db_a" | grep -q "pass (1 functions checked)"; then
+if grep <<<"$db_a" -q "pass (1 functions checked)"; then
     echo "  ok  scoping: a/foo.con disambiguates from b/foo.con (1 function)"
     PASS=$((PASS + 1))
 else
@@ -10445,7 +10445,7 @@ else
 fi
 
 db_b=$($COMPILER tests/programs/duplicate_basename/src/b/foo.con --check predictable 2>&1 || true)
-if echo "$db_b" | grep -q "pass (1 functions checked)"; then
+if grep <<<"$db_b" -q "pass (1 functions checked)"; then
     echo "  ok  scoping: b/foo.con disambiguates from a/foo.con (1 function)"
     PASS=$((PASS + 1))
 else
@@ -10490,7 +10490,7 @@ PP_DIR="examples/proof_pressure"
 
 # 1. Build shows proof summary line
 wf_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_wf_pp 2>&1)
-if echo "$wf_build" | grep -q "^Proofs:"; then
+if grep <<<"$wf_build" -q "^Proofs:"; then
     echo "  ok  workflow: build shows proof summary line"
     wf_pass=$((wf_pass + 1))
 else
@@ -10501,7 +10501,7 @@ fi
 rm -f /tmp/test_wf_pp
 
 # 2. Build summary mentions proved count
-if echo "$wf_build" | grep "^Proofs:" | grep -q "proved"; then
+if grep <<<"$wf_build" "^Proofs:" | grep -q "proved"; then
     echo "  ok  workflow: build summary mentions proved count"
     wf_pass=$((wf_pass + 1))
 else
@@ -10510,7 +10510,7 @@ else
 fi
 
 # 3. Build summary mentions stale count
-if echo "$wf_build" | grep "^Proofs:" | grep -q "stale"; then
+if grep <<<"$wf_build" "^Proofs:" | grep -q "stale"; then
     echo "  ok  workflow: build summary mentions stale count"
     wf_pass=$((wf_pass + 1))
 else
@@ -10532,7 +10532,7 @@ rm -f /tmp/test_wf_pp2
 
 # 5. Check command produces proof status report
 wf_check=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" check 2>&1) || true
-if echo "$wf_check" | grep -q "=== Proof Status Report ==="; then
+if grep <<<"$wf_check" -q "=== Proof Status Report ==="; then
     echo "  ok  workflow: check shows proof status report"
     wf_pass=$((wf_pass + 1))
 else
@@ -10541,7 +10541,7 @@ else
 fi
 
 # 6. Check command shows next steps
-if echo "$wf_check" | grep -q "^Next steps:"; then
+if grep <<<"$wf_check" -q "^Next steps:"; then
     echo "  ok  workflow: check shows next steps"
     wf_pass=$((wf_pass + 1))
 else
@@ -10561,8 +10561,8 @@ else
 fi
 
 # 8. Check next-steps prioritizes stale before missing
-first_step=$(echo "$wf_check" | grep -A1 "^Next steps:" | tail -1)
-if echo "$first_step" | grep -q "stale"; then
+first_step=$(grep <<<"$wf_check" -A1 "^Next steps:" | tail -1)
+if grep <<<"$first_step" -q "stale"; then
     echo "  ok  workflow: check next-steps prioritizes stale"
     wf_pass=$((wf_pass + 1))
 else
@@ -10572,7 +10572,7 @@ else
 fi
 
 # 9. Check totals line present
-if echo "$wf_check" | grep -q "^Totals:"; then
+if grep <<<"$wf_check" -q "^Totals:"; then
     echo "  ok  workflow: check shows totals line"
     wf_pass=$((wf_pass + 1))
 else
@@ -10582,7 +10582,7 @@ fi
 
 # 10. Check without project dir gives helpful error
 wf_noproject=$(cd /tmp && "$ROOT_DIR/$COMPILER" check 2>&1) || true
-if echo "$wf_noproject" | grep -q "no Concrete.toml found"; then
+if grep <<<"$wf_noproject" -q "no Concrete.toml found"; then
     echo "  ok  workflow: check without project gives helpful error"
     wf_pass=$((wf_pass + 1))
 else
@@ -10609,8 +10609,8 @@ PP_DIR="examples/proof_pressure"
 
 # 1. Build summary counts only user functions (not 300+ stdlib)
 sc_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_sc_pp 2>&1)
-sc_summary=$(echo "$sc_build" | grep "^Proofs:")
-if echo "$sc_summary" | grep -qE "^Proofs: [0-9]+ proved, [0-9]+ stale, [0-9]+ missing, [0-9]+ blocked$"; then
+sc_summary=$(grep <<<"$sc_build" "^Proofs:")
+if grep <<<"$sc_summary" -qE "^Proofs: [0-9]+ proved, [0-9]+ stale, [0-9]+ missing, [0-9]+ blocked$"; then
     echo "  ok  scoping: build summary shows user-only counts"
     sc_pass=$((sc_pass + 1))
 else
@@ -10621,7 +10621,7 @@ fi
 rm -f /tmp/test_sc_pp
 
 # 2. Build summary does not include large stdlib counts (total should be < 20)
-sc_total=$(echo "$sc_summary" | grep -oE '[0-9]+' | paste -sd+ - | bc)
+sc_total=$(grep <<<"$sc_summary" -oE '[0-9]+' | paste -sd+ - | bc)
 if [ "$sc_total" -lt 20 ]; then
     echo "  ok  scoping: build summary total < 20 (user-only, not stdlib)"
     sc_pass=$((sc_pass + 1))
@@ -10632,7 +10632,7 @@ fi
 
 # 3. Check output has no std.* function entries
 sc_check=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" check 2>&1) || true
-if ! echo "$sc_check" | grep -q '`std\.'; then
+if ! grep <<<"$sc_check" -q '`std\.'; then
     echo "  ok  scoping: check report has no std.* functions"
     sc_pass=$((sc_pass + 1))
 else
@@ -10641,7 +10641,7 @@ else
 fi
 
 # 4. Check output only shows main.* functions
-if echo "$sc_check" | grep '`main\.' | grep -q "main\."; then
+if grep <<<"$sc_check" '`main\.' | grep -q "main\."; then
     echo "  ok  scoping: check report shows main.* functions"
     sc_pass=$((sc_pass + 1))
 else
@@ -10650,8 +10650,8 @@ else
 fi
 
 # 5. Check totals line has small count (user functions only)
-sc_totals=$(echo "$sc_check" | grep "^Totals:")
-sc_fn_count=$(echo "$sc_totals" | grep -oE '^Totals: [0-9]+' | grep -oE '[0-9]+')
+sc_totals=$(grep <<<"$sc_check" "^Totals:")
+sc_fn_count=$(grep <<<"$sc_totals" -oE '^Totals: [0-9]+' | grep -oE '[0-9]+')
 if [ -n "$sc_fn_count" ] && [ "$sc_fn_count" -lt 20 ]; then
     echo "  ok  scoping: check totals count < 20 (user-only)"
     sc_pass=$((sc_pass + 1))
@@ -10661,7 +10661,7 @@ else
 fi
 
 # 6. Check shows dependency obligations hidden footer
-if echo "$sc_check" | grep -q "dependency obligations hidden"; then
+if grep <<<"$sc_check" -q "dependency obligations hidden"; then
     echo "  ok  scoping: check shows dependency obligations hidden footer"
     sc_pass=$((sc_pass + 1))
 else
@@ -10683,7 +10683,7 @@ fi
 
 # 8. Next steps only reference main.* functions
 sc_next=$(echo "$sc_check" | sed -n '/^Next steps:/,/^$/p')
-if echo "$sc_next" | grep -q "main\." && ! echo "$sc_next" | grep -q "std\."; then
+if grep <<<"$sc_next" -q "main\." && ! grep <<<"$sc_next" -q "std\."; then
     echo "  ok  scoping: next steps reference only user functions"
     sc_pass=$((sc_pass + 1))
 else
@@ -10744,7 +10744,7 @@ pub fn main() -> Int {
 CON
 sc_rp2_rc=0
 sc_rp2_out=$(cd "$SC_TMPDIR2" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_sc_rp2 2>&1) || sc_rp2_rc=$?
-if [ "$sc_rp2_rc" -ne 0 ] && echo "$sc_rp2_out" | grep -q "policy violation.*main\.add"; then
+if [ "$sc_rp2_rc" -ne 0 ] && grep <<<"$sc_rp2_out" -q "policy violation.*main\.add"; then
     echo "  ok  scoping: require-proofs catches user-package missing proof"
     sc_pass=$((sc_pass + 1))
 else

@@ -16,9 +16,9 @@ fi
 
 # ---------- 1. Multi-error: all independent errors reported ----------
 output=$($COMPILER "$TESTDIR/phase3_diag_multi_error.con" --emit-llvm 2>&1)
-if echo "$output" | grep -q "type mismatch in let binding 'a'" \
-   && echo "$output" | grep -q "type mismatch in let binding 'b'" \
-   && echo "$output" | grep -q "type mismatch in let binding 'c'"; then
+if grep <<<"$output" -q "type mismatch in let binding 'a'" \
+   && grep <<<"$output" -q "type mismatch in let binding 'b'" \
+   && grep <<<"$output" -q "type mismatch in let binding 'c'"; then
     echo "  ok  phase3_diag_multi_error.con reports all 3 independent errors"
     PASS=$((PASS + 1))
 else
@@ -30,7 +30,7 @@ fi
 # ---------- 2. Specific location: error on the right line ----------
 output=$($COMPILER "$TESTDIR/phase3_diag_specific_location.con" --emit-llvm 2>&1)
 # The error must reference line 9 (the deeply-nested let), not any parent line.
-if echo "$output" | grep -q "^.*:9:.*error"; then
+if grep <<<"$output" -q "^.*:9:.*error"; then
     echo "  ok  phase3_diag_specific_location.con error points to correct line (9)"
     PASS=$((PASS + 1))
 else
@@ -41,7 +41,7 @@ fi
 
 # ---------- 3. No cascade: single root cause produces < 5 errors ----------
 output=$($COMPILER "$TESTDIR/phase3_diag_no_cascade.con" --emit-llvm 2>&1)
-error_count=$(echo "$output" | grep -c "error\[" || true)
+error_count=$(grep <<<"$output" -c "error\[" || true)
 if [ "$error_count" -lt 5 ]; then
     echo "  ok  phase3_diag_no_cascade.con produced $error_count error(s) (< 5)"
     PASS=$((PASS + 1))
@@ -53,8 +53,8 @@ fi
 
 # ---------- 4. Hint quality: capability error includes hint text ----------
 output=$($COMPILER "$TESTDIR/phase3_diag_hint_quality.con" --emit-llvm 2>&1)
-if echo "$output" | grep -q "requires File" \
-   && echo "$output" | grep -qi "hint:"; then
+if grep <<<"$output" -q "requires File" \
+   && grep <<<"$output" -qi "hint:"; then
     echo "  ok  phase3_diag_hint_quality.con includes capability error with hint"
     PASS=$((PASS + 1))
 else
@@ -65,8 +65,8 @@ fi
 
 # ---------- 5. Type mismatch: shows expected and got types ----------
 output=$($COMPILER "$TESTDIR/phase3_diag_type_mismatch.con" --emit-llvm 2>&1)
-if echo "$output" | grep -q "expected" \
-   && echo "$output" | grep -q "got"; then
+if grep <<<"$output" -q "expected" \
+   && grep <<<"$output" -q "got"; then
     echo "  ok  phase3_diag_type_mismatch.con shows both expected and got types"
     PASS=$((PASS + 1))
 else

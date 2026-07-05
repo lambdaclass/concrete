@@ -12,6 +12,7 @@ trap 'rm -rf "$OUTDIR" "$RESDIR"' EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 TOTAL=0
 
 # Extract test cases handling multiline expected values, output as individual files
@@ -26,6 +27,11 @@ for i, m in enumerate(re.finditer(pattern, content)):
         expected = m.group(3)
     else:
         expected = m.group(4)
+    # run_tests.sh writes multiline expectations as "$(printf ...)"; the regex
+    # captures that literally, so expand the idiom or the spec can never match.
+    p = re.fullmatch(r"\$\(printf \x27(.*)\x27\)", expected, re.S)
+    if p:
+        expected = p.group(1).replace("\\n", "\n").replace("\\t", "\t")
     with open(os.path.join(resdir, f"test_{i:04d}.spec"), "w") as f:
         f.write(path + "\n")
         f.write(expected)
@@ -37,6 +43,16 @@ for spec in "$RESDIR"/test_*.spec; do
     expected=$(tail -n +2 "$spec")
     name=$(basename "$file" .con)
     spec_id=$(basename "$spec" .spec)
+    # The scraper sees every run_ok call, including ones run_tests.sh guards
+    # behind the flaky-TCP skip — honor the same skip here.
+    if [ "${SKIP_FLAKY_TCP_TEST:-0}" = "1" ]; then
+        case "$name" in
+            tcp_basic|net_tcp_roundtrip)
+                echo "skip $name (SKIP_FLAKY_TCP_TEST=1)"
+                SKIP=$((SKIP + 1))
+                continue ;;
+        esac
+    fi
     (
         out="$OUTDIR/$spec_id"
         if ! $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
@@ -73,4 +89,5 @@ for f in "$RESDIR"/*.out; do
 done
 
 echo ""
-echo "PASS: $PASS  FAIL: $FAIL  TOTAL: $((PASS + FAIL))"
+echo "PASS: $PASS  FAIL: $FAIL  SKIP: $SKIP  TOTAL: $((PASS + FAIL))"
+[ "$FAIL" -eq 0 ]

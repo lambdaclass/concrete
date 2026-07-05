@@ -55,8 +55,8 @@ ck "signed nonlinear product unproven by kernel tiers"  "" "st('adv.signed_produ
 
 echo "=== trust boundary: SMT emission only for kernel-unproved VCs (no overreach) ==="
 EMIT="$("$COMPILER" "$ADV" --report vcs --emit-smt 2>&1 | grep -E '^;; ==== ' | sort -u)"
-echo "$EMIT" | grep -q 'signed_product#ovf0'   && ! echo "$EMIT" | grep -q 'linear_guarded'   \
-  && ! echo "$EMIT" | grep -q 'product_guarded' \
+grep <<<"$EMIT" -q 'signed_product#ovf0'   && ! grep <<<"$EMIT" -q 'linear_guarded'   \
+  && ! grep <<<"$EMIT" -q 'product_guarded' \
   && ok "queries emitted for signed_product but NOT for omega/bv-owned VCs" \
   || no "SMT emission overreached onto a kernel-owned VC"
 

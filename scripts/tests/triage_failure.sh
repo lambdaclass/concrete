@@ -97,23 +97,23 @@ echo "  Error: $(echo "$ERROR_OUTPUT" | head -3)"
 if [[ -z "$PREDICATE" ]]; then
   echo
   echo "--- Auto-detecting predicate ---"
-  if echo "$ERROR_OUTPUT" | grep -q "error\[parse\]"; then
+  if grep <<<"$ERROR_OUTPUT" -q "error\[parse\]"; then
     PREDICATE="parse-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[resolve\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[resolve\]"; then
     PREDICATE="resolve-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[check\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[check\]"; then
     PREDICATE="check-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[elab\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[elab\]"; then
     PREDICATE="elab-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[core-check\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[core-check\]"; then
     PREDICATE="core-check-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[post-mono\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[post-mono\]"; then
     PREDICATE="mono-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "error\[lower\]"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "error\[lower\]"; then
     PREDICATE="lower-error"
-  elif echo "$ERROR_OUTPUT" | grep -q "LLVM IR validation failed"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "LLVM IR validation failed"; then
     PREDICATE="crash"
-  elif echo "$ERROR_OUTPUT" | grep -q "clang.*error"; then
+  elif grep <<<"$ERROR_OUTPUT" -q "clang.*error"; then
     PREDICATE="crash"
   else
     PREDICATE="crash"

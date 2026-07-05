@@ -47,8 +47,8 @@ HDR='mod m {
 
 reject(){ printf '%s\n  %s\n}' "$HDR" "$3" > "$TMP/t.con"
   local out; out="$("$C" "$TMP/t.con" -o "$TMP/t.bin" 2>&1)"
-  if echo "$out" | grep -q "($2)"; then ok "$1 rejected ($2)"
-  else no "$1: expected $2, got '$(echo "$out" | grep -oE '\([A-Z0-9]+\)' | head -1)'"; fi; }
+  if grep <<<"$out" -q "($2)"; then ok "$1 rejected ($2)"
+  else no "$1: expected $2, got '$(grep <<<"$out" -oE '\([A-Z0-9]+\)' | head -1)'"; fi; }
 
 accept(){ printf '%s\n  %s\n}' "$HDR" "$2" > "$TMP/t.con"
   if "$C" "$TMP/t.con" -o "$TMP/t.bin" >"$TMP/t.err" 2>&1; then ok "$1 compiles"

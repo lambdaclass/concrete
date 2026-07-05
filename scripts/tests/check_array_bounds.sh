@@ -31,7 +31,7 @@ aborts(){ local n="$1"; printf '%s' "$2" > "$TMP/$n.con"
     no "$n: expected to COMPILE (then trap at runtime)"; sed 's/^/        /' "$TMP/$n.err" | head -3; return; fi
   "$TMP/$n.bin" >/dev/null 2>&1; local ce=$?
   local ie; ie="$("$C" "$TMP/$n.con" --interp 2>&1 || true)"
-  if [ "$ce" -ne 0 ] && echo "$ie" | grep -qi "bound\|index"; then
+  if [ "$ce" -ne 0 ] && grep <<<"$ie" -qi "bound\|index"; then
     ok "$n: OOB traps (compiled exit $ce, interp errors)"
   else no "$n: did NOT trap (compiled exit $ce, interp='$(echo "$ie" | head -1)')"; fi; }
 

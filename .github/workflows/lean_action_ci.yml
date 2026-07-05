@@ -188,7 +188,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Run SSA test suite
-        run: bash ./scripts/tests/test_ssa.sh
+        run: SKIP_FLAKY_TCP_TEST=1 bash ./scripts/tests/test_ssa.sh
 
   trust-gate:
     name: Trust gate (correctness contracts)

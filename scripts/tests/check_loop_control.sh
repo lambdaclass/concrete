@@ -44,10 +44,10 @@ run_expect(){
 reject_with(){
   local name="$1" code="$2"
   local out; out="$("$C" "$D/$name.con" -o "$TMP/$name.bin" 2>&1)"
-  if echo "$out" | grep -qE 'error\['; then
-    echo "$out" | grep -q "($code)" \
+  if grep <<<"$out" -qE 'error\['; then
+    grep <<<"$out" -q "($code)" \
       && ok "$name rejected with $code" \
-      || { no "$name rejected, but not with $code"; echo "$out" | grep -oE '\([A-Z0-9]+\)[^|]*' | head -1 | sed 's/^/        got: /'; }
+      || { no "$name rejected, but not with $code"; grep <<<"$out" -oE '\([A-Z0-9]+\)[^|]*' | head -1 | sed 's/^/        got: /'; }
   else
     no "$name: expected rejection ($code), but it compiled"
   fi

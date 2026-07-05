@@ -26,10 +26,10 @@ reject() {  # name, source, expected-substring
   local err; err="$("$COMPILER" "$TMP/$1.con" -o "$TMP/$1" 2>&1)"
   if "$COMPILER" "$TMP/$1.con" -o "$TMP/$1" >/dev/null 2>&1; then
     no "$1: expected REJECT but it compiled"
-  elif echo "$err" | grep -q "$3"; then
+  elif grep <<<"$err" -q "$3"; then
     ok "$1 rejected ($3)"
   else
-    no "$1 rejected but not for the expected reason: $(echo "$err" | grep -i error | head -1)"
+    no "$1 rejected but not for the expected reason: $(grep <<<"$err" -i error | head -1)"
   fi
 }
 
