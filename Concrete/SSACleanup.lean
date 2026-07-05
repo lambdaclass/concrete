@@ -267,11 +267,68 @@ private def collectAllUses (blocks : List SBlock) : List String :=
     let termU := termUses b.term
     acc ++ instU ++ termU) []
 
-/-- Is an instruction side-effecting (must be kept even if result unused)? -/
+/-- Bit-width and signedness of an integer type (mirror of Interp.intBitWidth). -/
+private def intBitWidth : Ty → Option (Nat × Bool)
+  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
+  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
+  | _   => none
+
+/-- True iff `n` fits `ty`'s representable range. Keeps constant folding in step
+    with checked arithmetic (ROADMAP #10): an `add/sub/mul/div` whose constant
+    result overflows must NOT be folded — leaving the op live so EmitSSA lowers it
+    to the checked helper that traps at runtime (matching Interp's `checkedToType`).
+    Folding overflow here would silently wrap and diverge from the interpreter. -/
+private def fitsType (ty : Ty) (n : Int) : Bool :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let (lo, hi) : Int × Int :=
+      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
+      else (0, (2 : Int) ^ w - 1)
+    lo ≤ n && n ≤ hi
+  | none => true  -- non-fixed-width — fold as before
+
+/-- A checked binop over two integer constants is provably non-trapping exactly
+    when the folder can fold it: result in range; divisor nonzero for div/mod;
+    shift amount in range. -/
+private def constPairNonTrapping (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Bool :=
+  match lhs, rhs with
+  | .intConst a _, .intConst b _ =>
+    (match op with
+     | .add => fitsType ty (a + b)
+     | .sub => fitsType ty (a - b)
+     | .mul => fitsType ty (a * b)
+     | .div | .mod => b != 0 && fitsType ty (Int.tdiv a b)
+     | .shl | .shr =>
+       (match intBitWidth ty with
+        | some (w, _) => 0 ≤ b && b < Int.ofNat w
+        | none => false)
+     | _ => false)
+  | _, _ => false
+
+/-- Is an instruction side-effecting (must be kept even if result unused)?
+    Ordinary INTEGER arithmetic is CHECKED (ARITHMETIC_POLICY): add/sub/mul
+    trap on overflow, div/mod on zero and MIN over -1, shifts out of range —
+    so a checked binop is side-effecting and must survive DCE even when its
+    result is unused. Otherwise `0 * (a * b)` folds to 0, the unused `a * b`
+    is deleted, and the documented trap silently vanishes (found by the first
+    nightly fuzz run, seed 20260703). The explicit wrapping and saturating
+    variants are pure and stay removable; comparisons/bool/float ops never
+    trap. -/
 private def isSideEffecting : SInst → Bool
   | .call _ _ _ _ => true
   | .store _ _ => true
   | .memcpy _ _ _ => true
+  | .binOp _ op lhs rhs ty =>
+    (match op with
+     | .add | .sub | .mul | .div | .mod | .shl | .shr =>
+       (match ty with
+        | .i8 | .i16 | .i32 | .int | .u8 | .u16 | .u32 | .uint =>
+          -- A constant pair is provably non-trapping exactly when the folder
+          -- can fold it (result in range, divisor nonzero): those stay
+          -- removable, so folding leaves no dead const ops behind.
+          !(constPairNonTrapping op lhs rhs ty)
+        | _ => false)
+     | _ => false)
   | _ => false
 
 /-- Eliminate instructions whose dst is never used. Iterate until fixpoint. -/
@@ -294,26 +351,6 @@ private partial def eliminateDeadInstsFixpoint (blocks : List SBlock) : List SBl
 -- ============================================================
 -- Pass 5: Constant folding + algebraic simplifications
 -- ============================================================
-
-/-- Bit-width and signedness of an integer type (mirror of Interp.intBitWidth). -/
-private def intBitWidth : Ty → Option (Nat × Bool)
-  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
-  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
-  | _   => none
-
-/-- True iff `n` fits `ty`'s representable range. Keeps constant folding in step
-    with checked arithmetic (ROADMAP #10): an `add/sub/mul/div` whose constant
-    result overflows must NOT be folded — leaving the op live so EmitSSA lowers it
-    to the checked helper that traps at runtime (matching Interp's `checkedToType`).
-    Folding overflow here would silently wrap and diverge from the interpreter. -/
-private def fitsType (ty : Ty) (n : Int) : Bool :=
-  match intBitWidth ty with
-  | some (w, signed) =>
-    let (lo, hi) : Int × Int :=
-      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
-      else (0, (2 : Int) ^ w - 1)
-    lo ≤ n && n ≤ hi
-  | none => true  -- non-fixed-width — fold as before
 
 /-- Try to fold a binary operation on two constant operands. -/
 private def foldBinOpConst (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option SVal :=

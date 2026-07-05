@@ -1,0 +1,9 @@
+// DCE must not delete an unused CHECKED op: `0 * (a * b)` folds to 0, but the
+// inner `a * b` still traps on overflow (interp and compiled agree). Found by
+// the first nightly fuzz run (seed 20260703).
+fn main() -> Int {
+    let mut a: u16 = 65520;
+    let mut b: u16 = 9;
+    let c: u16 = 0 * (a * b);
+    return (c as Int);
+}

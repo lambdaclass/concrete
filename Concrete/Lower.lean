@@ -538,11 +538,60 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | _ => return .reg name ty
 
   | .binOp op lhs rhs ty =>
-    let lVal ← lowerExpr lhs
-    let rVal ← lowerExpr rhs
-    let dst ← freshReg
-    emit (.binOp dst op lVal rVal ty)
-    return .reg dst ty
+    match op with
+    | .and_ | .or_ =>
+      -- SHORT-CIRCUIT lowering: the RHS must not evaluate when the LHS decides
+      -- the result — `x != 0 && (10 / x) > 0` is the blessed guard idiom, and
+      -- the RHS division must not trap when x == 0. Matches the interpreter
+      -- and ProofCore. (Historically `&&`/`||` lowered EAGERLY; DCE deleting
+      -- the unused trapping RHS masked the divergence until checked arithmetic
+      -- became side-effecting, exposed by the 2026-07-03 nightly fuzz run.)
+      let lVal ← lowerExpr lhs
+      let pfx := if op == .and_ then "scand" else "scor"
+      let rhsLabel ← freshLabel s!"{pfx}.rhs"
+      let mergeLabel ← freshLabel s!"{pfx}.merge"
+      let resultSlot ← freshReg s!"{pfx}slot."
+      emit (.alloca resultSlot .bool)
+      emit (.store lVal (.reg resultSlot .bool))
+      let preVars ← snapshotVars
+      let entryEndLabel ← getCurrentLabel
+      if op == .and_ then
+        terminateBlock (.condBr lVal rhsLabel mergeLabel)
+      else
+        terminateBlock (.condBr lVal mergeLabel rhsLabel)
+      startBlock rhsLabel
+      let rVal ← lowerExpr rhs
+      emit (.store rVal (.reg resultSlot .bool))
+      let rhsEndVars ← snapshotVars
+      let rhsEndLabel ← getCurrentLabel
+      terminateBlock (.br mergeLabel)
+      -- Merge: phi any scalar var the RHS remapped (a match/if-expression in
+      -- the RHS can contain arm statements), mirroring ifExpr's merge.
+      startBlock mergeLabel
+      for (name, preVal) in preVars do
+        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
+        let rhsV := (rhsEndVars.find? fun (n, _) => n == name).map (·.2)
+        let changed := match rhsV with
+          | some v => match v, preVal with
+            | .reg n1 _, .reg n2 _ => n1 != n2
+            | _, _ => true
+          | none => false
+        if changed then
+          match rhsV with
+          | some v =>
+            let phiReg ← freshReg s!"{pfx}phi."
+            emit (.phi phiReg [(v, rhsEndLabel), (preVal, entryEndLabel)] preVal.ty)
+            setVar name (.reg phiReg preVal.ty)
+          | none => pure ()
+      let loadDst ← freshReg s!"{pfx}load."
+      emit (.load loadDst (.reg resultSlot .bool) .bool)
+      return .reg loadDst .bool
+    | _ =>
+      let lVal ← lowerExpr lhs
+      let rVal ← lowerExpr rhs
+      let dst ← freshReg
+      emit (.binOp dst op lVal rVal ty)
+      return .reg dst ty
 
   | .unaryOp op operand ty =>
     let oVal ← lowerExpr operand
@@ -1226,6 +1275,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     }
     pushLoop loopInfo
     let condVal ← lowerExpr cond
+    -- A short-circuit `&&`/`||` in the condition ends in its scand/scor merge
+    -- block, so THAT (not the header) is the exit edge's predecessor.
+    let condEndLabel ← getCurrentLabel
     terminateBlock (.condBr condVal bodyLabel exitLabel)
     startBlock bodyLabel
     lowerStmts body
@@ -1271,7 +1323,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       if !breakEdges.isEmpty then
         for (name, phiReg, _, ty) in headerPhis do
           let headerVal := SVal.reg phiReg ty
-          let mut exitIncoming : List (SVal × String) := [(headerVal, headerLabel)]
+          let mut exitIncoming : List (SVal × String) := [(headerVal, condEndLabel)]
           for (breakVars, breakLabel) in breakEdges do
             let breakVal := (breakVars.find? fun (n, _) => n == name).map (·.2) |>.getD headerVal
             exitIncoming := exitIncoming ++ [(breakVal, breakLabel)]
@@ -1284,7 +1336,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             setVar name (.reg exitPhiReg ty)
       -- Use a flag phi: 0 from header (normal), 1 from break
       let flagReg ← freshReg "bflag."
-      let mut flagIncoming : List (SVal × String) := [(.intConst 0 .int, headerLabel)]
+      let mut flagIncoming : List (SVal × String) := [(.intConst 0 .int, condEndLabel)]
       for (_, breakLabel) in breakEdges do
         flagIncoming := flagIncoming ++ [(.intConst 1 .int, breakLabel)]
       emit (.phi flagReg flagIncoming .int)
@@ -1855,6 +1907,9 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     pushScope .loop
     -- Lower condition (uses phi values)
     let condVal ← lowerExpr cond
+    -- A short-circuit `&&`/`||` in the condition ends in its scand/scor merge
+    -- block, so THAT (not the header) is the exit edge's predecessor.
+    let condEndLabel ← getCurrentLabel
     terminateBlock (.condBr condVal bodyLabel exitLabel)
     -- Lower body (without step, since step is separate for for-loops)
     startBlock bodyLabel
@@ -1923,7 +1978,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       if !breakEdges.isEmpty then
         for (name, phiReg, _, ty) in headerPhis do
           let headerVal := SVal.reg phiReg ty
-          let mut exitIncoming : List (SVal × String) := [(headerVal, headerLabel)]
+          let mut exitIncoming : List (SVal × String) := [(headerVal, condEndLabel)]
           for (breakVars, breakLabel) in breakEdges do
             let breakVal := (breakVars.find? fun (n, _) => n == name).map (·.2) |>.getD headerVal
             exitIncoming := exitIncoming ++ [(breakVal, breakLabel)]
@@ -1976,7 +2031,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     if !breakEdges.isEmpty then
       for (name, phiReg, _, ty) in headerPhis do
         let headerVal := SVal.reg phiReg ty
-        let mut exitIncoming : List (SVal × String) := [(headerVal, headerLabel)]
+        let mut exitIncoming : List (SVal × String) := [(headerVal, condEndLabel)]
         for (breakVars, breakLabel) in breakEdges do
           let breakVal := (breakVars.find? fun (n, _) => n == name).map (·.2) |>.getD headerVal
           exitIncoming := exitIncoming ++ [(breakVal, breakLabel)]

@@ -35,7 +35,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # no documented divergences remain (casts agree since the evalCast fix).
 EXPECTED_DIVERGE=" "
 # checked-arithmetic overflow: both sides trap (no value on either side).
-EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap "
+EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap trap_elision_mul_zero "
 # interpreter cannot execute these shapes yet.
 INTERP_UNSUPPORTED=" fn_pointer "
 
