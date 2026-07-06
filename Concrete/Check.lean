@@ -78,6 +78,10 @@ structure TypeEnv where
   -- assignment restores the binding before the next iteration, so the
   -- consume-inside-loop rule (E0207) does not apply to it.
   rebindingVar : Option String := none
+  -- Set while checking a `break value;` expression: the value ident's
+  -- auto-consume gets the one-level loop-depth exemption (H14 — a break
+  -- fires at most once per loop entry). Transient, like rebindingVar.
+  breakConsumeExempt : Bool := false
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
@@ -872,9 +876,9 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
       setEnv { env with vars := vars' }
 
 /-- Consume a variable if it exists. Skips function names (not in var scope). -/
-def consumeVarIfExists (name : String) (span : Option Span := none) : CheckM Unit := do
+def consumeVarIfExists (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
   match ← lookupVarInfo name with
-  | some _ => consumeVar name span
+  | some _ => consumeVar name span breakDepthExempt
   | none => pure ()  -- function reference, not a variable
 
 /-- Check that all tracked linear variables in the given name list are consumed.
@@ -1323,14 +1327,29 @@ private partial def inferMethodParamAndRetTys
 -- Type checking expressions and statements
 -- ============================================================
 
+/-- Expression checking mode (docs/VALUE_FLOW_SPEC.md — the auto-consume
+    inversion, 2026-07-06). Consumption is decided HERE, in ONE place, not in
+    every AST handler; a new syntax form that forgets to pick a mode gets
+    `value` and fails closed (over-rejects) instead of silently leaking.
+
+    `value` — the default. An ident use MOVES a non-Copy binding (the read IS
+        the consumption); a by-value read of a non-Copy sub-place (`w.f`,
+        `arr[i]`) rejects (E0290/H11); Copy reads copy.
+    `callArg` — call/method/static-call ARGUMENTS ONLY. H11 projection rules
+        apply, but idents are NOT auto-consumed: the call site decides from
+        the PARAMETER type (`&T` never consumes; `&mut T` consumes only
+        borrow-block refs — reborrowable otherwise; owned params consume).
+        Do NOT use this anywhere else — it would recreate the forgot-to-
+        consume bug class (H13/H14).
+    `place` — addressable expression: projection bases, borrow targets,
+        assignment targets, `..base`. No consumption, no H11 rejection. -/
+inductive UseMode where
+  | value | callArg | place
+  deriving Repr, BEq
+
 mutual
 
-/-- `asPlace`: the expression is evaluated as a PLACE (borrow target, projection
-    base, assignment target, auto-borrowed receiver), not as a value. A by-value
-    read of a non-Copy sub-place (`w.f`, `arr[i]`) is rejected (E0290/H11) only
-    when `asPlace` is false — the same syntax stays legal under `&`/`&mut`, as a
-    further projection base, and on the left of an assignment. -/
-partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := false) : CheckM Ty := do
+partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
     -- Use hint to infer integer literal type (resolve aliases first)
@@ -1368,12 +1387,25 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     | none =>
     match ← lookupVarInfo name with
     | some info =>
-      -- Reading a variable (not consuming). Check it's not already consumed.
-      if !info.isCopy && info.state == .consumed then
-        -- secondary span: where the value was moved (Phase 4 #11).
-        throwCheck (.variableUsedAfterMove name) (some e.getSpan)
-          (related := info.movedAt.toList.map (fun sp => (sp, s!"'{name}' moved here")))
-      useVar name (some e.getSpan)
+      if mode == .value then
+        -- AUTO-CONSUME (the inversion): in value position, the ident read IS
+        -- the move of a non-Copy binding. useVar first — the FROZEN check
+        -- applies to Copy reads too (consumeVar early-returns for Copy);
+        -- then consumeVar handles every non-Copy state (use-after-move
+        -- E0205, reserved, the loop rule). `breakConsumeExempt` is the H14
+        -- one-level loop-depth exemption, set only around a `break value;`.
+        useVar name (some e.getSpan)
+        let env ← getEnv
+        consumeVarIfExists name (some e.getSpan)
+          (breakDepthExempt := if env.breakConsumeExempt then 1 else 0)
+      else
+        -- place/callArg: reading, not consuming. Still reject a read of an
+        -- already-moved value.
+        if !info.isCopy && info.state == .consumed then
+          -- secondary span: where the value was moved (Phase 4 #11).
+          throwCheck (.variableUsedAfterMove name) (some e.getSpan)
+            (related := info.movedAt.toList.map (fun sp => (sp, s!"'{name}' moved here")))
+        useVar name (some e.getSpan)
       return info.ty
     | none =>
       -- Check if it's a function name (first-class function reference)
@@ -1458,7 +1490,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       let ty ← checkExpr operand hint
       return ty  -- CoreCheck validates bitwise not types
   | .arrowAccess _ obj field =>
-    let objTy ← checkExpr obj none true
+    let objTy ← checkExpr obj none .place
     -- obj must be Heap<T> or HeapArray<T>
     let innerTy := match objTy with
       | .heap t => t
@@ -1545,10 +1577,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
         let ty ← checkExpr tExpr hint
-        -- Trailing expression is a value move — consume linear variables
-        match tExpr with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-        | _ => pure ()
+        -- value mode auto-consumes a trailing ident (VALUE_FLOW_SPEC)
         pure ty
       | some (.return_ _ v) =>
         match v with
@@ -1569,9 +1598,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     let elseTy ← match else_.getLast? with
       | some (.expr _ eExpr true) => do
         let ty ← checkExpr eExpr hint
-        match eExpr with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-        | _ => pure ()
         pure ty
       | some (.return_ _ v) =>
         match v with
@@ -1614,10 +1640,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let argTy ← checkExpr arg (some resolvedInnerTy)
       expectTy resolvedInnerTy argTy s!"newtype '{fnName}' constructor" (some e.getSpan)
-      -- Consume linear variables passed to newtype constructor (ownership moves)
-      match arg with
-      | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-      | _ => pure ()
       if inferredTypeArgs.isEmpty then return .named fnName
       else return .generic fnName inferredTypeArgs
     | none =>
@@ -1637,9 +1659,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         if ntName == "" then throwCheckMsg s!"unwrap() requires a newtype argument, got {tyToString argTy}"
         match ← lookupNewtype ntName with
         | some nt =>
-          match arg with
-          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-          | _ => pure ()
           return nt.innerTy
         | none => throwCheckMsg s!"unwrap() requires a newtype argument, '{ntName}' is not a newtype"
     -- Intercept wrapping_*/saturating_*(a, b) — explicit modular/clamping
@@ -1664,7 +1683,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if intrinsic == some .print || intrinsic == some .println then
       if args.isEmpty then throwCheckMsg s!"{fnName}() requires at least 1 argument"
       for arg in args do
-        let argTy ← checkExpr arg
+        -- callArg: a String ident is AUTO-BORROWED by print (not moved)
+        let argTy ← checkExpr arg none .callArg
         -- Accept: String (auto-borrowed), integer types, bool, char
         match argTy with
         | .string | .ref .string | .refMut .string => pure ()
@@ -1677,7 +1697,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if intrinsic == some .append then
       match args with
       | bufArg :: rest =>
-        let bufTy ← checkExpr bufArg
+        let bufTy ← checkExpr bufArg none .callArg
         match bufTy with
         | .refMut .string => pure ()
         | _ => throwCheckMsg s!"append() first argument must be &mut String, got '{tyToString bufTy}'"
@@ -1711,10 +1731,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       let destroyFn ← lookupFn (destroyFnNameFor typeName)
       match destroyFn with
       | some _ =>
-        -- Consume the argument
-        match arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-        | _ => pure ()
         return .unit
       | none => throwCheck (.typeDoesNotImplDestroy typeName) (some e.getSpan)
     -- Intercept alloc(val) calls
@@ -1722,10 +1738,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 1 then throwCheck (.builtinWrongArgCount "alloc" 1) (some e.getSpan)
       let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let argTy ← checkExpr arg
-      -- Consume linear variables passed to alloc (ownership moves to heap)
-      match arg with
-      | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-      | _ => pure ()
       return .heap argTy
     -- Intercept free(ptr) calls
     if intrinsic == some .free then
@@ -1734,10 +1746,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       let argTy ← checkExpr arg
       match argTy with
       | .heap innerTy =>
-        -- Consume the argument (Heap<T> is linear)
-        match arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-        | _ => pure ()
         return innerTy
       | _ => throwCheck (.freeRequiresHeap (tyToString argTy)) (some e.getSpan)
     -- Intercept vec_new::<T>()
@@ -1751,7 +1759,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_push_char" 2) (some e.getSpan)
       let strArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let chArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let strTy ← checkExpr strArg
+      let strTy ← checkExpr strArg none .callArg
       match strTy with
       | .refMut .string => pure ()
       | _ => throwCheck (.builtinWrongFirstArg "string_push_char" "&mut String as first argument" (tyToString strTy)) (some e.getSpan)
@@ -1763,7 +1771,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_append" 2) (some e.getSpan)
       let strArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let otherArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let strTy ← checkExpr strArg
+      let strTy ← checkExpr strArg none .callArg
       match strTy with
       | .refMut .string => pure ()
       | _ => throwCheck (.builtinWrongFirstArg "string_append" "&mut String as first argument" (tyToString strTy)) (some e.getSpan)
@@ -1775,7 +1783,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_append_int" 2) (some e.getSpan)
       let strArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let nArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let strTy ← checkExpr strArg
+      let strTy ← checkExpr strArg none .callArg
       match strTy with
       | .refMut .string => pure ()
       | _ => throwCheck (.builtinWrongFirstArg "string_append_int" "&mut String as first argument" (tyToString strTy)) (some e.getSpan)
@@ -1787,7 +1795,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_append_bool" 2) (some e.getSpan)
       let strArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let bArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let strTy ← checkExpr strArg
+      let strTy ← checkExpr strArg none .callArg
       match strTy with
       | .refMut .string => pure ()
       | _ => throwCheck (.builtinWrongFirstArg "string_append_bool" "&mut String as first argument" (tyToString strTy)) (some e.getSpan)
@@ -1799,7 +1807,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_reserve" 2) (some e.getSpan)
       let strArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let capArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let strTy ← checkExpr strArg
+      let strTy ← checkExpr strArg none .callArg
       match strTy with
       | .refMut .string => pure ()
       | _ => throwCheck (.builtinWrongFirstArg "string_reserve" "&mut String as first argument" (tyToString strTy)) (some e.getSpan)
@@ -1811,23 +1819,20 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != 2 then throwCheck (.builtinWrongArgCount "vec_push" 2) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let valArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
         | .refMut (.generic "Vec" [et]) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_push" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
       let valTy ← checkExpr valArg (some elemTy)
       expectTy elemTy valTy "vec_push() element argument" (some e.getSpan)
-      match valArg with
-      | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-      | _ => pure ()
       return .unit
     -- Intercept vec_get(&v, idx)
     if intrinsic == some .vecGet then
       if args.length != 2 then throwCheck (.builtinWrongArgCount "vec_get" 2) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let idxArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
         | .ref (.generic "Vec" [et]) => et
         | .refMut (.generic "Vec" [et]) => et
@@ -1842,7 +1847,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let idxArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
       let valArg := match args with | _ :: _ :: c :: _ => c | _ => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
         | .refMut (.generic "Vec" [et]) => et
         | _ => Ty.placeholder
@@ -1851,15 +1856,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       expectTy .int idxTy "vec_set() index argument" (some e.getSpan)
       let valTy ← checkExpr valArg (some elemTy)
       expectTy elemTy valTy "vec_set() value argument" (some e.getSpan)
-      match valArg with
-      | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-      | _ => pure ()
       return .unit
     -- Intercept vec_len(&v)
     if intrinsic == some .vecLen then
       if args.length != 1 then throwCheck (.builtinWrongArgCount "vec_len" 1) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let ok := match vecTy with
         | .ref (.generic "Vec" _) => true
         | .refMut (.generic "Vec" _) => true
@@ -1870,7 +1872,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if intrinsic == some .vecPop then
       if args.length != 1 then throwCheck (.builtinWrongArgCount "vec_pop" 1) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
         | .refMut (.generic "Vec" [et]) => et
         | _ => Ty.placeholder
@@ -1880,7 +1882,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if intrinsic == some .vecFree then
       if args.length != 1 then throwCheck (.builtinWrongArgCount "vec_free" 1) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
-      let vecTy ← checkExpr vecArg
+      let vecTy ← checkExpr vecArg none .callArg
       let ok := match vecTy with
         | .generic "Vec" _ => true
         | _ => false
@@ -1910,7 +1912,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         throwCheck (.wrongArgCount s!"function pointer '{fnName}'" paramTys.length args.length) (some e.getSpan)
       -- Check each argument type
       for (arg, pTy) in args.zip paramTys do
-        let argTy ← checkExpr arg (some pTy)
+        let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -2024,7 +2026,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
-        let argTy ← checkExpr arg (some pTy)
+        let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument '{pName}' of '{fnName}'" (some e.getSpan)
         -- If arg is a bare identifier of a linear type, consume it —
         -- but NOT if the parameter type is a reference (borrow, not move).
@@ -2047,7 +2049,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       -- sizeof intrinsic
       if intrinsic == some .sizeof || fnName.endsWith sizeofSuffix then return .uint
       else throwCheck (.undeclaredFunction fnName) (some e.getSpan)
-  | .paren _ inner => checkExpr inner hint asPlace
+  | .paren _ inner => checkExpr inner hint mode
   | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
@@ -2057,7 +2059,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       -- A `..base` functional-update source must itself be this struct type.
       match base with
       | some b =>
-        let bTy ← checkExpr b (some structTy)
+        -- `..base` reads Copy fields OUT of base (E0220 guards non-Copy);
+        -- base itself stays live — a place read, not a move.
+        let bTy ← checkExpr b (some structTy) .place
         expectTy structTy bTy s!"`..base` of struct '{name}'" (some e.getSpan)
       | none => pure ()
       for sf in sd.fields do
@@ -2066,10 +2070,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         | some (_, expr) =>
           let exprTy ← checkExpr expr (some fieldTy)
           expectTy fieldTy exprTy s!"field '{sf.name}' of struct '{name}'" (some e.getSpan)
-          -- Consume linear variables used as struct fields
-          match expr with
-          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-          | _ => pure ()
         | none =>
           -- A missing field is supplied by `..base` if present; otherwise it is a
           -- real omission (unions allow partial initialization).
@@ -2087,7 +2087,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
-    let objTy ← checkExpr obj none true
+    let objTy ← checkExpr obj none .place
     -- Prevent direct field access on Heap<T> — must use ->
     match objTy with
     | .heap _ => throwCheck (.heapAccessRequired field (tyToString objTy)) (some e.getSpan)
@@ -2120,7 +2120,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
           match obj with
           | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
           | _ =>
-            if !asPlace && !(← isCopyType innerFieldTy) then
+            if mode != .place && !(← isCopyType innerFieldTy) then
               throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}'") (some e.getSpan)
           return innerFieldTy
         else throwCheckMsg s!"newtype '{structName}' only supports .0 field access"
@@ -2135,7 +2135,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
           -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
           -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
           -- and destructuring the whole owner.
-          if !asPlace && !(← isCopyType fieldTy) then
+          if mode != .place && !(← isCopyType fieldTy) then
             throwCheck (.nonCopyProjection (tyToString fieldTy) s!"field '{field}' of '{structName}'") (some e.getSpan)
           return fieldTy
         | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
@@ -2158,10 +2158,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
           | some (_, expr) =>
             let exprTy ← checkExpr expr (some fieldTy)
             expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
-            -- Consume linear variables used as enum fields
-            match expr with
-            | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-            | _ => pure ()
           | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
         for (fn, _) in fields do
           match ev.fields.find? fun sf => sf.name == fn with
@@ -2186,10 +2182,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if enumName != "" then
       match ← lookupEnum enumName with
       | some ed =>
-        -- Consume scrutinee if it's a linear ident
-        match scrutinee with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-        | _ => pure ()
+        -- (scrutinee ident already moved by value-mode checkExpr)
         -- CoreCheck validates exhaustiveness, duplicates, field counts, wrong-enum
         -- Linearity across arms: snapshot env, check each arm, ensure all agree
         let envBefore ← getEnv
@@ -2251,10 +2244,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
           let armTy ← match body.getLast? with
             | some (.expr _ armExpr true) => do
               let ty ← checkExpr armExpr hint
-              -- Trailing expression is a value move — consume linear variables
-              match armExpr with
-              | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-              | _ => pure ()
               pure ty
             | some (.return_ rsp v) =>
               -- A `return` inside an arm consumes the returned value (and checks it
@@ -2353,10 +2342,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
             -- arm-local binding. Without consuming the original identifier here,
             -- `match h { y => free(y) } ; free(h);` aliases one linear handle
             -- through two names.
-            if !scrCopy then
-              match scrutinee with
-              | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-              | _ => pure ()
+            -- (scrutinee ident already moved by value-mode checkExpr)
             addVar binding bindTy
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
@@ -2380,10 +2366,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         let armTy ← match body.getLast? with
           | some (.expr _ armExpr true) => do
             let ty ← checkExpr armExpr hint
-            -- Trailing expression is a value move — consume linear variables
-            match armExpr with
-            | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-            | _ => pure ()
             pure ty
           | some (.return_ rsp v) =>
             checkStmt (.return_ rsp v) envBefore.currentRetTy
@@ -2443,7 +2425,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       | none => setEnv envBefore
       return matchResultTy
   | .borrow _ inner =>
-    let innerTy ← checkExpr inner none true
+    let innerTy ← checkExpr inner none .place
     -- Check the variable is not moved or already mutably borrowed
     match inner with
     | .ident _ varName =>
@@ -2459,7 +2441,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     | _ => pure ()
     return .ref innerTy
   | .borrowMut _ inner =>
-    let innerTy ← checkExpr inner none true
+    let innerTy ← checkExpr inner none .place
     match inner with
     | .ident _ varName =>
       match ← lookupVarInfo varName with
@@ -2476,7 +2458,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     | _ => pure ()
     return .refMut innerTy
   | .deref _ inner =>
-    let innerTy ← checkExpr inner
+    -- Reading THROUGH a ref/ptr does not consume the binding (place read);
+    -- only the Heap load-and-free below consumes.
+    let innerTy ← checkExpr inner none .place
     match innerTy with
     | .ref t => return t
     | .refMut t => return t
@@ -2493,10 +2477,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     | _ => throwCheck .cannotDerefNonRef (some e.getSpan)
   | .try_ _ inner =>
     let innerTy ← checkExpr inner
-    -- Consume the inner expression if it's a variable
-    match inner with
-    | .ident _ name => consumeVar name (some e.getSpan)
-    | _ => pure ()
     let (enumName, typeArgs) := match innerTy with
       | .named n => (n, ([] : List Ty))
       | .generic n args => (n, args)
@@ -2529,18 +2509,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         | some (.array t _) => some t
         | _ => none
       let firstTy ← checkExpr first elemHint
-      -- An array literal MOVES each element into the array: consume a linear ident
-      -- element so `[a, b]` cannot duplicate `a`/`b`. Without this the elements stay
-      -- live and could be consumed a second time while the array also owns them
-      -- (a double-free / linearity-duplication soundness hole).
-      match first with | .ident _ n => consumeVarIfExists n (some first.getSpan) | _ => pure ()
+      -- value mode moves each element in (H10) — auto-consumed at checkExpr
       for e in rest do
         let eTy ← checkExpr e (some firstTy)
         expectTy firstTy eTy "array element" (some e.getSpan)
-        match e with | .ident _ n => consumeVarIfExists n (some e.getSpan) | _ => pure ()
       return .array firstTy elems.length
   | .arrayIndex _ arr index =>
-    let arrTy ← checkExpr arr none true
+    let arrTy ← checkExpr arr none .place
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type. Resolve the element type
     -- through a reference/pointer to the array (`&[T;N]`, `&mut [T;N]`, raw ptr,
@@ -2557,19 +2532,21 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       -- H11: a by-value read of a non-Copy element duplicates it (the array
       -- still owns the same value). `&arr[i]`, Copy elements, `arr[i].f`
       -- projection bases, and `arr[i] = v` stay legal.
-      if !asPlace && !(← isCopyType elemTy) then
+      if mode != .place && !(← isCopyType elemTy) then
         throwCheck (.nonCopyProjection (tyToString elemTy) "array element") (some e.getSpan)
       return elemTy
     | none => return .placeholder
   | .cast _ inner targetTy =>
-    let _innerTy ← checkExpr inner
+    -- Legal cast operands are numeric (Copy): nothing to consume. Place mode
+    -- so an ILLEGAL `s as Int` reports "cannot cast", not a consume error.
+    let _innerTy ← checkExpr inner none .place
     -- CoreCheck validates cast legality and capability requirements
     return targetTy
   | .methodCall _ obj methodName typeArgs args =>
     -- The receiver is a place: `w.f.method()` auto-borrows for `&self` /
     -- `&mut self`. A by-value `self` on a projection receiver is re-checked
     -- below once the signature is known.
-    let objTy ← checkExpr obj none true
+    let objTy ← checkExpr obj none .place
     let innerTy := match objTy with
       | .ref t => t
       | .refMut t => t
@@ -2601,7 +2578,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
           if args.length != params.length then
             throwCheck (.wrongArgCount s!"method '{methodName}'" params.length args.length) (some e.getSpan)
           for (arg, p) in args.zip params do
-            let argTy ← checkExpr arg (some p.ty)
+            let argTy ← checkExpr arg (some p.ty) .callArg
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match arg with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -2627,7 +2604,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != methodParams.length then
         throwCheck (.wrongArgCount s!"method '{methodName}'" methodParams.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip methodParams do
-        let argTy ← checkExpr arg (some pTy)
+        let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -2685,7 +2662,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"static method '{methodName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
-        let argTy ← checkExpr arg (some pTy)
+        let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -2744,15 +2721,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         modify fun env =>
           { env with vars := env.vars.map fun (n, info) =>
               if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-      | .ident _ sourceName =>
-        -- Move-through-let: `let g = f;` over a linear `f` MOVES it — `f` is
-        -- consumed and ownership transfers to `g`. Without this, `f` stayed
-        -- live (usable after the move, and counted as unconsumed at scope exit),
-        -- which both allowed use-after-move and made the per-block linearity
-        -- check below false-positive on `let local = payload;` (KNOWN_HOLES H9).
-        -- consumeVar is a no-op for Copy sources (incl. `&T`), so a reborrow of
-        -- an immutable reference does not move.
-        consumeVarIfExists sourceName (some stmt.getSpan)
       | _ => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
@@ -2775,18 +2743,17 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- restores the binding within the same statement).
       let envPre ← getEnv
       setEnv { envPre with rebindingVar := some name }
-      let valTy ← checkExpr value (some info.ty)
+      -- Self-assign `a = a` checks the RHS as a PLACE: auto-consuming `a`
+      -- would re-arm the binding and legalize the no-op; the rebind rule
+      -- below must still see the OLD value live (E0219). Any other RHS is a
+      -- plain value move (H13) — auto-consumed at checkExpr.
+      let selfAssign := match value with
+        | .ident _ vn => vn == name
+        | _ => false
+      let valTy ← checkExpr value (some info.ty) (if selfAssign then .place else .value)
       let envPost ← getEnv
       setEnv { envPost with rebindingVar := envPre.rebindingVar }
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
-      -- H13: `a = b` MOVES an ident RHS into the binding — consume it exactly
-      -- like `let g = b;` / `return b;` / `arr[i] = b;` do. (Self-assign
-      -- `a = a` is excluded: the rebind rule below handles it — the RHS
-      -- consume of `a` itself is what makes a rebind legal.)
-      match value with
-      | .ident _ vn =>
-        if vn != name then consumeVarIfExists vn (some stmt.getSpan)
-      | _ => pure ()
       -- Linear REBIND rule: a linear variable may be reassigned only once its
       -- OLD value has been consumed (one binding, one LIVE resource) — the
       -- fold/accumulate pattern `acc = f(acc, x)` requires it. Overwriting a
@@ -2816,10 +2783,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
     let valTy ← checkExpr value (some retTy)
     expectTy retTy valTy "return value" (some stmt.getSpan)
-    -- Returning a linear variable consumes it
-    match value with
-    | .ident _ varName => consumeVar varName (some stmt.getSpan)
-    | _ => pure ()
   | .return_ _ none =>
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
   | .expr _ e isValue =>
@@ -2950,7 +2913,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       if env.borrowRefs.contains vn then
         throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
     | _ => pure ()
-    let objTy ← checkExpr obj none true
+    let objTy ← checkExpr obj none .place
     -- Auto-deref through references
     let innerTy := match objTy with
       | .ref t => t
@@ -2984,7 +2947,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
   | .derefAssign _ target value =>
-    let targetTy ← checkExpr target
+    let targetTy ← checkExpr target none .place
     match targetTy with
     | .refMut inner =>
       -- H15: `*r = v` through `&mut T` overwrites an INITIALIZED value — a
@@ -2999,14 +2962,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let valTy ← checkExpr value (some inner)
       expectTy inner valTy "deref assignment" (some stmt.getSpan)
     | _ => pure ()  -- CoreCheck validates deref-assign target type
-    -- Conservation: `*p = v` MOVES a linear `v` into the slot (this is how
-    -- trusted collection code stores owned values through *mut V). Without
-    -- the consume, the stored value stayed live and was re-flagged E0208.
-    match value with
-    | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
-    | _ => pure ()
+    -- Conservation: `*p = v` MOVES a linear `v` into the slot — the ident
+    -- move happens in value-mode checkExpr (auto-consume).
   | .arrayIndexAssign _ arr index value =>
-    let arrTy ← checkExpr arr none true
+    let arrTy ← checkExpr arr none .place
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type
     match arrTy with
@@ -3018,10 +2977,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let valTy ← checkExpr value (some elemTy)
       expectTy elemTy valTy "array element assignment" (some stmt.getSpan)
     | _ => let _ ← checkExpr value; pure ()
-    -- Conservation: `arr[i] = v` moves a linear `v` in, same as above.
-    match value with
-    | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
-    | _ => pure ()
+    -- Conservation: `arr[i] = v` moves a linear `v` in — value-mode
+    -- checkExpr auto-consumes the ident.
   | .defer _ body =>
     -- Verify body is a call expression
     match body with
@@ -3104,7 +3061,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
   | .arrowAssign _ obj field value =>
-    let objTy ← checkExpr obj none true
+    let objTy ← checkExpr obj none .place
     let innerTy := match objTy with
       | .heap t => t
       | .heapArray t => t
@@ -3136,14 +3093,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- consumption.
     match value with
     | some expr =>
+      -- H14: breaking with a linear ident MOVES it out as the loop result —
+      -- value-mode checkExpr auto-consumes it. `breakConsumeExempt` grants
+      -- the one-level loop-depth exemption (a break fires at most once per
+      -- loop entry); restore the flag right after.
+      let envB ← getEnv
+      setEnv { envB with breakConsumeExempt := true }
       let valTy ← checkExpr expr
-      -- H14: breaking with a linear ident MOVES it out as the loop result
-      -- (mirror `return f;`). A value declared immediately outside the broken
-      -- loop is exempt from the loop-depth rule (breakDepthExempt := 1): the
-      -- break exits that loop, so at most one consume per entry.
-      match expr with
-      | .ident _ varName => consumeVar varName (some stmt.getSpan) (breakDepthExempt := 1)
-      | _ => pure ()
+      modify fun envA => { envA with breakConsumeExempt := envB.breakConsumeExempt }
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
@@ -3184,10 +3141,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- — field access doesn't move, so the temp would leak). Elab expands it to the
     -- temp+field form for codegen, past this checker. See docs/OWNERSHIP_MODEL.md.
     let valTy ← checkExpr value (some (.named structName))
-    -- The destructure moves the source, so consume it if it is a linear binding.
-    match value with
-    | .ident _ srcName => consumeVarIfExists srcName (some stmt.getSpan)
-    | _ => pure ()
+    -- The destructure moves the source — value-mode checkExpr auto-consumes.
     -- Resolve any generic type arguments so field types are concrete.
     let typeArgs := match ← resolveType valTy with
       | .generic _ args => args

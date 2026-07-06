@@ -65,6 +65,31 @@ check_inductive Expr
 check_inductive MatchArm
 check_inductive Stmt
 
+echo "=== checkExpr modes: every Expr constructor has a row in the modes table ==="
+# The Expression-modes section must also cover every Expr constructor.
+MODES_SECTION="$(awk '/^## Expression modes/{grab=1} grab{print} /^## Change discipline/{grab=0}' "$SPEC")"
+missing=0
+while IFS= read -r c; do
+  if ! grep -q "\`$c\`" <<<"$MODES_SECTION"; then
+    no "Expr.$c has no row in the Expression-modes table (which UseMode does what?)"
+    missing=1
+  fi
+done <<< "$(constructors Expr)"
+[ "$missing" -eq 0 ] && ok "Expr: all constructors covered in the modes table"
+
+echo "=== callArg is CONFINED to call/method/static-call argument checking ==="
+# Pin the use-site count: callArg exists ONLY because arguments are checked
+# against parameter types. A new use must be a conscious decision (update the
+# pin + the spec), never a convenience escape — that would recreate the
+# forgot-to-consume bug class (H13/H14).
+CALLARG_PIN=18
+CALLARG_ACTUAL="$(grep -c '\.callArg' Concrete/Check.lean)"
+if [ "$CALLARG_ACTUAL" -eq "$CALLARG_PIN" ]; then
+  ok "callArg use-site count matches the pin ($CALLARG_PIN)"
+else
+  no "callArg use-site count drifted: $CALLARG_ACTUAL (pin: $CALLARG_PIN) — if intentional, justify the new site in docs/VALUE_FLOW_SPEC.md and update the pin"
+fi
+
 echo ""
 echo "VALUE-FLOW-SPEC: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -86,6 +86,32 @@ params are borrows (exempt); `&T` params are Copy. See
 | `letDestructure` | enum destructure / let-else: **consumes** the source; bindings OWN payloads; let-else over a non-Copy enum **rejects** (**E0288** — the no-match path would discard it) | conservation + discard |
 | `letStructDestructure` | whole-owner **move**: source consumed, ALL fields must be bound (partial is **E0252**), each binding OWNED (must be consumed) | conservation |
 
+## Expression modes (checkExpr `UseMode`)
+
+Since the 2026-07-06 refactor, consumption is decided centrally in
+`checkExpr` by mode, not per AST handler. Every `Expr` constructor must say
+what each mode means for it (this section is gate-checked like the tables
+above). `callArg` is CONFINED to call/method/static-call argument checking —
+the gate pins its use-site count so a new use is a conscious decision, not an
+escape hatch.
+
+| constructor | value | callArg | place |
+|---|---|---|---|
+| `intLit` `floatLit` `boolLit` `strLit` `charLit` | creates | same as value | n/a (not addressable) |
+| `ident` | **moves** non-Copy (auto-consume; frozen check for all) | reads; site consumes per PARAM type | reads; no consume |
+| `binOp` `unaryOp` `cast` | reads Copy operands (cast operand is checked as place so illegal casts report "cannot cast") | same | n/a |
+| `call` `methodCall` `staticMethodCall` | result is an owned value; ARGS are checked in callArg | n/a (a call result is a value) | n/a |
+| `paren` | transparent — propagates the surrounding mode | transparent | transparent |
+| `structLit` `enumLit` `arrayLit` | fields/elements checked in value (moved in); `..base` checked as place | same | n/a |
+| `fieldAccess` `arrayIndex` | Copy read copies; non-Copy read rejects E0290; base checked as place | same as value | sub-place; no flow |
+| `arrowAccess` | heap-interior read (excluded from H11, trusted boundary) | same | sub-place |
+| `match_` `ifExpr` `whileExpr` | scrutinee/arm values in value mode; branch envs merged | n/a | n/a |
+| `borrow` `borrowMut` | inner checked as place; result &T Copy / &mut exclusive | same | n/a |
+| `deref` | inner checked as place (reading THROUGH a ref/ptr never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
+| `try_` | operand in value mode (moved) | n/a | n/a |
+| `fnRef` | creates a Copy fn-pointer | same | n/a |
+| `allocCall` | inner/allocator checked; owned Heap result | n/a | n/a |
+
 ## Change discipline
 
 Adding a constructor to `Expr`/`MatchArm`/`Stmt` fails

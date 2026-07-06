@@ -41,6 +41,21 @@ first run found a real checker bug: if-EXPRESSION arms shared one env, so
 `if c { v } else { v }` was a spurious E0205 — ifExpr now mirrors the
 statement branch-merge machinery.
 
+### Mode-based expression checking (2026-07-06)
+
+The structural fix behind the whole H13–H17 family: `checkExpr` now takes a
+`UseMode` (`value` / `callArg` / `place`) and VALUE-POSITION IDENT READS
+AUTO-CONSUME in one place — ~25 scattered per-handler "remember to consume
+the ident" blocks were deleted. `callArg` (arguments only: consumption is
+parameter-type-directed — `&T` never, `&mut T` only borrow-block refs, owned
+always) is pinned to its 18 use sites by the value-flow gate so it can never
+become a general escape hatch; `place` covers projection bases, borrow and
+assignment targets, `..base`, and deref inners. Forgetting a mode on new
+syntax now OVER-REJECTS instead of silently leaking — the
+forgot-to-consume-in-one-AST-handler bug class is structurally closed.
+Verified by the linearity fuzzer (2,400 cases, 6 seeds), the linearity gate
+trio, and the full suite.
+
 ### Conditional Copy for generic instantiations (2026-07-05)
 
 `Option<T>` / `Result<T, E>` / `struct Copy Box<T>` are now Copy **iff** every

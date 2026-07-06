@@ -565,16 +565,23 @@ the active list is pull-condition-gated or polish.
    machinery. Keep adding shapes here before adding syntax that moves,
    borrows, overwrites, or exits with linear values.
 
-13g. **Refactor expression checking to explicit modes.** Generalize the H11
-   `asPlace` patch into `checkExpr` modes: `value`, `place`, and `borrow`.
-   Value mode is the default and consumes non-`Copy` identifiers/places
-   automatically; `place` and `borrow` are the explicit non-consuming
-   exceptions used for projection bases, assignment targets, borrow targets,
-   and auto-borrowed receivers. The goal is fail-closed checker evolution:
-   forgetting a mode on new syntax over-rejects visibly instead of silently
-   leaking or duplicating ownership. Do this after 13c/13f are green, with
-   `fuzz_linearity.py`, the three linearity gates, examples, and `test-ci-gates`
-   as the safety net.
+13g. ✅ **DONE (2026-07-06) — expression checking refactored to explicit
+   modes.** `checkExpr` takes `UseMode`: `value` (default — a value-position
+   ident read AUTO-CONSUMES a non-Copy binding, in ONE place; the frozen
+   check applies to Copy reads too), `callArg` (arguments only — H11 rules
+   apply but consumption is PARAMETER-TYPE-directed at the site: `&T` never,
+   `&mut T` only borrow-block refs, owned always; its 18 use sites are
+   PINNED by `check_value_flow_spec.sh` so it cannot become an escape
+   hatch), and `place` (projection bases, borrow/assignment targets,
+   `..base`, deref inners — reading THROUGH a ref never consumes the
+   binding). ~25 scattered per-handler consume blocks deleted. Kept-explicit
+   exceptions: newtype `.0` whole-owner move, by-value `self` receivers,
+   `break f;` depth-exempt consume (transient env flag), `a = a` self-assign
+   (checked as place so E0219 holds), `*heap` load-and-free. The spec gained
+   a per-constructor Expression-modes table, gate-checked. Verified: fuzzer
+   2,400 cases/6 seeds, linearity trio, full suite 1585/0, examples,
+   goldens, SSA, differential, `test-ci-gates`. Forgetting a mode on new
+   syntax now over-rejects visibly instead of silently leaking.
 
 13h. **Centralize ownership-transfer and overwrite policy helpers.** Delete
    scattered per-AST `if ident then consumeVarIfExists` logic in favor of one
