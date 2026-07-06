@@ -22,7 +22,8 @@ fn show_point<T: Describe>(x: Int, y: Int) -> Int {
 }
 
 fn consume_point(p: Point) -> Int {
-    return p.x;
+    let Point { x, y } = p;
+    return x;
 }
 
 fn main() -> Int {

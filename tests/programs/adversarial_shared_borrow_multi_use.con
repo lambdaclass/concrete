@@ -18,7 +18,8 @@ fn sum_fields(d: &Data) -> Int {
 }
 
 fn consume_data(d: Data) -> Int {
-    return d.x + d.y;
+    let Data { x, y } = d;
+    return x + y;
 }
 
 fn shared_ref_multiple_calls() -> Int {

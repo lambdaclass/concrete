@@ -31,12 +31,12 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 HDR='mod m {
   struct File { fd: i32 }
-  impl Destroy for File { fn destroy(self) { } }
+  impl Destroy for File { fn destroy(self) { let File { fd } = self; } }
   struct Copy ViewPair { a: i32, b: i32 }
   enum Res { Has { f: File }, Empty {} }
   fn make() -> File { return File { fd: 3 }; }
   fn openr() -> Res { return Res::Has { f: File { fd: 3 } }; }
-  fn sink(f: File) -> Int { return f.fd as Int; }
+  fn sink(f: File) -> Int { let File { fd } = f; return fd as Int; }
   fn peek(f: &File) -> Int { return f.fd as Int; }'
 
 reject(){ printf '%s\n  %s\n}' "$HDR" "$3" > "$TMP/t.con"

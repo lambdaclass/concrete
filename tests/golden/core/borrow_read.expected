@@ -19,7 +19,10 @@ fn read_a(p: &Pair) -> Int {
 }
 
 fn consume(p: Pair) -> Int {
-  return p.a;
+  let __destr_Pair: Pair = p;
+  let a: Int = __destr_Pair.a;
+  let b: Int = __destr_Pair.b;
+  return a;
 }
 
 fn main() -> Int {

@@ -5,9 +5,12 @@ struct A { val: Int }
 struct B { val: Int }
 struct C { val: Int }
 
-fn close_a(a: A) -> Int { return a.val; }
-fn close_b(b: B) -> Int { return b.val; }
-fn close_c(c: C) -> Int { return c.val; }
+fn close_a(a: A) -> Int {
+    let A { val } = a; return val; }
+fn close_b(b: B) -> Int {
+    let B { val } = b; return val; }
+fn close_c(c: C) -> Int {
+    let C { val } = c; return val; }
 
 fn triple_defer() -> Int {
     let a: A = A { val: 1 };

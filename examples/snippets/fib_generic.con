@@ -1,5 +1,5 @@
 mod fib {
-     pub fn fib<T>(n: T) -> T {
+     pub fn fib<T: Copy>(n: T) -> T {
         if n < 2 {
             return n;
         }

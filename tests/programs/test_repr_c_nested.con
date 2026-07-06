@@ -1,6 +1,6 @@
 // Test: nested #[repr(C)] struct layout
 #[repr(C)]
-struct Inner {
+struct Copy Inner {
     a: i32,
     b: i32,
 }
@@ -13,7 +13,8 @@ struct Outer {
 }
 
 fn sum_outer(o: Outer) -> Int {
-    return (o.x + o.inner.a + o.inner.b + o.y) as Int;
+    let Outer { x, inner, y } = o;
+    return (x + inner.a + inner.b + y) as Int;
 }
 
 fn main() -> Int {

@@ -5,7 +5,8 @@ struct Resource {
 }
 
 fn consume_resource(r: Resource) -> Int {
-    return r.id;
+    let Resource { id } = r;
+    return id;
 }
 
 // Both branches must agree on consumption

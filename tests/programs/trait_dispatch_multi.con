@@ -18,7 +18,7 @@ impl Measure for Circle {
     }
 }
 
-fn get_measure<T: Measure>(x: T) -> Int {
+fn get_measure<T: Measure + Copy>(x: T) -> Int {
     return x.measure();
 }
 

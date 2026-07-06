@@ -5,11 +5,14 @@ struct Inner { x: Int }
 struct Outer { inner: Inner, tag: Int }
 
 fn consume_inner(i: Inner) -> Int {
-    return i.x;
+    let Inner { x } = i;
+    return x;
 }
 
 fn consume_outer(o: Outer) -> Int {
-    return o.tag;
+    let Outer { inner, tag } = o;
+    let Inner { x } = inner;
+    return tag;
 }
 
 fn main() -> Int {

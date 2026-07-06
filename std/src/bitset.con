@@ -156,8 +156,9 @@ mod bitset {
         }
 
         pub fn drop(self) with(Alloc) {
-            if self.cap_words > 0 {
-                dealloc::<u64>(self.data);
+            let BitSet { data, n_bits, cap_words } = self;
+            if cap_words > 0 {
+                dealloc::<u64>(data);
             }
         }
     }

@@ -4,7 +4,8 @@
 struct Res { val: Int }
 
 fn consume(r: Res) -> Int {
-    return r.val;
+    let Res { val } = r;
+    return val;
 }
 
 fn main() -> Int {

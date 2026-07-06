@@ -19,8 +19,10 @@ impl Clone for Box {
 // T inferred from &T argument, no explicit type args.
 fn id<T>(x: &T) -> i64 { return 0; }
 
-// T inferred from &mut T; writes through the mutable reference.
-fn set<T>(x: &mut T, v: T) -> i64 { *x = v; return 0; }
+// T inferred from &mut T; writes through the mutable reference. T: Copy —
+// overwriting a LINEAR pointee through &mut would leak the old value
+// (E0291/H15), so generic write-through requires a Copy bound.
+fn set<T: Copy>(x: &mut T, v: T) -> i64 { *x = v; return 0; }
 
 // Trait-bound generic dispatched through a reference.
 fn dup<T: Clone>(x: &T) -> T { return x.clone(); }

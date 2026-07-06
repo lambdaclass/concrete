@@ -7,7 +7,8 @@ impl Point {
 }
 
 fn consume_point(p: Point) -> Int {
-    return p.x;
+    let Point { x, y } = p;
+    return x;
 }
 
 fn main() -> Int {

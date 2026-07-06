@@ -158,7 +158,7 @@ fn sum_numbers(input: &String, tokens: &Vec<Int>) -> Int {
 }
 
 // Use trait dispatch for span measurement
-fn measure_span<T: HasLength>(s: T) -> Int {
+fn measure_span<T: HasLength + Copy>(s: T) -> Int {
     return s.length();
 }
 

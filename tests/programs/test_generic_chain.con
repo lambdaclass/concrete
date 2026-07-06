@@ -11,11 +11,11 @@ impl Transform for Val {
     }
 }
 
-fn transform<T: Transform>(t: T) -> Int {
+fn transform<T: Transform + Copy>(t: T) -> Int {
     return t.get();
 }
 
-fn apply<T: Transform>(x: T) -> Int {
+fn apply<T: Transform + Copy>(x: T) -> Int {
     return transform(x);
 }
 

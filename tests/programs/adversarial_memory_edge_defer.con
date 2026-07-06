@@ -5,7 +5,8 @@ struct Handle {
 }
 
 fn close_handle(h: Handle) -> Int {
-    return h.fd;
+    let Handle { fd } = h;
+    return fd;
 }
 
 // defer reserves the variable — can read but not move

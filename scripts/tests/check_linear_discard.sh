@@ -30,17 +30,16 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 HDR='mod m {
   struct Token { x: i32 }
   struct File { fd: i32 }
-  impl Destroy for File { fn destroy(self) { } }
+  impl Destroy for File { fn destroy(self) { let File { fd } = self; } }
   struct Wrap { f: File }
   struct Pair { f: File, g: File }
   enum Data { A { v: i32 }, B {} }
   enum Res { Has { f: File }, Empty {} }
   fn make() -> Token { return Token { x: 1 }; }
-  fn sink(t: Token) -> Int { return t.x as Int; }
+  fn sink(t: Token) -> Int { let Token { x } = t; return x as Int; }
   fn make_file(n: i32) -> File { return File { fd: n }; }
   fn make_wrap() -> Wrap { return Wrap { f: make_file(1) }; }
   fn sink_file(f: File) -> Int { destroy(f); return 0; }
-  fn sink_arr(a: [File; 2]) -> Int { return (a[0].fd + a[1].fd) as Int; }
   fn maybe() -> Option<i32> { return Option::<i32>::None {}; }
   fn boxed() with(Alloc) -> Heap<Token> { return alloc(Token { x: 1 }); }
   fn openr() -> Res { return Res::Has { f: File { fd: 3 } }; }'
@@ -74,7 +73,7 @@ reject "value wildcard/Heap (non-enum non-Copy)" E0288 'fn main() with(Alloc) ->
 echo "=== non-enum value patterns move non-Copy scrutinees ==="
 reject "value pattern then original reuse" E0205 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } free(h); return 0; }'
 reject "value pattern binding unconsumed" E0208 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { } } return 0; }'
-reject "array literal then element reuse" E0205 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; destroy(a); destroy(b); return sink_arr(arr); }'
+reject "array literal then element reuse" E0205 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; destroy(a); destroy(b); return 0; }'
 reject "partial linear struct destructure" E0252 'fn main() -> Int { let p: Pair = Pair { f: make_file(1), g: make_file(2) }; let Pair { f } = p; return sink_file(f); }'
 
 echo "=== legitimate forms still compile ==="
@@ -83,18 +82,23 @@ accept "wildcard arm/Option<i32> (conditionally Copy)" 'fn main() -> Int { let o
 accept "wildcard payload (Copy field)"     'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
 accept "value pattern consumes Heap once" 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } return 0; }'
 accept "linear struct destructure moves field" 'fn main() -> Int { let w: Wrap = make_wrap(); let Wrap { f } = w; return sink_file(f); }'
-accept "array literal moves elements" 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; return sink_arr(arr); }'
+# H17 consequence: an owned [linear; N] cannot be discharged until array
+# destructure lands (KNOWN_HOLES H11 note) — asserts the honest E0208.
+reject "array of linears is undischargeable" E0208 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; return 0; }'
 accept "free(box)"          'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); free(b); return 0; }'
 accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return sink(t); }'
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'
 
-# KNOWN_HOLES H16/H17 (OPEN, disclosed 2026-07-05, fixes queued):
-#   H16 — same-scope shadowing (`let f = mk(); let f = mk();`) leaks the first
-#         binding (scope exit resolves locals by NAME, masking the older entry).
-#   H17 — linear params (incl. by-value `self`) carry no consume obligation
-#         (`fn drop_it(f: File) {}` is a silent-drop escape). RULED 2026-07-05:
-#         params are owned locals and must be consumed; H12-style burn-down.
-# Reject rows land with the fixes; repros in docs/KNOWN_HOLES.md.
+echo "=== H16: shadowing a still-live linear binding is rejected (would leak) ==="
+reject "let f=..; let f=..; (live shadow)" E0292 'fn main() -> Int { let f: File = make_file(1); let f: File = make_file(2); return sink_file(f); }'
+accept "let s = transform(s) (consumed first)" 'fn grow(f: File) -> File { return f; } fn main() -> Int { let f: File = make_file(1); let f: File = grow(f); return sink_file(f); }'
+
+echo "=== H17: params (incl. by-value self) are owned locals — must be consumed ==="
+reject "fn drop_it(f: File) {} (silent-drop escape)" E0208 'fn drop_it(f: File) -> Int { return 0; } fn main() -> Int { return drop_it(make_file(1)); }'
+reject "param read but never consumed"               E0208 'fn peek_leak(f: File) -> Int { return f.fd as Int; } fn main() -> Int { return peek_leak(make_file(1)); }'
+reject "by-value self silently dropped"              E0208 'fn main() -> Int { let f: File = make_file(1); return sink_file(f); } impl File { fn vanish(self) -> Int { return 0; } }'
+accept "param consumed via destructure"              'fn use_f(f: File) -> Int { let File { fd } = f; return fd as Int; } fn main() -> Int { return use_f(make_file(1)); }'
+accept "&self / &mut self borrows carry no obligation" 'impl File { fn get(&self) -> i32 { return self.fd; } fn bump(&mut self) { self.fd = self.fd + 1; } } fn main() -> Int { let mut f: File = make_file(1); let v: i32 = f.get(); f.bump(); return (v as Int) + sink_file(f); }'
 
 echo ""
 echo "LINEAR-DISCARD: PASS=$PASS  FAIL=$FAIL"

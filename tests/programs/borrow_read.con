@@ -1,7 +1,8 @@
 struct Point { x: Int, y: Int }
 
 fn read_x(p: &Point) -> Int { return p.x; }
-fn consume(p: Point) -> Int { return p.x; }
+fn consume(p: Point) -> Int {
+    let Point { x, y } = p; return x; }
 
 fn main() -> Int {
     let p: Point = Point { x: 10, y: 20 };

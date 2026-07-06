@@ -198,6 +198,15 @@ inductive CheckError where
   -- a non-Copy sub-place may be borrowed (`&w.f`), or the whole owner
   -- destructured; only a Copy sub-place may be read by value.
   | nonCopyProjection (tyName : String) (placeDesc : String)
+  -- H15: `arr[i] = v` / `*r = v` (through `&mut`) over a non-Copy target would
+  -- leak the OLD value (the E0219 rule, extended past field assignment).
+  -- Raw-pointer stores (`*mut`) stay exempt: they are the trusted collection
+  -- idiom for writing UNINITIALIZED slots.
+  | cannotOverwriteLinearPlace (desc : String) (tyName : String)
+  -- H16: `let f = …;` shadowing a still-live non-Copy binding would silently
+  -- drop the shadowed value (scope exit resolves names, so the older entry's
+  -- obligation vanished). Consume the old value first, or use another name.
+  | shadowsLiveLinear (name : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -290,11 +299,15 @@ def CheckError.message : CheckError → String
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
+  | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
+  | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
+  | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
+  | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
@@ -418,6 +431,8 @@ def CheckError.code : CheckError → String
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
   | .nonCopyProjection _ _ => "E0290"
+  | .cannotOverwriteLinearPlace _ _ => "E0291"
+  | .shadowsLiveLinear _ => "E0292"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -818,8 +833,13 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
       setEnv { env with vars := vars' }
 
 /-- Consume a linear variable (mark it as consumed).
-    Errors on use-after-move, or consuming an outer var inside a loop. -/
-def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
+    Errors on use-after-move, or consuming an outer var inside a loop.
+    `breakDepthExempt`: consuming via `break value;` exits the loop, so a value
+    declared IMMEDIATELY outside the broken loop is consumed at most once per
+    entry to that loop — pass 1 to relax the loop-depth rule by one level
+    (H14). Deeper outer values stay rejected: an enclosing loop could re-enter
+    the broken loop and re-consume. -/
+def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
   let env ← getEnv
   match env.vars.lookup name with
   | none => throwCheck (.undeclaredVariable name) span
@@ -842,7 +862,7 @@ def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
       -- inside a loop — except inside a branch that exits the function
       -- (`while … { if bad { s.drop(); return 1; } }`): the return-path rule
       -- then guarantees everything live is consumed, and no iteration follows.
-      if info.loopDepth < env.loopDepth && !env.inFnExitingBranch
+      if info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
           && env.rebindingVar != some name then
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
@@ -1174,17 +1194,29 @@ private partial def checkTraitBounds (bounds : List (String × List String)) (ma
   let env ← getEnv
   for (paramName, requiredTraits) in bounds do
     match mapping.lookup paramName with
-    | some concreteType =>
+    | some concreteType0 =>
+      -- A turbofish arg naming one of the CALLER's own type params arrives as
+      -- `.named "T"` — normalize to `.typeVar` so the caller's bounds are
+      -- consulted (`fib::<T>(n - 1)` inside `fn fib<T: Copy>` satisfies Copy).
+      let concreteType := match concreteType0 with
+        | .named n => if env.currentTypeParams.contains n then .typeVar n else concreteType0
+        | t => t
       for traitName in requiredTraits do
         if traitName == "Copy" then
           if !(← isCopyType concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ => n | _ => "<type>"
+            let tn := match concreteType with | .named n => n | .generic n _ => n | .typeVar n => n | _ => "<type>"
             throwCheck (.traitBoundNotSatisfied tn "Copy" context)
         else
           match concreteType with
           | .named tn | .generic tn _ =>
             if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
               throwCheck (.traitBoundNotSatisfied tn traitName context)
+          | .typeVar n =>
+            -- caller's own type param: satisfied if the caller declares the
+            -- same trait bound on it
+            let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
+            if !callerBounds.contains traitName then
+              throwCheck (.traitBoundNotSatisfied n traitName context)
           | _ => pure ()  -- primitive types, skip non-Copy bound checking
     | none => pure ()
 
@@ -1498,7 +1530,16 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
     if condTy != .bool then
       throwCheck (.ifCondNotBool (tyToString condTy)) (some e.getSpan)
     let env ← getEnv
+    -- BRANCH ISOLATION (found by the linearity fuzzer, 2026-07-06): the two
+    -- arms were checked SEQUENTIALLY against the same env, so
+    -- `if c { v } else { v }` — both arms moving the SAME var, which is the
+    -- agreement-correct form — was a spurious E0205 (the else-arm saw the
+    -- then-arm's consume). Mirror the `.ifElse` statement machinery:
+    -- snapshot, check each arm from the snapshot, then merge with agreement.
+    let envBefore ← getEnv
     -- Check then branch: all stmts except the last, then check last for its type
+    if blockExitsFunction then_ then
+      setEnv { envBefore with inFnExitingBranch := true }
     let thenInit := then_.dropLast
     checkStmts thenInit env.currentRetTy
     let thenTy ← match then_.getLast? with
@@ -1517,7 +1558,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
-    -- Check else branch
+    let envAfterThen ← getEnv
+    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating then_) (some e.getSpan)
+    -- Check else branch from the SNAPSHOT (not the then-arm's aftermath)
+    setEnv envBefore
+    if blockExitsFunction else_ then
+      setEnv { envBefore with inFnExitingBranch := true }
     let elseInit := else_.dropLast
     checkStmts elseInit env.currentRetTy
     let elseTy ← match else_.getLast? with
@@ -1535,6 +1581,19 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := f
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
+    let envAfterElse ← getEnv
+    checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating else_) (some e.getSpan)
+    if blockExitsFunction then_ then
+      checkReturnPathConsumed envBefore.vars envAfterThen.vars (some e.getSpan)
+    if blockExitsFunction else_ then
+      checkReturnPathConsumed envBefore.vars envAfterElse.vars (some e.getSpan)
+    -- Merge: fall-through arms must AGREE on consumption of outer linears.
+    mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars
+      (blockDiverges then_) (blockDiverges else_) (some e.getSpan)
+    -- Drop branch-locals; restore the exit flag.
+    let envM ← getEnv
+    setEnv { envM with vars := envM.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n),
+                       inFnExitingBranch := envBefore.inFnExitingBranch }
     -- Both branches must agree on type
     if thenTy != elseTy && thenTy != .never && elseTy != .never then
       throwCheck (.ifBranchTypeMismatch (tyToString thenTy) (tyToString elseTy)) (some e.getSpan)
@@ -2666,6 +2725,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     if name == "_" then
       throwCheck .letUnderscoreRemoved (some stmt.getSpan)
     else
+      -- H16: shadowing a still-LIVE non-Copy binding would silently drop the
+      -- shadowed value — scope exit resolves locals by name, so the older
+      -- entry's obligation vanishes behind the new one. Consume it first
+      -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
+      match ← lookupVarInfo name with
+      | some prev =>
+        if !prev.isCopy && prev.state != .consumed && prev.state != .reserved then
+          throwCheck (.shadowsLiveLinear name) (some stmt.getSpan)
+      | none => pure ()
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
       match value with
       | .borrow _ (.ident _ sourceName) =>
@@ -2711,6 +2779,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let envPost ← getEnv
       setEnv { envPost with rebindingVar := envPre.rebindingVar }
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
+      -- H13: `a = b` MOVES an ident RHS into the binding — consume it exactly
+      -- like `let g = b;` / `return b;` / `arr[i] = b;` do. (Self-assign
+      -- `a = a` is excluded: the rebind rule below handles it — the RHS
+      -- consume of `a` itself is what makes a rebind legal.)
+      match value with
+      | .ident _ vn =>
+        if vn != name then consumeVarIfExists vn (some stmt.getSpan)
+      | _ => pure ()
       -- Linear REBIND rule: a linear variable may be reassigned only once its
       -- OLD value has been consumed (one binding, one LIVE resource) — the
       -- fold/accumulate pattern `acc = f(acc, x)` requires it. Overwriting a
@@ -2911,6 +2987,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let targetTy ← checkExpr target
     match targetTy with
     | .refMut inner =>
+      -- H15: `*r = v` through `&mut T` overwrites an INITIALIZED value — a
+      -- non-Copy pointee would leak (the E0219 rule). Raw-pointer stores
+      -- (`*mut`, below) stay exempt: they are the trusted collection idiom
+      -- for writing uninitialized slots.
+      if !(← isCopyType inner) then
+        throwCheck (.cannotOverwriteLinearPlace "pointee (through &mut)" (tyToString inner)) (some stmt.getSpan)
       let valTy ← checkExpr value (some inner)
       expectTy inner valTy "deref assignment" (some stmt.getSpan)
     | .ptrMut inner =>
@@ -2929,6 +3011,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- CoreCheck validates index type and array type
     match arrTy with
     | .array elemTy _ =>
+      -- H15: overwriting a non-Copy element leaks the OLD value (arrays are
+      -- always fully initialized) — the E0219 field rule, applied to elements.
+      if !(← isCopyType elemTy) then
+        throwCheck (.cannotOverwriteLinearPlace "array element" (tyToString elemTy)) (some stmt.getSpan)
       let valTy ← checkExpr value (some elemTy)
       expectTy elemTy valTy "array element assignment" (some stmt.getSpan)
     | _ => let _ ← checkExpr value; pure ()
@@ -3045,14 +3131,19 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       if !env.loopLabels.contains l then
         throwCheck (.unknownLoopLabel l) (some stmt.getSpan)
     | none => pure ()
-    -- Check all linear variables declared in the loop body are consumed or reserved by defer
-    for (name, info) in env.vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
-        throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
-    -- Check break value if present (for while-as-expression)
+    -- Check break value if present (for while-as-expression) — BEFORE the
+    -- skip check, so `break f;` over a loop-local linear counts as its
+    -- consumption.
     match value with
     | some expr =>
       let valTy ← checkExpr expr
+      -- H14: breaking with a linear ident MOVES it out as the loop result
+      -- (mirror `return f;`). A value declared immediately outside the broken
+      -- loop is exempt from the loop-depth rule (breakDepthExempt := 1): the
+      -- break exits that loop, so at most one consume per entry.
+      match expr with
+      | .ident _ varName => consumeVar varName (some stmt.getSpan) (breakDepthExempt := 1)
+      | _ => pure ()
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
@@ -3060,6 +3151,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         if prevTy != valTy then
           throwCheck (.breakTypeMismatch (tyToString valTy) (tyToString prevTy)) (some stmt.getSpan)
     | none => pure ()
+    -- Check all linear variables declared in the loop body are consumed or reserved by defer
+    for (name, info) in (← getEnv).vars do
+      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
+        throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
     if env.loopDepth == 0 then
@@ -3233,28 +3328,29 @@ def checkFn (f : FnDef) : CheckM Unit := do
   if tyContainsRef retTy then
     throwCheckMsg s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" f.span
   modify fun env => { env with currentRetTy := retTy }
-  -- Add params to env. Linear params are "consumed" by being received.
-  let mut paramNames : List String := []
+  -- Add params to env. H17 (ruled 2026-07-05): params are OWNED LOCALS — the
+  -- caller moved the value in, so the callee holds its obligation and must
+  -- consume it like any other binding. (The old policy — "linear params are
+  -- consumed by being received" — made `fn drop_it(f: File) {}` a universal
+  -- silent-drop escape, enforced only for generic-typed untouched params.)
+  -- `&mut T` params are BORROWS: the caller owns the pointee, and the
+  -- reference itself is exclusive (non-Copy, can't be duplicated) but carries
+  -- no consume obligation — dropping a borrow releases it. Only OWNED params
+  -- take the obligation. (`&T` params are Copy and never tracked.)
+  let mut borrowedParams : List String := []
   for p in f.params do
     let paramTyRaw := resolveTypeParams p.ty f.typeParams
     let paramTy ← resolveType paramTyRaw
     addVar p.name paramTy true  -- params are always mutable for now
-    paramNames := paramNames ++ [p.name]
+    match paramTy with
+    | .refMut _ => borrowedParams := borrowedParams ++ [p.name]
+    | _ => pure ()
   -- Check body
   checkStmts f.body retTy
-  -- Check local bindings, plus generic by-value params whose linearity is otherwise erased.
+  -- Check local bindings AND owned params for the consume obligation.
   let envAfter ← getEnv
   let localVars := envAfter.vars.filter fun (name, _) =>
-    match envBefore.vars.lookup name with
-    | some _ => false
-    | none =>
-      if paramNames.contains name then
-        -- For params with generic types, only flag if completely untouched (.unconsumed).
-        -- .used is acceptable — the function used the parameter (borrowed, field-accessed, etc).
-        match envAfter.vars.lookup name with
-        | some info => tyContainsTypeVar info.ty && info.state == .unconsumed
-        | none => false
-      else true
+    (envBefore.vars.lookup name).isNone && !borrowedParams.contains name
   let localNames := localVars.map fun (name, _) => name
   -- H9: if the body never terminates (a server's `while true {…}` accept loop, an
   -- unconditional abort), its textual end is unreachable, so a still-live linear

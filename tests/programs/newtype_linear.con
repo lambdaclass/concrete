@@ -6,7 +6,8 @@ struct Data {
 newtype Wrapper = Data;
 
 fn consume(d: Data) -> Int {
-    return d.value;
+    let Data { value } = d;
+    return value;
 }
 
 fn main() -> Int {

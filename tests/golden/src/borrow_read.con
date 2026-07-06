@@ -4,7 +4,8 @@ fn read_a(p: &Pair) -> Int {
     return p.a;
 }
 
-fn consume(p: Pair) -> Int { return p.a; }
+fn consume(p: Pair) -> Int {
+    let Pair { a, b } = p; return a; }
 
 fn main() -> Int {
     let p: Pair = Pair { a: 10, b: 20 };

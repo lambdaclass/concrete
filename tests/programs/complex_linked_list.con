@@ -19,7 +19,8 @@ fn make_pair(x: Int, y: Int) -> Pair {
 }
 
 fn sum_pair(p: Pair) -> Int {
-    return p.first + p.second;
+    let Pair { first, second } = p;
+    return first + second;
 }
 
 fn main() -> Int {

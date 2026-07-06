@@ -11,11 +11,11 @@ impl Summable for Pair {
     }
 }
 
-fn get_total<T: Summable>(x: T) -> Int {
+fn get_total<T: Summable + Copy>(x: T) -> Int {
     return x.total();
 }
 
-fn double_total<T: Summable>(x: T) -> Int {
+fn double_total<T: Summable + Copy>(x: T) -> Int {
     let t: Int = get_total(x);
     return t * 2;
 }

@@ -10,6 +10,37 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H13–H17 CLOSED: the value-flow discharge sweep (2026-07-06)
+
+Re-running the H11 audit over every *discharge* site found five more holes —
+two duplications (`a = b` rebind and `break f;` never consumed the moved
+value) and three leaks (`arr[i] = v` / `*r = v` through `&mut` dropped the
+overwritten value; same-scope shadowing dropped the shadowed binding; linear
+params including by-value `self` had NO consume obligation — `fn drop_it(f:
+File) {}` was a universal silent-drop escape). All disclosed first, then
+fixed: rebind/break consume (E0205 on reuse), non-Copy overwrite rejects
+(**E0291**), live-linear shadowing rejects (**E0292**), and — the big ruling —
+**params are owned locals and must be consumed** (`&mut T` params are borrows
+and exempt; no terminal parameter sinks, including `Destroy` impl bodies).
+The burn-down covered 16 std sites, ~95 fixtures, and 3 examples, and
+surfaced two real by-products: **`Vec::swap_remove`** (std lacked the
+linear-safe O(1) removal — `examples/kvstore` was hand-rolling it with a
+leak and a forget-escape) and a **`checkTraitBounds` fix** (a caller's own
+type param as a turbofish argument failed its own Copy bound, and non-Copy
+trait bounds on type-var arguments were silently skipped). An owned
+`[linear; N]` is now a disclosed expressiveness gap that fails closed
+(E0208) until array destructure patterns land.
+
+The prevention program landed with it: `docs/VALUE_FLOW_SPEC.md` (a
+normative value-flow row for every AST constructor) enforced by
+`check_value_flow_spec.sh` in CI (a new constructor fails until it declares
+its flow), and `scripts/tests/fuzz_linearity.py` — a ground-truth
+conservation fuzzer (consume-once must compile; leak/dup/shadow/param-sink
+must reject) running as a CI smoke and a nightly rotating campaign. Its
+first run found a real checker bug: if-EXPRESSION arms shared one env, so
+`if c { v } else { v }` was a spurious E0205 — ifExpr now mirrors the
+statement branch-merge machinery.
+
 ### Conditional Copy for generic instantiations (2026-07-05)
 
 `Option<T>` / `Result<T, E>` / `struct Copy Box<T>` are now Copy **iff** every

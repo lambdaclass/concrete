@@ -19,99 +19,72 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**Five open holes (H13–H17), all found by the 2026-07-05 post-H11 value-flow
-probe sweep** — the read-side audit that closed H11 was re-run over every
-*write/discharge* site. Two are duplications (double-free class), three are
-leaks (silent-drop class). Fixes for H13–H16 are immediate next work; H17 has
-a recorded design ruling and a larger burn-down.
-
-### H13. Plain rebind `a = b` does not consume the RHS — OPEN 2026-07-05 (duplication)
-
-The assignment handler enforces the rebind rule on the LHS (the OLD value must
-be consumed, else E0219) and re-arms the binding, but never consumes an
-**ident RHS** — every other move site (`let g = b`, call arguments, `return b`,
-`*p = b`, `arr[i] = b`) does. So the same linear value ends up owned by both
-names:
-
-```concrete
-let mut a: File = mk(); sink(a);
-let b: File = mk();
-a = b;                    // b moved into a…
-sink(b); sink(a);         // …but both still consumable -> double-free. Compiles today.
-```
-
-**Gate:** noted as the H13 gap in `check_linear_conservation.sh`; reject rows
-land with the fix. **Fix:** consume an ident RHS in the `.assign` case,
-exactly as `.letDecl` does.
-
-### H14. `break value;` does not consume an ident value — OPEN 2026-07-05 (duplication)
-
-A break-with-value moves the value out as the loop expression's result, but
-the ident is never consumed — the loop result and the original both own it:
-
-```concrete
-let f: File = mk();
-let g: File = while true { break f; } else { mk() };
-sink(g); sink(f);         // same File consumed twice. Compiles today.
-```
-
-**Gate:** noted as the H14 gap in `check_linear_conservation.sh`; reject rows
-land with the fix. **Fix:** consume an ident break-value in the `.break_` case
-(mirroring `.return_`).
-
-### H15. Non-Copy overwrite through `arr[i] = v` and `*r = v` (`&mut`) leaks the old value — OPEN 2026-07-05 (leak)
-
-Field assignment over a non-Copy field is rejected (E0219: overwrite would
-leak the old value), but its two siblings are unguarded: `arr[i] = v` over a
-non-Copy element and `*r = v` through a `&mut` reference both drop the OLD
-value silently (the 2026-07-02 stores-consume fix consumed the RHS but nobody
-accounts for what was overwritten). Raw-pointer stores (`*mut`) are the
-trusted collection idiom for writing *uninitialized* slots and stay exempt.
-
-```concrete
-let mut arr: [File; 2] = [mk(), mk()];
-arr[0] = mk();            // old arr[0] leaked. Compiles today.
-```
-
-**Gate:** noted as the H15 gap in `check_linear_conservation.sh`; reject rows
-land with the fix. **Fix:** E0219-analog rejection in `.arrayIndexAssign` and
-in `.derefAssign` when the target is `&mut T` with non-Copy `T`.
-
-### H16. Same-scope shadowing leaks the shadowed linear value — OPEN 2026-07-05 (leak)
-
-`let f: File = mk(); let f: File = mk();` silently drops the first `File`:
-scope-exit checking resolves locals BY NAME, so the newer binding masks the
-older entry and its obligation is never checked. (Nested-scope shadowing is
-sound — the outer binding is checked at its own scope exit; only same-scope
-re-`let` leaks.)
-
-**Gate:** noted as the H16 gap in `check_linear_discard.sh`; reject rows land
-with the fix. **Fix:** scope-exit must check env *entries* (including shadowed
-duplicates), not name lookups.
-
-### H17. Linear parameters (incl. by-value `self`) carry no consume obligation — OPEN 2026-07-05 (leak)
-
-`fn vanish(self) {}` / `fn drop_it(f: File) {}` are universal silent-drop
-escapes: the checker deliberately treats params as "consumed by being
-received" (`Check.lean` comment), with one carve-out — a *generic-typed,
-completely untouched* param IS flagged (E0208), so `fn tag<T>(h: Hold<T>)`
-errors while `fn sink(f: File)` does not. Inconsistent, and disclosed nowhere
-outside a code comment; it contradicts the one law ("a non-Copy value never
-silently disappears") end-to-end, since the caller-side move is accounted but
-the callee discharges the obligation for free.
-
-```concrete
-fn drop_it(f: File) -> Int { return 0; }   // f silently dropped. Compiles today.
-```
-
-**Ruling (2026-07-05):** params are OWNED LOCALS and must be consumed like any
-other binding — no entry-consumption escape. The generic-param carve-out is
-then subsumed by the general rule. **Fix path:** flip the exemption in
-`checkFn`, measure the std/test burn-down (H12-style tranche: every
-received-but-unconsumed linear param becomes E0208), migrate, then delete the
-carve-out. The linearity fuzzer's oracle assumes this ruling.
+**None.** Every previously tracked hole is closed and gated (see below).
 
 ## Recently closed
+
+### H13–H17. The 2026-07-05/06 value-flow discharge sweep — ALL CLOSED 2026-07-06
+
+Five holes found by re-running the H11 read-side audit over every
+*write/discharge* site (~20 targeted probes), disclosed first, then fixed in
+one burn-down. Two were duplications (double-free class), three were leaks
+(silent-drop class). Gates: reject+accept rows in
+`check_linear_conservation.sh` (H13/H14/H15) and `check_linear_discard.sh`
+(H16/H17).
+
+- **H13 (duplication): `a = b` rebind never consumed the ident RHS** — `b`
+  and `a` both owned the same value. Fixed: the `.assign` case consumes an
+  ident RHS exactly like `let g = b;` / `return b;` (self-assign `a = a`
+  stays the rebind case). Reuse after `a = b` is now E0205.
+- **H14 (duplication): `break f;` never consumed the break-value** — the
+  loop result and the original both owned it. Fixed: `.break_` consumes an
+  ident value (mirroring `return f;`); the value check runs BEFORE the
+  skip-unconsumed check so a loop-local moved out via break counts as
+  consumed, and a value declared immediately outside the broken loop is
+  exempt from the loop-depth rule (`breakDepthExempt` — a break fires at most
+  once per loop entry; deeper outer values stay E0206).
+- **H15 (leak): `arr[i] = v` and `*r = v` (through `&mut`) leaked the
+  overwritten value** — E0219 guarded only field assignment. Fixed: both now
+  reject a non-Copy target (**E0291** `cannotOverwriteLinearPlace`).
+  Raw-pointer stores (`*mut`) stay exempt: the trusted collection idiom
+  writes UNINITIALIZED slots.
+- **H16 (leak): same-scope shadowing dropped the shadowed value** — scope
+  exit resolves locals by name, so `let f = mk(); let f = mk();` masked the
+  first obligation. Fixed at the `let` site (**E0292** `shadowsLiveLinear`):
+  shadowing a still-live non-Copy binding rejects; `let s = transform(s);`
+  stays legal (the RHS consumed the old value first).
+- **H17 (leak): linear params (incl. by-value `self`) carried no consume
+  obligation** — `fn drop_it(f: File) {}` was a universal silent-drop escape
+  ("consumed by being received"), enforced only for generic-typed untouched
+  params. **Ruling (2026-07-05): params are OWNED LOCALS and must be
+  consumed.** `&mut T` params are borrows (the caller owns the pointee) and
+  carry no obligation; `&T` params are Copy. The generic-param carve-out is
+  deleted — one rule for all bindings, including Destroy impl bodies (no
+  terminal parameter sinks: `fn destroy(self) { let File { fd } = self; }`).
+  Burn-down: 16 std sites (all terminal consumers — `drop`/`close`/
+  `into_raw_parts` — now destructure self into Copy raw parts), ~95 test
+  fixtures (destructure idiom; `T: … + Copy` bounds on trait-dispatch
+  generics; Copy marks on POD structs), 3 examples.
+
+**Found during the burn-down (fixed in the same change):**
+- `examples/kvstore`'s `forget_string` was a deliberate silent-drop escape
+  papering over a leak+alias swap-removal dance → **`Vec::swap_remove`
+  added to std** (moves the removed element out; O(1); tested) and kvstore
+  rewritten soundly.
+- **`checkTraitBounds` bug:** a turbofish arg naming the CALLER's own type
+  param (`fib::<T>(n-1)` inside `fn fib<T: Copy>`) arrived as `.named "T"`
+  and failed its own Copy bound; worse, non-Copy TRAIT bounds on type-var
+  arguments were silently skipped. Both fixed: `.named` args matching a
+  current type param normalize to `.typeVar`, and type-var args check the
+  caller's declared bounds.
+
+**Disclosed consequence (expressiveness gap, fails closed):** an owned
+`[linear; N]` cannot be discharged at all — H11 removed the unsound element
+copy-out and array destructure patterns do not exist yet — so holding one is
+E0208 (never a silent leak). `adversarial_linear_array.con` and gate rows
+assert the E0208; array destructure is the workload-gated follow-up
+(ROADMAP 13b note).
+
 
 ### H11. Projecting a non-Copy value out of a place by value duplicated it — CLOSED 2026-07-05
 

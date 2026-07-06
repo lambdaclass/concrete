@@ -81,7 +81,7 @@ fn top_k_smallest(values: &Vec<Int>, k: Int) with(Alloc) -> Vec<Int> {
 }
 
 // Compute Stats using trait method
-fn compute_stats<T: Scorable>(s: T) -> Int {
+fn compute_stats<T: Scorable + Copy>(s: T) -> Int {
     return s.score();
 }
 

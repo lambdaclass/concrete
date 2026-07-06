@@ -4,7 +4,8 @@ struct Counter {
 }
 
 fn consume(c: Counter) -> Int {
-    return c.sum;
+    let Counter { count, sum } = c;
+    return sum;
 }
 
 fn main() -> Int {

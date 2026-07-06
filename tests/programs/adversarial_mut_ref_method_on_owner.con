@@ -10,7 +10,8 @@ impl Counter {
 }
 
 fn consume(c: Counter) -> Int {
-    return c.val;
+    let Counter { val } = c;
+    return val;
 }
 
 fn main() -> Int {

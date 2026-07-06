@@ -893,7 +893,9 @@ run_ok "$TESTDIR/adversarial_linear_field_read_no_consume.con" 90
 run_ok "$TESTDIR/adversarial_newtype_consume.con" 183
 run_ok "$TESTDIR/adversarial_heap_ownership.con" 360
 run_ok "$TESTDIR/adversarial_heap_defer_cleanup.con" 300
-run_ok "$TESTDIR/adversarial_linear_array.con" 0
+# H17: an owned [linear; N] is inexpressible to consume until array
+# destructure lands (H11 note) — the fixture asserts the honest E0208.
+run_err "$TESTDIR/adversarial_linear_array.con" "was never consumed"
 run_ok "$TESTDIR/adversarial_mut_ref_deref_only.con" 15
 run_ok "$TESTDIR/adversarial_mut_ref_single_call.con" 11
 run_ok "$TESTDIR/adversarial_mut_ref_sequential_borrows.con" 12
@@ -6730,7 +6732,7 @@ check_collection_tests() {
 
 check_collection_tests "Vec" \
     vec_test_vec_get_in_bounds vec_test_vec_get_out_of_bounds vec_test_vec_get_empty \
-    vec_test_pop_some vec_test_pop_none \
+    vec_test_pop_some vec_test_pop_none vec_test_swap_remove \
     vec_test_vec_set vec_test_vec_clear_reuse vec_test_vec_push_growth vec_test_vec_pop_until_empty
 
 check_collection_tests "Fs" \

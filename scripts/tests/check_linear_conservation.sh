@@ -29,7 +29,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 HDR='mod m {
   struct File { fd: i32 }
-  impl Destroy for File { fn destroy(self) { } }
+  impl Destroy for File { fn destroy(self) { let File { fd } = self; } }
   struct Wrap { f: File }
   struct Two { f: File, g: File }
   struct Box { f: File }
@@ -37,8 +37,7 @@ HDR='mod m {
   enum E { A { f: File }, B {} }
   fn mk() -> File { return File { fd: 3 }; }
   fn mkW() -> Wrap { return Wrap { f: mk() }; }
-  fn sink(f: File) -> Int { return f.fd as Int; }
-  fn take2(x: [File; 2]) -> Int { return x[0].fd as Int; }
+  fn sink(f: File) -> Int { let File { fd } = f; return fd as Int; }
   fn takeW(w: Wrap) -> Int { let Wrap { f } = w; return sink(f); }
   fn useTwo(w: Two) -> Int { let Two { f, g } = w; return sink(f) + sink(g); }
   fn useBox(b: Box) -> Int { let Box { f } = b; return sink(f); }
@@ -61,9 +60,12 @@ reject "let g=f; reuse f"       E0205 'fn main() -> Int { let f: File = mk(); le
 accept "let g=f; consume g"     'fn main() -> Int { let f: File = mk(); let g: File = f; return sink(g); }'
 
 echo "=== array-literal moves each element (the duplication bug) ==="
-reject "[a,b]; reuse a"         E0205 'fn main() -> Int { let a: File = mk(); let b: File = mk(); let x: [File; 2] = [a, b]; a.destroy(); b.destroy(); return take2(x); }'
+reject "[a,b]; reuse a"         E0205 'fn main() -> Int { let a: File = mk(); let b: File = mk(); let x: [File; 2] = [a, b]; a.destroy(); b.destroy(); return 0; }'
 reject "[a,b] then array leaks" E0208 'fn main() -> Int { let a: File = mk(); let b: File = mk(); let x: [File; 2] = [a, b]; return 0; }'
-accept "[a,b] moved into array, consumed" 'fn main() -> Int { let a: File = mk(); let b: File = mk(); let x: [File; 2] = [a, b]; return take2(x); }'
+# H17 consequence (see KNOWN_HOLES H11 note): an owned [linear; N] cannot be
+# discharged until array destructure lands — the "consumed" form is honestly
+# INEXPRESSIBLE, so it asserts E0208 instead of an accept.
+reject "[a,b] array is undischargeable (until array destructure)" E0208 'fn take2(x: [File; 2]) -> Int { return x[0].fd as Int; } fn main() -> Int { let a: File = mk(); let b: File = mk(); let x: [File; 2] = [a, b]; return take2(x); }'
 
 echo "=== struct-literal field moves ==="
 reject "Wrap{f:x}; reuse x"     E0205 'fn main() -> Int { let x: File = mk(); let w: Wrap = Wrap { f: x }; sink(x); return takeW(w); }'
@@ -95,19 +97,28 @@ reject "let-else over resource enum" E0288 'fn main() -> Int { let e: E = E::B {
 echo "=== H11: by-value non-Copy projection out of a place is rejected (E0290) ==="
 reject "let g = w.f (non-Copy field, the H11 repro)" E0290 'fn main() -> Int { let w: Wrap = mkW(); let g: File = w.f; sink(g); return takeW(w); }'
 reject "sink(w.f) (projection as call argument)"     E0290 'fn main() -> Int { let w: Wrap = mkW(); return sink(w.f) + takeW(w); }'
-reject "let a = x[0] (non-Copy array element)"       E0290 'fn main() -> Int { let x: [File; 2] = [mk(), mk()]; let a: File = x[0]; sink(a); return take2(x); }'
+reject "let a = x[0] (non-Copy array element)"       E0290 'fn main() -> Int { let x: [File; 2] = [mk(), mk()]; let a: File = x[0]; return sink(a); }'
 reject "nested o.w.f (outermost read decides)"       E0290 'fn main() -> Int { let o: Outer = mkO(); let g: File = o.w.f; sink(g); return takeO(o); }'
 reject "w.f.destroy() (by-value self on projection)" E0290 'fn main() -> Int { let w: Wrap = mkW(); w.f.destroy(); return takeW(w); }'
 accept "&w.f borrow of non-Copy sub-place"           'fn main() -> Int { let w: Wrap = mkW(); let n: Int = peek(&w.f); return n + takeW(w); }'
 accept "Copy field and Copy element reads"           'fn main() -> Int { let p: Pt = Pt { x: 1, y: 2 }; let mut a: [i32; 2] = [3, 4]; let v: i32 = a[0]; a[1] = 9; return (p.x + v + a[1]) as Int; }'
 accept "Copy leaf through non-Copy intermediate (o.w.f.fd)" 'fn main() -> Int { let o: Outer = mkO(); let n: Int = o.w.f.fd as Int; return n + takeO(o); }'
 
-# KNOWN_HOLES H13/H14/H15 (OPEN, disclosed 2026-07-05, fixes queued):
-#   H13 — plain rebind `a = b` does not consume the ident RHS (duplication).
-#   H14 — `break f;` does not consume the ident break-value (duplication).
-#   H15 — `arr[i] = v` / `*r = v` (&mut) over non-Copy leak the OLD value
-#         (E0219 guards only field assignment).
-# Reject rows land with the fixes; repros in docs/KNOWN_HOLES.md.
+echo "=== H13: rebind 'a = b' consumes the RHS (was a silent duplication) ==="
+reject "a = b; reuse b"            E0205 'fn main() -> Int { let mut a: File = mk(); sink(a); let b: File = mk(); a = b; sink(b); return sink(a); }'
+reject "a = b; a and b both live"  E0205 'fn main() -> Int { let mut a: File = mk(); sink(a); let b: File = mk(); a = b; return sink(a) + sink(b); }'
+accept "a = b rebind, then consume a" 'fn main() -> Int { let mut a: File = mk(); sink(a); let b: File = mk(); a = b; return sink(a); }'
+
+echo "=== H14: break f; consumes the break-value (was a silent duplication) ==="
+reject "break f; reuse f"          E0205 'fn main() -> Int { let f: File = mk(); let g: File = while true { break f; } else { mk() }; return sink(g) + sink(f); }'
+accept "break f; consume loop result" 'fn main() -> Int { let f: File = mk(); let g: File = while true { break f; } else { mk() }; return sink(g); }'
+accept "break of loop-local linear"   'fn main() -> Int { let g: File = while true { let l: File = mk(); break l; } else { mk() }; return sink(g); }'
+
+echo "=== H15: overwriting a non-Copy element/pointee is rejected (would leak) ==="
+reject "arr[i] = v over non-Copy element" E0291 'fn main() -> Int { let mut x: [File; 2] = [mk(), mk()]; x[0] = mk(); return 0; }'
+reject "*r = v through &mut non-Copy"     E0291 'fn set(r: &mut File) { *r = mk(); } fn main() -> Int { let mut f: File = mk(); set(&mut f); return sink(f); }'
+accept "arr[i] = v over Copy element"     'fn main() -> Int { let mut a: [i32; 2] = [1, 2]; a[0] = 9; return a[0] as Int; }'
+accept "*r = v through &mut Copy"         'fn set(r: &mut i32) { *r = 9; } fn main() -> Int { let mut n: i32 = 1; set(&mut n); return n as Int; }'
 
 echo ""
 echo "LINEAR-CONSERVATION: PASS=$PASS  FAIL=$FAIL"

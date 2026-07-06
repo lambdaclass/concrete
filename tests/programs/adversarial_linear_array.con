@@ -1,5 +1,13 @@
 // Adversarial test: array of linear elements is itself linear.
-// The array must be consumed at scope exit.
+// Passing it into a function consumes it at the CALLER (sound, gated). But
+// the CALLEE then owns a `[Resource; 2]` it cannot discharge: since H11
+// there is no by-value element move-out, and array destructure patterns do
+// not exist yet (workload-gated follow-up, ROADMAP 13b / KNOWN_HOLES H11
+// note). With params holding real obligations (H17), an owned array of
+// linear values is honestly INEXPRESSIBLE to consume — this fixture asserts
+// the E0208 instead of pretending the leak is fine. Flip back to a positive
+// run when array destructure lands.
+// Expected: error — 'arr' was never consumed
 
 struct Resource {
     value: Int,

@@ -4,7 +4,8 @@
 struct Token { id: Int }
 
 fn consume_token(t: Token) -> Int {
-    return t.id;
+    let Token { id } = t;
+    return id;
 }
 
 fn process(t: Token) -> Int {

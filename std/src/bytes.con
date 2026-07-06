@@ -120,7 +120,8 @@ mod bytes {
         /// The Bytes value is consumed; no copy is made.
         /// The caller is responsible for ensuring the bytes are valid text.
         pub fn to_string(self) -> String {
-            let s: String = String { ptr: self.ptr, len: self.len, cap: self.cap };
+            let Bytes { ptr, len, cap } = self;
+            let s: String = String { ptr: ptr, len: len, cap: cap };
             return s;
         }
 
@@ -132,11 +133,13 @@ mod bytes {
         /// also `free` the pointer) or leak (the H9 linearity check now rejects the
         /// silent forget). The returned struct is `Copy` (it owns nothing itself).
         pub fn into_raw_parts(self) -> BytesRaw {
-            return BytesRaw { ptr: self.ptr, len: self.len, cap: self.cap };
+            let Bytes { ptr, len, cap } = self;
+            return BytesRaw { ptr: ptr, len: len, cap: cap };
         }
 
         pub fn drop(self) with(Alloc) {
-            dealloc::<u8>(self.ptr);
+            let Bytes { ptr, len, cap } = self;
+            dealloc::<u8>(ptr);
         }
     }
 

@@ -7,7 +7,8 @@ struct Pair {
 }
 
 fn consume_pair(p: Pair) -> Int {
-    return p.a + p.b;
+    let Pair { a, b } = p;
+    return a + b;
 }
 
 // Field access should NOT consume the struct

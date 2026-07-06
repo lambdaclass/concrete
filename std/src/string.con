@@ -120,7 +120,8 @@ mod string {
 
         /// TODO: drop should be a trait, and isn't really called yet automatically.
         pub fn drop(self) with(Alloc) {
-            dealloc::<u8>(self.ptr);
+            let String { ptr, len, cap } = self;
+            dealloc::<u8>(ptr);
         }
 
         /// Check if this string starts with the given prefix.
@@ -366,7 +367,7 @@ mod string {
         return (value as T) - 48;
     }
 
-    pub fn int_to_digit<T>(value: T) -> char {
+    pub fn int_to_digit<T: Copy>(value: T) -> char {
         return (value + 48) as char;
     }
 

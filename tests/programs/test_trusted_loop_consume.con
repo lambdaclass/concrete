@@ -11,13 +11,14 @@ struct Buf {
 
 trusted impl Buf {
     fn free_entries(self) with(Alloc, Unsafe) {
+        let Buf { ptr, len } = self;
         let mut i: u64 = 0;
-        while i < self.len {
-            let p: *mut u8 = self.ptr + i;
+        while i < len {
+            let p: *mut u8 = ptr + i;
             let val: u8 = *p;
             i = i + 1;
         }
-        free(self.ptr);
+        free(ptr);
     }
 }
 

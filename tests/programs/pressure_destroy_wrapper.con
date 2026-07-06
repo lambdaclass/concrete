@@ -5,6 +5,7 @@ struct Resource { val: Int }
 
 impl Destroy for Resource {
     fn destroy(self) {
+        let Resource { val } = self;
     }
 }
 

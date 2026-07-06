@@ -494,25 +494,30 @@ the active list is pull-condition-gated or polish.
    assignment forms. Close `docs/KNOWN_HOLES.md` H11 only when the gate asserts
    the previous reproducer fails.
 
-13c. **Write the value-flow conservation spec and make it a feature gate
-   requirement.** The linearity work has three distinct failure classes:
-   discard (a value vanishes), conservation (a value duplicates or aliases), and
-   scope (a value falls out of nested control flow). Turn that into a small
-   normative spec, not a prose afterthought: every expression/statement form
-   must say whether it copies, moves, borrows, consumes, initializes storage,
-   overwrites storage, or rejects. The spec must cover at least identifiers,
-   calls, method receivers, returns, array literals, struct literals,
-   destructuring, field/index projection, field/index assignment, functional
-   update, match scrutinees, `?`, `defer`, and wildcard patterns. Future syntax
-   cannot land without adding a conservation/discard/scope row to the relevant
-   gate. Partial-pattern forms are conservation/discard sites too: `let-else`,
-   `if let`, and `while let` lower through an unmatched path, so over non-`Copy`
-   enums they reject by design (`E0288`) until the whole instantiated enum is
-   `Copy` (for example, after conditional `Copy` makes `Option<i32>` genuinely
-   `Copy`). Do not add variant-aware weakening as a special case. Add
-   `docs/VALUE_FLOW_CONSERVATION.md` and make it the canonical bridge between
+13c. ✅ **DONE / KEEP RATCHEting — value-flow spec + constructor-coverage
+   gate.** The linearity work has three distinct failure classes: discard (a
+   value vanishes), conservation (a value duplicates or aliases), and scope (a
+   value falls out of nested control flow). This is now a mechanical contract,
+   not a prose afterthought: `docs/VALUE_FLOW_SPEC.md` records every
+   expression/statement constructor and classifies whether it copies, moves,
+   borrows, consumes, initializes storage, overwrites storage, rejects, or
+   diverges. `scripts/tests/check_value_flow_spec.sh` is the constructor-
+   coverage gate: every AST constructor must have a value-flow row and at
+   least one gate fixture or explicit rationale. Future syntax cannot land
+   without updating this table and fixture set. The spec exists to prevent the
+   exact 2026-07 bug families from recurring: assignment RHS not consumed,
+   `break` value not consumed, non-`Copy` overwrite leaks, live-linear
+   shadowing, parameter silent discard, H11 sub-place read duplication, and
+   fallible-result discard drifting with conditional `Copy`. Partial-pattern
+   forms are conservation/discard sites too: `let-else`, `if let`, and
+   `while let` lower through an unmatched path, so over non-`Copy` enums they
+   reject by design (`E0288`) until the whole instantiated enum is `Copy`
+   (for example, after conditional `Copy` makes `Option<i32>` genuinely
+   `Copy`). Do not add variant-aware weakening as a special case. Keep
+   `docs/VALUE_FLOW_SPEC.md` as the canonical bridge between
    `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
-   `check_linear_conservation.sh`, and `check_linear_nested_scope.sh`.
+   `check_linear_conservation.sh`, `check_linear_nested_scope.sh`, and the
+   linearity fuzzer.
 
 13d. ✅ **DONE (2026-07-02) — front-end checker coverage includes every source
    body, including std.** The root bug was that `Check` consumed submodule
@@ -529,25 +534,147 @@ the active list is pull-condition-gated or polish.
    384 -> 0 std burn-down; the gate now asserts the exemption machinery cannot
    quietly return and std stays at zero front-end violations.
 
-13e. **Post-H11 conservation audit sweep — RUN 2026-07-05; found 5 holes
-   (H13–H17), all disclosed in docs/KNOWN_HOLES.md before fixing.** ~20
-   targeted probes over every value-flow *discharge* site. Sound: locals
-   (read/borrow/unused), match arms + guards, if-expr moves, return paths,
-   return-path leaks, loop-consume, H11 projections. Broken: H13 rebind
-   `a = b` doesn't consume the RHS (dup), H14 `break f;` doesn't consume
-   (dup), H15 `arr[i] = v` / `*r = v` (&mut) leak the overwritten value, H16
-   same-scope shadowing leaks, H17 linear params (incl. by-value `self`) have
-   no consume obligation (deliberate but undisclosed; RULED: params are owned
-   locals and must be consumed — H12-style burn-down). The remaining 13e tail
+13e. ✅ **Post-H11 conservation audit sweep — RUN 2026-07-05, H13–H17 ALL
+   FIXED 2026-07-06** (disclosed in docs/KNOWN_HOLES.md before fixing, per
+   the H-pattern). H13 rebind consumes the RHS, H14 `break f;` consumes, H15
+   non-Copy overwrite via `arr[i]=`/`*&mut=` rejects (E0291), H16 live-linear
+   shadowing rejects (E0292), H17 params are OWNED LOCALS and must be
+   consumed (`&mut T` params are borrows, exempt; no terminal parameter
+   sinks, incl. Destroy impls). Burn-down: 16 std sites (terminal consumers
+   destructure into Copy raw parts), ~95 fixtures, 3 examples; it also
+   yielded `Vec::swap_remove` (std was missing the linear-safe O(1) removal)
+   and a `checkTraitBounds` fix (caller's own type param as turbofish arg
+   failed its own Copy bound; non-Copy trait bounds on type-var args were
+   silently skipped). `[linear; N]` remains an EXPRESSIVENESS gap that fails
+   closed (E0208) until array destructure lands. The remaining 13e tail
    (callable-value capture probes) folds into #18's landing gates.
-   Program agreed 2026-07-05, in order: disclose (done) → fix H13–H16 →
-   H17 burn-down → constructor-coverage gate (13c's mechanical half: every
-   AST constructor must have a value-flow row + gate fixture) → linearity
-   fuzzer (generate consume-exactly-once/leak/dup programs from a
-   ground-truth oracle; nightly, like fuzz_differential) → checkExpr mode
-   refactor (generalize `asPlace` to value/place/borrow with value-mode
-   auto-consume — the structural fix that prevents the class) → interp
-   runtime conservation oracle as the nightly backstop.
+   The prevention program is split into 13c and 13f-13j below; keep those
+   gates/refactors ahead of new language surface.
+
+13f. ✅ **DONE / KEEP RUNNING — linearity fuzzer.** Add
+   `scripts/tests/fuzz_linearity.py` as the ownership analogue of
+   `fuzz_differential.py`: generate programs that thread one or more linear
+   resources through assignment, shadowing, branches, loops, `break`, `return`,
+   matches, projections, stores, params, calls, destructuring, and fallible
+   wrappers. The generator carries the ground-truth consume count per path:
+   exactly once must compile; zero-consume and double-consume variants must
+   reject. Wire a smoke run into CI and a rotating nightly campaign. This
+   fuzzer's first run already found a real checker bug: `if`-EXPRESSION arms
+   were checked sequentially against the same env, so `if c { v } else { v }`
+   was a spurious E0205; `ifExpr` now mirrors the statement branch-merge
+   machinery. Keep adding shapes here before adding syntax that moves,
+   borrows, overwrites, or exits with linear values.
+
+13g. **Refactor expression checking to explicit modes.** Generalize the H11
+   `asPlace` patch into `checkExpr` modes: `value`, `place`, and `borrow`.
+   Value mode is the default and consumes non-`Copy` identifiers/places
+   automatically; `place` and `borrow` are the explicit non-consuming
+   exceptions used for projection bases, assignment targets, borrow targets,
+   and auto-borrowed receivers. The goal is fail-closed checker evolution:
+   forgetting a mode on new syntax over-rejects visibly instead of silently
+   leaking or duplicating ownership. Do this after 13c/13f are green, with
+   `fuzz_linearity.py`, the three linearity gates, examples, and `test-ci-gates`
+   as the safety net.
+
+13h. **Centralize ownership-transfer and overwrite policy helpers.** Delete
+   scattered per-AST `if ident then consumeVarIfExists` logic in favor of one
+   helper for "this expression transfers ownership" and one helper for "this
+   place may be overwritten." Assignment, return, `break value`, function
+   arguments, method receivers, stores, array/struct literal elements,
+   destructuring, `?`, and `defer` must all route through those helpers or
+   through the mode-based `checkExpr` entry point. The overwrite helper owns
+   the E0219/E0291 family: rebind after consuming old value is legal; live
+   non-`Copy` field/index/`&mut` pointee overwrite rejects; trusted/raw-pointer
+   uninitialized-slot idioms must be explicit trusted boundaries, not silent
+   safe-code exceptions.
+
+13i. **Represent control-flow exit modes as data.** Branches, match arms,
+   loops, `return`, `break value`, `continue`, `abort`, and future `noreturn`
+   calls should produce a structured exit mode:
+   `fallsThrough | returns | breaks(value?) | continues | diverges`. Linear
+   merge rules should consume this object instead of re-deriving reachability
+   and ownership state ad hoc in each checker path. This is the follow-through
+   from H9/H14/H17 and the H12 std burn-down: diverging arms do not merge,
+   return paths must discharge owned locals before leaving their scope, and
+   break-with-value consumes the value being transported.
+
+13j. **Add an interpreter runtime conservation oracle when the interpreter has
+   heap support.** Deferred pull-condition: the interpreter currently has no
+   heap model (`allocCall` remains in the differential gate's unsupported
+   class), so there is no allocation/free balance to observe. When
+   interp gains alloc/Heap support, tag every non-`Copy` runtime value with an
+   ID, record move/consume/free events, and report copied, leaked, or
+   double-consumed IDs at exit behind `--interp-strict`. Wire it into
+   `fuzz_differential.py`, `fuzz_linearity.py`, and corpus/nightly runs as the
+   dynamic backstop for checker mistakes. Until then, 13c + 13f + the static
+   gates are the conservation net.
+
+13k. **Stop direct checker environment mutation outside ownership APIs.**
+   The checker should expose narrow state-transition helpers such as
+   `declareVar`, `moveVar`, `copyVar`, `borrowPlace`, `markConsumed`,
+   `reserveForDefer`, `restoreScope`, and `mergeBranchStates`; direct mutation
+   of `env.vars`, consumed states, borrow/ref lists, or branch snapshots should
+   disappear outside those helpers. This is the API-level version of the
+   mode-checker refactor: make illegal states hard to construct, make every
+   ownership transition auditable in one place, and keep future bug hunts from
+   finding another isolated handler that updates the environment differently
+   from the rest.
+
+13l. **Create one shared type-predicate module for Copy, trait bounds, and
+   substitution-sensitive facts.** The conditional-Copy and H17 burn-downs
+   exposed repeated logic across Check, Elab, CoreCheck, Mono, and post-mono
+   verification: instantiated `Copy`, builtin `Option`/`Result` rules,
+   type-parameter substitution, caller type params passed through turbofish,
+   and trait-bound satisfaction must not be reimplemented per pass. Move these
+   predicates into one shared module and require every pass to call it. A new
+   type/classification rule lands only with shared positives/negatives proving
+   Check, Elab, CoreCheck, Mono, and Verify agree.
+
+13m. **Add diagnostic-code coverage gates for ownership/type diagnostics.**
+   Every `CheckError` / `CoreCheckError` code in the ownership, Copy,
+   capability, and value-flow families must have a negative fixture, a
+   stable-code assertion, and a hint assertion when the diagnostic has a hint.
+   This gate should cover new codes such as E0290/E0291/E0292 and existing
+   high-value codes E0205/E0208/E0219/E0220/E0286/E0287/E0288/E0520. The goal
+   is not only "the program rejects"; the user-facing reason must be stable and
+   useful, and `--report diagnostic-codes` must stay complete.
+
+13n. **Systematize pass-agreement gates.** Strengthen LANGUAGE_INVARIANTS #19
+   into a reusable gate family: any program accepted by Check/CoreCheck must
+   not die later with an internal E07xx, panic, SSA-verify error, lowering
+   mismatch, or interpreter/compiler disagreement unless the feature is
+   explicitly classified as unsupported. Reuse `fuzz_differential.py`,
+   `fuzz_linearity.py`, codegen-differential vectors, and small hand-written
+   fixtures. Each new semantic rule should answer: do Check, Elab, CoreCheck,
+   Mono, Lower, SSAVerify, interpreter, and reports agree on the same meaning?
+
+13o. **Add explicit `noreturn` / diverging-function facts.** Today the checker
+   knows builtins like `abort()` diverge, but ordinary APIs such as
+   `libc_exit` cannot communicate "this never returns" without source-level
+   workarounds. Add a small explicit surface (`-> never`, `#[noreturn]`, or an
+   equivalent trusted declaration fact) that feeds the structured exit-mode
+   object from 13i. This is not inference magic: the divergence fact must be
+   visible in source/signature/report output, and wrong trusted declarations
+   remain trusted-boundary responsibility.
+
+13p. **Add array destructure / linear array move-out only when a workload pulls
+   it.** H11 correctly made `[linear; N]` fail closed for by-value element reads:
+   without partial moves or array patterns, an owned array of linear elements
+   has no way to move every element out. Do not re-open element projection to
+   make this convenient. When a real workload needs it, design explicit
+   whole-owner array destructuring (`let [a, b] = arr;` or a fixed-size
+   equivalent) and gate that every element moves exactly once while partial
+   element move-out remains rejected.
+
+13q. **Add checker mutation tests proving the linearity gates are load-bearing.**
+   Mutate or patch-disable key checker rules in CI-local/nightly mode and prove
+   the corresponding gates fail: assignment RHS consume, `break value` consume,
+   live-linear shadowing rejection, non-`Copy` overwrite rejection, H11
+   non-`Copy` sub-place read rejection, param consume obligations, conditional
+   Copy demotion, must-use fallibility before Copy, and branch/arm merge
+   agreement. This is separate from proof/evidence mutation testing: it proves
+   the checker and linearity gates would catch the exact bug class if it came
+   back.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has

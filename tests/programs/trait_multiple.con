@@ -17,8 +17,10 @@ impl GetVal for B {
     }
 }
 
-fn consume_a(a: A) -> Int { return a.val; }
-fn consume_b(b: B) -> Int { return b.val; }
+fn consume_a(a: A) -> Int {
+    let A { val } = a; return val; }
+fn consume_b(b: B) -> Int {
+    let B { val } = b; return val; }
 
 fn main() -> Int {
     let a: A = A { val: 10 };

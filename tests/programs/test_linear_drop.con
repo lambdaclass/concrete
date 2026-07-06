@@ -6,6 +6,7 @@ struct Foo {
 
 impl Foo {
     fn drop(self) {
+        let Foo { x } = self;
     }
 }
 

@@ -15,7 +15,7 @@ impl Doubler for Wrap {
     }
 }
 
-fn call_doubled<T: Doubler>(t: T) -> i32 {
+fn call_doubled<T: Doubler + Copy>(t: T) -> i32 {
     return t.doubled();
 }
 

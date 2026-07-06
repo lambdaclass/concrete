@@ -4,7 +4,8 @@ struct Wrapper<T> { inner: T }
 struct Pair<A, B> { first: A, second: B }
 
 fn unwrap_wrapper(w: Wrapper<Int>) -> Int {
-    return w.inner;
+    let Wrapper { inner } = w;
+    return inner;
 }
 
 fn unwrap_pair(p: Pair<Wrapper<Int>, Int>) -> Int {

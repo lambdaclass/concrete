@@ -17,7 +17,7 @@ impl Numeric for Float64 {
     }
 }
 
-fn generic_abs<T: Numeric>(x: T) -> T {
+fn generic_abs<T: Numeric + Copy>(x: T) -> T {
     return x.abs();
 }
 

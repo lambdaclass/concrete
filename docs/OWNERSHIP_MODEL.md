@@ -48,6 +48,18 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
   including locals in `if`/`else` branches and match arms (nested-scope checking),
   and including on `return`/`break` paths. `let g = f;` over a linear `f` **moves**
   it (`f` is consumed; using `f` afterward is **E0205**).
+- **Params are OWNED LOCALS (H17, ruled 2026-07-05).** The caller moved the value
+  in, so the callee holds the obligation: an owned non-Copy param — including
+  by-value `self`, including `Destroy` impl bodies — must be consumed like any
+  other binding (**E0208**). There are no terminal parameter sinks:
+  `fn drop_it(f: File) {}` rejects; a terminal consumer destructures into Copy
+  raw parts (`fn destroy(self) { let File { fd } = self; }`). `&mut T` params
+  are BORROWS — exclusive (non-Copy, can't be duplicated) but carrying no
+  consume obligation; `&T` params are Copy.
+- **Shadowing a still-live linear binding is rejected (H16, E0292):**
+  `let f = mk(); let f = mk();` would silently drop the first value (scope exit
+  resolves names). `let s = transform(s);` stays legal — the RHS consumed the
+  old value before the new binding lands.
 - **Exemption:** a block whose textual end is unreachable — a non-terminating
   `while true {}` (no break) or `abort()` — need not consume its locals (a server's
   accept loop legitimately holds a resource live forever). `return`/`break`/`continue`
@@ -58,8 +70,9 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
 Every site a value can flow *into* **moves** (consumes) a linear operand exactly once —
 duplicating one would let it be freed twice. Concretely:
 
-- **`let g = f;`**, **function argument**, **`return f;`**, **match scrutinee** — all
-  consume `f`; reuse afterward is **E0205**. **Stores consume too:** `*p = v` and
+- **`let g = f;`**, **function argument**, **`return f;`**, **match scrutinee**,
+  **`a = f;` (rebind, H13)**, **`break f;` (loop result, H14)** — all consume `f`;
+  reuse afterward is **E0205**. **Stores consume too:** `*p = v` and
   `arr[i] = v` move a linear `v` into the slot (2026-07-02).
 - **Linear rebind:** `acc = f(acc, x)` is legal — a `let mut` linear variable may be
   reassigned once its OLD value has been consumed (the fold/accumulate pattern),
@@ -101,7 +114,10 @@ duplicating one would let it be freed twice. Concretely:
   (`neg_if_let_noncopy`, now over a linear payload).
 - **Assigning to a non-Copy field** (`o.f = v`) is rejected (**E0219**): overwriting
   would leak the old linear value and cannot soundly move the new one in. Destructure
-  and rebuild, or make the field `Copy`.
+  and rebuild, or make the field `Copy`. The same rule covers the other overwrite
+  sites (H15, **E0291**): `arr[i] = v` over a non-Copy element and `*r = v` through
+  `&mut T` with non-Copy `T`. Raw-pointer stores (`*mut`) stay exempt — the trusted
+  collection idiom writes UNINITIALIZED slots.
 - **Functional update `S { ..base }`** may not *copy* a non-Copy field from `base`
   (**E0220**) — the value would be owned by both `base` and the result. Set each
   non-Copy field explicitly.

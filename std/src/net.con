@@ -145,7 +145,8 @@ mod net {
         }
 
         pub fn close(self) with(Unsafe, Network) {
-            close(self.fd);
+            let TcpListener { fd } = self;
+            close(fd);
         }
     }
 
@@ -233,7 +234,8 @@ mod net {
         }
 
         pub fn close(self) with(Unsafe, Network) {
-            close(self.fd);
+            let TcpStream { fd } = self;
+            close(fd);
         }
     }
 

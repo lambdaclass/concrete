@@ -14,7 +14,9 @@ struct Outer {
 }
 
 fn read_inner(o: Outer) -> Int {
-    return o.inner.data[0] + o.inner.data[1] + o.inner.data[2] + o.inner.tag + o.id;
+    let Outer { inner, id } = o;
+    let Inner { data, tag } = inner;
+    return data[0] + data[1] + data[2] + tag + id;
 }
 
 pub fn main() with(Std) {

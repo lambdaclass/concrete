@@ -1,7 +1,9 @@
 // Adversarial test: sequential borrows of the same variable.
 // After one borrow block ends, another should work.
 
-struct Data {
+// Copy: the test overwrites a Data through &mut (`*r2 = Data {…}`), which is
+// legal only for Copy pointees since H15 (a linear pointee would leak).
+struct Copy Data {
     x: Int,
     y: Int,
 }

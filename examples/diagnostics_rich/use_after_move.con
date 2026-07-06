@@ -2,7 +2,7 @@
 // it is moved. Human and JSON renderings must agree (one Diagnostic record).
 struct Resource { value: Int, }
 
-fn consume(r: Resource) -> Int { return r.value; }
+fn consume(r: Resource) -> Int { let Resource { value } = r; return value; }
 
 fn main() -> Int {
     let r: Resource = Resource { value: 42 };

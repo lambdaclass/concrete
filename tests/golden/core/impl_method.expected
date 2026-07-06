@@ -14,7 +14,9 @@ enum Result<T, E> {
 }
 
 fn consume(c: Counter) -> Int {
-  return c.value;
+  let __destr_Counter: Counter = c;
+  let value: Int = __destr_Counter.value;
+  return value;
 }
 
 fn main() -> Int {

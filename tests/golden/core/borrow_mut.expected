@@ -18,7 +18,9 @@ fn set_value(b: &mut Box, v: Int) -> () {
 }
 
 fn consume(b: Box) -> Int {
-  return b.value;
+  let __destr_Box: Box = b;
+  let value: Int = __destr_Box.value;
+  return value;
 }
 
 fn main() -> Int {

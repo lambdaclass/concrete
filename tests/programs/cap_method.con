@@ -8,7 +8,8 @@ impl Logger {
 }
 
 fn consume_logger(l: Logger) -> Int {
-    return l.level;
+    let Logger { level } = l;
+    return level;
 }
 
 fn run() with(Console) -> Int {

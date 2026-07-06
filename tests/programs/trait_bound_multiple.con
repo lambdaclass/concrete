@@ -25,7 +25,8 @@ fn inspect<T: Describe + Measure>(x: Int) -> Int {
 }
 
 fn consume_box(b: Box) -> Int {
-    return b.width;
+    let Box { width, height } = b;
+    return width;
 }
 
 fn main() -> Int {

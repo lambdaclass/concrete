@@ -3,7 +3,8 @@ struct Resource {
 }
 
 fn consume_resource(r: Resource) -> Int {
-    return r.value;
+    let Resource { value } = r;
+    return value;
 }
 
 fn main() -> Int {

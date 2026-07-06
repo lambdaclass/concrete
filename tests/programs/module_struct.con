@@ -3,7 +3,8 @@ mod Lib {
     pub fn make_point(x: Int, y: Int) -> Point {
         return Point { x: x, y: y };
     }
-    pub fn consume_point(p: Point) -> Int { return p.x + p.y; }
+    pub fn consume_point(p: Point) -> Int {
+        let Point { x, y } = p; return x + y; }
 }
 
 mod Main {

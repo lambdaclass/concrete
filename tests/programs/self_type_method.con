@@ -11,7 +11,8 @@ impl Counter {
 }
 
 fn consume_counter(c: Counter) -> Int {
-    return c.value;
+    let Counter { value } = c;
+    return value;
 }
 
 fn main() -> Int {

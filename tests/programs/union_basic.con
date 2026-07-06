@@ -6,8 +6,10 @@ union Payload {
 
 // Create a union and read a field in a trusted function
 trusted fn read_int(p: Payload) -> Int {
-    let v: Int = p.i;
-    return v;
+    // Unions destructure whole-owner like structs (all fields bound; they
+    // share memory) — this is the consume for the owned param (H17).
+    let Payload { i, f } = p;
+    return i;
 }
 
 fn main() with(Std) -> Int {

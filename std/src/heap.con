@@ -129,8 +129,9 @@ mod heap {
         }
 
         pub fn drop(self) with(Alloc) {
-            if self.cap > 0 {
-                dealloc(self.data);
+            let BinaryHeap { data, len, cap, cmp_fn } = self;
+            if cap > 0 {
+                dealloc(data);
             }
         }
     }

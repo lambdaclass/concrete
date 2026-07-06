@@ -11,7 +11,7 @@ impl Describe for Point {
     }
 }
 
-fn show<T: Describe>(p: T) -> Int {
+fn show<T: Describe + Copy>(p: T) -> Int {
     return p.describe();
 }
 

@@ -103,8 +103,9 @@ mod deque {
         }
 
         pub fn drop(self) with(Alloc) {
-            if self.cap > 0 {
-                dealloc(self.ptr);
+            let Deque { ptr, head, len, cap } = self;
+            if cap > 0 {
+                dealloc(ptr);
             }
         }
     }

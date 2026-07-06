@@ -21,7 +21,7 @@ impl Displayable for Tagged {
     }
 }
 
-fn use_both<T: Addable + Displayable>(x: T) -> Int {
+fn use_both<T: Addable + Displayable + Copy>(x: T) -> Int {
     return x.add_val() + x.display_val();
 }
 

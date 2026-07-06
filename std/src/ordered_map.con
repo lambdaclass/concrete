@@ -191,9 +191,10 @@ mod ordered_map {
         }
 
         pub fn drop(self) with(Alloc) {
-            if self.cap > 0 {
-                dealloc::<K>(self.keys);
-                dealloc::<V>(self.values);
+            let OrderedMap { keys, values, len, cap, cmp_fn } = self;
+            if cap > 0 {
+                dealloc::<K>(keys);
+                dealloc::<V>(values);
             }
         }
     }

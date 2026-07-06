@@ -9,11 +9,13 @@ fn wrap(x: Int) -> Box<Int> {
 }
 
 fn unwrap(b: Box<Int>) -> Int {
-    return b.inner;
+    let Box { inner, tag } = b;
+    return inner;
 }
 
 fn transform(b: Box<Int>, f: fn(Int) -> Int) -> Box<Int> {
-    let val: Int = b.inner;
+    let Box { inner, tag } = b;
+    let val: Int = inner;
     let result: Int = f(val);
     return Box::<Int> { inner: result, tag: 1 };
 }

@@ -21,7 +21,7 @@ impl HasLabel for TaggedInt {
     }
 }
 
-fn combined<T: HasValue + HasLabel>(item: T) -> Int {
+fn combined<T: HasValue + HasLabel + Copy>(item: T) -> Int {
     return item.value() + item.label();
 }
 

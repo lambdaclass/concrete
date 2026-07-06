@@ -122,9 +122,10 @@ trusted impl IntMap {
     }
 
     pub fn drop(self) with(Alloc, Unsafe) {
-        free(self.keys as *mut u8);
-        free(self.values as *mut u8);
-        free(self.flags as *mut u8);
+        let IntMap { keys, values, flags, len, cap, hash_fn, eq_fn } = self;
+        free(keys as *mut u8);
+        free(values as *mut u8);
+        free(flags as *mut u8);
     }
 }
 

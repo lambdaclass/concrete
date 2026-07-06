@@ -12,15 +12,18 @@ fn make(v: Int) -> Resource {
 }
 
 fn add_ten(r: Resource) -> Resource {
-    return Resource { value: r.value + 10 };
+    let Resource { value } = r;
+    return Resource { value: value + 10 };
 }
 
 fn double(r: Resource) -> Resource {
-    return Resource { value: r.value * 2 };
+    let Resource { value } = r;
+    return Resource { value: value * 2 };
 }
 
 fn finish(r: Resource) -> Int {
-    return r.value;
+    let Resource { value } = r;
+    return value;
 }
 
 pub fn main() with(Std) {

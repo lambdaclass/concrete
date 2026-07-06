@@ -21,7 +21,7 @@ impl Scorable for Entry {
     }
 }
 
-fn weighted<T: Scorable>(item: T, mult: Int) -> Int {
+fn weighted<T: Scorable + Copy>(item: T, mult: Int) -> Int {
     return item.score() * mult;
 }
 

@@ -7,7 +7,8 @@ impl A {
 }
 
 fn consume_a(a: A) -> Int {
-    return a.a;
+    let A { a, b } = a;
+    return a;
 }
 
 fn main() -> Int {

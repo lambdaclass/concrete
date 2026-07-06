@@ -21,11 +21,11 @@ impl Perimeter for Square {
     }
 }
 
-fn measure_area<T: Area>(shape: T) -> Int {
+fn measure_area<T: Area + Copy>(shape: T) -> Int {
     return shape.area();
 }
 
-fn measure_perim<T: Perimeter>(shape: T) -> Int {
+fn measure_perim<T: Perimeter + Copy>(shape: T) -> Int {
     return shape.perimeter();
 }
 

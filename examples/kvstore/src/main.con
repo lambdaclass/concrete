@@ -25,10 +25,6 @@ mod kvstore {
     import std.hash.{hash_string, eq_string};
     import std.vec.{Vec};
 
-    // Consumes a linear String without freeing its backing memory.
-    fn forget_string(s: String) {
-    }
-
     fn string_to_bytes(s: &String) with(Alloc) -> Bytes {
         let len: Int = string_length(s);
         let mut b: Bytes = Bytes::with_capacity(len as u64);
@@ -92,16 +88,13 @@ mod kvstore {
         if idx < 0 {
             return;
         }
-        let len: Int = keys.len() as Int;
-        let last: Int = len - 1;
-        if idx != last {
-            let last_key: String = vec_get::<String>(keys, last);
-            vec_set::<String>(keys, idx, last_key);
-        }
-        let pk: Option<String> = keys.pop();
-        match pk {
+        // swap_remove MOVES the removed String out (no duplicate, no leak) —
+        // the old vec_get/vec_set/pop/forget dance both leaked the removed
+        // clone's buffer and needed a silent-drop escape (closed by H17).
+        let removed: Option<String> = keys.swap_remove(idx as u64);
+        match removed {
             Option::Some { value } => {
-                forget_string(value);
+                value.drop();
             },
             Option::None => {}
         }

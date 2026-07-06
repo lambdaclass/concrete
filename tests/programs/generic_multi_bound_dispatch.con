@@ -34,7 +34,7 @@ impl Describable for Ball {
     }
 }
 
-fn total<T: Measurable + Describable>(item: T) -> Int {
+fn total<T: Measurable + Describable + Copy>(item: T) -> Int {
     return item.measure() + item.describe();
 }
 

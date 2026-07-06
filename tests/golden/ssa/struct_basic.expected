@@ -9,7 +9,7 @@ entry:
   ret i64 %t4
 }
 
-; source: main @ line 10
+; source: main @ line 11
 define i64 @main() {
 entry:
   %t0 = alloca %Point

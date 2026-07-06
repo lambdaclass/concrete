@@ -1,6 +1,6 @@
 // repr(C) struct containing another repr(C) struct
 #[repr(C)]
-struct Vec2 {
+struct Copy Vec2 {
     x: i32,
     y: i32,
 }
@@ -12,7 +12,8 @@ struct Rect {
 }
 
 fn area(r: Rect) -> i32 {
-    return r.size.x * r.size.y;
+    let Rect { origin, size } = r;
+    return size.x * size.y;
 }
 
 fn main() -> Int {

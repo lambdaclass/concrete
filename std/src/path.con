@@ -84,7 +84,8 @@ mod path {
         }
 
         pub fn drop(self) with(Alloc) {
-            dealloc::<u8>(self.ptr);
+            let PathBuf { ptr, len, cap } = self;
+            dealloc::<u8>(ptr);
         }
     }
 

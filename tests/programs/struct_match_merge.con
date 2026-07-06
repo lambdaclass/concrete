@@ -4,7 +4,8 @@ struct Pair {
 }
 
 fn sum(p: Pair) -> Int {
-    return p.x + p.y;
+    let Pair { x, y } = p;
+    return x + y;
 }
 
 fn main() -> Int {

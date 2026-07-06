@@ -4,7 +4,8 @@ fn set_value(b: &mut Box, v: Int) {
     b.value = v;
 }
 
-fn consume(b: Box) -> Int { return b.value; }
+fn consume(b: Box) -> Int {
+    let Box { value } = b; return value; }
 
 fn main() -> Int {
     let mut b: Box = Box { value: 0 };

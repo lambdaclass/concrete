@@ -15,7 +15,10 @@ enum Result<T, E> {
 }
 
 fn sum(p: Pair) -> Int {
-  return (p.a + p.b);
+  let __destr_Pair: Pair = p;
+  let a: Int = __destr_Pair.a;
+  let b: Int = __destr_Pair.b;
+  return (a + b);
 }
 
 fn main() -> Int {

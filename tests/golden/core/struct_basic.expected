@@ -15,7 +15,10 @@ enum Result<T, E> {
 }
 
 fn sum_point(p: Point) -> Int {
-  return (p.x + p.y);
+  let __destr_Point: Point = p;
+  let x: Int = __destr_Point.x;
+  let y: Int = __destr_Point.y;
+  return (x + y);
 }
 
 fn main() -> Int {

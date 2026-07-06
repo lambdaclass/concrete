@@ -29,11 +29,11 @@ impl Shape for Circle {
     }
 }
 
-fn total_area<T: Shape>(a: T, b: T) -> Int {
+fn total_area<T: Shape + Copy>(a: T, b: T) -> Int {
     return a.area() + b.area();
 }
 
-fn describe_shape<T: Shape>(s: T) -> Int {
+fn describe_shape<T: Shape + Copy>(s: T) -> Int {
     let a: Int = s.area();
     let p: Int = s.perimeter();
     return a + p;

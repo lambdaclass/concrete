@@ -6,7 +6,8 @@ mod Lib {
     impl Summable for Point {
         fn total(&self) -> Int { return self.x + self.y; }
     }
-    fn consume(p: Point) -> Int { return p.x + p.y; }
+    fn consume(p: Point) -> Int {
+        let Point { x, y } = p; return x + y; }
     pub fn make_and_sum(x: Int, y: Int) -> Int {
         let p: Point = Point { x: x, y: y };
         let result: Int = p.total();

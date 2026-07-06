@@ -6,7 +6,8 @@ struct Matrix {
 }
 
 fn sum_matrix(m: Matrix) -> Int {
-    return m.a + m.b + m.c + m.d;
+    let Matrix { a, b, c, d } = m;
+    return a + b + c + d;
 }
 
 fn main() -> Int {

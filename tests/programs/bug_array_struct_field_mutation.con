@@ -15,7 +15,8 @@ struct Buf {
 }
 
 fn test_from_struct(b: Buf) -> i32 {
-    let mut d: [i32; 4] = b.data;
+    let Buf { data, len } = b;
+    let mut d: [i32; 4] = data;
     d[0] = 99;
     return d[0];
 }

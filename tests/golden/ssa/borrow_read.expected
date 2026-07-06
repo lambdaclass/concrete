@@ -13,7 +13,7 @@ entry:
   ret i64 %t1
 }
 
-; source: main @ line 9
+; source: main @ line 10
 define i64 @main() {
 entry:
   %addr.4 = alloca %Pair

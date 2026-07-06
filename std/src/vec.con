@@ -38,6 +38,25 @@ mod vec {
             return Option::<T>::Some { value: *target_ptr };
         }
 
+        /// Remove and return the element at `at` in O(1) by moving the LAST
+        /// element into its place (order not preserved). None if out of
+        /// bounds. This is the linear-safe removal for non-Copy elements —
+        /// the removed value is MOVED out (the caller owns it), never
+        /// duplicated or leaked.
+        pub fn swap_remove(&mut self, at: u64) -> Option<T> {
+            if at >= self.len {
+                return Option::<T>::None;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            let out: T = *target_ptr;
+            self.len = self.len - 1;
+            if at < self.len {
+                let last_ptr: *mut T = self.ptr + self.len;
+                *target_ptr = *last_ptr;
+            }
+            return Option::<T>::Some { value: out };
+        }
+
         /// Bounds-checked access. Returns None if index is out of bounds.
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below
         // (the Copy cell). Non-Copy elements: borrow via a scoped callback or
@@ -85,7 +104,8 @@ mod vec {
 
         /// TODO: drop should be a trait, and isn't really called yet automatically.
         pub fn drop(self) with(Alloc) {
-            dealloc(self.ptr);
+            let Vec { ptr, len, cap } = self;
+            dealloc(ptr);
         }
 
         /// Fold over all elements, threading an accumulator. Capability-
@@ -312,6 +332,32 @@ mod vec {
                 v.drop();
                 return 1;
             }
+        }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_swap_remove() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10); v.push(20); v.push(30);
+        let r: Option<i32> = v.swap_remove(0);
+        match r {
+            Option::Some { value } => {
+                if value != 10 { v.drop(); return 1; }
+            },
+            Option::None => { v.drop(); return 1; }
+        }
+        // last element moved into slot 0; len shrank
+        if v.len() != 2 { v.drop(); return 2; }
+        match v.get(0) {
+            Option::Some { value } => { if value != 30 { v.drop(); return 3; } },
+            Option::None => { v.drop(); return 3; }
+        }
+        // out of bounds -> None
+        match v.swap_remove(9) {
+            Option::Some { value } => { v.drop(); return 4; },
+            Option::None => { }
         }
         v.drop();
         return 0;

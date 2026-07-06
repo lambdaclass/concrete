@@ -48,7 +48,8 @@ mod io {
         }
 
         pub fn close(self) with(Unsafe) {
-            fclose(self.ptr);
+            let TextFile { ptr } = self;
+            fclose(ptr);
         }
     }
 

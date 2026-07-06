@@ -172,9 +172,10 @@ mod map {
         }
 
         pub fn drop(self) with(Alloc) {
-            dealloc::<K>(self.keys);
-            dealloc::<V>(self.values);
-            dealloc::<u8>(self.flags);
+            let HashMap { keys, values, flags, len, cap, hash_fn, eq_fn } = self;
+            dealloc::<K>(keys);
+            dealloc::<V>(values);
+            dealloc::<u8>(flags);
         }
 
         // --- Internal helpers ---
