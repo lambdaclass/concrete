@@ -164,6 +164,11 @@ jobs:
           python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
           python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
 
+      - name: Linearity fuzz campaign (ground-truth conservation oracle, rotating seed)
+        run: |
+          SEED=$(date -u +%Y%m%d)
+          python3 scripts/tests/fuzz_linearity.py --n 400 --seed "$SEED"
+
       - name: Upload failing case (if any)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -429,6 +434,12 @@ jobs:
 
       - name: Linear-conservation gate (every value-flow site moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/match; no duplication)
         run: bash scripts/tests/check_linear_conservation.sh
+
+      - name: Value-flow spec coverage gate (ROADMAP 13c — every AST constructor must have a value-flow row in docs/VALUE_FLOW_SPEC.md)
+        run: bash scripts/tests/check_value_flow_spec.sh
+
+      - name: Linearity fuzz smoke (deterministic seed — consume-once compiles, leak/dup/shadow/param-sink reject)
+        run: python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706
 
       - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
         run: bash scripts/tests/check_no_macros.sh
