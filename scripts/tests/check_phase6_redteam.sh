@@ -81,7 +81,7 @@ else no "bad_body: expected exactly one parse error"; "$C" "$TMP/bad_body.con" 2
 echo "=== 2. match linear-consumption agreement across arm forms ==="
 # A linear resource consumed in EVERY arm (OR + range + guard + wildcard) is OK.
 write consume_all 'struct R { v: Int }
-fn take(r: R) -> Int { return r.v; }
+fn take(r: R) -> Int { let R { v } = r; return v; }
 fn f(x: Int) -> Int {
     let r: R = R { v: 1 };
     match x {
@@ -98,7 +98,7 @@ if "$C" "$TMP/consume_all.con" -o "$TMP/consume_all.bin" >"$TMP/ca.err" 2>&1; th
 else no "consume_all: should compile"; sed 's/^/        /' "$TMP/ca.err" | head -3; fi
 # Consumed in only some arms must be rejected (arms disagree on consumption).
 write consume_some 'struct R { v: Int }
-fn take(r: R) -> Int { return r.v; }
+fn take(r: R) -> Int { let R { v } = r; return v; }
 fn f(x: Int) -> Int {
     let r: R = R { v: 1 };
     match x {
