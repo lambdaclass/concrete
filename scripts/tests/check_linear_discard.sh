@@ -88,6 +88,14 @@ accept "free(box)"          'fn main() with(Alloc) -> Int { let b: Heap<Token> =
 accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return sink(t); }'
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'
 
+# KNOWN_HOLES H16/H17 (OPEN, disclosed 2026-07-05, fixes queued):
+#   H16 — same-scope shadowing (`let f = mk(); let f = mk();`) leaks the first
+#         binding (scope exit resolves locals by NAME, masking the older entry).
+#   H17 — linear params (incl. by-value `self`) carry no consume obligation
+#         (`fn drop_it(f: File) {}` is a silent-drop escape). RULED 2026-07-05:
+#         params are owned locals and must be consumed; H12-style burn-down.
+# Reject rows land with the fixes; repros in docs/KNOWN_HOLES.md.
+
 echo ""
 echo "LINEAR-DISCARD: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -19,7 +19,97 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**None.** Every previously tracked hole is closed and gated (see below).
+**Five open holes (H13–H17), all found by the 2026-07-05 post-H11 value-flow
+probe sweep** — the read-side audit that closed H11 was re-run over every
+*write/discharge* site. Two are duplications (double-free class), three are
+leaks (silent-drop class). Fixes for H13–H16 are immediate next work; H17 has
+a recorded design ruling and a larger burn-down.
+
+### H13. Plain rebind `a = b` does not consume the RHS — OPEN 2026-07-05 (duplication)
+
+The assignment handler enforces the rebind rule on the LHS (the OLD value must
+be consumed, else E0219) and re-arms the binding, but never consumes an
+**ident RHS** — every other move site (`let g = b`, call arguments, `return b`,
+`*p = b`, `arr[i] = b`) does. So the same linear value ends up owned by both
+names:
+
+```concrete
+let mut a: File = mk(); sink(a);
+let b: File = mk();
+a = b;                    // b moved into a…
+sink(b); sink(a);         // …but both still consumable -> double-free. Compiles today.
+```
+
+**Gate:** noted as the H13 gap in `check_linear_conservation.sh`; reject rows
+land with the fix. **Fix:** consume an ident RHS in the `.assign` case,
+exactly as `.letDecl` does.
+
+### H14. `break value;` does not consume an ident value — OPEN 2026-07-05 (duplication)
+
+A break-with-value moves the value out as the loop expression's result, but
+the ident is never consumed — the loop result and the original both own it:
+
+```concrete
+let f: File = mk();
+let g: File = while true { break f; } else { mk() };
+sink(g); sink(f);         // same File consumed twice. Compiles today.
+```
+
+**Gate:** noted as the H14 gap in `check_linear_conservation.sh`; reject rows
+land with the fix. **Fix:** consume an ident break-value in the `.break_` case
+(mirroring `.return_`).
+
+### H15. Non-Copy overwrite through `arr[i] = v` and `*r = v` (`&mut`) leaks the old value — OPEN 2026-07-05 (leak)
+
+Field assignment over a non-Copy field is rejected (E0219: overwrite would
+leak the old value), but its two siblings are unguarded: `arr[i] = v` over a
+non-Copy element and `*r = v` through a `&mut` reference both drop the OLD
+value silently (the 2026-07-02 stores-consume fix consumed the RHS but nobody
+accounts for what was overwritten). Raw-pointer stores (`*mut`) are the
+trusted collection idiom for writing *uninitialized* slots and stay exempt.
+
+```concrete
+let mut arr: [File; 2] = [mk(), mk()];
+arr[0] = mk();            // old arr[0] leaked. Compiles today.
+```
+
+**Gate:** noted as the H15 gap in `check_linear_conservation.sh`; reject rows
+land with the fix. **Fix:** E0219-analog rejection in `.arrayIndexAssign` and
+in `.derefAssign` when the target is `&mut T` with non-Copy `T`.
+
+### H16. Same-scope shadowing leaks the shadowed linear value — OPEN 2026-07-05 (leak)
+
+`let f: File = mk(); let f: File = mk();` silently drops the first `File`:
+scope-exit checking resolves locals BY NAME, so the newer binding masks the
+older entry and its obligation is never checked. (Nested-scope shadowing is
+sound — the outer binding is checked at its own scope exit; only same-scope
+re-`let` leaks.)
+
+**Gate:** noted as the H16 gap in `check_linear_discard.sh`; reject rows land
+with the fix. **Fix:** scope-exit must check env *entries* (including shadowed
+duplicates), not name lookups.
+
+### H17. Linear parameters (incl. by-value `self`) carry no consume obligation — OPEN 2026-07-05 (leak)
+
+`fn vanish(self) {}` / `fn drop_it(f: File) {}` are universal silent-drop
+escapes: the checker deliberately treats params as "consumed by being
+received" (`Check.lean` comment), with one carve-out — a *generic-typed,
+completely untouched* param IS flagged (E0208), so `fn tag<T>(h: Hold<T>)`
+errors while `fn sink(f: File)` does not. Inconsistent, and disclosed nowhere
+outside a code comment; it contradicts the one law ("a non-Copy value never
+silently disappears") end-to-end, since the caller-side move is accounted but
+the callee discharges the obligation for free.
+
+```concrete
+fn drop_it(f: File) -> Int { return 0; }   // f silently dropped. Compiles today.
+```
+
+**Ruling (2026-07-05):** params are OWNED LOCALS and must be consumed like any
+other binding — no entry-consumption escape. The generic-param carve-out is
+then subsumed by the general rule. **Fix path:** flip the exemption in
+`checkFn`, measure the std/test burn-down (H12-style tranche: every
+received-but-unconsumed linear param becomes E0208), migrate, then delete the
+carve-out. The linearity fuzzer's oracle assumes this ruling.
 
 ## Recently closed
 

@@ -529,20 +529,25 @@ the active list is pull-condition-gated or polish.
    384 -> 0 std burn-down; the gate now asserts the exemption machinery cannot
    quietly return and std stays at zero front-end violations.
 
-13e. **Run the final conservation audit sweep after H11.** This is an audit,
-   not a known bug bucket. Once by-value non-`Copy` sub-place projection is
-   rejected, do the remaining targeted probes for the same class of bugs before
-   calling the conservation story closed:
-   callable/callback values must not be able to capture a linear value and then
-   duplicate or leak it through repeated invocation, storage, or handoff; raw
-   pointer place writes (`derefAssign`, `arrayIndexAssign` through `*mut`, and
-   any trusted/unsafe helper built on them) must not silently duplicate or leak
-   non-`Copy` values in safe code. If a path is safe-only, gate it; if it is
-   trusted/unsafe-only, require an explicit boundary and report-visible
-   classification; if it is a real safe-code hole, disclose it in
-   `docs/KNOWN_HOLES.md` before fixing. Add rows to
-   `scripts/tests/check_linear_conservation.sh` or a dedicated
-   `check_linear_conservation_sweep.sh` so these probes remain permanent.
+13e. **Post-H11 conservation audit sweep — RUN 2026-07-05; found 5 holes
+   (H13–H17), all disclosed in docs/KNOWN_HOLES.md before fixing.** ~20
+   targeted probes over every value-flow *discharge* site. Sound: locals
+   (read/borrow/unused), match arms + guards, if-expr moves, return paths,
+   return-path leaks, loop-consume, H11 projections. Broken: H13 rebind
+   `a = b` doesn't consume the RHS (dup), H14 `break f;` doesn't consume
+   (dup), H15 `arr[i] = v` / `*r = v` (&mut) leak the overwritten value, H16
+   same-scope shadowing leaks, H17 linear params (incl. by-value `self`) have
+   no consume obligation (deliberate but undisclosed; RULED: params are owned
+   locals and must be consumed — H12-style burn-down). The remaining 13e tail
+   (callable-value capture probes) folds into #18's landing gates.
+   Program agreed 2026-07-05, in order: disclose (done) → fix H13–H16 →
+   H17 burn-down → constructor-coverage gate (13c's mechanical half: every
+   AST constructor must have a value-flow row + gate fixture) → linearity
+   fuzzer (generate consume-exactly-once/leak/dup programs from a
+   ground-truth oracle; nightly, like fuzz_differential) → checkExpr mode
+   refactor (generalize `asPlace` to value/place/borrow with value-mode
+   auto-consume — the structural fix that prevents the class) → interp
+   runtime conservation oracle as the nightly backstop.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has

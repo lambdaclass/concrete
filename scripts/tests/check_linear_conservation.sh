@@ -102,6 +102,13 @@ accept "&w.f borrow of non-Copy sub-place"           'fn main() -> Int { let w: 
 accept "Copy field and Copy element reads"           'fn main() -> Int { let p: Pt = Pt { x: 1, y: 2 }; let mut a: [i32; 2] = [3, 4]; let v: i32 = a[0]; a[1] = 9; return (p.x + v + a[1]) as Int; }'
 accept "Copy leaf through non-Copy intermediate (o.w.f.fd)" 'fn main() -> Int { let o: Outer = mkO(); let n: Int = o.w.f.fd as Int; return n + takeO(o); }'
 
+# KNOWN_HOLES H13/H14/H15 (OPEN, disclosed 2026-07-05, fixes queued):
+#   H13 — plain rebind `a = b` does not consume the ident RHS (duplication).
+#   H14 — `break f;` does not consume the ident break-value (duplication).
+#   H15 — `arr[i] = v` / `*r = v` (&mut) over non-Copy leak the OLD value
+#         (E0219 guards only field assignment).
+# Reject rows land with the fixes; repros in docs/KNOWN_HOLES.md.
+
 echo ""
 echo "LINEAR-CONSERVATION: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
