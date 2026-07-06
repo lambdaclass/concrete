@@ -18,16 +18,17 @@ The bugs this model fixed all came from treating these as one:
 
 | concept | question it answers | who has it |
 |---|---|---|
-| **Copy** | may I *duplicate* it? (use it twice) | primitives, `&T`, raw pointers, `fn` pointers, and structs/enums explicitly marked `Copy` (whose fields are all Copy — a `Copy` type may never own a resource) |
-| **linear** (= non-Copy) | must I *account for* it exactly once? | everything not `Copy`: `String`, `File`, `Vec<T>`, `Heap<T>`, unmarked structs, `Option`/`Result`, protocol/witness tokens |
+| **Copy** | may I *duplicate* it? (use it twice) | primitives, `&T`, raw pointers, `fn` pointers, and structs/enums explicitly marked `Copy` (whose fields are all Copy — a `Copy` type may never own a resource). Generic marked-`Copy` types are **conditionally** Copy: `Option<T>` / `Result<T, E>` / `struct Copy Box<T>` are Copy iff every substituted payload is Copy (`Option<i32>` yes, `Option<String>` no) |
+| **linear** (= non-Copy) | must I *account for* it exactly once? | everything not `Copy`: `String`, `File`, `Vec<T>`, `Heap<T>`, unmarked structs, `Option`/`Result` over linear payloads, protocol/witness tokens |
 | **Destroy** | is there an *explicit consuming cleanup* verb? | resource owners that need teardown (`String`, `File`, …); it is a *verb*, not a structural property — a linear value may have one or not |
 
 Two things follow that are easy to get wrong:
 
-- **`Copy` answers "duplicable", not "droppable".** `&mut T` and `Option<i32>` are not
-  duplicable, yet dropping them is harmless. They are *linear* here anyway, because
+- **`Copy` answers "duplicable", not "droppable".** `&mut T` is not duplicable
+  (exclusive), yet dropping it is harmless — it is *linear* here anyway, because
   Concrete's rule is about accounting, not just aliasing. If a value genuinely owns
-  nothing and is safe to copy and drop, mark it `Copy`.
+  nothing and is safe to copy and drop, mark it `Copy` (for generics, the mark is
+  conditional: the instantiation is Copy only when its payloads are).
 - **`Destroy` is not "the reason a value is linear".** A permit / receipt / proof
   witness owns no heap and has no `Destroy`, yet must not vanish — it is simply a
   linear value you must hand off. `Destroy` is only the *name of the cleanup* for the
@@ -92,13 +93,12 @@ duplicating one would let it be freed twice. Concretely:
   which is illegal over a **non-Copy** enum (the linear `_` rule). For a non-Copy /
   resource-owning enum, **use a full explicit `match`** instead of let-else.
 - **`if let` / `while let`** desugar the same way and follow the same rule (decision
-  re-confirmed 2026-07-01): over a **non-Copy** enum — including `Option<i32>`, since
-  the discard rule keys on the TYPE's Copy-ness, not on whether the uncovered variants
-  happen to own resources — they are rejected (**E0288**); write an explicit exhaustive
-  `match`. Over a `Copy` enum they work as expected. If generic instantiations ever get
-  conditional Copy (`Option<i32>` Copy when the payload is Copy — a natural part of
-  stabilizing `std.option`), these shapes become legal for Copy payloads without
-  bending the rule. Gated by `check_pattern_ergonomics.sh` (`neg_if_let_noncopy`).
+  re-confirmed 2026-07-01): over a **non-Copy** enum they are rejected (**E0288**);
+  write an explicit exhaustive `match`. Over a `Copy` enum they work as expected.
+  Since conditional Copy landed (2026-07-05), `Option<i32>`-class instantiations ARE
+  Copy, so `if let` over them is legal *for the right reason* — the rule is unbent;
+  `Option<File>` still rejects. Gated by `check_pattern_ergonomics.sh`
+  (`neg_if_let_noncopy`, now over a linear payload).
 - **Assigning to a non-Copy field** (`o.f = v`) is rejected (**E0219**): overwriting
   would leak the old linear value and cannot soundly move the new one in. Destructure
   and rebuild, or make the field `Copy`.
@@ -183,15 +183,19 @@ sibling) and **Linear Haskell** (multiplicities). Unlike Rust — which is affin
 an *implicit* `Drop` that runs cleanup for you — Concrete makes cleanup explicit, so
 it must reject silent disappearance rather than paper over it with a destructor.
 
-## Deliberately deferred: conditional `Copy`
+## Conditional `Copy` (landed 2026-07-05)
 
-`Copy` is currently a fixed per-declaration flag, so a generic container cannot be
-`Copy` (marking `Option` `Copy` would wrongly make `Option<File>` `Copy` too). That
-means `Option<i32>` is treated as linear, and `match opt_i32 { _ => {} }` is rejected
-— you write the two-arm form. The principled convenience is **conditional `Copy`**:
-`Option<T>` is `Copy` iff `T` is `Copy`. Then a catch-all `_` over `Option<i32>` would
-be valid *for the right reason* — the whole value is genuinely unrestricted. This is a
-future convenience, **not a foundation**; the linear rule stands without it.
+`Copy` on a generic declaration is a *conditional* mark: the instantiation is `Copy`
+iff every field/payload is `Copy` after substitution. `Option<T>` is `Copy` iff `T`
+is; `Result<T, E>` iff `T` and `E` are; `struct Copy Box<T>` iff `T` is; arrays were
+always structural (`[T; N]` Copy iff `T`). A catch-all `_` over `Option<i32>` is
+valid *for the right reason* — the whole value is genuinely unrestricted — while
+`Option<File>` stays linear. A non-qualifying instantiation of a `Copy`-marked
+generic is **demoted to linear, not an error** (Mono demotes specializations to a
+fixpoint; `verifyCopyFieldsPostMono` asserts the invariant "isCopy ⇒ all fields
+Copy" machine-wide). The hard rule is preserved: no Copy value ever contains a
+non-Copy one. This is a convenience layered on the linear rule, **not a
+foundation**; the linear rule stands without it.
 
 ## Where it lives
 

@@ -1,0 +1,15 @@
+// Conditional Copy negative: Result<String-like, i32> is not Copy — a linear
+// Ok payload keeps the whole Result linear; by-value field projection of the
+// contained value out of a struct holding it rejects (E0290), and reuse after
+// a consuming match rejects (E0205).
+// Expected: error about use after move
+struct Res { data: Int }
+
+fn use_res(r: Res) -> Int { let Res { data } = r; return data; }
+
+fn main() -> Int {
+    let r: Result<Res, i32> = Result::Ok { value: Res { data: 2 } };
+    let a: Int = match r { Result::Ok { value } => use_res(value), Result::Err { error } => error as Int };
+    let b: Int = match r { Result::Ok { value } => use_res(value), Result::Err { error } => error as Int };
+    return a + b;
+}

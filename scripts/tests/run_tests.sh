@@ -1281,7 +1281,12 @@ run_err "$TESTDIR/error_copy_destroy.con"        "implements Destroy and cannot 
 run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discriminant values are not supported"
 run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
 run_err "$TESTDIR/error_copy_linear_field.con"   "contains non-copy field"
-run_err "$TESTDIR/error_copy_generic_non_copy_instantiation.con" "non-Copy field"
+# Conditional Copy (Phase 7 #3): Box<MyResource> silently LOSES Copy (not an
+# instantiation error) — the move-after-use is what rejects, matching the
+# fixture's stated intent.
+run_err "$TESTDIR/error_copy_generic_non_copy_instantiation.con" "used after move"
+run_err "$TESTDIR/error_conditional_copy_option.con" "used after move"
+run_err "$TESTDIR/error_conditional_copy_result.con" "used after move"
 run_err "$TESTDIR/error_destroy_no_impl.con"     "does not implement Destroy"
 run_err "$TESTDIR/error_destroy_reserved.con"    "is a reserved identifier"
 # Phase 5: Allocator errors
@@ -1457,6 +1462,8 @@ run_ok "$TESTDIR/union_basic.con" 42
 run_ok "$TESTDIR/test_generic_chain.con" 42
 run_ok "$TESTDIR/test_generic_nested_struct.con" 42
 run_ok "$TESTDIR/test_method_generic.con" 42
+# Conditional Copy (Phase 7 #3): Copy iff all substituted fields/payloads Copy
+run_ok "$TESTDIR/conditional_copy.con" 37
 run_ok "$TESTDIR/test_enum_recursive_sum.con" 42
 run_ok "$TESTDIR/test_match_exhaustive_nested.con" 42
 run_ok "$TESTDIR/test_linearity_branch_agree.con" 42

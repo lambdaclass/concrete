@@ -66,7 +66,9 @@ reject "let _ = 5; (Copy)"  E0289 'fn main() -> Int { let _ = 5; return 0; }'
 echo "=== \`_\` may ignore only Copy — dropping a non-Copy value is rejected (E0288) ==="
 reject "wildcard arm/resource"       E0288 'fn f(r: Res) -> Int { match r { _ => { } } return 0; } fn main() -> Int { return f(openr()); }'
 reject "wildcard payload/resource"   E0288 'fn f(r: Res) -> Int { match r { Res::Has { _ } => { }, Res::Empty {} => { } } return 0; } fn main() -> Int { return f(openr()); }'
-reject "wildcard arm/Option (non-Copy, no resource)" E0288 'fn main() -> Int { let o: Option<i32> = maybe(); match o { _ => { } } return 0; }'
+# Conditional Copy (2026-07-05): Option<i32> IS Copy now, so the non-Copy row
+# needs a linear payload; the Option<i32> wildcard moved to the accept rows.
+reject "wildcard arm/Option over linear payload" E0288 'fn main() -> Int { let o: Option<File> = Option::<File>::Some { value: make_file(1) }; match o { _ => { } } return 0; }'
 reject "value wildcard/Heap (non-enum non-Copy)" E0288 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { _ => { } } return 0; }'
 
 echo "=== non-enum value patterns move non-Copy scrutinees ==="
@@ -77,6 +79,7 @@ reject "partial linear struct destructure" E0252 'fn main() -> Int { let p: Pair
 
 echo "=== legitimate forms still compile ==="
 accept "exhaustive, Copy payloads ignored" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { Option::Some { _ } => { }, Option::None => { } } return 0; }'
+accept "wildcard arm/Option<i32> (conditionally Copy)" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { _ => { } } return 0; }'
 accept "wildcard payload (Copy field)"     'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
 accept "value pattern consumes Heap once" 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } return 0; }'
 accept "linear struct destructure moves field" 'fn main() -> Int { let w: Wrap = make_wrap(); let Wrap { f } = w; return sink_file(f); }'

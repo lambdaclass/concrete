@@ -790,6 +790,12 @@ private partial def collectAllModuleStructs (m : CModule) : List CStructDef :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllModuleStructs s) []
   own ++ sub
 
+/-- Recursively collect all enum defs from a module and its submodules. -/
+private partial def collectAllModuleEnums (m : CModule) : List CEnumDef :=
+  let own := m.enums
+  let sub := m.submodules.foldl (fun acc s => acc ++ collectAllModuleEnums s) []
+  own ++ sub
+
 /-- Monomorphize generic struct definitions in a program.
     Collects all usages of generic struct types, creates concrete struct defs,
     and rewrites all references from `Ty.generic` to `Ty.named`. -/
@@ -828,7 +834,54 @@ private partial def monoStructsInProgram (modules : List CModule) : List CModule
         isPacked := sd.isPacked
         reprAlign := sd.reprAlign } : CStructDef)
     | none => none
-  -- 5. Rewrite all modules: rewrite types in functions, add new struct defs to first module only
+  -- 5. Conditional Copy (Phase 7 #3): a specialized `struct Copy S<T>` is Copy
+  -- iff every substituted field is Copy. Demote non-qualifying specializations
+  -- to linear (isCopy := false) instead of erroring — iterate to a fixpoint so
+  -- nested specializations (`Pair_Box_String` over `Box_String`) settle. This
+  -- keeps the machine-wide invariant "isCopy = true ⇒ all fields Copy" that
+  -- verifyCopyFieldsPostMono asserts.
+  let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  let isCopyField (specialized : List CStructDef) (ty : Ty) : Bool :=
+    -- named refs resolve against BOTH the specializations being demoted and
+    -- the pre-existing hand-written structs
+    let structs := specialized ++ allStructs
+    let rec go (fuel : Nat) (ty : Ty) : Bool :=
+      match fuel with
+      | 0 => false
+      | fuel+1 =>
+        match ty with
+        | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
+        | .bool | .float64 | .float32 | .char | .unit => true
+        | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
+        | .fn_ _ _ _ => true
+        | .named n =>
+          (match structs.find? fun sd => sd.name == n with
+           | some sd => sd.isCopy
+           | none => match allEnums.find? fun ed => ed.name == n with
+             | some ed => ed.isCopy
+             | none => false)
+        | .generic n args =>
+          -- generic enums (Option/Result) survive mono as instances
+          (match allEnums.find? fun ed => ed.name == n with
+           | some ed =>
+             ed.isCopy && ed.variants.all fun (_, vfs) => vfs.all fun (_, fty) =>
+               go fuel (Layout.substTyVars (ed.typeParams.zip args) fty)
+           | none => false)
+        | .array elem _ => go fuel elem
+        | _ => false
+    go 32 ty
+  let rec demote (fuel : Nat) (structs : List CStructDef) : List CStructDef :=
+    match fuel with
+    | 0 => structs
+    | fuel+1 =>
+      let structs' := structs.map fun sd =>
+        if sd.isCopy && sd.typeParams.isEmpty
+           && !(sd.fields.all fun (_, fty) => isCopyField structs fty)
+        then { sd with isCopy := false } else sd
+      if (structs'.zip structs).all (fun (a, b) => a.isCopy == b.isCopy)
+      then structs' else demote fuel structs'
+  let newStructs := demote (newStructs.length + 1) newStructs
+  -- 6. Rewrite all modules: rewrite types in functions, add new struct defs to first module only
   let rec rewriteModule (m : CModule) : CModule :=
     { m with
       functions := m.functions.map (rewriteFnTys mapping)

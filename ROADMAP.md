@@ -278,14 +278,13 @@ user needs *some* slab to write anything real. So the gate is:
 1. **The minimum slab is the Phase 5 core slab**: modules/imports, minimal
    project model, `concrete test`, core diagnostics, bytes/text/path, and
    collections.
-2. **Build exactly that** — not the full back half. Two additions promoted to
-   pre-trial prerequisites (2026-07-02): **conditional Copy for generic
-   instantiations** (Phase 7 #3) — a trial user writes `Option<i32>` in hour
-   one and today gets told to write a full match (`if let` on non-Copy enums
-   rejects by design; the fix is known, and without it the trial measures a
-   missing keystone as language friction). The former **H12 std migration**
-   prerequisite is now complete (Phase 7 #38b): the trial evaluates enforcement
-   claims against a stdlib that is checked like user code.
+2. **Build exactly that** — not the full back half. Both pre-trial
+   prerequisites are now complete: **conditional Copy for generic
+   instantiations** ✅ DONE 2026-07-05 (`Option<T>`/`Result<T,E>`/Copy-marked
+   generics are Copy iff all substituted payloads are Copy; `if let` over
+   `Option<i32>` is legal for the right reason), and the **H12 std migration**
+   (Phase 7 #38b): the trial evaluates enforcement claims against a stdlib
+   that is checked like user code.
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
    of Phases 11-19.**
 
@@ -384,15 +383,16 @@ are folded out.
   the block's value when a branch/arm ends with a value; all-statement forms
   stay statements. `check_trailing_value_blocks.sh`.
 
-**Highest-leverage next items (updated 2026-07-05), in order:** conditional
-Copy (Phase 7 #3 — pre-trial prerequisite, see the external-validation gate;
-it also lets the `T: Copy`-bounded std helpers serve `Option<i32>`-class
-types naturally), then #18 (callable-values implementation) and #35 (the
-validation project) as the phase's exit path. ✅ Landed 2026-07-05: 13b / H11
-(by-value non-Copy projection rejected, E0290 — KNOWN_HOLES OPEN section is
-empty again). ✅ Landed 2026-07-02: #24a (sub-file diagnostic attribution)
-and Phase 7 #38b / H12 (std fully front-end checked, exemption deleted).
-Everything else in the active list is pull-condition-gated or polish.
+**Highest-leverage next items (updated 2026-07-05), in order:** #18
+(callable-values implementation) and #35 (the validation project) as the
+phase's exit path — both former blockers are done. ✅ Landed 2026-07-05: 13b /
+H11 (by-value non-Copy projection rejected, E0290 — KNOWN_HOLES OPEN section
+is empty again) and conditional Copy (Phase 7 #3 — `Option<T>`/`Result<T,E>`/
+Copy-marked generics are Copy iff all substituted payloads are Copy; both
+pre-trial prerequisites for the external-validation gate are now met).
+✅ Landed 2026-07-02: #24a (sub-file diagnostic attribution) and Phase 7 #38b
+/ H12 (std fully front-end checked, exemption deleted). Everything else in
+the active list is pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
@@ -810,11 +810,13 @@ class and authority/allocation story.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
-   for fallible returns. Evaluate CONDITIONAL COPY for generic instantiations
-   here (`Option<i32>` is Copy when the payload is Copy): it is the principled
-   path that restores `if let`/`while let` on `Option<Copy>` — rejected by
-   design under the linear `_` rule (see docs/OWNERSHIP_MODEL.md, decision
-   2026-07-01) — without bending that rule or adding variant-aware analysis. Include the small ergonomic floor before real workloads
+   for fallible returns. ✅ CONDITIONAL COPY landed 2026-07-05: `Option<T>` /
+   `Result<T, E>` / Copy-marked generic structs are Copy iff every substituted
+   field/payload is Copy (`isCopyType` evaluates instantiations; Mono demotes
+   non-qualifying specializations to linear instead of erroring; `if let` /
+   `while let` on `Option<Copy>` is legal for the right reason — the linear
+   `_` rule unbent). Fixtures: `conditional_copy.con`,
+   `error_conditional_copy_{option,result}.con`. Include the small ergonomic floor before real workloads
    work around the canonical error types: `map_err`, `and_then`, `unwrap_or`,
    `ok_or`, and any `unwrap_or_else`/callback form that remains explicit about
    control flow and capabilities. If `?` gains conversion behavior, its

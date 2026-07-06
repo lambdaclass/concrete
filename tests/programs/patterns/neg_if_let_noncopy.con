@@ -3,14 +3,16 @@
 // scrutinee on the no-match path, and `_` may discard only Copy data: the
 // discard rule keys on the TYPE (isCopy), not on whether the uncovered
 // variants happen to own resources. Use an explicit exhaustive match instead.
-// (If generic instantiations ever get conditional Copy — Option<i32> Copy when
-// the payload is Copy — this shape becomes legal WITHOUT bending the rule.)
+// Since conditional Copy landed (2026-07-05), Option<i32> IS Copy and that
+// shape is legal — so the non-Copy case needs a linear payload: Option<Res>
+// stays linear and still rejects.
 mod m {
-    fn unwrap_or(o: Option<i32>, d: i32) -> i32 {
-        if let Option::Some { value } = o { return value; } else { return d; }
+    struct Res { data: i32 }
+    fn unwrap_or(o: Option<Res>, d: i32) -> i32 {
+        if let Option::Some { value } = o { let Res { data } = value; return data; } else { return d; }
     }
     fn main() -> Int {
-        let s: Option<i32> = Option::<i32>::Some { value: 7 };
+        let s: Option<Res> = Option::<Res>::Some { value: Res { data: 7 } };
         if unwrap_or(s, 99) == 7 { return 7; }
         return 1;
     }

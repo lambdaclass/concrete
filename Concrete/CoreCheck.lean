@@ -759,7 +759,7 @@ private def tyToString : Ty → String
   | .heapArray inner => "HeapArray<" ++ tyToString inner ++ ">"
   | .placeholder => "<unknown>"
 
-private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
+private partial def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
   match ty with
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
   | .bool | .float64 | .float32 | .char | .unit => true
@@ -773,6 +773,19 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
     | some sd => sd.isCopy
     | none => match allEnums.find? fun ed => ed.name == name with
       | some ed => ed.isCopy
+      | none => false
+  | .generic name args =>
+    -- Conditional Copy (Phase 7 #3): declared Copy AND all fields/payloads Copy
+    -- after substituting the instantiation's args (type params in `args` fall
+    -- to the `.typeVar` assumption above, matching the decl-time policy).
+    match allStructs.find? fun sd => sd.name == name with
+    | some sd =>
+      sd.isCopy && sd.fields.all fun (_, fty) =>
+        isCopyTy allStructs allEnums (Layout.substTyVars (sd.typeParams.zip args) fty)
+    | none => match allEnums.find? fun ed => ed.name == name with
+      | some ed =>
+        ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
+          isCopyTy allStructs allEnums (Layout.substTyVars (ed.typeParams.zip args) fty)
       | none => false
   | .array elem _ => isCopyTy allStructs allEnums elem
   | _ => false

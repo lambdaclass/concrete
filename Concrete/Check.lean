@@ -611,6 +611,29 @@ def resolveType (ty : Ty) : CheckM Ty := do
     return .fn_ params' capSet retTy'
   | _ => return ty
 
+private def substCapSet (mapping : List (String × Ty)) : CapSet → CapSet
+  | .concrete caps =>
+    -- Cap variable names that map to types are not relevant here, keep as-is
+    .concrete caps
+  | .var name => .var name
+  | .union a b => .union (substCapSet mapping a) (substCapSet mapping b)
+  | .empty => .empty
+
+private def substTy (mapping : List (String × Ty)) : Ty → Ty
+  | .named name => match mapping.lookup name with | some t => t | none => .named name
+  | .typeVar name => match mapping.lookup name with | some t => t | none => .typeVar name
+  | .ref inner => .ref (substTy mapping inner)
+  | .refMut inner => .refMut (substTy mapping inner)
+  | .ptrMut inner => .ptrMut (substTy mapping inner)
+  | .ptrConst inner => .ptrConst (substTy mapping inner)
+  | .array elem n => .array (substTy mapping elem) n
+  | .generic name args => .generic name (args.map (substTy mapping))
+  | .fn_ params capSet retTy =>
+    .fn_ (params.map (substTy mapping)) (substCapSet mapping capSet) (substTy mapping retTy)
+  | .heap inner => .heap (substTy mapping inner)
+  | .heapArray inner => .heapArray (substTy mapping inner)
+  | ty => ty
+
 /-- Is this type Copy (non-linear)? Primitives are Copy; structs are linear. -/
 partial def isCopyType (ty : Ty) : CheckM Bool := do
   match ty with
@@ -637,14 +660,24 @@ partial def isCopyType (ty : Ty) : CheckM Bool := do
         match env.newtypes.find? fun nt => nt.name == name with
         | some nt => isCopyType nt.innerTy
         | none => return false
-  | .generic name _args =>
-    -- Look up the struct/enum definition — if it's declared Copy, the instantiation is Copy
+  | .generic name args =>
+    -- CONDITIONAL Copy (Phase 7 #3): a declared-Copy generic is Copy iff every
+    -- field/payload is Copy AFTER substituting this instantiation's args —
+    -- `Option<i32>` is Copy, `Option<String>` is not. A Copy instantiation can
+    -- therefore never contain a non-Copy value (the hard rule); a non-Copy
+    -- instantiation is simply linear, not an error. Undeclared stays linear.
     let env ← getEnv
     match env.structs.find? fun sd => sd.name == name with
-    | some sd => return sd.isCopy
+    | some sd =>
+      if !sd.isCopy then return false
+      let mapping := sd.typeParams.zip args
+      sd.fields.allM fun f => isCopyType (substTy mapping f.ty)
     | none =>
       match env.enums.find? fun ed => ed.name == name with
-      | some ed => return ed.isCopy
+      | some ed =>
+        if !ed.isCopy then return false
+        let mapping := ed.typeParams.zip args
+        ed.variants.allM fun v => v.fields.allM fun f => isCopyType (substTy mapping f.ty)
       | none => return false
   | .typeVar name =>
     -- Check if the type parameter has a Copy bound
@@ -1086,29 +1119,6 @@ private partial def unifyTypes (pattern actual : Ty) (typeParams : List String) 
     | .array aElem _ => unifyTypes elem aElem typeParams
     | _ => []
   | _ => []
-
-private def substCapSet (mapping : List (String × Ty)) : CapSet → CapSet
-  | .concrete caps =>
-    -- Cap variable names that map to types are not relevant here, keep as-is
-    .concrete caps
-  | .var name => .var name
-  | .union a b => .union (substCapSet mapping a) (substCapSet mapping b)
-  | .empty => .empty
-
-private def substTy (mapping : List (String × Ty)) : Ty → Ty
-  | .named name => match mapping.lookup name with | some t => t | none => .named name
-  | .typeVar name => match mapping.lookup name with | some t => t | none => .typeVar name
-  | .ref inner => .ref (substTy mapping inner)
-  | .refMut inner => .refMut (substTy mapping inner)
-  | .ptrMut inner => .ptrMut (substTy mapping inner)
-  | .ptrConst inner => .ptrConst (substTy mapping inner)
-  | .array elem n => .array (substTy mapping elem) n
-  | .generic name args => .generic name (args.map (substTy mapping))
-  | .fn_ params capSet retTy =>
-    .fn_ (params.map (substTy mapping)) (substCapSet mapping capSet) (substTy mapping retTy)
-  | .heap inner => .heap (substTy mapping inner)
-  | .heapArray inner => .heapArray (substTy mapping inner)
-  | ty => ty
 
 /-- Does `ty` (transitively) own a resource — would silently dropping a value of
     this type leak? True if it has a `Destroy` impl, is a heap-owning builtin
@@ -2757,10 +2767,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       match eTy with
       | .unit | .never | .placeholder => pure ()
       | _ =>
-        if !(← isCopyType eTy) then
-          match mustUseEnumName? eTy with
-          | some _ => throwCheck (.discardedMustUse (tyToString eTy)) (some stmt.getSpan)
-          | none => throwCheck (.discardedLinear (tyToString eTy)) (some stmt.getSpan)
+        -- Must-use keys on FALLIBILITY, not linearity: a discarded Result /
+        -- Option silently drops a possible failure even when the instantiation
+        -- is Copy (Option<i32> under conditional Copy). Check it first.
+        match mustUseEnumName? eTy with
+        | some _ => throwCheck (.discardedMustUse (tyToString eTy)) (some stmt.getSpan)
+        | none =>
+          if !(← isCopyType eTy) then
+            throwCheck (.discardedLinear (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
     let _condTy ← checkExpr cond
@@ -2938,10 +2952,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       match bodyTy with
       | .unit | .never | .placeholder => pure ()
       | _ =>
-        if !(← isCopyType bodyTy) then
-          match mustUseEnumName? bodyTy with
-          | some _ => throwCheck (.discardedMustUse (tyToString bodyTy)) (some stmt.getSpan)
-          | none => throwCheck (.discardedLinear (tyToString bodyTy)) (some stmt.getSpan)
+        -- Must-use keys on FALLIBILITY, not linearity (see the statement-
+        -- discard check): a deferred Result/Option is flagged even when Copy.
+        match mustUseEnumName? bodyTy with
+        | some _ => throwCheck (.discardedMustUse (tyToString bodyTy)) (some stmt.getSpan)
+        | none =>
+          if !(← isCopyType bodyTy) then
+            throwCheck (.discardedLinear (tyToString bodyTy)) (some stmt.getSpan)
     -- Any variable consumed by the deferred call should be reserved, not consumed.
     -- The actual consumption happens at scope exit.
     match body with
@@ -3306,7 +3323,8 @@ def checkModule (m : Module) (summary : FileSummary)
       { name := "Some", fields := [{ name := "value", ty := .typeVar "T" }] },
       { name := "None", fields := [] }
     ]
-    isCopy := false
+    -- Conditionally Copy: `Option<T>` is Copy iff `T` is Copy (Phase 7 #3).
+    isCopy := true
     builtinId := some .option
   }
   let builtinResultEnum : EnumDef := {
@@ -3316,7 +3334,8 @@ def checkModule (m : Module) (summary : FileSummary)
       { name := okVariantName, fields := [{ name := "value", ty := .typeVar "T" }] },
       { name := errVariantName, fields := [{ name := "error", ty := .typeVar "E" }] }
     ]
-    isCopy := false
+    -- Conditionally Copy: `Result<T, E>` is Copy iff `T` and `E` are (Phase 7 #3).
+    isCopy := true
     builtinId := some .result
   }
   let hasUserResult := m.enums.any fun ed => ed.name == resultEnumName

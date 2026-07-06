@@ -1,5 +1,6 @@
 import Concrete.Core
 import Concrete.Diagnostic
+import Concrete.Layout
 
 namespace Concrete
 
@@ -265,7 +266,7 @@ def verifyNoTypeVars (modules : List CModule) : Diagnostics :=
   violationsToDiagnostics "post-mono" violations
 
 /-- Check whether a type is Copy, given the full post-mono struct and enum lists. -/
-private def isCopyTyPostMono (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
+private partial def isCopyTyPostMono (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
   match ty with
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
   | .bool | .float64 | .float32 | .char | .unit => true
@@ -276,6 +277,20 @@ private def isCopyTyPostMono (allStructs : List CStructDef) (allEnums : List CEn
     | some sd => sd.isCopy
     | none => match allEnums.find? fun ed => ed.name == name with
       | some ed => ed.isCopy
+      | none => false
+  | .generic name args =>
+    -- Generic ENUMS (Option/Result) survive mono as `.generic` instances.
+    -- Conditional Copy (Phase 7 #3): Copy iff declared Copy and every payload
+    -- is Copy after substitution.
+    match allEnums.find? fun ed => ed.name == name with
+    | some ed =>
+      ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
+        isCopyTyPostMono allStructs allEnums (Layout.substTyVars (ed.typeParams.zip args) fty)
+    | none =>
+      match allStructs.find? fun sd => sd.name == name with
+      | some sd =>
+        sd.isCopy && sd.fields.all fun (_, fty) =>
+          isCopyTyPostMono allStructs allEnums (Layout.substTyVars (sd.typeParams.zip args) fty)
       | none => false
   | .array elem _ => isCopyTyPostMono allStructs allEnums elem
   | _ => false

@@ -14,7 +14,9 @@
 struct Copy Pair<T> { a: T, b: T }
 struct Copy Hold<T> { item: T }
 
-fn tag<T>(h: Hold<T>) -> i64 { return 9; }
+// T: Copy — under conditional Copy (2026-07-05), Hold<T> is Copy in the body
+// only when T is; unbounded T would make the unconsumed param h an E0208.
+fn tag<T: Copy>(h: Hold<T>) -> i64 { return 9; }
 
 fn main() -> i64 {
     let a: Hold<Pair<i64>>  = Hold::<Pair<i64>>  { item: Pair::<i64>  { a: 1, b: 2 } };

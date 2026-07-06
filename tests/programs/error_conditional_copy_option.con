@@ -1,0 +1,13 @@
+// Conditional Copy negative: Option<T> is Copy IFF T is Copy — Option over a
+// linear payload stays linear, so reusing it after a consuming match rejects.
+// Expected: error about use after move
+struct Res { data: Int }
+
+fn use_res(r: Res) -> Int { let Res { data } = r; return data; }
+
+fn main() -> Int {
+    let o: Option<Res> = Option::Some { value: Res { data: 1 } };
+    let a: Int = match o { Option::Some { value } => use_res(value), Option::None => 0 };
+    let b: Int = match o { Option::Some { value } => use_res(value), Option::None => 0 };
+    return a + b;
+}

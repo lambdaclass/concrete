@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Conditional Copy for generic instantiations (2026-07-05)
+
+`Option<T>` / `Result<T, E>` / `struct Copy Box<T>` are now Copy **iff** every
+substituted field/payload is Copy: `Option<i32>` is reusable, `_`-ignorable,
+and `if let`-able for the right reason; `Option<String>` stays linear. A
+non-qualifying instantiation of a Copy-marked generic is **demoted to linear,
+not an error** (Mono demotes specializations to a fixpoint;
+`verifyCopyFieldsPostMono` keeps the machine-wide invariant "isCopy ⇒ all
+fields Copy"). Must-use was re-keyed on fallibility, not linearity: discarding
+a Copy `Result`/`Option` still flags **E0286**. This closes the second
+pre-trial prerequisite for the external-validation gate (Phase 7 #3).
+
 ### H11 CLOSED: non-Copy sub-place reads by value are rejected (2026-07-05)
 
 The last open conservation hole. `let g = w.f;` / `let x = arr[i];` over a

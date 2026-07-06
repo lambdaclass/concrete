@@ -40,7 +40,7 @@ rm -f examples/known_holes/mono_name_collision/src/main
 echo "=== array type-args are distinct (formerly all 'unknown') ==="
 cat > "$TMP/arr.con" <<'EOF'
 struct Copy Box<T> { v: T }
-fn tag<T>(b: Box<T>) -> i64 { return 1; }
+fn tag<T: Copy>(b: Box<T>) -> i64 { return 1; }
 fn main() -> i64 {
     let a: Box<[i64; 2]>  = Box::<[i64; 2]>  { v: [10, 20] };
     let b: Box<[bool; 2]> = Box::<[bool; 2]> { v: [true, false] };
@@ -57,7 +57,7 @@ cat > "$TMP/exec.con" <<'EOF'
 struct Copy Pair<T> { a: T, b: T }
 struct Copy Hold<T> { item: T }
 fn first_i64(h: Hold<Pair<i64>>) -> i64 { return h.item.a; }
-fn count<T>(h: Hold<T>, base: i64) -> i64 { return base; }
+fn count<T: Copy>(h: Hold<T>, base: i64) -> i64 { return base; }
 fn main() -> i64 {
     let big: Hold<Pair<i64>>    = Hold::<Pair<i64>>  { item: Pair::<i64>  { a: 100, b: 200 } };
     let small: Hold<Pair<bool>> = Hold::<Pair<bool>> { item: Pair::<bool> { a: true, b: false } };

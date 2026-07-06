@@ -1606,14 +1606,16 @@ partial def elabModule (m : Module) (summary : FileSummary)
     variants := [
       { name := "Some", fields := [{ name := "value", ty := .typeVar "T" }] },
       { name := "None", fields := [] }
-    ], isCopy := false, builtinId := some .option
+    -- Conditionally Copy: `Option<T>` is Copy iff `T` is Copy (Phase 7 #3).
+    ], isCopy := true, builtinId := some .option
   }
   let builtinResultEnum : EnumDef := {
     name := resultEnumName, typeParams := ["T", "E"],
     variants := [
       { name := okVariantName, fields := [{ name := "value", ty := .typeVar "T" }] },
       { name := errVariantName, fields := [{ name := "error", ty := .typeVar "E" }] }
-    ], isCopy := false, builtinId := some .result
+    -- Conditionally Copy: `Result<T, E>` is Copy iff `T` and `E` are (Phase 7 #3).
+    ], isCopy := true, builtinId := some .result
   }
   let hasUserResult := m.enums.any fun ed => ed.name == resultEnumName
     || imports.enums.any fun ed => ed.name == resultEnumName
