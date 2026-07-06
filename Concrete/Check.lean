@@ -192,6 +192,12 @@ inductive CheckError where
   -- component you have already accounted for by matching), never a device that makes a
   -- non-Copy value vanish. Consume it, move it, return it, or `destroy()` it.
   | letUnderscoreRemoved
+  -- H11: projecting a non-Copy value OUT of a place by value (`let g = w.f;`,
+  -- `let x = arr[i];`) duplicates it — the place still owns the same value, so
+  -- both copies would be consumed (double-free). Concrete has no partial moves:
+  -- a non-Copy sub-place may be borrowed (`&w.f`), or the whole owner
+  -- destructured; only a Copy sub-place may be read by value.
+  | nonCopyProjection (tyName : String) (placeDesc : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -283,10 +289,12 @@ def CheckError.message : CheckError → String
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
+  | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
+  | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
@@ -409,6 +417,7 @@ def CheckError.code : CheckError → String
   | .discardedLinear _ => "E0287"
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
+  | .nonCopyProjection _ _ => "E0290"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -1274,7 +1283,12 @@ private partial def inferMethodParamAndRetTys
 
 mutual
 
-partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
+/-- `asPlace`: the expression is evaluated as a PLACE (borrow target, projection
+    base, assignment target, auto-borrowed receiver), not as a value. A by-value
+    read of a non-Copy sub-place (`w.f`, `arr[i]`) is rejected (E0290/H11) only
+    when `asPlace` is false — the same syntax stays legal under `&`/`&mut`, as a
+    further projection base, and on the left of an assignment. -/
+partial def checkExpr (e : Expr) (hint : Option Ty := none) (asPlace : Bool := false) : CheckM Ty := do
   match e with
   | .intLit sp n =>
     -- Use hint to infer integer literal type (resolve aliases first)
@@ -1402,7 +1416,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       let ty ← checkExpr operand hint
       return ty  -- CoreCheck validates bitwise not types
   | .arrowAccess _ obj field =>
-    let objTy ← checkExpr obj
+    let objTy ← checkExpr obj none true
     -- obj must be Heap<T> or HeapArray<T>
     let innerTy := match objTy with
       | .heap t => t
@@ -1421,7 +1435,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     match ← lookupStruct structName with
     | some sd =>
       match sd.fields.find? fun f => f.name == field with
-      | some f => resolveType f.ty
+      | some f =>
+        -- NOT under the H11 projection rule: `h->next` + `free(h)` is the
+        -- blessed heap-node destructure (free() only frees the shell), and
+        -- Heap<T> interiors are not linearity-tracked.
+        resolveType f.ty
       | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
     | none => throwCheck (.unknownStructType structName) (some e.getSpan)
   | .allocCall _ inner allocExpr =>
@@ -1960,7 +1978,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       -- sizeof intrinsic
       if intrinsic == some .sizeof || fnName.endsWith sizeofSuffix then return .uint
       else throwCheck (.undeclaredFunction fnName) (some e.getSpan)
-  | .paren _ inner => checkExpr inner hint
+  | .paren _ inner => checkExpr inner hint asPlace
   | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
@@ -2000,7 +2018,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
-    let objTy ← checkExpr obj
+    let objTy ← checkExpr obj none true
     -- Prevent direct field access on Heap<T> — must use ->
     match objTy with
     | .heap _ => throwCheck (.heapAccessRequired field (tyToString objTy)) (some e.getSpan)
@@ -2023,13 +2041,19 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       match ← lookupNewtype structName with
       | some nt =>
         if field == newtypeFieldName then
-          -- Consume the newtype variable if linear
-          match obj with
-          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-          | _ => pure ()
           -- Substitute type params for generic newtypes
           let mapping := nt.typeParams.zip typeArgs
-          return substTy mapping nt.innerTy
+          let innerFieldTy := substTy mapping nt.innerTy
+          -- `.0` on an ident is a whole-owner move: the newtype var is consumed
+          -- and the inner value is moved out (legal for non-Copy). On any other
+          -- base (`w.nt.0`) nothing is consumed, so a non-Copy inner value
+          -- would be owned twice — the H11 projection rule applies.
+          match obj with
+          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+          | _ =>
+            if !asPlace && !(← isCopyType innerFieldTy) then
+              throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}'") (some e.getSpan)
+          return innerFieldTy
         else throwCheckMsg s!"newtype '{structName}' only supports .0 field access"
       | none =>
       match ← lookupStruct structName with
@@ -2037,7 +2061,14 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         match sd.fields.find? fun f => f.name == field with
         | some f =>
           let mapping := sd.typeParams.zip typeArgs
-          resolveType (substTy mapping f.ty)
+          let fieldTy ← resolveType (substTy mapping f.ty)
+          -- H11: a by-value read of a non-Copy field duplicates it (the struct
+          -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
+          -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
+          -- and destructuring the whole owner.
+          if !asPlace && !(← isCopyType fieldTy) then
+            throwCheck (.nonCopyProjection (tyToString fieldTy) s!"field '{field}' of '{structName}'") (some e.getSpan)
+          return fieldTy
         | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
       | none => throwCheck .fieldAccessNonStruct (some e.getSpan)
   | .enumLit _ enumName variant typeArgs fields =>
@@ -2343,7 +2374,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       | none => setEnv envBefore
       return matchResultTy
   | .borrow _ inner =>
-    let innerTy ← checkExpr inner
+    let innerTy ← checkExpr inner none true
     -- Check the variable is not moved or already mutably borrowed
     match inner with
     | .ident _ varName =>
@@ -2359,7 +2390,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     | _ => pure ()
     return .ref innerTy
   | .borrowMut _ inner =>
-    let innerTy ← checkExpr inner
+    let innerTy ← checkExpr inner none true
     match inner with
     | .ident _ varName =>
       match ← lookupVarInfo varName with
@@ -2440,24 +2471,36 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         match e with | .ident _ n => consumeVarIfExists n (some e.getSpan) | _ => pure ()
       return .array firstTy elems.length
   | .arrayIndex _ arr index =>
-    let arrTy ← checkExpr arr
+    let arrTy ← checkExpr arr none true
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type. Resolve the element type
     -- through a reference/pointer to the array (`&[T;N]`, `&mut [T;N]`, raw ptr,
     -- heap) — indexing auto-derefs, so `arr[i]` / `&arr[i]` work when `arr` is a
     -- reference to an array, not only a bare array (C10; sibling of #6b).
-    match arrTy with
-    | .array elemTy _ => return elemTy
-    | .ref (.array elemTy _) | .refMut (.array elemTy _)
-    | .ptrConst (.array elemTy _) | .ptrMut (.array elemTy _)
-    | .heap (.array elemTy _) => return elemTy
-    | _ => return .placeholder
+    let elemTy? := match arrTy with
+      | .array elemTy _ => some elemTy
+      | .ref (.array elemTy _) | .refMut (.array elemTy _)
+      | .ptrConst (.array elemTy _) | .ptrMut (.array elemTy _)
+      | .heap (.array elemTy _) => some elemTy
+      | _ => none
+    match elemTy? with
+    | some elemTy =>
+      -- H11: a by-value read of a non-Copy element duplicates it (the array
+      -- still owns the same value). `&arr[i]`, Copy elements, `arr[i].f`
+      -- projection bases, and `arr[i] = v` stay legal.
+      if !asPlace && !(← isCopyType elemTy) then
+        throwCheck (.nonCopyProjection (tyToString elemTy) "array element") (some e.getSpan)
+      return elemTy
+    | none => return .placeholder
   | .cast _ inner targetTy =>
     let _innerTy ← checkExpr inner
     -- CoreCheck validates cast legality and capability requirements
     return targetTy
   | .methodCall _ obj methodName typeArgs args =>
-    let objTy ← checkExpr obj
+    -- The receiver is a place: `w.f.method()` auto-borrows for `&self` /
+    -- `&mut self`. A by-value `self` on a projection receiver is re-checked
+    -- below once the signature is known.
+    let objTy ← checkExpr obj none true
     let innerTy := match objTy with
       | .ref t => t
       | .refMut t => t
@@ -2545,6 +2588,17 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           -- Self is by value — this method consumes the receiver
           match obj with
           | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+          | .fieldAccess _ (.ident _ _) f =>
+            -- `v.0.drop()` on a newtype ident is a whole-owner move: the
+            -- fieldAccess already consumed `v`. Any other field projection
+            -- leaves the place owning the same value — the H11 rule applies.
+            if f != newtypeFieldName && !(← isCopyType innerTy) then
+              throwCheck (.nonCopyProjection (tyToString innerTy) s!"place projection (by-value `self` receiver of '{methodName}')") (some e.getSpan)
+          | .fieldAccess .. | .arrayIndex .. =>
+            -- H11: a by-value `self` MOVES the receiver, but a projection
+            -- receiver (`w.f.take()`) leaves the place owning the same value.
+            if !(← isCopyType innerTy) then
+              throwCheck (.nonCopyProjection (tyToString innerTy) s!"place projection (by-value `self` receiver of '{methodName}')") (some e.getSpan)
           | _ => pure ()
       | _ => pure ()
       return retTy
@@ -2806,7 +2860,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       if env.borrowRefs.contains vn then
         throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
     | _ => pure ()
-    let objTy ← checkExpr obj
+    let objTy ← checkExpr obj none true
     -- Auto-deref through references
     let innerTy := match objTy with
       | .ref t => t
@@ -2856,7 +2910,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | .ident _ vn => consumeVarIfExists vn (some stmt.getSpan)
     | _ => pure ()
   | .arrayIndexAssign _ arr index value =>
-    let arrTy ← checkExpr arr
+    let arrTy ← checkExpr arr none true
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type
     match arrTy with
@@ -2947,7 +3001,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
   | .arrowAssign _ obj field value =>
-    let objTy ← checkExpr obj
+    let objTy ← checkExpr obj none true
     let innerTy := match objTy with
       | .heap t => t
       | .heapArray t => t

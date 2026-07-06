@@ -48,7 +48,8 @@ mod ordered_set {
         }
 
         pub fn drop(self) with(Alloc) {
-            self.inner.drop();
+            let OrderedSet { inner } = self;
+            inner.drop();
         }
     }
 

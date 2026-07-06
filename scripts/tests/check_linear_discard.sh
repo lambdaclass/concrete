@@ -40,7 +40,7 @@ HDR='mod m {
   fn make_file(n: i32) -> File { return File { fd: n }; }
   fn make_wrap() -> Wrap { return Wrap { f: make_file(1) }; }
   fn sink_file(f: File) -> Int { destroy(f); return 0; }
-  fn sink_arr(a: [File; 2]) -> Int { destroy(a[0]); destroy(a[1]); return 0; }
+  fn sink_arr(a: [File; 2]) -> Int { return (a[0].fd + a[1].fd) as Int; }
   fn maybe() -> Option<i32> { return Option::<i32>::None {}; }
   fn boxed() with(Alloc) -> Heap<Token> { return alloc(Token { x: 1 }); }
   fn openr() -> Res { return Res::Has { f: File { fd: 3 } }; }'

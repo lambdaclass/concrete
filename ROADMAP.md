@@ -384,15 +384,15 @@ are folded out.
   the block's value when a branch/arm ends with a value; all-statement forms
   stay statements. `check_trailing_value_blocks.sh`.
 
-**Highest-leverage next items (updated 2026-07-02 EOD), in order:** 13b (H11 —
-now the ONLY open hole and the last conservation gap), conditional Copy
-(Phase 7 #3 — pre-trial prerequisite, see the external-validation gate; it
-also lets the `T: Copy`-bounded std helpers serve `Option<i32>`-class types
-naturally), then #18 (callable-values implementation) and #35 (the validation
-project) as the phase's exit path. ✅ Landed 2026-07-02: #24a (sub-file
-diagnostic attribution) and Phase 7 #38b / H12 (std fully front-end checked,
-exemption deleted). Everything else in the active list is
-pull-condition-gated or polish.
+**Highest-leverage next items (updated 2026-07-05), in order:** conditional
+Copy (Phase 7 #3 — pre-trial prerequisite, see the external-validation gate;
+it also lets the `T: Copy`-bounded std helpers serve `Option<i32>`-class
+types naturally), then #18 (callable-values implementation) and #35 (the
+validation project) as the phase's exit path. ✅ Landed 2026-07-05: 13b / H11
+(by-value non-Copy projection rejected, E0290 — KNOWN_HOLES OPEN section is
+empty again). ✅ Landed 2026-07-02: #24a (sub-file diagnostic attribution)
+and Phase 7 #38b / H12 (std fully front-end checked, exemption deleted).
+Everything else in the active list is pull-condition-gated or polish.
 
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
@@ -461,7 +461,21 @@ pull-condition-gated or polish.
      `docs/KNOWN_HOLES.md` when fixed; the closing gate must prove the previous
      false-green `check_ignored_result.sh` coverage hole is sealed.
 
-13b. **Close H11: by-value projection of a non-`Copy` sub-place must not copy.**
+13b. ✅ **DONE (2026-07-05) — H11 closed: by-value projection of a non-`Copy`
+   sub-place is rejected (E0290).** Position-aware fix: `checkExpr` gained an
+   `asPlace` flag; projection bases, borrow targets, assignment targets, and
+   auto-borrowed receivers check as places, so `&w.f`, `w.f.g`, `arr[i] = v`,
+   and `&self` method calls stay legal while `let g = w.f;`, `sink(w.f)`,
+   `let a = arr[i];`, and by-value-`self` on a projection reject. `p->f` heap
+   reads are explicitly excluded (heap-shell destructure idiom; interiors
+   untracked by design). Gate: 5 reject + 3 accept rows in
+   `check_linear_conservation.sh`; KNOWN_HOLES H11 moved to closed. Std
+   fallout: 2 sites (HashSet/OrderedSet drop → destructure). Follow-up
+   (workload-gated): ARRAY DESTRUCTURE patterns (`let [a, b] = arr;`) — an
+   owned array of linear values now has no whole-owner move-out (borrow or
+   Copy-leaf reads only); pull when a real workload needs to consume linear
+   array elements.
+   Original item:
    The broad Copy/linearity conservation work has landed: array literals move
    their elements, struct literals and destructuring conserve ownership,
    non-Copy field overwrite is rejected, `S { ..base }` cannot duplicate a

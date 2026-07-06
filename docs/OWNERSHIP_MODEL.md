@@ -73,6 +73,16 @@ duplicating one would let it be freed twice. Concretely:
   leave `a`/`b` live, so they could be freed while the array also owned them. Fixed and
   locked by the conservation gate.)*
 - **Struct literal** `Wrap { f: x }` moves `x` in.
+- **Sub-place reads are Copy-only (H11, closed 2026-07-05):** a *by-value* read of a
+  non-Copy sub-place — `let g = w.f;`, `let x = arr[i];`, a nested `o.w.f`, or a
+  by-value-`self` method on a projection (`w.f.destroy()`) — is rejected (**E0290**):
+  the place would still own the same value (a duplication). Borrow the sub-place
+  (`&w.f`, `&mut arr[i]`), read Copy leaves (`w.f.fd`), or destructure the whole
+  owner. Projection bases, borrow targets, assignment targets, and auto-borrowed
+  receivers are checked *as places*, so `w.f.g`, `arr[i] = v`, and `&self` method
+  calls stay legal. `p->f` heap reads are excluded: `h->next` + `free(h)` is the
+  blessed heap-node destructure (`free` only frees the shell; `Heap<T>` interiors
+  are not linearity-tracked).
 - **Struct destructure** `let Wrap { f } = w;` moves the source `w` out and each named
   field becomes an **owned** binding (must itself be consumed). It is checked natively
   (a `let __destr = w; let f = __destr.f` desugaring would be unsound for a linear

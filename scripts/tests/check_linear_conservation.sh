@@ -41,7 +41,11 @@ HDR='mod m {
   fn take2(x: [File; 2]) -> Int { return x[0].fd as Int; }
   fn takeW(w: Wrap) -> Int { let Wrap { f } = w; return sink(f); }
   fn useTwo(w: Two) -> Int { let Two { f, g } = w; return sink(f) + sink(g); }
-  fn useBox(b: Box) -> Int { let Box { f } = b; return sink(f); }'
+  fn useBox(b: Box) -> Int { let Box { f } = b; return sink(f); }
+  struct Outer { w: Wrap }
+  fn mkO() -> Outer { return Outer { w: mkW() }; }
+  fn takeO(o: Outer) -> Int { let Outer { w } = o; return takeW(w); }
+  fn peek(r: &File) -> Int { return r.fd as Int; }'
 
 reject(){ printf '%s\n  %s\n}' "$HDR" "$3" > "$TMP/t.con"
   local out; out="$("$C" "$TMP/t.con" -o "$TMP/t.bin" 2>&1)"
@@ -88,12 +92,15 @@ accept "Pt { x: 9, ..a } over Copy"   'fn main() -> Int { let a: Pt = Pt { x: 1,
 echo "=== let-else over a non-Copy enum stays rejected (linear: use full match) ==="
 reject "let-else over resource enum" E0288 'fn main() -> Int { let e: E = E::B {}; let E::A { f } = e else { return 0; }; return sink(f); }'
 
-# KNOWN_HOLES H11 (OPEN): projecting a non-Copy value out of a place BY VALUE
-# (`let g = w.f;` / `let g = arr[i];`) currently copies instead of moving, so it can be
-# owned twice (double-free). The borrow form `&w.f` and Copy-element index are correct
-# (covered above). The buggy by-value non-Copy projection is NOT asserted-reject here
-# yet — the fix is context-sensitive (move-vs-borrow position). Add the reject rows
-# when H11 lands. Repro in docs/KNOWN_HOLES.md.
+echo "=== H11: by-value non-Copy projection out of a place is rejected (E0290) ==="
+reject "let g = w.f (non-Copy field, the H11 repro)" E0290 'fn main() -> Int { let w: Wrap = mkW(); let g: File = w.f; sink(g); return takeW(w); }'
+reject "sink(w.f) (projection as call argument)"     E0290 'fn main() -> Int { let w: Wrap = mkW(); return sink(w.f) + takeW(w); }'
+reject "let a = x[0] (non-Copy array element)"       E0290 'fn main() -> Int { let x: [File; 2] = [mk(), mk()]; let a: File = x[0]; sink(a); return take2(x); }'
+reject "nested o.w.f (outermost read decides)"       E0290 'fn main() -> Int { let o: Outer = mkO(); let g: File = o.w.f; sink(g); return takeO(o); }'
+reject "w.f.destroy() (by-value self on projection)" E0290 'fn main() -> Int { let w: Wrap = mkW(); w.f.destroy(); return takeW(w); }'
+accept "&w.f borrow of non-Copy sub-place"           'fn main() -> Int { let w: Wrap = mkW(); let n: Int = peek(&w.f); return n + takeW(w); }'
+accept "Copy field and Copy element reads"           'fn main() -> Int { let p: Pt = Pt { x: 1, y: 2 }; let mut a: [i32; 2] = [3, 4]; let v: i32 = a[0]; a[1] = 9; return (p.x + v + a[1]) as Int; }'
+accept "Copy leaf through non-Copy intermediate (o.w.f.fd)" 'fn main() -> Int { let o: Outer = mkO(); let n: Int = o.w.f.fd as Int; return n + takeO(o); }'
 
 echo ""
 echo "LINEAR-CONSERVATION: PASS=$PASS  FAIL=$FAIL"

@@ -5,7 +5,7 @@
 
 struct Copy Pair<A, B> { a: A, b: B }
 
-fn first<A, B>(p: Pair<A, B>) -> A {
+fn first<A: Copy, B: Copy>(p: Pair<A, B>) -> A {
     return p.a;
 }
 

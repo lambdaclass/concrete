@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H11 CLOSED: non-Copy sub-place reads by value are rejected (2026-07-05)
+
+The last open conservation hole. `let g = w.f;` / `let x = arr[i];` over a
+non-Copy field/element used to COPY the value out while the place kept owning
+it — a duplication (double-free once both were consumed). `checkExpr` now
+carries an `asPlace` position flag: projection bases, borrow targets,
+assignment targets, and auto-borrowed method receivers evaluate as places, so
+`&w.f`, `w.f.g`, `arr[i] = v`, and `&self` calls stay legal while bare
+by-value non-Copy projections reject (**E0290**). `p->f` heap reads are
+excluded (the heap-shell destructure idiom; `Heap<T>` interiors are not
+linearity-tracked — disclosed). Owned arrays of linear values now have no
+whole-owner move-out; array destructure patterns are the workload-gated
+follow-up. KNOWN_HOLES' OPEN section is empty.
+
 ### H12 CLOSED: std fully front-end checked; four more checker fixes (2026-07-02)
 
 Tranche 3 finished the same-day burn-down (384 violations → 0) and DELETED the

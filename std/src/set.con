@@ -73,7 +73,8 @@ mod set {
         }
 
         pub fn drop(self) with(Alloc) {
-            self.inner.drop();
+            let HashSet { inner } = self;
+            inner.drop();
         }
     }
 

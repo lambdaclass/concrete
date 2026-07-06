@@ -8,9 +8,10 @@ fn unwrap_wrapper(w: Wrapper<Int>) -> Int {
 }
 
 fn unwrap_pair(p: Pair<Wrapper<Int>, Int>) -> Int {
-    let w: Wrapper<Int> = p.first;
-    let s: Int = p.second;
-    return unwrap_wrapper(w) + s;
+    // Wrapper<Int> is linear: move it out by destructuring the whole owner
+    // (a bare `p.first` by-value read is E0290/H11).
+    let Pair { first, second } = p;
+    return unwrap_wrapper(first) + second;
 }
 
 fn main() -> Int {

@@ -3,11 +3,13 @@ struct Box<T> { val: T }
 
 impl<T> Box<T> {
     pub fn get(self) -> T {
-        return self.val;
+        let Box { val } = self;
+        return val;
     }
 
     pub fn map<U>(self, f: fn(T) -> U) -> Box<U> {
-        return Box::<U> { val: f(self.val) };
+        let Box { val } = self;
+        return Box::<U> { val: f(val) };
     }
 }
 
