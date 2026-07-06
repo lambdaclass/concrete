@@ -314,11 +314,25 @@ How it is enforced (mostly by rules that already exist):
    permanent — ROADMAP #8a). A context struct therefore **cannot hold a
    `&HashMap` / `&mut HashMap` field**. This removes the obvious smuggling path
    structurally.
-2. **The container is already borrowed by the call.** `with_value_mut` takes
-   `&mut self`; while that borrow is live, no second `&mut self` can be formed,
-   so the `&mut Ctx` passed alongside cannot also be (or contain) `&mut self`.
-   The ordinary borrow checker rejects passing a context that re-borrows the
-   receiver.
+2. **The container is already borrowed by the call — ENFORCED 2026-07-06 as
+   E0293** (`conflictingCallBorrows`). The pre-#18 probe sweep showed the
+   checker DID accept `f(&mut x, &mut x)` and `m.scoped(&mut m, cb)` — the
+   claim that "the ordinary borrow checker rejects" this was aspirational.
+   Now within one call's arguments (including the auto-borrowed method
+   receiver) two borrows may not OVERLAP when either is `&mut` — overlap is
+   path-prefix on (root, projection steps), so `&mut w` conflicts with
+   `&mut w.f` but `&mut w.a` + `&mut w.b` (disjoint fields) stay legal, and
+   an ident argument that IS a live borrow counts as a borrow of its
+   tracked root (single-hop alias: `let r = &mut c; c.scoped(r, cb)`
+   rejects). Array-index steps are wildcard (conservatively overlapping).
+   Shared+shared stays legal. Gate rows in `check_callable_values.sh`:
+   `neg_double_mut_borrow`, `neg_shared_plus_mut_borrow`,
+   `neg_receiver_ctx_alias`, `neg_alias_through_binding`,
+   `neg_same_projection_twice`, `neg_whole_overlaps_part`,
+   `pos_disjoint_field_muts`, `pos_two_distinct_muts`, `pos_shared_shared`.
+   Known residual: multi-hop alias chains (`let r2 = r;`) drop the
+   `borrowedFrom` root and are not caught — tracked with 13k (ownership-
+   transition APIs), where borrow provenance would survive rebinding.
 3. **A residual gate check** (`scripts/tests/check_callable_values.sh`) pins
    that the `Ctx` type of a scoped-callback call does not name the container type
    by reference, so that even if (1) or (2) were ever weakened, a context that

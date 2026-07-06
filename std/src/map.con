@@ -99,13 +99,13 @@ mod map {
             return Option::<R>::None;
         }
 
-        // NOTE: scoped MUTABLE access (`with_value_mut` / `modify`) is DEFERRED.
-        // Unlike the immutable `with_value` above, a `&mut self` scoped callback
-        // has a separate soundness obligation — the callback's `&mut Ctx` context
-        // must not alias the container (else it could realloc storage while
-        // holding the borrowed `&mut V`). That "container-not-in-context" rule
-        // needs its own enforcement and is tracked separately; until then use the
-        // move-out/move-back operation API `update(k, fn(V) -> V)`.
+        // NOTE: scoped MUTABLE access (`with_value_mut` / `modify`) is UNBLOCKED
+        // as of 2026-07-06: the "container-not-in-context" rule is now ENFORCED
+        // by the checker (E0293 — a variable may not be borrowed twice in one
+        // call when any borrow is `&mut`, receiver included), gated in
+        // check_callable_values.sh. Implementation is the next #18 tranche;
+        // until it lands use the move-out/move-back operation API
+        // `update(k, fn(V) -> V)`.
 
         pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
             // Grow if load factor >= 75%

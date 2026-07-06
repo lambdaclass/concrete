@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### E0293: container-not-in-context is enforced, not aspirational (2026-07-06)
+
+First tranche of #18 (callable values). The design doc claimed the borrow
+checker already rejected a scoped callback whose context re-borrows the
+container — probing showed it accepted `f(&mut x, &mut x)`,
+`mix(&x, &mut x)`, and the real attack `m.scoped(&mut m, cb)`. New rule:
+within ONE call's arguments (auto-borrowed method receiver included), a
+variable may be borrowed at most once when any of its borrows is `&mut`
+(**E0293** `conflictingCallBorrows`; shared+shared stays legal). The check
+is PATH-BASED: overlap is prefix-of on (root, projections), so `&mut w` vs
+`&mut w.f` conflicts while disjoint `&mut w.a` + `&mut w.b` stays legal; an
+ident argument that is a live borrow counts as a borrow of its tracked root
+(single-hop aliases like `let r = &mut c; c.scoped(r, cb)` reject). This is
+the soundness keystone `with_value_mut`/`modify` were deferred on — they are
+now unblocked. Gated in `check_callable_values.sh` (9 rows incl. the
+receiver-alias, alias-through-binding, and projection attacks). Known
+residual: multi-hop alias chains lose the tracked root (filed with 13k).
+
+
 ### H13–H17 CLOSED: the value-flow discharge sweep (2026-07-06)
 
 Re-running the H11 audit over every *discharge* site found five more holes —

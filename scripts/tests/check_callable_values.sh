@@ -160,6 +160,49 @@ import m.{H};
 fn rd(x: &i64) -> i64 { return *x; }
 fn main() -> i64 { let h: H = H { v: 42 }; return h.with_value(rd); }' 42
 
+echo "=== E0293: aliasing borrows within ONE call are rejected (container-not-in-context) ==="
+reject_e0293() {
+  local name="$1" src="$2"
+  printf '%s' "$src" > "$TMP/$name.con"
+  local out; out="$("$COMPILER" "$TMP/$name.con" -o "$TMP/$name.bin" 2>&1)"
+  if grep <<<"$out" -q "(E0293)"; then ok "$name rejected (E0293)"
+  else no "$name: expected E0293, got '$(grep <<<"$out" -oE '\(E[0-9]+\)' | head -1)'"; fi
+}
+reject_e0293 neg_double_mut_borrow 'struct X { v: i32 }
+fn two(a: &mut X, b: &mut X) { a.v = 1; b.v = 2; }
+fn main() -> Int { let mut x: X = X { v: 0 }; two(&mut x, &mut x); let X { v } = x; return v as Int; }'
+reject_e0293 neg_shared_plus_mut_borrow 'struct X { v: i32 }
+fn mix(a: &X, b: &mut X) -> i32 { b.v = 2; return a.v; }
+fn main() -> Int { let mut x: X = X { v: 0 }; let r: i32 = mix(&x, &mut x); let X { v } = x; return (r + v) as Int; }'
+reject_e0293 neg_receiver_ctx_alias 'mod m { pub struct C { n: i64 }
+  trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
+import m.{C};
+fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
+fn main() -> Int { let mut c: C = C { n: 1 }; c.scoped(&mut c, cb); let C { n } = c; return n as Int; }'
+reject_e0293 neg_alias_through_binding 'mod m { pub struct C { n: i64 }
+  trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
+import m.{C};
+fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
+fn main() -> Int { let mut c: C = C { n: 1 }; let r: &mut C = &mut c; c.scoped(r, cb); let C { n } = c; return n as Int; }'
+reject_e0293 neg_same_projection_twice 'struct Copy F { v: i32 }
+struct W { f: F }
+fn two(a: &mut F, b: &mut F) { a.v = 1; b.v = 2; }
+fn main() -> Int { let mut w: W = W { f: F { v: 0 } }; two(&mut w.f, &mut w.f); let W { f } = w; return f.v as Int; }'
+reject_e0293 neg_whole_overlaps_part 'struct Copy F { v: i32 }
+struct W { f: F }
+fn mix(x: &mut W, y: &mut F) { y.v = 1; }
+fn main() -> Int { let mut w: W = W { f: F { v: 0 } }; mix(&mut w, &mut w.f); let W { f } = w; return f.v as Int; }'
+run pos_disjoint_field_muts 'struct Copy F { v: i32 }
+struct Copy W { a: F, b: F }
+fn two(x: &mut F, y: &mut F) -> i32 { x.v = 1; y.v = 2; return x.v + y.v; }
+fn main() -> i64 { let mut w: W = W { a: F { v: 0 }, b: F { v: 0 } }; return two(&mut w.a, &mut w.b) as i64; }' 3
+run pos_two_distinct_muts 'struct Copy X { v: i32 }
+fn two(a: &mut X, b: &mut X) -> i32 { a.v = 1; b.v = 2; return a.v + b.v; }
+fn main() -> i64 { let mut x: X = X { v: 0 }; let mut y: X = X { v: 0 }; return two(&mut x, &mut y) as i64; }' 3
+run pos_shared_shared 'struct Copy X { v: i32 }
+fn two(a: &X, b: &X) -> i32 { return a.v + b.v; }
+fn main() -> i64 { let x: X = X { v: 3 }; return two(&x, &x) as i64; }' 6
+
 echo ""
 echo "NOTE: immutable HashMap::with_value behavior is gated by the map stdlib"
 echo "      #[test]s (run via --stdlib-module map): test_map_with_value,"

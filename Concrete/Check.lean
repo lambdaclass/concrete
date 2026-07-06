@@ -211,6 +211,13 @@ inductive CheckError where
   -- drop the shadowed value (scope exit resolves names, so the older entry's
   -- obligation vanished). Consume the old value first, or use another name.
   | shadowsLiveLinear (name : String)
+  -- #18 container-not-in-context enforcement: within ONE call's arguments
+  -- (including the auto-borrowed method receiver), a variable may be borrowed
+  -- at most once when any of its borrows is `&mut` — `f(&mut x, &mut x)` and
+  -- `f(&x, &mut x)` alias the same object with exclusivity in one activation.
+  -- This is what keeps a scoped callback's context from reaching the borrowed
+  -- container (`m.with_value_mut(&k, &mut m, f)` rejects here).
+  | conflictingCallBorrows (name : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -305,6 +312,7 @@ def CheckError.message : CheckError → String
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
+  | .conflictingCallBorrows name => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -312,6 +320,7 @@ def CheckError.hint : CheckError → Option String
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
+  | .conflictingCallBorrows _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
@@ -437,6 +446,7 @@ def CheckError.code : CheckError → String
   | .nonCopyProjection _ _ => "E0290"
   | .cannotOverwriteLinearPlace _ _ => "E0291"
   | .shadowsLiveLinear _ => "E0292"
+  | .conflictingCallBorrows _ => "E0293"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=
@@ -1327,6 +1337,65 @@ private partial def inferMethodParamAndRetTys
 -- Type checking expressions and statements
 -- ============================================================
 
+/-- A borrow PATH: root variable + projection steps (field names; an array
+    index is the wildcard step "[]" — two indexings of one root are treated
+    as overlapping since indices are not statically comparable). -/
+private partial def borrowPathOf : Expr → Option (String × List String)
+  | .ident _ n => some (n, [])
+  | .fieldAccess _ obj f =>
+    (borrowPathOf obj).map fun (r, steps) => (r, steps ++ [f])
+  | .arrayIndex _ arr _ =>
+    (borrowPathOf arr).map fun (r, steps) => (r, steps ++ ["[]"])
+  | .paren _ inner => borrowPathOf inner
+  | _ => none
+
+/-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
+    Disjoint fields (`w.a` vs `w.b`) do NOT overlap — precise, no over-reject;
+    `w` vs `w.f` DO (the whole overlaps the part). -/
+private def pathsOverlap (a b : String × List String) : Bool :=
+  a.1 == b.1 && (a.2.isPrefixOf b.2 || b.2.isPrefixOf a.2)
+
+/-- #18 container-not-in-context: within one call's arguments (plus the
+    auto-borrowed method receiver), two borrows may not OVERLAP when either
+    is `&mut` (E0293). Covers `&x`/`&mut x`, projections (`&mut w.f` twice,
+    or `&mut w` + `&mut w.f`), and single-hop ALIASES: an ident argument
+    whose binding is a ref/&mut with a tracked `borrowedFrom` root counts as
+    a borrow of that root. Shared+shared overlap is fine. -/
+def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (span : Option Span) : CheckM Unit := do
+  let mut seen : List ((String × List String) × Bool) := []
+  for (path, isMut) in parts do
+    for (prevPath, prevMut) in seen do
+      if pathsOverlap path prevPath && (isMut || prevMut) then
+        throwCheck (.conflictingCallBorrows path.1) span
+    seen := (path, isMut) :: seen
+
+/-- Collect (path, isMut) pairs from syntactic borrow arguments AND from
+    ident arguments that are themselves live borrows (alias-through-binding:
+    `let r = &mut c; c.scoped(r, cb)` — `r` counts as a borrow of `c`). -/
+def borrowArgParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
+  let mut out : List ((String × List String) × Bool) := []
+  for a in args do
+    match a with
+    | .borrow _ inner =>
+      match borrowPathOf inner with
+      | some p => out := out ++ [(p, false)]
+      | none => pure ()
+    | .borrowMut _ inner =>
+      match borrowPathOf inner with
+      | some p => out := out ++ [(p, true)]
+      | none => pure ()
+    | .ident _ n =>
+      match ← lookupVarInfo n with
+      | some info =>
+        match info.borrowedFrom with
+        | some root =>
+          let isMut := match info.ty with | .refMut _ => true | _ => false
+          out := out ++ [((root, []), isMut)]
+        | none => pure ()
+      | none => pure ()
+    | _ => pure ()
+  return out
+
 /-- Expression checking mode (docs/VALUE_FLOW_SPEC.md — the auto-consume
     inversion, 2026-07-06). Consumption is decided HERE, in ONE place, not in
     every AST handler; a new syntax form that forgets to pick a mode gets
@@ -1625,6 +1694,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       throwCheck (.ifBranchTypeMismatch (tyToString thenTy) (tyToString elseTy)) (some e.getSpan)
     if thenTy == .never then return elseTy else return thenTy
   | .call _sp fnName typeArgs args =>
+    -- E0293: no overlapping borrows of one place within a single call (any &mut).
+    checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
     | some nt =>
@@ -2589,6 +2660,18 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     let mangledName := typeName ++ "_" ++ methodName
     match ← lookupFn mangledName with
     | some sig =>
+      -- E0293: the auto-borrowed receiver counts as a borrow of the receiver
+      -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
+      -- alias the container through the context and must reject
+      -- (container-not-in-context, #18 §5.1).
+      let receiverPart : List ((String × List String) × Bool) :=
+        match sig.params.head? with
+        | some ("self", .ref _) =>
+          (match borrowPathOf obj with | some p => [(p, false)] | none => [])
+        | some ("self", .refMut _) =>
+          (match borrowPathOf obj with | some p => [(p, true)] | none => [])
+        | _ => []
+      checkCallBorrowConflicts (receiverPart ++ (← borrowArgParts args)) (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
       let objTypeArgs := match innerTy with
         | .generic _ args => args
@@ -2650,6 +2733,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>
+    -- E0293: no overlapping borrows of one place within a single call (any &mut).
+    checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     match ← lookupFn mangledName with
     | some sig =>
