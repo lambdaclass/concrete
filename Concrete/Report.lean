@@ -7439,6 +7439,16 @@ def diagnosticCodesReport : String :=
     entry "E0283" "check" "error" "reserved identifier",
     entry "E0284" "check" "error" "unknown module",
     entry "E0285" "check" "error" "symbol not public in module",
+    -- Check: discard/linearity one-law (E0286–E0289, Phase 6 #13 + H6)
+    entry "E0286" "check" "error" "fallible result discarded (must use)",
+    entry "E0287" "check" "error" "non-Copy value discarded without consumption",
+    entry "E0288" "check" "error" "wildcard would discard a non-Copy value",
+    entry "E0289" "check" "error" "let _ removed (wildcard is not a discard)",
+    -- Check: conservation sweep + callable values (E0290–E0293, 2026-07-05/06)
+    entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
+    entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
+    entry "E0292" "check" "error" "shadowing a still-live non-Copy binding",
+    entry "E0293" "check" "error" "overlapping borrows of one place in a single call",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

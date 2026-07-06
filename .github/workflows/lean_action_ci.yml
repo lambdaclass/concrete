@@ -438,6 +438,9 @@ jobs:
       - name: Value-flow spec coverage gate (ROADMAP 13c — every AST constructor must have a value-flow row in docs/VALUE_FLOW_SPEC.md)
         run: bash scripts/tests/check_value_flow_spec.sh
 
+      - name: Diagnostic-code ledger completeness (ROADMAP 13m — every emittable E-code has a --report diagnostic-codes entry)
+        run: bash scripts/tests/check_diagnostic_codes_complete.sh
+
       - name: Linearity fuzz smoke (deterministic seed — consume-once compiles, leak/dup/shadow/param-sink reject)
         run: python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706
 
