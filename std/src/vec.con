@@ -173,6 +173,28 @@ mod vec {
             return Option::<R>::Some { value: r };
         }
 
+        /// Indexed scoped MUTABLE access (docs/CALLABLE_VALUES §5): `&mut T`
+        /// is confined to `f`; E0293 keeps the vector out of the context.
+        pub fn with_at_mut<Ctx, R, cap C>(&mut self, at: u64, ctx: &mut Ctx, f: fn(&mut Ctx, &mut T) with(C) -> R) with(C) -> Option<R> {
+            if at >= self.len {
+                return Option::<R>::None;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            let r: R = f(ctx, target_ptr as &mut T);
+            return Option::<R>::Some { value: r };
+        }
+
+        /// Shared-context iteration (docs/CALLABLE_VALUES §3.1, shared mode):
+        /// `ctx` is borrowed immutably for the whole walk.
+        pub fn for_each_with<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &T) with(C)) with(C) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let p: *mut T = self.ptr + i;
+                f(ctx, p as &T);
+                i = i + 1;
+            }
+        }
+
         // TODO: insert, remove
     }
 
@@ -361,6 +383,49 @@ mod vec {
         }
         v.drop();
         return 0;
+    }
+
+    // shared-context + indexed-mut callbacks
+    struct Copy VOff { off: i32 }
+    fn vsum_with(c: &VOff, x: &i32) { let _n: i32 = *x + c.off; }
+    struct Copy VAcc { total: i32 }
+    fn vacc_with(c: &VOff, x: &i32) -> i32 { return *x + c.off; }
+    fn vbump(c: &mut VAcc, x: &mut i32) -> i32 { *x = *x + 1; c.total = c.total + *x; return *x; }
+
+    #[test]
+    fn test_vec_for_each_with() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1); v.push(2);
+        let c: VOff = VOff { off: 10 };
+        v.for_each_with(&c, vsum_with);   // shared ctx threads; no mutation
+        let n: u64 = v.len();
+        v.drop();
+        if n == 2 { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_vec_with_at_mut() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(5);
+        let mut a: VAcc = VAcc { total: 0 };
+        let r: Option<i32> = v.with_at_mut(0, &mut a, vbump);   // 5 -> 6 in place
+        let mut ok: i32 = 1;
+        match r {
+            Option::Some { value } => { if value == 6 && a.total == 6 { ok = 0; } }
+            Option::None => { ok = 2; }
+        }
+        match v.get(0) {
+            Option::Some { value } => { if value != 6 { ok = 3; } }
+            Option::None => { ok = 4; }
+        }
+        // out of bounds -> None
+        match v.with_at_mut(9, &mut a, vbump) {
+            Option::Some { value } => { ok = 5; }
+            Option::None => { }
+        }
+        v.drop();
+        return ok;
     }
 
     #[test]

@@ -92,7 +92,7 @@ language**: Concrete uses use-site binding, not a struct-level `BoundFn<Ctx, A,
 R, Caps>`. What is *not* yet built is the bound-callback *context* threading
 (§3), the scoped collection callbacks (§5), and the elision shortcut (§7).
 
-## 3. Bound callbacks: function pointer + explicit context [specified]
+## 3. Bound callbacks: function pointer + explicit context [implemented: shared/mutable modes + scoped trio, 2026-07-06; consuming combinators remain workload-gated]
 
 A bound callback is two things passed explicitly:
 
@@ -223,7 +223,7 @@ a real workload needs to *store* a bound callback as a first-class value (e.g. a
 dispatch table of context+fn pairs). Until then it is unnecessary, and adding it
 early would re-open the closure/value-model questions this design closes.
 
-## 5. Scoped collection callbacks (V1.1 H1 tail) [specified]
+## 5. Scoped collection callbacks (V1.1 H1 tail) [implemented 2026-07-06]
 
 These replace the immutable read accessor `get -> Option<&V>` that is the last
 open half of H1. They give the callback borrowed access to a stored element,

@@ -54,6 +54,65 @@ mod ordered_map {
         // withdrawn `get_mut -> Option<&mut V>`, the H1 mutable aggregate-ref
         // hole). Moves the value out, applies `f`, moves it back. Returns true
         // if the key was present. ROADMAP Phase 6 #8a.
+        /// Scoped SHARED read of one value (docs/CALLABLE_VALUES §5): the
+        /// borrowed `&V` lives only inside `f`; the result returns BY VALUE.
+        pub fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<R>::None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<R>::None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<R>::None;
+            }
+            let v: *mut V = self.values + idx;
+            let r: R = f(ctx, v as &V);
+            return Option::<R>::Some { value: r };
+        }
+
+        /// Scoped MUTABLE access in place (docs/CALLABLE_VALUES §5): `&mut V`
+        /// is confined to `f`; E0293 keeps the container out of the context.
+        pub fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<R>::None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<R>::None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<R>::None;
+            }
+            let v: *mut V = self.values + idx;
+            let r: R = f(ctx, v as &mut V);
+            return Option::<R>::Some { value: r };
+        }
+
+        /// Convenience over `with_value_mut` for the no-result case.
+        pub fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return false;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return false;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return false;
+            }
+            let v: *mut V = self.values + idx;
+            f(ctx, v as &mut V);
+            return true;
+        }
+
         pub fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
@@ -244,6 +303,35 @@ mod ordered_map {
     }
 
     import std.test.{assert_eq, assert_true, ignore_opt};
+
+    struct Copy OmCtx { add: i32, calls: i32 }
+    fn om_read(c: &OmCtx, v: &i32) -> i32 { return *v + c.add; }
+    fn om_bump(c: &mut OmCtx, v: &mut i32) -> i32 { c.calls = c.calls + 1; *v = *v + c.add; return *v; }
+    fn om_zero(c: &mut OmCtx, v: &mut i32) { c.calls = c.calls + 1; *v = 0; }
+
+    #[test]
+    fn test_om_with_value_trio() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        ignore_opt::<i32>(m.insert(7, 35));
+        let k: i32 = 7;
+        let miss: i32 = 99;
+        let c0: OmCtx = OmCtx { add: 5, calls: 0 };
+        let mut ok: i32 = 1;
+        match m.with_value(&k, &c0, om_read) {           // 35 + 5 = 40, by value
+            Option::Some { value } => { if value == 40 { ok = 0; } }
+            Option::None => { ok = 2; }
+        }
+        let mut c: OmCtx = OmCtx { add: 5, calls: 0 };
+        match m.with_value_mut(&k, &mut c, om_bump) {    // 35 -> 40 in place
+            Option::Some { value } => { if value != 40 { ok = 3; } }
+            Option::None => { ok = 4; }
+        }
+        let hit: bool = m.modify(&k, &mut c, om_zero);
+        let missed: bool = m.modify(&miss, &mut c, om_zero);
+        if ok == 0 && hit && !missed && c.calls == 2 { ok = 0; } else if ok == 0 { ok = 5; }
+        m.drop();
+        return ok;
+    }
 
     #[test]
     fn test_insert_and_get() with(Alloc) -> i32 {

@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### #18 callable values: scoped mutation + context combinator surface (2026-07-06)
+
+With E0293 enforcing container-not-in-context, the deferred scoped-mutable
+tier landed: `HashMap::with_value_mut`/`modify`, `OrderedMap::with_value`/
+`with_value_mut`/`modify`, `Vec::with_at_mut` — in-place `&mut V` access
+confined to the callback, results returned by value, references never
+escaping. The context-combinator surface is now two-mode per the design doc:
+`for_each_with` (shared `&Ctx`) and `for_each_ctx` (mutable `&mut Ctx`,
+reborrowed per call) on Vec and HashMap. Consuming one-shot combinators and
+OrderedMap iteration stay workload-gated. This closes the H1 tail completely:
+the accessor model is scoped shared reads + scoped in-place mutation +
+move-out — no returned references anywhere.
+
+
 ### E0293: container-not-in-context is enforced, not aspirational (2026-07-06)
 
 First tranche of #18 (callable values). The design doc claimed the borrow

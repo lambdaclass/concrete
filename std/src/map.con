@@ -99,13 +99,42 @@ mod map {
             return Option::<R>::None;
         }
 
-        // NOTE: scoped MUTABLE access (`with_value_mut` / `modify`) is UNBLOCKED
-        // as of 2026-07-06: the "container-not-in-context" rule is now ENFORCED
-        // by the checker (E0293 — a variable may not be borrowed twice in one
-        // call when any borrow is `&mut`, receiver included), gated in
-        // check_callable_values.sh. Implementation is the next #18 tranche;
-        // until it lands use the move-out/move-back operation API
-        // `update(k, fn(V) -> V)`.
+        /// Scoped MUTABLE access to one element in place (docs/CALLABLE_VALUES
+        /// §5). The `&mut V` lives only inside `f`'s activation; the combinator
+        /// returns `f`'s result BY VALUE — no reference escapes. Soundness:
+        /// the container is exclusively borrowed (`&mut self`) for the whole
+        /// call and E0293 rejects any context that overlaps the receiver
+        /// (container-not-in-context), so the table cannot be reallocated
+        /// while the element borrow is live.
+        pub fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 1 {
+                let val_ptr: *mut V = self.values + idx;
+                let r: R = f(ctx, val_ptr as &mut V);
+                return Option::<R>::Some { value: r };
+            }
+            return Option::<R>::None;
+        }
+
+        /// Convenience over `with_value_mut` for the no-result case: mutate the
+        /// value for `key` in place. Returns whether the key was present.
+        pub fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 1 {
+                let val_ptr: *mut V = self.values + idx;
+                f(ctx, val_ptr as &mut V);
+                return true;
+            }
+            return false;
+        }
+
+        // (with_value_mut/modify landed 2026-07-06, above — enforcement is
+        // E0293 container-not-in-context, gated in check_callable_values.sh.
+        // `update(k, fn(V) -> V)` remains the move-out/move-back alternative.)
 
         pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
             // Grow if load factor >= 75%
@@ -259,6 +288,38 @@ mod map {
                 i = i + 1;
             }
             return acc;
+        }
+
+        /// Shared-context iteration (docs/CALLABLE_VALUES §3.1): `ctx` is
+        /// borrowed immutably; called once per occupied slot.
+        pub fn for_each_with<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &K, &V) with(C)) with(C) {
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    let val_ptr: *mut V = self.values + i;
+                    f(ctx, key_ptr as &K, val_ptr as &V);
+                }
+                i = i + 1;
+            }
+        }
+
+        /// Mutable-context iteration (docs/CALLABLE_VALUES §3.1): `ctx` is
+        /// reborrowed per call — the fold-into-a-caller-owned-sink shape.
+        pub fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &K, &V) with(C)) with(C) {
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    let val_ptr: *mut V = self.values + i;
+                    f(&mut *ctx, key_ptr as &K, val_ptr as &V);
+                }
+                i = i + 1;
+            }
         }
 
         /// Call a function for each key-value pair in the map.
@@ -423,6 +484,72 @@ mod map {
         match r {
             Option::Some { value } => { if value == 40 { ok = 0; } }
             Option::None => { ok = 2; }
+        }
+        m.drop();
+        return ok;
+    }
+
+    // with_value_mut/modify callbacks: mutate in place through &mut V,
+    // counting calls in the mutable context.
+    struct Copy WvmCtx { delta: i32, calls: i32 }
+    fn wvm_bump(c: &mut WvmCtx, v: &mut i32) -> i32 { c.calls = c.calls + 1; *v = *v + c.delta; return *v; }
+    fn wvm_zero(c: &mut WvmCtx, v: &mut i32) { c.calls = c.calls + 1; *v = 0; }
+
+    struct Copy FeCtx { mul: i64 }
+    fn fe_read(c: &FeCtx, k: &i32, v: &i32) { let _x: i64 = (*k as i64) * c.mul + (*v as i64); }
+    struct Copy FeAcc { sum: i64 }
+    fn fe_acc(c: &mut FeAcc, k: &i32, v: &i32) { c.sum = c.sum + (*k as i64) + (*v as i64); }
+
+    #[test]
+    fn test_map_for_each_with_and_ctx() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        ignore_opt::<i32>(m.insert(1, 10));
+        ignore_opt::<i32>(m.insert(2, 20));
+        let c: FeCtx = FeCtx { mul: 3 };
+        m.for_each_with(&c, fe_read);           // shared ctx
+        let mut a: FeAcc = FeAcc { sum: 0 };
+        m.for_each_ctx(&mut a, fe_acc);         // mutable ctx: 1+10+2+20 = 33
+        m.drop();
+        if a.sum == 33 { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_map_with_value_mut() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        ignore_opt::<i32>(m.insert(7, 35));
+        let mut c: WvmCtx = WvmCtx { delta: 5, calls: 0 };
+        let k: i32 = 7;
+        let r: Option<i32> = m.with_value_mut(&k, &mut c, wvm_bump);   // 35 + 5 = 40, in place
+        let mut ok: i32 = 1;
+        match r {
+            Option::Some { value } => { if value == 40 && c.calls == 1 { ok = 0; } }
+            Option::None => { ok = 2; }
+        }
+        // the mutation is visible on a later read
+        match m.get(&k) {
+            Option::Some { value } => { if value != 40 { ok = 3; } }
+            Option::None => { ok = 4; }
+        }
+        m.drop();
+        return ok;
+    }
+
+    #[test]
+    fn test_map_modify_and_missing() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        ignore_opt::<i32>(m.insert(1, 10));
+        let mut c: WvmCtx = WvmCtx { delta: 0, calls: 0 };
+        let k1: i32 = 1;
+        let k2: i32 = 99;
+        let hit: bool = m.modify(&k1, &mut c, wvm_zero);
+        let miss: bool = m.modify(&k2, &mut c, wvm_zero);
+        let mut ok: i32 = 1;
+        if hit && !miss && c.calls == 1 {
+            match m.get(&k1) {
+                Option::Some { value } => { if value == 0 { ok = 0; } }
+                Option::None => { ok = 2; }
+            }
         }
         m.drop();
         return ok;

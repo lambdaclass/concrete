@@ -672,6 +672,12 @@ are folded out.
     - Add explicit context-threading combinators for `&Ctx` and `&mut Ctx`
       callbacks over the collection surfaces that need them; consuming
       one-shot contexts land only if a workload needs them.
+      Linear rule: borrowed contexts are not moved into a hidden environment.
+      `&Ctx` is many-call read-only, `&mut Ctx` is many-call exclusive
+      reborrow-per-invocation, and consuming `Ctx` is one-shot unless `Ctx` is
+      `Copy`. A callback over `&mut Ctx` may mutate through the context but may
+      not move a linear field out of the context unless the API is explicitly
+      one-shot/consuming.
     - Gate callable capture/conservation: callback function pointers capture
       nothing; every context is an ordinary parameter whose ownership is checked
       by the existing value-flow machinery; callback capsets remain in the
@@ -839,7 +845,13 @@ are folded out.
     tests, and trace/debug commands). CI must build, run, test, format-check,
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
-    language/tooling slab, not the full stdlib.
+    language/tooling slab, not the full stdlib. Include at least one
+    reload/plugin-shaped or sandbox-shaped boundary if it can stay small:
+    a module loaded through an explicit capability/API surface, or a
+    WASM-like/sandbox placeholder that proves Concrete's authority reports can
+    explain "what this extension may touch." Native arbitrary-code loading stays
+    trusted; sandboxed or constrained extensions must expose their authority in
+    headers and audit output.
 37. Add a docs/profile synchronization audit before verified-profile work.
     `docs/PROFILES.md`, README/site copy, guarantee docs, and profile reports
     must agree with current implementation: known holes open section empty,
@@ -849,7 +861,10 @@ are folded out.
     new `check_profile_docs.sh`; include negatives for stale "array bounds not
     covered", stale "integer overflow wraps silently", stale H11/open-hole
     status, and any wording that upgrades tests/runtime checks/SMT to formal
-    proof. This item is a prerequisite for pulling the verified profile forward.
+    proof. Extend the same gate into a doc-snippet compile check: every Concrete
+    code block in README/site/docs either compiles under an explicit fixture
+    harness or is marked `pseudocode`/`text` with a reason. This item is a
+    prerequisite for pulling the verified profile forward.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -1009,10 +1024,13 @@ class and authority/allocation story.
      allocator/arena/pool is used. Do not replace capabilities with allocator
      parameters, and do not add an ambient implicit allocator. The research
      note should compare Zig-style explicit allocators, arena/test allocators,
-     embedded/freestanding pools, allocation failure policy, and audit output
-     that records both the capability and the allocator identity/strategy. If
-     admitted, every allocator-taking API must keep allocation authority visible
-     in function headers and reports.
+     embedded/freestanding pools, hot-reload/plugin ownership, allocation
+     failure policy, and audit output that records both the capability and the
+     allocator identity/strategy. If admitted, every allocator-taking API must
+     keep allocation authority visible in function headers and reports. This
+     item should move ahead of allocator-heavy collection stabilization if the
+     validation project needs arenas, test allocators, reload-safe allocation,
+     or freestanding pools.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, REVERSE
@@ -1119,10 +1137,23 @@ class and authority/allocation story.
     package/workload evidence demands it.
 29. Build stdlib test/oracle helpers in `std.test`: expected failures,
     capability-scoped fixtures, temp directories, oracle vector runners,
-    interpreter-vs-compiled helpers, and report snapshots.
+    interpreter-vs-compiled helpers, and report snapshots. Stdlib tests must
+    also serve as runnable API documentation: every public stdlib type/function
+    gets a tiny positive usage test and, where meaningful, a negative or edge
+    case. Public docs should link to or quote those tests rather than carrying
+    stale hand-written examples. Add a gate that fails when a new public stdlib
+    symbol lacks a test/doc example or when a referenced example no longer
+    compiles.
 30. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
-    diagnostics apply; and how accumulating error sets are reported.
+    diagnostics apply; and how accumulating error sets are reported. Split
+    recoverable domain/environment failures from fatal invariant failures:
+    `Result`/`Option` for user, file, network, parse, and domain errors that a
+    caller can handle; abort/trap for OOM, bounds, arithmetic traps, impossible
+    invariants, and explicitly unrecoverable runtime failures. Audit output
+    should identify which public APIs can recover, which can trap, and which
+    require a policy gate. Do not add a second Zig-style error-union mechanism;
+    improve the `Result`/`Option` surface instead.
 30a. Define the canonical **consume / destroy / handoff** conventions for
     linear code. The guide must distinguish explicit cleanup (`destroy(x)` or
     the type's consuming `.drop()`/Destroy verb), ownership transfer by

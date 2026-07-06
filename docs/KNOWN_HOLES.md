@@ -328,8 +328,12 @@ rejected) + the blanket signature rule in `Concrete/Check.lean` (`checkFn`) +
 the fn-type / generic-instantiation rules in `resolveType` / call sites. The
 `from(param)` escape valve remains deeply deferred and evidence-gated (ROADMAP
 Phase 7 #8e).
-Deferred follow-on: `with_value_mut`/`modify` (separate container-not-in-context
-obligation).
+Follow-on CLOSED 2026-07-06: `with_value_mut`/`modify` landed (HashMap,
+OrderedMap; `Vec::with_at_mut`) once the container-not-in-context obligation
+became a checker rule — **E0293** rejects overlapping borrows within one call
+(path-based: receiver included, projections, single-hop aliases), gated in
+`check_callable_values.sh`. The H1 accessor surface is now fully two-sided:
+scoped shared reads AND scoped in-place mutation, references never escaping.
 
 ORIGINAL HOLE (for history): stdlib `get`/`get_mut`-style APIs returned
 references inside aggregates (`Option<&T>`, `Option<&mut V>`). The owner was

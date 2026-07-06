@@ -6733,6 +6733,7 @@ check_collection_tests() {
 check_collection_tests "Vec" \
     vec_test_vec_get_in_bounds vec_test_vec_get_out_of_bounds vec_test_vec_get_empty \
     vec_test_pop_some vec_test_pop_none vec_test_swap_remove \
+    vec_test_vec_for_each_with vec_test_vec_with_at_mut \
     vec_test_vec_set vec_test_vec_clear_reuse vec_test_vec_push_growth vec_test_vec_pop_until_empty
 
 check_collection_tests "Fs" \
@@ -6768,7 +6769,7 @@ check_collection_tests "OrderedMap" \
     ordered_map_test_insert_and_get ordered_map_test_sorted_order ordered_map_test_overwrite \
     ordered_map_test_omap_remove ordered_map_test_get_missing \
     ordered_map_test_omap_remove_empty ordered_map_test_omap_min_max_empty ordered_map_test_omap_clear_reuse \
-    ordered_map_test_omap_insert_remove_stress
+    ordered_map_test_omap_insert_remove_stress ordered_map_test_om_with_value_trio
 
 check_collection_tests "OrderedSet" \
     ordered_set_test_insert_contains ordered_set_test_oset_remove ordered_set_test_min_max \
