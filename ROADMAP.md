@@ -112,25 +112,21 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. **One open hole: H11.** H11 is the
-remaining narrow place-projection conservation hole — projecting a non-Copy value
-out of a field or array element by value (`let g = w.f;` / `let g = arr[i];`)
-copies instead of moving, so it can be owned twice (double-free); latent (no
-corpus use), fix is context-sensitive (move-vs-borrow position) and scheduled.
-H12 is closed: user submodules and the entire `std` subtree are now checked by
-the full front-end, the exemption machinery is deleted, and
-`check_submodule_check_coverage.sh` pins the all-source rule at zero. The broad linearity and
-conservation model is otherwise enforced and gated: H10 (array-literal
-duplication) is closed (`test-linear-conservation`, E0205); non-Copy field
-assignment and `S { ..base }` duplication are rejected (E0219/E0220); H9
-(nested-scope linear leak) is closed (Phase 6 #13a: move-through-let +
-per-block scope-exit + divergence, E0208/E0205, `test-linear-nested-scope`);
-the `_`/`let _`/bare-discard half of H6 is closed (E0287/E0288/E0289). H7
-(loop-SSA) and H8 (array bounds) are closed. Overflow, div/mod-zero,
-over-width shift, `MIN` negation, the float→int cast (H2), and array bounds (H8)
-all abort by default at runtime (ROADMAP #10 Stage 2.x + H8); linearity is now
-enforced at every discard site (H6); `let _ = expr;` is removed, and `_` may
-ignore only `Copy` values.
+it in sync when a hole is added or fixed. **No known holes are currently open.**
+H1/H2/H6-H17 and the C-series are closed and gated; the open section of
+`docs/KNOWN_HOLES.md` is empty. The broad linearity/value-flow model is enforced
+and guarded by `docs/VALUE_FLOW_SPEC.md`, `check_linear_discard.sh`,
+`check_linear_conservation.sh`, `check_linear_nested_scope.sh`, the linearity
+fuzzer, and pass-agreement gates. Remaining linearity work in this roadmap is
+hardening/refactor work, not open soundness debt. The known expressiveness gap is
+fail-closed: owned arrays of linear elements have no whole-owner move-out until
+array destructure is pulled by a workload (Phase 6 #13p). H12 is closed: user
+submodules and the entire `std` subtree are now checked by the full front-end,
+the exemption machinery is deleted, and `check_submodule_check_coverage.sh`
+pins the all-source rule at zero. Overflow, div/mod-zero, over-width shift,
+`MIN` negation, the float→int cast (H2), and array bounds (H8) all abort by
+default at runtime (ROADMAP #10 Stage 2.x + H8); `let _ = expr;` is removed, and
+`_` may ignore only `Copy` values.
 
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
@@ -383,17 +379,6 @@ are folded out.
   the block's value when a branch/arm ends with a value; all-statement forms
   stay statements. `check_trailing_value_blocks.sh`.
 
-**Highest-leverage next items (updated 2026-07-05), in order:** #18
-(callable-values implementation) and #35 (the validation project) as the
-phase's exit path — both former blockers are done. ✅ Landed 2026-07-05: 13b /
-H11 (by-value non-Copy projection rejected, E0290 — KNOWN_HOLES OPEN section
-is empty again) and conditional Copy (Phase 7 #3 — `Option<T>`/`Result<T,E>`/
-Copy-marked generics are Copy iff all substituted payloads are Copy; both
-pre-trial prerequisites for the external-validation gate are now met).
-✅ Landed 2026-07-02: #24a (sub-file diagnostic attribution) and Phase 7 #38b
-/ H12 (std fully front-end checked, exemption deleted). Everything else in
-the active list is pull-condition-gated or polish.
-
 13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
    bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
    bare/deferred non-Copy discard, E0288 `_` over a non-`Copy` value, E0289
@@ -407,59 +392,9 @@ the active list is pull-condition-gated or polish.
    arm now consumes the payload; and a `blockNonTerminating` exemption (`while true {}`
    / `abort()`) so an unreachable block end is not a false leak. Two value-view
    types the hole had masked were corrected to `Copy` and `Bytes::into_raw_parts`
-   added for trusted ownership transfer. Original write-up retained below.
-
-   **(original)** The Phase 6 #13 ignored-result implementation
-   made `let _ = expr;` an acknowledgement form, but the checker currently skips
-   registering `_` bindings for any non-`Destroy` type. That creates a linearity
-   escape hatch: `let _ = LinearStruct { ... };` compiles even though the same
-   value bound to a name is E0208, and `let _ = Result<Resource, E>` drops the
-   outer result without proving/consuming the payload. Tracked as
-   `docs/KNOWN_HOLES.md` **H6**. Broader probe (2026-06-27) found the root class
-   is **missing nested-scope exit checking**: a bare expression statement like
-   `LinearStruct { ... };` compiles because `Stmt.expr` only rejects
-   `Result`/`Option`; `if`/`if`-expression branches can create branch-local
-   linear values that disappear when the checker restores the pre-branch env;
-   match/enum destructuring arms do not scope-check arm-local linear fields
-   introduced by variant bindings or skipped by `_`; enum `let ... else`
-   destructuring over a linear payload can bind-and-drop the payload; `return`
-   inside a nested branch can skip checking locals created earlier in that branch;
-   `?` propagation inside a nested branch can do the same;
-   and returned linear values in statement position (`make_resource();`,
-   `receiver.method_returning_resource();`, `Type::make_resource();`) compile.
-   Deferred calls are another discard site: `defer risky_result();` and
-   `defer make_resource();` currently ignore the call result. Required fix:
-   - Define one checker helper for "may be explicitly discarded" and use it for
-     `let _ =`, `Stmt.expr` discard, match arm wildcard/value bindings, and
-     destructuring desugar output; Copy values are discardable, but linear values
-     must be consumed, returned, or reserved exactly as MEMORY_GUARANTEES says.
-   - Refactor checker block handling so every statement list is checked as a
-     lexical scope with a known entry environment, exit mode, and local-variable
-     set; before an env is restored or a branch result is merged, all locals
-     introduced inside that block/arm must pass `checkScopeExit` unless the block
-     exits by a path that transfers ownership (`return`, typed `break`, etc.) and
-     that path has checked the same local set. Do not rely on the final
-     function-level `checkScopeExit` to catch locals from branches/arms whose envs
-     are thrown away.
-   - Reject or force explicit handling for `Result<T, E>` / `Option<T>` when `T`
-     or `E` can carry a linear value; do not treat the outer enum as a proof that
-     payload ownership disappeared.
-   - Add red-team fixtures to `scripts/tests/check_ignored_result.sh` or a new
-     linear-discard gate: ordinary `let _ = Linear`, bare `Linear;`, returned
-     linear temporary in statement position, branch-local linear in `if` /
-     `if`-expression including return/`?` propagation paths, empty/copy-only `else` branches,
-     enum `E::A { _ }` over a linear payload, enum arm `E::A { x }` fallthrough
-     with `x` unconsumed, enum `let E::A { x } = e else { ... };` with `x`
-     unconsumed, calls/methods/static methods returning linear values in statement
-     position, deferred calls returning `Result`/`Option` or linear values, and
-     `Result<Resource, E>` acknowledgement must all fail. Keep the existing
-     loop/break/continue/borrow-block positives green; probes show those paths
-     already reject locals correctly.
-   - Register E0286 in `--report diagnostic-codes` while touching the diagnostic
-     surface.
-   - Update `docs/IGNORED_RESULT.md`, `docs/MEMORY_GUARANTEES.md`, and
-     `docs/KNOWN_HOLES.md` when fixed; the closing gate must prove the previous
-     false-green `check_ignored_result.sh` coverage hole is sealed.
+   added for trusted ownership transfer. Historical hole details live in
+   `docs/KNOWN_HOLES.md` and the changelog; this roadmap keeps only the active
+   contract and gates.
 
 13b. ✅ **DONE (2026-07-05) — H11 closed: by-value projection of a non-`Copy`
    sub-place is rejected (E0290).** Position-aware fix: `checkExpr` gained an
@@ -475,24 +410,6 @@ the active list is pull-condition-gated or polish.
    owned array of linear values now has no whole-owner move-out (borrow or
    Copy-leaf reads only); pull when a real workload needs to consume linear
    array elements.
-   Original item:
-   The broad Copy/linearity conservation work has landed: array literals move
-   their elements, struct literals and destructuring conserve ownership,
-   non-Copy field overwrite is rejected, `S { ..base }` cannot duplicate a
-   non-Copy field, and discard/scope paths are gated. H11 is the remaining
-   narrow read-side exception. Today `let g = w.f;` and `let g = arr[i];` over a
-   non-`Copy` field/element project a value out of a place without invalidating
-   the original owner, so the same linear value can be owned twice. The fix must
-   be position-aware, not a blanket field/index rejection: `&w.f`, `&mut w.f`,
-   `w.f.copy_method()`, `arr[i] = v`, and reads of `Copy` fields/elements stay
-   legal; only a by-value move of a non-`Copy` sub-place is rejected. Concrete
-   has no partial moves, so the source-level rule is: move the whole owner
-   through destructuring or an explicit ownership-transfer API; borrow sub-places
-   when you need scoped access. Extend `scripts/tests/check_linear_conservation.sh`
-   with rejecting rows for non-`Copy` field/index projection and positive rows
-   for Copy reads, borrows, method calls that do not move the sub-place, and
-   assignment forms. Close `docs/KNOWN_HOLES.md` H11 only when the gate asserts
-   the previous reproducer fails.
 
 13c. ✅ **DONE / KEEP RATCHEting — value-flow spec + constructor-coverage
    gate.** The linearity work has three distinct failure classes: discard (a
@@ -583,7 +500,10 @@ the active list is pull-condition-gated or polish.
    goldens, SSA, differential, `test-ci-gates`. Forgetting a mode on new
    syntax now over-rejects visibly instead of silently leaking.
 
-13h. **Centralize ownership-transfer and overwrite policy helpers.** Delete
+13h. **Deferred hardening ratchet — centralize ownership-transfer and overwrite
+   policy helpers.** This is valuable checker cleanup, but it is not an open
+   soundness blocker after 13c-13g; do it when touching the checker next or
+   after the #18/#35 validation frontier. Delete
    scattered per-AST `if ident then consumeVarIfExists` logic in favor of one
    helper for "this expression transfers ownership" and one helper for "this
    place may be overwritten." Assignment, return, `break value`, function
@@ -595,7 +515,8 @@ the active list is pull-condition-gated or polish.
    uninitialized-slot idioms must be explicit trusted boundaries, not silent
    safe-code exceptions.
 
-13i. **Represent control-flow exit modes as data.** Branches, match arms,
+13i. **Deferred hardening ratchet — represent control-flow exit modes as data.**
+   Branches, match arms,
    loops, `return`, `break value`, `continue`, `abort`, and future `noreturn`
    calls should produce a structured exit mode:
    `fallsThrough | returns | breaks(value?) | continues | diverges`. Linear
@@ -605,7 +526,8 @@ the active list is pull-condition-gated or polish.
    return paths must discharge owned locals before leaving their scope, and
    break-with-value consumes the value being transported.
 
-13j. **Add an interpreter runtime conservation oracle when the interpreter has
+13j. **Deferred hardening ratchet — add an interpreter runtime conservation
+   oracle when the interpreter has
    heap support.** Deferred pull-condition: the interpreter currently has no
    heap model (`allocCall` remains in the differential gate's unsupported
    class), so there is no allocation/free balance to observe. When
@@ -616,7 +538,8 @@ the active list is pull-condition-gated or polish.
    dynamic backstop for checker mistakes. Until then, 13c + 13f + the static
    gates are the conservation net.
 
-13k. **Stop direct checker environment mutation outside ownership APIs.**
+13k. **Deferred hardening ratchet — stop direct checker environment mutation
+   outside ownership APIs.**
    The checker should expose narrow state-transition helpers such as
    `declareVar`, `moveVar`, `copyVar`, `borrowPlace`, `markConsumed`,
    `reserveForDefer`, `restoreScope`, and `mergeBranchStates`; direct mutation
@@ -627,7 +550,8 @@ the active list is pull-condition-gated or polish.
    finding another isolated handler that updates the environment differently
    from the rest.
 
-13l. **Create one shared type-predicate module for Copy, trait bounds, and
+13l. **Deferred hardening ratchet — create one shared type-predicate module for
+   Copy, trait bounds, and
    substitution-sensitive facts.** The conditional-Copy and H17 burn-downs
    exposed repeated logic across Check, Elab, CoreCheck, Mono, and post-mono
    verification: instantiated `Copy`, builtin `Option`/`Result` rules,
@@ -637,7 +561,8 @@ the active list is pull-condition-gated or polish.
    type/classification rule lands only with shared positives/negatives proving
    Check, Elab, CoreCheck, Mono, and Verify agree.
 
-13m. **Add diagnostic-code coverage gates for ownership/type diagnostics.**
+13m. **Deferred hardening ratchet — add diagnostic-code coverage gates for
+   ownership/type diagnostics.**
    Every `CheckError` / `CoreCheckError` code in the ownership, Copy,
    capability, and value-flow families must have a negative fixture, a
    stable-code assertion, and a hint assertion when the diagnostic has a hint.
@@ -646,7 +571,7 @@ the active list is pull-condition-gated or polish.
    is not only "the program rejects"; the user-facing reason must be stable and
    useful, and `--report diagnostic-codes` must stay complete.
 
-13n. **Systematize pass-agreement gates.** Strengthen LANGUAGE_INVARIANTS #19
+13n. **Deferred hardening ratchet — systematize pass-agreement gates.** Strengthen LANGUAGE_INVARIANTS #19
    into a reusable gate family: any program accepted by Check/CoreCheck must
    not die later with an internal E07xx, panic, SSA-verify error, lowering
    mismatch, or interpreter/compiler disagreement unless the feature is
@@ -673,7 +598,8 @@ the active list is pull-condition-gated or polish.
    equivalent) and gate that every element moves exactly once while partial
    element move-out remains rejected.
 
-13q. **Add checker mutation tests proving the linearity gates are load-bearing.**
+13q. **Deferred hardening ratchet — add checker mutation tests proving the
+   linearity gates are load-bearing.**
    Mutate or patch-disable key checker rules in CI-local/nightly mode and prove
    the corresponding gates fail: assignment RHS consume, `break value` consume,
    live-linear shadowing rejection, non-`Copy` overwrite rejection, H11
@@ -734,15 +660,30 @@ the active list is pull-condition-gated or polish.
     Kept research/workload-gated: if a real workload keeps hitting unit bugs, the
     first step is a report-only prototype (`examples/units_probe/` + gate),
     annotations optional and erased only after audit records the conversion.
-18. Finish only the remaining callable-values implementation work that real
-    workloads pull. The design checkpoint is DONE and recorded in
+18. **NEXT active language item — finish callable values without closures.**
+    This is the next Phase 6 implementation item now that the value-flow,
+    conditional-`Copy`, and std-checker blockers are closed. The design
+    checkpoint is DONE and recorded in
     `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` plus the changelog; H1 is closed
     by subtraction; immutable scoped reads and the capability-polymorphic HOF
-    surface have shipped. Keep the roadmap focused on the unfinished tail:
-    `with(f)` capset-elision if signature noise becomes real friction,
-    `with_value_mut` / `modify` only after a container-not-in-context gate proves
-    the mutable receiver/context aliasing invariant, and first-class stored
-    `BoundFn` values only after a storage workload needs them. `from(param)` and
+    surface have shipped. Landing order:
+    - Finish or revert any partial E0293 / same-call-borrow checker work before
+      adding APIs. A half-landed aliasing policy is worse than no policy.
+    - Add explicit context-threading combinators for `&Ctx` and `&mut Ctx`
+      callbacks over the collection surfaces that need them; consuming
+      one-shot contexts land only if a workload needs them.
+    - Gate callable capture/conservation: callback function pointers capture
+      nothing; every context is an ordinary parameter whose ownership is checked
+      by the existing value-flow machinery; callback capsets remain in the
+      `fn(...) with(C) -> R` type and must be required at each call site.
+    - Add the scoped collection callback gate: `with_value_mut` / `modify`
+      only after a container-not-in-context check proves the mutable
+      receiver/context aliasing invariant, including the method receiver and
+      all callback/context arguments.
+    - Add first-class stored `BoundFn` values only after a storage workload
+      needs them.
+    Keep the roadmap focused on this unfinished tail. `with(f)` capset-elision
+    is admitted only if signature noise becomes real friction. `from(param)` and
     view structs are **deep research escape valves**, not planned language work:
     they come forward only if operation APIs, owned views, and scoped callbacks
     fail a real workload badly enough to justify returned-reference provenance.
@@ -890,7 +831,7 @@ the active list is pull-condition-gated or polish.
     three stale-fixture CI failures on 2026-07-01/02 hid inside per-gate
     heredocs. `check_cast_matrix.sh` is the first consumer; new gates should
     source it, and existing gates migrate opportunistically when touched.
-35. Add the Phase 6 validation project: a small C/Rust-style CLI using the
+35. **Next after #18 — add the Phase 6 validation project:** a small C/Rust-style CLI using the
     Phase 5 core slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, narrow const
     generics, pattern ergonomics, callable/capability callback decisions,
@@ -899,6 +840,16 @@ the active list is pull-condition-gated or polish.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
+37. Add a docs/profile synchronization audit before verified-profile work.
+    `docs/PROFILES.md`, README/site copy, guarantee docs, and profile reports
+    must agree with current implementation: known holes open section empty,
+    checked array bounds, checked arithmetic policy, conditional `Copy`, linear
+    params, std fully front-end checked, proof limitations, and what remains
+    trusted/reported rather than proved. Gate with `check_docs_drift.sh` or a
+    new `check_profile_docs.sh`; include negatives for stale "array bounds not
+    covered", stale "integer overflow wraps silently", stale H11/open-hole
+    status, and any wording that upgrades tests/runtime checks/SMT to formal
+    proof. This item is a prerequisite for pulling the verified profile forward.
 
 ## Phase 7: Standard Library And Core APIs
 
