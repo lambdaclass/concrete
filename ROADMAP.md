@@ -609,6 +609,52 @@ are folded out.
    the checker and linearity gates would catch the exact bug class if it came
    back.
 
+13r. **Doc-snippet compile gate (from the Zig-at-100k-lines lessons,
+   2026-07-07).** Every ```con code block in README/site/docs/*.md must either
+   COMPILE (or compile-and-check for reject examples marked as such) or carry
+   an explicit `pseudocode`/`illustrative` marker. Zig's real-world pain was
+   stale online examples drifting from an evolving language; Concrete avoids it
+   early by making doc snippets first-class evidence — a gate extracts fenced
+   `con` blocks and runs each through the compiler, failing on an unmarked
+   block that no longer compiles. Cheap, high-leverage, and directly serves
+   the no-dark-constructs / honest-docs discipline. Slice-friendly: start with
+   docs/ that already contain runnable snippets. HIGHEST-PRIORITY of these four.
+
+13s. **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
+   (2026-07-07).** `with(Alloc)` is the AUTHORITY ("may allocate"); it does not
+   say WHICH allocator owns the memory. Arenas, tests, embedded, hot-reload,
+   plugins, and the #35 validation project all want allocator IDENTITY, not
+   just permission (the Zig hot-reload story is the sharpest argument: memory
+   must outlive a reloaded library, which needs a named allocator the caller
+   controls). Research an explicit allocator value threaded alongside the
+   capability — e.g. `fn parse(input: &Text, alloc: Allocator) with(Alloc) ->
+   Result<Ast, ParseError>` — under the linear/H17 rules (an `Allocator` is a
+   borrow or a Copy handle, never a hidden global). TIMING IS THE POINT:
+   retrofitting an allocator parameter into already-shipped collection
+   signatures is an H12/H17-scale burn-down, so decide the model before Phase 7
+   #3+ harden the APIs. Deliverable is a design doc + decision, not
+   implementation.
+
+13t. **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
+   normative split so stdlib `Result` usage stays consistent and does not drift
+   into Zig-style everything-bubbles noise: `Result` for DOMAIN / user /
+   environment failures (parse error, file-not-found, connection refused);
+   `abort`/trap for INVARIANT failures, OOM, bounds, and arithmetic traps
+   (already the shipped stance — checked arithmetic, array bounds, E0286
+   forcing acknowledgment); and the audit/report surface must NAME which
+   failures a function treats as recoverable vs fatal. Mostly codifies existing
+   behavior, but writing it down is what prevents API-by-API drift. Feeds the
+   Phase 7 std ergonomics work and the #35 error surfaces.
+
+13u. **Trap / debug runtime UX — shaped by #35 (2026-07-07).** Runtime traps
+   (bounds, overflow, div-by-zero, OOM, checked-cast) currently abort without a
+   source span. Make them useful: a source span on the trap where the emitter
+   can carry one, a `concrete run --trace` mode, stable runtime-failure reports,
+   and debug builds tuned for inspectability. This is real usability work best
+   scoped AFTER #35 tells us which traps actually hurt in a real workload — file
+   now, prioritize by evidence. Lowest-urgency of these four; pull it forward
+   only if the validation project makes trap opacity painful.
+
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
    a namespace gap: if two imported modules export the same public name, the
@@ -660,13 +706,26 @@ are folded out.
     Kept research/workload-gated: if a real workload keeps hitting unit bugs, the
     first step is a report-only prototype (`examples/units_probe/` + gate),
     annotations optional and erased only after audit records the conversion.
-18. **NEXT active language item — finish callable values without closures.**
-    This is the next Phase 6 implementation item now that the value-flow,
-    conditional-`Copy`, and std-checker blockers are closed. The design
-    checkpoint is DONE and recorded in
-    `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` plus the changelog; H1 is closed
-    by subtraction; immutable scoped reads and the capability-polymorphic HOF
-    surface have shipped. Landing order:
+18. ✅ **CORE DONE 2026-07-06 — callable values without closures.**
+    Shipped (commits 3f25e185 + 8588c8e9, CI green): E0293
+    (`conflictingCallBorrows`) is the container-not-in-context hard rule —
+    path-based overlap within one call, auto-borrowed receiver + single-hop
+    `borrowedFrom` aliases included; `with_value_mut`/`modify` on HashMap and
+    OrderedMap, `Vec::with_at_mut`; `for_each_with` (shared `&Ctx`) and
+    `for_each_ctx` (mutable `&mut Ctx`, reborrowed per call) on Vec + HashMap.
+    H1 tail CLOSED — no ref-returning accessor anywhere in std; the model is
+    scoped-read + scoped-in-place-mutation + move-out. The three-mode
+    discipline held exactly as designed: `&Ctx` many-call read-only, `&mut Ctx`
+    many-call reborrow (H17 makes it an ordinary borrow — no consume
+    obligation, no move-out), consuming one-shot. Gated by
+    `check_callable_values.sh` (21 rows).
+    DEFERRED TAIL (not blockers for #35): consuming one-shot combinators + more
+    collection HOFs (workload-pulled), `with(f)` capability-ELISION (§6 — admit
+    only if signature noise becomes real friction), `proved_for_instance`
+    EVIDENCE artifacts (§8 — fits proof-automation, not blocking), first-class
+    stored `BoundFn` (only if a storage workload needs it). `from(param)`/view
+    structs remain deep research escape valves.
+    Original landing plan (for history):
     - Finish or revert any partial E0293 / same-call-borrow checker work before
       adding APIs. A half-landed aliasing policy is worse than no policy.
     - Add explicit context-threading combinators for `&Ctx` and `&mut Ctx`
