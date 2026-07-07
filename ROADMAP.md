@@ -473,7 +473,20 @@ are folded out.
    `while let` lower through an unmatched path, so over non-`Copy` enums they
    reject by design (`E0288`) until the whole instantiated enum is `Copy`
    (for example, after conditional `Copy` makes `Option<i32>` genuinely
-   `Copy`). Do not add variant-aware weakening as a special case. Keep
+   `Copy`). The same spec is also the searchable **pass-agreement /
+   argument-passing contract**: every call, method receiver, callback context,
+   `&T`, `&mut T`, owned param, reborrow, and return must state whether the
+   value is copied, moved, borrowed, consumed, or rejected. Callable values and
+   future stdlib combinators must add rows here before landing, so callback
+   ergonomics cannot bypass the ordinary linearity rules.
+   This is also the named **feature-interaction checklist**: every new language
+   or stdlib feature must answer in the spec/gate whether it copies, moves,
+   borrows, consumes, or rejects; whether it changes required capabilities;
+   whether it changes proof extraction / ProofCore meaning; whether interpreter
+   and compiled code agree; and whether report/audit output exposes the same
+   fact. The checklist exists because the hardest bugs came from feature
+   intersections, not isolated constructs.
+   Do not add variant-aware weakening as a special case. Keep
    `docs/VALUE_FLOW_SPEC.md` as the canonical bridge between
    `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
    `check_linear_conservation.sh`, `check_linear_nested_scope.sh`, and the
@@ -541,7 +554,11 @@ are folded out.
    a per-constructor Expression-modes table, gate-checked. Verified: fuzzer
    2,400 cases/6 seeds, linearity trio, full suite 1585/0, examples,
    goldens, SSA, differential, `test-ci-gates`. Forgetting a mode on new
-   syntax now over-rejects visibly instead of silently leaking.
+   syntax now over-rejects visibly instead of silently leaking. Future refactors
+   must preserve the invariant that `UseMode` and the value-flow spec are the
+   single implementation/source-of-truth pair for pass agreement; individual
+   syntax handlers should not grow ad hoc "consume this ident" logic again
+   without a spec row and gate.
 
 13h. **Deferred hardening ratchet — centralize ownership-transfer and overwrite
    policy helpers.** This is valuable checker cleanup, but it is not an open
@@ -660,12 +677,21 @@ are folded out.
    early by making doc snippets first-class evidence — a gate extracts fenced
    `con` blocks and runs each through the compiler, failing on an unmarked
    block that no longer compiles. Cheap, high-leverage, and directly serves
-   the no-dark-constructs / honest-docs discipline. Extend the snippet marker
-   with an optional evidence expectation block (for example expected
-   diagnostic, capability set, proof status, or audit fact) so examples can
-   prove not only "this compiles" but "this claim still reports the same
-   evidence." Slice-friendly: start with docs/ that already contain runnable
-   snippets. HIGHEST-PRIORITY of these four.
+   the no-dark-constructs / honest-docs discipline.
+
+   Deliverable: `scripts/tests/check_doc_snippets.sh` plus a small fenced-block
+   convention:
+   - runnable examples use a plain `con` fence;
+   - expected rejects use a `con reject:E02xx` fence;
+   - illustrative-only snippets use a `con pseudocode` fence;
+   - evidence expectation: a nearby `<!-- concrete-evidence: ... -->` block
+     naming expected diagnostics, capability facts, proof status, or audit
+     facts.
+
+   Done when the gate fails on an unmarked broken snippet, fails when an
+   evidence expectation drifts, and passes on one positive, one expected-reject,
+   and one explicitly-pseudocode example. Slice-friendly: start with docs/ that
+   already contain runnable snippets. HIGHEST-PRIORITY of these four.
 
 13s. **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
    (2026-07-07).** `with(Alloc)` is the AUTHORITY ("may allocate"); it does not
@@ -679,8 +705,14 @@ are folded out.
    borrow or a Copy handle, never a hidden global). TIMING IS THE POINT:
    retrofitting an allocator parameter into already-shipped collection
    signatures is an H12/H17-scale burn-down, so decide the model before Phase 7
-   #3+ harden the APIs. Deliverable is a design doc + decision, not
-   implementation.
+   #3+ harden the APIs.
+
+   Deliverable: `research/stdlib/allocator-as-value.md` with a GO/NO-GO
+   decision, example signatures for `Vec`, `String`, parsers, arena allocation,
+   test allocators, and hot-reload-owned memory, plus the report fields needed
+   to show both `with(Alloc)` authority and allocator identity. Gate is a
+   design-review fixture, not implementation: examples must show that the
+   allocator value is explicit, linear/borrow-safe, and never a hidden global.
 
 13t. **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
    normative split so stdlib `Result` usage stays consistent and does not drift
@@ -690,8 +722,13 @@ are folded out.
    (already the shipped stance — checked arithmetic, array bounds, E0286
    forcing acknowledgment); and the audit/report surface must NAME which
    failures a function treats as recoverable vs fatal. Mostly codifies existing
-   behavior, but writing it down is what prevents API-by-API drift. Feeds the
-   Phase 7 std ergonomics work and the #35 error surfaces.
+   behavior, but writing it down is what prevents API-by-API drift.
+
+   Deliverable: `docs/ERROR_CONVENTIONS.md` plus stdlib examples for parse
+   failure, file-not-found, OOM/trap, bounds/trap, and ignored `Result`. Done
+   when at least one audit/report fixture shows a public API classified as
+   recoverable, one as fatal/trapping, and one as policy-gated. Feeds the Phase
+   7 std ergonomics work and the #35 error surfaces.
 
 13u. **Trap / debug runtime UX — shaped by #35 (2026-07-07).** Runtime traps
    (bounds, overflow, div-by-zero, OOM, checked-cast) currently abort without a
@@ -699,8 +736,14 @@ are folded out.
    can carry one, a `concrete run --trace` mode, stable runtime-failure reports,
    and debug builds tuned for inspectability. This is real usability work best
    scoped AFTER #35 tells us which traps actually hurt in a real workload — file
-   now, prioritize by evidence. Lowest-urgency of these four; pull it forward
-   only if the validation project makes trap opacity painful.
+   now, prioritize by evidence.
+
+   Deliverable: a runtime-failure record with trap kind, source span when
+   available, function, operation, target profile, and replay command.
+   Acceptance gate: one bounds trap, one arithmetic trap, one OOM/fatal fixture
+   if available, and one trace-mode run must produce stable human and JSON
+   output. Lowest-urgency of these four; pull it forward only if the validation
+   project makes trap opacity painful.
 
 13v. **Build-output convention (repo hygiene, found by #35, 2026-07-07).**
    `concrete build` emits an extensionless binary into the project root named
@@ -713,6 +756,9 @@ are folded out.
    also lets a `make clean` sweep the stray `out/`, `*.con.ll`, and example
    binaries currently littering the tree. NOT a folder reorg — the repo layout
    is otherwise healthy and path-coupled to manifests/gates, so leave it.
+   Done when a new example builds without adding a `.gitignore` entry, `make
+   clean` removes generated binaries/IR, and existing run/test scripts find the
+   new output path through one helper rather than hard-coded source-dir binaries.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
@@ -1296,14 +1342,21 @@ batteries-included breadth. The ranked build order is:
     stale hand-written examples. Add a gate that fails when a new public stdlib
     symbol lacks a test/doc example or when a referenced example no longer
     compiles.
-29a. Add a public stdlib API snapshot/diff before the surface freezes. The
-     snapshot records module path, public names, signatures, `Copy`/linear
+29a. Add a public stdlib API snapshot/diff before the surface freezes.
+
+     Deliverable: `concrete std snapshot --json` (or an equivalent test helper)
+     and `scripts/tests/check_stdlib_api_snapshot.sh`.
+
+     Snapshot fields: module path, public names, signatures, `Copy`/linear
      requirements, capabilities, allocation behavior, trap/recoverable-failure
-     profile, evidence class, deprecation status, and linked tests/docs. A
-     change to any public API fact must produce an explicit diff and fail the
-     gate until the snapshot and docs are updated. This is the stdlib-local
-     version of Phase 10's proof/capability diff and Phase 18's package API
-     artifacts; it prevents accidental drift while the library is still small.
+     profile, evidence class, deprecation status, and linked tests/docs.
+
+     Done when adding/removing a public function, changing a signature, widening
+     a capability, changing allocation/trap behavior, or changing an evidence
+     class fails the gate until the snapshot and docs are updated. This is the
+     stdlib-local version of Phase 10's proof/capability diff and Phase 18's
+     package API artifacts; it prevents accidental drift while the library is
+     still small.
 30. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported. Split
@@ -1521,6 +1574,13 @@ they force a named surface or public claim.
     otherwise it does not belong in this phase. Do not jump straight to multiple
     10k-line ports before the Phase 5 core slab, Phase 7 stdlib, and daily
     workflow can support them; that would mostly test missing ergonomics.
+    Each accepted workload, including #35, must leave behind a checked gap
+    report (`WORKLOAD_REPORT.md` or manifest fields) naming: missing stdlib
+    APIs, painful syntax, ownership/copy friction, error-handling friction,
+    proof/contract friction, runtime trap/debug friction, capability/authority
+    surprises, docs/tooling gaps, and which later roadmap item should absorb
+    each lesson. A workload is not complete if it only builds; it must either
+    feed the linear roadmap or prove that no new item is needed.
     Sequence:
     - **Main compiler repo:** keep tiny proof patterns
       (`examples/proof_patterns/`), evidence-class examples, small real programs
@@ -1672,11 +1732,18 @@ lemmas, and actionable failure diagnostics.
     a failing Lean proof back to the intended obligation id.
 4a. Define one proof artifact schema shared by obligations, minimization,
     `--why`, generated stubs, synthesis attempts, repair plans, stale-proof
-    reports, proof-cache entries, and replay bundles. Every proof command must
-    emit schema version, stable obligation ids, source fingerprint, policy id,
-    evidence class, replay command, and trust/assumption deltas using this
-    schema. Do not let `--emit-lean`, `--minimize`, `--synthesize`,
-    `--repair-plan`, and cache/status output grow separate JSON dialects.
+    reports, proof-cache entries, and replay bundles.
+
+    Deliverable: `docs/PROOF_ARTIFACT_SCHEMA.md` plus a schema-versioned JSON
+    fixture directory. Required common fields: `schema_version`,
+    `obligation_id`, source fingerprint, source span, policy id, evidence
+    class, replay command, tool versions, assumptions/trust deltas, and final
+    status.
+
+    Done when `--emit-lean`, `--minimize`, `--why`, `--synthesize`,
+    `--repair-plan`, proof-cache status, and stale-proof reports all emit this
+    shared envelope, and a gate fails if any command invents a private JSON
+    dialect.
 5. Add human docs only after the binary path exists:
     `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
     should summarize the binary workflow and point to the ProofKit guide, but
@@ -1737,6 +1804,19 @@ lemmas, and actionable failure diagnostics.
     final evidence class, replay command, and whether the final artifact works
     without the LLM. Design target:
     `docs/PROOF_SYNTHESIS.md`.
+
+    Product model: the human reviews the spec, assumptions, and evidence class;
+    the kernel checks the generated proof artifact. Do not design this as
+    "trust the generated proof" or "the LLM decides correctness." If the spec
+    is weak, vacuous, or wrong, synthesis has only made the wrong theorem cheap;
+    Phase 10/11 spec-adequacy, vacuity, and mutation gates are therefore part of
+    this feature's safety story.
+
+    Deliverable: a replay bundle, not an LLM transcript. The bundle must contain
+    the obligation, generated candidate artifacts, accepted proof/invariant/
+    lemma artifacts, rejected attempts with reasons, policy decisions, and a
+    `concrete replay` command that validates the final evidence without network
+    access or model access.
 
     Gates: synthesize a loop invariant for a small loop proof; synthesize a
     missing helper lemma; repair a stale proof after source drift; reject a
@@ -1821,13 +1901,17 @@ lemmas, and actionable failure diagnostics.
     lemma families over those models. Treat these as **formal shadow models**
     for real containers: user proofs reason about the mathematical model, while
     collection implementations prove refinement facts from `Vec`, `HashMap`,
-    `OrderedMap`, and `HashSet` to the corresponding formal model. This is the
-    tractability unlock for proving real programs that use containers; without
-    it, app proofs inherit bucket/tombstone/capacity internals. Each refinement
-    fact must be replayable, schema-versioned, and red-teamed with a deliberately
-    false refinement that the checker/kernel rejects. The proof library should
-    hide runtime implementation details behind refinement facts rather than
-    making every user proof reason about container internals.
+    `OrderedMap`, and `HashSet` to the corresponding formal model.
+
+    Deliverable: one end-to-end refinement slice, for example
+    `HashMap<K,V>` operation facts lowering to `formal_map`, with replayable
+    Lean artifacts and a user proof that consumes only the formal model facts.
+
+    Done when the user proof does not mention buckets/tombstones/capacity, the
+    collection implementation proves the bridge facts, the report names the
+    refinement evidence class, and a deliberately false refinement is rejected by
+    the checker/kernel. This is the tractability unlock for proving real
+    programs that use containers.
 18. Add bounded quantified specs for collections, not arbitrary open-ended
     logic. V1 syntax should cover only finite, source-visible domains:
     `forall i in 0..n { P(i) }`, `exists i in 0..n { P(i) }`, and library
@@ -1915,7 +1999,12 @@ five graduated flagships and one package-scale example.
    Keep one shared evidence-class enum and one shared fact vocabulary across
    reports; no report kind may invent private status strings for `proved`,
    `reported`, `trusted`, `assumed`, `runtime_checked`, `tested_by_oracle`,
-   `observed_only`, or `stale`.
+   `observed_only`, or `stale`. This is the phase where the global **no second
+   truth source** rule becomes mechanical: README/site docs, LSP, MCP, agent
+   JSON, release bundles, artifact viewers, and package reports must wrap these
+   compiler facts or generated snapshots, not restate evidence status by hand.
+   Add a drift fixture proving a stale hand-written claim is caught or marked
+   explicitly non-authoritative.
 2. Add `concrete audit`: one human-readable plus machine-readable bundle
    covering authority, trust, allocation, proof status, obligations,
    assumptions, policy, snapshots, backend/target assumptions, replay, and the
@@ -1926,25 +2015,34 @@ five graduated flagships and one package-scale example.
 4. Add `concrete why <capability>`: explain why a function needs `File`,
    `Network`, `Alloc`, `Unsafe`, etc., including transitive call chains.
 5. Add `concrete diff old new`: authority/proof/trust/runtime-obligation diff.
-   This is also the first **proof/capability diff for code review** surface:
-   produce a PR-oriented summary such as "+ File capability", "+ trusted
-   function", "proof became stale", "new runtime trap site", "evidence
-   downgraded", or "allocation authority widened." The output must be human
-   readable and JSON so CI, GitHub comments, editors, and agents can all show
-   the same facts. This is Concrete's review differentiator: evidence changes
-   live where code review happens, not in a separate proof report nobody opens.
+   This is also the first **proof/capability diff for code review** surface.
+
+   Output must include human text and JSON rows for: added/removed capability,
+   capability widening/narrowing, new `trusted`/`Unsafe`/extern boundary,
+   stale/missing/downgraded proof, new runtime trap site, allocation authority
+   change, changed assumption, and changed stdlib evidence class.
+
+   Done when the same JSON drives CI, a GitHub-comment/golden fixture, editor
+   display, and agent consumption. This is Concrete's review differentiator:
+   evidence changes live where code review happens, not in a separate proof
+   report nobody opens.
 6. Add semantic trust diff gates: capability widening, allocation change,
    trusted boundary addition, stale proof, weakened/missing obligation,
    assumption widening, runtime-obligation change, and stdlib evidence-class
    drift. Add a red-team fixture proving the diff cannot emit a false-clean
    summary when a capability/trust/proof fact changed.
-6a. Add early **capability budget files** before full package facts exist. A
-    project should be able to declare a small local policy such as
-    `forbidden = ["Network", "Unsafe"]` or `allowed = ["Alloc"]`; builds and
-    audit diffs fail when the program widens beyond that budget. This is the
-    single-package precursor to Phase 18 import fact constraints, and should
-    reuse the same fact vocabulary so the policy graduates cleanly to
-    dependency/package boundaries.
+6a. Add early **capability budget files** before full package facts exist.
+
+    Deliverable: a project-local policy file (for example
+    `concrete.policy.toml`) with a minimal V1 surface:
+    `forbidden_caps = ["Network", "Unsafe"]`, `allowed_caps = ["Alloc"]`, and
+    optional `forbid_trusted = true`.
+
+    Done when `concrete check` / `concrete audit` fails a fixture that widens
+    beyond the budget, reports the exact function/import that caused the
+    widening, and reuses the same fact vocabulary as Phase 18 import fact
+    constraints so the policy graduates cleanly to dependency/package
+    boundaries.
 7. Add `concrete audit --json`: machine-readable audit output for CI,
    dashboards, editor tooling, and release bundles.
 7a. Add a **verified profile** command/policy surface that makes "formally
@@ -1965,14 +2063,17 @@ five graduated flagships and one package-scale example.
    but it must never collapse different evidence classes into one fake green
    badge: `proved`, `runtime_checked`, `tested_by_oracle`, `assumed`, and
    `trusted` stay distinct on screen and in JSON.
-9. Ensure every release bundle includes an evidence replay command. The concrete
-   command should be something like `concrete replay <bundle>`: it rebuilds and
-   rechecks the selected tests, gates, proofs, doc snippets, report snapshots,
-   and release facts; emits a summary of memory-safety enforcement, runtime
-   checks, capabilities, proofs, trusted boundaries, assumptions, and
-   unsupported facts; and works without network or LLM access. Gates: clean
-   bundle replays green, stale proof fails, missing gate fails, changed source
-   fails, and an LLM-generated proof bundle replays using only checked artifacts.
+9. Ensure every release bundle includes an evidence replay command.
+
+   Deliverable: `concrete replay <bundle>` rebuilds and rechecks the selected
+   tests, gates, proofs, doc snippets, report snapshots, and release facts. It
+   emits a summary of memory-safety enforcement, runtime checks, capabilities,
+   proofs, trusted boundaries, assumptions, and unsupported facts. It must work
+   without network access, without an LLM, and without private source paths.
+
+   Done when the replay gate covers: clean bundle replays green, stale proof
+   fails, missing gate fails, changed source fails, schema mismatch fails, and
+   an LLM-generated proof bundle replays using only checked artifacts.
 10. Make `tested_by_oracle` evidence structured and diffable:
     - add an oracle manifest naming reference, seeds, case count, input model,
       comparison mode, and coverage kind;
@@ -2008,19 +2109,26 @@ five graduated flagships and one package-scale example.
     (`counterexample`, `tested_by_property_failure`, `oracle_failure`, etc.),
     replay command, and the original tool provenance. Wire
     `scripts/tests/check_counterexample_regressions.sh` with one SMT overflow
-    witness, one property-test contract witness, and one oracle mismatch. The
+    witness, one property-test contract witness, one oracle mismatch, one
+    fuzzer/differential mismatch, one runtime-trap witness, and one proof
+    failure/minimized obligation witness. The
     gate must fail if a future refactor turns the same counterexample into
     `proved_*` without changing the checked fixture expectation.
 12a. Add **observed contract inference from tests** as an explicit non-proof
-     on-ramp to specs. Given a set of passing tests or property cases, the tool
-     may propose candidate preconditions/postconditions/invariants and mark them
-     `observed_only` / `suggested_contract`, never `proved`. Reports must show
-     the sample size, generator profile, counterexamples tried, and the command
-     needed to promote the suggestion into a checked contract/proof obligation.
-     Gates: infer a useful range postcondition from tests; reject or mark weak a
-     vacuous suggestion; prove a mutated implementation can invalidate the
-     observed claim; and ensure no inferred contract upgrades evidence without a
-     separate proof or policy-approved assumption.
+     on-ramp to specs.
+
+     Deliverable: `concrete infer-contracts <target> --from-tests --json`
+     proposes candidate preconditions, postconditions, or invariants from
+     passing tests/property cases. Every output fact is marked
+     `observed_only` / `suggested_contract`, never `proved`.
+
+     Reports must show sample size, generator profile, counterexamples tried,
+     surviving mutants if any, and the command needed to promote the suggestion
+     into a checked contract/proof obligation. Gates: infer a useful range
+     postcondition from tests; reject or mark weak a vacuous suggestion; prove a
+     mutated implementation can invalidate the observed claim; and ensure no
+     inferred contract upgrades evidence without a separate proof or
+     policy-approved assumption.
 13. Add spec provenance and adequacy facts to audit/release bundles: spec name,
     source standard or paper, independent reference if any, test-vector set,
     reviewer, review date, assumptions, and evidence class
@@ -2095,9 +2203,12 @@ under a stronger badge.
 9. Add assumption lifecycle checks: every assumption has an owner, scope,
    rationale, review date, affected claims, and a diff gate when it widens.
 10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
-   backend, runtime, and target assumptions in one machine-readable list. V1 is
-   an honest report, not an auto-refactorer: show the trusted surface, the facts
-   each boundary supports, what calls it reaches, and which claims depend on it.
+   backend, runtime, and target assumptions in one machine-readable list.
+
+   V1 deliverable: `concrete audit --trust-boundaries --json` shows the trusted
+   surface, the facts each boundary supports, what calls it reaches, and which
+   claims depend on it. This is an honest report, not an auto-refactorer.
+
    A later "trusted-boundary shrinker" may suggest wrappers or proof targets,
    but suggestions must be advisory until a replayed proof/audit diff validates
    the smaller boundary.
@@ -2240,8 +2351,14 @@ promises.
     unchecked FFI wrappers. There is no global unsafe mode and no silent
     trusted wrapper that hides authority: audit output must show the safe
     wrapper, the underlying trusted/Unsafe operation, and the assumption being
-    accepted. Add a red-team gate proving safe code cannot reach the unchecked
-    operation without the capability or trusted boundary.
+    accepted.
+
+    Deliverable: `docs/UNSAFE_ISLAND.md` plus fixtures for `get_unchecked`-style
+    access, raw-pointer place writes, unchecked casts, inline asm placeholder,
+    and FFI wrapper assumptions. Add a red-team gate proving safe code cannot
+    reach the unchecked operation without the capability or trusted boundary,
+    and proving audit output shows both the safe wrapper and the underlying
+    trusted/Unsafe operation.
 9. Decide the proof class for references and borrows. A function using `&` or
    `&mut` must be classified as one of: value-only/borrow-free,
    proved over read-only references, proved over mutable references with
@@ -2756,6 +2873,14 @@ audience):**
 1. Define first public release criteria: supported subset, required examples,
    required diagnostics, proof workflow, stdlib/project UX, evidence/policy/
    tooling story.
+1a. Add the first-user teaching path as a release-bar artifact, not marketing
+    copy. Deliverable: `docs/LEARN_CONCRETE.md` plus a checked tutorial
+    transcript that covers install/build/run/test, `Copy` vs linear values,
+    consume/destroy/handoff, capabilities in function headers, `Result` /
+    ignored-result diagnostics, stdlib basics, one runtime trap, one audit
+    report, and the five evidence classes. The tutorial must use runnable
+    snippets covered by the doc-snippet gate and must not claim proof where the
+    compiler reports only testing, runtime checking, assumption, or trust.
 2. Publish a public claim matrix: what Concrete proves, enforces, reports,
    assumes, and trusts.
 3. Add release claim freeze: README, `CLAIMS_TODAY.md`, roadmap, showcase
@@ -3117,15 +3242,19 @@ reports without inventing a second truth source.
     `dev_checked` / `tested` facts, never as proof. Editor and agent prompts
     should suggest "promote this to a contract/obligation" when release or
     high-integrity policy requires stronger evidence.
-13a. Add installed-binary feature discovery for agents and editor tooling:
-     `concrete help --json`, `concrete agent features --json`, or equivalent.
-     The catalog must describe supported commands, inputs, artifacts, schema
-     versions, evidence classes, replay commands, policy gates, forbidden
-     actions, and examples of valid next steps. It is the source of truth that
-     MCP, LSP, docs, and LLM prompts wrap; they must not duplicate a stale list
-     of Concrete features. Gate it with golden JSON snapshots and one agent
-     workflow that discovers proof synthesis, replay, capability diffs, and
-     counterexample saving from the installed binary alone.
+13a. Add installed-binary feature discovery for agents and editor tooling.
+
+     Deliverable: `concrete help --json` and/or
+     `concrete agent features --json`. The catalog must describe supported
+     commands, accepted inputs, emitted artifacts, schema versions, evidence
+     classes, replay commands, policy gates, forbidden actions, and examples of
+     valid next steps.
+
+     Rule: this catalog is the source of truth that MCP, LSP, docs, and LLM
+     prompts wrap; they must not duplicate a stale list of Concrete features.
+     Done when golden JSON snapshots exist and one agent workflow discovers
+     proof synthesis, replay, capability diffs, and counterexample saving from
+     the installed binary alone.
 14. Add the Phase 19 validation artifact:
    `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,
