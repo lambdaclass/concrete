@@ -660,8 +660,12 @@ are folded out.
    early by making doc snippets first-class evidence — a gate extracts fenced
    `con` blocks and runs each through the compiler, failing on an unmarked
    block that no longer compiles. Cheap, high-leverage, and directly serves
-   the no-dark-constructs / honest-docs discipline. Slice-friendly: start with
-   docs/ that already contain runnable snippets. HIGHEST-PRIORITY of these four.
+   the no-dark-constructs / honest-docs discipline. Extend the snippet marker
+   with an optional evidence expectation block (for example expected
+   diagnostic, capability set, proof status, or audit fact) so examples can
+   prove not only "this compiles" but "this claim still reports the same
+   evidence." Slice-friendly: start with docs/ that already contain runnable
+   snippets. HIGHEST-PRIORITY of these four.
 
 13s. **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
    (2026-07-07).** `with(Alloc)` is the AUTHORITY ("may allocate"); it does not
@@ -1292,6 +1296,14 @@ batteries-included breadth. The ranked build order is:
     stale hand-written examples. Add a gate that fails when a new public stdlib
     symbol lacks a test/doc example or when a referenced example no longer
     compiles.
+29a. Add a public stdlib API snapshot/diff before the surface freezes. The
+     snapshot records module path, public names, signatures, `Copy`/linear
+     requirements, capabilities, allocation behavior, trap/recoverable-failure
+     profile, evidence class, deprecation status, and linked tests/docs. A
+     change to any public API fact must produce an explicit diff and fail the
+     gate until the snapshot and docs are updated. This is the stdlib-local
+     version of Phase 10's proof/capability diff and Phase 18's package API
+     artifacts; it prevents accidental drift while the library is still small.
 30. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported. Split
@@ -1658,6 +1670,13 @@ lemmas, and actionable failure diagnostics.
     parse/check up to the intended placeholder boundary, assert replay JSON
     reports the same statuses as human replay, and assert proof-check JSON maps
     a failing Lean proof back to the intended obligation id.
+4a. Define one proof artifact schema shared by obligations, minimization,
+    `--why`, generated stubs, synthesis attempts, repair plans, stale-proof
+    reports, proof-cache entries, and replay bundles. Every proof command must
+    emit schema version, stable obligation ids, source fingerprint, policy id,
+    evidence class, replay command, and trust/assumption deltas using this
+    schema. Do not let `--emit-lean`, `--minimize`, `--synthesize`,
+    `--repair-plan`, and cache/status output grow separate JSON dialects.
 5. Add human docs only after the binary path exists:
     `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
     should summarize the binary workflow and point to the ProofKit guide, but
@@ -1799,10 +1818,16 @@ lemmas, and actionable failure diagnostics.
     predicates and formal stdlib models: sorted, bounded, no-duplicates,
     fixed-length, prefix, checksum, constant-time source shape, `formal_vec`,
     `formal_map`, `formal_set`, spec-only `bigint`, and the first reusable
-    lemma families over those models. The proof library should hide runtime
-    implementation details (hash buckets, capacities, tombstones, wraparound
-    storage) behind refinement facts rather than making every user proof reason
-    about container internals.
+    lemma families over those models. Treat these as **formal shadow models**
+    for real containers: user proofs reason about the mathematical model, while
+    collection implementations prove refinement facts from `Vec`, `HashMap`,
+    `OrderedMap`, and `HashSet` to the corresponding formal model. This is the
+    tractability unlock for proving real programs that use containers; without
+    it, app proofs inherit bucket/tombstone/capacity internals. Each refinement
+    fact must be replayable, schema-versioned, and red-teamed with a deliberately
+    false refinement that the checker/kernel rejects. The proof library should
+    hide runtime implementation details behind refinement facts rather than
+    making every user proof reason about container internals.
 18. Add bounded quantified specs for collections, not arbitrary open-ended
     logic. V1 syntax should cover only finite, source-visible domains:
     `forall i in 0..n { P(i) }`, `exists i in 0..n { P(i) }`, and library
@@ -1885,8 +1910,12 @@ Done when: `concrete audit`, semantic diff, and an artifact viewer cover the
 five graduated flagships and one package-scale example.
 
 1. Stabilize machine-readable fact schemas for proof status, obligations,
-   effects, capabilities, assumptions, policies, snapshots, and showcase
-   metadata.
+   effects, capabilities, assumptions, policies, snapshots, showcase metadata,
+   runtime traps, synthesis attempts, stdlib evidence, and package evidence.
+   Keep one shared evidence-class enum and one shared fact vocabulary across
+   reports; no report kind may invent private status strings for `proved`,
+   `reported`, `trusted`, `assumed`, `runtime_checked`, `tested_by_oracle`,
+   `observed_only`, or `stale`.
 2. Add `concrete audit`: one human-readable plus machine-readable bundle
    covering authority, trust, allocation, proof status, obligations,
    assumptions, policy, snapshots, backend/target assumptions, replay, and the
@@ -1897,9 +1926,25 @@ five graduated flagships and one package-scale example.
 4. Add `concrete why <capability>`: explain why a function needs `File`,
    `Network`, `Alloc`, `Unsafe`, etc., including transitive call chains.
 5. Add `concrete diff old new`: authority/proof/trust/runtime-obligation diff.
+   This is also the first **proof/capability diff for code review** surface:
+   produce a PR-oriented summary such as "+ File capability", "+ trusted
+   function", "proof became stale", "new runtime trap site", "evidence
+   downgraded", or "allocation authority widened." The output must be human
+   readable and JSON so CI, GitHub comments, editors, and agents can all show
+   the same facts. This is Concrete's review differentiator: evidence changes
+   live where code review happens, not in a separate proof report nobody opens.
 6. Add semantic trust diff gates: capability widening, allocation change,
    trusted boundary addition, stale proof, weakened/missing obligation,
-   assumption widening.
+   assumption widening, runtime-obligation change, and stdlib evidence-class
+   drift. Add a red-team fixture proving the diff cannot emit a false-clean
+   summary when a capability/trust/proof fact changed.
+6a. Add early **capability budget files** before full package facts exist. A
+    project should be able to declare a small local policy such as
+    `forbidden = ["Network", "Unsafe"]` or `allowed = ["Alloc"]`; builds and
+    audit diffs fail when the program widens beyond that budget. This is the
+    single-package precursor to Phase 18 import fact constraints, and should
+    reuse the same fact vocabulary so the policy graduates cleanly to
+    dependency/package boundaries.
 7. Add `concrete audit --json`: machine-readable audit output for CI,
    dashboards, editor tooling, and release bundles.
 7a. Add a **verified profile** command/policy surface that makes "formally
@@ -1916,8 +1961,18 @@ five graduated flagships and one package-scale example.
     verified fixture and negatives for stale proof, assumption, SMT-only claim,
     unchecked unsafe, and unresolved runtime obligation.
 8. Add an artifact viewer CLI/TUI over facts, obligations, proofs,
-   assumptions, release bundles, and diffs.
-9. Ensure every release bundle includes an evidence replay command.
+   assumptions, release bundles, and diffs. It may show a compact dashboard,
+   but it must never collapse different evidence classes into one fake green
+   badge: `proved`, `runtime_checked`, `tested_by_oracle`, `assumed`, and
+   `trusted` stay distinct on screen and in JSON.
+9. Ensure every release bundle includes an evidence replay command. The concrete
+   command should be something like `concrete replay <bundle>`: it rebuilds and
+   rechecks the selected tests, gates, proofs, doc snippets, report snapshots,
+   and release facts; emits a summary of memory-safety enforcement, runtime
+   checks, capabilities, proofs, trusted boundaries, assumptions, and
+   unsupported facts; and works without network or LLM access. Gates: clean
+   bundle replays green, stale proof fails, missing gate fails, changed source
+   fails, and an LLM-generated proof bundle replays using only checked artifacts.
 10. Make `tested_by_oracle` evidence structured and diffable:
     - add an oracle manifest naming reference, seeds, case count, input model,
       comparison mode, and coverage kind;
@@ -1945,7 +2000,8 @@ five graduated flagships and one package-scale example.
     gate must prove property testing finds and shrinks the false claim without
     ever producing a `proved_*` status.
 12. Add counterexample-to-regression persistence for obligation witnesses from
-    SMT, property tests, oracle failures, and future fuzzed contracts. Command
+    SMT, property tests, oracle failures, fuzzers, differential mismatches,
+    runtime traps, proof failures, and future fuzzed contracts. Command
     surface: `concrete counterexample save <obligation_id> --out
     tests/counterexamples/<name>.con` plus JSON mode. The saved fixture must
     include source inputs, expected failing obligation id, expected status
@@ -1955,6 +2011,16 @@ five graduated flagships and one package-scale example.
     witness, one property-test contract witness, and one oracle mismatch. The
     gate must fail if a future refactor turns the same counterexample into
     `proved_*` without changing the checked fixture expectation.
+12a. Add **observed contract inference from tests** as an explicit non-proof
+     on-ramp to specs. Given a set of passing tests or property cases, the tool
+     may propose candidate preconditions/postconditions/invariants and mark them
+     `observed_only` / `suggested_contract`, never `proved`. Reports must show
+     the sample size, generator profile, counterexamples tried, and the command
+     needed to promote the suggestion into a checked contract/proof obligation.
+     Gates: infer a useful range postcondition from tests; reject or mark weak a
+     vacuous suggestion; prove a mutated implementation can invalidate the
+     observed claim; and ensure no inferred contract upgrades evidence without a
+     separate proof or policy-approved assumption.
 13. Add spec provenance and adequacy facts to audit/release bundles: spec name,
     source standard or paper, independent reference if any, test-vector set,
     reviewer, review date, assumptions, and evidence class
@@ -2029,7 +2095,12 @@ under a stronger badge.
 9. Add assumption lifecycle checks: every assumption has an owner, scope,
    rationale, review date, affected claims, and a diff gate when it widens.
 10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
-   backend, runtime, and target assumptions in one machine-readable list.
+   backend, runtime, and target assumptions in one machine-readable list. V1 is
+   an honest report, not an auto-refactorer: show the trusted surface, the facts
+   each boundary supports, what calls it reaches, and which claims depend on it.
+   A later "trusted-boundary shrinker" may suggest wrappers or proof targets,
+   but suggestions must be advisory until a replayed proof/audit diff validates
+   the smaller boundary.
 11. Add spec-adequacy gates: release policy can require reviewed spec
     provenance for selected claims, forbid unreviewed specs in graduated
     flagships, and show when a theorem is `proved_by_lean` against a
@@ -3046,6 +3117,15 @@ reports without inventing a second truth source.
     `dev_checked` / `tested` facts, never as proof. Editor and agent prompts
     should suggest "promote this to a contract/obligation" when release or
     high-integrity policy requires stronger evidence.
+13a. Add installed-binary feature discovery for agents and editor tooling:
+     `concrete help --json`, `concrete agent features --json`, or equivalent.
+     The catalog must describe supported commands, inputs, artifacts, schema
+     versions, evidence classes, replay commands, policy gates, forbidden
+     actions, and examples of valid next steps. It is the source of truth that
+     MCP, LSP, docs, and LLM prompts wrap; they must not duplicate a stale list
+     of Concrete features. Gate it with golden JSON snapshots and one agent
+     workflow that discovers proof synthesis, replay, capability diffs, and
+     counterexample saving from the installed binary alone.
 14. Add the Phase 19 validation artifact:
    `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,
