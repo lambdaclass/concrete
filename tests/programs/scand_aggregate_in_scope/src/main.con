@@ -1,0 +1,19 @@
+// Regression: short-circuit `&&`/`||` lowering used to emit a phi of an
+// AGGREGATE (String) at the scand/scor merge when a promoted aggregate was in
+// scope — invalid IR (E0714 "phi has aggregate type"). Aggregates are now
+// never phi'd at the merge. Found by the #35 conlog workload.
+mod scand_aggregate_in_scope {
+    pub fn main() with(Std) -> Int {
+        let s: String = "hello";
+        let a: Int = 1;
+        let b: Int = 2;
+        // `&&` and `||` with a live promoted String in scope.
+        let ok1: bool = a == 1 && b == 2;
+        let ok2: bool = a == 9 || b == 2;
+        s.drop();
+        if ok1 {
+            if ok2 { return 0; }
+        }
+        return 1;
+    }
+}

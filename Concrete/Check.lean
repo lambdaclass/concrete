@@ -3436,7 +3436,14 @@ def checkModule (m : Module) (summary : FileSummary)
   let implMethodSigs := resolveImplMethodSigs (imports.implMethodSigs ++ localImplSigs) allImplBlocks allTraitImpls
   let traitImplMethodSigs : List (String × FnSummary) := []
   let implSigList := (implMethodSigs ++ traitImplMethodSigs).map Prod.snd
-  let implOffset := externOffset + externSigs.length
+  -- allSigs order is: imported ++ fnSigs ++ builtin ++ extern ++ submodule ++ impl.
+  -- implOffset MUST include submoduleSigs.length — otherwise, when any submodule
+  -- exists, every impl-method name (e.g. `String_drop`) indexes into the
+  -- submodule-sigs region instead of the impl region, so `s.drop()` resolves to
+  -- a submodule function's signature and stops being recognized as a by-value-
+  -- self consume (a linear value is then falsely E0208). Found by the #35
+  -- log-analyzer workload: any multi-module project owning a linear value.
+  let implOffset := externOffset + externSigs.length + submoduleSigs.length
   let implNames : List (String × Nat) :=
     (enumerateList (implMethodSigs ++ traitImplMethodSigs)).map fun (idx, (name, _)) => (name, implOffset + idx)
   let allSigs := importedSigList ++ fnSigs ++ builtinSigs ++ externSigs ++ submoduleSigs ++ implSigList

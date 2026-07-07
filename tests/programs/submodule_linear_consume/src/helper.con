@@ -1,0 +1,7 @@
+// A sibling submodule. Its mere presence used to break the PARENT module's
+// linear-consumption analysis (impl-method sig indices were offset past the
+// submodule sigs), so `s.drop()` in main stopped counting as a consume (E0208).
+// Regression guard for that checker bug (found by the #35 conlog workload).
+mod helper {
+    pub fn tag() -> Int { return 7; }
+}

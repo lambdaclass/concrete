@@ -41,10 +41,16 @@ Those belong in:
 - [015_O0_default_distorted_real_workload_performance.md](015_O0_default_distorted_real_workload_performance.md)
 - [016_cross_module_generic_monomorphization_link_failure.md](016_cross_module_generic_monomorphization_link_failure.md)
 - [017_std_net_socket_constants_are_linux_only.md](017_std_net_socket_constants_are_linux_only.md)
+- [018_stack_array_borrow_creates_copy.md](018_stack_array_borrow_creates_copy.md)
+- [019_array_struct_field_mutation.md](019_array_struct_field_mutation.md)
+- [020_int_match_consume_not_propagated.md](020_int_match_consume_not_propagated.md)
+- [021_int_match_disagree_not_checked.md](021_int_match_disagree_not_checked.md)
+- [022_submodule_breaks_parent_impl_method_consume.md](022_submodule_breaks_parent_impl_method_consume.md) — found by #35 conlog workload
+- [023_shortcircuit_aggregate_phi.md](023_shortcircuit_aggregate_phi.md) — found by #35 conlog workload
 
 ## Open Numbered Bugs
 
-- [018_stack_array_borrow_creates_copy.md](018_stack_array_borrow_creates_copy.md)
+_(none currently)_
 
 ## Still Open, But Not Numbered Bugs
 

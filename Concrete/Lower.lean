@@ -569,7 +569,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- the RHS can contain arm statements), mirroring ifExpr's merge.
       startBlock mergeLabel
       for (name, preVal) in preVars do
-        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
+        -- Promoted vars are memory-backed (their alloca slot carries the value;
+        -- reads reload) — never phi them. Aggregates are NEVER phi'd either:
+        -- emitting `phi %String` is invalid IR (E0714). A var only "changes"
+        -- across a boolean `&&`/`||` RHS via reassignment, which promotes it —
+        -- so a still-unpromoted aggregate cannot have changed, and skipping it
+        -- is correct. (Bug found by the #35 conlog workload: `a && b` with a
+        -- promoted `String` in scope produced an aggregate phi.)
+        if (← isPromoted name).isSome then continue
+        if (← isAggregateForPromotion preVal.ty) then continue
         let rhsV := (rhsEndVars.find? fun (n, _) => n == name).map (·.2)
         let changed := match rhsV with
           | some v => match v, preVal with

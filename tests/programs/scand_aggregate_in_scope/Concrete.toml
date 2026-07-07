@@ -1,0 +1,3 @@
+[package]
+name = "scand_aggregate_in_scope"
+version = "0.1.0"

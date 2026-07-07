@@ -1,0 +1,33 @@
+mod submodule_linear_consume {
+    mod helper;
+    import helper.{tag};
+
+    // Consume an owned String via a by-value-self method (`.drop()`), both
+    // straight-line and inside a nested if-in-while — the exact shapes the
+    // impl-offset bug mis-resolved when a submodule was declared.
+    fn consume_lines(text: &String) with(Std) -> Int {
+        let n: Int = string_length(text);
+        let mut i: Int = 0;
+        let mut seen: Int = 0;
+        while i <= n {
+            if i == n {
+                let line: String = string_slice(text, 0, i);
+                line.drop();
+                seen = seen + 1;
+            }
+            i = i + 1;
+        }
+        return seen;
+    }
+
+    pub fn main() with(Std) -> Int {
+        let s: String = "abc";
+        let got: Int = consume_lines(&s);
+        s.drop();
+        // got == 1 (one trailing "line"); tag() == 7 exercises the submodule import.
+        if got == 1 {
+            if tag() == 7 { return 0; }
+        }
+        return 1;
+    }
+}
