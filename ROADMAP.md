@@ -396,7 +396,7 @@ are folded out.
 - **#17 iteration protocol** — blessed traversal forms, no `Iterator` trait;
   `docs/ITERATION_PROTOCOL.md`.
 - **#19 stdlib handoff** — required surfaces stable/provisional, none blocked;
-  `docs/STDLIB_HANDOFF.md`, `check_stdlib_handoff.sh`.
+  `docs/stdlib/STDLIB_HANDOFF.md`, `check_stdlib_handoff.sh`.
 - **#33 memory model** — user-facing narrative; "no uninitialized reads" is a
   grammar-level guarantee. `docs/MEMORY_MODEL.md`, `check_memory_model.sh`.
 - **#35a semantic-darkness / red-team gate** — `check_phase6_redteam.sh`.
@@ -688,6 +688,18 @@ are folded out.
    scoped AFTER #35 tells us which traps actually hurt in a real workload — file
    now, prioritize by evidence. Lowest-urgency of these four; pull it forward
    only if the validation project makes trap opacity painful.
+
+13v. **Build-output convention (repo hygiene, found by #35, 2026-07-07).**
+   `concrete build` emits an extensionless binary into the project root named
+   after the package, which globs cannot cleanly ignore — so `.gitignore`
+   hand-enumerates ~42 per-example binary paths and every new project example
+   needs another line (conlog just hit this). Give `concrete build` a
+   conventional output directory (e.g. `target/` or a `build/`-style dir,
+   already covered by the existing `build/` ignore) so one ignore rule
+   suffices and built binaries never sit in source dirs. Small tooling change;
+   also lets a `make clean` sweep the stray `out/`, `*.con.ll`, and example
+   binaries currently littering the tree. NOT a folder reorg — the repo layout
+   is otherwise healthy and path-coupled to manifests/gates, so leave it.
 
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
@@ -1242,7 +1254,7 @@ batteries-included breadth. The ranked build order is:
     `std.fs.boundary` wraps ambient filesystem entry points behind directory
     handles; `std.net.boundary` wraps socket creation before pure parsers see
     bytes; `std.libc.boundary` wraps extern calls before safe code sees owned
-    values. Add `docs/STDLIB_BOUNDARY_MODULES.md`,
+    values. Add `docs/stdlib/STDLIB_BOUNDARY_MODULES.md`,
     `examples/stdlib_recipes/{fs_boundary,net_boundary,ffi_boundary}/`, and
     `scripts/tests/check_stdlib_boundary_modules.sh`; the gate must prove that
     the public safe wrapper surface has narrower authority than the underlying
@@ -1254,7 +1266,7 @@ batteries-included breadth. The ranked build order is:
     `remove`, `rename`, and `list`. Ambient absolute-path helpers must be
     hosted-only convenience wrappers with explicit authority. Temp-file,
     symlink, path-normalization, and TOCTOU behavior must appear in
-    `docs/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
+    `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
 28. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
@@ -1318,7 +1330,7 @@ batteries-included breadth. The ranked build order is:
     backend-later, freestanding-later, or research-later until a workload
     forces it.
 36. Add stdlib docs and examples for C/Rust users:
-    `docs/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
+    `docs/stdlib/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
     `path_fs`, `result_errors`, `vec_map`, `parser_cursor`, `json_scan`,
     `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
     and `capability_io`. Each recipe must show the exact `std.*` imports,

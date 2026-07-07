@@ -6,7 +6,7 @@ This document defines the principles that filter every new stdlib API. If a prop
 
 For the concrete module inventory and first-release target, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
 For the existing stdlib direction, see [STDLIB.md](STDLIB.md).
-For the language-level design principles, see [PRINCIPLES.md](PRINCIPLES.md).
+For the language-level design principles, see [PRINCIPLES.md](../PRINCIPLES.md).
 
 ---
 

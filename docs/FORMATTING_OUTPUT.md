@@ -7,7 +7,7 @@ This document defines the direction for formatting and text output in Concrete b
 > string-heavy programs such as `policy_engine`, `grep`, and parser error reporters should have explicit, buffer-oriented formatting paths that feel idiomatic enough without depending on interpolation magic, hidden allocation, or ad hoc builtin-shaped helpers.
 
 For encoding rules, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
-For stdlib direction, see [STDLIB.md](STDLIB.md).
+For stdlib direction, see [STDLIB.md](stdlib/STDLIB.md).
 
 ---
 
@@ -101,7 +101,7 @@ The design in section 2 is the frozen first-release target. It is reconsidered o
 - **Width/padding pressure.** Aligned tabular output is unavoidable in a workload (e.g., `ls`-style columns) and cannot be built from primitives without excessive verbosity.
 - **Float precision.** A workload needs fine-grained float formatting (e.g., scientific notation, fixed precision) that `float_to_string` cannot deliver.
 
-Any such finding is recorded in [STDLIB.md](STDLIB.md) gap ledger and triggers a scoped design revision. The `print`/`println`/`append` triad is the frozen surface and all three are shipped as of 2026-04-20.
+Any such finding is recorded in [STDLIB.md](stdlib/STDLIB.md) gap ledger and triggers a scoped design revision. The `print`/`println`/`append` triad is the frozen surface and all three are shipped as of 2026-04-20.
 
 ---
 

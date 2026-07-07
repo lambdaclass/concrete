@@ -7,7 +7,7 @@ This document is the stable-direction counterpart to [../research/language/opaqu
 > add opaque/newtype validated wrapper types and canonical fallible conversion conventions: zero-cost domain wrappers, smart constructors, checked narrowing/parsing, and explicit `try_from`-style paths should make validated values easy to carry without implicit coercions or ambient convention.
 
 For the underlying layout story, see [LAYOUT_CONTRACT.md](LAYOUT_CONTRACT.md).
-For the broader stdlib direction, see [STDLIB.md](STDLIB.md).
+For the broader stdlib direction, see [STDLIB.md](stdlib/STDLIB.md).
 
 ---
 
@@ -184,7 +184,7 @@ The validated-wrapper surface is accepted as freeze-ready on the current evidenc
 - [x] `NonZeroU32`, `NonZeroU64`, `Port`, `AsciiText` exist in stdlib with the shapes in section 4.
 - [x] Each ships tests that cover `try_new` happy path, `try_new` rejection, `.0` extraction, and absence of implicit coercion.
 - [x] No stdlib validated wrapper exposes an infallible `from_*` where validation is required.
-- [x] This document and [STDLIB.md](STDLIB.md) cross-reference each other on the validated-wrapper section.
+- [x] This document and [STDLIB.md](stdlib/STDLIB.md) cross-reference each other on the validated-wrapper section.
 - [x] The compiler/runtime contract is closed and covered by end-to-end regressions: native/SSA layout on enum-payload newtypes, cross-module newtype identity, instance-method dispatch on wrappers, and narrowed cast exemption for wrap/unwrap-only representation casts.
 
 A medium-workload example using a stdlib validated wrapper end-to-end would still be useful follow-up evidence under item 67, but it is not a freeze blocker now that the design and compiler gaps are closed.

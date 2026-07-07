@@ -16,7 +16,7 @@ For FFI, trusted boundaries, and capability aliases, see [FFI.md](FFI.md).
 For diagnostics and error recovery, see [DIAGNOSTICS.md](DIAGNOSTICS.md).
 For pass contracts and report modes, see [PASSES.md](PASSES.md).
 For the execution model and runtime boundary, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
-For the stdlib module inventory and capability mapping, see [STDLIB.md](STDLIB.md).
+For the stdlib module inventory and capability mapping, see [STDLIB.md](stdlib/STDLIB.md).
 
 ## The Three-Way Split
 
@@ -268,13 +268,13 @@ High-Integrity ── future profile: same language, stricter rules
 
 | Topic | Primary doc | Also mentioned in |
 |-------|------------|-------------------|
-| Capabilities | This document, [FFI.md](FFI.md) | [PASSES.md](PASSES.md), [STDLIB.md](STDLIB.md) |
-| Trusted boundaries | [FFI.md](FFI.md) | This document, [STDLIB.md](STDLIB.md) |
+| Capabilities | This document, [FFI.md](FFI.md) | [PASSES.md](PASSES.md), [STDLIB.md](stdlib/STDLIB.md) |
+| Trusted boundaries | [FFI.md](FFI.md) | This document, [STDLIB.md](stdlib/STDLIB.md) |
 | Capability aliases | [FFI.md](FFI.md) | [PASSES.md](PASSES.md) |
 | Linearity / ownership | [VALUE_MODEL.md](VALUE_MODEL.md) | This document |
 | Error model | [DIAGNOSTICS.md](DIAGNOSTICS.md) | [PASSES.md](PASSES.md) |
 | Report modes | [PASSES.md](PASSES.md) | This document |
 | Proof boundary | [ARCHITECTURE.md](ARCHITECTURE.md) | This document, [PASSES.md](PASSES.md) |
-| Execution model | [EXECUTION_MODEL.md](EXECUTION_MODEL.md) | [STDLIB.md](STDLIB.md) |
+| Execution model | [EXECUTION_MODEL.md](EXECUTION_MODEL.md) | [STDLIB.md](stdlib/STDLIB.md) |
 | High-integrity profile | This document | [IDENTITY.md](IDENTITY.md), [EXECUTION_MODEL.md](EXECUTION_MODEL.md) |
 | ABI / FFI safety | [ABI.md](ABI.md) | [FFI.md](FFI.md), [VALUE_MODEL.md](VALUE_MODEL.md) |

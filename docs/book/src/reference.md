@@ -15,7 +15,7 @@ Use them when you need exact current direction rather than the book's higher-lev
 - [`docs/PASSES.md`](../../PASSES.md)
   Pass-by-pass ownership and responsibility breakdown.
 
-- [`docs/STDLIB.md`](../../STDLIB.md)
+- [`docs/stdlib/STDLIB.md`](../../stdlib/STDLIB.md)
   Stable stdlib direction, systems-module conventions, and collection priorities.
 
 - [`docs/TESTING.md`](../../TESTING.md)

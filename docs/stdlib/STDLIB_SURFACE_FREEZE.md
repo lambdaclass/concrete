@@ -57,7 +57,7 @@ Generic absence type.
 | `unwrap_or(self, default: T) -> T` | method |
 | `ok_or<E>(self, err: E) -> Result<T, E>` | method |
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STDLIB_AUDIT.md](STDLIB_AUDIT.md), [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STDLIB_AUDIT.md](STDLIB_AUDIT.md), [ERROR_HANDLING_DESIGN.md](../ERROR_HANDLING_DESIGN.md)
 
 #### `std.result` -- stable
 
@@ -75,7 +75,7 @@ Generic success/failure type.
 
 Tier 2 helpers (`map`, `map_err`, `and_then`, `or_else`, `unwrap_or_else`) are approved additions pending function-pointer-in-generic validation. They are not frozen because they do not yet exist.
 
-Source: [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md)
+Source: [ERROR_HANDLING_DESIGN.md](../ERROR_HANDLING_DESIGN.md)
 
 #### `std.math` -- stable
 
@@ -189,7 +189,7 @@ Endian-aware byte reading, byte cursor, byte writer. 9 tests pass.
 
 Implemented in `std/src/numeric.con`. ByteCursor and ByteWriter provide typed endian reads/writes. Validated by `examples/packet/` (uses `ByteCursor` for all header reads) and 9 unit tests in the module. Checked arithmetic and narrowing helpers are not yet implemented. Signed variants (`read_i16_be`, etc.) are deferred.
 
-Source: [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
+Source: [BYTE_CURSOR_API.md](../BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](../ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
 
 ### 2.2 Alloc Layer (requires malloc/free)
 
@@ -213,7 +213,7 @@ Owned mutable UTF-8 string.
 
 Note: `push_char` is flagged for rename to `push` in [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md) for verb consistency. Frozen under the current name; the rename is an approved future change.
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md)
 
 #### `std.bytes` -- stable
 
@@ -243,9 +243,9 @@ Borrowed text view over `String`.
 | `Text` | struct: `{ ptr, len }` |
 | `from_string`, `len`, `is_empty`, `get_unchecked`, `eq` | methods |
 
-Experimental because the relationship between `Text`, `&String`, and the borrow checker is not fully settled. See open question on `Text` vs `&str` in [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
+Experimental because the relationship between `Text`, `&String`, and the borrow checker is not fully settled. See open question on `Text` vs `&str` in [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md).
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md)
 
 #### `std.vec` -- stable
 
@@ -518,7 +518,7 @@ Allocation primitives (`grow`, `dealloc`). Used by Vec, String, Bytes, HashMap i
 
 Raw libc FFI bindings. Should not be imported by user code. Candidate for `pub(pkg)` restriction when package management lands.
 
-Source: [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md), [VISIBILITY_AND_MODULE_HYGIENE.md](VISIBILITY_AND_MODULE_HYGIENE.md)
+Source: [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md), [VISIBILITY_AND_MODULE_HYGIENE.md](../VISIBILITY_AND_MODULE_HYGIENE.md)
 
 #### `std.ptr` -- internal
 
@@ -574,10 +574,10 @@ Every syntax construct in the language and its freeze status.
 
 | Form | Description | Design doc |
 |------|-------------|------------|
-| `let Type::Variant { fields } = expr;` | Irrefutable enum destructuring | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| `let StructType { fields } = expr;` | Irrefutable struct destructuring | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| `let Type::Variant { fields } = expr else { diverging_body };` | Refutable destructuring with else | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| Elaboration-time generic inference | Omit type params when context provides them | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) #1, #4 |
+| `let Type::Variant { fields } = expr;` | Irrefutable enum destructuring | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| `let StructType { fields } = expr;` | Irrefutable struct destructuring | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| `let Type::Variant { fields } = expr else { diverging_body };` | Refutable destructuring with else | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| Elaboration-time generic inference | Omit type params when context provides them | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) #1, #4 |
 
 These are designed, LL(1)-verified, and approved. They may be implemented before release. Once implemented, they become stable.
 
@@ -585,24 +585,24 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 
 | Form | Reason | Reference |
 |------|--------|-----------|
-| Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| Operator overloading | Permanent for first release: hidden effects | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| Default function arguments | Hidden parameters; deferred | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| String interpolation | Requires macros or special parser form; deferred | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) |
-| `for x in collection` | Requires iterator protocol; deferred | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) #18 |
-| Compound assignment (`+=`, `-=`) | Low priority sugar; deferred | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) #20 |
-| Guard clauses in match | Grammar ambiguity with `if`; deferred | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) #8 |
-| Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
-| Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
-| Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
-| `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](VISIBILITY_AND_MODULE_HYGIENE.md) |
-| Unifying `#` with `::` | Deferred pending user feedback | [SYNTAX_FREEZE_REVIEW.md](SYNTAX_FREEZE_REVIEW.md) #10 |
+| Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| Operator overloading | Permanent for first release: hidden effects | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| Default function arguments | Hidden parameters; deferred | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| String interpolation | Requires macros or special parser form; deferred | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) |
+| `for x in collection` | Requires iterator protocol; deferred | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) #18 |
+| Compound assignment (`+=`, `-=`) | Low priority sugar; deferred | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) #20 |
+| Guard clauses in match | Grammar ambiguity with `if`; deferred | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](../PATTERN_DESTRUCTURING.md) |
+| Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) #8 |
+| Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md) |
+| Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md) |
+| Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../ANTI_FEATURES.md) |
+| `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../VISIBILITY_AND_MODULE_HYGIENE.md) |
+| Unifying `#` with `::` | Deferred pending user feedback | [SYNTAX_FREEZE_REVIEW.md](../SYNTAX_FREEZE_REVIEW.md) #10 |
 
 ---
 
@@ -625,7 +625,7 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | `bool` | 1-bit | -- | -- |
 | `char` | 8-bit | -- | Byte-oriented first-release surface; see section 6 |
 
-Source: [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md)
+Source: [ARITHMETIC_POLICY.md](../ARITHMETIC_POLICY.md)
 
 ### 4.2 String / text / byte types
 
@@ -636,7 +636,7 @@ Source: [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md)
 | `Bytes` | Raw bytes | Owned, linear | Alloc |
 | `[u8; N]` | Raw bytes, fixed | Copy, stack | Core |
 
-Source: [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md) Principle 4
+Source: [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md) Principle 4
 
 ### 4.3 Generic types
 
@@ -702,7 +702,7 @@ Rules:
 - Core-layer functions have `caps: (pure)` -- no capabilities.
 - No new capabilities may be added without an unfreeze.
 
-Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [ANTI_FEATURES.md](ANTI_FEATURES.md)
+Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [ANTI_FEATURES.md](../ANTI_FEATURES.md)
 
 ---
 
@@ -781,7 +781,7 @@ These cannot be added without rethinking fundamental language invariants.
 | String interpolation | Requires macros (permanently excluded) or special form |
 | `pub(pkg)` visibility | Package management lands |
 
-Full rationale for each: [ANTI_FEATURES.md](ANTI_FEATURES.md), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
+Full rationale for each: [ANTI_FEATURES.md](../ANTI_FEATURES.md), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
 
 ---
 

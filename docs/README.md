@@ -33,7 +33,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [PROVABLE_V1.md](PROVABLE_V1.md) — the first named, release-facing provable subset contract
 - [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) — current proof-eligible subset and its boundary
 - [LANGUAGE_INVARIANTS.md](LANGUAGE_INVARIANTS.md) — the language rules that must hold across every phase
-- [STDLIB.md](STDLIB.md) — current stable stdlib direction and module priorities
+- [STDLIB.md](stdlib/STDLIB.md) — current stable stdlib direction and module priorities
 - [TESTING.md](TESTING.md) — current test structure and what each suite is for
 - [VALUE_MODEL.md](VALUE_MODEL.md) — value, borrow, ownership, and resource-model rules
 

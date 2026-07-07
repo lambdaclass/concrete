@@ -132,4 +132,4 @@ The section-2 menu is the frozen surface. It is reconsidered only on explicit ev
 - A validated-wrapper workload (item 72) that crosses FFI in a way opaque newtypes cannot express.
 - A concrete cross-target portability bug that the current target caveats do not describe.
 
-Any such finding is recorded in [STDLIB.md](STDLIB.md) gap ledger and triggers a scoped design revision. Growth is by evidence, not by precedent from other languages.
+Any such finding is recorded in [STDLIB.md](stdlib/STDLIB.md) gap ledger and triggers a scoped design revision. Growth is by evidence, not by precedent from other languages.

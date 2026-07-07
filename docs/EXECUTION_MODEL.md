@@ -7,7 +7,7 @@ This document defines Concrete's execution model: how programs start, allocate, 
 For the value and ownership model, see [VALUE_MODEL.md](VALUE_MODEL.md).
 For the safety model (capabilities, trusted, Unsafe), see [SAFETY.md](SAFETY.md).
 For ABI and layout details, see [ABI.md](ABI.md).
-For stdlib module inventory, see [STDLIB.md](STDLIB.md).
+For stdlib module inventory, see [STDLIB.md](stdlib/STDLIB.md).
 
 ---
 

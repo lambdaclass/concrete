@@ -7,7 +7,7 @@ This document defines the two execution targets for Concrete programs: **freesta
 For profile definitions and gates, see [PROFILES.md](PROFILES.md).
 For the execution model and stdlib layers, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
 For the predictable runtime boundary, see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).
-For the stdlib module inventory, see [STDLIB.md](STDLIB.md).
+For the stdlib module inventory, see [STDLIB.md](stdlib/STDLIB.md).
 
 ---
 

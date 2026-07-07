@@ -7,11 +7,11 @@ This document maps each canonical example and pressure test to the stdlib APIs i
 Status note: the `parse_validate` and `service_errors` rewrites are landed. Sections 2.1 and 2.2 are marked DONE. The remaining sections are kept as a template for future rewrites.
 
 For the stdlib module inventory, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
-For error handling ergonomics, see [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md).
-For byte cursor APIs, see [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md).
-For the string/text/bytes split, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
+For error handling ergonomics, see [ERROR_HANDLING_DESIGN.md](../ERROR_HANDLING_DESIGN.md).
+For byte cursor APIs, see [BYTE_CURSOR_API.md](../BYTE_CURSOR_API.md).
+For the string/text/bytes split, see [STRING_TEXT_CONTRACT.md](../STRING_TEXT_CONTRACT.md).
 For the core/hosted layer split, see [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md).
-For Phase 3 exit criteria, see [PHASE_EXIT_CHECKLISTS.md](PHASE_EXIT_CHECKLISTS.md) lines 72-94.
+For Phase 3 exit criteria, see [PHASE_EXIT_CHECKLISTS.md](../PHASE_EXIT_CHECKLISTS.md) lines 72-94.
 
 ---
 

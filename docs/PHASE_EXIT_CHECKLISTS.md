@@ -117,7 +117,7 @@ dns_header, dns_packet, binary_endian), ownership-heavy structures (tree,
 ordered_map, arena_graph, intrusive_list, linear patterns), borrow/aliasing
 patterns, trusted-wrapper/FFI pressure, fixed-capacity/no-alloc pressure,
 cleanup/leak boundary. Gap findings were reconciled into the stdlib
-requirements ledger (`docs/STDLIB_AUDIT.md`).
+requirements ledger (`docs/stdlib/STDLIB_AUDIT.md`).
 
 ## Milestone: Stdlib and Syntax Freeze (old "Phase 3") — complete (19/19)
 
@@ -130,8 +130,8 @@ method dispatch, cast exemption narrowed), `Type::Variant` qualification,
 field punning + `let...else` + destructuring, visibility rules, endian APIs,
 layout/ABI contract (`docs/LAYOUT_CONTRACT.md`), module hygiene, canonical
 examples on the intended surface, and the `grep`/`lox` medium-workload
-validation (`docs/STDLIB_FREEZE_LEDGER.md`). Changes to the frozen surface
-require explicit unfreezing per `docs/STDLIB_SURFACE_FREEZE.md`.
+validation (`docs/stdlib/STDLIB_FREEZE_LEDGER.md`). Changes to the frozen surface
+require explicit unfreezing per `docs/stdlib/STDLIB_SURFACE_FREEZE.md`.
 
 ## Superseded sections
 

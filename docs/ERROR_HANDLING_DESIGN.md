@@ -12,8 +12,8 @@ Both items share a single constraint: Concrete's error handling must remain expl
 For the failure model, see [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md).
 For the predictable failure discipline, see [PREDICTABLE_FAILURE_DISCIPLINE.md](PREDICTABLE_FAILURE_DISCIPLINE.md).
 For what is permanently excluded, see [ANTI_FEATURES.md](ANTI_FEATURES.md).
-For stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md).
-For the stdlib module inventory, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
+For stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](stdlib/STDLIB_DESIGN_PRINCIPLES.md).
+For the stdlib module inventory, see [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md).
 
 ---
 
@@ -718,6 +718,6 @@ From Wave 1 documents and permanent exclusions:
 - **No closures** (ANTI_FEATURES.md) — function-pointer-taking helpers are the ceiling. No captured-state lambdas.
 - **No implicit trait resolution** (ANTI_FEATURES.md) — `?` cannot auto-convert error types. `map_err` is the explicit alternative.
 - **Abort-only for unrecoverable failures** (FAILURE_STRATEGY.md) — helpers are for recoverable errors only. OOM and hardware traps still abort.
-- **Explicit is better than implicit** (STDLIB_DESIGN_PRINCIPLES.md, principle 8) — every error conversion is a visible function call.
-- **Uniform error vocabulary** (STDLIB_DESIGN_PRINCIPLES.md, principle 10) — all fallible stdlib operations use `Result<T, ModuleError>`. The helpers make this pattern ergonomic.
-- **Every API must justify its existence** (STDLIB_DESIGN_PRINCIPLES.md, principle 7) — every helper listed here points to real code (pressure programs or canonical examples) that would be shorter, clearer, or more correct with it.
+- **Explicit is better than implicit** (stdlib/STDLIB_DESIGN_PRINCIPLES.md, principle 8) — every error conversion is a visible function call.
+- **Uniform error vocabulary** (stdlib/STDLIB_DESIGN_PRINCIPLES.md, principle 10) — all fallible stdlib operations use `Result<T, ModuleError>`. The helpers make this pattern ergonomic.
+- **Every API must justify its existence** (stdlib/STDLIB_DESIGN_PRINCIPLES.md, principle 7) — every helper listed here points to real code (pressure programs or canonical examples) that would be shorter, clearer, or more correct with it.

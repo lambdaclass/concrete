@@ -36,7 +36,7 @@ This book is not the only source of truth for every stable detail.
 For deeper stable references, see:
 
 - [`docs/README.md`](@/reference/_index.md)
-- [`docs/STDLIB.md`](@/reference/STDLIB.md)
+- [`docs/stdlib/STDLIB.md`](@/reference/STDLIB.md)
 - [`docs/TESTING.md`](@/reference/TESTING.md)
 - [`docs/ARCHITECTURE.md`](@/reference/ARCHITECTURE.md)
 - [`ROADMAP.md`](https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md)

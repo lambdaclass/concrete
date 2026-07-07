@@ -4,11 +4,11 @@ Status: design reference (Phase 3, item 65)
 
 This document specifies the endian-aware byte cursor APIs for Concrete's stdlib. These APIs replace the hand-rolled byte-to-integer conversion patterns found in every parser pressure test with checked, library-first primitives. No bitfield syntax is proposed; the approach is plain functions on plain types.
 
-For the module inventory that lists `std.numeric` as priority 1, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
+For the module inventory that lists `std.numeric` as priority 1, see [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md).
 For the byte-vs-text separation, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
 For narrowing/widening cast rules, see [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md).
 For the existing text cursor, see `std.parse.Cursor`.
-For checked indexing direction, see [STDLIB_TARGET.md](STDLIB_TARGET.md) (item 54).
+For checked indexing direction, see [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md) (item 54).
 
 ---
 
@@ -43,7 +43,7 @@ This pattern has multiple problems:
 
 ### The gap
 
-This was identified as the **#1 priority gap** in [STDLIB_TARGET.md](STDLIB_TARGET.md):
+This was identified as the **#1 priority gap** in [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md):
 
 > `std.numeric` endian read/write: All 5 parser pressure programs. Priority 1. Roadmap item 68.
 
@@ -511,7 +511,7 @@ For fixed-buffer serialization (no allocation):
 
 ## 9. Module Placement
 
-The cursor types and endian functions live in `std.numeric`, as specified in [STDLIB_TARGET.md](STDLIB_TARGET.md). The module provides three categories of functionality:
+The cursor types and endian functions live in `std.numeric`, as specified in [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md). The module provides three categories of functionality:
 
 1. **Endian-aware byte reading and writing** (this document): `ByteCursor`, `ByteWriter`, standalone read/write functions.
 2. **Checked arithmetic** (see [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md)): `checked_add`, `checked_sub`, `checked_mul`.
@@ -641,7 +641,7 @@ The initial API does not support seeking to arbitrary positions or rewinding. Po
 6. **Standalone functions**: `read_u16_be_at`, `write_u32_le_at`, etc. on `Bytes` and raw pointers.
 7. **Checked narrowing helpers**: `try_narrow_u32_to_u16`, etc.
 8. **Tests**: round-trip tests for every width and endianness, bounds-failure tests, cursor position tracking tests.
-9. **Rewrite pressure test**: port `pressure_parse_dns_packet.con` to use `ByteCursor` as the validation example from [STDLIB_TARGET.md](STDLIB_TARGET.md).
+9. **Rewrite pressure test**: port `pressure_parse_dns_packet.con` to use `ByteCursor` as the validation example from [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md).
 
 Steps 1-3 unblock all parser pressure programs. Steps 4-7 complete the module. Step 9 validates the API against real parsing code.
 
@@ -655,4 +655,4 @@ Steps 1-3 unblock all parser pressure programs. Steps 4-7 complete the module. S
 
 3. **Should reads on `Bytes` be methods or free functions?** Adding `bytes.read_u16_be(offset)` as a method on `Bytes` is ergonomic but mixes container concerns (storage) with parsing concerns (endian interpretation). Free functions in `std.numeric` keep the separation clean. This document proposes free functions; methods can be added later if the ergonomic cost proves too high.
 
-4. **`CursorError` extensibility.** Two variants (`UnexpectedEnd`, `InvalidData`) cover the cursor layer. But users will want domain errors (e.g., `BadMagic`, `UnsupportedVersion`). Should `CursorError` have a `Custom { code: i32 }` variant, or should callers wrap `CursorError` in their own error enum? Wrapping is the library-first answer and avoids a grab-bag error type. This matches the approach in [STDLIB_TARGET.md](STDLIB_TARGET.md) where error conversion helpers are listed as a `std.result` concern.
+4. **`CursorError` extensibility.** Two variants (`UnexpectedEnd`, `InvalidData`) cover the cursor layer. But users will want domain errors (e.g., `BadMagic`, `UnsupportedVersion`). Should `CursorError` have a `Custom { code: i32 }` variant, or should callers wrap `CursorError` in their own error enum? Wrapping is the library-first answer and avoids a grab-bag error type. This matches the approach in [STDLIB_TARGET.md](stdlib/STDLIB_TARGET.md) where error conversion helpers are listed as a `std.result` concern.

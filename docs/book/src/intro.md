@@ -32,7 +32,7 @@ This book is not the only source of truth for every stable detail.
 For deeper stable references, see:
 
 - [`docs/README.md`](../../README.md)
-- [`docs/STDLIB.md`](../../STDLIB.md)
+- [`docs/stdlib/STDLIB.md`](../../stdlib/STDLIB.md)
 - [`docs/TESTING.md`](../../TESTING.md)
 - [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md)
 - [`ROADMAP.md`](../../../ROADMAP.md)

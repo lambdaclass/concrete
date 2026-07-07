@@ -6,7 +6,7 @@ This document records the direction for Concrete's standard library after the co
 
 The standard library is not just "APIs we need eventually." It is one of the main ways the language proves that its design is viable for correctness-focused low-level work.
 
-For the stable project direction, see [../docs/STDLIB.md](../docs/STDLIB.md). This note is broader and more exploratory.
+For the stable project direction, see [../docs/stdlib/STDLIB.md](../../docs/stdlib/STDLIB.md). This note is broader and more exploratory.
 
 ## Design Rules
 

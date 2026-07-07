@@ -5,9 +5,9 @@ Status: design reference (Phase 3, item 56)
 This document defines the boundary between the bounded/provable-friendly core stdlib and the OS/runtime-dependent hosted stdlib. It specifies what belongs in each layer, why, and how the capability/trust model makes the boundary auditable.
 
 For the existing stdlib direction, see [STDLIB.md](STDLIB.md).
-For the three-layer classification, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
-For the freestanding/hosted execution split, see [FREESTANDING_SPLIT.md](FREESTANDING_SPLIT.md).
-For the trust model, see [SAFETY.md](SAFETY.md) and [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md).
+For the three-layer classification, see [EXECUTION_MODEL.md](../EXECUTION_MODEL.md).
+For the freestanding/hosted execution split, see [FREESTANDING_SPLIT.md](../FREESTANDING_SPLIT.md).
+For the trust model, see [SAFETY.md](../SAFETY.md) and [TRUSTED_COMPUTING_BASE.md](../TRUSTED_COMPUTING_BASE.md).
 
 ---
 
@@ -157,7 +157,7 @@ FFI support is not a stdlib layer in the same sense as core/alloc/hosted. It is 
 | Raw pointer types (`*const T`, `*mut T`) | C interop data | Copy, untracked by ownership |
 | `#[repr(C)]` structs | C-ABI-compatible layout | Checked by `Layout.isFFISafe` |
 | Null-terminated string conventions | C string interop | Manual — no stdlib helper yet |
-| Layout guarantees | Field offsets, sizes, alignments for FFI structs | Documented in [ABI.md](ABI.md) |
+| Layout guarantees | Field offsets, sizes, alignments for FFI structs | Documented in [ABI.md](../ABI.md) |
 
 ### Current FFI gaps
 
@@ -176,7 +176,7 @@ FFI code sits outside all compiler verification. The trust model for FFI is:
 2. `extern fn` — raw foreign binding. Caller must have `with(Unsafe)`.
 3. `trusted fn` wrapper — contains pointer arithmetic and extern calls behind a safe API. Declares its capabilities honestly.
 
-The recommended pattern from [TRUSTED_BOUNDARY_GUIDE.md](TRUSTED_BOUNDARY_GUIDE.md) is: tiny trusted wrappers that do one unsafe operation each, with pure validation logic in separate safe functions.
+The recommended pattern from [TRUSTED_BOUNDARY_GUIDE.md](../TRUSTED_BOUNDARY_GUIDE.md) is: tiny trusted wrappers that do one unsafe operation each, with pure validation logic in separate safe functions.
 
 ---
 
@@ -290,7 +290,7 @@ Go has a single, large stdlib. There is no core/alloc/hosted distinction. All pa
 
 ## Implementation Status
 
-The three-layer classification exists in documentation ([EXECUTION_MODEL.md](EXECUTION_MODEL.md), [STDLIB.md](STDLIB.md)) and is enforced indirectly by the capability system. What remains:
+The three-layer classification exists in documentation ([EXECUTION_MODEL.md](../EXECUTION_MODEL.md), [STDLIB.md](STDLIB.md)) and is enforced indirectly by the capability system. What remains:
 
 | Item | Status |
 |------|--------|

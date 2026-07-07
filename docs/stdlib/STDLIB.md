@@ -4,10 +4,12 @@ Status: provisional reference
 
 This document captures the current stable direction for the standard library.
 
-For the exploratory design notes behind it, see [../research/stdlib/stdlib-design.md](../research/stdlib/stdlib-design.md). For active priorities, see [../ROADMAP.md](../ROADMAP.md).
+For the exploratory design notes behind it, see [../research/stdlib/stdlib-design.md](../../research/stdlib/stdlib-design.md). For active priorities, see [../ROADMAP.md](../../ROADMAP.md).
+For the ranked module build order and proof-facing formal stdlib modules, see
+[STDLIB_LEADERBOARD.md](STDLIB_LEADERBOARD.md).
 
 Use this file for the stable direction.
-Use [../research/stdlib/stdlib-design.md](../research/stdlib/stdlib-design.md) for the broader exploratory comparisons, language borrowings, and future-facing design space.
+Use [../research/stdlib/stdlib-design.md](../../research/stdlib/stdlib-design.md) for the broader exploratory comparisons, language borrowings, and future-facing design space.
 If this file and the research note ever differ, treat this file as the stable project direction and the research note as exploratory background.
 
 ## Design Rules
@@ -28,9 +30,9 @@ For low-level internals, the split is now:
 - pointer-level implementation unsafety is contained by `trusted fn` / `trusted impl`
 - foreign boundaries (`extern fn`) remain under `with(Unsafe)` even inside trusted code
 
-See [SAFETY.md](SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../research/language/trusted-boundary.md) for the exploratory design notes. For active design work on checked access, slice views, and validated wrapper types, see [../research/language/checked-indexing-and-slice-views.md](../research/language/checked-indexing-and-slice-views.md) and [../research/language/opaque-validated-types.md](../research/language/opaque-validated-types.md).
+See [SAFETY.md](../SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../../research/language/trusted-boundary.md) for the exploratory design notes. For active design work on checked access, slice views, and validated wrapper types, see [../research/language/checked-indexing-and-slice-views.md](../../research/language/checked-indexing-and-slice-views.md) and [../research/language/opaque-validated-types.md](../../research/language/opaque-validated-types.md).
 
-**Capability aliases** (e.g., `cap IO = File + Console;`) can reduce signature repetition in stdlib and user code. See [FFI.md](FFI.md).
+**Capability aliases** (e.g., `cap IO = File + Console;`) can reduce signature repetition in stdlib and user code. See [FFI.md](../FFI.md).
 
 It should avoid:
 
@@ -112,7 +114,7 @@ The stdlib should not quietly assume one overflow story while docs and proofs as
 
 ## Execution Model Alignment
 
-The stdlib is classified into three layers by host dependency, documented in [EXECUTION_MODEL.md](EXECUTION_MODEL.md):
+The stdlib is classified into three layers by host dependency, documented in [EXECUTION_MODEL.md](../EXECUTION_MODEL.md):
 
 | Layer | Modules | Host assumption |
 |-------|---------|-----------------|
@@ -483,7 +485,7 @@ This fits the implemented three-way split between:
 - **`trusted`** = containment of internal pointer-level implementation techniques (raw ptr deref, arithmetic, casts) behind a safe API — callers do not need `Unsafe` just because a container uses raw pointers internally
 - **`with(Unsafe)`** = authority to cross foreign boundaries (FFI, transmute) — always explicit, even inside `trusted` code
 
-See [../research/language/trusted-boundary.md](../research/language/trusted-boundary.md) for the full design.
+See [../research/language/trusted-boundary.md](../../research/language/trusted-boundary.md) for the full design.
 
 ## Later Additions
 

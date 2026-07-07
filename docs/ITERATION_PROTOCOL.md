@@ -7,7 +7,7 @@ protocol**. Traversal is expressed with a small hierarchy of explicit forms,
 each of which keeps authority (capabilities) and allocation visible in the
 signature. This document is the official story for which traversal form to reach
 for, and it is the contract Phase 7 stdlib authors build against (see
-[STDLIB_HANDOFF.md](STDLIB_HANDOFF.md), surface `iteration`).
+[STDLIB_HANDOFF.md](stdlib/STDLIB_HANDOFF.md), surface `iteration`).
 
 The forms are gated by `scripts/tests/check_iteration_protocol.sh`.
 

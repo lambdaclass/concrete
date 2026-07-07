@@ -235,7 +235,7 @@ The main near-term stdlib work remains:
 
 ## Where To Go Deeper
 
-For the stable stdlib direction, read [`docs/STDLIB.md`](@/reference/STDLIB.md).
+For the stable stdlib direction, read [`docs/stdlib/STDLIB.md`](@/reference/STDLIB.md).
 
 That document goes deeper on:
 

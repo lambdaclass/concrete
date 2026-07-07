@@ -6,9 +6,9 @@ This document defines Concrete's visibility model and the module hygiene guarant
 
 For the language identity, see [IDENTITY.md](IDENTITY.md).
 For anti-features, see [ANTI_FEATURES.md](ANTI_FEATURES.md).
-For the stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md).
-For the core/hosted boundary, see [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md).
-For the stdlib API audit, see [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md).
+For the stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](stdlib/STDLIB_DESIGN_PRINCIPLES.md).
+For the core/hosted boundary, see [HOSTED_STDLIB_SPLIT.md](stdlib/HOSTED_STDLIB_SPLIT.md).
+For the stdlib API audit, see [STDLIB_API_REVIEW.md](stdlib/STDLIB_API_REVIEW.md).
 
 ---
 

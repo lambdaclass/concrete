@@ -140,7 +140,7 @@ Standalone files have no manifest and therefore no policy enforcement. If you ne
 
 ## Related
 
-- [STDLIB.md](STDLIB.md) — stdlib module inventory and design rules
+- [STDLIB.md](stdlib/STDLIB.md) — stdlib module inventory and design rules
 - [PROFILES.md](PROFILES.md) — profile definitions
 - [EXECUTION_MODEL.md](EXECUTION_MODEL.md) — core/alloc/hosted stdlib layers
 - [bugs/007_no_print_string_builtin.md](bugs/007_no_print_string_builtin.md) — standalone print gap history (fixed via builtins)
