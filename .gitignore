@@ -29,6 +29,7 @@ examples/toml/toml_parser
 examples/integrity/fcheck
 examples/kvstore/kvstore
 examples/kvstore/kvstore.log
+examples/conlog/conlog
 examples/http/http_server
 examples/lox/lox
 examples/vm/vm

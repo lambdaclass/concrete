@@ -1,0 +1,123 @@
+// conlog — pure log-line parser. No capabilities beyond Alloc: parsing touches
+// nothing but its input String. Line format: "<ts> <LEVEL> <status> <path>":
+//   103 ERROR 500 /api/user
+// Uses the builtin string free-functions (string_length / string_char_at /
+// string_slice / string_eq) — the cross-module String surface (see FINDINGS.md).
+mod parser {
+    import std.parse.{parse_int};
+
+    pub enum Copy Level { Info {}, Warn {}, Error {} }
+
+    // A parsed log line. Linear: it owns `path` (a String).
+    pub struct LogEntry {
+        ts: i64,
+        level: Level,
+        status: i32,
+        path: String,
+    }
+
+    pub enum Copy ParseError { EmptyLine {}, BadTimestamp {}, BadLevel {}, BadStatus {}, MissingPath {} }
+
+    // string_char_at returns the byte as Int; ASCII space is 32.
+    fn is_space(b: Int) -> bool { return b == 32; }
+
+    // Index of the next non-space char at or after `from`.
+    fn skip_spaces(s: &String, from: Int) -> Int {
+        let n: Int = string_length(s);
+        let mut i: Int = from;
+        while i < n {
+            if !is_space(string_char_at(s, i)) { return i; }
+            i = i + 1;
+        }
+        return i;
+    }
+
+    // Index of the next space at or after `from` (or end).
+    fn find_space(s: &String, from: Int) -> Int {
+        let n: Int = string_length(s);
+        let mut i: Int = from;
+        while i < n {
+            if is_space(string_char_at(s, i)) { return i; }
+            i = i + 1;
+        }
+        return i;
+    }
+
+    fn level_of(tok: &String) -> Option<Level> {
+        if string_eq(tok, &"INFO") { return Option::<Level>::Some { value: Level::Info {} }; }
+        if string_eq(tok, &"WARN") { return Option::<Level>::Some { value: Level::Warn {} }; }
+        if string_eq(tok, &"ERROR") { return Option::<Level>::Some { value: Level::Error {} }; }
+        return Option::<Level>::None;
+    }
+
+    // Parse one line into a LogEntry. Recoverable failures -> ParseError (Result).
+    pub fn parse_line(line: &String) with(Alloc) -> Result<LogEntry, ParseError> {
+        let n: Int = string_length(line);
+        let a0: Int = skip_spaces(line, 0);
+        if a0 >= n { return Result::<LogEntry, ParseError>::Err { error: ParseError::EmptyLine {} }; }
+
+        // field 1: timestamp
+        let a1: Int = find_space(line, a0);
+        let ts_tok: String = string_slice(line, a0, a1);
+        let ts_opt: Option<i64> = parse_int(&ts_tok);
+        ts_tok.drop();
+        let ts: i64 = match ts_opt {
+            Option::Some { value } => value,
+            Option::None => { return Result::<LogEntry, ParseError>::Err { error: ParseError::BadTimestamp {} }; }
+        };
+
+        // field 2: level
+        let b0: Int = skip_spaces(line, a1);
+        let b1: Int = find_space(line, b0);
+        let lvl_tok: String = string_slice(line, b0, b1);
+        let lvl_opt: Option<Level> = level_of(&lvl_tok);
+        lvl_tok.drop();
+        let level: Level = match lvl_opt {
+            Option::Some { value } => value,
+            Option::None => { return Result::<LogEntry, ParseError>::Err { error: ParseError::BadLevel {} }; }
+        };
+
+        // field 3: status
+        let c0: Int = skip_spaces(line, b1);
+        let c1: Int = find_space(line, c0);
+        let st_tok: String = string_slice(line, c0, c1);
+        let st_opt: Option<i64> = parse_int(&st_tok);
+        st_tok.drop();
+        let status: i32 = match st_opt {
+            Option::Some { value } => value as i32,
+            Option::None => { return Result::<LogEntry, ParseError>::Err { error: ParseError::BadStatus {} }; }
+        };
+
+        // field 4: path (rest of line, from first non-space)
+        let d0: Int = skip_spaces(line, c1);
+        if d0 >= n { return Result::<LogEntry, ParseError>::Err { error: ParseError::MissingPath {} }; }
+        let path: String = string_slice(line, d0, n);
+
+        return Result::<LogEntry, ParseError>::Ok { value: LogEntry { ts: ts, level: level, status: status, path: path } };
+    }
+
+    // An ERROR-level line, or any 4xx/5xx status, counts as an error.
+    pub fn is_error(e: &LogEntry) -> bool {
+        match e.level {
+            Level::Error {} => { return true; }
+            Level::Warn {} => { }
+            Level::Info {} => { }
+        }
+        return e.status >= 400;
+    }
+
+    pub fn status_of(e: &LogEntry) -> i32 { return e.status; }
+    pub fn ts_of(e: &LogEntry) -> i64 { return e.ts; }
+
+    // Move the owned path out of an entry, dropping the rest (Copy fields).
+    pub fn into_path(e: LogEntry) -> String {
+        let LogEntry { ts, level, status, path } = e;
+        return path;
+    }
+
+    // Consume-and-discard an entry (its owned String must not leak).
+    pub fn drop_entry(e: LogEntry) with(Alloc) {
+        let LogEntry { ts, level, status, path } = e;
+        path.drop();
+    }
+}

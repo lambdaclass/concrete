@@ -1,0 +1,75 @@
+// conlog — a small log-analyzer CLI (ROADMAP #35 validation project).
+// Pipeline: read (File) -> parse (pure) -> aggregate -> emit (Console).
+// Capabilities live at the edges; the parser core is pure (Alloc only).
+mod conlog {
+    mod parser;
+
+    import parser.{parse_line, is_error, drop_entry, LogEntry, ParseError};
+    import std.fs.{read_to_string, FsError};
+    import std.io.{println, eprintln};
+    import std.args.{count, get};
+
+    // Count entries, errors, and unparseable lines in one text buffer.
+    fn process_text(text: &String) with(Std) -> Int {
+        let n: Int = string_length(text);
+        let mut total: Int = 0;
+        let mut errors: Int = 0;
+        let mut bad: Int = 0;
+        let mut start: Int = 0;
+        let mut i: Int = 0;
+        while i <= n {
+            let at_end: bool = i == n;
+            let mut is_nl: bool = false;
+            if !at_end { is_nl = string_char_at(text, i) == 10; }
+            if is_nl || at_end {
+                if i > start {
+                    let line: String = string_slice(text, start, i);
+                    match parse_line(&line) {
+                        Result::Ok { value } => {
+                            total = total + 1;
+                            if is_error(&value) { errors = errors + 1; }
+                            drop_entry(value);
+                        }
+                        Result::Err { error } => { bad = bad + 1; }
+                    }
+                    line.drop();
+                }
+                start = i + 1;
+            }
+            i = i + 1;
+        }
+
+        let mut out: String = "";
+        out.append_int(total);
+        out.append(&" entries, ");
+        out.append_int(errors);
+        out.append(&" errors, ");
+        out.append_int(bad);
+        out.append(&" unparseable");
+        println(&out);
+        out.drop();
+        return 0;
+    }
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+        if argc < 2 {
+            eprintln(&"usage: conlog <logfile>");
+            return 2;
+        }
+        let path: String = get(1);
+        match read_to_string(&path) {
+            Result::Ok { value } => {
+                path.drop();
+                let code: Int = process_text(&value);
+                value.drop();
+                return code;
+            }
+            Result::Err { error } => {
+                path.drop();
+                eprintln(&"error: cannot read log file");
+                return 1;
+            }
+        }
+    }
+}

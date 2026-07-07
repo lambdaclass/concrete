@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### #35 validation project (conlog) — first workload; two checker/codegen bugs fixed (2026-07-07)
+
+Started the log-analyzer validation project (`examples/conlog`) — the first
+real workload driving the language/tooling slab. Within the first pipeline it
+surfaced two genuine compiler bugs, both now fixed with regression tests
+(bug ledger 022, 023):
+
+- **Bug 022 (checker):** declaring a sibling submodule (`mod x;`) broke the
+  PARENT module's linear-consumption analysis — impl-method signatures
+  (`String_drop`, …) were indexed past the submodule sigs in `checkModule`,
+  so `s.drop()` stopped counting as a by-value-`self` consume and every owned
+  linear was falsely E0208. This blocked essentially every multi-module
+  project that owns a linear value; `std` escaped only because its parent
+  `lib.con` never calls such a method in its own body. Fix: `implOffset`
+  now includes `submoduleSigs.length`. Regression:
+  `tests/programs/submodule_linear_consume/`.
+- **Bug 023 (codegen):** short-circuit `&&`/`||` lowering emitted a `phi` of
+  an aggregate type (`String`) at the scand/scor merge when a promoted
+  aggregate was in scope — invalid IR (E0714). Fix: never phi promoted vars
+  or aggregates at the merge (aggregates merge through memory, like the
+  if/match merges — cf. bug 008). Regression:
+  `tests/programs/scand_aggregate_in_scope/`.
+
+Also recorded ergonomic findings in `examples/conlog/FINDINGS.md` (the
+cross-module String surface is the builtin free-functions, not the methods;
+no `String::split`/`lines()`) — deferred to Phase 7 std work per the
+deferral discipline.
+
+
 ### #18 callable values: scoped mutation + context combinator surface (2026-07-06)
 
 With E0293 enforcing container-not-in-context, the deferred scoped-mutable
@@ -851,7 +880,7 @@ deliberately separate, later stages.
 
 ### Phase 6 #19: stdlib handoff contract (2026-06-24)
 
-Added `docs/STDLIB_HANDOFF.md` + `scripts/tests/check_stdlib_handoff.sh`
+Added `docs/stdlib/STDLIB_HANDOFF.md` + `scripts/tests/check_stdlib_handoff.sh`
 (`make test-stdlib-handoff` + CI step) — the contract between the language phases
 and Phase 7. Each of the 12 required language surfaces the stdlib depends on
 carries a status (`stable_for_stdlib` / `provisional_with_gate` / `blocked`) tied
@@ -4027,9 +4056,9 @@ Coverage added: 15 new adversarial tests across newtype (9), enum_match, borrow,
 
 The canonical Phase 3 exit checklist is now 19/19 complete. The first-release stdlib/syntax surface is treated as freeze-ready on current evidence rather than on aspirational follow-up rewrites.
 
-- **Runtime-collection close-out**: `docs/RUNTIME_COLLECTIONS.md` and `docs/STDLIB_FREEZE_LEDGER.md` now treat the shipped map/deque surface as sufficient for freeze. `HashMap::get_mut`, displaced-value `insert`, and `OrderedMap::get_mut` are all landed. `lox` runs end-to-end against the frozen surface; rewriting it onto the canonical `HashMap<String, Value>` + `Vec<Frame>` shape remains useful follow-up evidence, not a blocker.
+- **Runtime-collection close-out**: `docs/RUNTIME_COLLECTIONS.md` and `docs/stdlib/STDLIB_FREEZE_LEDGER.md` now treat the shipped map/deque surface as sufficient for freeze. `HashMap::get_mut`, displaced-value `insert`, and `OrderedMap::get_mut` are all landed. `lox` runs end-to-end against the frozen surface; rewriting it onto the canonical `HashMap<String, Value>` + `Vec<Frame>` shape remains useful follow-up evidence, not a blocker.
 - **Validated-wrapper close-out**: the local wrapper docs now match the actual compiler state. The freeze-ready surface is the shipped stdlib wrappers (`NonZeroU32`, `NonZeroU64`, `Port`, `AsciiText`) plus the four resolved compiler gaps: native/SSA layout on enum-payload newtypes, cross-module identity, instance-method dispatch on wrappers, and narrowed wrap/unwrap-only cast exemption.
-- **Roadmap/docs alignment**: ROADMAP items 57, 67, 72, and 79 now agree with the changelog and local freeze ledgers; `docs/STDLIB_VALIDATION_PLAN.md` and `docs/STDLIB_SURFACE_FREEZE.md` were also updated to stop advertising stale Phase 3 item metadata.
+- **Roadmap/docs alignment**: ROADMAP items 57, 67, 72, and 79 now agree with the changelog and local freeze ledgers; `docs/stdlib/STDLIB_VALIDATION_PLAN.md` and `docs/stdlib/STDLIB_SURFACE_FREEZE.md` were also updated to stop advertising stale Phase 3 item metadata.
 - **Post-freeze cleanup**: the remaining Phase 3 roadmap entries were either closed with explicit rationale or reworded as post-freeze follow-up polish, the stale layout freeze checklist was converted into a close-out note, and the last golden `#` syntax files were migrated to `::` so the frozen syntax record matches the corpus again.
 
 ### Newtype-cast exemption narrowed to wrap/unwrap pairs
@@ -4068,7 +4097,7 @@ The newtype surface designed in `docs/VALIDATED_WRAPPERS.md` is now usable on th
 - **Inherent-impl path now native-clean**: the note in `tests/programs/newtype_validated.con` flagged `impl Port { fn try_new ... }` returning `Option<Port>` as a known layout-bug trigger. That path now lowers, links, and runs; it is the shape the stdlib wrappers use.
 - **`std.ordered_map` gains `get_mut`**: paired with the wrapper work because both are part of the Phase 3 stdlib-freeze checklist for runtime collections.
 - **Regression coverage**: `std/src/lib.con --test` runs 248/248 including the new `AsciiText` tests; `pipeline-test` 32/32 layout/ABI cases still green; 8 newtype `.con` test programs compile and run; 3 error-path tests (`error_newtype_no_implicit`, `error_newtype_double_unwrap`, `error_newtype_wrong_inner`) still reject as expected.
-- **Freeze-ledger update**: `docs/STDLIB_FREEZE_LEDGER.md` validated-wrapper row flips from "Partial — newtype mechanism works at interp; native/SSA layout bug on enum-payload newtypes" to "Complete"; `docs/VALIDATED_WRAPPERS.md §8` drops the `Layout.tySize`/`Layout.tyAlign` gap (the instance-method-dispatch gap remains, by design).
+- **Freeze-ledger update**: `docs/stdlib/STDLIB_FREEZE_LEDGER.md` validated-wrapper row flips from "Partial — newtype mechanism works at interp; native/SSA layout bug on enum-payload newtypes" to "Complete"; `docs/VALIDATED_WRAPPERS.md §8` drops the `Layout.tySize`/`Layout.tyAlign` gap (the instance-method-dispatch gap remains, by design).
 
 ### Canonical Result/Option surface and `Type::Variant` qualification
 
@@ -5333,7 +5362,7 @@ Phase E is done. All 11 items are complete. `docs/EXECUTION_MODEL.md` is the cen
 **Items 6–11 (new this milestone):**
 
 - **Item 6 — Target/platform support policy**: Three-tier support model (Tier 1: x86_64-linux, aarch64-darwin; Tier 2: x86_64-darwin; Experimental: everything else). Documents what "supported" means, what is target-dependent, and what is not yet validated empirically.
-- **Item 7 — Stdlib execution model alignment**: Full module-to-layer mapping (Core/Alloc/Hosted) with capabilities and host dependencies for all 24 stdlib modules. `docs/STDLIB.md` updated with execution model alignment section.
+- **Item 7 — Stdlib execution model alignment**: Full module-to-layer mapping (Core/Alloc/Hosted) with capabilities and host dependencies for all 24 stdlib modules. `docs/stdlib/STDLIB.md` updated with execution model alignment section.
 - **Item 8 — Execution profiles**: Documents planned profiles (`no_alloc`, `bounded_alloc`, `no_unsafe`, `no_ffi`, `high_integrity`), how they map to the existing capability system, and their relationship to `ProofCore` eligibility.
 - **Item 9 — Performance validation direction**: Documents principles (representative workloads, compilation time matters, observability over cleverness), metrics, regression thresholds, and future CI integration.
 - **Item 10 — Verified FFI envelopes and structural boundedness**: Documents FFI envelope direction (mechanical checking of extern fn contracts), structural boundedness properties (allocation-free, stack-bounded, terminating), and how they connect to existing report infrastructure.

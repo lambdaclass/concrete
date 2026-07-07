@@ -94,6 +94,8 @@ examples/known_holes/proven_oob_index/src/main.con expected-error
 examples/known_holes/raw_ptr_to_local/src/main.con skip
 examples/known_holes/returned_ref_provenance_map/src/main.con skip
 examples/known_holes/returned_ref_provenance_vec/src/main.con skip
+examples/conlog/src/main.con project-build
+examples/conlog/src/parser.con project-build
 examples/kvstore/src/main.con project-build
 examples/loop_invariant/src/main.con compile
 examples/lox/src/main.con project-build
