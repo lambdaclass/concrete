@@ -31,10 +31,14 @@ document as one queue:
 3b. **(active frontier — Phase 6+)** make Concrete usable as a normal everyday
    language: patterns, iteration, capability polymorphism, daily-workflow UX,
    project ergonomics;
-4. build the standard library and core APIs before relying on real workloads,
-   packages, editor tooling, freestanding targets, or release examples;
-5. validate the bet with flagships, real workloads, and at least one external
-   user before the large ecosystem/release/editor build-out;
+4. validate the bet with one real workload before broadening the platform:
+   #35 is the next forcing function after the callable-values core, and it
+   should drive the first stdlib/tooling gaps instead of waiting for a complete
+   batteries-included library;
+5. build the standard library and core APIs as a small coherent runway for that
+   workload: Gleam-sized coherence first, Zig-style allocator/authority
+   explicitness, Rust/Ada/SPARK-style safety/proof discipline, and Go/Odin
+   breadth only after workload pressure;
 6. finish remaining proof-authoring cleanup: colocate example Lean proofs with
    their Concrete examples, keep generated proof workspaces source-linked and
    replayable, and leave the deeper `ProofCore` / spec-registry split deferred
@@ -300,6 +304,36 @@ on and what a negative result would teach against. A **fail** verdict does not
 silently park Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
 audience, or stop — before any Phase 11+ item may start.
+
+### Stdlib runway checkpoint (recorded 2026-07-07)
+
+The stdlib survey changes the next ordering without changing the language
+philosophy. Concrete should not chase a Go/Odin-sized standard library before a
+real program exists. The next useful shape is: **#35 validation project first,
+then a small coherent stdlib floor, then allocator/proof/tooling hardening
+based on what that program actually forced.**
+
+Comparison baseline:
+- **Gleam** is the nearest size model for v1 coherence: small, consistent,
+  pleasant `Option`/`Result`/collection/text APIs.
+- **Zig** is the allocator/authority lesson: explicit allocator values matter
+  for arenas, tests, hot reload, plugins, embedded pools, and API stability.
+- **Rust** is the layering lesson: keep core/no-alloc, alloc-backed, and hosted
+  APIs distinct; collections/errors/IO are the daily-programming floor.
+- **Ada/SPARK** is the assurance lesson: containers, strings, IO, big/spec
+  numbers, formal containers, and lemma libraries need explicit proof/evidence
+  classes.
+- **Go/Odin** are breadth references, not the near-term size target: compression,
+  full crypto, broad networking, threads, atomics, archive formats, and vendor
+  wrappers stay deferred until workload evidence pulls them.
+- **Lean** informs proof infrastructure, not ordinary app-stdlib breadth.
+
+Therefore Phase 7 is ranked by app-unblocking value, not by module count:
+error ergonomics; allocator-as-value research before allocator-heavy API
+hardening; buffered IO/reader/writer; path/FS; string/text/bytes coherence;
+collections phase 2; tests-as-docs; CLI/env/process; trap/debug UX; verified
+profile/proof UX. Broad crypto/compression/networking remains later unless #35
+forces it.
 
 ## Phase 6: Language Usability And Daily Workflow
 
@@ -896,7 +930,8 @@ are folded out.
     three stale-fixture CI failures on 2026-07-01/02 hid inside per-gate
     heredocs. `check_cast_matrix.sh` is the first consumer; new gates should
     source it, and existing gates migrate opportunistically when touched.
-35. **Next after #18 — add the Phase 6 validation project:** a small C/Rust-style CLI using the
+35. **Immediate next forcing workload — add the Phase 6 validation project:**
+    a small C/Rust-style CLI using the
     Phase 5 core slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, narrow const
     generics, pattern ergonomics, callable/capability callback decisions,
@@ -910,7 +945,11 @@ are folded out.
     WASM-like/sandbox placeholder that proves Concrete's authority reports can
     explain "what this extension may touch." Native arbitrary-code loading stays
     trusted; sandboxed or constrained extensions must expose their authority in
-    headers and audit output.
+    headers and audit output. Preferred first workload after the stdlib survey:
+    a log analyzer / structured text-processing CLI, because it stresses
+    errors, buffered IO, bytes/text boundaries, path/FS, maps, scoped
+    callbacks, output formatting, and an optional filter/plugin-shaped
+    authority boundary without demanding broad networking or crypto.
 37. Add a docs/profile synchronization audit before verified-profile work.
     `docs/PROFILES.md`, README/site copy, guarantee docs, and profile reports
     must agree with current implementation: known holes open section empty,
@@ -935,17 +974,41 @@ for errors, bytes/text/path, collections, formatting/parsing, I/O capabilities,
 tests, and oracle helpers, with every public stdlib item carrying an evidence
 class and authority/allocation story.
 
-1. Define the stdlib gap matrix against Gleam, Roc, and Zig before expanding
-   APIs. Concrete should not copy Zig's full surface; it should make a
-   Gleam/Roc-sized core pleasant, Zig-style authority explicit, and Concrete's
-   evidence ledger visible. Record which modules are core-now, hosted-now,
-   freestanding-later, package-later, or research-later. The matrix must name
-   the obvious external references so they are not forgotten: Gleam's
-   `List`/`Dict`/`Set`/`String`/`BitArray`/`BytesTree`/`StringTree`/`Uri`/
-   `Dynamic.Decode`; Roc's `Str`/`List`/`Dict`/`Set`/`Iter`/numeric builtins;
-   and Zig's `ArrayList`/maps/sets/sort/fmt/json/base64/Uri/fs/process/time/
-   random/hash/crypto/log/testing/allocators/atomics/threads/compress/archive/
-   target/OS/debug-format surface.
+Phase 7 priority order is deliberately narrower than the comparison languages:
+make Concrete's small core pleasant and auditable before copying broad
+batteries-included breadth. The ranked build order is:
+
+1. `Option`/`Result` ergonomics and recoverable-vs-fatal conventions.
+2. Allocator-as-value research before allocator-heavy collection APIs harden.
+3. Buffered `Reader`/`Writer` and file/byte-stream IO.
+4. `Path`/filesystem APIs.
+5. `String`/`Text`/`Bytes` coherence.
+6. Collections phase 2 on the callable-values surface.
+7. `std.test` tests-as-docs and doc-snippet gates.
+8. CLI/env/process helpers for real tools.
+9. Trap/debug UX and verified-profile/proof-obligation UX.
+10. Broad compression/crypto/networking/threading only after workload demand.
+
+1. Define the stdlib gap matrix against Gleam, Zig, Rust, Go, Odin, Ada/SPARK,
+   Lean, and Roc before expanding APIs. Concrete should not copy any one
+   surface. It should make a Gleam/Roc-sized core pleasant, keep Zig-style
+   allocation/authority explicit, preserve Rust-style core/alloc/hosted
+   layering where useful, copy Ada/SPARK's evidence-class discipline, use Lean
+   as proof-infrastructure guidance, and treat Go/Odin as breadth references
+   for later, not as v1 size targets. Record which modules are core-now,
+   hosted-now, freestanding-later, package-later, or research-later. The matrix
+   must name the obvious external references so they are not forgotten:
+   Gleam's `List`/`Dict`/`Set`/`String`/`BitArray`/`BytesTree`/`StringTree`/
+   `Uri`/`Dynamic.Decode`; Roc's `Str`/`List`/`Dict`/`Set`/`Iter`/numeric
+   builtins; Zig's `ArrayList`/maps/sets/sort/fmt/json/base64/Uri/fs/process/
+   time/random/hash/crypto/log/testing/allocators/atomics/threads/compress/
+   archive/target/OS/debug-format surface; Rust's `core`/`alloc`/`std`,
+   `Option`/`Result`, slices, `Vec`, maps, `io`, `fs`, `path`, and `time`;
+   Go's `bufio`/`io`/`os`/`path`/`encoding`/`testing`/`crypto`/`compress`
+   breadth; Odin's base/core/vendor split and data-oriented package layout;
+   Ada's predefined strings, containers, IO, numerics, and command-line
+   units; SPARK's formal/functional containers, big numbers, IO restrictions,
+   and lemma libraries; and Lean's proof/library organization.
 2. Define stdlib module layout and naming: core/prelude, bytes/text/path,
    collections, numeric helpers, formatting/parsing, console/file/network/
    process/time, test/oracle helpers, and target-profile-specific modules.
@@ -986,16 +1049,18 @@ class and authority/allocation story.
    control flow and capabilities. If `?` gains conversion behavior, its
    lowering and reports must remain explicit: no hidden allocation, no hidden
    capability gain, and no silent conversion of one error set into another.
-3a. Add **conditional `Copy` for generic containers** without weakening
-   linearity. `Option<T>` is `Copy` iff `T` is `Copy`; `Result<T, E>` is `Copy`
-   iff both `T` and `E` are `Copy`; future generic containers must state their
-   rule structurally and reject any instantiation that would make a resource
-   owner `Copy`. This is a convenience and correctness-of-classification item,
-   not an affine escape hatch: non-`Copy` values still cannot be silently
-   discarded, and `_` may ignore a generic value only when the instantiated
-   whole type is actually `Copy`. Gate with positives for `Option<i32>` /
-   `Result<i32, i32>` Copy behavior and negatives for `Option<String>`,
-   `Result<String, E>`, and nested resource-owning payloads.
+3a. ✅ **DONE (2026-07-05) — conditional `Copy` for generic containers without
+   weakening linearity.** `Option<T>` is `Copy` iff `T` is `Copy`; `Result<T, E>`
+   is `Copy` iff both `T` and `E` are `Copy`; Copy-marked generic structs are
+   demoted to linear for non-qualifying instantiations. This is a convenience
+   and correctness-of-classification item, not an affine escape hatch:
+   non-`Copy` values still cannot be silently discarded, and `_` may ignore a
+   generic value only when the instantiated whole type is actually `Copy`.
+   Gates include positives for `Option<i32>` / `Result<i32, i32>` Copy behavior
+   and negatives for `Option<String>`, `Result<String, E>`, and nested
+   resource-owning payloads. Future generic containers must state their
+   conditional-`Copy` rule structurally and preserve the invariant that no
+   `Copy` value contains a non-`Copy` owner.
 4. Build raw-data APIs in `std.bytes` and `std.slice`: `Bytes`, byte slices,
    fixed buffers, parser cursors,
    byte-preserving formatting, and no implicit UTF-8 or lossy conversions.
@@ -1221,7 +1286,14 @@ class and authority/allocation story.
     (bare non-`Copy` statement, `_` over non-`Copy`, `let _`, non-`Copy`
     sub-place projection by value). This is documentation plus examples and
     diagnostics, not automatic `Drop`: no hidden cleanup and no hidden control
-    flow.
+    flow. Include a short **Copy and Linear Values** guide: when to mark a type
+    `Copy`, why `Option<i32>` is `Copy` but `Option<String>` is linear, how
+    value-mode reads move non-`Copy` bindings by default, why `_` ignores only
+    `Copy`, how params are owned locals unless they are borrows, and the
+    ordinary consume paths (`destroy`, handoff, return, destructure, `defer`).
+    This guide is the user-facing explanation of the conditional-`Copy` and
+    mode-based-checker refactors; it should be validated by small runnable
+    examples and linked from README/site docs.
 31. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
