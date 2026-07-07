@@ -998,8 +998,11 @@ batteries-included breadth. The ranked build order is:
 6. Collections phase 2 on the callable-values surface.
 7. `std.test` tests-as-docs and doc-snippet gates.
 8. CLI/env/process helpers for real tools.
-9. Trap/debug UX and verified-profile/proof-obligation UX.
-10. Broad compression/crypto/networking/threading only after workload demand.
+9. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+   proof-obligation UX.
+10. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+    `formal_set`, `bigint`, lemma helpers) once contracts need them.
+11. Broad compression/crypto/networking/threading only after workload demand.
 
 1. Define the stdlib gap matrix against Gleam, Zig, Rust, Go, Odin, Ada/SPARK,
    Lean, and Roc before expanding APIs. Concrete should not copy any one
@@ -1309,6 +1312,15 @@ batteries-included breadth. The ranked build order is:
 31. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
+31a. Add proof-facing formal stdlib models only when a proof or contract
+    workload pulls them. These are not runtime containers: `std.formal_vec`,
+    `std.formal_map`, and `std.formal_set` model mathematical sequences, maps,
+    and sets for contracts, loop invariants, and Lean obligations; `std.bigint`
+    models unbounded mathematical integers for specs before any runtime
+    big-number API exists; `std.rational` stays deferred until exact-ratio
+    specs need it. Each formal module must state its erasure/runtime story, its
+    evidence class, the Lean artifact it lowers to, and the refinement relation
+    to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
 32. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
@@ -1743,8 +1755,13 @@ lemmas, and actionable failure diagnostics.
     extend it to proof-result caching, agent-facing proof suggestions, and any
     external solver path.
 17. Add a small verified/spec-checked standard proof library for common
-    predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
-    constant-time source shape.
+    predicates and formal stdlib models: sorted, bounded, no-duplicates,
+    fixed-length, prefix, checksum, constant-time source shape, `formal_vec`,
+    `formal_map`, `formal_set`, spec-only `bigint`, and the first reusable
+    lemma families over those models. The proof library should hide runtime
+    implementation details (hash buckets, capacities, tombstones, wraparound
+    storage) behind refinement facts rather than making every user proof reason
+    about container internals.
 18. Add bounded quantified specs for collections, not arbitrary open-ended
     logic. V1 syntax should cover only finite, source-visible domains:
     `forall i in 0..n { P(i) }`, `exists i in 0..n { P(i) }`, and library
@@ -2438,7 +2455,12 @@ and incremental build contracts are explicit enough for release evidence.
 4. Add native compiled-program debugging support: DWARF/source-map emission,
    source-mapped backtraces for runtime failures, debug-vs-release behavior,
    optimized-code caveats, and diagnostics that distinguish source-level
-   runtime checks from trusted backend/OS crashes.
+   runtime checks from trusted backend/OS crashes. Runtime traps inserted by
+   Concrete (bounds, arithmetic, cast/profile checks, failed runtime
+   obligations) should carry enough source span and check-class information
+   that a real application can debug them without reverse-engineering the abort
+   site. This is not proof evidence; it is usability for enforced/runtime-
+   checked facts.
 5. Add clean-build versus incremental-build equivalence checks: facts,
    obligations, diagnostics, reports, and codegen must agree.
 6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
@@ -2481,7 +2503,11 @@ and incremental build contracts are explicit enough for release evidence.
 14. Define stdlib contracts for allocators, I/O handles, directory/file/path
     handles, byte/text/path conversion APIs, and fallible return discipline.
     Each public stdlib function must state allocation behavior, OS authority,
-    failure mode, trusted platform assumptions, and evidence class.
+    failure mode, trusted platform assumptions, and evidence class. This item
+    also owns the release-facing unsafe/trusted boundary UX: a safe wrapper may
+    narrow authority, but reports must still show the underlying trusted,
+    extern, raw-pointer, or `with(Unsafe)` operation and the assumption it
+    depends on.
 15. Add stdlib evidence gates so core helpers cannot silently widen authority,
     allocation, proof assumptions, or runtime-error obligations.
 16. Evaluate a normalized mid-level IR only when traceability/backend-contract
@@ -2795,6 +2821,10 @@ policies, provenance, and registry protocol.
    assumptions, proof/evidence summaries, and replay commands. Add
    `scripts/tests/check_package_artifacts.sh`; the gate must prove package
    consumers read these artifacts rather than source-private side channels.
+   This phase is the main 20k+ LOC scale boundary: large Concrete programs need
+   package/workspace boundaries, import hygiene, visibility/API stability,
+   versioning, generated docs, and evidence summaries before the language can
+   claim to support multi-team codebases rather than only single-repo examples.
 2. Design and parse package manifest.
 3. Add version constraints, dependency resolution, and lockfile.
 4. Add workspace and multi-package support.
@@ -2992,7 +3022,11 @@ forcing example, explicitly deferred, or rejected.
 
 1. Keep concurrency design-only until the v1 surface is frozen:
    capability lattice, scopes, spawn/join, linear handles, bounded channels,
-   result flow, ownership transfer, rejected forms, and report schema.
+   result flow, ownership transfer, rejected forms, and report schema. This
+   includes the memory-model question Concrete must not answer accidentally:
+   atomics, synchronization, shared mutable state, data-race freedom,
+   capability-gated thread authority, and proof/evidence classes for concurrent
+   code all remain research-gated until a formal model and pressure tests exist.
 2. Build concurrency pressure-test sketches and expected reports before
    implementation.
 3. Mechanize the v1 concurrency formal model before claiming safety.
@@ -3024,8 +3058,8 @@ forcing example, explicitly deferred, or rejected.
     stdlib and concurrency pressure tests exist.
 14. Add the Phase 20 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
-    (concurrency, typestate, arena allocation, WCET, binary-format DSLs,
-    hardware capability mapping, Miri-style interpreter, sized evaluator,
-    persistent rewrite state, and row effects). No research item graduates
-    unless its forcing example, report shape, evidence class, and rejection or
-    pull-forward criteria are recorded.
+    (concurrency, atomics/memory model, typestate, arena allocation, WCET,
+    binary-format DSLs, hardware capability mapping, Miri-style interpreter,
+    sized evaluator, persistent rewrite state, and row effects). No research
+    item graduates unless its forcing example, report shape, evidence class,
+    and rejection or pull-forward criteria are recorded.
