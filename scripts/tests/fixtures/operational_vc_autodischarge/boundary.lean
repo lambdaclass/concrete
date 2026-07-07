@@ -17,7 +17,7 @@
   Design note: research/proof-evidence/operational-vc-auto-discharge.md
 -/
 import Std.Tactic.BVDecide
-import Concrete.Proof
+import Concrete.Proof.Proof
 import Concrete.Examples.HmacSha256.Proofs
 import Concrete.Examples.ParseValidate.Proofs
 

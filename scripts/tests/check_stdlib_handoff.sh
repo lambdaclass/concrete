@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stdlib handoff gate (ROADMAP Phase 6 #19; docs/STDLIB_HANDOFF.md).
+# Stdlib handoff gate (ROADMAP Phase 6 #19; docs/stdlib/STDLIB_HANDOFF.md).
 #
 # The handoff contract names every language surface the Phase 7 stdlib depends on
 # and gives each a status. This gate keeps the contract honest:
@@ -13,7 +13,7 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-DOC="docs/STDLIB_HANDOFF.md"
+DOC="docs/stdlib/STDLIB_HANDOFF.md"
 [ -f "$DOC" ] || { echo "error: $DOC missing" >&2; exit 2; }
 
 # Canonical required surfaces (ROADMAP #19). Dropping one from the doc fails here.

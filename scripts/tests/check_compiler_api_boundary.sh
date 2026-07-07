@@ -19,7 +19,7 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # The V1 boundary allowlist — must agree with docs/COMPILER_API.md.
-BOUNDARY=("Concrete.Project" "Concrete.Pipeline" "Concrete.CompilerLedger" "Concrete.ObligationCore" "Concrete.Diagnostic" "Concrete.DebugBundle")
+BOUNDARY=("Concrete.Resolve.Project" "Concrete.Pipeline.Pipeline" "Concrete.Report.CompilerLedger" "Concrete.Proof.ObligationCore" "Concrete.Report.Diagnostic" "Concrete.Report.DebugBundle")
 CONSUMER_ROOTS=("editor" "tools" "integrations" "lsp" "mcp" "plugins")
 DOC="docs/COMPILER_API.md"
 
@@ -64,7 +64,7 @@ done
 
 echo "=== self-test: the scanner actually detects violations (no false green) ==="
 FIX="$(mktemp -d)"
-printf 'import Concrete.CompilerLedger\nimport Concrete.Diagnostic\n' > "$FIX/good.lean"
+printf 'import Concrete.Report.CompilerLedger\nimport Concrete.Report.Diagnostic\n' > "$FIX/good.lean"
 printf 'import Concrete.Parser\nimport Concrete.Report\n'             > "$FIX/bad_internal.lean"
 printf 'import Concrete\n'                                            > "$FIX/bad_umbrella.lean"
 [ -z "$(scan_file "$FIX/good.lean")" ] && ok "a boundary-only consumer passes the scanner" \
@@ -74,7 +74,7 @@ printf 'import Concrete\n'                                            > "$FIX/ba
 [ -n "$(scan_file "$FIX/bad_umbrella.lean")" ] && ok "scanner flags the bare umbrella import" \
   || no "scanner FAILED to flag the bare umbrella import"
 
-echo "=== a consumer loads a project THROUGH the boundary (Concrete.Project only) ==="
+echo "=== a consumer loads a project THROUGH the boundary (Concrete.Resolve.Project only) ==="
 PROBE="scripts/tests/fixtures/api_boundary/load_probe.lean"
 [ -f "$PROBE" ] || no "load probe fixture missing"
 # static: the probe imports only boundary modules (no internals, no umbrella).
@@ -83,7 +83,7 @@ PROBE="scripts/tests/fixtures/api_boundary/load_probe.lean"
 # the boundary actually exposes the loading API.
 grep -qE "def loadProject" Concrete/Resolve/Project.lean && grep -qE "partial def findProjectRoot" Concrete/Resolve/Project.lean \
   && grep -qE "structure ProjectContext" Concrete/Resolve/Project.lean \
-  && ok "Concrete.Project exposes findProjectRoot / loadProject / ProjectContext" \
+  && ok "Concrete.Resolve.Project exposes findProjectRoot / loadProject / ProjectContext" \
   || no "boundary module missing the project-loading API"
 # dynamic: compile + run the probe so we prove it actually loads a project (only
 # when a Lean toolchain is available — never a false fail on a bare runner).

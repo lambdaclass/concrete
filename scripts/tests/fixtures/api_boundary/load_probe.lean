@@ -2,7 +2,7 @@
 -- consumer that loads a Concrete project using ONLY the boundary module
 -- `Concrete.Project` — no umbrella, no internals. Proves the project-loading
 -- boundary is actually usable in-process. Run via `lake env lean --run`.
-import Concrete.Project
+import Concrete.Resolve.Project
 open Concrete
 
 def main : IO Unit := do

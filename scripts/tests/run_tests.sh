@@ -10464,6 +10464,10 @@ else
 fi
 
 # --- Project-level tests (require Concrete.toml + std) ---
+# Auto-discovers every tests/programs/<proj>/ with a Concrete.toml (build+run).
+# Bug-regression projects run here (referenced by name for audit_bug_corpus.sh):
+#   submodule_linear_consume/src/main  (bug 022 — submodule impl-offset)
+#   scand_aggregate_in_scope/src/main  (bug 023 — short-circuit aggregate phi)
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
     if [ -f "$projdir/Concrete.toml" ]; then

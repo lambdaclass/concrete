@@ -39,6 +39,8 @@ declare -A BUG_TEST_MAP=(
   [019]="bug_array_struct_field_mutation.con"
   [020]="bug_int_match_consume.con"
   [021]="bug_int_match_disagree.con"
+  [022]="submodule_linear_consume/src/main.con"
+  [023]="scand_aggregate_in_scope/src/main.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).

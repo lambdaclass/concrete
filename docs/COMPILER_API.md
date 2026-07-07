@@ -17,14 +17,14 @@ This is a boundary definition + guard, not a refactor: the compiler itself
 
 | Module | Surface |
 | --- | --- |
-| `Concrete.Project` | Project loading: `findProjectRoot`, `loadProject` → `ProjectContext` (deps + frontend + policy + ledger, loaded once). The way tooling loads a project in-process. |
-| `Concrete.Pipeline` | Frontend entry + pass orchestration: `runFrontend`, `runFrontendDiagnostics`, the named artifact types, pass inspection. |
-| `Concrete.CompilerLedger` | Non-proof fact store: artifacts, diagnostics-as-facts, timings, source files, dependency/obligation links. Artifact lookup + pass inspection. |
-| `Concrete.ObligationCore` | Proof-obligation ledger queries (statuses, evidence classes, replay). |
-| `Concrete.Diagnostic` | Structured diagnostics and their rendering (human + JSON), the one record both outputs share. |
-| `Concrete.DebugBundle` | Release / debug bundle capture. |
+| `Concrete.Resolve.Project` | Project loading: `findProjectRoot`, `loadProject` → `ProjectContext` (deps + frontend + policy + ledger, loaded once). The way tooling loads a project in-process. |
+| `Concrete.Pipeline.Pipeline` | Frontend entry + pass orchestration: `runFrontend`, `runFrontendDiagnostics`, the named artifact types, pass inspection. |
+| `Concrete.Report.CompilerLedger` | Non-proof fact store: artifacts, diagnostics-as-facts, timings, source files, dependency/obligation links. Artifact lookup + pass inspection. |
+| `Concrete.Proof.ObligationCore` | Proof-obligation ledger queries (statuses, evidence classes, replay). |
+| `Concrete.Report.Diagnostic` | Structured diagnostics and their rendering (human + JSON), the one record both outputs share. |
+| `Concrete.Report.DebugBundle` | Release / debug bundle capture. |
 
-Project loading is now a first-class boundary module (`Concrete.Project`, #16b):
+Project loading is now a first-class boundary module (`Concrete.Resolve.Project`, #16b):
 consumers call `findProjectRoot` + `loadProject` in-process to get a
 `ProjectContext` without shelling out. The CLI contract (`check_cli_contract.sh`,
 #15) remains available for out-of-process consumers — e.g.
