@@ -339,7 +339,7 @@ fixed_capacity, constant_time_tag use `Int`/`u8`, not `u32`
 `add`).  Backend match: source `+` on `u32` lowers to LLVM `add`
 (`EmitSSA.lean`), which wraps at the type width.
 
-Inline regression theorems in `Concrete/Proof.lean`:
+Inline regression theorems in `Concrete/Proof/Proof.lean`:
 - `0xFFFFFFFF + 1 = 0`  (overflow to zero)
 - `0x80000000 + 0x80000000 = 0`  (carry leaves the 32-bit window)
 - `0x7FFFFFFF + 1 = 0x80000000`  (no overflow, read unsigned/positive)
@@ -373,7 +373,7 @@ R-25 extends the existing `bitor` constructor to u32:
     evalBinOp (.bitor 32 false) (.int a) (.int b) =
       some (.int (Int.ofNat ((BitVec.ofInt 32 a) ||| (BitVec.ofInt 32 b)).toNat))
 
-Inline regression theorems in `Concrete/Proof.lean`:
+Inline regression theorems in `Concrete/Proof/Proof.lean`:
 - `0xFFFFFFFF << 4 = 0xFFFFFFF0`  (truncation at width)
 - `1 << 31 = 0x80000000`  (high bit, still positive unsigned)
 - `0x0F0F0F0F | 0xF0F0F0F0 = 0xFFFFFFFF`  (u32 or)
@@ -402,7 +402,7 @@ match: source `>>` on an unsigned operand lowers to LLVM `lshr`
 BitVec `>>>` (logical) model and codegen agree.  An arithmetic
 `ashr` variant (`signed = true`) is an append-only follow-up.
 
-Inline regression theorems in `Concrete/Proof.lean`:
+Inline regression theorems in `Concrete/Proof/Proof.lean`:
 - `0xFFFFFFFF >> 4 = 0x0FFFFFFF`  (zero-fill from the top, not negative)
 - `0xFFFFFFFF >> 3 = 0x1FFFFFFF`  (the sigma0 SHR amount)
 - `0x80000000 >> 31 = 1`  (high bit to bottom)
@@ -430,7 +430,7 @@ row in this register.  Backend match: source `&` lowers to
 LLVM `and` at the operand width (`EmitSSA.lean`), so the
 BitVec `&&&` model and codegen agree.
 
-Inline regression theorems in `Concrete/Proof.lean` pin the
+Inline regression theorems in `Concrete/Proof/Proof.lean` pin the
 u32 unsigned behavior:
 - `0xFFFFFFFF & 0x12345678 = 0x12345678`  (mask identity `Ch` relies on)
 - `0xFFFFFFFF & 0xFFFFFFFF = 4294967295`  (high bit set, still positive)
@@ -455,7 +455,7 @@ u8-unsigned case ct_compare actually uses).  Signed-mode
 requiring one `evalBinOp` case + one `binOpToPBinOp`
 mapping + an updated row in this register.
 
-Inline regression theorems in `Concrete/Proof.lean` pin the
+Inline regression theorems in `Concrete/Proof/Proof.lean` pin the
 u8 unsigned behavior:
 - `128 | 0 = 128`  (high bit set, still positive)
 - `128 | 1 = 129`
@@ -490,7 +490,7 @@ This matters when the result's high bit is set: signed view
 surfaces as a negative `Int` (which is correct for `i32` but
 WRONG for `u32`); unsigned view surfaces as a large positive
 `Int` (correct for `u32`).  Inline regression theorems in
-`Concrete/Proof.lean` pin this behavior:
+`Concrete/Proof/Proof.lean` pin this behavior:
 - `0xFFFFFFFF ^ 0` signed = `-1`, unsigned = `4294967295`
 - `0xFFFFFFFF mod 4` signed = `-1`, unsigned = `3`
 

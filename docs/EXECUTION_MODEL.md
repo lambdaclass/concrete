@@ -194,7 +194,7 @@ Stack size is not bounded or checked by the compiler. Stack overflow is caught b
 
 ### Memory layout
 
-All memory layout decisions are centralized in `Concrete/Layout.lean`:
+All memory layout decisions are centralized in `Concrete/Check/Layout.lean`:
 
 - Type sizes and alignments follow platform conventions (i8=1, i16=2, i32=4, i64=8, f64=8, ptr=8, bool=1)
 - Structs use C-like field layout with natural alignment padding (unless `#[repr(packed)]`)

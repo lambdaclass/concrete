@@ -25,7 +25,7 @@ consider the failure/none arm. Discarding `i32`, `bool`, or a `vec_push` that
 returns `()` is harmless and is **not** flagged — only a value whose type is
 `Result<…>` or `Option<…>` (however spelled: bare `.named` or `.generic` with
 type arguments). User enums in general are *not* must-use; if a real workload
-shows a specific enum needs it, widen `mustUseEnumName?` in `Concrete/Check.lean`.
+shows a specific enum needs it, widen `mustUseEnumName?` in `Concrete/Check/Check.lean`.
 
 ## How to acknowledge a deliberate discard
 
@@ -75,7 +75,7 @@ impossible, not merely discouraged.
 
 ## Where it lives
 
-- Rule: `Concrete/Check.lean` — `mustUseEnumName?` (the must-use predicate) and the
+- Rule: `Concrete/Check/Check.lean` — `mustUseEnumName?` (the must-use predicate) and the
   `Stmt.expr` discard check in `checkStmt` (emits `E0286`). The linear `_` rule (a
   `_` may ignore only a Copy value) lives in the match-arm checks (emits `E0288`,
   `wildcardDiscardsNonCopy`); `let _ =` is removed (`E0289`).

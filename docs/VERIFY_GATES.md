@@ -164,7 +164,7 @@ warnings; it is not allowed to forget what its own contract is.
 When a future pass joins the pipeline, the contract requires:
 
 1. Define the structural invariant the pass's output must satisfy.
-2. Implement a verifier in `Concrete/Verify.lean` (or a sibling
+2. Implement a verifier in `Concrete/Check/Verify.lean` (or a sibling
    module) that returns `Diagnostics`.
 3. Add a field to `VerifyReport`. Extend `runVerifyGates`,
    `isClean`, `errorCount`, `warningCount`, `allDiagnostics`, and
@@ -176,10 +176,10 @@ When a future pass joins the pipeline, the contract requires:
 
 ## See also
 
-- `Concrete/Verify.lean` — the per-gate verifiers.
-- `Concrete/SSAVerify.lean` — the SSA-level structural verifier
+- `Concrete/Check/Verify.lean` — the per-gate verifiers.
+- `Concrete/IR/SSAVerify.lean` — the SSA-level structural verifier
   invoked at the `post-lower` and `post-cleanup` boundaries.
-- `Concrete/Pipeline.lean` — `runVerifyGates`, `VerifyReport`.
+- `Concrete/Pipeline/Pipeline.lean` — `runVerifyGates`, `VerifyReport`.
 - `docs/WRONG_CODE_CORPUS.md` — `category = "verifier-trigger"`
   cases live here when a verify gate fires on real code.
 - WC-0004 (`tests/wrong-code/cases/WC-0004.md`) — the canonical

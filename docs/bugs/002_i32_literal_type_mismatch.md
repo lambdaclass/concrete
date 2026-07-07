@@ -16,7 +16,7 @@ let b: i32 = 0 - a;  // LLVM: sub i64 0, %i32_val  (crash or wrong result)
 
 ## Root Cause
 
-**File:** `Concrete/Elab.lean`, `elabExpr` binOp case (line ~292)
+**File:** `Concrete/Elab/Elab.lean`, `elabExpr` binOp case (line ~292)
 
 Integer literals with no type hint default to `.int` (i64). In a binary operation `0 - a`:
 
@@ -29,7 +29,7 @@ This produced `sub i64 0, %i32_val` — an LLVM type mismatch.
 
 ## Fix
 
-**File:** `Concrete/Elab.lean`
+**File:** `Concrete/Elab/Elab.lean`
 
 After elaborating both operands, check if one is a default-typed literal (Int) and the other has a concrete smaller integer type. If so, re-elaborate the literal with the concrete type as hint:
 

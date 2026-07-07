@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 import Concrete.ProofKit.BitVec
 
 /-!

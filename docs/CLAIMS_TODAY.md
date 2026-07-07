@@ -35,7 +35,7 @@ For safe code that passes the checker, the compiler enforces at compile time:
 subtraction — the language invariant *references are second-class, never
 returned*: the checker rejects any safe-callable function or function type that
 returns a reference, directly, nested in an aggregate (`Option<&T>`), or via
-generic instantiation (`Concrete/Check.lean`, `resolveType`; gate
+generic instantiation (`Concrete/Check/Check.lean`, `resolveType`; gate
 `scripts/tests/check_returned_ref_provenance.sh`). The former aggregate-ref
 accessors were migrated to the value model: `get -> Option<V>` (Copy),
 `with_value` / `with_at` to borrow (scoped, the `&V` never escapes the callback),

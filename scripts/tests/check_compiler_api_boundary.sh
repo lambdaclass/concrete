@@ -81,8 +81,8 @@ PROBE="scripts/tests/fixtures/api_boundary/load_probe.lean"
 [ -z "$(scan_file "$PROBE")" ] && ok "load_probe imports only boundary modules" \
   || no "load_probe reaches past the boundary: $(scan_file "$PROBE")"
 # the boundary actually exposes the loading API.
-grep -qE "def loadProject" Concrete/Project.lean && grep -qE "partial def findProjectRoot" Concrete/Project.lean \
-  && grep -qE "structure ProjectContext" Concrete/Project.lean \
+grep -qE "def loadProject" Concrete/Resolve/Project.lean && grep -qE "partial def findProjectRoot" Concrete/Resolve/Project.lean \
+  && grep -qE "structure ProjectContext" Concrete/Resolve/Project.lean \
   && ok "Concrete.Project exposes findProjectRoot / loadProject / ProjectContext" \
   || no "boundary module missing the project-loading API"
 # dynamic: compile + run the probe so we prove it actually loads a project (only

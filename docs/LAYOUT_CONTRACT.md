@@ -6,7 +6,7 @@ This document is the stable-direction counterpart to the exploratory note at [..
 
 > settle the supported `repr` forms, when layout is guaranteed versus intentionally opaque, transparent-wrapper rules, field-order promises, and what reports must surface for reviewers and package boundaries.
 
-For implementation details, see [ABI_LAYOUT.md](ABI_LAYOUT.md) and `Concrete/Layout.lean`.
+For implementation details, see [ABI_LAYOUT.md](ABI_LAYOUT.md) and `Concrete/Check/Layout.lean`.
 For platform support and sizes, see [ABI.md](ABI.md).
 For FFI rules, see [FFI.md](FFI.md).
 

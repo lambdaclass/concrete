@@ -17,7 +17,7 @@ The ABI/layout subsystem is responsible for:
 - FFI-safety checks
 - the low-level representation of `#[repr(C)]`, `#[repr(packed)]`, and `#[repr(align(N))]`
 
-The implementation authority today is `Concrete/Layout.lean`.
+The implementation authority today is `Concrete/Check/Layout.lean`.
 
 ## Source of Truth
 

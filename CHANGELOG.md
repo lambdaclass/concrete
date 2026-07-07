@@ -376,7 +376,7 @@ the language affine in one corner and linear everywhere else.
 Resolved by making the whole discipline **linear**, with one law: **a non-Copy value
 never silently disappears.**
 
-- **`_` gating tightened from `ownsResource` to `isCopy`** (`Concrete/Check.lean`).
+- **`_` gating tightened from `ownsResource` to `isCopy`** (`Concrete/Check/Check.lean`).
   A wildcard arm (`match e { _ => {} }`) or `_` payload field over a **non-Copy**
   value is now rejected (**E0288**, renamed `wildcardDiscardsNonCopy`) — including
   resource-free non-Copy values like `Option<i32>`. `_` may ignore only a `Copy`
@@ -403,7 +403,7 @@ Closed the last tracked soundness hole (KNOWN_HOLES H9, ROADMAP #13a): a non-Cop
 value bound to a NAMED binding inside an `if`/`else` branch or a match arm and not
 consumed before that block exited used to leak — the branch/arm merge dropped the
 local before the function-level scope-exit check could see it. Fixed in
-`Concrete/Check.lean` with the three pieces the H6 thread always pointed at:
+`Concrete/Check/Check.lean` with the three pieces the H6 thread always pointed at:
 
 - **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is consumed;
   no-op for Copy sources incl. `&T`). A bare-ident let-RHS previously only marked the
@@ -435,7 +435,7 @@ property of `let _` — it was `_` silently consuming a value that transitively 
 a resource, and that survived at other `_` sites (`match x { _ => {} }`,
 `E::Has { _ }`). So:
 
-- **Transitive `_`-resource rule (the soundness fix, `Concrete/Check.lean`).** A new
+- **Transitive `_`-resource rule (the soundness fix, `Concrete/Check/Check.lean`).** A new
   `ownsResource` predicate (Destroy impl, heap builtin — String/Vec/HashMap/Heap/…
   — or any struct/enum/array component that owns one) now gates every `_` site: a
   wildcard arm or `_` payload field over a resource owner is rejected (**E0288**),
@@ -462,14 +462,14 @@ With these, **no soundness or codegen holes remain open** in KNOWN_HOLES.
 - **H7 — loop after a loop-bearing `if`-branch produced invalid SSA (E0708).** A
   loop counter declared inside an `if`/`else` branch leaked into the env, so the
   *next* loop's header phi referenced the first loop's counter from a
-  non-dominating block. Found by the differential fuzzer. Fix (`Concrete/Lower.lean`):
+  non-dominating block. Found by the differential fuzzer. Fix (`Concrete/IR/Lower.lean`):
   after an if-statement merges, restrict the live variable set to the names that
   existed before the `if` (the scope cleanup the `match` lowering already did). The
   fuzzer now runs **with loops re-enabled** and is clean. Regression:
   `loop_after_branch_loop.con`.
 - **H6 — silent discard of a linear (non-Copy) value.** A non-Copy value dropped
   without being consumed silently vanished, contradicting the linearity guarantee.
-  Closed across every discard site (`Concrete/Check.lean`): a bare statement value
+  Closed across every discard site (`Concrete/Check/Check.lean`): a bare statement value
   / discarded call result → **E0287**; a branch-local declared in an `if`/`else`
   branch and left unconsumed → **E0208** (new `checkBlockLocalsConsumed`); an
   unconsumed match-arm payload → **E0208**; a deferred call returning a linear
@@ -490,7 +490,7 @@ out-of-bounds memory** in compiled code (the interpreter trapped) — a real
 memory-safety hole, and the one runtime-safety obligation left unenforced while
 overflow/div-zero/shift/`MIN`-neg/float-cast all trap. Now closed:
 
-- **Checked by default** (`Concrete/Lower.lean` + `Concrete/EmitSSA.lean`): every
+- **Checked by default** (`Concrete/IR/Lower.lean` + `Concrete/Backend/EmitSSA.lean`): every
   array GEP — read (`arrayIndex`), write (`storeToPlace`), and borrow/place
   (`placeAddr`, covering `&a[i]`/`&mut a[i]` and nested `m[i][j]` / `a[i].f`) —
   emits a call to a shared `@__cc_bounds_check` helper. A single unsigned compare
@@ -518,13 +518,13 @@ as a bug regardless of the interpreter — an **oracle-free** signal. It immedia
 found two more codegen bugs, now fixed (regression vectors in
 `tests/oracle/vectors.txt`):
 
-- **`(8 + 5) + v1` — compound-literal binop not coerced** (`Concrete/Elab.lean`).
+- **`(8 + 5) + v1` — compound-literal binop not coerced** (`Concrete/Elab/Elab.lean`).
   Only a *bare* integer literal adapted to the other operand's concrete width; a
   literal-only *sub-expression* stayed `int`/i64, so `int + i32` was accepted by the
   checker but emitted a mismatched-operand binop (E0715). The adaptation now applies
   to any `int`-typed operand, guarded so a genuine `Int` value is unaffected.
   Fixtures: `binop_literal_width.con`.
-- **`__last_expr` pseudo-variable leaked into merge/loop phis** (`Concrete/Lower.lean`).
+- **`__last_expr` pseudo-variable leaked into merge/loop phis** (`Concrete/IR/Lower.lean`).
   The internal trailing-value variable (`.expr` lowering) was included in
   `snapshotVars`, so a value-bearing `if`/`match` block's `__last_expr` leaked into a
   later construct's merge/loop-header phi reconciliation, building a spurious,
@@ -550,14 +550,14 @@ form of the hand-written probes (ROADMAP Phase 14 #13, v1). Each fix carries a
 permanent regression vector in `tests/oracle/vectors.txt`.
 
 - **Miscompile — `&mut o.f` inside a conditional branch applied on the wrong path**
-  (`Concrete/Lower.lean`; found by the fuzzer). A mutable struct local wasn't
+  (`Concrete/IR/Lower.lean`; found by the fuzzer). A mutable struct local wasn't
   promoted to stable storage at declaration, so a field borrow inside an `if`
   branch forced an unsound mid-branch promotion; the post-merge read saw the
   write applied even when that branch wasn't taken. Mutable value aggregates
   (arrays — already — plus user structs/enums) are now promoted to a stable alloca
   at declaration. Fixtures: `mut_ref_field_in_branch.con`.
 
-- **Miscompile — `&mut <place>` aliased a copy, not storage** (`Concrete/Lower.lean`).
+- **Miscompile — `&mut <place>` aliased a copy, not storage** (`Concrete/IR/Lower.lean`).
   Passing `&mut a[i]` (array element) or `&mut o.f` (struct field) to a function
   GEP'd into a *loaded value* (a throwaway copy), so the callee's write was
   silently lost — the array/struct was unchanged on return. Now a new `placeAddr`
@@ -565,13 +565,13 @@ permanent regression vector in `tests/oracle/vectors.txt`.
   `borrow`/`borrowMut` and the call-argument path both route through it, including
   nested places (`&mut a[i].f`, `&mut grid[i][j]`). The old `&mut field` call-arg
   special case (the source of the copy) is gone. Fixtures: `mut_ref_place.con`.
-- **Miscompile — nested `match`-expression produced invalid SSA** (`Concrete/Elab.lean`).
+- **Miscompile — nested `match`-expression produced invalid SSA** (`Concrete/Elab/Elab.lean`).
   A `match` used as another match's arm value got result type `unit` (the type was
   read only from a hint, defaulting to unit), so its arm literals were cast to
   `void` and the outer match collapsed to a single value from a non-dominating
   block (`E0703`). Match result type is now inferred from the arm bodies when no
   hint is present. Fixtures: `nested_match_value.con`.
-- **Interp — value-bearing `if`/`match` blocks evaluated to unit** (`Concrete/Interp.lean`).
+- **Interp — value-bearing `if`/`match` blocks evaluated to unit** (`Concrete/Interp/Interp.lean`).
   `evalStmts` discarded the final statement's value and `evalStmt`'s `.expr` arm
   ignored `isValue`, so a value-bearing `if`/`match` block returned unit (the cast
   then failed, or a downstream `unit + unit` errored). Both now propagate the
@@ -579,10 +579,10 @@ permanent regression vector in `tests/oracle/vectors.txt`.
 - **Interp — `while`-expression as a value was unsupported.** `Flow.brk` now
   carries an optional value, `break v` yields it, and a new `evalWhileExpr`
   evaluates the loop/`else` value. Fixtures: `while_expr_value.con`.
-- **Parser — `else if` chains rejected in value position** (`Concrete/Parser.lean`).
+- **Parser — `else if` chains rejected in value position** (`Concrete/Frontend/Parser.lean`).
   The if-expression parser required `else {`; a trailing `else if` now parses as
   the else block's value. Fixtures: `else_if_chain.con`.
-- **Interp — bitwise `& | ^` wrong on negative operands** (`Concrete/Interp.lean`).
+- **Interp — bitwise `& | ^` wrong on negative operands** (`Concrete/Interp/Interp.lean`).
   `Int.toNat` clamps negatives to 0, so `-1 & 255` gave 0 instead of 255. Now
   computed on the two's-complement bit pattern at the operand width. Fixtures:
   `bitops_negative.con`.
@@ -599,7 +599,7 @@ whose value is a fallible result — `Result<…>` or `Option<…>` — silently
 the value away, ignoring a possible failure/absence. That discard is now
 rejected with **E0286** unless explicitly acknowledged.
 
-- **The rule** (`Concrete/Check.lean`): `mustUseEnumName?` marks `Result`/`Option`
+- **The rule** (`Concrete/Check/Check.lean`): `mustUseEnumName?` marks `Result`/`Option`
   as must-use; `checkStmt`'s `Stmt.expr` case emits E0286 when such a value is
   discarded (`isValue := false`). A trailing value expression (no `;`) flows out
   as the block's value and is never flagged. This closes the daily-workflow twin
@@ -862,7 +862,7 @@ handoff contract.
 ### Phase 6 #10 Stage 1: build-profile mechanism (2026-06-24)
 
 First stage of build profiles — the *mechanism* only, no codegen or semantic
-change. `Concrete/Profile.lean` defines the profiles (debug/release/predictable/
+change. `Concrete/Report/Profile.lean` defines the profiles (debug/release/predictable/
 proof/high-integrity); `--profile <name>` (CLI), `[profile] name = "..."` in
 Concrete.toml, and `--report profile` are wired in `Main.lean` with precedence
 CLI > manifest > default (debug). The report shows the active profile, its
@@ -909,7 +909,7 @@ interpreter did not dereference a `&T` match scrutinee, so a var/guard arm bound
 the reference instead of the pointee (e.g. `match p { n if n > 5 => .. }` on
 `p : &Int` errored `unsupported binop`, and `match p { n => return n }` returned
 the wrong value) — while the compiled path already derefed via the E0715 fix.
-Fixed in `Concrete/Interp.lean` by `autoDeref`-ing the match scrutinee. 11/11 green.
+Fixed in `Concrete/Interp/Interp.lean` by `autoDeref`-ing the match scrutinee. 11/11 green.
 
 ### CI-fallout triage: green the resurrected gate suite (2026-06-24)
 
@@ -1044,7 +1044,7 @@ the full fast suite (1576/0) all green locally.
   type is now a hard error instead of a silent truncation: `let a: u8 = 300;`
   was running as `44` — a "semantically dark construct" (a literal silently
   becoming a different value). Now **E0227** (`integer literal 300 is out of
-  range for type 'u8' (0..=255)`), checked in `Concrete/Check.lean` at the
+  range for type 'u8' (0..=255)`), checked in `Concrete/Check/Check.lean` at the
   literal's typed position for i8/i16/i32/Int and u8/u16/u32/Uint.
 - In-range literals at every width still compile (incl. hex/binary bases and the
   i64 default for un-annotated literals); explicit `as` casts may still truncate
@@ -1055,7 +1055,7 @@ the full fast suite (1576/0) all green locally.
   rejected): the `unaryOp neg` case range-checks the *negated* value `-N` against
   the target, so the signed minimum `i8 = -128` still compiles even though its
   inner literal 128 exceeds i8's positive max. The shared `intTyRange` helper
-  (`Concrete/Shared.lean`) backs both checks.
+  (`Concrete/Resolve/Shared.lean`) backs both checks.
 
 ### Phase 6 #5 (pattern ergonomics) closed; nested patterns deferred (2026-06-22)
 
@@ -1116,7 +1116,7 @@ the full fast suite (1576/0) all green locally.
 - Phase 6 #5, increment 5. `match` auto-derefs a `&T` / `&mut T` scrutinee so the
   pointee is matched directly. Enum-behind-`&E` already read the tag and payload
   through the pointer; the fix makes the **scalar** path work too.
-- Bug fixed (`Concrete/Lower.lean`, value-pattern branch): matching a `&scalar`
+- Bug fixed (`Concrete/IR/Lower.lean`, value-pattern branch): matching a `&scalar`
   against a literal emitted a pointer-vs-int comparison (E0715 ssa-verify). The
   branch now derefs a reference scrutinee once before literal/range comparisons
   and variable bindings, so `match x { 0 => …, 1..=9 => …, n => … }` on `x: &i32`
@@ -1131,7 +1131,7 @@ the full fast suite (1576/0) all green locally.
 - Phase 6 #5, increment 4. A match arm may list alternatives separated by `|`:
   `48..=57 | 97..=102 => …`, `1 | 2 | 3 => …`, `E::A | E::B => …`. An optional
   guard applies to the whole arm.
-- Implemented as a parse-time desugar (`Concrete/Parser.lean`): `parsePatternHead`
+- Implemented as a parse-time desugar (`Concrete/Frontend/Parser.lean`): `parsePatternHead`
   parses one pattern and returns an arm-builder; `parseMatchArm` collects
   `|`-separated heads and emits one ordinary `MatchArm` per alternative, all
   sharing the guard and body. No new AST/Core/lowering — every alternative reuses
@@ -1151,10 +1151,10 @@ the full fast suite (1576/0) all green locally.
   threaded through the full pipeline (parse, resolve, check, elab, mono,
   corecheck, lower, interp, format, report, proofcore). Lowered as a test
   inserted after the pattern's bindings and before the body, branching to the
-  next arm's check on failure (`Concrete/Lower.lean`, `finishMatchArmBody`).
+  next arm's check on failure (`Concrete/IR/Lower.lean`, `finishMatchArmBody`).
 - Exhaustiveness is sound: a guarded arm is not a catch-all — a guarded var arm
   is not a wildcard, and a guarded enum arm neither covers its variant nor counts
-  as a duplicate (`Concrete/CoreCheck.lean`, `CoreCanonicalize.lean`). Guards are
+  as a duplicate (`Concrete/Check/CoreCheck.lean`, `CoreCanonicalize.lean`). Guards are
   disclosed as an unsupported construct (`match guard`) in the proof path rather
   than mis-modelled.
 - Verified for var/enum/literal/range arms and value position. Fixtures +
@@ -1194,7 +1194,7 @@ the full fast suite (1576/0) all green locally.
 ### Pattern ergonomics: `if let` / `while let` (2026-06-22)
 
 - Phase 6 #5, increment 2. Conditional destructuring, desugared to a `match` at
-  parse time (`parseIfLet` / `parseWhileLet` in `Concrete/Parser.lean`) — no new
+  parse time (`parseIfLet` / `parseWhileLet` in `Concrete/Frontend/Parser.lean`) — no new
   AST/Core/lowering, reusing all match machinery (binding, exhaustiveness,
   linear-cleanup, codegen).
 - `if let Enum::Variant { binds } = e { … } [else { … }]` →
@@ -1234,7 +1234,7 @@ the full fast suite (1576/0) all green locally.
 - New lexer tokens `..` / `..=`; `MatchArm.rangeArm` / `CMatchArm.rangeArm`
   threaded through the full pipeline (parse, resolve, check, elab, mono,
   corecheck, lower, interp, format, report). Lowered to a `lo <= scr && scr (<=|<)
-  hi` comparison-branch (`Concrete/Lower.lean`), with comparison signedness
+  hi` comparison-branch (`Concrete/IR/Lower.lean`), with comparison signedness
   following the scrutinee type — a `u8` scrutinee compares unsigned, so
   `200..=255` works.
 - Endpoints, high-endpoint exclusion, value-position (match-as-expression) arms,
@@ -1275,18 +1275,18 @@ the full fast suite (1576/0) all green locally.
   - **Unknown alias target silently accepted** — `type A = Nope;` compiled (the
     target was never validated). Alias targets now go through `checkTyDeep`;
     unknown targets are rejected with **E0108** at the declaration
-    (`Concrete/Resolve.lean`).
+    (`Concrete/Resolve/Resolve.lean`).
   - **Recursive aliases gave a confusing error** — `type A = A;` (and mutual
     cycles) produced a misdirected downstream type-mismatch. Now detected during
     resolution and rejected with a dedicated **E0112** (`recursive type alias`).
   - **Alias chains / nested aliases expanded only one level** — `type C = B;
     type B = A; type A = i32` and `type Arr = [E; 3]` did not fully resolve. The
     alias map is now transitively + deeply closed (`closeAliasMap` /
-    `expandAliasDeep` in `Concrete/AST.lean`) before Check/Elab use it.
+    `expandAliasDeep` in `Concrete/Frontend/AST.lean`) before Check/Elab use it.
   - **`Copy` struct field typed by a Copy alias rejected** — `type Id = i32;
     struct Copy S { a: Id }` failed CoreCheck's Copy/repr check because the field
     type wasn't alias-expanded. Field types are now alias-expanded alongside
-    newtype-erasure at module build (`Concrete/Elab.lean`).
+    newtype-erasure at module build (`Concrete/Elab/Elab.lean`).
 - Full suite 1576/0; examples 127/0; snapshots 95/0.
 
 ### Loop control documented + gated; while-expression width miscompile fixed (2026-06-21)
@@ -1299,7 +1299,7 @@ the full fast suite (1576/0) all green locally.
   `break <v>` / `else { v }` (type agreement E0222), and linear-cleanup safety —
   a break/continue that would skip an unconsumed linear value is rejected
   (E0210/E0211).
-- The audit FOUND AND FIXED a real miscompile (`Concrete/Lower.lean`): a
+- The audit FOUND AND FIXED a real miscompile (`Concrete/IR/Lower.lean`): a
   while-as-expression's `break <value>` and `else` value at a non-i64 width were
   stored as i64 into a narrower result slot — e.g. `let v: i32 = while … { break
   7; } else { 0 }` emitted `store i64 7, ptr %wslot` into an `alloca i32` and read
@@ -1550,7 +1550,7 @@ the full fast suite (1576/0) all green locally.
   mutating `while`) miscompiled into a **silent infinite loop**: it got both a
   promoted alloca (from `&i`) and an SSA phi, the two diverged, the init `store`
   landed inside the body (resetting the counter), and the loop condition
-  vanished. Fixed in `Concrete/Lower.lean`:
+  vanished. Fixed in `Concrete/IR/Lower.lean`:
   - a scalar whose address is taken anywhere in the loop body is promoted to a
     stable alloca **before** the loop (memory-backed, driven through load/store
     like aggregates) instead of being phi-carried;
@@ -1627,7 +1627,7 @@ the full fast suite (1576/0) all green locally.
   pointer → segfault even with a live referent), and `with_value`'s generic `R`
   could be instantiated to `&V`, re-creating `Option<&V>` (the exact H1 shape)
   through a generic backdoor. Both are now ill-formed by the invariant.
-- Implemented the two suite-green enforcement points in `Concrete/Check.lean`:
+- Implemented the two suite-green enforcement points in `Concrete/Check/Check.lean`:
   (a) `resolveType` rejects a **function-pointer type** whose return contains a
   reference (so a ref-returning callback is unconstructable — this is what makes
   scoped callbacks sound); (b) generic call/method/static-call sites reject a
@@ -1661,7 +1661,7 @@ the full fast suite (1576/0) all green locally.
   pointee into a fresh alloca and take *that* address," so a reborrowed
   `&mut Ctx` aliased a throwaway copy and the callback's mutations were lost (a
   combinator accumulating into a context returned 0 instead of the real sum).
-  Fixed in `Concrete/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the pointer
+  Fixed in `Concrete/IR/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the pointer
   `e` itself — a true reborrow, no copy. Verified in IR (the reborrow call now
   passes the context pointer directly, no `alloca`) and by execution.
 - Gated by `scripts/tests/check_callable_values.sh` (three modes thread
@@ -1838,7 +1838,7 @@ the full fast suite (1576/0) all green locally.
   a COPY — local scalars were lowered as SSA register values, not addressable
   stack slots, so a store through the pointer never reached `x`. This was the
   architectural root the nested-place fix (C5) worked around. Fixed:
-  `addrOfLocal` (`Concrete/Lower.lean`) promotes a local to a stable stack
+  `addrOfLocal` (`Concrete/IR/Lower.lean`) promotes a local to a stable stack
   alloca on first address-take; reads/writes of the local route through the
   alloca, so the pointer aliases the variable and writes before/after the
   address-take compose correctly.
@@ -1952,7 +1952,7 @@ tracked, gated holes:
   `tag_for_Pair` / one `%Hold_Pair` struct type despite different layouts
   (16B vs 2B inner) — ABI corruption when a field is touched; arrays, refs,
   pointers, and fn-types fell through to `"unknown"`, collapsing even more.
-  `tyToSuffix` (`Concrete/Mono.lean`) is now total and keys on the FULL type
+  `tyToSuffix` (`Concrete/IR/Mono.lean`) is now total and keys on the FULL type
   with bracketed nested args (`Hold_T_Pair_T_Int_E_E`); both the function-name
   and struct-name manglers route through it, so symbols and struct layouts
   stay consistent and distinct. Full suite stayed 1548/0 across the
@@ -2090,7 +2090,7 @@ the source-contract hardening gate:
 - contract API stability facts and `concrete diff` classification for
   strengthened preconditions, weakened guarantees, and invariant drift;
 - source-contract soundness bridge facts R-22..R-28 in
-  `Concrete/ProofSoundness.lean`;
+  `Concrete/Proof/ProofSoundness.lean`;
 - an HMAC source-contract retrofit that proves symbolic call-site bounds where
   the current arithmetic can support them and reports the remaining
   division-shaped call-site gap honestly;
@@ -2161,7 +2161,7 @@ The audited "spec-drift-tied" claim is preserved.
 The migration is held in place by a namespace guard
 (`scripts/tests/check_proof_namespace.sh`, in CI and `make test-proof-namespace`):
 no `Concrete/Examples/` file may declare `namespace Concrete.Proof`; every
-theorem/lemma in `Concrete/Proof.lean` must be on an allowlist (a new one must be
+theorem/lemma in `Concrete/Proof/Proof.lean` must be on an allowlist (a new one must be
 moved to an example module or explicitly justified as infrastructure); and the
 migrated theorem names may not reappear in a `Concrete.Proof` file.
 
@@ -2845,7 +2845,7 @@ Bug fix found by writing the theorem
 ------------------------------------
 While inspecting `compute_tag`'s extracted PExpr, I noticed the
 loop body had `i = i + 1` TWICE per iteration. Cause: the
-for-loop desugar in `Concrete/Elab.lean:1087` concatenates step
+for-loop desugar in `Concrete/Elab/Elab.lean:1087` concatenates step
 into the while body (`whileBody := cBody ++ cStep`) AND stores
 step separately in `CStmt.while_`'s `step` field. The prior
 extraction commit iterated `body ++ step` and double-stepped
@@ -3281,7 +3281,7 @@ What's still missing
 
 What changed
 ------------
-- `Concrete/Proof.lean`: `parseHeaderExpr` PExpr matching the
+- `Concrete/Proof/Proof.lean`: `parseHeaderExpr` PExpr matching the
   exact body fingerprint emitted by `--report fingerprints`.
   Uses array index, struct literal, and enum literal — all
   supported by ProofCore as of the prior three commits.
@@ -3400,21 +3400,21 @@ the first two (struct literal + field access).
 
 What changed
 ------------
-- `Concrete/Proof.lean`: `PVal` gains a `struct_ (name, fields)`
+- `Concrete/Proof/Proof.lean`: `PVal` gains a `struct_ (name, fields)`
   constructor carrying the struct name plus a `List (String × PVal)`
   of field values. `PExpr` gains `structLit` (construction by
   name+fields) and `fieldAccess` (obj.field). `eval` learns both,
   with helper `evalFields` and `lookupField` in the `where` block.
-- `Concrete/ProofCore.lean`: `cExprToPExpr` translates
+- `Concrete/Proof/ProofCore.lean`: `cExprToPExpr` translates
   `CExpr.structLit` and `CExpr.fieldAccess`; recurses into field
   expressions so a struct of supported things extracts. The stale
   "if without else" diagnostic in `identifyUnsupportedStmt` is
   dropped — `cStmtsToPExprK` has supported early-return-with-fall-
   through since the parse_validate pilot.
-- `Concrete/ProofCore.lean`: `normalizePExpr` extended for the new
+- `Concrete/Proof/ProofCore.lean`: `normalizePExpr` extended for the new
   PExpr variants. `pexprFreeIn` recurses into struct fields and
   field-access objects.
-- `Concrete/Report.lean`: `renderPExpr` and `renderPExprAsLean`
+- `Concrete/Report/Report.lean`: `renderPExpr` and `renderPExprAsLean`
   handle the new variants. Both made `partial` (the recursion
   through `List.map` doesn't satisfy Lean's structural-termination
   checker without it).
@@ -3811,14 +3811,14 @@ E.11.
   invariant per boundary, severity, surface, the documented `try_`
   and `defer` placeholder exceptions for the post-elab gate, and the
   never-delete rule.
-- **Plumbing** (`Concrete/Pipeline.lean`): new `VerifyReport`
+- **Plumbing** (`Concrete/Pipeline/Pipeline.lean`): new `VerifyReport`
   structure carrying per-gate diagnostic lists, with helpers
   `isClean` / `errorCount` / `warningCount` / `allDiagnostics`. New
   `runVerifyGates : ValidatedCore → VerifyReport` runs every gate
   and short-circuits cleanly when a downstream pass refuses to even
   produce its artifact (mono error → post-mono diags; lower error →
   post-lower diags; etc.).
-- **Renderer** (`Concrete/Verify.lean`): `renderVerifyGates`
+- **Renderer** (`Concrete/Check/Verify.lean`): `renderVerifyGates`
   produces a human-readable per-gate banner with `ok` / `warn` /
   `FAIL` status and indented detail per non-clean gate.
 - **Single-program surface**: `concrete <file> --report verify`
@@ -3896,7 +3896,7 @@ Phase D.14.
   reduce --predicate external:<scripts/reduce/...>` invocation.
   Verifies the predicate holds on the original source before
   starting (refuses to reduce a passing program).
-- **Reducer extension** (`Concrete/Reduce.lean`): new
+- **Reducer extension** (`Concrete/Report/Reduce.lean`): new
   `Predicate.external (cmd : String)` constructor. Writes the
   candidate to a temp file, shells out to the command (split on
   whitespace, candidate path appended), returns true iff exit 0.
@@ -3965,7 +3965,7 @@ real bugs, not just historical fixed ones.
   was rewritten to early-return form to ship; the original symptom
   cited E0703 (a sibling dominator code that may have been the
   diagnostic before a verifier refactor).
-- **Root cause**: `Concrete/Lower.lean`'s match lowering calls
+- **Root cause**: `Concrete/IR/Lower.lean`'s match lowering calls
   `setVar` for enum-payload arm bindings, mutating the global var-
   table. Before each arm the lowering correctly restores `vars :=
   preMatchVars`, but at the END of the match the var-table still
@@ -4017,7 +4017,7 @@ The Phase A.1 differential harness has reached its useful steady state. 56 PASS 
 
 ### Semantic-oracle differential harness lands as a regression surface
 
-Phase A.1 + A.2 close: the source-level interpreter (`Concrete/Interp.lean`, `--interp`) is now driven by a corpus harness that compiles every vector to a native binary, runs `--interp`, and compares trimmed stdout. Mismatches are fail-the-build regressions; explicit `interp: ...` skips are recorded as PENDING entries pointing at named interpreter gaps. The companion trust-boundary doc enumerates the interpreter's supported subset and the assumptions that make it a defensible oracle.
+Phase A.1 + A.2 close: the source-level interpreter (`Concrete/Interp/Interp.lean`, `--interp`) is now driven by a corpus harness that compiles every vector to a native binary, runs `--interp`, and compares trimmed stdout. Mismatches are fail-the-build regressions; explicit `interp: ...` skips are recorded as PENDING entries pointing at named interpreter gaps. The companion trust-boundary doc enumerates the interpreter's supported subset and the assumptions that make it a defensible oracle.
 
 - **Harness**: `scripts/tests/test_oracle.sh` reads `tests/oracle/vectors.txt` and produces `ORACLE: PASS=N FAIL=N PENDING=N TOTAL=N`. Compiled and `--interp` paths share the same `<value>\n` contract for `fn main() -> Int` because the SSA wrapper formats the int return as `%lld\n` and `Main.lean`'s `interpProgram` `IO.println`s the int return.
 - **Corpus**: 39 vectors covering fib/arithmetic/recursion, structs, arrays, enums, match, linearity (non-borrow), generics, plus the canonical roadmap examples `parse_validate` and `service_errors`. Initial state: 32 PASS, 0 FAIL, 7 PENDING — borrow/try/string-literal cases (`fixed_capacity`, `result_ok`, `borrow_read`, `string_basic`, `impl_method`).
@@ -4046,9 +4046,9 @@ The roadmap now uses lettered phases (`A`-`N`) with task numbering restarting in
 
 A breadth-first set of adversarial tests organised under `tests/programs/adversarial/<area>/` (newtype, enum_match, borrow, defer, generic, linear, trait_dispatch) exposed three unrelated compiler bugs. Each bug ships with a named regression test under either the area folder or `tests/programs/bug_*.con`, all wired into `make test`.
 
-- **Bug 1 — chained newtypes broke the cast-validity exemption.** `Outer = Middle = Inner = i32` rejected `Middle(Inner(...))` at E0553 because the exemption used `Layout.resolveNewtype` (recurses to the primitive) instead of one-step unwrapping. The constructor wraps one step at a time, so the inner-vs-resolved comparison must be one-step too. Fix in `Concrete/CoreCheck.lean`: replaced the recursing check with a `oneStepInner` helper that finds the immediate inner type only, and try both wrap and unwrap directions independently. `Layout.ntSubstTy` was also promoted from `private` so CoreCheck can reuse it for generic newtypes. Regression: `tests/programs/adversarial/newtype/chained.con`.
-- **Bug 2 — `.0` on a borrowed newtype produced `&Newtype → Inner`.** `&self.0` (and `&mut self.0`) in an inherent impl method emitted a `.cast` from `.ref Newtype` to the inner primitive. CoreCheck's exemption (matching only direct `Newtype ↔ Inner` pairs) rejected it, and codegen would have mishandled the ref→value transition. Fix in `Concrete/Elab.lean`'s field-access path: when the receiver is a ref/refMut, emit `.deref cObj newtypeTy` first so the rebrand cast is `Newtype → Inner` as expected. Regression: `tests/programs/adversarial/newtype/borrow.con`.
-- **Bug 3 — narrow-int field assign elaborated the RHS as `Int`.** `c.n = 100` where `n: i32` elaborated `100` as `Int` (i64) because `elabExpr value` was called with no type hint. Codegen emitted `store i64 100` to a 4-byte field — undefined behaviour that the LLVM optimiser deletes at `-O2`. The bug masked itself under `lli` (which honours the low 4 bytes) and only surfaced when reading back via the native binary. Fix in `Concrete/Elab.lean`'s `.fieldAssign` path: look up the field's declared type from the struct definition and pass it as the value hint, so `100` is elaborated as `i32` directly. Regression: `tests/programs/bug_field_assign_narrow_field.con`.
+- **Bug 1 — chained newtypes broke the cast-validity exemption.** `Outer = Middle = Inner = i32` rejected `Middle(Inner(...))` at E0553 because the exemption used `Layout.resolveNewtype` (recurses to the primitive) instead of one-step unwrapping. The constructor wraps one step at a time, so the inner-vs-resolved comparison must be one-step too. Fix in `Concrete/Check/CoreCheck.lean`: replaced the recursing check with a `oneStepInner` helper that finds the immediate inner type only, and try both wrap and unwrap directions independently. `Layout.ntSubstTy` was also promoted from `private` so CoreCheck can reuse it for generic newtypes. Regression: `tests/programs/adversarial/newtype/chained.con`.
+- **Bug 2 — `.0` on a borrowed newtype produced `&Newtype → Inner`.** `&self.0` (and `&mut self.0`) in an inherent impl method emitted a `.cast` from `.ref Newtype` to the inner primitive. CoreCheck's exemption (matching only direct `Newtype ↔ Inner` pairs) rejected it, and codegen would have mishandled the ref→value transition. Fix in `Concrete/Elab/Elab.lean`'s field-access path: when the receiver is a ref/refMut, emit `.deref cObj newtypeTy` first so the rebrand cast is `Newtype → Inner` as expected. Regression: `tests/programs/adversarial/newtype/borrow.con`.
+- **Bug 3 — narrow-int field assign elaborated the RHS as `Int`.** `c.n = 100` where `n: i32` elaborated `100` as `Int` (i64) because `elabExpr value` was called with no type hint. Codegen emitted `store i64 100` to a 4-byte field — undefined behaviour that the LLVM optimiser deletes at `-O2`. The bug masked itself under `lli` (which honours the low 4 bytes) and only surfaced when reading back via the native binary. Fix in `Concrete/Elab/Elab.lean`'s `.fieldAssign` path: look up the field's declared type from the struct definition and pass it as the value hint, so `100` is elaborated as `i32` directly. Regression: `tests/programs/bug_field_assign_narrow_field.con`.
 
 Coverage added: 15 new adversarial tests across newtype (9), enum_match, borrow, defer, generic, linear, trait_dispatch (1 each), plus the dedicated bug regression. `make test` 771 → 787 pass / 0 fail.
 
@@ -4065,7 +4065,7 @@ The canonical Phase 3 exit checklist is now 19/19 complete. The first-release st
 
 The first cut of the instance-method-dispatch fix exempted *any* `.cast` where either side named a newtype from CoreCheck's cast-validity table. Reviewer caught the regression: `let x: bool = p as bool` and `let p: Port = b as Port` both compiled, bypassing the validated-wrapper contract in `docs/VALIDATED_WRAPPERS.md §2`. This narrows the exemption to the exact pattern Elab actually inserts: one side is a newtype `N`, and the other side equals `N`'s resolved inner type (after generic-arg substitution). Anything else falls through to the standard validity table and gets E0553 if it's not a legitimate cast on its own.
 
-- **Precise wrapper-pair check**: `Concrete/CoreCheck.lean` builds a `Layout.Ctx` from its newtypes list and uses `Layout.resolveNewtype` to compute the inner type for either side; the cast is exempt only when one resolved side equals the other side. Direction-symmetric (covers both wrap and unwrap).
+- **Precise wrapper-pair check**: `Concrete/Check/CoreCheck.lean` builds a `Layout.Ctx` from its newtypes list and uses `Layout.resolveNewtype` to compute the inner type for either side; the cast is exempt only when one resolved side equals the other side. Direction-symmetric (covers both wrap and unwrap).
 - **`hasTypeVar` loophole closed**: the cast-validity skip on type variables also matched any `.named _`, including newtypes. Now `.named n` is treated as a type parameter only when `n` is *not* a known struct, enum, or newtype. This was a pre-existing overbroad skip that the dispatch fix surfaced.
 - **Negative regressions**: `tests/programs/error_newtype_cast_to_unrelated.con` (Port→bool) and `tests/programs/error_newtype_cast_from_unrelated.con` (bool→Port) now reject at E0553. All 11 positive newtype programs still compile and run; all 5 newtype error tests reject; std/pipeline-test/full-suite baselines unchanged.
 
@@ -4075,7 +4075,7 @@ Calling an instance method on a newtype now resolves against the newtype's inher
 
 - **Type identity flows through elaboration**: `resolveTypeE` no longer erases newtype names. A `let p: Port = ...` binding now keeps `p` typed as `.named "Port"` through the rest of Elab, so `p.value()` mangles to `Port_value` and finds the inherent impl. Layout already resolves named types through `Layout.Ctx.newtypes`, so codegen still sees the right size/alignment.
 - **Constructor and `.0` carry the wrapper**: `Port(8080)` now produces a CExpr with type `.named "Port"` (via a representation no-op `.cast`); `p.0` unwraps back to the inner type. For generic newtypes, type args flow from explicit `::<T>` first, otherwise from the call hint (`let w: Wrapper<Int> = Wrapper(100);`).
-- **CoreCheck cast policy newtype-aware**: the cast-validity check in `Concrete/CoreCheck.lean` previously rejected `Int → Wrapper<Int>` at E0553. It now skips validation when either side names a newtype — Layout makes the cast a representation no-op, so the cast-policy table doesn't need to enumerate newtype-vs-inner combinations.
+- **CoreCheck cast policy newtype-aware**: the cast-validity check in `Concrete/Check/CoreCheck.lean` previously rejected `Int → Wrapper<Int>` at E0553. It now skips validation when either side names a newtype — Layout makes the cast a representation no-op, so the cast-policy table doesn't need to enumerate newtype-vs-inner combinations.
 - **Aggregate same-type cast lowering**: surfaced as a regression once newtype-over-`String` (`AsciiText`) started flowing through casts. EmitSSA's same-LLVM-type alias path was emitting `add %struct.X, 0` (invalid LLVM) for first-class aggregates. The same-type case now matches on LLVM kind and round-trips structs/arrays/enums through a stack slot.
 - **Test**: `tests/programs/newtype_method_dispatch.con` exercises both `p.value()` and `p.is_privileged()` on a `Port`. All 11 newtype regression programs (basic, copy, enum_payload, generic, linear, struct_copy_field, validated, adversarial_consume, module_across, summary_import, method_dispatch) compile and run with correct output. All 3 newtype error tests still reject as expected.
 
@@ -4083,7 +4083,7 @@ Calling an instance method on a newtype now resolves against the newtype's inher
 
 Newtypes now cross module boundaries cleanly, with no inner-type erasure and no special-casing required from callers. This closes the second of the two boundary gaps tracked against `docs/VALIDATED_WRAPPERS.md` (only the inherent-method-dispatch gap remains).
 
-- **Public newtypes are importable**: `pub newtype Port = u16;` now lands in the exporting module's `publicNames` (`Concrete/FileSummary.lean`); `import Wrap.{Port};` resolves and brings inherent impl methods along, mirroring the struct path.
+- **Public newtypes are importable**: `pub newtype Port = u16;` now lands in the exporting module's `publicNames` (`Concrete/Resolve/FileSummary.lean`); `import Wrap.{Port};` resolves and brings inherent impl methods along, mirroring the struct path.
 - **No erasure at the boundary**: `resolveImports` previously fed newtypes into the alias map alongside type aliases, which substituted the inner type into every imported signature — so a downstream `Port::try_new` returned `Option<u16>` instead of `Option<Port>`. The alias map is now type-aliases-only; newtype identity is preserved across the boundary, and Layout resolves through `Layout.Ctx.newtypes` natively (the 2026-04-24 fix).
 - **Imported newtypes reach Layout**: `ResolvedImports` gains a `newtypes` field; Check, Elab, and the elaborated `CModule.newtypes` all consume it. EmitSSA's `tyToLLVMTy` (a separate path from `Layout.tyToLLVM`) also resolves through newtypes now, fixing a panic that surfaced once the boundary stopped erasing.
 - **Test identity preserved**: `tests/programs/adversarial_module_newtype_across.con` exercises the full path (cross-module `Port::try_new`, `Option<Port>` pattern match, `.0` extraction); `tests/programs/summary_import_pub_newtype.con` (previously dead) now runs and returns 42; a new negative repro confirms passing a bare `u16` where `Port` is expected still fails type-check across the boundary.
@@ -4111,7 +4111,7 @@ Concrete now has one public `Result`/`Option` story and one enum/static qualific
 
 ### Source-level interpreter / semantic oracle (Phase 1, item 31)
 
-`Concrete/Interp.lean` — source-level interpreter operating on validated Core IR. CLI: `concrete <file.con> --interp`. Evaluates the predictable/core subset without codegen (no LLVM, no clang).
+`Concrete/Interp/Interp.lean` — source-level interpreter operating on validated Core IR. CLI: `concrete <file.con> --interp`. Evaluates the predictable/core subset without codegen (no LLVM, no clang).
 
 - **Supported**: integer/bool, let/assign, if/else, function calls, structs (creation + field access + field assign), enums (creation + match with field bindings), arrays (literal + indexing + index assign), bounded for/while loops, cast, binary ops (arithmetic + comparison + bitwise XOR/AND/OR), unary ops, break/continue
 - **Unsupported (explicit diagnostics)**: borrow, deref, float, string, char, defer, try, alloc, whileExpr, fnRef
@@ -4658,7 +4658,7 @@ Three policy constraints:
 
 Policy runs after CoreCheck, before monomorphization. Only project modules are checked (dependencies are excluded). `crypto_verify` example now uses `[policy] predictable = true, deny = ["Unsafe"]` as a demonstration.
 
-Implemented in `Concrete/Policy.lean` with `parsePolicy` (TOML parsing) and `enforcePolicy` (constraint checking). Wired into both `compileBuild` and `compileTests` in Main.lean.
+Implemented in `Concrete/Check/Policy.lean` with `parsePolicy` (TOML parsing) and `enforcePolicy` (constraint checking). Wired into both `compileBuild` and `compileTests` in Main.lean.
 
 ### Error context chains
 
@@ -4672,7 +4672,7 @@ test.con:2:5: error[check]: type mismatch in let binding 'x': expected i64, got 
   = while checking function 'foo'
 ```
 
-**Infrastructure** (`Concrete/Diagnostic.lean`):
+**Infrastructure** (`Concrete/Report/Diagnostic.lean`):
 - `Diagnostic.addContext` / `Diagnostics.addContext` — prepend a context frame
 - `withContext` — monadic combinator for `ExceptT Diagnostics m`
 - `Except.addContext` — pure combinator for `Except Diagnostics`
@@ -4717,7 +4717,7 @@ The core compiler pipeline now emits the same structured `Diagnostic` shape (`se
 
 **Predicates:** `parse-error`, `resolve-error`, `check-error`, `elab-error`, `core-check-error`, `mono-error`, `lower-error`, `consistency-violation`, `verify-warning`, `crash`. Substring matching via colon: `check-error:expected Int`.
 
-For programs that don't parse (parse-error predicate), falls back to line-based reduction. Implemented in `Concrete/Reduce.lean`.
+For programs that don't parse (parse-error predicate), falls back to line-based reduction. Implemented in `Concrete/Report/Reduce.lean`.
 
 ### Compiler identity in debug bundles
 
@@ -4768,7 +4768,7 @@ The capture pipeline tracks 9 stages (parse, resolve, check, elaborate, coreChec
 
 **New CLI mode:** `--report verify` runs both post-Elab (warnings) and post-Mono (errors) verifiers.
 
-**New file:** `Concrete/Verify.lean` — recursive IR walker that checks type predicates across all CExpr/CStmt/CMatchArm nodes, struct/enum fields, extern fn signatures, and constants.
+**New file:** `Concrete/Check/Verify.lean` — recursive IR walker that checks type predicates across all CExpr/CStmt/CMatchArm nodes, struct/enum fields, extern fn signatures, and constants.
 
 ### Pass invariants and contracts completed
 
@@ -5307,10 +5307,10 @@ Two Phase G items landed, simplifying the language surface and tightening the tr
 - The three-way model is now sharper: `with(Cap)` = semantic effects, `with(Unsafe)` = foreign boundary authority, `trusted` = reviewed pointer containment.
 
 What changed:
-- `Concrete/AST.lean`: removed `hasBang` field from `FnDef`
-- `Concrete/Parser.lean`: removed `!` sugar parsing from `parseFnDef` and `parseFnDefOrDecl`
-- `Concrete/Format.lean`: removed `bangStr` emission
-- `Concrete/Check.lean`: removed `isTrustedFn` from TypeEnv, loop-depth check now applies uniformly
+- `Concrete/Frontend/AST.lean`: removed `hasBang` field from `FnDef`
+- `Concrete/Frontend/Parser.lean`: removed `!` sugar parsing from `parseFnDef` and `parseFnDefOrDecl`
+- `Concrete/Frontend/Format.lean`: removed `bangStr` emission
+- `Concrete/Check/Check.lean`: removed `isTrustedFn` from TypeEnv, loop-depth check now applies uniformly
 
 Test suite: 766 tests passing, 0 failures.
 
@@ -5330,13 +5330,13 @@ Four Phase F items landed, covering capability ergonomics, reporting, aliases, a
 **Item 7 — Bounded semantic error recovery**: `checkStmts` (Check.lean) and `elabStmts` (Elab.lean) now catch per-statement errors, restore the type environment on failure, and add placeholder types for failed let-declarations to prevent cascading errors. All accumulated diagnostics are thrown together. Statement-level granularity avoids guessing at expression-level placeholders while catching independent errors.
 
 What changed:
-- `Concrete/AST.lean`: `CapAlias` structure, `CapSet.expandAliases`, `Module.expandCapAliases`
-- `Concrete/Parser.lean`: `cap Name = Cap1 + Cap2;` parsing at module level
-- `Concrete/Pipeline.lean`: alias expansion in `Pipeline.parse`
-- `Concrete/Check.lean`: per-statement error recovery in `checkStmts`; consumes `ResolvedProgram`; capability error hints
-- `Concrete/Elab.lean`: per-statement error recovery in `elabStmts`; consumes `ResolvedProgram`
-- `Concrete/CoreCheck.lean`: capability error hints
-- `Concrete/Report.lean`: `authorityReport` and `proofReport` functions
+- `Concrete/Frontend/AST.lean`: `CapAlias` structure, `CapSet.expandAliases`, `Module.expandCapAliases`
+- `Concrete/Frontend/Parser.lean`: `cap Name = Cap1 + Cap2;` parsing at module level
+- `Concrete/Pipeline/Pipeline.lean`: alias expansion in `Pipeline.parse`
+- `Concrete/Check/Check.lean`: per-statement error recovery in `checkStmts`; consumes `ResolvedProgram`; capability error hints
+- `Concrete/Elab/Elab.lean`: per-statement error recovery in `elabStmts`; consumes `ResolvedProgram`
+- `Concrete/Check/CoreCheck.lean`: capability error hints
+- `Concrete/Report/Report.lean`: `authorityReport` and `proofReport` functions
 - `Main.lean`: authority/proof report dispatch
 - `docs/FFI.md`: authority wrapper patterns, capability aliases
 - `docs/PASSES.md`: error accumulation, cap alias expansion, pipeline signature fixes
@@ -5405,11 +5405,11 @@ The final two partial checklist items are now done, completing the compiler impr
 **Item 4 — Post-cleanup SSA verification**: `Pipeline.lower` now runs `ssaVerifyProgram` both before and after `ssaCleanupProgram`. This mechanically guarantees that cleanup transformations (dead block elimination, trivial phi folding, empty block folding, constant folding, strength reduction, store-load forwarding) preserve all 8 SSA invariants (dominance, phi correctness, no aggregate phis, branch safety, unique defs, call arity, return coverage, type consistency). Previously verification ran only pre-cleanup — cleanup output was trusted by construction but not mechanically checked.
 
 What changed:
-- `Concrete/Pipeline.lean`: second `ssaVerifyProgram` call after cleanup
-- `Concrete/SSAVerify.lean`: module docstring updated to document dual verification; `isAggregateType` comment explains why generic heap types (Vec, HashMap, etc.) are excluded from the aggregate check
+- `Concrete/Pipeline/Pipeline.lean`: second `ssaVerifyProgram` call after cleanup
+- `Concrete/IR/SSAVerify.lean`: module docstring updated to document dual verification; `isAggregateType` comment explains why generic heap types (Vec, HashMap, etc.) are excluded from the aggregate check
 - `docs/PASSES.md`: pipeline diagram, SSAVerify section, and invariant chain updated to reflect post-cleanup verification
 
-**Item 5 — Builtin extraction from EmitSSA**: 568 lines of builtin LLVM IR generation extracted from `EmitSSA.lean` into `Concrete/EmitBuiltins.lean`. The new module exports `getBuiltinFns` (string ops, conversion ops) and `getVecBuiltinFns` (vec ops per element size) and imports only `Concrete.LLVM` and `Concrete.Layout` — no dependency on SSA IR, Core IR, or `EmitSSAState`. This proves the builtins are structurally decoupled from the SSA→LLVM translation. `EmitSSA.lean` shrinks from 1642 to 1099 lines.
+**Item 5 — Builtin extraction from EmitSSA**: 568 lines of builtin LLVM IR generation extracted from `EmitSSA.lean` into `Concrete/Backend/EmitBuiltins.lean`. The new module exports `getBuiltinFns` (string ops, conversion ops) and `getVecBuiltinFns` (vec ops per element size) and imports only `Concrete.LLVM` and `Concrete.Layout` — no dependency on SSA IR, Core IR, or `EmitSSAState`. This proves the builtins are structurally decoupled from the SSA→LLVM translation. `EmitSSA.lean` shrinks from 1642 to 1099 lines.
 
 Test suite: 663 tests passing, 0 failures.
 
@@ -5442,16 +5442,16 @@ Phase D (testing, backend, and trust multipliers) is fully complete. Final items
 
 ### Phase D item 4 complete: FFI/ABI maturity
 
-`docs/ABI.md` documents what's stable (FFI-safe scalars, repr(C)/packed/align layout, extern fn), what's intentionally unstable (non-repr struct layout, enum representation, pass-by-ptr convention, symbol naming), platform assumptions (64-bit only, hardcoded sizes), the FFI safety model, and a cross-platform verification matrix. 4 layout verification tests added to `Concrete/PipelineTest.lean` (scalar sizes, builtin sizes, repr(C) layout, pass-by-ptr decisions). Test suite: 651 tests (32 pass-level).
+`docs/ABI.md` documents what's stable (FFI-safe scalars, repr(C)/packed/align layout, extern fn), what's intentionally unstable (non-repr struct layout, enum representation, pass-by-ptr convention, symbol naming), platform assumptions (64-bit only, hardcoded sizes), the FFI safety model, and a cross-platform verification matrix. 4 layout verification tests added to `Concrete/Pipeline/PipelineTest.lean` (scalar sizes, builtin sizes, repr(C) layout, pass-by-ptr decisions). Test suite: 651 tests (32 pass-level).
 
 ### Phase D2 complete: backend contract, ValidatedCore, and proof workflow
 
 Phase D2 is done. The compiler now has explicit artifact boundaries with a proof-oriented pipeline, formal evaluation semantics with proven properties, and a documented SSA backend contract.
 
 What landed:
-- **`ValidatedCore` artifact** (`Concrete/Pipeline.lean`): explicit pipeline type. `Pipeline.coreCheck` is the only constructor; `Pipeline.monomorphize` takes `ValidatedCore`. `Pipeline.elaborate` returns `ElaboratedProgram` (elab + canonicalize only), `Pipeline.coreCheck` validates it.
-- **`ProofCore` extraction** (`Concrete/ProofCore.lean`): filters `ValidatedCore` into the pure, proof-eligible fragment — pure functions (empty capability set, not trusted), safe structs (no repr(C)/packed), safe enums (no builtin overrides). Reports inclusion/exclusion counts.
-- **Formal proof workflow** (`Concrete/Proof.lean`): evaluation semantics for a pure Core fragment (integers, booleans, arithmetic, let bindings, conditionals, function calls). Embeds abs, max, clamp. 17 proven theorems: concrete correctness (9), structural lemmas (3), conditional reduction (2), arithmetic (3).
+- **`ValidatedCore` artifact** (`Concrete/Pipeline/Pipeline.lean`): explicit pipeline type. `Pipeline.coreCheck` is the only constructor; `Pipeline.monomorphize` takes `ValidatedCore`. `Pipeline.elaborate` returns `ElaboratedProgram` (elab + canonicalize only), `Pipeline.coreCheck` validates it.
+- **`ProofCore` extraction** (`Concrete/Proof/ProofCore.lean`): filters `ValidatedCore` into the pure, proof-eligible fragment — pure functions (empty capability set, not trusted), safe structs (no repr(C)/packed), safe enums (no builtin overrides). Reports inclusion/exclusion counts.
+- **Formal proof workflow** (`Concrete/Proof/Proof.lean`): evaluation semantics for a pure Core fragment (integers, booleans, arithmetic, let bindings, conditionals, function calls). Embeds abs, max, clamp. 17 proven theorems: concrete correctness (9), structural lemmas (3), conditional reduction (2), arithmetic (3).
 - **SSA backend contract** (`docs/PASSES.md`): documents SSAVerify guarantees (8 invariants), SSACleanup guarantees (8 postconditions), EmitSSA assumptions (5 preconditions), and the invariant chain.
 
 ### Phase D1 complete: testing infrastructure
@@ -5459,9 +5459,9 @@ What landed:
 Phase D1 is done — all "done means" criteria met. Testing is now a first-class compiler subsystem with dependency-aware selection, pass-level coverage for all compiler passes, and a documented coverage matrix.
 
 What landed:
-- **Pass-level Lean tests** (`Concrete/PipelineTest.lean`, 28 tests): parse (4), frontend/check/elab (8), monomorphize (2), SSA lowering (2), SSA verify (3), SSA cleanup (2), SSA emit (2), full pipeline (5). Each pass tested in isolation on in-memory source strings — no clang, no file I/O, <1s total. Tests both success and error paths.
+- **Pass-level Lean tests** (`Concrete/Pipeline/PipelineTest.lean`, 28 tests): parse (4), frontend/check/elab (8), monomorphize (2), SSA lowering (2), SSA verify (3), SSA cleanup (2), SSA emit (2), full pipeline (5). Each pass tested in isolation on in-memory source strings — no clang, no file I/O, <1s total. Tests both success and error paths.
 - **Test metadata**: `test_manifest.toml` provides per-test reference metadata (category, kind, passes, profile, owner_pass — not consumed by the runner, serves as documentation and future tooling source). `test_dep_map.toml` maps 27 compiler source files to affected test sections and categories (consumed by `run_tests.sh --affected`).
-- **Dependency-aware selection**: `run_tests.sh --affected` auto-detects changed files via `git diff` and runs only affected test sections. Conservative mapping: `--affected Concrete/Report.lean` runs 72 tests (report + passlevel); `--affected Concrete/Lower.lean` runs 248 tests (positive + codegen + O2 + passlevel). Unknown files fall back to the full suite.
+- **Dependency-aware selection**: `run_tests.sh --affected` auto-detects changed files via `git diff` and runs only affected test sections. Conservative mapping: `--affected Concrete/Report/Report.lean` runs 72 tests (report + passlevel); `--affected Concrete/IR/Lower.lean` runs 248 tests (positive + codegen + O2 + passlevel). Unknown files fall back to the full suite.
 - **Coverage matrix and determinism policy** (`docs/TESTING.md`): full coverage matrix by failure mode (17 categories) and by compiler pass (12 passes), determinism rules (fixed seeds, no wall-clock dependence, 3 timeout tiers, network isolation by default, parallel safety, quarantine/repair policy), compile-time baselines, and failure isolation documentation.
 - **Compiler output cache**: file-keyed cache, 26/57 hits per fast run, avoids redundant recompilation for multi-assertion report tests.
 - **Failure artifact preservation**: `.test-failures/` with timestamped output and exact rerun commands.
@@ -5668,7 +5668,7 @@ Validated by four independent regression tests and a full IntMap (user-defined h
   `Parse -> Resolve -> Check -> Elab -> CoreCanonicalize -> CoreCheck -> Mono -> Lower -> SSAVerify -> SSACleanup -> EmitSSA -> clang`
 - Added explicit Core IR, elaboration, monomorphization, SSA lowering, SSA verification, SSA cleanup, and SSA-consuming codegen
 - Removed the legacy AST backend and `--compile-legacy`
-- Added `Concrete/Pipeline.lean` with explicit artifact types:
+- Added `Concrete/Pipeline/Pipeline.lean` with explicit artifact types:
   - `ParsedProgram`
   - `SummaryTable`
   - `ResolvedProgram`
@@ -5709,7 +5709,7 @@ Validated by four independent regression tests and a full IntMap (user-defined h
 - Added `#[repr(C)]` for structs
 - Added `#[repr(packed)]` and `#[repr(align(N))]`
 - Added `sizeof::<T>()` and `alignof::<T>()`
-- Centralized layout logic in `Concrete/Layout.lean`
+- Centralized layout logic in `Concrete/Check/Layout.lean`
 - Unified FFI-safety checks and LLVM type-definition generation through `Layout`
 - Fixed aligned struct/enum layout and enum payload offset handling
 - Fixed builtin `Option` / `Result` layout to size payloads from actual instantiations instead of hardcoded `i64` assumptions

@@ -16,7 +16,7 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-R="Concrete/Report.lean"; O="Concrete/ObligationCore.lean"; M="Main.lean"
+R="Concrete/Report/Report.lean"; O="Concrete/Proof/ObligationCore.lean"; M="Main.lean"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }

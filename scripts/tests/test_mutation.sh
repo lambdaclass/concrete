@@ -30,7 +30,7 @@ MUT_NEW=()
 MUT_DESC=()
 
 # 1. Layout: i32/u32/f32 size 4 → 8  (tySize)
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("  | .i32 | .u32 | .float32 => 4
   | .i16 | .u16 => 2")
 MUT_NEW+=("  | .i32 | .u32 | .float32 => 8
@@ -38,7 +38,7 @@ MUT_NEW+=("  | .i32 | .u32 | .float32 => 8
 MUT_DESC+=("Layout: tySize i32/u32/f32 4 → 8")
 
 # 2. Layout: i32/u32/f32 alignment 4 → 1  (tyAlign)
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("partial def tyAlign (ctx : Ctx) : Ty → Nat
   | .int | .uint | .float64 => 8
   | .i32 | .u32 | .float32 => 4")
@@ -48,7 +48,7 @@ MUT_NEW+=("partial def tyAlign (ctx : Ctx) : Ty → Nat
 MUT_DESC+=("Layout: tyAlign i32/u32/f32 4 → 1")
 
 # 3. Layout: unit size 0 → 4
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("  | .unit => 0
   | .string => Builtin.stringSize")
 MUT_NEW+=("  | .unit => 4
@@ -56,13 +56,13 @@ MUT_NEW+=("  | .unit => 4
 MUT_DESC+=("Layout: tySize unit 0 → 4")
 
 # 4. Layout: string size 24 → 16
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("def stringSize : Nat := 24")
 MUT_NEW+=("def stringSize : Nat := 16")
 MUT_DESC+=("Layout: string size 24 → 16")
 
 # 5. Layout: string not pass-by-ptr
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
   match ty with
   | .string => true")
@@ -72,7 +72,7 @@ MUT_NEW+=("def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
 MUT_DESC+=("Layout: isPassByPtr string → false")
 
 # 6. Layout: isFFISafe rejects integers
-MUT_FILE+=("Concrete/Layout.lean")
+MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("def isFFISafe (ctx : Ctx) (ty : Ty) : Bool :=
   match ty with
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true")
@@ -82,7 +82,7 @@ MUT_NEW+=("def isFFISafe (ctx : Ctx) (ty : Ty) : Bool :=
 MUT_DESC+=("Layout: isFFISafe rejects integers")
 
 # 7. Shared: floats not numeric
-MUT_FILE+=("Concrete/Shared.lean")
+MUT_FILE+=("Concrete/Resolve/Shared.lean")
 MUT_OLD+=("def isNumeric : Ty → Bool
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
   | .float64 | .float32 => true")
@@ -92,7 +92,7 @@ MUT_NEW+=("def isNumeric : Ty → Bool
 MUT_DESC+=("Shared: isNumeric rejects floats")
 
 # 8. Shared: i32 not integer
-MUT_FILE+=("Concrete/Shared.lean")
+MUT_FILE+=("Concrete/Resolve/Shared.lean")
 MUT_OLD+=("def isInteger : Ty → Bool
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true")
 MUT_NEW+=("def isInteger : Ty → Bool
@@ -100,7 +100,7 @@ MUT_NEW+=("def isInteger : Ty → Bool
 MUT_DESC+=("Shared: isInteger excludes i32")
 
 # 9. Check: disable use-after-move detection
-MUT_FILE+=("Concrete/Check.lean")
+MUT_FILE+=("Concrete/Check/Check.lean")
 MUT_OLD+=("    | .consumed =>
       throwCheck (.variableUsedAfterMove name) span")
 MUT_NEW+=("    | .consumed => return () -- MUTATION: skip use-after-move
@@ -108,7 +108,7 @@ MUT_NEW+=("    | .consumed => return () -- MUTATION: skip use-after-move
 MUT_DESC+=("Check: disable use-after-move")
 
 # 10. Check: disable loop-depth linearity check
-MUT_FILE+=("Concrete/Check.lean")
+MUT_FILE+=("Concrete/Check/Check.lean")
 MUT_OLD+=("      if info.loopDepth < env.loopDepth then
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_NEW+=("      if false then -- MUTATION: loop-depth disabled
@@ -116,7 +116,7 @@ MUT_NEW+=("      if false then -- MUTATION: loop-depth disabled
 MUT_DESC+=("Check: disable loop-depth linearity")
 
 # 11. Check: disable scope-exit unconsumed check
-MUT_FILE+=("Concrete/Check.lean")
+MUT_FILE+=("Concrete/Check/Check.lean")
 MUT_OLD+=("      if !info.isCopy && info.state != .consumed && info.state != .reserved then
         throwCheck (.linearVariableNeverConsumed name) span")
 MUT_NEW+=("      if false then -- MUTATION: scope check disabled
@@ -124,7 +124,7 @@ MUT_NEW+=("      if false then -- MUTATION: scope check disabled
 MUT_DESC+=("Check: disable scope-exit linearity")
 
 # 12. CoreCheck: disable match exhaustiveness
-MUT_FILE+=("Concrete/CoreCheck.lean")
+MUT_FILE+=("Concrete/Check/CoreCheck.lean")
 MUT_OLD+=("            if !seenVariants.contains vn then
               addCCError (.matchMissingVariant name vn)")
 MUT_NEW+=("            if !seenVariants.contains vn then
@@ -132,7 +132,7 @@ MUT_NEW+=("            if !seenVariants.contains vn then
 MUT_DESC+=("CoreCheck: disable match exhaustiveness")
 
 # 13. CoreCheck: disable capability discipline
-MUT_FILE+=("Concrete/CoreCheck.lean")
+MUT_FILE+=("Concrete/Check/CoreCheck.lean")
 MUT_OLD+=("      if !capsContain env.currentCapSet calleeCaps then
         addCCError (.insufficientCapabilities fn (capSetToString calleeCaps) (capSetToString env.currentCapSet))")
 MUT_NEW+=("      if !capsContain env.currentCapSet calleeCaps then
@@ -140,7 +140,7 @@ MUT_NEW+=("      if !capsContain env.currentCapSet calleeCaps then
 MUT_DESC+=("CoreCheck: disable capability check")
 
 # 14. CoreCheck: allow break outside loop
-MUT_FILE+=("Concrete/CoreCheck.lean")
+MUT_FILE+=("Concrete/Check/CoreCheck.lean")
 MUT_OLD+=("    if !env.inLoop then
       addCCError .breakOutsideLoop")
 MUT_NEW+=("    if false then -- MUTATION: break check disabled
@@ -148,7 +148,7 @@ MUT_NEW+=("    if false then -- MUTATION: break check disabled
 MUT_DESC+=("CoreCheck: allow break outside loop")
 
 # 15. Lower: arrayIndex GEP uses .int instead of elem type
-MUT_FILE+=("Concrete/Lower.lean")
+MUT_FILE+=("Concrete/IR/Lower.lean")
 MUT_OLD+=("    emit (.gep gepDst aVal [iVal] ty)
     let loadDst ← freshReg
     emit (.load loadDst (.reg gepDst ty) ty)")
@@ -158,7 +158,7 @@ MUT_NEW+=("    emit (.gep gepDst aVal [iVal] .int)
 MUT_DESC+=("Lower: arrayIndex GEP uses .int")
 
 # 16. EmitSSA: isReprCStruct always false
-MUT_FILE+=("Concrete/EmitSSA.lean")
+MUT_FILE+=("Concrete/Backend/EmitSSA.lean")
 MUT_OLD+=("private def isReprCStruct (s : EmitSSAState) : Ty → Bool
   | .named name => (Layout.lookupStruct (layoutCtxOf s) name).any (·.isReprC)
   | _ => false")
@@ -167,7 +167,7 @@ MUT_NEW+=("private def isReprCStruct (_s : EmitSSAState) : Ty → Bool
 MUT_DESC+=("EmitSSA: isReprCStruct always false")
 
 # 17. SSAVerify: disable aggregate phi check
-MUT_FILE+=("Concrete/SSAVerify.lean")
+MUT_FILE+=("Concrete/IR/SSAVerify.lean")
 MUT_OLD+=("      let ctx := if isAggregateType ty then
         addSSAError ctx (.aggregatePhi b.label dst (reprStr ty))
       else ctx")
@@ -177,7 +177,7 @@ MUT_NEW+=("      let ctx := if false then -- MUTATION: agg phi disabled
 MUT_DESC+=("SSAVerify: disable aggregate phi check")
 
 # 18. SSAVerify: disable phi missing-predecessor check
-MUT_FILE+=("Concrete/SSAVerify.lean")
+MUT_FILE+=("Concrete/IR/SSAVerify.lean")
 MUT_OLD+=("        if phiLabels.contains p then ctx
         else addSSAError ctx (.phiMissingPredecessor b.label p)")
 MUT_NEW+=("        if phiLabels.contains p then ctx

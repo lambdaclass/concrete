@@ -183,6 +183,6 @@ exercised indirectly by the wrong-code corpus.
 
 - `docs/WRONG_CODE_CORPUS.md` — the corpus contract.
 - `tests/wrong-code/README.md` — operations quickstart.
-- `Concrete/Reduce.lean` — the in-tree shrinker.
+- `Concrete/Report/Reduce.lean` — the in-tree shrinker.
 - `scripts/reduce/expect-*.sh` — predicate scripts.
 - `scripts/tests/minimize_wrong_code.sh` — the wrapper.

@@ -37,7 +37,7 @@ exercised.
 
 ## Root Cause
 
-**File:** `Concrete/Check.lean`, `checkModule` signature-table construction.
+**File:** `Concrete/Check/Check.lean`, `checkModule` signature-table construction.
 
 `allSigs` is laid out as
 `imported ++ fnSigs ++ builtin ++ extern ++ submodule ++ impl`, but the

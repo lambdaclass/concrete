@@ -104,7 +104,7 @@ roadmap's flagship/example work.
 - Trusted boundary guide (`docs/TRUSTED_BOUNDARY_GUIDE.md`)
 - Freestanding split defined (`docs/FREESTANDING_SPLIT.md`,
   `docs/STANDALONE_VS_PROJECT.md`, `docs/PROJECT_BOOTSTRAP.md`)
-- Source-level interpreter as semantic oracle (`Concrete/Interp.lean`,
+- Source-level interpreter as semantic oracle (`Concrete/Interp/Interp.lean`,
   `--interp`)
 
 Verification: `./scripts/tests/run_tests.sh --trust-gate`.

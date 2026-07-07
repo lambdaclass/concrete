@@ -169,13 +169,13 @@ The proof boundary sits after CoreCheck and before Mono, materialized as the `Va
 - normalized by CoreCanonicalize
 - validated by CoreCheck (capabilities, types, match coverage, declaration legality)
 
-`ProofCore` (`Concrete/ProofCore.lean`) extracts the pure, proof-eligible fragment from `ValidatedCore`:
+`ProofCore` (`Concrete/Proof/ProofCore.lean`) extracts the pure, proof-eligible fragment from `ValidatedCore`:
 
 **Eligible:** Pure functions (empty capability set, not trusted, no extern calls), safe algebraic data types (no repr(C)/packed).
 
 **Excluded:** Functions with capabilities, trusted/unsafe functions, extern functions, entry points.
 
-`Concrete/Proof.lean` defines formal evaluation semantics for the pure Core fragment and proves properties (abs, max, clamp correctness, structural lemmas, conditional reduction, arithmetic). See [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the full definition of the proof-eligible subset, and [ARCHITECTURE.md](ARCHITECTURE.md) for the proof architecture.
+`Concrete/Proof/Proof.lean` defines formal evaluation semantics for the pure Core fragment and proves properties (abs, max, clamp correctness, structural lemmas, conditional reduction, arithmetic). See [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the full definition of the proof-eligible subset, and [ARCHITECTURE.md](ARCHITECTURE.md) for the proof architecture.
 
 ## High-Integrity Profile Direction
 
@@ -255,7 +255,7 @@ ProofCore ────── proof-eligible subset of validated Core
      ├── pure functions only (no caps, no trusted, no extern)
      ├── safe algebraic data types
      ├── --report proof shows eligibility
-     └── Concrete/Proof.lean has formal semantics + theorems
+     └── Concrete/Proof/Proof.lean has formal semantics + theorems
 
 High-Integrity ── future profile: same language, stricter rules
      │

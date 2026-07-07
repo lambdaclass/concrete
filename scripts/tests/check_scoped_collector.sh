@@ -2,7 +2,7 @@
 # Unified scoped collector gate (ROADMAP Phase 3 #3 — adversarial regression).
 #
 # Phase 3 introduces ONE scoped context collector (`scopedWalk` in
-# Concrete/Report.lean). Obligation families migrate onto it one by one; asserts
+# Concrete/Report/Report.lean). Obligation families migrate onto it one by one; asserts
 # are the first migrated family. This gate is the adversarial guard the project
 # requires for every Phase-3 pipeline change: it pins the path-fact threading on
 # a fixture that exercises EACH mechanism the collector must get right, AND the

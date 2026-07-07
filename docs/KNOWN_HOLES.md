@@ -168,7 +168,7 @@ must stay at zero front-end violations.
 (resource-owning) element stayed live after being moved into the array — it could be
 `destroy()`'d *and* owned by the array: a double-free. Found by a systematic value-flow
 audit (does every site that receives a value *move* it exactly once?), not by a crash.
-Fixed in `Concrete/Check.lean` (`.arrayLit` now consumes linear ident elements; reuse
+Fixed in `Concrete/Check/Check.lean` (`.arrayLit` now consumes linear ident elements; reuse
 is E0205). Locked by `scripts/tests/check_linear_conservation.sh`, which walks every
 value-flow site — let-binding, array-literal, struct-literal, struct destructure,
 function argument, return, match scrutinee — and asserts move-exactly-once. Same audit
@@ -182,7 +182,7 @@ fixed linear struct destructure (was a fail-closed E0208 over-rejection); see
 (`match e { E::A { t } => { } }`) — and not consumed before that scope exited used
 to leak: the branch/arm merge dropped the local before the function-level
 `checkScopeExit` ran, so it was never seen. Closed by the three pieces the H6
-thread always pointed at (ROADMAP Phase 6 #13a), in `Concrete/Check.lean`:
+thread always pointed at (ROADMAP Phase 6 #13a), in `Concrete/Check/Check.lean`:
 
 1. **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is
    consumed; no-op for Copy sources, incl. `&T`). Before, a bare-ident let-RHS only
@@ -215,7 +215,7 @@ skipped without a silent forget). Gate: `scripts/tests/check_linear_nested_scope
 rejected with E0708: a loop counter declared inside the branch leaked into the
 env, so the next loop's header phi referenced the first loop's counter from a
 non-dominating block. Found by `scripts/tests/fuzz_differential.py` and minimized.
-Fix (`Concrete/Lower.lean`): after an if-statement merges, restrict the live
+Fix (`Concrete/IR/Lower.lean`): after an if-statement merges, restrict the live
 variable set to the names that existed before the `if` — the scope cleanup the
 `match` lowering already did (WC-0004) — so branch-local declarations don't leak
 into a later construct's phi reconciliation. The fuzzer now runs WITH loops (the
@@ -226,7 +226,7 @@ Regression: `tests/programs/loop_after_branch_loop.con` (oracle vector).
 
 **Fixed (the `_` / discard half; the named-binding remainder is tracked as H9).**
 The headline rule: **`_` can never silently consume a value that owns a resource,
-at any site, and `let _` is not a discard device.** Closed in `Concrete/Check.lean`:
+at any site, and `let _` is not a discard device.** Closed in `Concrete/Check/Check.lean`:
 
 - `let _ = e;` is **removed** entirely → **E0289**. `_` is only a pattern wildcard
   (ignore a component while you consume the whole), never a device that makes an
@@ -263,8 +263,8 @@ further down. Deferred *design* items that are not holes are listed under
 ### H8. Array indexing is not bounds-checked at runtime — CLOSED 2026-06-28
 
 **Fixed.** Raw `a[i]` / `a[i] = v` on a fixed array is now runtime bounds-checked:
-`Concrete/Lower.lean` emits a call to the shared `@__cc_bounds_check` helper
-(`Concrete/EmitSSA.lean`) before every array GEP — the read path (`arrayIndex`),
+`Concrete/IR/Lower.lean` emits a call to the shared `@__cc_bounds_check` helper
+(`Concrete/Backend/EmitSSA.lean`) before every array GEP — the read path (`arrayIndex`),
 the write path (`storeToPlace`), and the borrow/place path (`placeAddr`, covering
 `&a[i]`/`&mut a[i]` and nested `m[i][j]` / `a[i].f`). A single unsigned compare
 `(u64)i < len` rejects both a negative index and `i >= len`; on failure the helper
@@ -324,7 +324,7 @@ the value model: `get -> Option<V>` (Copy cell, `V: Copy`); `with_value` /
 `remove`/`pop` to move out (Move cell); raw pointers (`*const`/`*mut`) for
 low-level/unsafe access. No lifetimes, regions, or `from()`. Locked by
 `scripts/tests/check_returned_ref_provenance.sh` (now asserts ref-returns are
-rejected) + the blanket signature rule in `Concrete/Check.lean` (`checkFn`) +
+rejected) + the blanket signature rule in `Concrete/Check/Check.lean` (`checkFn`) +
 the fn-type / generic-instantiation rules in `resolveType` / call sites. The
 `from(param)` escape valve remains deeply deferred and evidence-gated (ROADMAP
 Phase 7 #8e).
@@ -366,7 +366,7 @@ inside a `while i < n { … ; i = i + 1 }`) miscompiled: the variable got both a
 promoted alloca (from `&i`, per C8) **and** an SSA phi, the two diverged, the
 init `store 0` landed inside the loop body (resetting the counter every
 iteration), and the loop condition disappeared — a silent infinite loop.
-**Fixed** (`Concrete/Lower.lean`): a scalar whose address is taken anywhere in
+**Fixed** (`Concrete/IR/Lower.lean`): a scalar whose address is taken anywhere in
 the loop body is now promoted to a stable alloca BEFORE the loop (memory-backed,
 single source of truth) rather than phi-carried — so it is driven entirely
 through memory, like aggregates. Promoted scalars are excluded from loop / `if` /
@@ -403,7 +403,7 @@ of the local, because local scalars were lowered as SSA register values, not
 addressable stack slots — a store through the pointer did not reach `x`. This
 was the architectural root that the nested-place fix (C5) worked around and the
 last manifestation of the addressability problem. Fixed: `addrOfLocal`
-(`Concrete/Lower.lean`) promotes a local to a stable stack alloca on first
+(`Concrete/IR/Lower.lean`) promotes a local to a stable stack alloca on first
 address-take, so the pointer aliases the variable; `lookupVar`/`setVar` route
 all reads/writes through the alloca, including writes before and after the
 address-take.
@@ -449,7 +449,7 @@ handled only single-level assignment targets, and a compound base was lowered
 as a value copy whose mutation was discarded. Deeper root: locals are SSA
 register values, not addressable slots, so single-level workarounds (struct
 copy-writeback; arrays happen to be alloca-backed) did not compose. Fixed by a
-unified `storeToPlace` (`Concrete/Lower.lean`) that writes compound places in
+unified `storeToPlace` (`Concrete/IR/Lower.lean`) that writes compound places in
 place by value-writeback, terminating at a root variable or a reference/deref
 base. `.fieldAssign` and `.arrayIndexAssign` now delegate to it.
 - **Locked by:** `scripts/tests/check_nested_field_write.sh` (9 execution
@@ -466,7 +466,7 @@ and discarded nested args, so `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>`
 collapsed into one `tag_for_Pair` / one `%Hold_Pair` despite different layouts
 (inner 16 bytes vs 2 bytes) — a silent miscompile (ABI corruption on field
 access). Arrays/refs/pointers/fn-types fell through to `"unknown"`, collapsing
-even more. Fixed: `tyToSuffix` (`Concrete/Mono.lean`) is now total and keys on
+even more. Fixed: `tyToSuffix` (`Concrete/IR/Mono.lean`) is now total and keys on
 the FULL type with bracketed nested args (`Hold_T_Pair_T_Int_E_E`), so distinct
 instantiations get distinct symbols and struct types. Both the function-name
 (`monoNameFor`) and struct-name manglers route through it, staying consistent.
@@ -513,7 +513,7 @@ proof_fingerprint, requires, ensures, invariant, variant, intrinsic, langitem)
 and rejects unknowns (E0001) with the known list as a hint.
 - **Locked by:** `tests/programs/error_unknown_attribute.con`.
 - **Maintenance:** a new attribute must be added to the `knownAttrs` list in
-  `Concrete/Parser.lean` as well as wired into its consumer, or it will be
+  `Concrete/Frontend/Parser.lean` as well as wired into its consumer, or it will be
   rejected.
 
 ---

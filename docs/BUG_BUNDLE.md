@@ -164,5 +164,5 @@ reduction; that is `make test-reducer-smoke`'s job.
 
 - `docs/WRONG_CODE_CORPUS.md` — the manifest schema and lifecycle.
 - `docs/REDUCER_WORKFLOW.md` — the reducer that feeds this pipeline.
-- `Concrete/DebugBundle.lean` — the in-tree pipeline-state capture
+- `Concrete/Report/DebugBundle.lean` — the in-tree pipeline-state capture
   used as the structural skeleton.

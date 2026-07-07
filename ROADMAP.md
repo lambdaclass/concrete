@@ -305,6 +305,15 @@ silently park Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
 audience, or stop — before any Phase 11+ item may start.
 
+If the trial fails because human proof authoring is too expensive, the next
+experiment is not "verification failed as a product idea." Run the same
+workload through the Phase 9 LLM-guided proof-synthesis loop and measure review
+cost instead of authoring cost: the non-author reviews the spec, assumptions,
+and replayed evidence while the tool/agent searches for invariants, lemmas, and
+proof scripts under kernel verification. The gate result should distinguish
+"the discipline is not worth it even with synthesis" from "manual proof
+authoring is not worth it."
+
 ### Stdlib runway checkpoint (recorded 2026-07-07)
 
 The stdlib survey changes the next ordering without changing the language
@@ -1696,6 +1705,38 @@ lemmas, and actionable failure diagnostics.
     evidence classes are allowed, and why automation did not close it.
     Diagnostics should point to the already-generated artifact or next action
     instead of introducing another parallel proof surface.
+14a. Add **LLM-guided proof synthesis, kernel-verified** as a first-class
+    proof-authoring workflow, not as prose-only AI help. Command shape:
+    `concrete prove --synthesize <module.fn>` (or an equivalent subcommand)
+    runs a closed loop: Concrete emits exact obligations; an LLM proposes loop
+    invariants, helper lemmas, or Lean proof scripts; Lean's kernel /
+    kernel-backed decision procedures check the artifact; failed attempts are
+    minimized and fed back into the next attempt; and only replayed
+    kernel-checked artifacts may upgrade evidence. LLM output is never
+    evidence by itself. Reports must record model/tool identity, attempt count,
+    generated assumptions, rejected assumptions, introduced trusted boundaries,
+    final evidence class, replay command, and whether the final artifact works
+    without the LLM. Design target:
+    `docs/PROOF_SYNTHESIS.md`.
+
+    Gates: synthesize a loop invariant for a small loop proof; synthesize a
+    missing helper lemma; repair a stale proof after source drift; reject a
+    plausible but false proof; reject any attempt that introduces a new
+    assumption, trusted fact, extern/Unsafe dependency, or solver-trusted fact
+    without policy approval; and produce a replay bundle that verifies without
+    the LLM or network. Add red-team fixtures where the agent proposes a proof
+    of the wrong theorem, a vacuous spec, an unapproved assumption, and a proof
+    script that typechecks only after weakening the claim.
+
+    Agent discoverability is part of the feature, not documentation garnish.
+    The installed binary must expose a machine-readable feature/command catalog
+    (for example `concrete agent features --json` or `concrete help --json`)
+    that tells LLM tools which proof commands exist, what artifacts they emit,
+    what evidence classes mean, which replay command validates a result, and
+    which actions are forbidden without policy approval. The same facts should
+    be reachable through any later MCP server, but the CLI/JSON catalog is the
+    source of truth so agents can discover the workflow without reading the
+    repository docs.
 15. Add proof-result caching once proof artifacts and fingerprints are stable.
     Cache key: toolchain version, source fingerprint, spec/proof link,
     obligation id, ProofKit version, backend engine version, and policy mode.

@@ -48,7 +48,7 @@ ck "obligation_link names the ObligationCore ledger" "'obligation-ledger' in d['
 echo "=== single producer: loadProject builds the store; commands read it ==="
 # the CompilerLedger is constructed in exactly one place (loadProject), not per
 # command. As of #16b, loadProject lives in the Concrete.Project boundary module.
-nprod="$(grep -cE "CompilerLedger\).linkObligations|CompilerLedger.empty" Concrete/Project.lean || true)"
+nprod="$(grep -cE "CompilerLedger\).linkObligations|CompilerLedger.empty" Concrete/Resolve/Project.lean || true)"
 [ "$nprod" = "1" ] && ok "exactly one CompilerLedger producer (loadProject in Concrete.Project)" \
   || no "expected one CompilerLedger producer, found $nprod"
 # build / test / check all go through loadProject (so they share the store).

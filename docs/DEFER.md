@@ -26,7 +26,7 @@ Implemented semantics (locked by the gate):
   `a`.)
 - **Runs on every exit path.** Deferred calls run on normal fall-through, on
   early `return`, on `break`/`continue` out of the scope, and on `?`/`Err`
-  propagation. (`Concrete/Lower.lean`: `emitFrameDeferredCalls` at scope pop,
+  propagation. (`Concrete/IR/Lower.lean`: `emitFrameDeferredCalls` at scope pop,
   `emitAllDeferredCalls` on return/Err, `emitDeferredUntilLoop` on break/continue.)
 - **Per-scope.** Each block scope has its own deferred list; exiting a block runs
   that block's defers, inner-to-outer.

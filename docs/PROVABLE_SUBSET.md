@@ -17,9 +17,9 @@ For the user-facing proof contract, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md). 
 
 The provable subset is the fragment of Concrete programs that can be formally reasoned about in Lean 4. It currently has two related boundaries:
 
-1. **ProofCore** (`Concrete/ProofCore.lean`) — the actual compiler extractor over validated Core IR
-2. **`--report proof`** (`Concrete/Report.lean`) — a stricter report that approximates which functions are currently good proof targets
-3. **Proof** (`Concrete/Proof.lean`) — formal evaluation semantics and proved properties over the proof fragment
+1. **ProofCore** (`Concrete/Proof/ProofCore.lean`) — the actual compiler extractor over validated Core IR
+2. **`--report proof`** (`Concrete/Report/Report.lean`) — a stricter report that approximates which functions are currently good proof targets
+3. **Proof** (`Concrete/Proof/Proof.lean`) — formal evaluation semantics and proved properties over the proof fragment
 
 ProofCore does not define its own semantics. It is a filter, not a rival IR. The semantic authority remains CoreCheck; ProofCore identifies which validated Core declarations the Lean proof infrastructure can reason about.
 
@@ -136,7 +136,7 @@ ProofCore extraction happens at the `ValidatedCore` stage, not after monomorphiz
 
 ## Proved Properties (Current)
 
-`Concrete/Proof.lean` holds proof INFRASTRUCTURE plus the hardcoded
+`Concrete/Proof/Proof.lean` holds proof INFRASTRUCTURE plus the hardcoded
 `provedFunctions` proof path; the flagship example-correctness theorems now live
 in per-example modules `Concrete.Examples.<Ex>.Proofs` (see CHANGELOG, 2026-06-06).
 

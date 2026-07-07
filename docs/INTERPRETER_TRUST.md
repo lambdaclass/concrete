@@ -1,6 +1,6 @@
 # Interpreter trust boundary
 
-Status: design + reference. Pinned to `Concrete/Interp.lean`.
+Status: design + reference. Pinned to `Concrete/Interp/Interp.lean`.
 
 This document defines the trust boundary of the source-level interpreter
 that is invoked via `concrete <file.con> --interp` and used as the
@@ -53,7 +53,7 @@ lowering, SSA emission, LLVM, clang, or any linker.
   value is the enum's first variant (tag 0 — by convention `Ok` /
   `Some`), unwrap its single payload field; otherwise return the
   whole enum from the current function. Mirrors the
-  `Concrete/Lower.lean` lowering exactly
+  `Concrete/IR/Lower.lean` lowering exactly
 - String literals — `IVal.string` carries the value; `&"literal"`
   materializes the string under a synthetic env name keyed off env
   length so successive borrows do not collide

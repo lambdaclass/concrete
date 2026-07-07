@@ -12,6 +12,11 @@ should use this file to decide which assurance annotations to suggest, which
 ones are future-only, and which evidence checks must be run before claiming that
 a program is proved.
 
+For the planned LLM-guided proof-synthesis loop, see
+[PROOF_SYNTHESIS.md](PROOF_SYNTHESIS.md). Agents may search for invariants,
+lemmas, and proof scripts, but their output is never evidence until Concrete's
+ordinary replay path and Lean's kernel check it.
+
 ## Current Foundation
 
 Concrete already has several SPARK-adjacent ingredients:
@@ -218,4 +223,3 @@ Agents should follow these rules when writing or reviewing Concrete code:
 - Phase 18: package/import evidence summaries and authority/evidence budgets.
 - Phase 19: editor/LSP diagnostics for failed invariants, frame facts,
   dependency facts, and proof obligations.
-

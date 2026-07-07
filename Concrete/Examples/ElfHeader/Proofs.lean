@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 
 /-!
 # elf_header — example proofs

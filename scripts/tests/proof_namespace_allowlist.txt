@@ -1,4 +1,4 @@
-# Allowlist of theorem/lemma names permitted in Concrete/Proof.lean.
+# Allowlist of theorem/lemma names permitted in Concrete/Proof/Proof.lean.
 #
 # After the theorem-namespace migration (ROADMAP item: move example proofs out of
 # Concrete.Proof.*), example-CORRECTNESS theorems for the seven flagships live in
@@ -8,7 +8,7 @@
 # registered spec PExprs, eval scaffolding, `specs`/`provedFunctions` tables, etc.
 # are `def`s, not theorems, so they stay freely.
 #
-# `check_proof_namespace.sh` fails if Concrete/Proof.lean declares a theorem/lemma
+# `check_proof_namespace.sh` fails if Concrete/Proof/Proof.lean declares a theorem/lemma
 # whose name is NOT on this list. When that happens:
 #   * if it is example-correctness  -> define it under Concrete.Examples.<Ex>.Proofs
 #   * if it is genuine infrastructure -> add the name here (a deliberate, reviewed act)

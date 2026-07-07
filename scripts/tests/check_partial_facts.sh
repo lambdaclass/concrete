@@ -90,8 +90,8 @@ echo "=== STRUCTURAL: the tolerant driver yields only Diagnostics, never Validat
 # proof/codegen artifact. Pin the signature so a refactor cannot widen it.
 # the def exists and its declared return type is (Diagnostics × Bool) — the
 # signature spans multiple lines, so match the return-type line on its own.
-if grep -q "def runFrontendDiagnostics" Concrete/Pipeline.lean \
-   && grep -qF ": IO (Diagnostics × Bool)" Concrete/Pipeline.lean; then
+if grep -q "def runFrontendDiagnostics" Concrete/Pipeline/Pipeline.lean \
+   && grep -qF ": IO (Diagnostics × Bool)" Concrete/Pipeline/Pipeline.lean; then
   ok "runFrontendDiagnostics : IO (Diagnostics × Bool) (no ValidatedCore)"
 else
   no "tolerant driver signature changed — re-audit the safety boundary"

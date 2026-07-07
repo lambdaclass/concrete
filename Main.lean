@@ -1,8 +1,8 @@
 import Concrete
-import Concrete.ObligationCore
-import Concrete.CompilerLedger
-import Concrete.Backend
-import Concrete.Project
+import Concrete.Proof.ObligationCore
+import Concrete.Report.CompilerLedger
+import Concrete.Backend.Backend
+import Concrete.Resolve.Project
 
 open Concrete
 

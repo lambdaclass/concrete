@@ -8,7 +8,7 @@ say what it does on that axis — **creates** an owned value, **moves**
 (consumes) an operand, **borrows** a place, **copies** (Copy only),
 **overwrites** storage, or **rejects**. A form with no row here cannot land:
 `scripts/tests/check_value_flow_spec.sh` extracts the constructor lists from
-`Concrete/AST.lean` and fails if any constructor is missing from this table.
+`Concrete/Frontend/AST.lean` and fails if any constructor is missing from this table.
 When you add a constructor, add its row AND a reject/accept fixture to the
 gate named in the row.
 

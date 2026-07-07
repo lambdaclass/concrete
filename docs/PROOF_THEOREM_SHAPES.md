@@ -2,7 +2,7 @@
 
 Status: active reference (Phase 2, items 3 and 5)
 
-This document defines the canonical theorem shapes, naming rules, property forms, readability standards, and explicit non-goals for Concrete-to-Lean proofs. Generated stubs (`--report lean-stubs`) and hand-written proofs in `Concrete/Proof.lean` must conform to these shapes.
+This document defines the canonical theorem shapes, naming rules, property forms, readability standards, and explicit non-goals for Concrete-to-Lean proofs. Generated stubs (`--report lean-stubs`) and hand-written proofs in `Concrete/Proof/Proof.lean` must conform to these shapes.
 
 ## Theorem categories
 

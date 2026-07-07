@@ -12,7 +12,7 @@
 #   UPDATE_PHASE1_SNAPSHOTS=1 bash scripts/tests/check_phase1_contracts.sh
 #
 # See examples/contract_negatives/README.md for the per-class explanation and
-# Concrete/ProofSoundness.lean (R-22..R-28) for the soundness justification.
+# Concrete/Proof/ProofSoundness.lean (R-22..R-28) for the soundness justification.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

@@ -10,14 +10,14 @@ The test system has four layers, ordered by cost:
 
 | Layer | Tool | Cost | What it catches |
 |-------|------|------|-----------------|
-| **Pass-level** | `Concrete/PipelineTest.lean` (Lean executable) | <1s, no I/O | Parse errors, type errors, elaboration bugs, monomorphization bugs, SSA verify/cleanup invariants, emit correctness |
+| **Pass-level** | `Concrete/Pipeline/PipelineTest.lean` (Lean executable) | <1s, no I/O | Parse errors, type errors, elaboration bugs, monomorphization bugs, SSA verify/cleanup invariants, emit correctness |
 | **Artifact** | `run_tests.sh --report`, `--codegen` | ~1s each, no clang | Report output regressions, SSA structure, LLVM IR shape, codegen differentials |
 | **End-to-end** | `run_tests.sh` positive/negative | ~0.5s each, needs clang | Full compile-and-run behavior, runtime correctness |
 | **Stress/integration** | `run_tests.sh` integration tests | ~1s each, needs clang | Multi-feature interactions, deep call chains, realistic programs |
 
 ### Pass-Level Lean Tests
 
-`Concrete/PipelineTest.lean` exercises individual compiler passes directly on in-memory source strings. No subprocess, no clang, no file I/O.
+`Concrete/Pipeline/PipelineTest.lean` exercises individual compiler passes directly on in-memory source strings. No subprocess, no clang, no file I/O.
 
 Current coverage (32 tests):
 - **Parse (4)**: valid programs parse, malformed input rejected
@@ -128,15 +128,15 @@ Named real-program corpus (13 tests):
 
 ```bash
 ./run_tests.sh --affected                     # auto-detect from git diff
-./run_tests.sh --affected Concrete/Lower.lean  # explicit file list
+./run_tests.sh --affected Concrete/IR/Lower.lean  # explicit file list
 ```
 
 The mapping from compiler source files to test sections lives in `test_dep_map.toml`. The mapping is conservative — when in doubt, more sections run.
 
 Example mappings:
-- `Concrete/Check.lean` → positive, negative, passlevel (type/cap/linearity tests)
-- `Concrete/Lower.lean` → positive, codegen, O2, passlevel (lowering + backend tests)
-- `Concrete/Report.lean` → report (report output tests only)
+- `Concrete/Check/Check.lean` → positive, negative, passlevel (type/cap/linearity tests)
+- `Concrete/IR/Lower.lean` → positive, codegen, O2, passlevel (lowering + backend tests)
+- `Concrete/Report/Report.lean` → report (report output tests only)
 - `std/src/*` → stdlib, collection (stdlib tests only)
 - Unknown files → full suite (safe fallback)
 
@@ -146,7 +146,7 @@ After an `--affected` run, the summary shows which files triggered which section
 
 ```
 === Affected mode ===
-  changed files: Concrete/Lower.lean,Concrete/SSACleanup.lean
+  changed files: Concrete/IR/Lower.lean,Concrete/IR/SSACleanup.lean
   sections: codegen,O2,passlevel,positive
 ```
 
@@ -454,7 +454,7 @@ All 468 compilable test programs pass with zero violations. Integrated into `--f
 
 ### Phase 6: Verifier Passes (complete)
 
-Goal: catch internal compiler invariant violations before bad state leaks downstream. Three verifier passes implemented in `Concrete/Verify.lean`:
+Goal: catch internal compiler invariant violations before bad state leaks downstream. Three verifier passes implemented in `Concrete/Check/Verify.lean`:
 
 - **Post-Elab verifier** (`verifyNoPlaceholders`): detects `Ty.placeholder` surviving elaboration. Available only via `--report verify` (not wired into pipeline). 14 programs with try/defer expressions retain placeholder types — documented intentional exception, resolved during lowering.
 - **Post-Mono verifier** (`verifyPostMono`): hard gate — detects `Ty.typeVar` surviving monomorphization. Blocks compilation. Skips generic definitions (only checks monomorphized copies). Wired into `Pipeline.monomorphize`.
@@ -538,7 +538,7 @@ Goal: compiler diagnostics accumulate human-readable context as errors propagate
 
 Goal: make `[policy]` in `Concrete.toml` a first-class compile-error mechanism, not just report-side analysis.
 
-`Concrete/Policy.lean` implements `ProjectPolicy` with three constraint types:
+`Concrete/Check/Policy.lean` implements `ProjectPolicy` with three constraint types:
 - **`predictable = true`**: enforces the predictable-execution profile (no recursion, alloc, FFI, blocking) as compile errors, reusing `Report.checkPredictableModule`
 - **`deny = ["Unsafe", ...]`**: forbids listed capabilities via `CFnDef.capSet.normalize` checking
 - **`require-proofs = true`**: requires Lean proofs for all eligible functions, rejecting `.missing`, `.stale`, `.blocked` obligation statuses

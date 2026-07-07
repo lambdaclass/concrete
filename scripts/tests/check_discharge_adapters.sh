@@ -4,7 +4,7 @@
 # Every status-changing backend is a typed `DischargeAdapter` with a DECLARED set
 # of evidence classes it may produce; `DischargeAdapter.fold` applies a result
 # only when the class is in that set. The firewall is therefore structural:
-#   - the COMPILE-TIME `example`s in Concrete/Report.lean prove smtAdapter /
+#   - the COMPILE-TIME `example`s in Concrete/Report/Report.lean prove smtAdapter /
 #     runtimeAdapter / assumptionAdapter / oracleAdapter declare NO static-proof
 #     class, and that the fold rejects a foreign class — kernel-checked, so a
 #     green build already guarantees the firewall;
@@ -57,10 +57,10 @@ ckjson "assume VC is 'assumed', never a proof class" "$ASM" "" "$PATH" \
   "all(v['status']=='assumed' for v in d['vcs'] if v['kind']=='assume') and any(v['kind']=='assume' for v in d['vcs'])"
 
 echo "=== structural firewall is kernel-checked at build time ==="
-grep -q "def proofClasses" Concrete/Report.lean \
-  && grep -q "smtAdapter.allowed.all (fun c => !proofClasses.contains c)" Concrete/Report.lean \
+grep -q "def proofClasses" Concrete/Report/Report.lean \
+  && grep -q "smtAdapter.allowed.all (fun c => !proofClasses.contains c)" Concrete/Report/Report.lean \
   && ok "compile-time firewall examples present (build green ⇒ proven)" \
-  || no "firewall examples missing from Concrete/Report.lean"
+  || no "firewall examples missing from Concrete/Report/Report.lean"
 
 echo ""
 echo "DISCHARGE-ADAPTERS: PASS=$PASS  FAIL=$FAIL"

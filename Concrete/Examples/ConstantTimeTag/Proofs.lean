@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 
 /-!
 # constant_time_tag — example proofs

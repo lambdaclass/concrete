@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Value-flow constructor-coverage gate (ROADMAP 13c / 13e prevention program).
 #
-# Every surface AST constructor (Expr / MatchArm / Stmt in Concrete/AST.lean)
+# Every surface AST constructor (Expr / MatchArm / Stmt in Concrete/Frontend/AST.lean)
 # must have a row in docs/VALUE_FLOW_SPEC.md declaring its value-flow behavior
 # (creates / moves / borrows / copies / overwrites / rejects) and naming the
 # gate that locks it. The H13-H17 sweep existed because value flow is
@@ -17,7 +17,7 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-AST="Concrete/AST.lean"
+AST="Concrete/Frontend/AST.lean"
 SPEC="docs/VALUE_FLOW_SPEC.md"
 [ -f "$AST" ] || { echo "error: $AST missing" >&2; exit 2; }
 [ -f "$SPEC" ] || { echo "error: $SPEC missing — write the value-flow spec (ROADMAP 13c)" >&2; exit 1; }
@@ -83,7 +83,7 @@ echo "=== callArg is CONFINED to call/method/static-call argument checking ==="
 # pin + the spec), never a convenience escape — that would recreate the
 # forgot-to-consume bug class (H13/H14).
 CALLARG_PIN=18
-CALLARG_ACTUAL="$(grep -c '\.callArg' Concrete/Check.lean)"
+CALLARG_ACTUAL="$(grep -c '\.callArg' Concrete/Check/Check.lean)"
 if [ "$CALLARG_ACTUAL" -eq "$CALLARG_PIN" ]; then
   ok "callArg use-site count matches the pin ($CALLARG_PIN)"
 else

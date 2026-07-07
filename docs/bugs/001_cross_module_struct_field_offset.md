@@ -24,7 +24,7 @@ mod Main {
 
 ## Root Cause
 
-**File:** `Concrete/Elab.lean`, `elabModule` function (line ~1066–1121)
+**File:** `Concrete/Elab/Elab.lean`, `elabModule` function (line ~1066–1121)
 
 During elaboration, the `ElabEnv` correctly includes all struct definitions (`imports.structs ++ m.structs`) for type checking. However, the resulting `CModule` only included **local** struct definitions:
 
@@ -49,7 +49,7 @@ This meant every field access generated `gep ptr, 0` regardless of which field w
 
 ## Fix
 
-**File:** `Concrete/Elab.lean`
+**File:** `Concrete/Elab/Elab.lean`
 
 Include imported structs (deduplicated against local names) in the `CModule` output:
 

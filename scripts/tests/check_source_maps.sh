@@ -42,11 +42,11 @@ printf '%s' "$H" | grep -qE "capability_at_line\.con:${FNLINE}:" \
   || no "human output missing the source location"
 
 echo "=== plumbing is pinned: declSpan is carried Core-side and populated by Elab ==="
-grep -qE "declSpan : Option Span" Concrete/Core.lean \
+grep -qE "declSpan : Option Span" Concrete/Elab/Core.lean \
   && ok "CFnDef carries declSpan" || no "CFnDef.declSpan missing"
-grep -qE "declSpan := some f\.span" Concrete/Elab.lean \
+grep -qE "declSpan := some f\.span" Concrete/Elab/Elab.lean \
   && ok "Elab populates declSpan from the source FnDef span" || no "Elab does not populate declSpan"
-grep -qE "currentFnSpan := f\.declSpan" Concrete/CoreCheck.lean \
+grep -qE "currentFnSpan := f\.declSpan" Concrete/Check/CoreCheck.lean \
   && ok "core-check threads declSpan as the diagnostic span" || no "core-check does not use declSpan"
 
 echo "=== obligations from project code cite their source location ==="
@@ -74,9 +74,9 @@ printf '%s' "$SSA" | grep -qE "^; source: divide @ line ${OBLINE}\$" \
   && ok "the SSA dump names divide's source line ($OBLINE)" \
   || no "SSA dump missing source-line provenance for divide"
 # pin the Core→SSA plumbing.
-grep -qE "declSpan : Option Span" Concrete/SSA.lean \
+grep -qE "declSpan : Option Span" Concrete/IR/SSA.lean \
   && ok "SFnDef carries declSpan" || no "SFnDef.declSpan missing"
-grep -qE "declSpan := f\.declSpan" Concrete/Lower.lean \
+grep -qE "declSpan := f\.declSpan" Concrete/IR/Lower.lean \
   && ok "lowerFn carries declSpan Core→SSA" || no "lowerFn drops declSpan"
 
 echo "=== declaration-level diagnostics carry the declaration span ==="
@@ -88,19 +88,19 @@ printf '%s' "$CD" | grep -qE "error_copy_destroy\.con:${CDLINE}:" \
   && ok "Copy/Destroy conflict points at the struct declaration (line $CDLINE)" \
   || no "Copy/Destroy conflict missing its declaration span"
 # pin the decl-span plumbing for structs/enums/traits/trait-impls.
-grep -qE "declSpan := some sd\.span" Concrete/Elab.lean \
+grep -qE "declSpan := some sd\.span" Concrete/Elab/Elab.lean \
   && ok "Elab populates CStructDef.declSpan" || no "Elab drops struct decl spans"
-grep -qE "mkDeclDiag .* sd\.declSpan" Concrete/CoreCheck.lean \
+grep -qE "mkDeclDiag .* sd\.declSpan" Concrete/Check/CoreCheck.lean \
   && ok "core-check decl diagnostics attach the declaration span" \
   || no "mkDeclDiag drops declaration spans"
 
 echo "=== import-resolution diagnostics carry the import span ==="
-grep -qE "span := some imp\.span" Concrete/FileSummary.lean \
+grep -qE "span := some imp\.span" Concrete/Resolve/FileSummary.lean \
   && ok "unknown-module / not-public errors point at the import statement" \
   || no "import-resolution diagnostics are location-less"
 
 echo "=== ssa-verify diagnostics carry the function declaration span ==="
-grep -qE "span := ctx\.declSpan" Concrete/SSAVerify.lean \
+grep -qE "span := ctx\.declSpan" Concrete/IR/SSAVerify.lean \
   && ok "ssa-verify errors attach the function declSpan" \
   || no "ssa-verify errors are location-less"
 

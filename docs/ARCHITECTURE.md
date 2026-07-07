@@ -21,6 +21,26 @@ Source -> Parse -> Resolve -> Check -> Elab -> CoreCanonicalize -> CoreCheck -> 
 
 The old AST backend is gone. The current compiler goes through the full Core -> SSA pipeline, with structured diagnostics across the semantic passes.
 
+## Source Layout
+
+`Concrete/` is grouped into pipeline-phase subdirectories (2026-07-07 — the
+flat 44-file layout became hard to navigate). Lean module namespaces are
+independent of file paths, so this is purely an `import`-path grouping; the
+`namespace Concrete` declarations are unchanged.
+
+- `Concrete/Frontend/` — `Token Lexer Parser AST Format`
+- `Concrete/Resolve/` — `Resolve FileSummary Shared Intrinsic BuiltinSigs Project`
+- `Concrete/Elab/` — `Core CoreCanonicalize Elab`
+- `Concrete/Check/` — `Check CoreCheck Verify Policy Layout`
+- `Concrete/IR/` — `SSA SSACleanup SSAVerify Mono Lower`
+- `Concrete/Backend/` — `Backend EmitSSA EmitLLVM EmitBuiltins LLVM`
+- `Concrete/Interp/` — `Interp`
+- `Concrete/Proof/` — `Proof ProofCore ProofSoundness ObligationCore Sha256Spec`
+- `Concrete/Report/` — `Report Diagnostic CompilerLedger DebugBundle Reduce Profile`
+- `Concrete/Pipeline/` — `Pipeline PipelineTest`
+- `Concrete/ProofKit.lean` + `Concrete/ProofKit/` and `Concrete/Examples/` are
+  pre-existing subsystem subtrees, left in place.
+
 ## Target Proof/Audit Pipeline
 
 The backend path and the proof/audit path are intentionally separate.
@@ -71,11 +91,11 @@ Recent architecture-level cleanups worth calling out:
 - the first planned testing-strategy expansion is complete: parser fuzzing, property tests, trace tests, report consistency tests, and selected differential tests now exercise the pipeline more directly
 - stdlib `#[test]` execution now runs through the real compiler path via `concrete std/src/lib.con --test`, and recent parser/lowering/codegen fixes were driven by making that path actually execute the stdlib test corpus
 
-Most string-based semantic dispatch has been replaced by `IntrinsicId` lookup (`Concrete/Intrinsic.lean`). Some string matching remains at true foreign-symbol boundaries (extern fn names, linker aliases) where it is unavoidable. The intrinsic boundary is now explicit and testable.
+Most string-based semantic dispatch has been replaced by `IntrinsicId` lookup (`Concrete/Resolve/Intrinsic.lean`). Some string matching remains at true foreign-symbol boundaries (extern fn names, linker aliases) where it is unavoidable. The intrinsic boundary is now explicit and testable.
 
 ## Artifact Flow
 
-The compiler defines named artifact types in `Concrete/Pipeline.lean`:
+The compiler defines named artifact types in `Concrete/Pipeline/Pipeline.lean`:
 
 - `ParsedProgram`
 - `SummaryTable`
@@ -161,9 +181,9 @@ Keep as-is:
 
 Done:
 
-- `ValidatedCore` is a named pipeline artifact (`Concrete/Pipeline.lean`); `Pipeline.coreCheck` is the only constructor
-- `ProofCore` extracts the pure, proof-eligible fragment (`Concrete/ProofCore.lean`)
-- `Concrete/Proof.lean` defines formal evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness; literal evaluation; conditional reduction; arithmetic)
+- `ValidatedCore` is a named pipeline artifact (`Concrete/Pipeline/Pipeline.lean`); `Pipeline.coreCheck` is the only constructor
+- `ProofCore` extracts the pure, proof-eligible fragment (`Concrete/Proof/ProofCore.lean`)
+- `Concrete/Proof/Proof.lean` defines formal evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness; literal evaluation; conditional reduction; arithmetic)
 - `Pipeline.monomorphize` takes `ValidatedCore` — the type system enforces that validation happened
 
 Still change:
@@ -307,7 +327,7 @@ Recent backend cleanups:
 
 ## Core IR Design
 
-The core IR is a smaller, stricter language — not another AST. Defined in `Concrete/Core.lean`.
+The core IR is a smaller, stricter language — not another AST. Defined in `Concrete/Elab/Core.lean`.
 
 Includes:
 - literals, locals, calls
@@ -326,7 +346,7 @@ Excludes:
 
 ### Proof-Oriented Core Direction
 
-`ProofCore` (`Concrete/ProofCore.lean`) is a restricted,
+`ProofCore` (`Concrete/Proof/ProofCore.lean`) is a restricted,
 proof-oriented view of validated Core. It is the Lean-facing proof
 IR, but it is not a separate semantic authority — the semantic
 authority remains CoreCheck / validated Core. See
@@ -348,7 +368,7 @@ pipeline.
 - Extern functions and FFI types
 - Entry-point functions (main)
 
-**Formal semantics** (`Concrete/Proof.lean`) define evaluation for a pure Core fragment:
+**Formal semantics** (`Concrete/Proof/Proof.lean`) define evaluation for a pure Core fragment:
 
 - Integer/boolean literals, arithmetic, comparisons
 - Let bindings, if/then/else, function calls
@@ -413,7 +433,7 @@ Each pass guarantees specific properties about its output:
 
 ### A1: Define Core IR
 
-New file: `Concrete/Core.lean`
+New file: `Concrete/Elab/Core.lean`
 
 Define `CoreTy`, `CoreExpr`, `CoreStmt`, `CoreFn`, `CoreModule`.
 
@@ -421,7 +441,7 @@ Define `CoreTy`, `CoreExpr`, `CoreStmt`, `CoreFn`, `CoreModule`.
 
 ### A2: Elaboration Phase
 
-New file: `Concrete/Elab.lean`
+New file: `Concrete/Elab/Elab.lean`
 
 Convert resolved AST -> Core IR.
 
@@ -429,7 +449,7 @@ Convert resolved AST -> Core IR.
 
 ### A3: Resolution Phase
 
-New file: `Concrete/Resolve.lean`
+New file: `Concrete/Resolve/Resolve.lean`
 
 Extract name resolution, module resolution, and symbol binding from `Check.lean` into a dedicated pass.
 
@@ -443,7 +463,7 @@ Introduce an explicit summary layer between parsing and body-level checking.
 
 ### A4: Core Validation
 
-New file: `Concrete/CoreCheck.lean`
+New file: `Concrete/Check/CoreCheck.lean`
 
 Type check, capability check, and validate legality on Core IR.
 
@@ -489,7 +509,7 @@ Add and stabilize the lowering pass that produces SSA as the backend-oriented IR
 
 ### A9b: SSA Verify / Cleanup
 
-New files: `Concrete/SSAVerify.lean`, `Concrete/SSACleanup.lean`
+New files: `Concrete/IR/SSAVerify.lean`, `Concrete/IR/SSACleanup.lean`
 
 Validate SSA invariants and perform structural cleanup before codegen.
 
@@ -499,23 +519,23 @@ Validate SSA invariants and perform structural cleanup before codegen.
 
 Build mechanized proofs over the validated Core IR.
 
-**Status:** Started. `Concrete/Proof.lean` defines evaluation semantics for a pure Core fragment and proves 17 theorems (abs/max/clamp correctness, structural lemmas, conditional reduction, arithmetic). `Concrete/ProofCore.lean` extracts the proof-eligible subset from `ValidatedCore`. Scope is still narrow — structs, enums, match, recursive functions, and source-to-Core traceability remain.
+**Status:** Started. `Concrete/Proof/Proof.lean` defines evaluation semantics for a pure Core fragment and proves 17 theorems (abs/max/clamp correctness, structural lemmas, conditional reduction, arithmetic). `Concrete/Proof/ProofCore.lean` extracts the proof-eligible subset from `ValidatedCore`. Scope is still narrow — structs, enums, match, recursive functions, and source-to-Core traceability remain.
 
 ## Architecture Priority Table
 
 | Priority | Phase | Description | New files | Status |
 |----------|-------|-------------|-----------|--------|
-| 1 | A1 | Core IR definition | `Concrete/Core.lean` | **DONE** |
-| 2 | A2 | Elaboration phase | `Concrete/Elab.lean` | **DONE** |
-| 3 | A3 | Resolution phase cleanup | `Concrete/Resolve.lean` | **DONE** |
-| 4 | A4 | Core validation | `Concrete/CoreCheck.lean` | **DONE enough** |
-| 5 | A5 | Codegen consumes SSA IR | `Concrete/EmitSSA.lean` | **DONE** |
-| 6 | A6 | Structured diagnostics | `Concrete/Diagnostic.lean` | **DONE enough** |
+| 1 | A1 | Core IR definition | `Concrete/Elab/Core.lean` | **DONE** |
+| 2 | A2 | Elaboration phase | `Concrete/Elab/Elab.lean` | **DONE** |
+| 3 | A3 | Resolution phase cleanup | `Concrete/Resolve/Resolve.lean` | **DONE** |
+| 4 | A4 | Core validation | `Concrete/Check/CoreCheck.lean` | **DONE enough** |
+| 5 | A5 | Codegen consumes SSA IR | `Concrete/Backend/EmitSSA.lean` | **DONE** |
+| 6 | A6 | Structured diagnostics | `Concrete/Report/Diagnostic.lean` | **DONE enough** |
 | 7 | A7 | Builtin vs stdlib boundary | documentation + migration | Active |
-| 8 | A8 | Monomorphization cleanup | `Concrete/Mono.lean` | **DONE** |
-| 9 | A9 | SSA / lowering IR | `Concrete/Lower.lean` | **DONE** |
-| 10 | A9b | SSA verify / cleanup | `Concrete/SSAVerify.lean`, `Concrete/SSACleanup.lean` | **DONE** |
-| 11 | A10 | Formal kernel proofs | `Concrete/Proof.lean`, `Concrete/ProofCore.lean` | **Started** (17 theorems, pure fragment) |
+| 8 | A8 | Monomorphization cleanup | `Concrete/IR/Mono.lean` | **DONE** |
+| 9 | A9 | SSA / lowering IR | `Concrete/IR/Lower.lean` | **DONE** |
+| 10 | A9b | SSA verify / cleanup | `Concrete/IR/SSAVerify.lean`, `Concrete/IR/SSACleanup.lean` | **DONE** |
+| 11 | A10 | Formal kernel proofs | `Concrete/Proof/Proof.lean`, `Concrete/Proof/ProofCore.lean` | **Started** (17 theorems, pure fragment) |
 
 ## Internal Semantic Spec Notes
 

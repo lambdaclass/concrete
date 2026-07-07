@@ -21,7 +21,7 @@ fn main() -> i32 {
 
 ## Root Cause
 
-Two issues in `Concrete/Lower.lean` line 1460 (`arrayIndexAssign` case):
+Two issues in `Concrete/IR/Lower.lean` line 1460 (`arrayIndexAssign` case):
 
 1. **GEP base type is wrong**: The GEP instruction receives `value.ty` which resolves to the internal runtime type (`i64`) rather than the array element type (`i32`). This causes the pointer offset calculation to use 8-byte strides over a 4-byte element array.
 

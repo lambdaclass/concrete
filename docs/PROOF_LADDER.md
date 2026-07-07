@@ -19,7 +19,7 @@ is discharged, and what trust class that discharge earns.*
 
 ## The reusable proof layer (SHIPPED)
 
-These are kernel-verified lemmas in `Concrete/Proof.lean`. Their point is to
+These are kernel-verified lemmas in `Concrete/Proof/Proof.lean`. Their point is to
 turn loop/array proofs from heroic one-off `simp` scripts into a reusable
 layer, so the next proof is "large but systematic," not speculative.
 
@@ -164,9 +164,9 @@ ghost values erase; the compiled binary is unchanged.
 
 | Piece | Status |
 |---|---|
-| Array / `while_` / fuel-monotonicity / counter-loop lemmas | **shipped** (`Concrete/Proof.lean`) |
+| Array / `while_` / fuel-monotonicity / counter-loop lemmas | **shipped** (`Concrete/Proof/Proof.lean`) |
 | `bv_decide` kernel-checked tier, used in a committed proof | **shipped** (`Concrete/Sha256Refine.lean`; `proved_by_kernel_decision`) |
-| Spec layer (`Concrete/Sha256Spec.lean`) | **shipped** |
+| Spec layer (`Concrete/Proof/Sha256Spec.lean`) | **shipped** |
 | Refinement pattern: extracted `PExpr` refines spec, ∀ inputs | **shipped** for the Boolean round functions (`ch_refines` / `maj_refines`) |
 | First **loop** refinement: `block_to_words_refines_spec` (∀ 64 bytes, via `eval_while_count`) | **shipped** (`Concrete/Sha256Refine.lean`) |
 | `rotr` + four sigma refinements (incl. `32−n` shift) + `rotr_call` call/bind scaffolding | **shipped** (`Concrete/Sha256Refine.lean`) |

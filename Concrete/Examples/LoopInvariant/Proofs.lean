@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 
 /-!
 # loop_invariant.count_up — example proof

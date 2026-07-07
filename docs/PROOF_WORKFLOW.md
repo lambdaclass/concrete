@@ -7,6 +7,8 @@ This document defines the complete workflow for proving Concrete functions with 
 For proof contract semantics, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md).
 For theorem shapes and naming rules, see [PROOF_THEOREM_SHAPES.md](PROOF_THEOREM_SHAPES.md).
 For the proof pressure set used during development, see [PROOF_PRESSURE_SET.md](PROOF_PRESSURE_SET.md).
+For the future LLM-guided synthesis loop, see
+[PROOF_SYNTHESIS.md](PROOF_SYNTHESIS.md).
 
 ---
 
@@ -459,7 +461,7 @@ concrete examples/proof_pressure/src/main.con --report extraction 2>&1 | grep -A
 concrete examples/proof_pressure/src/main.con --report lean-stubs > /tmp/stubs.lean
 # Look at clamp_valueExpr and the theorem stub
 
-# 3. Write the theorem (in Concrete/Proof.lean or a separate file)
+# 3. Write the theorem (in Concrete/Proof/Proof.lean or a separate file)
 # theorem clamp_value_correct (x lo hi : Int) (fuel : Nat) :
 #     eval generatedFns (...) (fuel + 3) clamp_valueExpr
 #     = some (.int (if x < lo then lo else if x > hi then hi else x)) := by ...

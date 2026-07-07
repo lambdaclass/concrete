@@ -54,7 +54,7 @@ Recommended workflows:
   ./scripts/tests/run_tests.sh --full                 # pre-merge — complete coverage
   ./scripts/tests/run_tests.sh -j 1                   # debug ordering issues
   ./scripts/tests/run_tests.sh --affected             # run tests for uncommitted changes
-  ./scripts/tests/run_tests.sh --affected Concrete/Lower.lean,Concrete/SSA.lean
+  ./scripts/tests/run_tests.sh --affected Concrete/IR/Lower.lean,Concrete/IR/SSA.lean
 USAGE
     exit 0
 }
@@ -114,7 +114,7 @@ if [ "$MODE" = "manifest" ]; then
     echo "# category | kind | file"
     echo "#"
     # Pass-level Lean tests
-    echo "passlevel | lean_pass | Concrete/PipelineTest.lean (32 tests)"
+    echo "passlevel | lean_pass | Concrete/Pipeline/PipelineTest.lean (32 tests)"
     # Positive tests (run_ok)
     for f in tests/programs/*.con; do
         base=$(basename "$f" .con)

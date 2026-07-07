@@ -2,7 +2,7 @@
 
 **Status:** Fixed
 **Discovered:** 2026-03-15
-**Fix:** `Concrete/Lower.lean` — prefix string constant names with module name
+**Fix:** `Concrete/IR/Lower.lean` — prefix string constant names with module name
 
 ## Symptom
 

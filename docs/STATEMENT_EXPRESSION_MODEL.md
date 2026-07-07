@@ -42,7 +42,7 @@ last `.expr` regardless of the `;`, which:
 
 ## Root cause (pinpointed)
 
-`Concrete/Parser.lean`:
+`Concrete/Frontend/Parser.lean`:
 - `parseExprBlock` (the value-bearing block parser, used for if-expression
   branches and `{ … }` match-arm bodies): a trailing expression with **no** `;`
   (line ~846) and a `;`-terminated statement (line ~862) both emit the identical
@@ -103,17 +103,17 @@ These are features, not the bug; keep them out so the fix stays bounded.
 
 ## Touch points
 
-- `Concrete/AST.lean`: `Stmt.expr` gains `isValue : Bool`.
-- `Concrete/Parser.lean`: set `isValue` in `parseExprBlock` (trailing-no-`;` →
+- `Concrete/Frontend/AST.lean`: `Stmt.expr` gains `isValue : Bool`.
+- `Concrete/Frontend/Parser.lean`: set `isValue` in `parseExprBlock` (trailing-no-`;` →
   true; `;` → false) and `parseMatchArmBody` (bare `=> expr` → true). `parseBlock`
   and all other `.expr` builders → false.
-- `Concrete/Check.lean`: the arm/branch type sites (`body.getLast?` at ~1116,
+- `Concrete/Check/Check.lean`: the arm/branch type sites (`body.getLast?` at ~1116,
   ~1135, ~1727, ~1800; if-branch at ~1090): `.expr e true` → typeof e, else Unit.
-- `Concrete/Elab.lean`: if-expression result-type inference and arm elaboration
+- `Concrete/Elab/Elab.lean`: if-expression result-type inference and arm elaboration
   use the same rule; carry the flag onto `CExpr`/`CStmt` if Core needs it.
-- `Concrete/Core.lean` + `Concrete/CoreCanonicalize.lean`: thread the flag (or
+- `Concrete/Elab/Core.lean` + `Concrete/Elab/CoreCanonicalize.lean`: thread the flag (or
   the trailing-expr notion) so Lower can see it.
-- `Concrete/Lower.lean`: `lastExprVal` returns the trailing value only for
+- `Concrete/IR/Lower.lean`: `lastExprVal` returns the trailing value only for
   `.expr … true`; a `;`-terminated last `.expr` contributes no value (Unit) —
   also removes a class of `store void`/wrong-slot hazards.
 - Formatter: print a trailing value expression without `;`, a statement with `;`.

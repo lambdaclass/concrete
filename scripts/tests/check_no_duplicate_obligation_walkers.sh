@@ -13,7 +13,7 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-R="Concrete/Report.lean"; M="Main.lean"
+R="Concrete/Report/Report.lean"; M="Main.lean"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
@@ -36,7 +36,7 @@ grep -q "Report.vcsJson dvcs" "$M" && grep -q "Report.vcsReport dvcs" "$M" \
   && ok "--report vcs and audit render the obligation schedule directly" \
   || no "a VC report no longer renders the obligation schedule"
 # the conversion glue is gone.
-grep -q "toVCView" "$M" Concrete/ObligationCore.lean \
+grep -q "toVCView" "$M" Concrete/Proof/ObligationCore.lean \
   && no "toVCView conversion glue reintroduced (records are unified — no view needed)" \
   || ok "no toVCView conversion glue (records unified)"
 

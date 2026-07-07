@@ -14,4 +14,4 @@ root = "Main"
 
 [[lean_exe]]
 name = "pipeline-test"
-root = "Concrete.PipelineTest"
+root = "Concrete.Pipeline.PipelineTest"

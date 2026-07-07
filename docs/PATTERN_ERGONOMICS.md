@@ -49,7 +49,7 @@ dedicated "range pattern on non-integer scrutinee" diagnostic is a follow-up.
 
 Implementation: lexer tokens `..` / `..=`; `MatchArm.rangeArm` /
 `CMatchArm.rangeArm`; lowered to a `lo <= scr && scr (<=|<) hi` comparison-branch
-(`Concrete/Lower.lean`), mirroring the literal-arm branch.
+(`Concrete/IR/Lower.lean`), mirroring the literal-arm branch.
 
 ## Landed: `if let` / `while let`
 
@@ -150,7 +150,7 @@ fn tag(e: &E) -> i32 { match e { E::A { x } => x, E::B => 0 } }  // reads throug
 - Scalar scrutinees behind `&i32` are dereferenced once before literal/range
   comparisons and variable bindings, so `n` binds the value and `0 => …` /
   `1..=9 => …` compare against the value (not the pointer). This matches Check's
-  auto-deref of the scrutinee type (`Concrete/Lower.lean`, value-pattern branch).
+  auto-deref of the scrutinee type (`Concrete/IR/Lower.lean`, value-pattern branch).
 - A non-`Copy` value borrowed in a match is still linear: it is read, not
   consumed, so it must be consumed/dropped elsewhere (an unconsumed one is E0208,
   the normal linearity rule).
@@ -167,7 +167,7 @@ let copy = State { ..state };                  // every field from state
 
 - The listed fields take their given values; every omitted field is filled from
   `base`. `base` must be the same struct type (else E0220).
-- Desugared in Elab to `base.field` for each omitted field (`Concrete/Elab.lean`),
+- Desugared in Elab to `base.field` for each omitted field (`Concrete/Elab/Elab.lean`),
   so no new Core/lowering. **Use a variable (or simple place) as the base** — a
   complex base expression is re-read once per copied field.
 - Cleanest for `Copy` structs (the typical state-update case); a non-`Copy` base

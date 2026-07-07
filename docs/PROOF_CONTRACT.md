@@ -12,7 +12,7 @@ For the provable subset definition, see [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md)
 
 A proof artifact in Concrete consists of:
 
-1. **A Lean 4 theorem** in `Concrete/Proof.lean` that proves a property about a function's `PExpr` (proof expression) representation.
+1. **A Lean 4 theorem** in `Concrete/Proof/Proof.lean` that proves a property about a function's `PExpr` (proof expression) representation.
 2. **A registry entry** that binds the theorem to a specific function by qualified name, spec name, and body fingerprint.
 3. **A body fingerprint** — a structural hash of the function's Core IR body that identifies the exact code the proof was written against.
 

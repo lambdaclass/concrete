@@ -109,7 +109,7 @@ path.
 an omission. Today:
 
 - **`defer` is an extraction blocker.** The ProvableV1 spec extractor
-  (`Concrete/ProofCore.lean`, `identifyUnsupported`) classifies any function
+  (`Concrete/Proof/ProofCore.lean`, `identifyUnsupported`) classifies any function
   containing `defer` as unextractable, with the reason string `defer`. Such a
   function surfaces through the existing **proof-ineligible construct** kind
   (`ineligible` status, E0802); no Lean spec is generated for it.

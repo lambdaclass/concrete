@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 
 /-!
 # crypto_verify — example proofs

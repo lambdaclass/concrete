@@ -7,7 +7,7 @@ EBNF file; this page indexes it and the surrounding syntax facts.
 
 The single source of truth for Concrete's syntactic shape is
 [`grammar/concrete.ebnf`](../grammar/concrete.ebnf). The hand-written
-recursive-descent parser (`Concrete/Parser.lean`) must accept exactly that
+recursive-descent parser (`Concrete/Frontend/Parser.lean`) must accept exactly that
 language. The grammar is **LL(1)** — every alternation resolves with one token of
 lookahead — and three independent checkers verify this mechanically in CI:
 

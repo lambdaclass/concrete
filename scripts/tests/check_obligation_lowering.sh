@@ -2,7 +2,7 @@
 # Obligation-expression lowering gate (ROADMAP Phase 3 #12).
 #
 # Phase 3 #12 routes every lowering target through ONE shared operator table
-# (`obBinOpLean` / `obBinOpSmt` / `leanBinOp` in Concrete/Report.lean) so the
+# (`obBinOpLean` / `obBinOpSmt` / `leanBinOp` in Concrete/Report/Report.lean) so the
 # human / Lean-prop / SMT-LIB renderings cannot drift. The refactor is
 # PARITY-ONLY: it was verified byte-identical against the pre-#12 binary for
 # --report vcs (JSON + Lean conclusions), --emit-smt (SMT-LIB), --emit-lean-replay

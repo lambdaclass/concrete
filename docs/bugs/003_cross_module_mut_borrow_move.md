@@ -25,7 +25,7 @@ mod Main {
 
 ## Root Cause
 
-**File:** `Concrete/Check.lean`, function call argument processing (line ~1161–1167)
+**File:** `Concrete/Check/Check.lean`, function call argument processing (line ~1161–1167)
 
 When checking function call arguments, the checker unconditionally consumed any bare identifier argument without checking whether the parameter type was a reference:
 
@@ -44,7 +44,7 @@ The fundamental issue: the code didn't distinguish between owned parameters (whi
 
 ## Fix
 
-**File:** `Concrete/Check.lean`
+**File:** `Concrete/Check/Check.lean`
 
 Check the parameter type before consuming. Reference parameters (`&T`, `&mut T`) borrow without consuming:
 

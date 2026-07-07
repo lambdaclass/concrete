@@ -9,7 +9,7 @@
 # theorems). This gate keeps the migration "done" by failing when:
 #
 #   1. a file under Concrete/Examples/ re-enters `namespace Concrete.Proof`;
-#   2. Concrete/Proof.lean declares a theorem/lemma not on the allowlist
+#   2. Concrete/Proof/Proof.lean declares a theorem/lemma not on the allowlist
 #      (scripts/tests/proof_namespace_allowlist.txt) — i.e. a new example proof
 #      snuck into the compiler namespace;
 #   3. one of the migrated flagship theorems reappears in any Concrete.Proof file.
@@ -21,7 +21,7 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-PROOF="Concrete/Proof.lean"
+PROOF="Concrete/Proof/Proof.lean"
 ALLOW="scripts/tests/proof_namespace_allowlist.txt"
 FAIL=0
 
@@ -33,7 +33,7 @@ if grep -rln '^namespace Concrete\.Proof\b' Concrete/Examples/ 2>/dev/null | gre
   FAIL=1
 fi
 
-# 2. Allowlist subset check on Concrete/Proof.lean theorems/lemmas.
+# 2. Allowlist subset check on Concrete/Proof/Proof.lean theorems/lemmas.
 current="$(grep -oE "^(theorem|lemma) [A-Za-z0-9_']+" "$PROOF" | awk '{print $2}' | sort -u)"
 allow="$(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$ALLOW" | sort -u)"
 newones="$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$allow"))"

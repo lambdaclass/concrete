@@ -475,7 +475,7 @@ Examples to add under `examples/callbacks/`:
    / `&*e` lowered to "load the pointee into a fresh temp and take *its* address"
    — so a reborrowed `&mut Ctx` aliased a throwaway copy and the callback's
    mutations were lost (the combinator returned 0 instead of the accumulated
-   value). Fixed in `Concrete/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the
+   value). Fixed in `Concrete/IR/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the
    pointer `e` itself (a true reborrow, no copy). Gated by
    `scripts/tests/check_callable_values.sh` (three modes thread correctly; the
    reborrow aliases and has no temp alloca in IR; caps not erased) and

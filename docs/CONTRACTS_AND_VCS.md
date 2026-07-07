@@ -777,7 +777,7 @@ The audit and release bundle must name which of these affect a given claim.
 ## Soundness Bridge
 
 The source-contract pipeline is justified at the kernel level by the
-`Source-contract soundness (R-22..R-28)` section of `Concrete/ProofSoundness.lean`.
+`Source-contract soundness (R-22..R-28)` section of `Concrete/Proof/ProofSoundness.lean`.
 A small `Clause` inductive models the decidable contract fragment the VC
 generators actually lower; its `eval` is the contract's intended semantics, and
 the theorems prove the relationships the pipeline relies on:

@@ -27,7 +27,7 @@ Rationale:
   recorded as resolved facts (see ROADMAP #27 target constants), so reports and
   release bundles can state what affected the compiled artifact.
 
-`Concrete.toml` already has a `[profile]` section (parsed by `Concrete/Project.lean`);
+`Concrete.toml` already has a `[profile]` section (parsed by `Concrete/Resolve/Project.lean`);
 profile/target-keyed source roots build on that mechanism rather than introducing
 a parallel one.
 

@@ -33,10 +33,10 @@ Legend: DONE / PARTIAL / DEFERRED (by design, blocker documented) / OPEN (unbuil
 
 | Item | Status | Evidence |
 |---|---|---|
-| 1 ProjectContext (one load for all commands) | DONE | `Concrete/Project.lean`; commits a1b7d4e1, 3a35be60; `check_cli_plumbing.sh` |
-| 2 CompilerLedger / ProjectFacts store | DONE | `Concrete/CompilerLedger.lean` (recordArtifact/Fact/Diagnostic/Dependency/Timing/SourceMap/ReplayCommand); 9531b3f5; `check_compiler_ledger.sh` |
+| 1 ProjectContext (one load for all commands) | DONE | `Concrete/Resolve/Project.lean`; commits a1b7d4e1, 3a35be60; `check_cli_plumbing.sh` |
+| 2 CompilerLedger / ProjectFacts store | DONE | `Concrete/Report/CompilerLedger.lean` (recordArtifact/Fact/Diagnostic/Dependency/Timing/SourceMap/ReplayCommand); 9531b3f5; `check_compiler_ledger.sh` |
 | 3 Frontend pass chain → ledger artifacts | DONE | `Project.lean:391`; 96b09ece; `check_compiler_ledger.sh` |
-| 4 Structured diagnostics, human+JSON from one record | DONE | `Concrete/Diagnostic.lean`; resolver/type/ownership/capability/parser families; `check_rich_diagnostics.sh` |
+| 4 Structured diagnostics, human+JSON from one record | DONE | `Concrete/Report/Diagnostic.lean`; resolver/type/ownership/capability/parser families; `check_rich_diagnostics.sh` |
 | 5 Explicit canonicalization pass | PARTIAL | `Pipeline.desugar` (pre-check) + `CoreCanonicalize` (post-elab) exist, but split across the boundary rather than one pass "between resolution and type checking"; no gate pins the boundary |
 | 6 Multi-level IR no-fact-erasure policy | OPEN | no systematic preservation policy/gate; facts kept ad hoc (e.g. `declSpan`) |
 | 7 Distinct `TypedIR` (post-check, pre-obligation) | OPEN | Elab produces Core directly; no separate typed surface IR artifact |

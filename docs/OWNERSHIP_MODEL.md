@@ -130,7 +130,7 @@ duplicating one would let it be freed twice. Concretely:
 ### Control flow: how branches, arms, and loops account for consumption
 
 Refined 2026-07-02 (the H12 std migration forced the checker to model these
-precisely; all four rules are as-built in `Concrete/Check.lean`):
+precisely; all four rules are as-built in `Concrete/Check/Check.lean`):
 
 - **Fall-through branches must agree.** After `if`/`else` (or a `match`), the
   branches that reach the merge point must agree on what was consumed
@@ -215,7 +215,7 @@ foundation**; the linear rule stands without it.
 
 ## Where it lives
 
-- Predicate: `Concrete/Check.lean` — `isCopyType` (the `Copy` decision) and the
+- Predicate: `Concrete/Check/Check.lean` — `isCopyType` (the `Copy` decision) and the
   discard/consume checks that key on it (`checkScopeExit`, the per-block
   `checkBlockLocalsConsumed`, the match-arm `_` gate, the `Stmt.expr` discard check).
 - Move-through-let and the divergence helpers (`blockNonTerminating`) are in the same

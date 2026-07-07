@@ -26,9 +26,9 @@ Source Text
     ▼
   CoreCheck ── ElaboratedProgram → ValidatedCore
     │
-    ├─→ ProofCore extraction (Concrete/ProofCore.lean) — pure fragment for Lean proofs
-    ├─→ Proof semantics (Concrete/Proof.lean) — formal evaluation + first theorems
-    ├─→ Policy enforcement (Concrete/Policy.lean) — [policy] compile errors
+    ├─→ ProofCore extraction (Concrete/Proof/ProofCore.lean) — pure fragment for Lean proofs
+    ├─→ Proof semantics (Concrete/Proof/Proof.lean) — formal evaluation + first theorems
+    ├─→ Policy enforcement (Concrete/Check/Policy.lean) — [policy] compile errors
     │
     ▼
   Mono ──── ValidatedCore → MonomorphizedProgram
@@ -43,7 +43,7 @@ Source Text
   clang ─── executable
 ```
 
-Each arrow represents a typed artifact boundary defined in `Concrete/Pipeline.lean`. The pipeline is data-flow-driven: each pass consumes the previous pass's named artifact type. `ValidatedCore` is the proof-oriented boundary — only `Pipeline.coreCheck` can construct it, and `Pipeline.monomorphize` requires it as input.
+Each arrow represents a typed artifact boundary defined in `Concrete/Pipeline/Pipeline.lean`. The pipeline is data-flow-driven: each pass consumes the previous pass's named artifact type. `ValidatedCore` is the proof-oriented boundary — only `Pipeline.coreCheck` can construct it, and `Pipeline.monomorphize` requires it as input.
 
 ### Proof-Oriented Pipeline Summary
 
@@ -60,9 +60,9 @@ Keep as-is:
 
 Done:
 
-- `ValidatedCore` is a named, explicit pipeline artifact (`Concrete/Pipeline.lean`)
-- `ProofCore` extracts the pure, proof-eligible fragment from validated Core (`Concrete/ProofCore.lean`)
-- `Concrete/Proof.lean` defines evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness, literal evaluation, conditional reduction, arithmetic)
+- `ValidatedCore` is a named, explicit pipeline artifact (`Concrete/Pipeline/Pipeline.lean`)
+- `ProofCore` extracts the pure, proof-eligible fragment from validated Core (`Concrete/Proof/ProofCore.lean`)
+- `Concrete/Proof/Proof.lean` defines evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness, literal evaluation, conditional reduction, arithmetic)
 - `Pipeline.coreCheck` is the only constructor for `ValidatedCore`; `Pipeline.monomorphize` takes `ValidatedCore`
 
 Still change:
@@ -512,7 +512,7 @@ EmitSSA: 1:1 translation to LLVM IR text — no validation, just emission
 
 ## Artifact Flow
 
-The compiler produces explicit, stable artifacts at each stage. Since the introduction of `Concrete/Pipeline.lean`, each boundary is a named artifact type with a composable runner function:
+The compiler produces explicit, stable artifacts at each stage. Since the introduction of `Concrete/Pipeline/Pipeline.lean`, each boundary is a named artifact type with a composable runner function:
 
 ```
 Source Text
@@ -633,7 +633,7 @@ Each pass boundary has a different level of machine-checkability today. This tab
 | Elab → CoreCheck | **Opt-in** (`--report verify`) | `verifyNoPlaceholders` exists but is not wired into the pipeline — only available via `--report verify`. `Ty.placeholder` legitimately survives in try/defer expressions (documented exception). Promoting to a pipeline gate requires fixing try/defer elaboration |
 | CoreCheck → ValidatedCore | **Partially** (opaque constructor) | Core IR semantic assertions: no capability violations, no type mismatches (re-check) |
 | ValidatedCore → ProofCore | **Yes** (`selfCheck`, 15 invariants) | Already machine-checked via `--report consistency` |
-| ValidatedCore → Mono | **Yes** (`verifyPostMono`) | Hard gate: `Ty.typeVar` surviving monomorphization blocks compilation. Implemented in `Concrete/Verify.lean`, wired into `Pipeline.monomorphize` |
+| ValidatedCore → Mono | **Yes** (`verifyPostMono`) | Hard gate: `Ty.typeVar` surviving monomorphization blocks compilation. Implemented in `Concrete/Check/Verify.lean`, wired into `Pipeline.monomorphize` |
 | Mono → Lower | No (Lower input is trusted) | All generic calls resolved, no polymorphic function bodies |
 | Lower → SSAVerify | **Yes** (`ssaVerifyProgram`) | Already machine-checked: dominance, phi coverage, branch safety |
 | SSACleanup → SSAVerify | **Yes** (re-verified) | Already machine-checked post-cleanup |

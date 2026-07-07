@@ -25,7 +25,7 @@ For the exploratory design direction behind the source-facing `repr` surface, se
 
 ## Platform Assumptions
 
-Concrete currently targets **64-bit platforms only**. The following sizes are hardcoded in `Concrete/Layout.lean`:
+Concrete currently targets **64-bit platforms only**. The following sizes are hardcoded in `Concrete/Check/Layout.lean`:
 
 | Type | Size (bytes) | Alignment (bytes) | Notes |
 |------|-------------|-------------------|-------|
@@ -187,7 +187,7 @@ The language should not promise a large Rust-style menu of representation tricks
 
 ## Layout Verification
 
-The layout module (`Concrete/Layout.lean`) is the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings. Both `Lower.lean` and `EmitSSA.lean` delegate to `Layout` rather than maintaining their own layout logic.
+The layout module (`Concrete/Check/Layout.lean`) is the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings. Both `Lower.lean` and `EmitSSA.lean` delegate to `Layout` rather than maintaining their own layout logic.
 
 Layout properties are verified by:
 
@@ -201,16 +201,16 @@ The following table shows the layout properties assumed by `Layout.lean`. These 
 
 | Property | Value | Verified by |
 |----------|-------|-------------|
-| `sizeof(Int)` = 8 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize .int = 8` |
-| `sizeof(i32)` = 4 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize .i32 = 4` |
-| `sizeof(ptr)` = 8 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize (.ref _) = 8` |
-| `sizeof(String)` = 24 | Compile-time constant | `Concrete/PipelineTest.lean` builtin size test |
-| `sizeof(Vec)` = 24 | Compile-time constant | `Concrete/PipelineTest.lean` builtin size test |
+| `sizeof(Int)` = 8 | Compile-time constant | `Concrete/Pipeline/PipelineTest.lean` layout test, `Layout.lean tySize .int = 8` |
+| `sizeof(i32)` = 4 | Compile-time constant | `Concrete/Pipeline/PipelineTest.lean` layout test, `Layout.lean tySize .i32 = 4` |
+| `sizeof(ptr)` = 8 | Compile-time constant | `Concrete/Pipeline/PipelineTest.lean` layout test, `Layout.lean tySize (.ref _) = 8` |
+| `sizeof(String)` = 24 | Compile-time constant | `Concrete/Pipeline/PipelineTest.lean` builtin size test |
+| `sizeof(Vec)` = 24 | Compile-time constant | `Concrete/Pipeline/PipelineTest.lean` builtin size test |
 | `alignof(i64)` = 8 | Compile-time constant | `Layout.lean tyAlign .int = 8` |
 | `alignof(i32)` = 4 | Compile-time constant | `Layout.lean tyAlign .i32 = 4` |
 | Enum tag = i32 | Compile-time constant | `Layout.lean alignUp 4 payloadAlign` |
-| repr(C) field order | Declaration order | `fieldOffset` iterates in declaration order; tested in `Concrete/PipelineTest.lean` |
-| repr(packed) no padding | Consecutive offsets | `fieldOffset` sums sizes without alignment; tested in `Concrete/PipelineTest.lean` |
-| Pass-by-ptr for structs | All named types | `isPassByPtr` returns true for named types; tested in `Concrete/PipelineTest.lean` |
+| repr(C) field order | Declaration order | `fieldOffset` iterates in declaration order; tested in `Concrete/Pipeline/PipelineTest.lean` |
+| repr(packed) no padding | Consecutive offsets | `fieldOffset` sums sizes without alignment; tested in `Concrete/Pipeline/PipelineTest.lean` |
+| Pass-by-ptr for structs | All named types | `isPassByPtr` returns true for named types; tested in `Concrete/Pipeline/PipelineTest.lean` |
 
 **What this does not verify:** emitted LLVM IR signatures, actual runtime struct layout on target hardware, or foreign interop correctness. The tests confirm the layout model is internally consistent, not that it produces correct binaries on all targets. Empirical cross-target validation (compiling and running FFI tests on x86_64 and aarch64) is future work.

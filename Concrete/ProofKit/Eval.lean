@@ -1,4 +1,4 @@
-import Concrete.Proof
+import Concrete.Proof.Proof
 
 /-!
 # Concrete Proof Kit — Eval

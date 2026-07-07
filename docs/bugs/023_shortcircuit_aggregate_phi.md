@@ -26,7 +26,7 @@ s.drop();
 
 ## Root Cause
 
-**File:** `Concrete/Lower.lean`, the `&&`/`||` short-circuit lowering
+**File:** `Concrete/IR/Lower.lean`, the `&&`/`||` short-circuit lowering
 (scand/scor merge block).
 
 The merge phis every variable whose SVal differs between the pre-RHS and

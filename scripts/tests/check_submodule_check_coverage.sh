@@ -149,7 +149,7 @@ fi
 
 echo "=== std stays fully front-end checked (H12 closed; no exemption returns) ==="
 
-if grep -q 'stdMigratedSubmodules' Concrete/Check.lean; then
+if grep -q 'stdMigratedSubmodules' Concrete/Check/Check.lean; then
   no "exemption machinery is BACK in Check.lean (H12 regression)"
 else
   ok "no std exemption machinery in Check.lean"

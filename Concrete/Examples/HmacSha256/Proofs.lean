@@ -26,7 +26,7 @@
   (#20), where that machinery is built.
 -/
 import Std.Tactic.BVDecide
-import Concrete.Proof
+import Concrete.Proof.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
 import Concrete.ProofKit.Arith
@@ -34,7 +34,7 @@ import Concrete.ProofKit.Array
 import Concrete.ProofKit.Loops
 import Concrete.ProofKit.Calls
 import Concrete.ProofKit.Refinement
-import Concrete.Sha256Spec
+import Concrete.Proof.Sha256Spec
 
 namespace Examples.HmacSha256.Proofs
 
