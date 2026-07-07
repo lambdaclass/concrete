@@ -31,12 +31,19 @@ independent of file paths, so this is purely an `import`-path grouping; the
 - `Concrete/Frontend/` — `Token Lexer Parser AST Format`
 - `Concrete/Resolve/` — `Resolve FileSummary Shared Intrinsic BuiltinSigs Project`
 - `Concrete/Elab/` — `Core CoreCanonicalize Elab`
-- `Concrete/Check/` — `Check CoreCheck Verify Policy Layout`
+- `Concrete/Check/` — `Check CoreCheck Verify Policy Layout` (Check.lean split
+  2026-07-07: `CheckError` [diagnostics enum + message/hint/code + throwCheck],
+  `CheckHelpers` [env / consume / scope-exit / merge helpers], `Check` [the
+  `checkExpr` mutual block + `checkModule`/`checkProgram` entries])
 - `Concrete/IR/` — `SSA SSACleanup SSAVerify Mono Lower`
 - `Concrete/Backend/` — `Backend EmitSSA EmitLLVM EmitBuiltins LLVM`
 - `Concrete/Interp/` — `Interp`
 - `Concrete/Proof/` — `Proof ProofCore ProofSoundness ObligationCore Sha256Spec`
 - `Concrete/Report/` — `Report Diagnostic CompilerLedger DebugBundle Reduce Profile`
+  (Report.lean split 2026-07-07: `ReportBase` [source-loc / fingerprint / cap
+  helpers], `ReportInterface` [Report 1-4 + contract-VC generation],
+  `ReportObligations` [array-bounds / div-zero / overflow / nonlinear
+  collectors], `Report` [Report 5-11 + profile + prove/emit-lean views])
 - `Concrete/Pipeline/` — `Pipeline PipelineTest`
 - `Concrete/ProofKit.lean` + `Concrete/ProofKit/` and `Concrete/Examples/` are
   pre-existing subsystem subtrees, left in place.

@@ -18,7 +18,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== every emittable E-code has a --report diagnostic-codes entry ==="
 missing=0
-for f in Concrete/Check/Check.lean Concrete/Check/CoreCheck.lean; do
+for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean; do
   codes="$(grep -oE '=> "E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
   [ -z "$codes" ] && { no "$f: extracted no codes (pattern drift?)"; continue; }
   while IFS= read -r c; do

@@ -13,19 +13,22 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-R="Concrete/Report/Report.lean"; M="Main.lean"
+# The report layer was split (2026-07-07): the obligation collectors live in
+# Concrete/Report/ReportObligations.lean, so search the whole Report/ dir to
+# keep the "no duplicate walkers ANYWHERE in the report layer" guarantee.
+R="Concrete/Report"; M="Main.lean"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== the old family-specific scoped walkers stay deleted ==="
-old="$(grep -cE "def scopedCallsS|def scopedBoundsS|def scopedDivS|def scopedArithS|def scopedAssertsS" "$R" || true)"
+old="$(grep -rhE "def scopedCallsS|def scopedBoundsS|def scopedDivS|def scopedArithS|def scopedAssertsS" "$R" | wc -l | tr -d ' ')"
 [ "$old" = "0" ] && ok "no per-family scoped*S collector reintroduced" \
   || no "a family-specific scoped collector came back ($old found) — route it through scopedWalk"
 
 echo "=== the unified collector + per-family leaves are the only collection path ==="
 for d in scopedWalkS scopedWalkB callLeaf boundsLeaf divLeaf arithLeaf assertLeaf; do
-  grep -qE "def $d\b" "$R" && ok "present: $d" || no "missing unified-collector piece: $d"
+  grep -rqE "def $d\b" "$R" && ok "present: $d" || no "missing unified-collector piece: $d"
 done
 
 echo "=== VC reports render the ONE obligation schedule directly (post-merge) ==="
