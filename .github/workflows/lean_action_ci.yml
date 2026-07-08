@@ -29,6 +29,9 @@ jobs:
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
 
+      - name: Constructor-coverage gate (every walker handles every constructor)
+        run: bash scripts/tests/check_constructor_coverage.sh
+
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 
