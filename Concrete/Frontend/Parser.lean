@@ -631,10 +631,20 @@ partial def parsePrimary : ParseM Expr := do
         | .intLit n =>
           advance
           let count := n.toNat
-          let mut i : Nat := 1
-          while i < count do
-            elems := elems ++ [first]
-            i := i + 1
+          -- Cap the repeat count. The literal is materialized as `count` AST
+          -- nodes here, so an absurd count (e.g. `[0; 100000000000]`) would hang
+          -- the compiler / exhaust memory before any later stage sees it. A
+          -- fixed-size array literal this large is never legitimate (use heap
+          -- allocation); reject it with a diagnostic. Largest real use is ~4096.
+          let maxRepeat : Nat := 1048576  -- 2^20
+          if count > maxRepeat then
+            let csp ← peekSpan
+            throwParse s!"array repeat count {count} is too large (maximum {maxRepeat})"
+              (span := some csp)
+              (hint := some "a fixed-size array literal this large is not supported; use heap allocation for large buffers")
+          -- O(count) build (the old `elems ++ [first]` loop was O(count^2) and
+          -- hung on counts in the tens of thousands).
+          elems := List.replicate count first
         | _ =>
           let csp ← peekSpan
           throwParse s!"expected integer count after ';' in array repeat, got {countTk}" (span := some csp)

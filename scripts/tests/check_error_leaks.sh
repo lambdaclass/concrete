@@ -59,6 +59,9 @@ clean_reject rec_direct  'mod m { struct S { x: S } fn main() -> Int { return 0;
 clean_reject rec_mutual  'mod m { struct A { b: B } struct B { a: A } fn main() -> Int { return 0; } }'                  "recursive type"
 clean_reject rec_array   'mod m { struct S { xs: [S; 2] } fn main() -> Int { return 0; } }'                              "recursive type"
 
+echo "=== an absurd array-repeat count is a diagnostic, not a compiler hang/OOM (bug 026) ==="
+clean_reject huge_array 'mod m { fn main() -> Int { let a: [i64; 100000000000] = [0; 100000000000]; return 0; } }'  "too large"
+
 echo "=== an executable with no entry point is a diagnostic, not an ld leak (bug 025) ==="
 clean_reject no_main    'mod m { fn helper() -> Int { return 1; } }'  "no \`main\` function"
 clean_reject empty_file ''                                            "no \`main\` function"

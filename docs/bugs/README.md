@@ -49,10 +49,11 @@ Those belong in:
 - [023_shortcircuit_aggregate_phi.md](023_shortcircuit_aggregate_phi.md) — found by #35 conlog workload
 - [024_recursive_struct_infinite_size.md](024_recursive_struct_infinite_size.md) — found by panic-to-diagnostic probing; recursive struct → E0583 instead of llvm-as leak
 - [025_no_main_linker_error.md](025_no_main_linker_error.md) — no `main` in an executable build → clean `error[link]` instead of an ld leak
+- [026_array_repeat_count_hang.md](026_array_repeat_count_hang.md) — huge `[v; N]` repeat count → clean parse diagnostic instead of O(N²) hang/OOM
 
 ## Open Numbered Bugs
 
-_(none currently)_
+- [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
 
 ## Still Open, But Not Numbered Bugs
 

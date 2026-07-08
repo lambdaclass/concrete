@@ -52,6 +52,8 @@ declare -A SKIP_BUGS=(
   [017]="socket constants linux-only -- platform-specific stdlib"
   [024]="recursive-struct infinite size -- covered by check_error_leaks.sh gate corpus"
   [025]="no-main linker leak -- covered by check_error_leaks.sh (no_main, empty_file cases)"
+  [026]="huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)"
+  [027]="EmitSSA O(n^2) rendering -- OPEN perf item; no .con regression (codegen perf, not correctness)"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="
