@@ -66,6 +66,14 @@ echo "=== an executable with no entry point is a diagnostic, not an ld leak (bug
 clean_reject no_main    'mod m { fn helper() -> Int { return 1; } }'  "no \`main\` function"
 clean_reject empty_file ''                                            "no \`main\` function"
 
+echo "=== defining a compiler-reserved name is a diagnostic, not a duplicate-symbol LLVM leak (bug 028) ==="
+clean_reject clash_usermain 'mod m { fn user_main() -> Int { return 7; } fn main() -> Int { return user_main(); } }'  "reserved"
+clean_reject clash_cc       'mod m { fn __cc_bounds_check() -> Int { return 1; } fn main() -> Int { return __cc_bounds_check(); } }'  "reserved"
+clean_reject clash_concrete 'mod m { fn __concrete_get_argc() -> Int { return 9; } fn main() -> Int { return 0; } }'  "reserved"
+
+echo "=== extern declarations of compiler-provided __ symbols still compile (no false positive) ==="
+accepts extern_argc 'mod m { trusted extern fn __concrete_get_argc() -> i32; fn main() with(Unsafe) -> Int { return __concrete_get_argc() as Int; } }'
+
 echo "=== indirection breaks the cycle — valid recursive shapes still compile (no false positive) ==="
 accepts ll_ptr    'mod m { struct Node { val: i32, next: *const Node } fn main() -> Int { return 0; } }'
 accepts ll_mutual 'mod m { struct A { b: *mut B } struct B { a: *const A } fn main() -> Int { return 0; } }'

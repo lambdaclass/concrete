@@ -50,6 +50,7 @@ Those belong in:
 - [024_recursive_struct_infinite_size.md](024_recursive_struct_infinite_size.md) — found by panic-to-diagnostic probing; recursive struct → E0583 instead of llvm-as leak
 - [025_no_main_linker_error.md](025_no_main_linker_error.md) — no `main` in an executable build → clean `error[link]` instead of an ld leak
 - [026_array_repeat_count_hang.md](026_array_repeat_count_hang.md) — huge `[v; N]` repeat count → clean parse diagnostic instead of O(N²) hang/OOM
+- [028_reserved_name_collision.md](028_reserved_name_collision.md) — user fn named `user_main`/`__*` → clean `reserved identifier` instead of an LLVM duplicate-symbol leak
 
 ## Open Numbered Bugs
 

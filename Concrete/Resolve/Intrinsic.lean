@@ -324,9 +324,23 @@ def sizeofSuffix : String := "_sizeof"
 -- 4. Convenience predicates
 -- ============================================================
 
-/-- Check if a function name is reserved by the compiler. -/
+/-- Check if a function name is reserved by the compiler.
+
+    Covers three families, so a user *definition* can never collide with a
+    compiler-emitted LLVM symbol (which would otherwise leak as an "LLVM IR
+    validation failed"/duplicate-definition error at codegen — bug 028):
+      - the named builtins users may call but not redefine (`reservedFnNames`);
+      - `user_main`, the symbol EmitSSA renames the entry point to;
+      - the `__` prefix, reserved for all compiler-internal helpers
+        (`__cc_*` bounds/overflow checks, `__concrete_*` argc/argv accessors,
+        `__destr_*` destructors, …).
+    This gates DEFINITIONS only (checked over `m.functions`); `extern`
+    declarations of compiler-provided `__`-symbols live in `m.externFns` and are
+    unaffected, so `trusted extern fn __concrete_get_argc()` still works. -/
 def isReservedFnName (name : String) : Bool :=
   reservedFnNames.contains name
+  || name == "user_main"
+  || name.startsWith "__"
 
 /-- Check if a name is any known builtin (intrinsic or extra). -/
 def isKnownBuiltinFn (name : String) : Bool :=
