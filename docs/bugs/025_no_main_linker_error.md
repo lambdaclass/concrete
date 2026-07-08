@@ -1,9 +1,10 @@
 # Bug 025: No `main` in an executable build leaks a linker error
 
-**Status:** Open
+**Status:** Fixed
 **Discovered:** 2026-07-07
+**Fixed:** 2026-07-08
 **Discovered in:** panic-to-diagnostic edge-case probing (pipeline second-tier work)
-**Tracked by:** `scripts/tests/check_error_leaks.sh` (NOT yet in the corpus — add when fixed)
+**Regression test:** `scripts/tests/check_error_leaks.sh` (`no_main`, `empty_file` cases)
 
 ## Symptom
 
@@ -32,12 +33,13 @@ When no user `main` exists, EmitSSA emits no `@main` wrapper, so `user_main` /
 Nothing on the compile-to-executable path asserts "an executable build needs a
 `main`".
 
-## Proposed Fix
+## Fix
 
-On the compile-to-executable path (`Main.lean` `compileSSA`), after checking,
-verify the program defines an entry `main`; if not, emit a clean diagnostic
-("error: no `main` function — an executable needs an entry point") and skip
-`clang`. Must respect the module/submodule main-resolution already used at
-`Main.lean:421` (`some ["main"] | some ["lib"]`) and must NOT reject legitimate
-library-only compilation if such a mode exists. Once fixed, add a
-`clean_reject` case to `check_error_leaks.sh` and flip this to Fixed.
+`Main.lean` `compileSSA`, at the `.ok ssa` branch: before codegen, check
+`ssa.ssaModules.any (·.functions.any ·.isEntryPoint)` (SSA modules are flat —
+submodules included — so this is complete). If no entry point exists, emit
+`error[link]: no \`main\` function found; ... define \`fn main() -> Int\`` and
+return 1. `--emit-llvm` is exempt (dumping IR for inspection is legitimate
+without an entry point), and there is no separate library/embedded build
+profile, so requiring `main` on the executable path is safe. Regression:
+`check_error_leaks.sh` `no_main` and `empty_file` cases.

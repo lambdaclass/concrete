@@ -154,6 +154,14 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
     IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
     return 1
   | .ok ssa =>
+    -- An executable needs an entry point. Without one, EmitSSA emits no `@main`
+    -- wrapper and the failure would otherwise leak from clang/ld as an opaque
+    -- "Undefined symbols: _main" (bug 025). Reject it here as a diagnostic.
+    -- `--emit-llvm` is exempt: dumping IR for inspection is legitimate with no
+    -- entry point (and there is no separate library/embedded build profile).
+    if !emitLLVM && !(ssa.ssaModules.any fun m => m.functions.any (·.isEntryPoint)) then
+      IO.eprintln "error[link]: no `main` function found; an executable needs an entry point — define `fn main() -> Int` in the root module"
+      return 1
     let llvmIR := Pipeline.emit ssa
     let llPath := inputPath ++ ".ll"
     writeFile llPath llvmIR

@@ -59,6 +59,10 @@ clean_reject rec_direct  'mod m { struct S { x: S } fn main() -> Int { return 0;
 clean_reject rec_mutual  'mod m { struct A { b: B } struct B { a: A } fn main() -> Int { return 0; } }'                  "recursive type"
 clean_reject rec_array   'mod m { struct S { xs: [S; 2] } fn main() -> Int { return 0; } }'                              "recursive type"
 
+echo "=== an executable with no entry point is a diagnostic, not an ld leak (bug 025) ==="
+clean_reject no_main    'mod m { fn helper() -> Int { return 1; } }'  "no \`main\` function"
+clean_reject empty_file ''                                            "no \`main\` function"
+
 echo "=== indirection breaks the cycle — valid recursive shapes still compile (no false positive) ==="
 accepts ll_ptr    'mod m { struct Node { val: i32, next: *const Node } fn main() -> Int { return 0; } }'
 accepts ll_mutual 'mod m { struct A { b: *mut B } struct B { a: *const A } fn main() -> Int { return 0; } }'
