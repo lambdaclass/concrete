@@ -1,6 +1,6 @@
 #!/bin/bash
 # Verify golden test baselines for --emit-core, --emit-ssa, and --fmt
-set -e
+set -eo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -34,7 +34,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL core/$name"
       echo "FAIL: core/$name"
-      diff -u "$core_expected" <(echo "$core_actual") | head -20
+      diff -u "$core_expected" <(echo "$core_actual") | head -20 || true
       echo "---"
     fi
   fi
@@ -50,7 +50,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL ssa/$name"
       echo "FAIL: ssa/$name"
-      diff -u "$ssa_expected" <(echo "$ssa_actual") | head -20
+      diff -u "$ssa_expected" <(echo "$ssa_actual") | head -20 || true
       echo "---"
     fi
   fi
@@ -66,7 +66,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL fmt/$name"
       echo "FAIL: fmt/$name"
-      diff -u "$fmt_expected" <(echo "$fmt_actual") | head -20
+      diff -u "$fmt_expected" <(echo "$fmt_actual") | head -20 || true
       echo "---"
     fi
     # Also check idempotency: format(format(x)) == format(x)
@@ -75,7 +75,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL fmt/$name (not idempotent)"
       echo "FAIL: fmt/$name (not idempotent)"
-      diff -u <(echo "$fmt_actual") <(echo "$fmt_round2") | head -20
+      diff -u <(echo "$fmt_actual") <(echo "$fmt_round2") | head -20 || true
       echo "---"
     else
       passed=$((passed + 1))
