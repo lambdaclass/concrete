@@ -435,6 +435,9 @@ jobs:
       - name: Error-leak gate (bug 024 — recursive/edge inputs give a clean diagnostic, not an llvm-as/ld/panic leak)
         run: bash scripts/tests/check_error_leaks.sh
 
+      - name: Source-span gate (every pass anchors its diagnostic to the original source line)
+        run: bash scripts/tests/check_source_spans.sh
+
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
 
