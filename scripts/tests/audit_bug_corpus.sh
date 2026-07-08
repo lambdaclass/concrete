@@ -50,6 +50,8 @@ declare -A SKIP_BUGS=(
   [010]="missing string_substr -- stdlib addition"
   [015]="O0 default perf -- compiler flag default change, not a .con test"
   [017]="socket constants linux-only -- platform-specific stdlib"
+  [024]="recursive-struct infinite size -- covered by check_error_leaks.sh gate corpus"
+  [025]="no-main linker leak -- OPEN; will get a check_error_leaks.sh case when fixed"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

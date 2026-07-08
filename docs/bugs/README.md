@@ -47,10 +47,11 @@ Those belong in:
 - [021_int_match_disagree_not_checked.md](021_int_match_disagree_not_checked.md)
 - [022_submodule_breaks_parent_impl_method_consume.md](022_submodule_breaks_parent_impl_method_consume.md) — found by #35 conlog workload
 - [023_shortcircuit_aggregate_phi.md](023_shortcircuit_aggregate_phi.md) — found by #35 conlog workload
+- [024_recursive_struct_infinite_size.md](024_recursive_struct_infinite_size.md) — found by panic-to-diagnostic probing; recursive struct → E0583 instead of llvm-as leak
 
 ## Open Numbered Bugs
 
-_(none currently)_
+- [025_no_main_linker_error.md](025_no_main_linker_error.md) — no `main` in an executable build leaks a linker error instead of a clean diagnostic
 
 ## Still Open, But Not Numbered Bugs
 

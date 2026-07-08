@@ -95,6 +95,7 @@ inductive CoreCheckError where
   | unknownTrait (traitName : String)
   | missingTraitMethod (typeName methodName : String)
   | traitMethodRetTyMismatch (methodName expectedRetTy actualRetTy : String)
+  | recursiveType (typeName : String)
 
 def CoreCheckError.message : CoreCheckError → String
   | .typeMismatchVariable name declared used => s!"type mismatch for variable '{name}': declared {declared}, used as {used}"
@@ -139,6 +140,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .unknownTrait traitName => s!"unknown trait '{traitName}'"
   | .missingTraitMethod typeName methodName => s!"trait impl for '{typeName}' is missing method '{methodName}'"
   | .traitMethodRetTyMismatch methodName expectedRetTy actualRetTy => s!"method '{methodName}' signature does not match trait definition: expected return type {expectedRetTy}, got {actualRetTy}"
+  | .recursiveType typeName => s!"recursive type '{typeName}' has infinite size"
 
 private def getEnv : StateM CoreCheckEnv CoreCheckEnv := get
 private def setEnv (env : CoreCheckEnv) : StateM CoreCheckEnv Unit := set env
@@ -148,6 +150,7 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .continueOutsideLoop => some "continue can only be used inside while or for loops"
   | .copyDestroyConflict _ => some "remove the Destroy impl or remove #[copy]"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
+  | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
   | .insufficientCapabilities _ required _ => some s!"add 'with({required})' to the calling function, or wrap the call in a trusted function"
   | .missingCapability callee cap _ =>
     match callee with
@@ -214,6 +217,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .unknownTrait _ => "E0580"
   | .missingTraitMethod _ _ => "E0581"
   | .traitMethodRetTyMismatch _ _ _ => "E0582"
+  | .recursiveType _ => "E0583"
 
 /-- WHY this is an error (rich diagnostic surface, Phase 4 #11). Capability family
     only; everything else defaults to `none` so its rendering is unchanged. -/
@@ -768,6 +772,31 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
 private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagnostic :=
   { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint }
 
+/-- Does `ty` reach struct/enum `target` through by-VALUE field edges only?
+    Named-struct, named-enum, and array-of-T edges are by-value and continue the
+    walk; every indirection (`ref`/`refMut`/`ptrMut`/`ptrConst`/`heap`/
+    `heapArray`) breaks the cycle, as do primitives. `visited` guards against
+    non-target cycles so the walk terminates. A struct whose fields reach itself
+    this way has infinite size and would otherwise escape to LLVM as a recursive
+    struct type. Generic instantiations are not traversed here (their fields are
+    settled during monomorphization). -/
+private partial def tyReachesByValue (structs : List CStructDef) (enums : List CEnumDef)
+    (target : String) (visited : List String) : Ty → Bool
+  | .named n =>
+    if n == target then true
+    else if visited.contains n then false
+    else
+      let v := n :: visited
+      (match structs.find? fun sd => sd.name == n with
+       | some sd => sd.fields.any fun (_, fty) => tyReachesByValue structs enums target v fty
+       | none => false)
+      || (match enums.find? fun ed => ed.name == n with
+          | some ed => ed.variants.any fun (_, vfs) => vfs.any fun (_, fty) =>
+              tyReachesByValue structs enums target v fty
+          | none => false)
+  | .array elem _ => tyReachesByValue structs enums target visited elem
+  | _ => false
+
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
@@ -787,6 +816,14 @@ def ccCheckModuleDecls (m : CModule)
           | _ => false
         if !isTypeParam && !isCopyTy allStructs allEnums fty then
           errors := errors ++ [mkDeclDiag (.copyFieldNotCopy sd.name fname) sd.declSpan]
+  -- 1b. Recursive/infinite-size structs: a struct that reaches itself through
+  --     by-value fields (directly, mutually, or via an array element) has no
+  --     finite layout. Reject it here with a diagnostic instead of letting a
+  --     self-referential LLVM struct type escape to codegen (llvm-as: "recursive
+  --     structure type"). Indirection (heap/ref/ptr) breaks the cycle.
+  for sd in m.structs do
+    if sd.fields.any fun (_, fty) => tyReachesByValue allStructs allEnums sd.name [sd.name] fty then
+      errors := errors ++ [mkDeclDiag (.recursiveType sd.name) sd.declSpan]
   -- 2. Copy/Destroy conflict for enums
   for ed in m.enums do
     if ed.isCopy then

@@ -432,6 +432,9 @@ jobs:
       - name: Array-bounds gate (KNOWN_HOLES H8 — raw a[i] runtime-checked; OOB read/write/negative/nested/&mut trap)
         run: bash scripts/tests/check_array_bounds.sh
 
+      - name: Error-leak gate (bug 024 — recursive/edge inputs give a clean diagnostic, not an llvm-as/ld/panic leak)
+        run: bash scripts/tests/check_error_leaks.sh
+
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
 
