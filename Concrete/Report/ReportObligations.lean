@@ -9,7 +9,9 @@ import Concrete.IR.SSA
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Format
 import Concrete.Report.ReportBase
-import Concrete.Report.ReportInterface
+-- Obligation collectors need only the contract/VC helper cluster, not the
+-- capability/arith/unsafe/layout report renderers (pipeline #34).
+import Concrete.Report.ReportVC
 
 namespace Concrete
 namespace Report

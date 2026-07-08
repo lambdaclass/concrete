@@ -9,6 +9,7 @@ import Concrete.IR.SSA
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Format
 import Concrete.Report.ReportBase
+import Concrete.Report.ReportInterface
 import Concrete.Report.ReportObligations
 
 namespace Concrete
