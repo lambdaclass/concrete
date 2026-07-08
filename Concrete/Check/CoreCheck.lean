@@ -759,36 +759,11 @@ private def tyToString : Ty → String
   | .heapArray inner => "HeapArray<" ++ tyToString inner ++ ">"
   | .placeholder => "<unknown>"
 
-private partial def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
-  match ty with
-  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
-  | .bool | .float64 | .float32 | .char | .unit => true
-  | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
-  | .fn_ _ _ _ => true
-  -- Type parameters are assumed Copy at definition time; concrete types are
-  -- validated after monomorphization when the type variable is substituted.
-  | .typeVar _ => true
-  | .named name =>
-    match allStructs.find? fun sd => sd.name == name with
-    | some sd => sd.isCopy
-    | none => match allEnums.find? fun ed => ed.name == name with
-      | some ed => ed.isCopy
-      | none => false
-  | .generic name args =>
-    -- Conditional Copy (Phase 7 #3): declared Copy AND all fields/payloads Copy
-    -- after substituting the instantiation's args (type params in `args` fall
-    -- to the `.typeVar` assumption above, matching the decl-time policy).
-    match allStructs.find? fun sd => sd.name == name with
-    | some sd =>
-      sd.isCopy && sd.fields.all fun (_, fty) =>
-        isCopyTy allStructs allEnums (Layout.substTyVars (sd.typeParams.zip args) fty)
-    | none => match allEnums.find? fun ed => ed.name == name with
-      | some ed =>
-        ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
-          isCopyTy allStructs allEnums (Layout.substTyVars (ed.typeParams.zip args) fty)
-      | none => false
-  | .array elem _ => isCopyTy allStructs allEnums elem
-  | _ => false
+-- Copy predicate: delegates to the one shared definition (`Layout.isCopyTyCore`).
+-- Decl-time policy: unsubstituted type params are assumed Copy (`typeVarIsCopy
+-- := true`); concrete types are re-validated after monomorphization.
+private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
+  Layout.isCopyTyCore allStructs allEnums (typeVarIsCopy := true) ty
 
 private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagnostic :=
   { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint }

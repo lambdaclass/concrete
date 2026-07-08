@@ -841,35 +841,14 @@ private partial def monoStructsInProgram (modules : List CModule) : List CModule
   -- keeps the machine-wide invariant "isCopy = true ⇒ all fields Copy" that
   -- verifyCopyFieldsPostMono asserts.
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  -- Copy predicate: delegates to the one shared definition
+  -- (`Layout.isCopyTyCore`). Named refs resolve against BOTH the
+  -- specializations being demoted and the pre-existing hand-written structs.
+  -- Post-mono policy (`typeVarIsCopy := false`): any `.typeVar` here is treated
+  -- as not-Copy. This routing also picks up conditional Copy for generic
+  -- STRUCT instances, which the previous inline walker omitted.
   let isCopyField (specialized : List CStructDef) (ty : Ty) : Bool :=
-    -- named refs resolve against BOTH the specializations being demoted and
-    -- the pre-existing hand-written structs
-    let structs := specialized ++ allStructs
-    let rec go (fuel : Nat) (ty : Ty) : Bool :=
-      match fuel with
-      | 0 => false
-      | fuel+1 =>
-        match ty with
-        | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
-        | .bool | .float64 | .float32 | .char | .unit => true
-        | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
-        | .fn_ _ _ _ => true
-        | .named n =>
-          (match structs.find? fun sd => sd.name == n with
-           | some sd => sd.isCopy
-           | none => match allEnums.find? fun ed => ed.name == n with
-             | some ed => ed.isCopy
-             | none => false)
-        | .generic n args =>
-          -- generic enums (Option/Result) survive mono as instances
-          (match allEnums.find? fun ed => ed.name == n with
-           | some ed =>
-             ed.isCopy && ed.variants.all fun (_, vfs) => vfs.all fun (_, fty) =>
-               go fuel (Layout.substTyVars (ed.typeParams.zip args) fty)
-           | none => false)
-        | .array elem _ => go fuel elem
-        | _ => false
-    go 32 ty
+    Layout.isCopyTyCore (specialized ++ allStructs) allEnums (typeVarIsCopy := false) ty
   let rec demote (fuel : Nat) (structs : List CStructDef) : List CStructDef :=
     match fuel with
     | 0 => structs

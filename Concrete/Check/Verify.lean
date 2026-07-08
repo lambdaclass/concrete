@@ -265,35 +265,12 @@ def verifyNoTypeVars (modules : List CModule) : Diagnostics :=
     acc ++ verifyModuleTypes Ty.containsTypeVar "Ty.typeVar found" m (skipGenerics := true)) []
   violationsToDiagnostics "post-mono" violations
 
-/-- Check whether a type is Copy, given the full post-mono struct and enum lists. -/
-private partial def isCopyTyPostMono (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
-  match ty with
-  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
-  | .bool | .float64 | .float32 | .char | .unit => true
-  | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
-  | .fn_ _ _ _ => true
-  | .named name =>
-    match allStructs.find? fun sd => sd.name == name with
-    | some sd => sd.isCopy
-    | none => match allEnums.find? fun ed => ed.name == name with
-      | some ed => ed.isCopy
-      | none => false
-  | .generic name args =>
-    -- Generic ENUMS (Option/Result) survive mono as `.generic` instances.
-    -- Conditional Copy (Phase 7 #3): Copy iff declared Copy and every payload
-    -- is Copy after substitution.
-    match allEnums.find? fun ed => ed.name == name with
-    | some ed =>
-      ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
-        isCopyTyPostMono allStructs allEnums (Layout.substTyVars (ed.typeParams.zip args) fty)
-    | none =>
-      match allStructs.find? fun sd => sd.name == name with
-      | some sd =>
-        sd.isCopy && sd.fields.all fun (_, fty) =>
-          isCopyTyPostMono allStructs allEnums (Layout.substTyVars (sd.typeParams.zip args) fty)
-      | none => false
-  | .array elem _ => isCopyTyPostMono allStructs allEnums elem
-  | _ => false
+/-- Check whether a type is Copy, given the full post-mono struct and enum lists.
+    Delegates to the one shared definition (`Layout.isCopyTyCore`). Post-mono
+    policy: any surviving `.typeVar` is treated as not-Copy (`typeVarIsCopy :=
+    false`) — it should have been substituted away by monomorphization. -/
+private def isCopyTyPostMono (allStructs : List CStructDef) (allEnums : List CEnumDef) (ty : Ty) : Bool :=
+  Layout.isCopyTyCore allStructs allEnums (typeVarIsCopy := false) ty
 
 /-- **Post-Mono Copy verifier**: monomorphized Copy structs must have all-Copy fields.
     Generic Copy structs skip field checks pre-mono (type params are assumed Copy).

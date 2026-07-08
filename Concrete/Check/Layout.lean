@@ -113,6 +113,54 @@ def substEnumTypeArgs (ed : CEnumDef) (typeArgs : List Ty) : CEnumDef :=
       (vn, fields.map fun (fn, ft) => (fn, substTyVars subst ft)) }
 
 -- ============================================================
+-- Copy predicate over Core types (one source of truth)
+-- ============================================================
+
+/-- Canonical `Copy` predicate over post-Elab Core types.
+
+    This is the single definition the Core-side passes share — CoreCheck's
+    decl-time check, Mono's demotion, and Verify's post-mono verifier — so they
+    can never drift on what "Copy" means (a class of "Check says yes,
+    Mono/Verify disagree" bugs).
+
+    `typeVarIsCopy` selects the phase policy for an *unsubstituted* type
+    parameter: pre-mono checking assumes type params are Copy (they are
+    re-validated after substitution — pass `true`), while post-mono
+    verification treats any surviving `.typeVar` as not-Copy (it should have
+    been substituted away — pass `false`).
+
+    Conditional Copy (Phase 7 #3): a declared-Copy generic is Copy iff every
+    field/payload is Copy *after* substituting the instantiation's arguments —
+    `Option<i32>` is Copy, `Option<String>` is not. Names are unique across the
+    struct/enum tables, so the struct-first / enum-first lookup order is
+    immaterial. -/
+partial def isCopyTyCore (structs : List CStructDef) (enums : List CEnumDef)
+    (typeVarIsCopy : Bool) : Ty → Bool
+  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
+  | .bool | .float64 | .float32 | .char | .unit => true
+  | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
+  | .fn_ _ _ _ => true
+  | .typeVar _ => typeVarIsCopy
+  | .named name =>
+    match structs.find? fun sd => sd.name == name with
+    | some sd => sd.isCopy
+    | none => match enums.find? fun ed => ed.name == name with
+      | some ed => ed.isCopy
+      | none => false
+  | .generic name args =>
+    match structs.find? fun sd => sd.name == name with
+    | some sd =>
+      sd.isCopy && sd.fields.all fun (_, fty) =>
+        isCopyTyCore structs enums typeVarIsCopy (substTyVars (sd.typeParams.zip args) fty)
+    | none => match enums.find? fun ed => ed.name == name with
+      | some ed =>
+        ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
+          isCopyTyCore structs enums typeVarIsCopy (substTyVars (ed.typeParams.zip args) fty)
+      | none => false
+  | .array elem _ => isCopyTyCore structs enums typeVarIsCopy elem
+  | _ => false
+
+-- ============================================================
 -- Type size (bytes)
 -- ============================================================
 

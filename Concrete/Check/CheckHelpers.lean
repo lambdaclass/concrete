@@ -6,6 +6,7 @@ import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
 import Concrete.Check.CheckError
+import Concrete.Check.Layout
 
 namespace Concrete
 
@@ -195,30 +196,25 @@ def resolveType (ty : Ty) : CheckM Ty := do
     return .fn_ params' capSet retTy'
   | _ => return ty
 
-def substCapSet (mapping : List (String × Ty)) : CapSet → CapSet
-  | .concrete caps =>
-    -- Cap variable names that map to types are not relevant here, keep as-is
-    .concrete caps
-  | .var name => .var name
-  | .union a b => .union (substCapSet mapping a) (substCapSet mapping b)
-  | .empty => .empty
+/-- Type-variable substitution over surface types. Delegates to the one shared
+    definition (`Layout.substTyVars`); the two were byte-for-byte equivalent
+    (the old local copy applied `substCapSet` on `.fn_`, but that was identity
+    for every cap form), so this keeps a single substitution implementation. -/
+def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
+  Layout.substTyVars mapping ty
 
-def substTy (mapping : List (String × Ty)) : Ty → Ty
-  | .named name => match mapping.lookup name with | some t => t | none => .named name
-  | .typeVar name => match mapping.lookup name with | some t => t | none => .typeVar name
-  | .ref inner => .ref (substTy mapping inner)
-  | .refMut inner => .refMut (substTy mapping inner)
-  | .ptrMut inner => .ptrMut (substTy mapping inner)
-  | .ptrConst inner => .ptrConst (substTy mapping inner)
-  | .array elem n => .array (substTy mapping elem) n
-  | .generic name args => .generic name (args.map (substTy mapping))
-  | .fn_ params capSet retTy =>
-    .fn_ (params.map (substTy mapping)) (substCapSet mapping capSet) (substTy mapping retTy)
-  | .heap inner => .heap (substTy mapping inner)
-  | .heapArray inner => .heapArray (substTy mapping inner)
-  | ty => ty
+/-- Is this type Copy (non-linear)? Primitives are Copy; structs are linear.
 
-/-- Is this type Copy (non-linear)? Primitives are Copy; structs are linear. -/
+    This is the *surface* Copy judgment: it runs during checking over surface
+    `StructDef`/`EnumDef` (env-based, monadic) and handles in-progress inference
+    forms the Core judgment never sees — `newtype` unwrapping, `.typeVar` with an
+    env Copy-bound, `.placeholder`. The *Core* counterpart is
+    `Layout.isCopyTyCore` (pure, over `CStructDef`/`CEnumDef`), shared by
+    CoreCheck/Mono/Verify. The two are kept separate only because they operate on
+    different representations at different phases; the primitive- and
+    conditional-generic policy is intentionally identical, so a change to what
+    "Copy" means must be mirrored in both (tracked toward Phase 14 #13b, one
+    source of typing truth). -/
 partial def isCopyType (ty : Ty) : CheckM Bool := do
   match ty with
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => return true
