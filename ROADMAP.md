@@ -1099,6 +1099,16 @@ evidence-carrying-artifact thesis applied to the compiler's own IR. Do not
 big-bang it; stage per the doc (IntArith beachhead → first certificate type →
 widen one fact axis at a time), each stage shippable and retiring debt.
 
+Quality bar for this phase: finishing `IntArith` alone is not "the best
+possible pipeline"; it is the first load-bearing semantic axis. The pipeline can
+make that claim only when every major semantic axis has the same discipline:
+one reference truth, one owning stage, no hidden alternate pipeline, facts
+carried forward instead of re-derived, backend lowering derived from compiler
+facts rather than parallel policy code, typed report/evidence rows, and
+mutation-tested gates proving the checks are load-bearing. Until then, public
+language claims should say "pipeline hardening in progress" rather than imply
+the compiler architecture is finished.
+
 1. **FIRST FIX: unify integer/arithmetic evaluation semantics.**
    Arithmetic semantics currently has multiple hand-maintained implementations:
    interpreter evaluation, constant folding / DCE decisions, and backend checked
@@ -1112,15 +1122,22 @@ widen one fact axis at a time), each stage shippable and retiring debt.
    cast normalization, checked/wrapping/saturating operations, division and
    remainder semantics, shift-range rules, overflow/trap predicates, and
    foldability. `Interp` must evaluate through it; `SSACleanup` must ask it
-   whether a constant fold is legal and whether it traps; `EmitSSA` /
-   `EmitBuiltins` must derive checked-helper selection from the same facts.
+   whether a constant fold is legal and whether it traps; `SSAVerify` must not
+   keep a separate width/signedness truth; `EmitSSA` / `EmitBuiltins` must
+   derive checked-helper width, signedness, div/rem helper choice, shift helper
+   choice, and trap-preservation decisions from the same facts. Codegen may own
+   LLVM mechanics and helper text, but not a separate arithmetic policy.
 
    Done when a gate proves `interpret == fold-then-interpret == compiled` over
    the integer operation matrix, including signed/unsigned widths, casts,
    negative operands, div/rem, shift bounds, checked overflow, wrapping ops,
    saturating ops if present, and trap preservation. Add a red-team fixture
    where an optimizer fold would erase a documented trap; that fixture must fail
-   if the trap disappears.
+   if the trap disappears. Add a documentation/API check that the shared
+   arithmetic module's comments match the implemented API surface (for example,
+   whether shifts/bitwise ops are handled by `evalIntBinOp` or by separate
+   helper predicates), because misleading reference-semantics comments are
+   themselves a drift source.
 
    Gate: `scripts/tests/check_int_arith_semantics.sh` (CI-wired, 14 rows).
    STATUS (partial — NOT done): `Interp` and `SSACleanup` now route through
@@ -1165,7 +1182,11 @@ widen one fact axis at a time), each stage shippable and retiring debt.
      elisions, never silently to raw LLVM behavior.
    Deliverable: `concrete inspect --pipeline-contracts --json` or an equivalent
    internal gate plus fixtures that intentionally violate one contract per
-   boundary.
+   boundary. This item is the line between "strong individual gates" and a
+   world-class pipeline: every later pass should be able to say which previous
+   contract makes a case impossible, and every user-triggerable violation should
+   become a diagnostic at the first responsible boundary rather than leaking to
+   Lower, LLVM, the linker, or a panic.
 
 3b. **Certificate-carrying IR — escalate stage contracts from gates that DETECT
    drift to types that FORBID it.** Items #2/#3/#5/#10 dedup meaning and catch
