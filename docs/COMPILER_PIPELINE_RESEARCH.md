@@ -8,6 +8,12 @@ This is not a feature wishlist. The point is to extract the parts that fit
 Concrete's philosophy: small systems language, explicit authority, typed facts,
 visible evidence, replayable failures, and no hidden trust expansion.
 
+For the focused Phase 6.5 follow-up on Zig result-location semantics,
+Rust/rustc queries, MLIR pass infrastructure, Hylo second-class references,
+Austral linear capabilities, Perceus reuse, and incremental verification caches,
+see
+[research/compiler/pipeline-lessons-2026-07.md](../research/compiler/pipeline-lessons-2026-07.md).
+
 ## Repositories Checked
 
 The comparison used local clones under `/private/tmp`:
