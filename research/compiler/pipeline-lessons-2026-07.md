@@ -12,6 +12,42 @@ research backing for the relevant roadmap items, especially Phase 6.5
 automation), Phase 14 (compiler soundness bridge), Phase 19 (editor/tooling),
 and Phase 20 (research-gated extensions).
 
+## Sources And Verification Status
+
+This note is a design synthesis from the Phase 6.5 pipeline discussion. It is
+not itself a completed external survey. When a claim from this note becomes a
+language guarantee, roadmap item, or public comparison, it must be backed by a
+checked source pass and recorded with provenance.
+
+Source targets for the follow-up pass:
+
+- Hylo / Val: [Hylo](https://www.hylo-lang.org/) language documentation and
+  the Mutable Value Semantics paper
+  ([arXiv:2106.12678](https://arxiv.org/abs/2106.12678)).
+- Vale: [Vale](https://vale.dev/) documentation and Verdagon design notes on
+  generational references, regions, and borrowing.
+- Zig: [Zig language reference](https://ziglang.org/documentation/master/),
+  release notes, compiler intern-pool design notes, and result-location
+  semantics documentation.
+- Rust: [rustc query system](https://rustc-dev-guide.rust-lang.org/query.html),
+  incremental compilation, red/green dependency tracking, and diagnostic
+  infrastructure.
+- MLIR: [MLIR pass management](https://mlir.llvm.org/docs/PassManagement/),
+  verifier rules, analysis invalidation, pass instrumentation, reproducer docs,
+  and the MLIR paper ([arXiv:2002.11054](https://arxiv.org/abs/2002.11054)).
+- Verified/certifying compiler peer group:
+  [Cogent](https://ts.data61.csiro.au/projects/TS/cogent.pml),
+  [CompCert](https://compcert.org/), [CakeML](https://cakeml.org/),
+  [F*](https://www.fstar-lang.org/), [Alive2](https://alive2.llvm.org/), and
+  [Austral](https://austral-lang.org/).
+- [Roc](https://www.roc-lang.org/), Mojo, [Koka](https://koka-lang.github.io/),
+  and Lean runtime reuse notes as lower-priority follow-up sources.
+
+Record source counts, adversarially verified claims, and refuted claims only
+after the follow-up pass exists as a checked artifact. Until then, any item
+marked "research" below should be treated as a direction to validate, not a
+fact Concrete depends on.
+
 ## Current Concrete Thesis
 
 Concrete is not trying to be "a compiler with a few tests." The pipeline thesis
@@ -63,11 +99,16 @@ Useful ideas:
 - **InternPool-style central identities.** Interned names/types/values reduce
   duplicate representation and make stable keys possible. Concrete's analog is
   stable interned IDs for names, types, target facts, proof obligations, and
-  report facts.
+  report facts. The useful part to validate is the index-/interned-identity
+  discipline: facts should serialize, hash, diff, and cache by stable IDs
+  instead of by long-lived object identity.
 - **Result Location Semantics.** Zig's destination-aware expression model is a
   useful vocabulary for Concrete's value/place/callArg/destination rules. It is
   especially relevant to linear aggregates, struct/array literals, returns,
-  move-destructure, and codegen destination passing.
+  move-destructure, and codegen destination passing. Treat the vocabulary as
+  valuable and the exact mechanism as cautionary: destination-sensitive
+  lowering is precisely where Concrete must make pass contracts and tests
+  stronger, not just more clever.
 - **Tested documentation.** Zig compiles and tests language-reference examples.
   Concrete already plans doc-snippet gates and tests-as-docs; this confirms the
   direction.
@@ -203,6 +244,12 @@ Useful ideas:
 - **Crash/failure reproducers.** Failure reproduction is part of the pass
   infrastructure.
 - **Dialects with verifiers.** Each IR layer can carry its own verifier.
+- **Verifier placement.** The idea to adapt is before-and-after verification:
+  a pass must reject invalid input and must also prove it did not introduce
+  invalid output.
+- **Structural-before-semantic ordering.** Cheap global structure checks should
+  fail before expensive semantic/proof obligations. This is the right ordering
+  for Concrete's stage contracts, proof extraction, and report generation.
 
 Concrete translation:
 
@@ -234,6 +281,15 @@ Useful ideas:
   replace returning references from collections.
 - **Exclusivity without making references first-class.** Concrete's callable
   values and scoped collection APIs are in the same family.
+- **Parameter and access conventions.** Research Hylo/Val-style conventions
+  such as ordinary read-only bindings, `inout`/mutable access, consuming
+  parameters, and setter-style projections as possible prior art for Concrete's
+  pass-agreement and scoped-access docs. Do not copy syntax without a separate
+  design pass.
+- **Exclusivity law.** Mutable projection should make the owner inaccessible
+  through aliases for the projection's lifetime; immutable projection permits
+  concurrent reads but no mutation. This is the rule that makes scoped
+  collection mutation sound without returning references.
 
 Concrete translation:
 
@@ -303,7 +359,8 @@ Roadmap slots:
 
 ## Vale
 
-Vale is useful mainly as a contrast case.
+Vale is useful mainly as a contrast case, with one speculative fallback idea to
+keep visible.
 
 Useful ideas:
 
@@ -311,11 +368,19 @@ Useful ideas:
   point.
 - **FFI/memory safety tradeoffs** are worth studying before broad trusted
   boundary work.
+- **Dynamic checked fallback.** If Concrete eventually hits a forcing workload
+  where the linear checker and second-class-reference invariant cannot prove a
+  liveness/provenance fact statically, a generational-reference-style runtime
+  check could discharge the obligation as `checked_dynamically`, never as
+  `proved`.
 
 Concrete translation:
 
 - Concrete should not switch away from linearity, but Vale helps test whether
   Concrete's FFI/trusted-boundary story is too narrow.
+- Do not adopt any "pure zero-cost safety" claim without proof. Region/frozen
+  scopes may remove checks within a constrained section, but the broader design
+  remains a runtime/static hybrid and must be reported honestly.
 
 Roadmap slots:
 
@@ -345,6 +410,47 @@ Roadmap slots:
 - Phase 18 package/dependency evidence.
 - Phase 16 freestanding/embedded.
 - Phase 20 research-gated optimization/build work.
+
+This Roc section, and any Mojo comparison, remains prior-knowledge level until
+a narrow follow-up pass verifies the specific compiler-pipeline claims. Do not
+use it as release-facing positioning without that pass.
+
+## Missing Peer Group: Verified And Certifying Compilers
+
+The first version of this note compared mostly against pragmatic language
+toolchains. Concrete's actual peer group also includes verified and certifying
+compiler projects. These are more relevant to the proof/evidence pipeline than
+Odin, Zig, or Gleam.
+
+Projects to study:
+
+- **Cogent.** A linearly typed systems language whose toolchain connects
+  generated C to a formal embedding through refinement proof artifacts. This is
+  one of the closest existing relatives to Concrete's "systems code plus
+  evidence" thesis.
+- **CompCert.** The baseline reference for proved compiler passes and verified
+  compilation. Concrete should use it as prior art for pass-correctness claims,
+  not as an excuse to claim the whole native toolchain is proved.
+- **CakeML.** A verified compiler with a bootstrap story. Relevant to the
+  no-second-truth-source and compiler-TCB dogfooding questions.
+- **F*/Low*.** A practical obligation-to-SMT-to-extraction pipeline for
+  low-level code. Relevant to Concrete's evidence-class ledger and proof
+  automation UX.
+- **Alive2.** SMT-based validation of LLVM IR optimizations/equivalence. This
+  is the closest prior art for validating the EmitSSA/backend boundary where a
+  differential fuzzer can find miscompiles but cannot prove absence.
+- **Austral.** Linear types plus capability security in a small language.
+  Austral remains a design-relative even though this research note is focused
+  on compiler pipeline lessons.
+- **Perceus / Lean 4 runtime.** Reuse analysis after ownership is stable; this
+  is relevant to Concrete's long-term optimization story, not to v1 semantics.
+
+Roadmap slots:
+
+- Phase 14 compiler soundness bridge and source-semantics agreement.
+- Phase 15 translation validation and backend trust boundaries.
+- Phase 18 package/evidence replay.
+- Phase 20 compiler self-verification research.
 
 ## New Ideas To Record
 
@@ -480,4 +586,3 @@ Roadmap fit: Phase 6.5 #20/#23, Phase 19 editor tooling.
 4. Add fingerprint-keyed incremental verification cache after proof replay and
    synthesis are usable enough to benefit from it.
 5. Add analysis preservation/invalidation contracts when cached analyses exist.
-

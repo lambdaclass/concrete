@@ -1088,16 +1088,18 @@ every item below is an instance of one principle — *each program has exactly o
 meaning, committed once by the stage that owns it, read-only for every stage
 after*. Two axes: (1) **one reference semantics** — the interpreter IS the
 language's operational meaning, and the folder/backend are derived from or
-checked against it, so the oracle is true by construction, not by fuzzing (items
-#1, #4, #14); and (2) **facts committed once** — every semantic fact (type, cap,
+checked against it, so the oracle is true by construction, not by fuzzing
+(`IntArith`, feature matrices, counterexample/replay gates); and (2) **facts
+committed once** — every semantic fact (type, cap,
 ownership, arithmetic policy, evidence class, resolved identity) is stamped once
 and never re-derived downstream. The key escalation this phase drives is from
-*gates that DETECT drift* to *types that FORBID it* (item #3b): shared
-predicates and pass-agreement gates catch disagreement after the fact, but
-certificate-carrying IR makes re-derivation unrepresentable. That is the
-evidence-carrying-artifact thesis applied to the compiler's own IR. Do not
-big-bang it; stage per the doc (IntArith beachhead → first certificate type →
-widen one fact axis at a time), each stage shippable and retiring debt.
+*gates that DETECT drift* to *types that FORBID it*: shared predicates and
+pass-agreement gates catch disagreement after the fact, but certificate-carrying
+IR makes re-derivation unrepresentable. That is the
+evidence-carrying-artifact thesis applied to the compiler's own IR. Long-term
+architecture wins over short-term compatibility in this phase: if a clean
+typed/certified boundary requires broad breakage, take the breakage and land it
+behind gates rather than enshrine a weak bridge as permanent architecture.
 
 Quality bar for this phase: finishing `IntArith` alone is not "the best
 possible pipeline"; it is the first load-bearing semantic axis. The pipeline can
@@ -1109,292 +1111,284 @@ mutation-tested gates proving the checks are load-bearing. Until then, public
 language claims should say "pipeline hardening in progress" rather than imply
 the compiler architecture is finished.
 
-1. **FIRST FIX: unify integer/arithmetic evaluation semantics.**
-   Arithmetic semantics currently has multiple hand-maintained implementations:
-   interpreter evaluation, constant folding / DCE decisions, and backend checked
-   helper emission. That threatens the interpreter-as-oracle and
-   differential-testing story because a fold or helper selection can disagree
-   with the source/runtime meaning. This is the evaluation-axis sibling of the
-   type-truth work below.
+1. **[DONE] Unify integer/arithmetic evaluation semantics.**
+   `Concrete/Semantics/IntArith.lean` is the single source of truth for integer
+   bit width, signedness, range, checked/wrapping/saturating behavior,
+   cast-normalization, div/rem semantics, shift-range predicates,
+   overflow/trap predicates, and foldability. `Interp`, `SSACleanup`,
+   `SSAVerify`, `EmitSSA`, report obligations, and diagnostic/range helpers all
+   read the relevant facts from it; codegen owns LLVM mechanics and helper text,
+   not a separate arithmetic policy.
 
-   Deliverable: `Concrete/Semantics/IntArith.lean` (or equivalent) defining the
-   single source of truth for integer bit width, signed/unsigned ranges,
-   cast normalization, checked/wrapping/saturating operations, division and
-   remainder semantics, shift-range rules, overflow/trap predicates, and
-   foldability. `Interp` must evaluate through it; `SSACleanup` must ask it
-   whether a constant fold is legal and whether it traps; `SSAVerify` must not
-   keep a separate width/signedness truth; `EmitSSA` / `EmitBuiltins` must
-   derive checked-helper width, signedness, div/rem helper choice, shift helper
-   choice, and trap-preservation decisions from the same facts. Codegen may own
-   LLVM mechanics and helper text, but not a separate arithmetic policy.
+   Gate: `scripts/tests/check_int_arith_semantics.sh` proves
+   `interpret == fold-then-interpret == compiled` over the integer matrix and
+   includes trap-preservation red-team cases. Keep the documentation/API check:
+   if `IntArith` comments claim an operation family is handled by one API while
+   the code handles it through helper predicates, the gate/docs drift must catch
+   it. This item is the model for every later semantic-axis migration.
 
-   Done when a gate proves `interpret == fold-then-interpret == compiled` over
-   the integer operation matrix, including signed/unsigned widths, casts,
-   negative operands, div/rem, shift bounds, checked overflow, wrapping ops,
-   saturating ops if present, and trap preservation. Add a red-team fixture
-   where an optimizer fold would erase a documented trap; that fixture must fail
-   if the trap disappears. Add a documentation/API check that the shared
-   arithmetic module's comments match the implemented API surface (for example,
-   whether shifts/bitwise ops are handled by `evalIntBinOp` or by separate
-   helper predicates), because misleading reference-semantics comments are
-   themselves a drift source.
+2. **[DONE] Centralize type and policy predicates used across the pipeline.**
+   `isCopy`, conditional Copy after substitution, type substitution/type-var
+   matching, and the main type-policy helpers should have one implementation
+   used by Check, Verify, CoreCheck, Mono, Elab/Lower as needed. Keep the
+   regression gate with generic `Option<T>` / `Result<T,E>`, user generic
+   structs/enums, trait bounds through turbofish/caller type params, arrays,
+   newtypes, and post-mono demotion cases proving all stages agree.
 
-   Gate: `scripts/tests/check_int_arith_semantics.sh` (CI-wired, 14 rows).
-   STATUS (partial — NOT done): `Interp` and `SSACleanup` now route through
-   `IntArith`; `EmitSSA`/`EmitBuiltins` still hold a PARALLEL hand-maintained
-   arithmetic copy (0 `IntArith` references). The gate passes because the three
-   views AGREE today — it proves agreement, not unification, so it is currently
-   a regression net over a still-forked backend, not evidence the item is
-   complete. #1 is done only when the backend derives checked-helper selection
-   from `IntArith` and the parallel copy is deleted.
+3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
+   `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
+   establishes that user-triggerable violations are caught at the first
+   responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
+   or Lean panics. Keep extending this gate whenever a new boundary rule is
+   introduced. The long-term form is `concrete inspect --pipeline-contracts
+   --json`, but the V1 gate is already the phase's contract backstop.
 
-2. Centralize type and policy predicates used across the pipeline.
-   Today `isCopyType` / `isCopyTy`-style logic exists in multiple stages
-   (Check, Verify, CoreCheck, Mono-style logic), and that scatter already caused
-   conditional-Copy / trait-bound bugs. Create one shared module used by Check,
-   Verify, CoreCheck, Mono, Elab/Lower as needed for:
-   - `isCopy` and conditional Copy after substitution;
-   - trait-bound satisfaction;
-   - resource ownership / `ownsResource`;
-   - type substitution and type-variable matching;
-   - strict type compatibility, including numeric width/signedness;
-   - pass-by-value versus pass-by-pointer/layout facts.
-   Add a gate with generic `Option<T>` / `Result<T,E>`, user generic structs,
-   trait bounds through turbofish/caller type params, arrays, newtypes, and
-   post-mono demotion cases proving all stages agree on the same answers.
+4. Centralize capabilities/effects as the next semantic axis.
+   Capabilities are as central to Concrete as arithmetic. Add or identify the
+   shared cap/effect fact layer for required caps, inferred callback caps,
+   trusted/Unsafe caps, package/import cap facts, diagnostic rendering, report
+   rendering, audit diffs, LSP/agent JSON, and proof/audit summaries. Check,
+   CoreCheck, Report, packages, and audit should render the same fact rather
+   than recomputing a capability string or capset shape independently.
 
-2a. Add the third fuzzer: generics / monomorphization / type-policy drift.
-   Concrete already has value/runtime fuzzing (`fuzz_differential`) and
-   ownership/conservation fuzzing (`fuzz_linearity`). The missing fuzzing axis
-   is the one that produced the conditional-Copy, turbofish, type-substitution,
-   and trait-bound bug cluster: generic instantiation and mono agreement.
+   Gate with an ordinary `File`/`Network` call, a capability-polymorphic
+   callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
+   dependency/package boundary, and one negative where report output would
+   otherwise disagree with the checker diagnostic.
 
-   Deliverable: `scripts/fuzz_generics.py` (or equivalent) that generates small
-   generic programs with user structs/enums, `Option<T>` / `Result<T,E>`,
-   conditional `Copy`, trait bounds, turbofish calls, nested generic fields,
-   arrays/newtypes, method impls, and multiple instantiations. The oracle is not
-   program output first; it is phase agreement. For each generated program,
-   Check, Elab/Core, Mono, CoreCheck, Verify, report facts, and any generated
-   specialized names must agree on Copy-ness, trait-bound satisfaction,
-   substitution, capability requirements, and whether a specialization is Copy
-   or demoted to linear. Negative variants should deliberately omit bounds,
-   instantiate `Copy` containers with linear payloads, shadow type variables,
-   collide mono names, or use caller type params through turbofish.
+5. Add stable interned fact IDs.
+   Before more report/proof/package/editor facts grow, introduce deterministic
+   internal identities for resolved names, type constructors, generic
+   instantiations, capability sets, target facts, proof obligations, report
+   facts, diagnostics, generated names, and source spans after desugaring. Human
+   output should still show source names; caches, pass hashes, evidence bundles,
+   and replay artifacts should use stable IDs.
 
-   Done when the fuzzer finds a seeded historical bug if the old behavior is
-   reintroduced, has a fast smoke target in CI and a longer rotating/nightly
-   campaign, and saves any disagreement as a minimized `.con` fixture with the
-   first disagreeing phase named. This is the type-axis analog of the arithmetic
-   agreement gate in #1 and the conservation fuzzer for linearity.
+   Done when the same source + compiler version + target/profile produces
+   stable IDs, unrelated edits preserve IDs where possible, generated names use
+   the same hygiene source, and a gate proves reports/agents can join facts by
+   ID without reparsing human strings.
 
-3. Add stage contracts and pass-agreement assertions between every major
-   compiler phase:
-   `AST -> Check -> Elab/Core -> Mono -> CoreCheck -> Lower -> SSA ->
-   SSAVerify -> Emit`.
-   Each stage must state what it promises and what it assumes. Minimum V1
-   contracts:
-   - after Check: no unconsumed owned linear locals, params, or branch locals;
-   - after Elab/Core: no impossible type hints, illegal mixed-width binops, or
-     hidden capability calls introduced by lowering sugar;
-   - after Mono: no unresolved generic declarations or type-var leakage in
-     emitted Core except explicitly allowed generic metadata;
-   - after CoreCheck: binops width-compatible, capabilities checked, Copy
-     constraints valid, unsafe/trusted operations facted;
-   - after Lower: SSA verifier passes, runtime traps are present for required
-     checks, and defer/scope cleanup boundaries are represented;
-   - after Emit: checked operations lower through named helpers or named proven
-     elisions, never silently to raw LLVM behavior.
-   Deliverable: `concrete inspect --pipeline-contracts --json` or an equivalent
-   internal gate plus fixtures that intentionally violate one contract per
-   boundary. This item is the line between "strong individual gates" and a
-   world-class pipeline: every later pass should be able to say which previous
-   contract makes a case impossible, and every user-triggerable violation should
-   become a diagnostic at the first responsible boundary rather than leaking to
-   Lower, LLVM, the linker, or a panic.
+6. Add a lightweight compiler fact dependency graph.
+   Do not build the full rustc-style demand-driven query engine yet, but record
+   dependency edges as first-class trace/replay data:
+   `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
+   corecheck -> lower/ssa -> obligations -> reports -> backend`. Every cached
+   or replayable fact must name the source/fact/version/profile inputs it
+   depends on. If a fact cannot name its dependencies, it is not eligible for
+   cache reuse or evidence replay.
 
-3b. **Certificate-carrying IR — escalate stage contracts from gates that DETECT
-   drift to types that FORBID it.** Items #2/#3/#5/#10 dedup meaning and catch
-   disagreement, but the architecture still INVITES it: any new pass can
-   re-infer a fact and disagree, and the gate only fires if someone wrote the
-   fixture. The structural fix is to make re-derivation unrepresentable — a
-   semantic fact is a field the owning stage stamped, not something a later
-   stage recomputes. Introduce the FIRST certificate type as the pattern's
-   beachhead: a `TypedProgram` (or equivalent) constructible only by the type
-   stage, whose node types Elab and CoreCheck may READ but not re-infer. This is
-   the Phase 6.5 entry point for Phase 14 #13b ("one source of typing truth");
-   6.5 introduces the pattern and the first certificate, Phase 14 finishes the
-   type axis and adds the preservation proofs. NOTE: the pattern is not
-   greenfield — `Pipeline.lean` already gates at STAGE granularity with
-   constructor-guarded artifact tokens (`ValidatedCore` is constructible only by
-   `Pipeline.coreCheck`, etc.; see docs/ARCHITECTURE.md Artifact Flow). This
-   item extends that from "this stage ran" tokens to "this FACT is committed in
-   the node" — carrying the type/cap/etc. inside the IR, read-only downstream,
-   rather than only proving a pass executed. Do not convert every fact at
-   once — land the type axis, prove the ergonomics and the compile-time win,
-   then widen to capability/arithmetic-policy/evidence-class/resolved-identity
-   one axis at a time (the staging in docs/PIPELINE_ARCHITECTURE.md). Done when
-   at least one committed fact is carried in the IR type such that a stage
-   attempting to re-derive it to a different answer FAILS TO COMPILE (not merely
-   fails a gate), a fixture proves the old re-inference site is gone, and the
-   differential fuzzer + `test-ci-gates` confirm behavior preservation for
-   accepted programs. Red-team: a patch that reintroduces a parallel re-inference
-   must not typecheck.
+   Done when `concrete trace-pipeline --json` can show why a proof obligation,
+   capability fact, diagnostic, or backend artifact changed, and a replay gate
+   marks dependent facts stale when an upstream source/fact hash changes.
 
-4. Eliminate hidden second pipelines.
-   Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
-   proof extraction, and tests must call the same composed pass functions or
-   declare a checked reason for diverging. The specific risk is a verifier
-   checking a path that production does not use, or a fuzzer exercising a
-   different lower/mono path than shipped code. Deliverable: a single pipeline
-   composition layer that exposes strict, tolerant, audit, and gate modes as
-   configured variants over the same stages. Gate with one fixture that would
-   fail if `runVerifyGates` re-runs mono/lower differently from production.
+7. Add pass locality and mutation rules.
+   Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
+   it may mutate, what facts it may write, and what prior stage contract makes
+   its assumptions legal. A report/audit pass may not recompute semantic facts;
+   a lowering pass may not mutate source-level facts; a function-local pass may
+   not inspect sibling functions unless explicitly declared; a proof extraction
+   pass may not silently invent checker facts.
 
-5. Centralize capabilities/effects as a semantic axis.
-   Capabilities are already central to Concrete's language identity, but the
-   pipeline should have one fact source for required caps, inferred callback
-   caps, trusted/Unsafe caps, report rendering, diagnostics, package facts, and
-   proof/audit summaries. Add or identify the shared cap/effect fact layer and
-   make Check, CoreCheck, Report, packages, LSP/agent JSON, and audit diffs read
-   from it. Gate with a capability-polymorphic callback, a trusted wrapper, an
-   Unsafe intrinsic, a dependency boundary, and one negative where report output
-   would otherwise disagree with the checker diagnostic.
+   Done when the pipeline-contract gate includes at least one red-team fixture
+   for illegal cross-level read, illegal fact write, hidden sibling inspection,
+   and report-side semantic recomputation.
 
-6. Unify tree-walker coverage across AST/Core/SSA consumers.
-   There are recursive walkers in Check, Verify, Mono, ProofCore, Report, Lower,
-   interpreter, and tests. Every new constructor risks one walker missing it.
-   Add a constructor-coverage manifest/gate proving every language/Core
-   constructor is handled by:
-   checker, elab, mono, proof extraction, report/audit, interpreter, lowering,
-   value-flow spec, and differential/oracle coverage or an explicit
-   compile-only/proof-only rationale. This is the compiler-pipeline version of
-   the feature-interaction checklist.
+8. Add analysis preservation and invalidation contracts.
+   Once facts are cached or reused, every pass must state which facts it reads,
+   writes, preserves, and invalidates. This is the guardrail that prevents
+   future incremental checking, proof caching, package facts, or editor facts
+   from becoming a stale second truth source.
 
-7. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
-   CoreCheck should catch frontend/checker/elab/mono misses before Lower.
-   Add or verify checks for:
-   - no unresolved generic/typevar leakage after mono;
-   - no illegal Copy specialization or post-mono Copy violation;
-   - no mixed-width binops or unchecked lenient numeric compatibility;
-   - no illegal non-Copy value-flow residue;
-   - no unresolved capability-polymorphic calls;
-   - no unsupported unsafe/trusted op without a fact;
-   - no user-triggerable layout/type hole that can become a Lower panic.
-   Gate with one accepted Core fixture per valid class and one rejected fixture
-   per invalid class.
+   Done when a pass that changes Core invalidates dependent CoreCheck, proof,
+   report, and backend facts; a pass that only changes source spans preserves
+   type/capability facts but invalidates source-linked diagnostics; and a gate
+   proves stale facts cannot remain green after an invalidating pass.
 
-8. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
-   remains ad hoc.
-   Historical bugs clustered around branch/loop/snapshot reconciliation. The
-   extracted builder should own:
-   if/match result values, loop headers/exits, phi construction, scope-local
-   variable filtering, internal trailing-value handling, and defer cleanup
-   boundaries. Acceptance gate: previous nested match, loop-after-loop-branch,
-   `__last_expr`, defer, and value-block fixtures remain green, and a mutation
-   that drops scope filtering or trap preservation is caught.
+9. Replace source-level side tables with a real typed AST boundary.
+   This is the root architectural item for the whole pipeline. Check must
+   produce a `TypedProgram` containing typed syntax (`TModule`, `TDecl`,
+   `TStmt`, `TExpr`, `TPlace`, typed patterns as needed), not an untyped
+   `ResolvedProgram` plus advisory metadata. Elab must accept only this typed
+   syntax and perform zero source-level type inference. Side tables may exist as
+   derived indexes for reports, caches, proof obligations, LSP, and agent JSON;
+   they are not the primary typing truth.
 
-9. Reduce ProofCore partial-def opacity only where proof preservation needs it.
-   ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
-   full rewrite here. Add non-partial wrappers or structural recursion only for
-   constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
-   with one theorem that would fail if the wrapper delegated to an opaque
-   partial-def shape.
+   Each typed node should carry the facts later phases need to avoid
+   re-derivation: stable node id, source span, resolved identity, type,
+   ownership/value-flow mode, pass-agreement mode, capability requirements,
+   fallibility/must-use facts, trusted/Unsafe classification, and desugaring
+   provenance where relevant. Use private constructors / certified wrappers at
+   phase boundaries so invalid states cannot be fabricated casually:
+   `ResolvedProgram -> Check -> TypedProgram -> Elab -> CoreProgram ->
+   CoreCheck -> ValidatedCore -> Mono -> ValidatedMonoCore -> Lower -> SSA ->
+   SSAVerify -> ValidatedSSA`.
 
-10. Move report/evidence output toward a typed fact ledger before more report
-   consumers appear.
-   This overlaps Phase 10, but the compiler-pipeline slice is narrower:
-   internal facts should be typed records until the final renderer, not strings
-   assembled at each report site. V1 target: diagnostic-code ledger facts,
-   capability facts, runtime-trap facts, Copy/linear facts, and trusted/Unsafe
-   facts. Gate that a new diagnostic/evidence fact cannot be emitted without a
-   schema row and report entry. This is the local pipeline version of "no second
-   truth source": reports, diagnostics, audit, replay, and agent JSON should
-   render typed facts rather than recompute meaning from strings.
+   Done when Elab cannot compile against raw `Expr`/`Stmt`, Elab's literal,
+   binop, cast, call, aggregate, match/if, pattern, and place handling reads
+   typed nodes rather than re-inferring source types, the old type-table/fallback
+   path is gone or demoted to derived metadata, and a regression proves the
+   historical E0228/H12 class cannot be represented. Breaking constructor
+   changes are acceptable here; the goal is the best long-term architecture, not
+   the smallest diff.
 
-11. Enforce the name-resolution / qualified-name boundary.
-   Resolve should be the only stage that decides what a source name means.
-   Later stages may consume resolved ids / qualified names but must not
-   reconstruct lookup from bare strings. This matters for modules, aliases,
-   methods, traits, generated mono names, and report attribution. Gate with
-   ambiguous imports, import aliases, methods with same bare name, and generated
-   mono names proving later stages use resolved identity.
+10. Define Concrete's result-location / destination-passing model.
+    Adapt Zig's result-location idea to Concrete's linear value model. Write the
+    Concrete-specific contract for value context, place context, borrow context,
+    callArg context, destination context, return destination, aggregate literal
+    destination, destructure destination, assignment destination, and scoped
+    callback destination. This should explain how struct/array literals move
+    fields/elements into destinations, how returns move into caller-visible
+    storage, why by-value projection of a non-Copy subplace is rejected, and how
+    parameter-directed pass agreement interacts with borrows and reborrows.
 
-12. Add a single builtin/intrinsic registry.
-   Builtins and intrinsics must not be separately described in signatures,
-   checker behavior, elab/lower special cases, interpreter behavior, report
-   facts, and stdlib assumptions. A registry row should define: source spelling,
-   type/signature, required capabilities, safety/trust class, lowering behavior,
-   interpreter behavior, runtime-trap behavior, and report/evidence facts. Gate
-   with at least one arithmetic helper, one bounds/trap helper, one unsafe/trusted
-   intrinsic, and one stdlib-facing builtin proving every consumer reads the same
-   registry facts.
+    This model should be represented in typed syntax, not rediscovered during
+    Lower: aggregate construction, returns, destructures, assignments, and
+    scoped callbacks should carry destination/pass facts from Check through
+    Elab into Core. Done when `docs/VALUE_FLOW_SPEC.md` or a new
+    destination-passing note names the modes, the checker/lowerer tests include
+    aggregate construction, return, destructure, assignment, borrow, callArg,
+    and scoped callback rows, and at least one old H10/H11-style conservation
+    bug is expressible as a violated destination contract.
 
-13. Add source-span preservation audits across the pipeline.
+11. Add a single builtin/intrinsic registry.
+    Builtins and intrinsics must not be separately described in signatures,
+    checker behavior, elab/lower special cases, interpreter behavior, report
+    facts, stdlib assumptions, and Unsafe/trusted policy. A registry row should
+    define source spelling, type/signature, required capabilities, safety/trust
+    class, lowering behavior, interpreter behavior, runtime-trap behavior, and
+    report/evidence facts.
+
+    Gate with one arithmetic helper, one bounds/trap helper, one allocation or
+    collection builtin, one unsafe/trusted intrinsic, and one stdlib-facing
+    builtin proving every consumer reads the same registry facts. The first
+    slice may be an intrinsic coverage/matrix gate; the end state is a registry,
+    not a grep-based allowlist.
+
+12. Move report/evidence output toward a typed fact ledger.
+    Internal facts should be typed records until the final renderer, not strings
+    assembled at each report site. V1 target: diagnostic-code facts, capability
+    facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
+    status facts, and package/import facts. Reports, diagnostics, audit, replay,
+    PR diffs, editor hovers, and agent JSON should render the same typed facts
+    rather than recompute meaning from strings.
+
+    Gate that a new diagnostic/evidence fact cannot be emitted without a schema
+    row and report entry, and add one negative where a stale hand-written report
+    string disagrees with the compiler fact.
+
+13. Eliminate hidden second pipelines.
+    Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
+    proof extraction, and tests must call the same composed pass functions or
+    declare a checked reason for diverging. The specific risk is a verifier
+    checking a path production does not use, or a fuzzer exercising a different
+    mono/lower path than shipped code.
+
+    Deliverable: a single pipeline composition layer exposing strict, tolerant,
+    audit, proof, and gate modes as configured variants over the same stages.
+    Gate with one fixture that would fail if `runVerifyGates` or the fuzzer
+    re-runs mono/lower differently from production.
+
+14. Enforce the name-resolution / qualified-name boundary.
+    Resolve should be the only stage that decides what a source name means.
+    Later stages may consume resolved IDs / qualified names but must not
+    reconstruct lookup from bare strings. This matters for modules, aliases,
+    methods, traits, generated mono names, report attribution, package facts,
+    and stable fact IDs.
+
+    Gate with ambiguous imports, import aliases, methods with the same bare
+    name, generated mono names, and report/audit attribution proving later
+    stages use resolved identity.
+
+15. Unify tree-walker coverage across AST/Core/SSA consumers.
+    There are recursive walkers in Check, Verify, Mono, ProofCore, Report,
+    Lower, interpreter, and tests. Every new constructor risks one walker
+    missing it. Keep the constructor-coverage manifest/gate proving every
+    language/Core constructor is handled by checker, elab, mono, proof
+    extraction, report/audit, interpreter, lowering, value-flow spec, and
+    differential/oracle coverage or an explicit compile-only/proof-only
+    rationale.
+
+16. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
+    CoreCheck should catch frontend/checker/elab/mono misses before Lower. Add
+    or verify checks for unresolved generic/typevar leakage after mono, illegal
+    Copy specialization, mixed-width binops, illegal non-Copy value-flow residue,
+    unresolved capability-polymorphic calls, unsupported unsafe/trusted ops
+    without facts, and user-triggerable layout/type holes that can become Lower
+    panics. Gate with one accepted Core fixture per valid class and one rejected
+    fixture per invalid class.
+
+17. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
+    The differential fuzzer is necessary but not sufficient. Maintain a feature
+    matrix: every language construct has at least one interp-vs-compiled test,
+    fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
+    new constructor cannot be added without a coverage row.
+
+18. Add the third fuzzer: generics / monomorphization / type-policy drift.
+    Concrete already has value/runtime fuzzing (`fuzz_differential`) and
+    ownership/conservation fuzzing (`fuzz_linearity`). Add
+    `scripts/fuzz_generics.py` (or equivalent) for user structs/enums,
+    `Option<T>` / `Result<T,E>`, conditional `Copy`, trait bounds, turbofish
+    calls, nested generic fields, arrays/newtypes, method impls, multiple
+    instantiations, and mono-name collisions.
+
+    The oracle is phase agreement first, not program output: Check, Elab/Core,
+    Mono, CoreCheck, Verify, reports, and generated names must agree on Copy,
+    trait-bound satisfaction, substitution, capability requirements, and whether
+    a specialization is Copy or demoted to linear. Negative variants should omit
+    bounds, instantiate `Copy` containers with linear payloads, shadow type
+    variables, collide mono names, or use caller type params through turbofish.
+    Done when the fuzzer rediscovers a seeded historical bug and saves
+    disagreements as minimized `.con` fixtures naming the first disagreeing
+    phase.
+
+19. Add parser/AST grammar-conformance fuzzing.
+    The LL(1) checker proves grammar shape, but it is not a parser/AST stress
+    net. Generate valid grammar-shaped programs, expected rejects, deeply nested
+    but bounded expressions, pattern/control-flow combinations, module/import
+    shapes, generic syntax, and statement/expression boundary cases. The oracle:
+    parser accepts the valid corpus, rejects the invalid corpus with stable
+    diagnostics, preserves source spans for representative nodes, and produces
+    AST forms whose feature rows are covered by item #17. When a formatter or
+    printer exists, extend this to parse -> print/normalize -> parse round-trip.
+
+20. Define diagnostic code ownership by phase.
+    The diagnostic ledger completeness gate prevents missing codes; now each
+    phase/category should own a code range or category (parse, check, corecheck,
+    mono, lower, proof, report, runtime trap), with source, hint, JSON payload,
+    and report behavior documented. Gate that a new diagnostic code declares
+    owner/category and appears in the ledger.
+
+21. Add a pipeline diagnostic-quality contract.
+    Every user-facing pipeline diagnostic must have a phase owner, stable code,
+    primary source span, human message, machine-readable JSON fields, and a
+    clear reason why that phase owns the rejection. When an actionable recovery
+    exists, include a hint; when the failure came from a fuzzer/gate/
+    counterexample, include a replay command. Internal generated names,
+    sentinels, LLVM/linker text, or Lean panic details must not leak into the
+    main user message unless explicitly marked compiler-internal context.
+
+    Done when a diagnostic-quality gate samples parse, check, mono/corecheck,
+    lower/SSA, emit/backend, proof/report, and runtime-obligation failures in
+    human and JSON output, and a red-team fixture fails when an error lacks a
+    source span, code, hint, owner, or JSON field.
+
+22. Add source-span preservation audits across the pipeline.
     After lexer/parser/check/elab/mono/lower, diagnostics, reports, traps, and
     proof obligations should still point to original source. Gate representative
     constructs: submodules, generic instantiations, desugared `if let`/`while
     let`, method calls, match arms, lowered runtime traps, and generated proof
     obligations. A fixture with a stale main-file span must fail.
 
-14. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
-    The differential fuzzer is necessary but not sufficient. Maintain a feature
-    matrix: every language construct has at least one interp-vs-compiled test,
-    fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
-    new constructor cannot be added without a coverage row.
-
-14a. Add parser/AST grammar-conformance fuzzing.
-    The LL(1) checker proves grammar shape, but it is not a substitute for a
-    parser/AST stress net. Generate valid grammar-shaped programs, expected
-    rejects, deeply nested but bounded expressions, pattern/control-flow
-    combinations, module/import shapes, generic syntax, and statement/expression
-    boundary cases. The oracle is: parser accepts the valid corpus, rejects the
-    invalid corpus with stable diagnostics, preserves source spans for
-    representative nodes, and produces AST forms whose feature rows are covered
-    by item #14. When a formatter/printer exists, extend this to
-    parse -> print/normalize -> parse round-trip; until then, keep it as
-    grammar-to-AST conformance. Done when the fuzzer rediscovers at least one
-    seeded parser/grammar drift bug and saves the minimized `.con` fixture.
-
-15. Define diagnostic code ownership by phase.
-    The diagnostic ledger completeness gate prevents missing codes; the next
-    step is stable ownership. Each phase/category should own a code range or
-    category (parse, check, corecheck, mono, lower, proof, report, runtime
-    trap), with source, hint, and report behavior documented. Gate that a new
-    diagnostic code declares owner/category and appears in the ledger.
-
-15a. Add a pipeline diagnostic-quality contract.
-    Phase 6.5 should not only ensure that errors are caught early; it should
-    also ensure they are useful. Every user-facing pipeline diagnostic must have
-    a phase owner, stable code, primary source span, human message,
-    machine-readable JSON fields, and a clear reason why that phase owns the
-    rejection. When an actionable recovery exists, the diagnostic should include
-    a hint; when the failure came from a fuzzer/gate/counterexample, the saved
-    fixture should include a replay command. Internal generated names,
-    implementation sentinels, LLVM/linker text, or Lean panic details must not
-    leak into the main user message unless they are explicitly marked as
-    compiler-internal context.
-
-    Done when a diagnostic-quality gate samples parse, check, mono/corecheck,
-    lower/SSA, emit/backend, proof/report, and runtime-obligation failures and
-    asserts the required fields exist in both human and JSON output. Include one
-    red-team fixture where an error is technically caught at the right phase but
-    lacks a source span, code, hint, owner, or JSON field; the gate must fail.
-
-16. Remove or encapsulate stringly internal sentinels.
+23. Encapsulate generated names and stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
-    naming API. Gate that user-defined names cannot collide with generated
-    names, and that generated names round-trip through reports/source maps
-    without becoming user-visible authority or value-flow facts.
+    naming API. Mono, elab, lower, proof extraction, and reports should use the
+    same API. Gate that user-defined names cannot collide with generated names,
+    and that generated names round-trip through reports/source maps without
+    becoming user-visible authority or value-flow facts.
 
-17. Add generated-name hygiene tests.
-    Mono, elab, lower, proof extraction, and report code should all use the
-    same generated-name API. Fixtures: user names that intentionally collide
-    with `__destr`, `__last_expr`, mono suffix spellings, helper functions, and
-    qualified module names. Expected result: either clean hygiene or a stable
-    diagnostic, never a miscompile/report mix-up.
-
-18. Define the panic-to-diagnostic boundary.
+24. Define the panic-to-diagnostic boundary.
     `panic!` in layout/type/lowering paths is acceptable only for compiler
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
@@ -1404,7 +1398,7 @@ the compiler architecture is finished.
     memory/time before reporting a diagnostic. Any remaining `panic!` must be
     documented as unreachable after a named prior phase contract.
 
-19. Add pass timing and IR-size telemetry for engineering observability.
+25. Add pass timing, memory, and IR-size telemetry.
     This is not a public performance claim. Record per-pass timing, peak memory
     / RSS when available, allocation or output-buffer size if available,
     module/function counts, AST/Core/SSA node counts, mono instantiation count,
@@ -1413,73 +1407,80 @@ the compiler architecture is finished.
     platform-specific memory fields; benchmarks/performance claims remain Phase
     17 release work.
 
-19a. Add an anti-superlinear compiler complexity guard.
-    Telemetry tells us what happened; this gate should fail when a compiler pass
-    quietly becomes quadratic or worse on ordinary generated programs. This is
-    motivated by bug 027 (`EmitSSA` O(n^2)): the compiler could still be
-    semantically correct while becoming unusable for 20k+ line workloads. Build
-    a small scaling corpus that generates the same program family at multiple
-    sizes (for example: large array literals/repeats, many functions, many
-    blocks, many mono instantiations, wide match/if chains, and large emitted
-    modules), records per-pass node counts, times, peak memory/RSS or output
-    buffer size from item #19, and asserts the growth stays within an allowed
-    envelope for the affected pass. The thresholds should be conservative and
-    machine-tolerant: compare slope/ratio across sizes, not absolute wall-clock
-    alone, and keep a local override for noisy developer machines while CI
-    enforces the stable corpus.
+26. Add an anti-superlinear compiler complexity guard.
+    Telemetry tells us what happened; this gate fails when a compiler pass
+    quietly becomes quadratic or worse on ordinary generated programs. Build a
+    scaling corpus that generates the same program family at multiple sizes:
+    large array literals/repeats, many functions, many blocks, many mono
+    instantiations, wide match/if chains, and large emitted modules. Compare
+    slope/ratio across sizes, not absolute wall-clock alone, and include peak
+    memory/RSS or output-buffer growth. Done when the gate catches a
+    deliberately reintroduced quadratic renderer/collector, an intentionally
+    excessive memory-growth variant, and the bug 027 family.
 
-    Done when the gate catches a deliberately reintroduced quadratic renderer or
-    collector, catches at least one intentionally excessive memory-growth
-    variant, protects the bug 027 family, records which pass exceeded its
-    scaling budget, and saves the generated reproducer plus replay command. This
-    is still not a public "Concrete is fast" benchmark; it is an internal
-    "compiler complexity did not silently regress" invariant.
+27. Add `concrete trace-pipeline --json`.
+    Dump per-stage summaries: modules, functions, diagnostics, capabilities,
+    obligations, mono instances, CoreCheck status, SSA blocks, runtime traps,
+    trusted/Unsafe facts, dependency edges, fact IDs, invalidation decisions,
+    and replay commands for failures. Gate with one clean program and one
+    failing program where the trace names the first phase that introduced,
+    preserved, invalidated, or rejected the relevant fact.
 
-20. Add `concrete trace-pipeline --json`.
-    The command should dump per-stage summaries: modules, functions,
-    diagnostics, capabilities, obligations, mono instances, CoreCheck status,
-    SSA blocks, runtime traps inserted, trusted/Unsafe facts, and replay
-    commands for failures. It is the human/agent debugging surface for this
-    phase. Gate with one clean program and one failing program where the trace
-    names the first phase that introduced or rejected the relevant fact.
-
-21. Add counterexample-first pipeline debugging.
+28. Add counterexample-first pipeline debugging.
     Any pipeline panic, proof failure, fuzzer mismatch, optimizer trap issue,
-    backend leak, linker leak, or stage-contract failure should be reducible to
-    a minimized `.con` fixture plus a replay command. Reuse the existing reducer
+    backend leak, linker leak, or stage-contract failure should reduce to a
+    minimized `.con` fixture plus a replay command. Reuse the existing reducer
     where possible. Gate with one panic-to-diagnostic failure, one
     interp-vs-compiled mismatch, one fold/trap-preservation failure, and one
     backend/linker leak proving the counterexample can be saved as a regression.
 
-22. Add mutation testing for the pipeline gates.
+29. Add mutation testing for the pipeline gates.
     Mutate or patch-disable one representative rule in each major family and
     prove the corresponding gate fails: CoreCheck type rule, Copy predicate,
     arithmetic trap preservation, capability requirement, walker constructor
-    handling, source-span stamping, generated-name hygiene, and report/evidence
-    schema row. This proves the pipeline gates are load-bearing instead of
-    decorative.
+    handling, source-span stamping, generated-name hygiene, diagnostic-quality
+    contract, fact invalidation, and report/evidence schema row. This proves the
+    pipeline gates are load-bearing instead of decorative.
 
-23. Add round-trip/replay artifacts for pass outputs.
-    For a selected program, users and agents should be able to ask what each
-    stage received, what it emitted, what facts changed, and what command
-    replays that claim. V1 artifact: per-stage summary hashes and optional
-    minimized dumps for AST, Core, post-mono Core, CoreCheck facts, SSA,
-    obligations, traps, and report facts. Gate that a replay detects source
-    changes, schema changes, and pass-output drift. Add a determinism rule:
-    same source, compiler version, target triple, profile, and dependency set
-    must produce stable pass-output hashes unless a field is explicitly marked
-    nondeterministic and excluded from the hash. This is required for caches,
-    agents, evidence bundles, and PR diffs to be reviewable.
+30. Add round-trip/replay artifacts for pass outputs.
+    For a selected program, users and agents should ask what each stage
+    received, what it emitted, what facts changed, and what command replays that
+    claim. V1 artifact: per-stage summary hashes and optional minimized dumps
+    for AST, Core, post-mono Core, CoreCheck facts, SSA, obligations, traps, and
+    report facts. Same source, compiler version, target triple, profile, and
+    dependency set must produce stable pass-output hashes unless a field is
+    explicitly marked nondeterministic and excluded from the hash.
 
-24. Add the Phase 6.5 validation artifact:
+31. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+    remains ad hoc.
+    Historical bugs clustered around branch/loop/snapshot reconciliation. The
+    extracted builder should own if/match result values, loop headers/exits, phi
+    construction, scope-local variable filtering, internal trailing-value
+    handling, and defer cleanup boundaries. Acceptance gate: previous nested
+    match, loop-after-loop-branch, `__last_expr`, defer, and value-block
+    fixtures remain green, and a mutation that drops scope filtering or trap
+    preservation is caught.
+
+32. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+    ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
+    full rewrite here. Add non-partial wrappers or structural recursion only for
+    constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
+    with one theorem that would fail if the wrapper delegated to an opaque
+    partial-def shape.
+
+33. Add the Phase 6.5 validation artifact.
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
-    compiler-pipeline corpus that exercises central policy predicates, stage
-    contracts, no-hidden-second-pipeline checks, walker coverage, CoreCheck
-    boundary failures, Lower/SSA control flow, source spans, generated-name
-    hygiene, panic-to-diagnostic behavior, counterexample saving, mutation
-    checks, pass-output replay, and trace output. The artifact must prove these
-    refactors are behavior preserving for accepted programs and fail closed for
-    malformed or unsupported programs.
+    compiler-pipeline corpus exercising arithmetic reference semantics,
+    central policy predicates, stage contracts, capability facts, stable fact
+    IDs, fact dependencies, pass locality, invalidation, certificate-carrying
+    IR, destination-passing/value flow, intrinsic registry, typed fact ledger,
+    no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
+    failures, feature matrices, source spans, generated-name hygiene,
+    diagnostic quality, panic-to-diagnostic behavior, performance/complexity
+    guards, counterexample saving, mutation checks, pass-output replay, and
+    trace output. The artifact must prove these refactors are behavior
+    preserving for accepted programs and fail closed for malformed or
+    unsupported programs.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -2294,6 +2295,13 @@ lemmas, and actionable failure diagnostics.
 15. Add proof-result caching once proof artifacts and fingerprints are stable.
     Cache key: toolchain version, source fingerprint, spec/proof link,
     obligation id, ProofKit version, backend engine version, and policy mode.
+    Extend the key with typed-fact fingerprints and dependency-fact
+    fingerprints once Phase 6.5's fact ledger / dependency graph exists. Stale
+    or dependency-mismatched entries become `needs_recheck`, never green. An
+    LLM-synthesized proof is not cached as evidence until Lean replays it.
+    Longer term, the cache should use the same stable interned fact IDs planned
+    for the compiler pipeline so obligations serialize, replay, and invalidate
+    without a second proof database.
     Store under `.build/concrete-proof-cache/` and expose
     `concrete prove --cache-status --json`. Wire
     `scripts/tests/check_proof_cache.sh`; the gate must prove cache hits do not
@@ -3014,6 +3022,13 @@ Goal: move the flagship-used `Core -> ProofCore` rules from "extracts to the
 expected ProofCore shape" toward source-semantics agreement and checked
 trust-gate correctness.
 
+Prior-art peer group for this phase: CompCert for proved compiler passes,
+CakeML for verified bootstrap discipline, Cogent for linear systems code with
+refinement proof artifacts, F*/Low* for obligation-to-SMT-to-extraction
+workflow, and Alive2 for SMT-checked LLVM IR equivalence/optimization
+validation. Keep these as reference points for the shape of evidence, not as
+marketing claims that Concrete already matches them.
+
 Done when: each flagship-used ProofCore construct is classified as
 shape-preserved, eval/source-semantics-preserved, or still trusted; proof-report
 facts agree with compiler state; and the remaining trusted base is
@@ -3112,6 +3127,10 @@ machine-readable.
     lossy casts, div/mod-zero, shifts, returned-reference rejection, ByteView
     wrong-buffer guards, HMAC/SHA-256 modular arithmetic, and capability-bearing
     stdlib calls.
+    Prior art and comparison targets: CompCert/CakeML/Cogent/F*/Low* for
+    source-semantics and proof/evidence pipelines, and Alive2 for backend IR
+    equivalence checking. See
+    `research/compiler/pipeline-lessons-2026-07.md`.
 13b. **One source of typing truth (typed AST).** Every 2026-07 front-end bug was
     two passes holding different opinions about the same program: Check typed
     literals from the hint while Elab typed them from the sibling operand;
@@ -3121,11 +3140,31 @@ machine-readable.
     predicates (`binOpOperandsAgree`) and LANGUAGE_INVARIANTS #19 gates DETECT
     drift; the architecture still INVITES it — three semi-independent semantic
     judgments over one program. Endgame: Check produces a TYPED AST that Elab
-    consumes (types computed once, threaded forward), deleting Elab's re-inference
-    and CoreCheck's overlapping rules down to genuine Core-shape validation.
-    Large refactor; do it as this phase's capstone, staged per expression family,
-    with the differential fuzzer + `test-ci-gates` as the safety net. Until then,
-    every new type rule MUST live in one shared predicate used by all passes.
+    consumes (types computed once, threaded forward), deleting Elab's
+    re-inference and CoreCheck's overlapping rules down to genuine Core-shape
+    validation.
+
+    Long-term architecture, not a staging bridge: Check produces real typed
+    syntax (`TExpr`, `TStmt`, `TPlace`, typed patterns as needed). Typed nodes
+    carry type, ownership/pass mode, capability facts, resolved identity, stable
+    node id, source span, and desugaring provenance as fields. Elab consumes
+    only `TypedProgram`; it does not accept raw `Expr`/`Stmt`, does not read an
+    advisory side table to decide source types, and does not infer source types.
+    Tables over node ids are derived metadata for reports, cache keys, proof
+    obligations, LSP, and agent tooling, not the source of typing truth.
+
+    The boundary chain should be unrepresentable-by-construction:
+    `ResolvedProgram -> Check -> TypedProgram -> Elab -> CoreProgram ->
+    CoreCheck -> ValidatedCore -> Mono -> ValidatedMonoCore -> Lower -> SSA ->
+    SSAVerify -> ValidatedSSA`. If a downstream stage wants a source type,
+    value-flow mode, capability requirement, or resolved callee, it reads the
+    typed node or certified fact produced by the owning stage. It may validate
+    shape; it may not create a second source-level judgment. Done when Elab's
+    re-inference code is deleted, not merely bypassed, and regressions prove the
+    literal/defaulting, mixed-width, std-bypass, conditional-Copy, and
+    capability/type-drift classes cannot be expressed through the typed
+    boundary. Breaking constructor changes are acceptable; the target is the
+    best long-term pipeline, not a minimal migration.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
@@ -3226,6 +3265,11 @@ and incremental build contracts are explicit enough for release evidence.
     Concrete lowering into the backend contract preserves the facts Concrete
     claims. Add `examples/translation_validation/` with straight-line,
     branch/loop, struct/array, runtime-check, and deliberate mismatch fixtures.
+    Prior art: CompCert for proved compilation/pass-correctness discipline and
+    Alive2 for SMT-checked LLVM IR equivalence/optimization validation. The
+    concrete threat model here is the class differential fuzzing has already
+    exposed: source/Core facts can be true while a backend lowering silently
+    emits a different native artifact unless that boundary has its own check.
     Wire `scripts/tests/check_translation_validation.sh`; the gate must prove a
     Lean-proved/Core-level claim cannot be presented as native-code evidence
     unless the backend artifact is either translation-validated or explicitly
@@ -3409,8 +3453,8 @@ audience):**
    inspect one audit bundle without repo-local assumptions.
 12. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
    `reported` / `assumed` / `trusted`.
-13. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
-   F*, Why3.
+13. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Hylo,
+   Cogent, Dafny, F*, Why3.
 14. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
    wrap libraries honestly, what stays outside Concrete.
 15. Add release/install distribution matrix: host triples, checksums/signing,
@@ -3773,7 +3817,22 @@ forcing example, explicitly deferred, or rejected.
     abstract effect inference. Revisit only as a research note if explicit
     capabilities create a proven, repeated blocker in real programs after the
     stdlib and concurrency pressure tests exist.
-14. Research dogfooding Concrete's evidence model onto the compiler's own TCB.
+14. Research a generational-reference-style dynamic fallback only if a forcing
+    workload proves static linearity plus second-class references are too
+    restrictive. The target use case is not ordinary ownership; it is a narrow
+    escape for liveness/provenance facts around observers, back-references,
+    callback-heavy object graphs, or host/FFI handles that Concrete cannot
+    prove statically without unacceptable surface complexity. If adopted, the
+    runtime check discharges an obligation as `checked_dynamically`, never as
+    `proved`, and audit/report output must distinguish it from static
+    ownership proof.
+
+    Do not pull this forward without a pressure test and a decision record.
+    The research pass must compare Vale-style generational references and
+    region/frozen-scope ideas, explicitly reject any vague "zero-cost safety"
+    claim, and prove the fallback does not become a hidden borrow checker,
+    hidden GC, implicit Drop, or a way to weaken the linear default.
+15. Research dogfooding Concrete's evidence model onto the compiler's own TCB.
     This is the logical endpoint of "evidence-carrying artifact applied to the
     compiler": rewrite or mirror selected compiler passes/checkers in Concrete,
     attach contracts, and use Concrete's own linearity/capability/proof pipeline
@@ -3790,11 +3849,11 @@ forcing example, explicitly deferred, or rejected.
     decision record states whether the approach actually shrinks the TCB, merely
     duplicates it, or creates a second source of truth. Pull forward only if a
     real pass can be checked without weakening the no-second-truth-source rule.
-15. Add the Phase 20 validation artifact: one pressure-test sketch, expected
+16. Add the Phase 20 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
     (concurrency, atomics/memory model, typestate, arena allocation, WCET,
     binary-format DSLs, hardware capability mapping, Miri-style interpreter,
-    sized evaluator, persistent rewrite state, row effects, and compiler
-    self-verification). No research item graduates unless its forcing example,
-    report shape, evidence class, and rejection or pull-forward criteria are
-    recorded.
+    sized evaluator, persistent rewrite state, row effects, generational
+    dynamic fallback, and compiler self-verification). No research item
+    graduates unless its forcing example, report shape, evidence class, and
+    rejection or pull-forward criteria are recorded.

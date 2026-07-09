@@ -3,6 +3,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Frontend.AST
 import Concrete.Semantics.IntArith
 import Concrete.Semantics.Capabilities
+import Concrete.Elab.Typed
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Resolve.Shared
