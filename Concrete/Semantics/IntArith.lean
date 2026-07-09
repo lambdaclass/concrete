@@ -161,14 +161,20 @@ inductive ArithResult where
   deriving Repr, BEq, Inhabited
 
 /-- Evaluate a binary op on two integer operands under the result type `ty`
-    (the LHS/value type; for shifts, the shifted value's width). This is the
-    single arithmetic evaluator: the interpreter calls it directly, and the
-    constant folder calls it (via `foldIntBinOp`) to decide foldability.
+    (the LHS/value type). This is the single arithmetic evaluator: the
+    interpreter calls it directly, and the constant folder calls it (via
+    `foldIntBinOp`) to decide foldability.
 
-    Reproduces exactly the semantics `Interp.evalBinOp` had:
-    checked `+ - * / %` (trap on overflow / zero / signed-MIN-over-neg-one),
-    `wrapping_*` (two's-complement wrap), `saturating_*` (clamp), `/ %` using
-    truncated division, and the shift/bitwise family at the type's width. -/
+    Covers exactly the value-producing arithmetic family: checked `+ - * / %`
+    (trap on overflow / zero / signed-MIN-over-neg-one), `wrapping_*`
+    (two's-complement wrap), and `saturating_*` (clamp); `/ %` use truncated
+    division. Every other op returns `.notApplicable`.
+
+    Shifts and bitwise ops are intentionally NOT handled here — they are simple
+    enough that callers apply the reference's small helpers directly
+    (`shiftAmountInRange` for the trap check, `maskWidth` for the shift result,
+    `bitwiseAtWidth` for `& | ^`). Keeping them out of the tri-state evaluator
+    avoids threading a shift-result formula through `ArithResult` for no gain. -/
 def evalIntBinOp (op : BinOp) (a : Int) (ty : Ty) (b : Int) : ArithResult :=
   match op with
   | .add => match checkedToType ty (a + b) with
