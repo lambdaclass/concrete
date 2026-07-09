@@ -1,7 +1,8 @@
 # Bug 027: EmitSSA renders SSA→LLVM text in O(n²)
 
-**Status:** Open (performance)
+**Status:** Partially fixed (performance)
 **Discovered:** 2026-07-08
+**Partial fix:** 2026-07-09
 **Discovered in:** array-repeat-count probing (bug 026) — a moderate array
 literal that passes the parser cap is still slow to codegen.
 
@@ -31,12 +32,27 @@ accumulator — O(n²) over `n` instructions/blocks. Examples:
   (lines ~1321-1322 and ~1413-1414), and `collectSValTys` using `++`;
 - block/instruction text assembly built by string `++` append per instruction.
 
-## Proposed Fix
+## Partial Fix (2026-07-09)
 
-Assemble instruction/block output and type lists without repeated `++`: collect
-into `Array` (or a list built in reverse then reversed once) and `String.join` /
-`intercalate` at the end — O(n). This is a codegen perf refactor, not a
-correctness bug: output is correct, just slow at scale. Bug 026 caps array-
-repeat literals at 2^20, which bounds the array-literal trigger; this bug is the
-general quadratic and should be fixed before large (20k+ LOC / large-function)
-workloads.
+The **type-collection folds** in `emitSModule` and `scanBuiltinEnumArgs` did
+`acc ++ collectSInstTys inst` — copying the growing accumulator once per
+instruction, O(n²) over a function's instruction count. Flipped to
+`collectSInstTys inst ++ acc` (prepend small onto big; the collected type list
+is deduped downstream via `findSome?`/`filterMap`, so order is irrelevant), and
+the seed `acc ++ retTys ++ paramTys` → `retTys ++ paramTys ++ acc`.
+
+Effect: a 20 000-element array literal went from a hard timeout (>2 min) to
+compiling. This removed the dominant quadratic.
+
+## Remaining (still Open)
+
+Codegen of very large functions is still superlinear (measured ~7s at 10k
+instructions, ~35s at 20k — worse than the 2× the size implies). The remaining
+cost is elsewhere on the `--emit-llvm` path (candidates: per-string
+`ssaEscapeStringForLLVM` `acc ++ char` at EmitSSA.lean:455; `dedupDecls`
+`acc.any` scan; or inherent output-size effects in the `EmitLLVM.printLLVM*`
+text assembly, which already uses `intercalate`). Pinning it down needs actual
+profiling, not eyeballing, and is a broader codegen refactor. Bug 026 caps
+array-repeat literals at 2²⁰, which bounds the array-literal trigger in
+practice; this remaining quadratic matters before large (20k+ LOC /
+large-function) workloads and should be driven by a profiler.

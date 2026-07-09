@@ -1319,8 +1319,11 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     let retTys := [f.retTy]
     let paramTys := f.params.map (·.2)
     f.blocks.foldl (fun acc b =>
-      b.insts.foldl (fun acc inst => acc ++ collectSInstTys inst) acc
-    ) (acc ++ retTys ++ paramTys)
+      -- prepend (small ++ big) — `acc ++ small` copies the growing accumulator
+      -- every instruction, which is O(n^2) over a large function (bug 027). The
+      -- collected types are deduped downstream, so order does not matter.
+      b.insts.foldl (fun acc inst => collectSInstTys inst ++ acc) acc
+    ) (retTys ++ paramTys ++ acc)
   ) ([] : List Ty)
   -- User types (dedup across modules, substitute type args for generic definitions)
   let s := m.structs.foldl (fun s sd =>
@@ -1411,7 +1414,10 @@ private def scanBuiltinEnumArgs (ctx : Layout.Ctx) (modules : List SModule) : (O
   let allTys := modules.foldl (fun acc m =>
     m.functions.foldl (fun acc f =>
       f.blocks.foldl (fun acc b =>
-        b.insts.foldl (fun acc inst => acc ++ collectSInstTys inst) acc
+        -- prepend (small ++ big) — `acc ++ small` copies the growing accumulator
+      -- every instruction, which is O(n^2) over a large function (bug 027). The
+      -- collected types are deduped downstream, so order does not matter.
+      b.insts.foldl (fun acc inst => collectSInstTys inst ++ acc) acc
       ) acc
     ) acc
   ) ([] : List Ty)
