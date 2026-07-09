@@ -21,6 +21,11 @@ Source -> Parse -> Resolve -> Check -> Elab -> CoreCanonicalize -> CoreCheck -> 
 
 The old AST backend is gone. The current compiler goes through the full Core -> SSA pipeline, with structured diagnostics across the semantic passes.
 
+The architectural north star for how meaning flows through these stages — one
+reference semantics, and facts committed once and read-only downstream — is
+[PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md); it is the frame behind the
+Phase 6.5 refactor items.
+
 ## Source Layout
 
 `Concrete/` is grouped into pipeline-phase subdirectories (2026-07-07 — the

@@ -1,4 +1,5 @@
 import Concrete.Elab.Core
+import Concrete.Semantics.IntArith
 
 namespace Concrete.Interp
 
@@ -144,124 +145,38 @@ private def arrayGet (elems : Array IVal) (n : Nat) : Option IVal :=
 -- Binary operations
 -- ============================================================
 
-/-- Bit width of an unsigned fixed-width integer type, if any. -/
-private def unsignedBitWidth : Ty → Option Nat
-  | .uint => some 64
-  | .u8   => some 8
-  | .u16  => some 16
-  | .u32  => some 32
-  | _     => none
-
-/-- Wrap an integer result to its type's width for unsigned
-    fixed-width types — exactly the BitVec round-trip the proof
-    model uses (`Concrete.Proof.evalBinOp`), so the interpreter
-    and the proof semantics agree by construction (e.g. u32 add
-    is mod 2^32, u32 `<<` truncates).  Signed / `Int` types are
-    left as mathematical `Int`, matching the width-agnostic
-    `add`/`sub`/`mul` of the proof model. -/
-private def maskWidth (ty : Ty) (n : Int) : Int :=
-  match unsignedBitWidth ty with
-  | some w => Int.ofNat (BitVec.ofInt w n).toNat
-  | none   => n
-
-/-- (bit width, signed?) for each fixed-width integer type, including the
-    64-bit `Int`/`Uint`. -/
-private def intBitWidth : Ty → Option (Nat × Bool)
-  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
-  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
-  | _   => none
-
-/-- True two's-complement wrap of `n` into `ty`'s width, for BOTH signed and
-    unsigned — what `wrapping_add`/`wrapping_sub`/`wrapping_mul` mean and exactly
-    what the compiled plain LLVM add/sub/mul produce. Unlike `maskWidth`, this
-    also wraps signed types (e.g. `wrapping_add(i32::MAX, 1) == i32::MIN`). -/
-private def wrapToType (ty : Ty) (n : Int) : Int :=
-  match intBitWidth ty with
-  | some (w, signed) => if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
-  | none             => n
-
-/-- Bitwise op on the two's-complement bit patterns at `ty`'s width, matching the
-    compiled LLVM `and`/`or`/`xor`. Must NOT go through `Int.toNat`, which clamps a
-    negative operand to 0 (so `-1 & 255` wrongly became 0 instead of 255). Convert
-    each operand to its `w`-bit pattern, apply `opNat`, then reinterpret per `ty`'s
-    signedness. -/
-private def bitwiseAtWidth (ty : Ty) (opNat : Nat → Nat → Nat) (a b : Int) : Int :=
-  match intBitWidth ty with
-  | some (w, signed) =>
-    let an := (BitVec.ofInt w a).toNat
-    let bn := (BitVec.ofInt w b).toNat
-    let rv := BitVec.ofNat w (opNat an bn)
-    if signed then rv.toInt else Int.ofNat rv.toNat
-  | none => Int.ofNat (opNat a.toNat b.toNat)
-
-/-- Checked arithmetic (ROADMAP #10 Stage 2.3): `some n` if `n` fits `ty`'s range,
-    else `none` (overflow → the interpreter traps, matching the compiled abort). -/
-private def checkedToType (ty : Ty) (n : Int) : Option Int :=
-  match intBitWidth ty with
-  | some (w, signed) =>
-    let (lo, hi) : Int × Int :=
-      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
-      else (0, (2 : Int) ^ w - 1)
-    if n < lo || n > hi then none else some n
-  | none => some n
-
-/-- Clamp `n` to `ty`'s representable range — what `saturating_*` mean, matching
-    the `llvm.{s,u}{add,sub}.sat` intrinsics. -/
-private def saturateToType (ty : Ty) (n : Int) : Int :=
-  match intBitWidth ty with
-  | some (w, signed) =>
-    let (lo, hi) : Int × Int :=
-      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
-      else (0, (2 : Int) ^ w - 1)
-    if n < lo then lo else if n > hi then hi else n
-  | none => n
+/-- Bridge the arithmetic reference's tri-state result into the interpreter's
+    `Except`. The interpreter IS the reference semantics (Principle 1): the
+    checked/wrapping/saturating/div/mod cases below evaluate through
+    `IntArith.evalIntBinOp`, and this maps its `value`/`trap`/`notApplicable`
+    outcome onto `ok`/`error`. The trap messages are `IntArith`'s, prefixed with
+    `interp:` to preserve the existing diagnostic text. -/
+private def arithOut : IntArith.ArithResult → Except String IVal
+  | .value n ty     => .ok (.int n ty)
+  | .trap msg       => .error s!"interp: {msg}"
+  | .notApplicable  => .error "interp: unsupported binop on given value types"
 
 def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- Result type is the LHS (value) type; for shifts this is the
   -- shifted value's width, not the shift-count's.  maskWidth then
   -- wraps unsigned results to that width.
   match op, lhs, rhs with
-  -- Ordinary `+` is CHECKED (ROADMAP #10 Stage 2.3): trap on overflow, matching
-  -- the compiled abort. (`-`/`*` flip in later sub-slices.)
-  | .add, .int a ty, .int b _ =>
-    match checkedToType ty (a + b) with
-    | some v => .ok (.int v ty)
-    | none   => .error "interp: arithmetic overflow (checked +)"
-  | .sub, .int a ty, .int b _ =>
-    match checkedToType ty (a - b) with
-    | some v => .ok (.int v ty)
-    | none   => .error "interp: arithmetic overflow (checked -)"
-  | .mul, .int a ty, .int b _ =>
-    match checkedToType ty (a * b) with
-    | some v => .ok (.int v ty)
-    | none   => .error "interp: arithmetic overflow (checked *)"
-  -- Explicit wrapping arithmetic: true two's-complement wrap (signed + unsigned),
-  -- matching the compiled plain LLVM add/sub/mul. ROADMAP #10 Stage 2.1.
-  | .wrappingAdd, .int a ty, .int b _ => .ok (.int (wrapToType ty (a + b)) ty)
-  | .wrappingSub, .int a ty, .int b _ => .ok (.int (wrapToType ty (a - b)) ty)
-  | .wrappingMul, .int a ty, .int b _ => .ok (.int (wrapToType ty (a * b)) ty)
-  -- Explicit saturating arithmetic: clamp to the type's range, matching the
-  -- llvm.{s,u}{add,sub}.sat intrinsics. ROADMAP #10 Stage 2.2.
-  | .saturatingAdd, .int a ty, .int b _ => .ok (.int (saturateToType ty (a + b)) ty)
-  | .saturatingSub, .int a ty, .int b _ => .ok (.int (saturateToType ty (a - b)) ty)
-  | .saturatingMul, .int a ty, .int b _ => .ok (.int (saturateToType ty (a * b)) ty)
-  | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
-  | .div, .int a ty, .int b _ =>
-    -- Truncated division (toward zero) to match LLVM `sdiv`/`udiv` — NOT Lean's
-    -- floored `/`, which disagrees for negative operands (e.g. -17/5 is -3, not
-    -- -4). Checked: signed MIN / -1 overflows (matches the compiled abort).
-    match checkedToType ty (Int.tdiv a b) with
-    | some v => .ok (.int v ty)
-    | none   => .error "interp: arithmetic overflow (checked /)"
-  | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"
-  | .mod, .int a ty, .int b _ =>
-    -- Truncated remainder (sign of dividend) to match LLVM `srem`/`urem` — NOT
-    -- Lean's floored `%` (e.g. -17%5 is -2, not 3). Checked: signed `MIN % -1`
-    -- is UB (the implied division overflows) and the compiled srem helper
-    -- aborts, so trap here too via the same quotient-overflow condition as `/`.
-    match checkedToType ty (Int.tdiv a b) with
-    | some _ => .ok (.int (maskWidth ty (Int.tmod a b)) ty)
-    | none   => .error "interp: arithmetic overflow (checked %)"
+  -- Integer arithmetic — checked `+ - * / %`, `wrapping_*`, `saturating_*` — all
+  -- evaluate through the ONE arithmetic reference. `evalIntBinOp` decides value
+  -- vs trap (overflow, div/mod by zero, signed MIN/-1); `arithOut` maps that to
+  -- `ok`/`error`. This is Principle 1: the interpreter's arithmetic meaning is
+  -- `IntArith`, not a second hand-maintained copy.
+  | .add, .int a ty, .int b _
+  | .sub, .int a ty, .int b _
+  | .mul, .int a ty, .int b _
+  | .wrappingAdd, .int a ty, .int b _
+  | .wrappingSub, .int a ty, .int b _
+  | .wrappingMul, .int a ty, .int b _
+  | .saturatingAdd, .int a ty, .int b _
+  | .saturatingSub, .int a ty, .int b _
+  | .saturatingMul, .int a ty, .int b _
+  | .div, .int a ty, .int b _
+  | .mod, .int a ty, .int b _ => arithOut (IntArith.evalIntBinOp op a ty b)
   | .eq, .int a _, .int b _ => .ok (.bool (a == b))
   | .neq, .int a _, .int b _ => .ok (.bool (a != b))
   | .lt, .int a _, .int b _ => .ok (.bool (a < b))
@@ -274,20 +189,18 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .neq, .bool a, .bool b => .ok (.bool (a != b))
   | .eq, .string a, .string b => .ok (.bool (a == b))
   | .neq, .string a, .string b => .ok (.bool (a != b))
-  | .bitxor, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.xor a b) ty)
-  | .bitand, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.land a b) ty)
-  | .bitor, .int a ty, .int b _ => .ok (.int (bitwiseAtWidth ty Nat.lor a b) ty)
+  | .bitxor, .int a ty, .int b _ => .ok (.int (IntArith.bitwiseAtWidth ty Nat.xor a b) ty)
+  | .bitand, .int a ty, .int b _ => .ok (.int (IntArith.bitwiseAtWidth ty Nat.land a b) ty)
+  | .bitor, .int a ty, .int b _ => .ok (.int (IntArith.bitwiseAtWidth ty Nat.lor a b) ty)
   -- checked shift: amount >= bit width traps (matches the compiled abort).
+  -- Shift-range is decided by the reference (`IntArith.shiftAmountInRange`); the
+  -- width-masking of the result uses the reference's `maskWidth`.
   | .shl, .int a ty, .int b _ =>
-    match intBitWidth ty with
-    | some (w, _) => if b < 0 || b ≥ Int.ofNat w then .error "interp: shift amount out of range"
-                     else .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
-    | none => .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
+    if IntArith.isIntTy ty && !IntArith.shiftAmountInRange ty b then .error "interp: shift amount out of range"
+    else .ok (.int (IntArith.maskWidth ty (a * (2 ^ b.toNat))) ty)
   | .shr, .int a ty, .int b _ =>
-    match intBitWidth ty with
-    | some (w, _) => if b < 0 || b ≥ Int.ofNat w then .error "interp: shift amount out of range"
-                     else .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
-    | none => .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
+    if IntArith.isIntTy ty && !IntArith.shiftAmountInRange ty b then .error "interp: shift amount out of range"
+    else .ok (.int (IntArith.maskWidth ty (a / (2 ^ b.toNat))) ty)
   | _, _, _ => .error "interp: unsupported binop on given value types"
 
 -- ============================================================
@@ -299,14 +212,14 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
   -- Negation is CHECKED (ROADMAP #10): `-x` overflows when `x` is the type's
   -- MIN, exactly as the compiled `0 - x` checked-subtract helper traps.
   | .neg, .int n ty =>
-    match checkedToType ty (-n) with
+    match IntArith.checkedToType ty (-n) with
     | some v => .ok (.int v ty)
     | none   => .error "interp: arithmetic overflow (checked negation)"
   | .not_, .bool b => .ok (.bool (!b))
   -- ~n at an unsigned width is `2^w - 1 - n`; maskWidth turns the
   -- mathematical `-(n+1)` into exactly that (e.g. ~0 = 0xFFFFFFFF
   -- at u32, not -1).
-  | .bitnot, .int n ty => .ok (.int (maskWidth ty (-(n + 1))) ty)
+  | .bitnot, .int n ty => .ok (.int (IntArith.maskWidth ty (-(n + 1))) ty)
   | _, _ => .error "interp: unsupported unary op"
 
 -- ============================================================
@@ -321,7 +234,7 @@ def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   -- retagging the type kept e.g. `(-11) as u32` at -11, so later unsigned
   -- arithmetic computed on the wrong value (spurious checked-add traps,
   -- wrong `%` results) and diverged from the compiled binary.
-  | .int n _ => .ok (.int (wrapToType targetTy n) targetTy)
+  | .int n _ => .ok (.int (IntArith.wrapToType targetTy n) targetTy)
   | .bool true => .ok (.int 1 targetTy)
   | .bool false => .ok (.int 0 targetTy)
   | _ => .error "interp: unsupported cast"

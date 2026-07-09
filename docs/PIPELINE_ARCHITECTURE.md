@@ -71,6 +71,14 @@ stage stamped, not something Elab recomputes. When a fact is an *input* rather
 than a *recomputation*, "two stages disagree" is not a bug class you gate
 against — it is a state the types will not let you build.
 
+This pattern is not greenfield. `Concrete/Pipeline/Pipeline.lean` already applies
+it at **stage granularity**: `ValidatedCore` is constructible only by
+`Pipeline.coreCheck`, `ResolvedProgram` only by Resolve, and so on — a
+downstream stage cannot fabricate "this ran" without the token. The escalation
+this note asks for is from *stage* tokens ("this pass executed") to *node facts*
+("this type/capability is committed here, read-only"): carry the fact inside the
+IR, not just a phantom proof that a pass ran over the whole program.
+
 This is the same bet Concrete makes about user code — *evidence carried in the
 artifact, not reconstructed by inspection* — applied to the compiler's own IR.
 Concrete demands evidence-carrying source from its users while its own pipeline

@@ -1068,6 +1068,16 @@ walker coverage, production/verification/test paths use the same composed
 pipeline unless explicitly justified, and pipeline debugging/reporting can
 explain where a fact was introduced or lost.
 
+Design rule for this phase: borrow the useful workflow lessons from Zig, Rust,
+Odin, SPARK, and Lean, but not their hidden ambiguity. Concrete should keep
+Zig's small-toolchain feel and explicit allocator lesson, Rust's fast feedback
+loop and review tooling discipline, SPARK's runtime-error proof framing, and
+Lean's kernel-checked replay discipline. It should not import Zig-style lazy
+checking of unused code, Rust-style implicit `Drop`, broad compile-time
+metaprogramming that hides generated behavior, or C/C++ warning culture. Every
+pipeline refactor below is judged by that standard: fewer second truth sources,
+faster local feedback, stronger evidence replay, and no new dark semantics.
+
 This phase is for refactors pulled by real bug classes, not aesthetic file
 splits. A task belongs here only if it prevents "Check says one thing, another
 stage says another" bugs, catches a missed constructor/stage interaction, or
@@ -1111,6 +1121,15 @@ widen one fact axis at a time), each stage shippable and retiring debt.
    saturating ops if present, and trap preservation. Add a red-team fixture
    where an optimizer fold would erase a documented trap; that fixture must fail
    if the trap disappears.
+
+   Gate: `scripts/tests/check_int_arith_semantics.sh` (CI-wired, 14 rows).
+   STATUS (partial — NOT done): `Interp` and `SSACleanup` now route through
+   `IntArith`; `EmitSSA`/`EmitBuiltins` still hold a PARALLEL hand-maintained
+   arithmetic copy (0 `IntArith` references). The gate passes because the three
+   views AGREE today — it proves agreement, not unification, so it is currently
+   a regression net over a still-forked backend, not evidence the item is
+   complete. #1 is done only when the backend derives checked-helper selection
+   from `IntArith` and the parallel copy is deleted.
 
 2. Centralize type and policy predicates used across the pipeline.
    Today `isCopyType` / `isCopyTy`-style logic exists in multiple stages
@@ -1159,7 +1178,13 @@ widen one fact axis at a time), each stage shippable and retiring debt.
    stage, whose node types Elab and CoreCheck may READ but not re-infer. This is
    the Phase 6.5 entry point for Phase 14 #13b ("one source of typing truth");
    6.5 introduces the pattern and the first certificate, Phase 14 finishes the
-   type axis and adds the preservation proofs. Do not convert every fact at
+   type axis and adds the preservation proofs. NOTE: the pattern is not
+   greenfield — `Pipeline.lean` already gates at STAGE granularity with
+   constructor-guarded artifact tokens (`ValidatedCore` is constructible only by
+   `Pipeline.coreCheck`, etc.; see docs/ARCHITECTURE.md Artifact Flow). This
+   item extends that from "this stage ran" tokens to "this FACT is committed in
+   the node" — carrying the type/cap/etc. inside the IR, read-only downstream,
+   rather than only proving a pass executed. Do not convert every fact at
    once — land the type axis, prove the ergonomics and the compile-time win,
    then widen to capability/arithmetic-policy/evidence-class/resolved-identity
    one axis at a time (the staging in docs/PIPELINE_ARCHITECTURE.md). Done when
@@ -2761,6 +2786,14 @@ relying only on examples and prose.
 Done when: parser/security examples can show obligations for bounds, div/mod
 zero, overflow profile, casts, and loop bounds with statuses
 `proved`, `enforced`, `assumed`, `missing`, or `blocked`.
+
+This phase is the **absence of runtime errors** story, stated honestly. A bounds
+check, overflow trap, cast check, or loop-bound assertion may be enforced at
+runtime, proved statically, assumed by policy, or still missing; those are
+different evidence classes and reports must not collapse them. The SPARK/Ada
+lesson to keep is the framing: runtime safety is not just "the program probably
+doesn't crash"; it is a set of named obligations with source spans, replay
+commands, and visible proof/enforcement status.
 
 0. [DONE 2026-06-11] PROVEN violations are hard errors by default in safe
    code. The obligation engine already discharges some obligations to
