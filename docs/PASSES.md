@@ -454,9 +454,22 @@ ProofCore is a side-channel extraction — it does not sit in the compilation pi
 
 ---
 
-## SSA Backend Contract
+## SSA / BackendIR Contract
 
-The SSA pipeline (Lower → SSAVerify → SSACleanup → EmitSSA) is a closed backend contract.  This section consolidates what each stage guarantees, what each stage may assume, and the overall invariant chain.
+Today the SSA pipeline is `Lower -> SSAVerify -> SSACleanup -> EmitSSA`. The
+long-term backend contract inserts a structured BackendIR stage before LLVM
+emission:
+
+```text
+Lower -> SSAVerify -> SSACleanup -> BackendIR -> BackendIRVerify -> EmitLLVM
+```
+
+This is useful even if LLVM remains the only emitter. BackendIR is the
+structured place where runtime checks, trap/source spans, layout and ABI facts,
+helper calls, target constants, and capability/trust labels stay inspectable
+before LLVM text or target code erases compiler intent. This section
+consolidates what the current SSA path guarantees and what BackendIR must
+preserve when added.
 
 ### What SSAVerify guarantees (postconditions)
 
@@ -484,15 +497,21 @@ After SSACleanup, EmitSSA may additionally assume:
 7. **Store-load forwarding:** Block-local value forwarding (invalidated by calls/memcpy).
 8. **Fixpoint convergence:** The pass iterates to a fixpoint — re-running cleanup does not change the output.
 
-### What EmitSSA assumes (preconditions)
+### What BackendIR / EmitSSA assumes (preconditions)
 
-EmitSSA is a pure translation; it does not validate its input.  It assumes:
+EmitSSA is currently a pure translation; it does not validate its input. Until
+BackendIR exists, it assumes:
 
 1. All SSAVerify invariants hold (dominance, phi correctness, branch safety).
 2. All SSACleanup optimizations have been applied (no dead blocks, no trivial phis).
 3. Aggregate types are passed/returned by pointer (the ABI contract from Lower). Exception: extern fn calls with `#[repr(C)]` struct args use ABI-flattened integer registers (see postconditions above).
 4. String literals are deduplicated globally (from Lower).
 5. Vec operations carry correct element-size metadata.
+
+After BackendIR lands, these assumptions should move into
+`BackendIRVerify`, and `EmitLLVM` should consume `ValidatedBackendIR`, not raw
+SSA. Direct SSA-to-LLVM emission should be retired once the BackendIR-mediated
+LLVM path reaches parity.
 
 ### Invariant chain
 
@@ -505,7 +524,11 @@ SSACleanup: removes dead code, folds constants, forwards stores, converges
   ↓
 SSAVerify (post-cleanup): re-validates all invariants after cleanup transformations
   ↓ (no dead blocks, no trivial phis, constants folded, invariants mechanically re-checked)
-EmitSSA: 1:1 translation to LLVM IR text — no validation, just emission
+BackendIR: structured backend intent (runtime checks, spans, layout, helper calls)
+  ↓
+BackendIRVerify: validates the backend contract
+  ↓
+EmitLLVM: translation from ValidatedBackendIR to LLVM IR text
 ```
 
 ---

@@ -15,7 +15,7 @@ gate-based V1 of the deliverable; a `concrete inspect --pipeline-contracts
 ## The stages
 
 ```
-source ──▶ Parse ──▶ Resolve ──▶ Check ──▶ Elab/Core ──▶ Mono ──▶ CoreCheck ──▶ Lower ──▶ SSA ──▶ SSAVerify ──▶ Emit ──▶ link
+source ──▶ Parse ──▶ Resolve ──▶ Check ──▶ Elab/Core ──▶ Mono ──▶ CoreCheck ──▶ Lower ──▶ SSA ──▶ SSAVerify ──▶ BackendIR ──▶ Emit ──▶ link
 ```
 
 ## Contracts (what each boundary guarantees)
@@ -57,6 +57,13 @@ source ──▶ Parse ──▶ Resolve ──▶ Check ──▶ Elab/Core ─
   elisions — never silently to raw LLVM wrap/UB. An executable build has an
   entry point. *Violation → `error[link]`, not an `ld` "Undefined symbols"
   leak.*
+
+### after BackendIR (planned)
+- Runtime checks, trap/source spans, layout/ABI facts, helper calls, target
+  constants, and capability/trust labels are still structured and inspectable.
+  `BackendIRVerify` rejects malformed backend intent before LLVM text emission.
+  This boundary is valuable even if LLVM remains the only emitter: it prevents
+  report/audit/codegen facts from being reconstructed out of raw LLVM strings.
 
 ## Enforcement discipline
 

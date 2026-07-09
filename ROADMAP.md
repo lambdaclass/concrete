@@ -1205,32 +1205,93 @@ the compiler architecture is finished.
    type/capability facts but invalidates source-linked diagnostics; and a gate
    proves stale facts cannot remain green after an invalidating pass.
 
-9. Replace source-level side tables with a real typed AST boundary.
+9. Replace source-level re-inference with a certified node/edge fact ledger.
    This is the root architectural item for the whole pipeline. Check must
-   produce a `TypedProgram` containing typed syntax (`TModule`, `TDecl`,
-   `TStmt`, `TExpr`, `TPlace`, typed patterns as needed), not an untyped
-   `ResolvedProgram` plus advisory metadata. Elab must accept only this typed
-   syntax and perform zero source-level type inference. Side tables may exist as
-   derived indexes for reports, caches, proof obligations, LSP, and agent JSON;
-   they are not the primary typing truth.
+   produce a `TypedProgram` over the exact post-desugar tree that Elab consumes,
+   and that certificate must carry the committed source facts Elab needs:
+   types, ownership/value-flow, pass agreement, capability requirements,
+   fallibility/must-use, trusted/Unsafe classification, resolved identity, and
+   proof-relevant provenance. Elab may read committed facts; it may not infer a
+   second source-level answer.
 
-   Each typed node should carry the facts later phases need to avoid
-   re-derivation: stable node id, source span, resolved identity, type,
-   ownership/value-flow mode, pass-agreement mode, capability requirements,
-   fallibility/must-use facts, trusted/Unsafe classification, and desugaring
-   provenance where relevant. Use private constructors / certified wrappers at
-   phase boundaries so invalid states cannot be fabricated casually:
-   `ResolvedProgram -> Check -> TypedProgram -> Elab -> CoreProgram ->
-   CoreCheck -> ValidatedCore -> Mono -> ValidatedMonoCore -> Lower -> SSA ->
-   SSAVerify -> ValidatedSSA`.
+   The best long-term representation for Concrete-in-Lean is a thin-in-facts
+   AST plus one real identity substrate, not fat constructors with every fact as
+   fields. Identity does NOT go on the shared `Expr` (a field there forces a
+   placeholder id upstream and permanent walker churn); it lives on a distinct,
+   ephemeral, id-carrying mirror IR (`IdentifiedProgram`) minted post-desugar and
+   consumed by Check and Elab only. Facts attach in a fail-closed ledger keyed by
+   source identity and, where needed, by edges/roles — making semantic facts
+   load-bearing without a fact-per-axis constructor churn.
 
-   Done when Elab cannot compile against raw `Expr`/`Stmt`, Elab's literal,
-   binop, cast, call, aggregate, match/if, pattern, and place handling reads
-   typed nodes rather than re-inferring source types, the old type-table/fallback
-   path is gone or demoted to derived metadata, and a regression proves the
+   This is a certificate CHAIN, not one global ledger. `ExprId` dies at Elab, so
+   the source-level `FactLedger` cannot key Core/SSA/backend facts. Each
+   downstream IR is its own certificate (`ValidatedCore`, `ValidatedSSA`,
+   `ValidatedBackendIR`) carrying its own facts on its own ids; the layers are
+   joined by provenance (`SourceKey -> CoreId -> SSAId -> BackendId -> emitted
+   location`). Each fact has exactly one owning layer; no later layer re-derives
+   another's fact. Provenance is itself a certified, fail-closed, many-to-many
+   relation — coverage-asserted per lowering, fold-unions-origins,
+   delete-invalidates (wired into #8) — never silent metadata; a missing or
+   ambiguous link is an error or an explicit `backend-trusted` classification.
+
+   Increment 0 substrate, before any family migration:
+   - introduce a distinct `IdentifiedProgram` / identified-tree representation
+     after desugaring and immediately before Check; parser/resolve/desugar stay
+     id-free, so there are no placeholder or meaningless ids to accidentally
+     read early;
+   - mint `NodeId`s in that pass, so Check and Elab consume the same identified
+     tree and desugaring never has to preserve pre-existing ids;
+   - represent `IdentifiedProgram` as a distinct, ephemeral, shape-preserving
+     mirror of the post-desugar AST that carries `NodeId` + span + shape and NO
+     facts, living only between the mint pass and Elab; identity is a field on
+     that mirror, never on the shared `Expr`, and never spans, traversal
+     positions, or structural hashes (all silent-desync channels);
+   - carry source span/origin/desugaring provenance separately from identity;
+   - define a `Std.HashMap`-backed fact ledger, not an assoc list; the ledger is
+     on a hot compiler path and must not repeat the bug-027 O(n²) pattern;
+   - generalize the key space beyond `ExprId`: a source fact attaches to more
+     than expressions (a pass-agreement edge endpoint is a PARAMETER, not an
+     expr), so key on `SourceKey = expr | stmt | decl | param | type | module`,
+     with `FactKey = node(SourceKey, role) | edge(SourceKey, SourceKey, kind)`
+     for call-site/parameter pass agreement, borrow conflicts, scoped
+     callback/container exclusions, capability edges, proof dependencies, and
+     invalidation dependencies;
+   - expose three distinct fail-closed APIs: `insertFact` rejects conflicting
+     writes to the same committed key, `requireFact` errors on missing facts for
+     migrated families, and `lookupFact` is reserved for unmigrated or optional
+     facts only;
+   - define migrated-family coverage: before `TypedProgram` is minted, Check
+     walks the tree and proves operationally that every node in each migrated
+     family has the required facts; missing facts or conflicting inserts are
+     compiler errors, never silent fallback;
+   - keep migration flags per fact family / syntax family so types can land
+     before capabilities, ownership, proof facts, and backend facts.
+
+   There is no separate "typed syntax": `IdentifiedProgram` carries identity +
+   shape but NO facts (types/ownership/etc. live in the ledger, keyed by id).
+   The fat `TExpr`/`TStmt` foundation in `Concrete/Elab/Typed.lean` is superseded
+   by `IdentifiedProgram` + `FactLedger` and is deleted as the first coupled step
+   of the run; only `ExprId` (→ `NodeId`) and `ValueMode` (→ the ownership-fact
+   payload) survive. No fact may have a second home as an AST field.
+
+   Boundary chain:
+   `ResolvedProgram -> DesugaredProgram -> IdentifiedProgram -> Check -> TypedProgram ->
+   Elab -> CoreProgram -> CoreCheck -> ValidatedCore -> Mono ->
+   ValidatedMonoCore -> Lower -> SSA -> SSAVerify -> ValidatedSSA`.
+   Done when Elab cannot run on an unchecked/unidentified tree, migrated
+   families fail closed on missing/conflicting facts, Elab's literal, binop,
+   cast, call, aggregate, match/if, pattern, and place handling reads committed
+   facts rather than re-inferring source facts, and regressions prove the
    historical E0228/H12 class cannot be represented. Breaking constructor
-   changes are acceptable here; the goal is the best long-term architecture, not
-   the smallest diff.
+   changes for the one identity substrate are acceptable; the goal is the best
+   long-term architecture, not the smallest diff.
+
+   Hot-read constraint: the ledger is canonical, but passes must not repeatedly
+   hash-probe the same fact in tight loops. Elab/Mono/Lower should bind required
+   facts locally while processing a node or block, and telemetry/complexity
+   gates should watch fact-ledger lookup counts and pass scaling. The goal is
+   to avoid replacing a correctness drift bug with a bug-027-shaped performance
+   problem at the center of the compiler.
 
 10. Define Concrete's result-location / destination-passing model.
     Adapt Zig's result-location idea to Concrete's linear value model. Write the
@@ -1242,10 +1303,10 @@ the compiler architecture is finished.
     storage, why by-value projection of a non-Copy subplace is rejected, and how
     parameter-directed pass agreement interacts with borrows and reborrows.
 
-    This model should be represented in typed syntax, not rediscovered during
-    Lower: aggregate construction, returns, destructures, assignments, and
-    scoped callbacks should carry destination/pass facts from Check through
-    Elab into Core. Done when `docs/VALUE_FLOW_SPEC.md` or a new
+    This model should be committed as typed ledger facts on nodes/edges, not
+    rediscovered during Lower: aggregate construction, returns, destructures,
+    assignments, and scoped callbacks should carry destination/pass facts from
+    Check through Elab into Core. Done when `docs/VALUE_FLOW_SPEC.md` or a new
     destination-passing note names the modes, the checker/lowerer tests include
     aggregate construction, return, destructure, assignment, borrow, callArg,
     and scoped callback rows, and at least one old H10/H11-style conservation
@@ -3144,27 +3205,61 @@ machine-readable.
     re-inference and CoreCheck's overlapping rules down to genuine Core-shape
     validation.
 
-    Long-term architecture, not a staging bridge: Check produces real typed
-    syntax (`TExpr`, `TStmt`, `TPlace`, typed patterns as needed). Typed nodes
-    carry type, ownership/pass mode, capability facts, resolved identity, stable
-    node id, source span, and desugaring provenance as fields. Elab consumes
-    only `TypedProgram`; it does not accept raw `Expr`/`Stmt`, does not read an
-    advisory side table to decide source types, and does not infer source types.
-    Tables over node ids are derived metadata for reports, cache keys, proof
-    obligations, LSP, and agent tooling, not the source of typing truth.
+    Long-term architecture, not a staging bridge: Check produces a certified
+    `TypedProgram` over a post-desugar tree whose nodes have stable identity.
+    The committed source typing truth lives in a fail-closed, source-level fact
+    ledger keyed by `SourceKey` (expr/stmt/decl/param/type/module) and, for
+    relational facts, by edges/roles. This is a certificate CHAIN, not one
+    global ledger: `ExprId` dies at Elab, so Core/SSA/backend facts live in their
+    own certificates (`ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR`), joined
+    to the source ledger by certified provenance (`SourceKey -> CoreId -> SSAId ->
+    BackendId`). Each fact has one owning layer; provenance is coverage-asserted
+    and fold-unions/delete-invalidates per #8, never silent. The AST stays
+    thin-in-facts but not identity-free: the one identity substrate is the
+    unavoidable one-time cost, and it lives on the ephemeral `IdentifiedProgram`
+    mirror, not the shared `Expr`. What is forbidden is silent fallback,
+    conflicting inserts, and downstream re-inference.
+
+    Node ids are minted by a distinct `IdentifiedProgram` pass after desugaring
+    and before Check, on the exact tree Check and Elab will share. Parser,
+    Resolve, and desugar remain id-free; there are no placeholder ids and no
+    lifecycle state where an id exists but is not meaningful. Source
+    span/origin/provenance are separate from identity, so synthetic nodes have
+    real ids and honest origins. Before `TypedProgram` is constructed, Check
+    runs a per-family coverage assertion: for every migrated family, every
+    relevant node/edge must have the required fact. Missing facts or conflicting
+    facts are compiler errors. Unmigrated families may still be absent only
+    while their migration flag says so.
+
+    Ledger substrate requirements: use a `Std.HashMap`-style implementation,
+    not a linear assoc list; define `FactKey` over `SourceKey` nodes and
+    edges/roles (not `ExprId` only — a pass-agreement endpoint is a parameter,
+    not an expression); keep `insertFact`, `requireFact`, and `lookupFact` as
+    separate APIs so conflicting writes, migrated-family absence, and
+    optional/unmigrated lookup cannot be confused. Facts such as E0293
+    container-not-in-context, borrow conflicts, call-site/parameter pass
+    agreement, capability dependencies, and proof dependencies are edge facts,
+    not node fields — which is *why* an edge-keyed ledger is required regardless
+    and a fat AST cannot subsume it. There is no separate typed syntax:
+    `IdentifiedProgram` carries identity + shape only; the source ledger is the
+    canonical store for source facts. Implementation must avoid repeated hot-path
+    lookups by binding facts locally within Elab/Lower (the ledger is the
+    Check→Elab handoff, not a per-access backend oracle) and measuring
+    lookup/scaling behavior in the Phase 6.5 telemetry and anti-superlinear gates.
 
     The boundary chain should be unrepresentable-by-construction:
-    `ResolvedProgram -> Check -> TypedProgram -> Elab -> CoreProgram ->
-    CoreCheck -> ValidatedCore -> Mono -> ValidatedMonoCore -> Lower -> SSA ->
-    SSAVerify -> ValidatedSSA`. If a downstream stage wants a source type,
-    value-flow mode, capability requirement, or resolved callee, it reads the
-    typed node or certified fact produced by the owning stage. It may validate
-    shape; it may not create a second source-level judgment. Done when Elab's
-    re-inference code is deleted, not merely bypassed, and regressions prove the
+    `ResolvedProgram -> DesugaredProgram -> IdentifiedProgram -> Check -> TypedProgram ->
+    Elab -> CoreProgram -> CoreCheck -> ValidatedCore -> Mono ->
+    ValidatedMonoCore -> Lower -> SSA -> SSAVerify -> ValidatedSSA`. If a
+    downstream stage wants a source type, value-flow mode, capability
+    requirement, pass-agreement decision, or resolved callee, it reads the
+    certified fact produced by the owning stage. It may validate shape; it may
+    not create a second source-level judgment. Done when Elab's re-inference
+    code is deleted, not merely bypassed, and regressions prove the
     literal/defaulting, mixed-width, std-bypass, conditional-Copy, and
     capability/type-drift classes cannot be expressed through the typed
-    boundary. Breaking constructor changes are acceptable; the target is the
-    best long-term pipeline, not a minimal migration.
+    boundary. Breaking constructor changes for identity are acceptable; the
+    target is the best long-term pipeline, not a minimal migration.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
@@ -3222,11 +3317,25 @@ and incremental build contracts are explicit enough for release evidence.
    varargs policy, calling convention labels, symbol names, and ownership/
    capability/trust annotations. Wire `scripts/tests/check_c_abi_matrix.sh`
    with both generated C callers and Concrete callers.
-9. Add backend IR emission and verification as a release-facing backend
-   contract: `concrete inspect --backend-ir`, `--emit-backend-ir`,
-   `concrete verify-ir --pass backend-ir`, golden backend-IR fixtures, and
-   round-trip checks that source maps, target constants, runtime checks, and
-   capability/trust labels survive lowering.
+9. Add `BackendIR` as a structured backend contract between `ValidatedSSA` and
+   LLVM/native emission. This is useful even if Concrete never ships its own
+   native backend: it gives the compiler a typed, inspectable place to preserve
+   runtime checks, trap/source-span facts, layout/ABI decisions, target
+   constants, trusted/runtime helper calls, and capability/trust labels before
+   they disappear into LLVM text or target code. The intended ladder is
+   `ValidatedSSA -> BackendIR -> ValidatedBackendIR -> EmitLLVM` first; later
+   emitters (native, C, WASM, QBE-style) may consume the same
+   `ValidatedBackendIR` only after the contract is stable.
+
+   V1 should cover a narrow subset: integer arithmetic, bools, branches,
+   direct calls, returns, checked runtime traps, small loads/stores, source-map
+   annotations, and helper calls. Add `concrete inspect --backend-ir`,
+   `--emit-backend-ir`, `concrete verify-ir --pass backend-ir`, golden
+   backend-IR fixtures, and round-trip checks that source maps, target
+   constants, runtime checks, and capability/trust labels survive lowering.
+   Gate old path vs BackendIR-mediated LLVM where both exist:
+   `interp == old compiled == BackendIR->LLVM compiled`, then retire the old
+   direct SSA->LLVM path once parity is established.
 10. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
     pointer-heavy examples, plus the stdlib sanitizer/runtime hooks from Phase
     11. Sanitizer findings are `runtime_checked` / `tested` evidence, not proof.
@@ -3255,10 +3364,11 @@ and incremental build contracts are explicit enough for release evidence.
     its supported subset, and report exactly which claims become backend/
     target-trusted.
 18. Add translation validation for codegen as the path out of a fully trusted
-    backend. V1 should validate a narrow backend-IR subset per compile:
+    backend. V1 should validate a narrow `ValidatedSSA -> BackendIR ->
+    ValidatedBackendIR` subset per compile:
     integer arithmetic, fixed arrays, structs, direct calls, branches, bounded
     loops, runtime checks, capability calls, and source-map annotations. The
-    validator compares checked Core / typed IR facts against emitted backend IR
+    validator compares checked Core / typed IR / SSA facts against BackendIR
     facts and reports one of: `translation_validated`, `translation_trusted`,
     `translation_blocked`, or `translation_mismatch`. This is not a promise to
     prove the whole LLVM/native stack; it is a per-artifact check that the

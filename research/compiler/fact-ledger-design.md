@@ -44,6 +44,53 @@ unmigrated, `require : fails closed` once it is.
 
 That sentence is the whole design. Everything below is mechanism for it.
 
+## Scope: a source-level ledger + per-IR certificates + provenance joins
+
+This is NOT one global ledger keyed by `ExprId` for every stage. It cannot be:
+`ExprId` lives on the ephemeral `IdentifiedProgram` and dies at Elab (Decision 1),
+so Core/SSA/Backend nodes have no `ExprId` to key by. A single `ExprId`-keyed
+store spanning all stages would force identity to thread through every downstream
+IR (killing "ephemeral" and re-adding a per-node id to every IR) — the exact cost
+the mirror-IR avoids.
+
+So the architecture is a **certificate chain**, not a monolithic ledger:
+
+- `FactLedger` (the source-level certificate; read "source fact ledger") —
+  keyed by source identity (see the generalized key space below). Owns type,
+  ownership, capability, pass-agreement, and must-use facts. This is "the
+  ledger"; it is source-level, not global.
+- `ValidatedCore`, `ValidatedSSA`, `ValidatedBackendIR` — each downstream IR is
+  its **own** certificate carrying its **own** facts on its **own** node/value
+  ids (Core shape + typed ops + proof *obligations*; SSA dominance + traps +
+  widths; backend ABI/layout + helper calls).
+- **Provenance** joins the layers: `SourceKey → CoreId → SSAId → BackendId →
+  emitted location`.
+
+This preserves the thesis without the contradiction: **each fact has exactly one
+owning layer; no later layer re-derives another layer's fact; later layers add
+their own facts; provenance links them.** That is a certificate chain, not a
+second source of truth.
+
+**Single-owner rule (no fact split across layers):** e.g. proof *eligibility*
+(pure / capability-free) is a **source** fact; proof *obligations / VCs* are
+**Core** facts. A fact belongs to one layer only.
+
+### Provenance is itself a certified, fail-closed relation — not metadata
+
+Because "no re-derivation" now leans on the join, provenance must obey the same
+discipline as facts, or misattribution becomes the drift class one level down
+(a report blaming the wrong source line, an obligation over the wrong node):
+
+- **Coverage-asserted:** every lowering pass emits a provenance edge for every
+  node it creates; a missing link is an ICE or an explicit `provenance-lost →
+  backend-trusted` classification, never a silent wrong link.
+- **Many-to-many, not 1:1:** one checked `+` → add + overflow-check + trap-block
+  (1→many); optimization fuses/deletes nodes (many→1, and deletions). So
+  provenance is a *relation* that semantics-preserving passes must **preserve /
+  union / invalidate** — wired into the analysis-preservation/invalidation
+  contract (ROADMAP 6.5 #8): fold ⇒ union origins; delete ⇒ invalidate dependent
+  facts + provenance. A naive 1:1 map breaks on the first inline.
+
 ## The ladder
 
 ```
@@ -115,17 +162,27 @@ EmitSSA fix) relocated into the ledger. Rules:
 ## FactLedger interface (the three fail-closed entry points)
 
 ```lean
-structure ExprId where            -- the NodeId; keys any typecheckable node
+structure ExprId where            -- the NodeId minted on IdentifiedProgram
   moduleId : String
   localId  : Nat
 deriving BEq, Repr, Hashable, Inhabited
 
+-- The key space is NOT ExprId-only: source facts attach to more than
+-- expressions (a pass-agreement edge endpoint is a PARAMETER, not an expr).
+inductive SourceKey  | expr (id : ExprId)   | stmt (id : StmtId)
+                     | decl (id : DeclId)   | param (id : ParamId)
+                     | type (id : TypeId)   | module (id : ModuleId)
+deriving BEq, Repr, Hashable
+
 inductive FactRole   | value | arg (idx : Nat) | field (name : String)
 inductive EdgeKind   | passAgreement | borrowConflict | containerExclusion
                      | capabilityFlow | proofDep | invalidationDep
-inductive FactKey    | node (id : ExprId) (role : FactRole)
-                     | edge (src dst : ExprId) (kind : EdgeKind)     -- edges from day one
-inductive FactStage  | check | elab | mono | coreCheck | lower       -- owning stage
+inductive FactKey    | node (key : SourceKey) (role : FactRole)
+                     | edge (src dst : SourceKey) (kind : EdgeKind)  -- edges from day one
+-- Owner is a SOURCE-level sub-stage only. Core/SSA/Backend facts do NOT live
+-- here — they live in ValidatedCore/ValidatedSSA/ValidatedBackendIR, joined by
+-- provenance (see "Scope"). This is SourceFactLedger, not a global ledger.
+inductive FactStage  | check                                        -- owning source stage
 inductive EvidenceClass | checked | inferred | assumed | trusted
 inductive Fact       | type (ty : Ty) | ownership (mode : ValueMode)
                      | capability (caps : CapSet) | relational

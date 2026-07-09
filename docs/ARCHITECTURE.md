@@ -124,7 +124,8 @@ All artifact boundaries from Resolve onward are load-bearing:
 - `ElaboratedProgram` → consumed by CoreCheck
 - `ValidatedCore` → consumed by Mono (type-enforced: only `Pipeline.coreCheck` constructs it)
 - `MonomorphizedProgram` → consumed by Lower
-- `SSAProgram` → consumed by Emit
+- `SSAProgram` → currently consumed by Emit; long-term consumed by BackendIR
+  lowering, then `ValidatedBackendIR` is consumed by EmitLLVM/native emitters
 
 **Remaining gap:** `Pipeline.resolveFiles` (the IO step that reads `mod X;` sub-module files from disk) returns `ParsedProgram × SourceMap`, not a dedicated artifact type. This means the transition from "parsed single file" to "parsed all files with sub-modules resolved" has no named boundary. The `ParsedProgram` that comes out of `resolveFiles` is structurally the same type as what went in, just with sub-module stubs replaced by their parsed contents. A future `ResolvedFilesProgram` artifact would make this boundary explicit and cacheable.
 

@@ -27,7 +27,7 @@ ProjectContext
   -> TypedIR / CheckedIR
   -> Core
   -> obligations and audit facts
-  -> interpreter / backend IR / codegen
+  -> interpreter / BackendIR / codegen
   -> CompilerLedger artifacts and facts
 ```
 
@@ -340,7 +340,20 @@ facts that honestly depend on source text or spans.
 
 ## Backend Contract
 
-The backend boundary should name:
+The backend boundary should be a structured IR boundary, not raw string
+emission. Even if LLVM remains the only final emitter, Concrete should insert a
+typed backend contract:
+
+```text
+ValidatedSSA
+  -> BackendIR
+  -> ValidatedBackendIR
+  -> EmitLLVM / future emitters
+```
+
+`BackendIR` is not primarily "how we replace LLVM." Its first job is to make
+backend intent inspectable and checkable before LLVM text or target code erases
+compiler facts. It should carry:
 
 - integer overflow profile
 - division and modulo semantics
@@ -350,9 +363,24 @@ The backend boundary should name:
 - target triple and data layout
 - libc/runtime assumptions
 - trusted toolchain components
+- runtime-check/trap facts and source spans
+- helper calls and trusted/runtime dependencies
+- capability/trust labels that reports must preserve
 
 Source-level claims stop at this boundary unless the backend contract carries
 evidence.
+
+V1 should be deliberately narrow: integer arithmetic, booleans, direct calls,
+branches, returns, checked traps, small loads/stores, source-map annotations,
+and helper calls. The gate should compare the old direct LLVM path and the
+BackendIR-mediated LLVM path where both exist:
+
+```text
+interpreter result == old compiled result == BackendIR -> LLVM compiled result
+```
+
+Once parity is established, direct SSA-to-LLVM emission should be retired so
+LLVM is just one emitter behind `ValidatedBackendIR`.
 
 ## Interpreter Versus Compiled
 

@@ -9,19 +9,35 @@ This is the target architecture for the type/ownership/capability/proof axes,
 reconciled after a long design pass. It is a design record, not a second
 roadmap; the roadmap stays linear and #9/#13b point here.
 
+> **Canonical substrate spec:** [`fact-ledger-design.md`](fact-ledger-design.md)
+> is the authoritative design for the identity + ledger substrate and is what
+> the code (`Concrete/Elab/Identified.lean`, `Concrete/Semantics/FactLedger.lean`)
+> follows. This document is the broader ladder/lessons synthesis; where they
+> overlap, defer to `fact-ledger-design.md`.
+
 ## Thesis in one paragraph
 
-Concrete's pipeline is a **certificate ladder over a single fact ledger**. Every
+Concrete's pipeline is a **certificate chain**, not one global ledger. Every
 semantic fact (type, ownership, capability, pass-agreement, proof-relevance) is
-committed exactly once by the stage that owns it, into one node/edge-keyed,
-fail-closed `FactLedger`. Later stages *require* facts; they never re-derive
-them. Each stage receives a certified input it cannot fabricate, adds its facts,
-rejects invalid states, and emits either the next certificate or a source-linked
-diagnostic. This is the Phase 6.5 fact-centralization thesis — already realized
-for arithmetic (one `IntArith` meaning across interp/opt/backend) and for
-capabilities (#5) — generalized to every axis, and enforced *structurally*
-(private certificate constructors, fail-closed ledger reads) rather than by
-after-the-fact gates.
+committed exactly once by the stage that owns it. The **source-level facts**
+(committed by Check) live in one fail-closed `FactLedger` keyed by source
+identity + edges; **each downstream IR** (`ValidatedCore`, `ValidatedSSA`,
+`ValidatedBackendIR`) is its own certificate carrying its own facts on its own
+ids; the layers are joined by **certified provenance**. Later stages *require*
+facts; they never re-derive them. Each stage receives a certified input it
+cannot fabricate, adds its facts, rejects invalid states, and emits either the
+next certificate or a source-linked diagnostic. This is the Phase 6.5
+fact-centralization thesis — already realized for arithmetic (one `IntArith`
+meaning across interp/opt/backend) and capabilities (#5) — generalized to every
+axis and enforced *structurally* (private certificate constructors, fail-closed
+reads) rather than by after-the-fact gates.
+
+Why a chain, not one ledger: `ExprId` lives on the ephemeral `IdentifiedProgram`
+and dies at Elab, so Core/SSA/backend nodes have no source id to key by. One
+global ledger would force identity through every downstream IR (killing
+"ephemeral", re-adding a per-node id everywhere). The chain keeps each fact in
+exactly one owning layer with provenance joins — a single source of truth *per
+fact*, not a single store.
 
 The debate this record closes: **the AST stays thin; the ledger is the
 certificate.** Some of Concrete's most important facts are not node-local
@@ -119,60 +135,66 @@ consequences fixed here:
   separate `origin : Span` for diagnostics. The two are never conflated; a
   desugared node is a first-class node with its own identity.
 
-**Representation: a phase-indexed AST (trees-that-grow), not a placeholder-id
-field.** The core AST is parameterized by an identity annotation:
+**Representation (as shipped in `Concrete/Elab/Identified.lean`): a distinct,
+ephemeral, id-carrying mirror IR — `IdExpr`.** Not a field on the shared `Expr`,
+and not a phase-indexed `Expr ι`; a separate shape-preserving mirror of the
+post-desugar AST that adds `id : ExprId` + `span` per node and **no facts**,
+living only between the mint pass and Elab:
 
 ```lean
-inductive Expr (ι : Type)        -- ι = identity annotation for this phase
-  | intLit  (id : ι) (span : Span) (v : …)
-  | binOp   (id : ι) (span : Span) (op : …) (lhs rhs : Expr ι)
-  | …
--- children carry ι too, so ids exist on every node or on none.
+structure IdExpr where            -- id-carrying, fact-free, ephemeral
+  id   : ExprId
+  span : Span
+  kind : IdExprKind               -- mirrors Expr's shapes; children are IdExpr
 
-abbrev RawExpr    := Expr Unit     -- parser / resolve / desugar: NO id exists
-abbrev IdExpr     := Expr NodeId   -- post-mint: every node has an id
-
-mintIds : Expr Unit → Expr NodeId  -- the post-desugar traversal
+mintIds : Expr → IdExpr           -- deterministic post-desugar traversal
 ```
 
-Why phase-indexed over a `id : NodeId` field with a sentinel: a sentinel/`Option`
-id is a *runtime* "unminted" state that a pass could read by mistake — a silent
-wrong-key bug, exactly the class we are eliminating. With the phase index,
-reading an id before mint is a **type error** (`Expr Unit` has no `NodeId`), so
-"no id before mint" is compile-time-enforced and fail-closed by construction.
-This is the identity analogue of "certificates have private constructors."
+Three options were on the table: (a) a `NodeId` field on the shared `Expr`
+(rejected — placeholder id upstream + permanent walker churn across every pass);
+(b) a phase-indexed `Expr ι` / trees-that-grow (`Expr Unit` upstream, `Expr
+NodeId` after mint — type-enforced "no id before mint", but parameterizing the
+core AST touches every match); (c) the **distinct mirror** that shipped. (c)
+wins on confinement: parser/resolve/desugar/mono/lower/interp/report are
+*untouched* by identity, and it is fail-closed *by exhaustiveness* — `mintIds`
+must pattern-match every `Expr` constructor, so a new source form won't compile
+until `IdExprKind` + the mint handle it (no silent drift between `Expr` and its
+mirror). The cost — a second shape kept in sync — is compile-time-caught, not
+silent. This is the identity analogue of "certificates have private
+constructors."
 
-Fallback (only if the parameterization proves too invasive in Lean): a single
-`Expr` with an `id : NodeId` field defaulted to a distinguished `NodeId.unminted`
-sentinel, plus a runtime guard that any `require`/`lookup` on `unminted` is an
-ICE. Strictly worse (runtime, not type-level) — prefer the phase index.
+### 2.2 The (source-level) ledger
 
-### 2.2 The ledger
+This is the **source-level** `FactLedger` — the Check-level certificate. Core /
+SSA / backend facts are NOT in it; they live in `ValidatedCore` / `ValidatedSSA`
+/ `ValidatedBackendIR`, joined by provenance (see §2.7). The key space is
+**`SourceKey`, not `ExprId`-only** — a pass-agreement endpoint is a *parameter*,
+not an expression. (Canonical: `fact-ledger-design.md`.)
 
 ```lean
-inductive Role   | typ | ownership | capability | passAgreement | proof | …
-inductive EdgeKind | borrowConflict | passAgreement | aliasOverlap | …
+inductive SourceKey | expr (id : ExprId) | stmt (id : StmtId) | decl (id : DeclId)
+                    | param (id : ParamId) | type (id : TypeId) | module (id : ModuleId)
+inductive Role      | typ | ownership | capability | passAgreement | proof | …
+inductive EdgeKind  | borrowConflict | passAgreement | containerExclusion | …
 
-inductive FactKey                                   -- edges are mandatory from day 1
-  | node (id : NodeId) (role : Role)
-  | edge (from to : NodeId) (kind : EdgeKind)
+inductive FactKey                                   -- edges mandatory from day 1
+  | node (key : SourceKey) (role : Role)
+  | edge (src dst : SourceKey) (kind : EdgeKind)
 deriving BEq, Hashable
 
 structure Fact where
   payload      : FactPayload      -- TypeFact | OwnershipFact | CapabilityFact | …
-  owningStage  : Stage
+  owningStage  : SourceStage      -- source-level only (Check); downstream IRs carry their own
   evidence     : EvidenceClass    -- proved | enforced | reported | assumed | trusted
-  deps         : List FactKey     -- for invalidation / the future query graph
+  deps         : List FactKey     -- invalidation / the future query graph
   provenance   : Span
-  -- invalidation rules live with the fact, not in ad-hoc pass logic.
 
 abbrev FactLedger := Std.HashMap FactKey Fact       -- HashMap, NEVER an assoc-list.
 ```
 
 `Std.HashMap`, not `List (FactKey × Fact)`: the ledger is read at the hottest
 points in the compiler; an assoc-list reintroduces the O(n²) accumulation bug
-(bug 027, fixed in EmitSSA this session) at the center of the pipeline. `NodeId`
-and `FactKey` derive `Hashable` precisely so this is available.
+(bug 027, fixed in EmitSSA this session) at the center of the pipeline.
 
 ### 2.3 Three access points (the fail-closed contract)
 
@@ -240,6 +262,27 @@ Mitigation, so this does not become 027-at-the-center:
 - **Measure the Elab/Lower hot path** before declaring the pure-thin read
   pattern acceptable.
 
+### 2.7 Provenance is a certified, fail-closed relation
+
+Because the certificate chain (not one ledger) joins layers by provenance
+(`SourceKey → CoreId → SSAId → BackendId → emitted location`), provenance is
+load-bearing and must obey the same discipline as facts — otherwise
+misattribution becomes the drift class one level down (a report blaming the
+wrong source line, an obligation over the wrong node):
+
+- **Coverage-asserted:** each lowering emits a provenance edge for every node it
+  creates; a missing link is an ICE or an explicit `provenance-lost →
+  backend-trusted` classification, never a silent wrong link.
+- **Many-to-many, not 1:1:** one checked `+` → add + overflow-check + trap-block
+  (1→many); optimization fuses/deletes (many→1, deletions). So provenance is a
+  relation that semantics-preserving passes **preserve / union / invalidate** —
+  wired into the analysis-preservation/invalidation contract (Phase 6.5 #8):
+  fold unions origins; delete invalidates dependent facts + provenance. A naive
+  1:1 map breaks on the first inline.
+
+Single-owner rule: each fact lives in exactly one layer (proof *eligibility* is
+a source fact; proof *obligations* are Core facts) — never split across layers.
+
 ## Part 3 — The uniform stage contract
 
 Every stage obeys the same contract:
@@ -284,8 +327,9 @@ The ladder is not codegen-only. Off the certified core:
 
 ## Part 6 — Increment plan
 
-- **Increment 0 (substrate):** phase-indexed `Expr ι` + `mintIds` (post-desugar);
-  `FactLedger` (HashMap, `node|edge` keys, `insert`/`require`/`lookup`);
+- **Increment 0 (substrate):** the ephemeral `IdExpr` mirror IR + `mintIds`
+  (post-desugar); `FactLedger` (HashMap, `SourceKey` `node|edge` keys,
+  `insert`/`require`/`lookup`);
   per-family coverage assertion in `TypedProgram.mk`. Land as its own verified
   green commit — this is a compiler-wide mechanical change and must not leave a
   non-compiling tree. Couple with paring f22e211a (below).

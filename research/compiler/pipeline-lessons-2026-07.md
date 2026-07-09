@@ -66,7 +66,15 @@ load-bearing semantic axis: integer width, signedness, range, overflow/trap
 policy, wrapping, saturation, casts, foldability, interpreter behavior, and
 backend helper choice now route through one reference module. The next axes are
 capabilities/effects, typed facts, intrinsics, resolved identity, and
-certificate-carrying IR.
+certificate-carrying IR. For Concrete-in-Lean, "typed facts" should mean a
+certified node/edge-keyed ledger over a tree with real node identity, not
+necessarily fat constructors carrying every fact as fields. The AST is allowed
+to stay thin in facts, but it must carry identity; the ledger is load-bearing,
+fail-closed certificate data, not optional metadata. Edge facts are decisive:
+pass agreement, borrow conflicts, scoped-container exclusions, capability
+dependencies, proof dependencies, and invalidation dependencies cannot all live
+as fields on one expression node, so the node/edge ledger is fundamental rather
+than a migration crutch.
 
 ## The Named Languages: Are Their Pipelines As Good?
 

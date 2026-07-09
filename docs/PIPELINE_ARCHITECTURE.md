@@ -64,12 +64,16 @@ to *types that forbid it*. Shared predicates and pass-agreement gates (items
 it still leaves the architecture *inviting* the bug — a new pass can always
 re-infer and disagree, and the gate only fires if someone wrote the fixture.
 
-The structural fix is **certificate-carrying IR**: make re-derivation
-*unrepresentable*. `TypedProgram` can only be constructed by the type stage;
-`CheckedProgram` carries the linearity result; a node's type is a field the type
-stage stamped, not something Elab recomputes. When a fact is an *input* rather
-than a *recomputation*, "two stages disagree" is not a bug class you gate
-against — it is a state the types will not let you build.
+The structural fix is **certificate-carrying IR plus a fail-closed fact
+ledger**: make re-derivation *unrepresentable*. `TypedProgram` can only be
+constructed by Check over an `IdentifiedProgram`; its node/edge-keyed ledger
+contains the committed facts; Elab and later stages require those facts instead
+of recomputing them. Some facts are inherently relational (call-site↔parameter
+pass agreement, borrow conflicts, container/context exclusions), so the ledger
+is not scaffolding around a fat AST — it is the certificate substrate. It is a
+*source-level* ledger, though: `ExprId` dies at Elab, so Core/SSA/backend facts
+live in their own certificates (`ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR`),
+joined by certified provenance. A certificate **chain**, not one global store.
 
 This pattern is not greenfield. `Concrete/Pipeline/Pipeline.lean` already applies
 it at **stage granularity**: `ValidatedCore` is constructible only by
@@ -114,15 +118,21 @@ rather than adding it:
 3. Widen the fact set one axis at a time — capability, arithmetic policy,
    evidence class, resolved identity — each landing with the differential fuzzer
    as the safety net, exactly as the checked-arithmetic flip was staged.
+4. Insert `BackendIR` after `ValidatedSSA` when backend/audit facts need a
+   structured boundary: `ValidatedSSA -> BackendIR -> ValidatedBackendIR ->
+   EmitLLVM`. This is valuable even if LLVM remains the only emitter because it
+   gives reports, translation validation, and source maps a structured backend
+   contract instead of raw LLVM text.
 
 ## Relationship to Phase 14
 
 Phase 14 #13b ("one source of typing truth") is Principle 2 completed on the
-type axis: Check emits a typed AST that Elab consumes, deleting Elab's
-re-inference. Phase 6.5 introduces the certificate-IR *pattern* and the first
-certificate type; Phase 14 finishes the type axis and adds the *preservation
-proofs* (each pass provably preserves the committed meaning). 6.5 makes the
-architecture stop inviting drift; 14 proves the passes honor it.
+type axis: Check emits a `TypedProgram` whose ledger commits type facts over an
+identified tree, and Elab consumes those facts, deleting Elab's re-inference.
+Phase 6.5 introduces the certificate/ledger pattern and the first certificate
+type; Phase 14 finishes the type axis and adds the preservation proofs (each
+pass provably preserves the committed meaning). 6.5 makes the architecture stop
+inviting drift; 14 proves the passes honor it.
 
 ## Non-goals
 
