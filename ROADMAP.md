@@ -1044,16 +1044,41 @@ are folded out.
 Goal: make the compiler pipeline have one opinion about each program before
 Phase 7 expands the stdlib and daily workload surface.
 
-Done when: shared type/policy decisions live in one place, every major stage
-states and checks its invariants, new syntax cannot bypass walker coverage, and
-pipeline debugging/reporting can explain where a fact was introduced or lost.
+Done when: shared type/policy/evaluation/effect decisions live in one place,
+every major stage states and checks its invariants, new syntax cannot bypass
+walker coverage, production/verification/test paths use the same composed
+pipeline unless explicitly justified, and pipeline debugging/reporting can
+explain where a fact was introduced or lost.
 
 This phase is for refactors pulled by real bug classes, not aesthetic file
 splits. A task belongs here only if it prevents "Check says one thing, another
 stage says another" bugs, catches a missed constructor/stage interaction, or
 makes pipeline failures reproducible.
 
-1. Centralize type and policy predicates used across the pipeline.
+1. **FIRST FIX: unify integer/arithmetic evaluation semantics.**
+   Arithmetic semantics currently has multiple hand-maintained implementations:
+   interpreter evaluation, constant folding / DCE decisions, and backend checked
+   helper emission. That threatens the interpreter-as-oracle and
+   differential-testing story because a fold or helper selection can disagree
+   with the source/runtime meaning. This is the evaluation-axis sibling of the
+   type-truth work below.
+
+   Deliverable: `Concrete/Semantics/IntArith.lean` (or equivalent) defining the
+   single source of truth for integer bit width, signed/unsigned ranges,
+   cast normalization, checked/wrapping/saturating operations, division and
+   remainder semantics, shift-range rules, overflow/trap predicates, and
+   foldability. `Interp` must evaluate through it; `SSACleanup` must ask it
+   whether a constant fold is legal and whether it traps; `EmitSSA` /
+   `EmitBuiltins` must derive checked-helper selection from the same facts.
+
+   Done when a gate proves `interpret == fold-then-interpret == compiled` over
+   the integer operation matrix, including signed/unsigned widths, casts,
+   negative operands, div/rem, shift bounds, checked overflow, wrapping ops,
+   saturating ops if present, and trap preservation. Add a red-team fixture
+   where an optimizer fold would erase a documented trap; that fixture must fail
+   if the trap disappears.
+
+2. Centralize type and policy predicates used across the pipeline.
    Today `isCopyType` / `isCopyTy`-style logic exists in multiple stages
    (Check, Verify, CoreCheck, Mono-style logic), and that scatter already caused
    conditional-Copy / trait-bound bugs. Create one shared module used by Check,
@@ -1068,7 +1093,7 @@ makes pipeline failures reproducible.
    trait bounds through turbofish/caller type params, arrays, newtypes, and
    post-mono demotion cases proving all stages agree on the same answers.
 
-2. Add stage contracts and pass-agreement assertions between every major
+3. Add stage contracts and pass-agreement assertions between every major
    compiler phase:
    `AST -> Check -> Elab/Core -> Mono -> CoreCheck -> Lower -> SSA ->
    SSAVerify -> Emit`.
@@ -1089,7 +1114,27 @@ makes pipeline failures reproducible.
    internal gate plus fixtures that intentionally violate one contract per
    boundary.
 
-3. Unify tree-walker coverage across AST/Core/SSA consumers.
+4. Eliminate hidden second pipelines.
+   Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
+   proof extraction, and tests must call the same composed pass functions or
+   declare a checked reason for diverging. The specific risk is a verifier
+   checking a path that production does not use, or a fuzzer exercising a
+   different lower/mono path than shipped code. Deliverable: a single pipeline
+   composition layer that exposes strict, tolerant, audit, and gate modes as
+   configured variants over the same stages. Gate with one fixture that would
+   fail if `runVerifyGates` re-runs mono/lower differently from production.
+
+5. Centralize capabilities/effects as a semantic axis.
+   Capabilities are already central to Concrete's language identity, but the
+   pipeline should have one fact source for required caps, inferred callback
+   caps, trusted/Unsafe caps, report rendering, diagnostics, package facts, and
+   proof/audit summaries. Add or identify the shared cap/effect fact layer and
+   make Check, CoreCheck, Report, packages, LSP/agent JSON, and audit diffs read
+   from it. Gate with a capability-polymorphic callback, a trusted wrapper, an
+   Unsafe intrinsic, a dependency boundary, and one negative where report output
+   would otherwise disagree with the checker diagnostic.
+
+6. Unify tree-walker coverage across AST/Core/SSA consumers.
    There are recursive walkers in Check, Verify, Mono, ProofCore, Report, Lower,
    interpreter, and tests. Every new constructor risks one walker missing it.
    Add a constructor-coverage manifest/gate proving every language/Core
@@ -1099,7 +1144,7 @@ makes pipeline failures reproducible.
    compile-only/proof-only rationale. This is the compiler-pipeline version of
    the feature-interaction checklist.
 
-4. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
+7. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
    CoreCheck should catch frontend/checker/elab/mono misses before Lower.
    Add or verify checks for:
    - no unresolved generic/typevar leakage after mono;
@@ -1112,7 +1157,7 @@ makes pipeline failures reproducible.
    Gate with one accepted Core fixture per valid class and one rejected fixture
    per invalid class.
 
-5. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+8. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
    remains ad hoc.
    Historical bugs clustered around branch/loop/snapshot reconciliation. The
    extracted builder should own:
@@ -1122,23 +1167,25 @@ makes pipeline failures reproducible.
    `__last_expr`, defer, and value-block fixtures remain green, and a mutation
    that drops scope filtering or trap preservation is caught.
 
-6. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+9. Reduce ProofCore partial-def opacity only where proof preservation needs it.
    ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
    full rewrite here. Add non-partial wrappers or structural recursion only for
    constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
    with one theorem that would fail if the wrapper delegated to an opaque
    partial-def shape.
 
-7. Move report/evidence output toward typed records before more report
+10. Move report/evidence output toward a typed fact ledger before more report
    consumers appear.
    This overlaps Phase 10, but the compiler-pipeline slice is narrower:
    internal facts should be typed records until the final renderer, not strings
    assembled at each report site. V1 target: diagnostic-code ledger facts,
    capability facts, runtime-trap facts, Copy/linear facts, and trusted/Unsafe
    facts. Gate that a new diagnostic/evidence fact cannot be emitted without a
-   schema row and report entry.
+   schema row and report entry. This is the local pipeline version of "no second
+   truth source": reports, diagnostics, audit, replay, and agent JSON should
+   render typed facts rather than recompute meaning from strings.
 
-8. Enforce the name-resolution / qualified-name boundary.
+11. Enforce the name-resolution / qualified-name boundary.
    Resolve should be the only stage that decides what a source name means.
    Later stages may consume resolved ids / qualified names but must not
    reconstruct lookup from bare strings. This matters for modules, aliases,
@@ -1146,7 +1193,7 @@ makes pipeline failures reproducible.
    ambiguous imports, import aliases, methods with same bare name, and generated
    mono names proving later stages use resolved identity.
 
-9. Add a single builtin/intrinsic registry.
+12. Add a single builtin/intrinsic registry.
    Builtins and intrinsics must not be separately described in signatures,
    checker behavior, elab/lower special cases, interpreter behavior, report
    facts, and stdlib assumptions. A registry row should define: source spelling,
@@ -1156,41 +1203,41 @@ makes pipeline failures reproducible.
    intrinsic, and one stdlib-facing builtin proving every consumer reads the same
    registry facts.
 
-10. Add source-span preservation audits across the pipeline.
+13. Add source-span preservation audits across the pipeline.
     After lexer/parser/check/elab/mono/lower, diagnostics, reports, traps, and
     proof obligations should still point to original source. Gate representative
     constructs: submodules, generic instantiations, desugared `if let`/`while
     let`, method calls, match arms, lowered runtime traps, and generated proof
     obligations. A fixture with a stale main-file span must fail.
 
-11. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
+14. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
     The differential fuzzer is necessary but not sufficient. Maintain a feature
     matrix: every language construct has at least one interp-vs-compiled test,
     fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
     new constructor cannot be added without a coverage row.
 
-12. Define diagnostic code ownership by phase.
+15. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; the next
     step is stable ownership. Each phase/category should own a code range or
     category (parse, check, corecheck, mono, lower, proof, report, runtime
     trap), with source, hint, and report behavior documented. Gate that a new
     diagnostic code declares owner/category and appears in the ledger.
 
-13. Remove or encapsulate stringly internal sentinels.
+16. Remove or encapsulate stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
     naming API. Gate that user-defined names cannot collide with generated
     names, and that generated names round-trip through reports/source maps
     without becoming user-visible authority or value-flow facts.
 
-14. Add generated-name hygiene tests.
+17. Add generated-name hygiene tests.
     Mono, elab, lower, proof extraction, and report code should all use the
     same generated-name API. Fixtures: user names that intentionally collide
     with `__destr`, `__last_expr`, mono suffix spellings, helper functions, and
     qualified module names. Expected result: either clean hygiene or a stable
     diagnostic, never a miscompile/report mix-up.
 
-15. Define the panic-to-diagnostic boundary.
+18. Define the panic-to-diagnostic boundary.
     `panic!` in layout/type/lowering paths is acceptable only for compiler
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
@@ -1198,14 +1245,14 @@ makes pipeline failures reproducible.
     Lean panics. Any remaining `panic!` must be documented as unreachable after
     a named prior phase contract.
 
-16. Add pass timing and IR-size telemetry for engineering observability.
+19. Add pass timing and IR-size telemetry for engineering observability.
     This is not a public performance claim. Record per-pass timing, module/function
     counts, AST/Core/SSA node counts, mono instantiation count, obligation count,
     runtime-trap count, and report size in a JSON trace. Gate only schema
     stability and absence of private paths; benchmarks/performance claims remain
     Phase 17 release work.
 
-17. Add `concrete trace-pipeline --json`.
+20. Add `concrete trace-pipeline --json`.
     The command should dump per-stage summaries: modules, functions,
     diagnostics, capabilities, obligations, mono instances, CoreCheck status,
     SSA blocks, runtime traps inserted, trusted/Unsafe facts, and replay
@@ -1213,14 +1260,39 @@ makes pipeline failures reproducible.
     phase. Gate with one clean program and one failing program where the trace
     names the first phase that introduced or rejected the relevant fact.
 
-18. Add the Phase 6.5 validation artifact:
+21. Add counterexample-first pipeline debugging.
+    Any pipeline panic, proof failure, fuzzer mismatch, optimizer trap issue,
+    backend leak, linker leak, or stage-contract failure should be reducible to
+    a minimized `.con` fixture plus a replay command. Reuse the existing reducer
+    where possible. Gate with one panic-to-diagnostic failure, one
+    interp-vs-compiled mismatch, one fold/trap-preservation failure, and one
+    backend/linker leak proving the counterexample can be saved as a regression.
+
+22. Add mutation testing for the pipeline gates.
+    Mutate or patch-disable one representative rule in each major family and
+    prove the corresponding gate fails: CoreCheck type rule, Copy predicate,
+    arithmetic trap preservation, capability requirement, walker constructor
+    handling, source-span stamping, generated-name hygiene, and report/evidence
+    schema row. This proves the pipeline gates are load-bearing instead of
+    decorative.
+
+23. Add round-trip/replay artifacts for pass outputs.
+    For a selected program, users and agents should be able to ask what each
+    stage received, what it emitted, what facts changed, and what command
+    replays that claim. V1 artifact: per-stage summary hashes and optional
+    minimized dumps for AST, Core, post-mono Core, CoreCheck facts, SSA,
+    obligations, traps, and report facts. Gate that a replay detects source
+    changes, schema changes, and pass-output drift.
+
+24. Add the Phase 6.5 validation artifact:
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
     compiler-pipeline corpus that exercises central policy predicates, stage
-    contracts, walker coverage, CoreCheck boundary failures, Lower/SSA control
-    flow, source spans, generated-name hygiene, panic-to-diagnostic behavior,
-    and trace output. The artifact must prove these refactors are behavior
-    preserving for accepted programs and fail closed for malformed or
-    unsupported programs.
+    contracts, no-hidden-second-pipeline checks, walker coverage, CoreCheck
+    boundary failures, Lower/SSA control flow, source spans, generated-name
+    hygiene, panic-to-diagnostic behavior, counterexample saving, mutation
+    checks, pass-output replay, and trace output. The artifact must prove these
+    refactors are behavior preserving for accepted programs and fail closed for
+    malformed or unsupported programs.
 
 ## Phase 7: Standard Library And Core APIs
 
