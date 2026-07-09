@@ -1,6 +1,7 @@
 import Concrete.Frontend.Token
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.AST
+import Concrete.Semantics.IntArith
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Resolve.Shared

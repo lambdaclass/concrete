@@ -885,12 +885,18 @@ are folded out.
       schema break when Phase 10 #11 lands. Do NOT add a separate `concrete
       test --fuzz` surface; this item only reserves the UX space.
 21. Add `concrete lint` / `concrete vet` before public examples grow:
-    semantic warnings that are not type errors, including ignored fallible
-    results, suspicious capabilities, unreachable contracts, redundant
-    runtime checks, likely path/bytes/text confusion, unstable public API use,
-    and release-policy warnings. Every lint must have a diagnostic code,
-    source span, machine-readable JSON payload, and an explicit allow/deny
-    policy.
+    semantic warnings that are not type errors, but still matter for audit and
+    release policy. This is Concrete's Clippy-like layer, but evidence-aware
+    rather than style-only. V1 lints: ignored fallible results, suspicious
+    capability widening, overly broad `with(Alloc, File, Network)` signatures,
+    manual cleanup patterns where explicit `defer` would be safer, unreachable
+    or vacuous contracts, redundant runtime checks, likely path/bytes/text
+    confusion, unstable public API use, weak proof claims, and release-policy
+    warnings. Every lint must have a diagnostic code, source span,
+    machine-readable JSON payload, and an explicit allow/deny policy. In strict
+    profiles a lint is either fixed, explicitly allowed by policy with a reason,
+    or a build failure; Concrete should not grow a C/C++-style pile of ignored
+    warnings.
 22. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
     lowered-IR dumps, source spans in runtime errors, and stable replay commands
     for report/debug failures.
@@ -955,6 +961,18 @@ are folded out.
     CLI contract rather than falling through to "open this as a file". Extend
     `scripts/tests/check_cli_contract.sh` with help, init/new, fmt check/write,
     unknown command, and missing-file cases.
+28a. Add a fast check-only inner loop before broad stdlib growth:
+     `concrete check` parses, resolves, type-checks, enforces linearity,
+     checks capabilities, validates ignored-result/must-use rules, and runs
+     cheap contract/profile eligibility checks without invoking LLVM, linking,
+     or executing the program. This is the Rust `cargo check` lesson adapted to
+     Concrete: most daily feedback should not wait for backend codegen. The
+     command must share the same frontend/checker/CoreCheck path as production
+     builds, emit the same diagnostics/facts, and support `--json` for editors
+     and agents. Gate with a project where `concrete check` catches a type
+     error, a capability error, a linearity error, and an ignored-result error;
+     and with a project where `concrete check` succeeds while `concrete build`
+     still fails later on a deliberate backend-only fixture.
 29. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure. Outputs must include `concrete doc --format json` and
@@ -1055,6 +1073,22 @@ splits. A task belongs here only if it prevents "Check says one thing, another
 stage says another" bugs, catches a missed constructor/stage interaction, or
 makes pipeline failures reproducible.
 
+**North star ([docs/PIPELINE_ARCHITECTURE.md](docs/PIPELINE_ARCHITECTURE.md)):**
+every item below is an instance of one principle — *each program has exactly one
+meaning, committed once by the stage that owns it, read-only for every stage
+after*. Two axes: (1) **one reference semantics** — the interpreter IS the
+language's operational meaning, and the folder/backend are derived from or
+checked against it, so the oracle is true by construction, not by fuzzing (items
+#1, #4, #14); and (2) **facts committed once** — every semantic fact (type, cap,
+ownership, arithmetic policy, evidence class, resolved identity) is stamped once
+and never re-derived downstream. The key escalation this phase drives is from
+*gates that DETECT drift* to *types that FORBID it* (item #3b): shared
+predicates and pass-agreement gates catch disagreement after the fact, but
+certificate-carrying IR makes re-derivation unrepresentable. That is the
+evidence-carrying-artifact thesis applied to the compiler's own IR. Do not
+big-bang it; stage per the doc (IntArith beachhead → first certificate type →
+widen one fact axis at a time), each stage shippable and retiring debt.
+
 1. **FIRST FIX: unify integer/arithmetic evaluation semantics.**
    Arithmetic semantics currently has multiple hand-maintained implementations:
    interpreter evaluation, constant folding / DCE decisions, and backend checked
@@ -1113,6 +1147,28 @@ makes pipeline failures reproducible.
    Deliverable: `concrete inspect --pipeline-contracts --json` or an equivalent
    internal gate plus fixtures that intentionally violate one contract per
    boundary.
+
+3b. **Certificate-carrying IR — escalate stage contracts from gates that DETECT
+   drift to types that FORBID it.** Items #2/#3/#5/#10 dedup meaning and catch
+   disagreement, but the architecture still INVITES it: any new pass can
+   re-infer a fact and disagree, and the gate only fires if someone wrote the
+   fixture. The structural fix is to make re-derivation unrepresentable — a
+   semantic fact is a field the owning stage stamped, not something a later
+   stage recomputes. Introduce the FIRST certificate type as the pattern's
+   beachhead: a `TypedProgram` (or equivalent) constructible only by the type
+   stage, whose node types Elab and CoreCheck may READ but not re-infer. This is
+   the Phase 6.5 entry point for Phase 14 #13b ("one source of typing truth");
+   6.5 introduces the pattern and the first certificate, Phase 14 finishes the
+   type axis and adds the preservation proofs. Do not convert every fact at
+   once — land the type axis, prove the ergonomics and the compile-time win,
+   then widen to capability/arithmetic-policy/evidence-class/resolved-identity
+   one axis at a time (the staging in docs/PIPELINE_ARCHITECTURE.md). Done when
+   at least one committed fact is carried in the IR type such that a stage
+   attempting to re-derive it to a different answer FAILS TO COMPILE (not merely
+   fails a gate), a fixture proves the old re-inference site is gone, and the
+   differential fuzzer + `test-ci-gates` confirm behavior preservation for
+   accepted programs. Red-team: a patch that reintroduces a parallel re-inference
+   must not typecheck.
 
 4. Eliminate hidden second pipelines.
    Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
@@ -1598,9 +1654,12 @@ batteries-included breadth. The ranked build order is:
     also serve as runnable API documentation: every public stdlib type/function
     gets a tiny positive usage test and, where meaningful, a negative or edge
     case. Public docs should link to or quote those tests rather than carrying
-    stale hand-written examples. Add a gate that fails when a new public stdlib
-    symbol lacks a test/doc example or when a referenced example no longer
-    compiles.
+    stale hand-written examples. This is the Zig stdlib lesson adapted to
+    Concrete: usage examples should be executable fixtures, not prose that can
+    rot. Add a gate that fails when a new public stdlib symbol lacks a test/doc
+    example, when a referenced example no longer compiles, or when a doc claims
+    an evidence class/capability/allocation behavior that the test/report does
+    not produce.
 29a. Add a public stdlib API snapshot/diff before the surface freezes.
 
      Deliverable: `concrete std snapshot --json` (or an equivalent test helper)
@@ -2049,7 +2108,13 @@ lemmas, and actionable failure diagnostics.
     exists, which source span generated it, which facts are in scope, what
     evidence classes are allowed, and why automation did not close it.
     Diagnostics should point to the already-generated artifact or next action
-    instead of introducing another parallel proof surface.
+    instead of introducing another parallel proof surface. Where a failed proof,
+    failed contract, or solver counterexample has concrete inputs or a finite
+    witness, emit a runnable `.con` counterexample fixture plus a replay command.
+    This is the Dafny/SPARK/F* lesson in Concrete's terms: proof failure should
+    feel like debugging a minimized program, not reading a wall of theorem-state
+    text. The fixture is evidence of failure only; it must never upgrade a claim
+    to proof.
 14a. Add **LLM-guided proof synthesis, kernel-verified** as a first-class
     proof-authoring workflow, not as prose-only AI help. Command shape:
     `concrete prove --synthesize <module.fn>` (or an equivalent subcommand)
@@ -2284,7 +2349,11 @@ five graduated flagships and one package-scale example.
    Done when the same JSON drives CI, a GitHub-comment/golden fixture, editor
    display, and agent consumption. This is Concrete's review differentiator:
    evidence changes live where code review happens, not in a separate proof
-   report nobody opens.
+   report nobody opens. A PR artifact should look like a compact evidence
+   changelog: `+ File capability`, `+ trusted function`, `- Unsafe removed`,
+   `verify_packet proof became stale`, `bounds obligation discharged`,
+   `dependency evidence downgraded`. It must preserve separate evidence classes
+   and must not collapse the review into one green badge.
 6. Add semantic trust diff gates: capability widening, allocation change,
    trusted boundary addition, stale proof, weakened/missing obligation,
    assumption widening, runtime-obligation change, and stdlib evidence-class

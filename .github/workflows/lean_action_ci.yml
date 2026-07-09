@@ -480,6 +480,9 @@ jobs:
       - name: Checked-arith gate (Phase 6 #10 Stage 2.3 — ordinary + traps on overflow; wrapping_* escapes)
         run: bash scripts/tests/check_checked_arith.sh
 
+      - name: Int-arith semantics gate (Phase 6.5 #1 — interpret == fold-then-interpret == compiled; trap preservation under folding)
+        run: bash scripts/tests/check_int_arith_semantics.sh
+
       - name: Arithmetic red-team gate (Phase 6 #10 — overflow/neg/div-mod/shift traps + interp==compiled value agreement)
         run: bash scripts/tests/check_arith_redteam.sh
 
