@@ -1163,6 +1163,30 @@ the compiler architecture is finished.
    trait bounds through turbofish/caller type params, arrays, newtypes, and
    post-mono demotion cases proving all stages agree on the same answers.
 
+2a. Add the third fuzzer: generics / monomorphization / type-policy drift.
+   Concrete already has value/runtime fuzzing (`fuzz_differential`) and
+   ownership/conservation fuzzing (`fuzz_linearity`). The missing fuzzing axis
+   is the one that produced the conditional-Copy, turbofish, type-substitution,
+   and trait-bound bug cluster: generic instantiation and mono agreement.
+
+   Deliverable: `scripts/fuzz_generics.py` (or equivalent) that generates small
+   generic programs with user structs/enums, `Option<T>` / `Result<T,E>`,
+   conditional `Copy`, trait bounds, turbofish calls, nested generic fields,
+   arrays/newtypes, method impls, and multiple instantiations. The oracle is not
+   program output first; it is phase agreement. For each generated program,
+   Check, Elab/Core, Mono, CoreCheck, Verify, report facts, and any generated
+   specialized names must agree on Copy-ness, trait-bound satisfaction,
+   substitution, capability requirements, and whether a specialization is Copy
+   or demoted to linear. Negative variants should deliberately omit bounds,
+   instantiate `Copy` containers with linear payloads, shadow type variables,
+   collide mono names, or use caller type params through turbofish.
+
+   Done when the fuzzer finds a seeded historical bug if the old behavior is
+   reintroduced, has a fast smoke target in CI and a longer rotating/nightly
+   campaign, and saves any disagreement as a minimized `.con` fixture with the
+   first disagreeing phase named. This is the type-axis analog of the arithmetic
+   agreement gate in #1 and the conservation fuzzer for linearity.
+
 3. Add stage contracts and pass-agreement assertions between every major
    compiler phase:
    `AST -> Check -> Elab/Core -> Mono -> CoreCheck -> Lower -> SSA ->
@@ -1318,6 +1342,19 @@ the compiler architecture is finished.
     fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
     new constructor cannot be added without a coverage row.
 
+14a. Add parser/AST grammar-conformance fuzzing.
+    The LL(1) checker proves grammar shape, but it is not a substitute for a
+    parser/AST stress net. Generate valid grammar-shaped programs, expected
+    rejects, deeply nested but bounded expressions, pattern/control-flow
+    combinations, module/import shapes, generic syntax, and statement/expression
+    boundary cases. The oracle is: parser accepts the valid corpus, rejects the
+    invalid corpus with stable diagnostics, preserves source spans for
+    representative nodes, and produces AST forms whose feature rows are covered
+    by item #14. When a formatter/printer exists, extend this to
+    parse -> print/normalize -> parse round-trip; until then, keep it as
+    grammar-to-AST conformance. Done when the fuzzer rediscovers at least one
+    seeded parser/grammar drift bug and saves the minimized `.con` fixture.
+
 15. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; the next
     step is stable ownership. Each phase/category should own a code range or
@@ -1344,15 +1381,41 @@ the compiler architecture is finished.
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
     lower and asserts user-triggerable cases return diagnostics rather than
-    Lean panics. Any remaining `panic!` must be documented as unreachable after
-    a named prior phase contract.
+    Lean panics. Include hostile malformed inputs that previously leaked to
+    backend/linker errors, exhausted recursion, or consumed excessive compile
+    memory/time before reporting a diagnostic. Any remaining `panic!` must be
+    documented as unreachable after a named prior phase contract.
 
 19. Add pass timing and IR-size telemetry for engineering observability.
-    This is not a public performance claim. Record per-pass timing, module/function
-    counts, AST/Core/SSA node counts, mono instantiation count, obligation count,
-    runtime-trap count, and report size in a JSON trace. Gate only schema
-    stability and absence of private paths; benchmarks/performance claims remain
-    Phase 17 release work.
+    This is not a public performance claim. Record per-pass timing, peak memory
+    / RSS when available, allocation or output-buffer size if available,
+    module/function counts, AST/Core/SSA node counts, mono instantiation count,
+    obligation count, runtime-trap count, and report size in a JSON trace. Gate
+    only schema stability, absence of private paths, and graceful absence of
+    platform-specific memory fields; benchmarks/performance claims remain Phase
+    17 release work.
+
+19a. Add an anti-superlinear compiler complexity guard.
+    Telemetry tells us what happened; this gate should fail when a compiler pass
+    quietly becomes quadratic or worse on ordinary generated programs. This is
+    motivated by bug 027 (`EmitSSA` O(n^2)): the compiler could still be
+    semantically correct while becoming unusable for 20k+ line workloads. Build
+    a small scaling corpus that generates the same program family at multiple
+    sizes (for example: large array literals/repeats, many functions, many
+    blocks, many mono instantiations, wide match/if chains, and large emitted
+    modules), records per-pass node counts, times, peak memory/RSS or output
+    buffer size from item #19, and asserts the growth stays within an allowed
+    envelope for the affected pass. The thresholds should be conservative and
+    machine-tolerant: compare slope/ratio across sizes, not absolute wall-clock
+    alone, and keep a local override for noisy developer machines while CI
+    enforces the stable corpus.
+
+    Done when the gate catches a deliberately reintroduced quadratic renderer or
+    collector, catches at least one intentionally excessive memory-growth
+    variant, protects the bug 027 family, records which pass exceeded its
+    scaling budget, and saves the generated reproducer plus replay command. This
+    is still not a public "Concrete is fast" benchmark; it is an internal
+    "compiler complexity did not silently regress" invariant.
 
 20. Add `concrete trace-pipeline --json`.
     The command should dump per-stage summaries: modules, functions,
@@ -1384,7 +1447,11 @@ the compiler architecture is finished.
     replays that claim. V1 artifact: per-stage summary hashes and optional
     minimized dumps for AST, Core, post-mono Core, CoreCheck facts, SSA,
     obligations, traps, and report facts. Gate that a replay detects source
-    changes, schema changes, and pass-output drift.
+    changes, schema changes, and pass-output drift. Add a determinism rule:
+    same source, compiler version, target triple, profile, and dependency set
+    must produce stable pass-output hashes unless a field is explicitly marked
+    nondeterministic and excluded from the hash. This is required for caches,
+    agents, evidence bundles, and PR diffs to be reviewable.
 
 24. Add the Phase 6.5 validation artifact:
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
@@ -3688,10 +3755,28 @@ forcing example, explicitly deferred, or rejected.
     abstract effect inference. Revisit only as a research note if explicit
     capabilities create a proven, repeated blocker in real programs after the
     stdlib and concurrency pressure tests exist.
-14. Add the Phase 20 validation artifact: one pressure-test sketch, expected
+14. Research dogfooding Concrete's evidence model onto the compiler's own TCB.
+    This is the logical endpoint of "evidence-carrying artifact applied to the
+    compiler": rewrite or mirror selected compiler passes/checkers in Concrete,
+    attach contracts, and use Concrete's own linearity/capability/proof pipeline
+    to reduce the trusted base of the toolchain itself. This is NOT a near-term
+    migration commitment and must not block Phase 7-19 work; it is a research
+    bet to keep visible so the project does not stop at verifying user programs
+    while leaving the compiler as an opaque trust-me artifact.
+
+    First pressure-test only: choose one narrow pass or checker helper with a
+    small state space (for example a value-flow checker slice, a type-policy
+    predicate, a report fact transformer, or a simple SSA cleanup rule), specify
+    its input/output contract, and compare the Concrete implementation against
+    the Lean/compiler implementation on a generated corpus. Done when the
+    decision record states whether the approach actually shrinks the TCB, merely
+    duplicates it, or creates a second source of truth. Pull forward only if a
+    real pass can be checked without weakening the no-second-truth-source rule.
+15. Add the Phase 20 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
     (concurrency, atomics/memory model, typestate, arena allocation, WCET,
     binary-format DSLs, hardware capability mapping, Miri-style interpreter,
-    sized evaluator, persistent rewrite state, and row effects). No research
-    item graduates unless its forcing example, report shape, evidence class,
-    and rejection or pull-forward criteria are recorded.
+    sized evaluator, persistent rewrite state, row effects, and compiler
+    self-verification). No research item graduates unless its forcing example,
+    report shape, evidence class, and rejection or pull-forward criteria are
+    recorded.
