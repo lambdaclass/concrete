@@ -9,6 +9,7 @@ import Concrete.IR.SSA
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Format
 import Concrete.Report.ReportBase
+import Concrete.Semantics.IntArith
 -- Obligation collectors need only the contract/VC helper cluster, not the
 -- capability/arith/unsafe/layout report renderers (pipeline #34).
 import Concrete.Report.ReportVC
@@ -525,13 +526,14 @@ def renderDiv (obls : List DivObl) (provedKeys : List String) : String := Id.run
 -- integer overflow semantics are profile-dependent and emitting this for every
 -- arithmetic op would flood the audit. Same disposition shape as bounds/div.
 
-/-- Inclusive value range of a fixed-width integer type (none = arbitrary/`Int`). -/
+/-- Inclusive value range of a *fixed-width* integer type (none = arbitrary/
+    `Int`). The range values come from the arithmetic reference
+    (`IntArith.intRange`); this deliberately keeps `Int`/`Uint` as `none` (an
+    audit choice — their overflow is profile-dependent, per the note above), so
+    it is not a blind alias of `IntArith.intRange`, which does give them ranges. -/
 def intRange : Ty → Option (Int × Int)
-  | .i8  => some (-128, 127)        | .i16 => some (-32768, 32767)
-  | .i32 => some (-2147483648, 2147483647)
-  | .u8  => some (0, 255)           | .u16 => some (0, 65535)
-  | .u32 => some (0, 4294967295)
-  | _ => none
+  | .int | .uint => none
+  | ty => IntArith.intRange ty
 
 /-- Best-effort fixed-width int type of an expression, from a var→type map. -/
 partial def exprIntTy (vt : List (String × Ty)) : Expr → Option Ty

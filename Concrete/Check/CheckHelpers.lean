@@ -95,11 +95,6 @@ def mustUseEnumName? : Ty → Option String
   | .generic n _ => if n == resultEnumName || n == optionEnumName then some n else none
   | _ => none
 
-/-- Is this a signed integer type? -/
-def isSignedInt : Ty → Bool
-  | .int | .i8 | .i16 | .i32 => true
-  | _ => false
-
 /-- Is this a float type? -/
 def isFloatType : Ty → Bool
   | .float32 | .float64 => true
