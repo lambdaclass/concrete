@@ -1362,6 +1362,24 @@ the compiler architecture is finished.
     trap), with source, hint, and report behavior documented. Gate that a new
     diagnostic code declares owner/category and appears in the ledger.
 
+15a. Add a pipeline diagnostic-quality contract.
+    Phase 6.5 should not only ensure that errors are caught early; it should
+    also ensure they are useful. Every user-facing pipeline diagnostic must have
+    a phase owner, stable code, primary source span, human message,
+    machine-readable JSON fields, and a clear reason why that phase owns the
+    rejection. When an actionable recovery exists, the diagnostic should include
+    a hint; when the failure came from a fuzzer/gate/counterexample, the saved
+    fixture should include a replay command. Internal generated names,
+    implementation sentinels, LLVM/linker text, or Lean panic details must not
+    leak into the main user message unless they are explicitly marked as
+    compiler-internal context.
+
+    Done when a diagnostic-quality gate samples parse, check, mono/corecheck,
+    lower/SSA, emit/backend, proof/report, and runtime-obligation failures and
+    asserts the required fields exist in both human and JSON output. Include one
+    red-team fixture where an error is technically caught at the right phase but
+    lacks a source span, code, hint, owner, or JSON field; the gate must fail.
+
 16. Remove or encapsulate stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
