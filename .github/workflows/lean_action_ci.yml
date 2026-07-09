@@ -438,6 +438,9 @@ jobs:
       - name: Source-span gate (every pass anchors its diagnostic to the original source line)
         run: bash scripts/tests/check_source_spans.sh
 
+      - name: Pipeline-contracts gate (Phase 6.5 #3 — each boundary violation caught at the first responsible pass, no leak)
+        run: bash scripts/tests/check_pipeline_contracts.sh
+
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
 
