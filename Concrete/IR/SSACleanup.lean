@@ -1,4 +1,5 @@
 import Concrete.IR.SSA
+import Concrete.Semantics.IntArith
 
 namespace Concrete
 
@@ -267,41 +268,21 @@ private def collectAllUses (blocks : List SBlock) : List String :=
     let termU := termUses b.term
     acc ++ instU ++ termU) []
 
-/-- Bit-width and signedness of an integer type (mirror of Interp.intBitWidth). -/
-private def intBitWidth : Ty → Option (Nat × Bool)
-  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
-  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
-  | _   => none
-
-/-- True iff `n` fits `ty`'s representable range. Keeps constant folding in step
-    with checked arithmetic (ROADMAP #10): an `add/sub/mul/div` whose constant
-    result overflows must NOT be folded — leaving the op live so EmitSSA lowers it
-    to the checked helper that traps at runtime (matching Interp's `checkedToType`).
-    Folding overflow here would silently wrap and diverge from the interpreter. -/
-private def fitsType (ty : Ty) (n : Int) : Bool :=
-  match intBitWidth ty with
-  | some (w, signed) =>
-    let (lo, hi) : Int × Int :=
-      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
-      else (0, (2 : Int) ^ w - 1)
-    lo ≤ n && n ≤ hi
-  | none => true  -- non-fixed-width — fold as before
-
 /-- A checked binop over two integer constants is provably non-trapping exactly
     when the folder can fold it: result in range; divisor nonzero for div/mod;
-    shift amount in range. -/
+    shift amount in range. Decided by the one arithmetic reference
+    (`IntArith`): add/sub/mul/div/mod are foldable-to-a-value iff
+    `foldIntBinOp` returns `some (some _)` (value, not trap); shifts are
+    non-trapping iff the amount is in range (`IntArith` does not fold shifts). -/
 private def constPairNonTrapping (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Bool :=
   match lhs, rhs with
   | .intConst a _, .intConst b _ =>
     (match op with
-     | .add => fitsType ty (a + b)
-     | .sub => fitsType ty (a - b)
-     | .mul => fitsType ty (a * b)
-     | .div | .mod => b != 0 && fitsType ty (Int.tdiv a b)
-     | .shl | .shr =>
-       (match intBitWidth ty with
-        | some (w, _) => 0 ≤ b && b < Int.ofNat w
-        | none => false)
+     | .add | .sub | .mul | .div | .mod =>
+       (match IntArith.foldIntBinOp op a ty b with
+        | some (some _) => true
+        | _ => false)
+     | .shl | .shr => IntArith.shiftAmountInRange ty b
      | _ => false)
   | _, _ => false
 
@@ -357,16 +338,16 @@ private def foldBinOpConst (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option SVal
   match lhs, rhs with
   | .intConst a _, .intConst b _ =>
     match op with
-    -- Checked ops: fold ONLY when in range; otherwise leave the op live so
-    -- EmitSSA's checked helper traps at runtime (matching Interp).
-    | .add => let r := a + b; if fitsType ty r then some (.intConst r ty) else none
-    | .sub => let r := a - b; if fitsType ty r then some (.intConst r ty) else none
-    | .mul => let r := a * b; if fitsType ty r then some (.intConst r ty) else none
-    -- div/mod use TRUNCATED division (toward zero) to match LLVM sdiv/srem and
-    -- the interpreter — Lean's floored `/`/`%` disagree for negative operands.
-    -- b!=0 AND result in range (signed MIN/-1 overflows → leave for the helper).
-    | .div => if b != 0 && fitsType ty (Int.tdiv a b) then some (.intConst (Int.tdiv a b) ty) else none
-    | .mod => if b != 0 && fitsType ty (Int.tdiv a b) then some (.intConst (Int.tmod a b) ty) else none
+    -- Checked arithmetic (add/sub/mul/div/mod) folds through the ONE arithmetic
+    -- reference. `foldIntBinOp` returns the tri-state: `some (some n)` folds to
+    -- `n`; `some none` means the op would TRAP (overflow, div-by-zero, signed
+    -- MIN/-1) so we must NOT fold — leave it live for EmitSSA's checked helper
+    -- to trap at runtime, matching the interpreter; `none` is a non-arithmetic
+    -- op (the comparisons below).
+    | .add | .sub | .mul | .div | .mod =>
+      (match IntArith.foldIntBinOp op a ty b with
+       | some (some r) => some (.intConst r ty)
+       | _ => none)
     | .eq => some (.boolConst (a == b))
     | .neq => some (.boolConst (a != b))
     | .lt => some (.boolConst (a < b))
@@ -490,7 +471,7 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
       -- fit (e.g. `-(i8::MIN)` after constant propagation), leave the op live so
       -- the checked negation helper traps at runtime — matching the interpreter.
       | .unaryOp dst .neg (.intConst n _) ty =>
-        if fitsType ty (-n) then (acc.1 ++ [(dst, .intConst (-n) ty)], acc.2) else acc
+        if IntArith.fitsType ty (-n) then (acc.1 ++ [(dst, .intConst (-n) ty)], acc.2) else acc
       | .binOp dst op lhs rhs ty =>
         match foldBinOp op lhs rhs ty with
         | some val => (acc.1 ++ [(dst, val)], acc.2)
