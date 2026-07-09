@@ -1,5 +1,6 @@
 import Concrete.Elab.Core
 import Concrete.Check.Layout
+import Concrete.Semantics.Capabilities
 import Concrete.Resolve.FileSummary
 import Concrete.Frontend.AST
 import Concrete.Resolve.Intrinsic
@@ -185,7 +186,7 @@ abbrev CapLookup := List (String × CapSet)
 partial def buildCapLookupModule (m : CModule) : CapLookup :=
   let fnEntries := m.functions.map fun f => (f.name, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
-    (n, if trusted then .empty else .concrete [unsafeCapName])
+    (n, Capabilities.externFnRequiredCaps trusted)
   fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildCapLookupModule sub) []
 
@@ -199,7 +200,7 @@ partial def buildQualCapLookupModule (m : CModule) (pfx : String := "")
   let fnEntries := m.functions.map fun f =>
     (qualPrefix ++ "." ++ f.name, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
-    (n, if trusted then .empty else .concrete [unsafeCapName])
+    (n, Capabilities.externFnRequiredCaps trusted)
   fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildQualCapLookupModule sub qualPrefix) []
 

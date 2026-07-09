@@ -441,6 +441,9 @@ jobs:
       - name: Pipeline-contracts gate (Phase 6.5 #3 — each boundary violation caught at the first responsible pass, no leak)
         run: bash scripts/tests/check_pipeline_contracts.sh
 
+      - name: Capability-facts gate (Phase 6.5 #5 — checker verdict and report rendering read one capability-fact source)
+        run: bash scripts/tests/check_capability_facts.sh
+
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
 

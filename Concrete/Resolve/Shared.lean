@@ -1,6 +1,7 @@
 import Concrete.Frontend.AST
 import Concrete.Resolve.Intrinsic
 import Concrete.Semantics.IntArith
+import Concrete.Semantics.Capabilities
 
 namespace Concrete
 
@@ -56,18 +57,10 @@ def binOpOperandsAgree (a b : Ty) : Bool :=
    | .ptrMut t1, .ptrConst t2 | .ptrConst t1, .ptrMut t2 => t1 == t2
    | _, _ => false)
 
-/-- Check if capSet `caller` is a superset of `callee`. -/
-def capsContain (caller callee : CapSet) : Bool :=
-  match callee with
-  | .empty => true
-  | .concrete calleeCaps =>
-    match caller with
-    | .empty => calleeCaps.isEmpty
-    | .concrete callerCaps => calleeCaps.all fun c => callerCaps.contains c
-    | .var _ => true  -- capability variable assumed to satisfy
-    | .union a b => capsContain a callee || capsContain b callee
-  | .var _ => true  -- capability variable, can't check statically here
-  | .union a b => capsContain caller a && capsContain caller b
+-- The capability superset check now lives in the one capability-fact source
+-- (`Concrete.Capabilities`); re-exported here so existing `capsContain` callers
+-- are unchanged (Phase 6.5 #5).
+export Concrete.Capabilities (capsContain)
 
 /-- Resolve `Self` to the concrete impl type in a Ty (pure, for signature building).
     Handles all type constructors including ptrMut, ptrConst, fn_. -/

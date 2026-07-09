@@ -326,7 +326,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if isPtrArith then
         -- Pointer arithmetic requires trusted or Unsafe
         let env ← getEnv
-        if !env.inTrusted && !capsContain env.currentCapSet (.concrete ["Unsafe"]) then
+        if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
           addCCError (.missingCapability "ptr_arith" "Unsafe" "")
       else
         let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
@@ -477,7 +477,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     match inner.ty with
     | .ref _ | .refMut _ => pure ()
     | .ptrMut _ | .ptrConst _ =>
-      if !env.inTrusted && !capsContain env.currentCapSet (.concrete ["Unsafe"]) then
+      if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "*raw_ptr" "Unsafe" "")
     | .heap _ =>
       if !capsContain env.currentCapSet (.concrete ["Alloc"]) then
@@ -581,7 +581,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let involvesPointer := isPtr innerTy || isPtr targetTy
     if involvesPointer && !isRefToPtr then
       let env ← getEnv
-      if !env.inTrusted && !capsContain env.currentCapSet (.concrete ["Unsafe"]) then
+      if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "unsafe_cast" "Unsafe" "")
   | .fnRef _ _ => pure ()
   | .try_ inner _ => ccCheckExpr inner
@@ -687,7 +687,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     match target.ty with
     | .refMut _ => pure ()
     | .ptrMut _ =>
-      if !env.inTrusted && !capsContain env.currentCapSet (.concrete ["Unsafe"]) then
+      if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "*raw_ptr=" "Unsafe" "")
     | _ => addCCError (.cannotAssignThroughNonMutRef (toString (repr target.ty)))
 
@@ -909,7 +909,7 @@ partial def ccCheckModule (m : CModule)
     (f.name, f.capSet, f.params, f.retTy)
   -- Extern functions: trusted ones need no cap, others require Unsafe
   let externSigs := m.externFns.map fun (name, params, retTy, isTrusted) =>
-    let cap := if isTrusted then CapSet.empty else CapSet.concrete ["Unsafe"]
+    let cap := Capabilities.externFnRequiredCaps isTrusted
     (name, cap, params, retTy)
   let initEnv : CoreCheckEnv := {
     fnSigs := fnSigs ++ externSigs

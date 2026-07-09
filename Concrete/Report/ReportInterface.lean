@@ -246,8 +246,9 @@ def arithmeticReport (modules : List CModule) (locMap : FnLocMap := []) : String
 --           analysis (--report unsafe)
 -- ============================================================
 
-def hasUnsafeCap (cs : CapSet) : Bool :=
-  cs.concreteCaps.contains unsafeCapName
+-- The "does this cap set literally list Unsafe" classification is the one
+-- capability-fact source (Phase 6.5 #5); kept under this name for callers.
+def hasUnsafeCap (cs : CapSet) : Bool := Capabilities.capSetHasUnsafe cs
 
 def usesRawPtr : Ty → Bool
   | .ptrMut _ | .ptrConst _ => true
