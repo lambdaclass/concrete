@@ -1,5 +1,6 @@
 import Concrete.IR.SSA
 import Concrete.Elab.Core
+import Concrete.Semantics.IntArith
 import Concrete.Backend.Backend
 import Concrete.Check.Layout
 import Concrete.Resolve.Intrinsic
@@ -178,11 +179,10 @@ private def intTyToLLVMTy : Ty → LLVMTy
 
 /-- Bit width of an integer Concrete type, for type-mangled LLVM intrinsic names
     (e.g. `llvm.sadd.sat.i8`). -/
-private def intTyBitWidth : Ty → Nat
-  | .i8 | .u8 | .char => 8
-  | .i16 | .u16 => 16
-  | .i32 | .u32 => 32
-  | _ => 64
+-- Codegen width comes from the ONE reference (`IntArith.llvmBitWidth`): the
+-- total LLVM `iN` width (char = i8, non-int = i64). Codegen owns the helper
+-- text and intrinsic spelling below; it does NOT keep its own width policy.
+private abbrev intTyBitWidth (ty : Ty) : Nat := IntArith.llvmBitWidth ty
 
 /-- A checked-arithmetic runtime helper (ROADMAP #10 Stage 2.3). The helper
     computes via `*.with.overflow` and aborts on overflow, else returns the value;
@@ -342,9 +342,9 @@ private def externParamTyToLLVMTy (s : EmitSSAState) (ty : Ty) : LLVMTy :=
   if isReprCStruct s ty then tyToLLVMTy s ty
   else paramTyToLLVMTy s ty
 
-private def ssaIsSignedInt : Ty → Bool
-  | .int | .i8 | .i16 | .i32 => true
-  | _ => false
+-- Signedness comes from the ONE reference (`IntArith.isSignedInt`); codegen
+-- picks the LLVM `s*`/`u*` intrinsic spelling from it but keeps no sign policy.
+private abbrev ssaIsSignedInt (ty : Ty) : Bool := IntArith.isSignedInt ty
 
 private def isIntegerTy : Ty → Bool
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 | .char | .bool => true
@@ -358,7 +358,7 @@ private def isFloatTy : Ty → Bool
     (see `checkedF2IHelper`). -/
 private def checkedF2ICallName (srcTy targetTy : Ty) : String :=
   let srcf := match srcTy with | .float32 => "f32" | _ => "f64"
-  let dsti := (if ssaIsSignedInt targetTy then "i" else "u") ++ toString (intTyBitWidth targetTy)
+  let dsti := (if IntArith.isSignedInt targetTy then "i" else "u") ++ toString (intTyBitWidth targetTy)
   "__cc_" ++ srcf ++ "_to_" ++ dsti
 
 /-- Get byte size of a type. Delegates to Layout.tySize with current state's defs. -/
