@@ -78,5 +78,37 @@ def floatLitType (hint : Option Ty) : Ty :=
   | some t => if isFloatTy t then t else .float64
   | none => .float64
 
+/-- A literal-only expression is FLEXIBLE: it adopts its type from context (the
+    other binop operand, or the type hint), mirroring Core elaboration. Covers
+    bare int/float literals, negated or parenthesized ones, and arithmetic over
+    literals only (`(8 + 9) % 1000`). The recursion through `binOp`/`paren`/`neg`
+    is load-bearing: it lets a nested literal tree like `(8 + 5) + x` (x: i32)
+    type top-down from the concrete operand, which is exactly what subsumes the
+    old bottom-up re-elaborate repair Elab used to carry for the E0715 case. -/
+partial def isFlexibleLit : Expr → Bool
+  | .intLit _ _ => true
+  | .floatLit _ _ => true
+  | .paren _ inner => isFlexibleLit inner
+  | .unaryOp _ .neg inner => isFlexibleLit inner
+  | .binOp _ _ l r => isFlexibleLit l && isFlexibleLit r
+  | _ => false
+
+/-- Which binop operand to type first. -/
+inductive OperandOrder where
+  /-- Flexible lhs, concrete rhs: type rhs first, then hint lhs with its type. -/
+  | rhsFirst
+  /-- Default: type lhs first, then hint rhs with its type. -/
+  | lhsFirst
+  deriving Repr, DecidableEq
+
+/-- The ONE operand-order decision Check and Elab share for a binary operator:
+    when one side is a flexible literal tree and the other is concrete, type the
+    concrete side first so its type becomes the flexible side's hint
+    (`inner[64 + i]`, i: i32 → 64 elaborates as i32). Both front-end passes route
+    through this, so Elab's old bottom-up re-elaborate repair is deleted in favor
+    of the single top-down rule. -/
+def binOpOperandOrder (lhsFlexible rhsFlexible : Bool) : OperandOrder :=
+  if lhsFlexible && !rhsFlexible then .rhsFirst else .lhsFirst
+
 end TypeJudgment
 end Concrete

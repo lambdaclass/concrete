@@ -134,17 +134,9 @@ private def setEnv (env : ElabEnv) : ElabM Unit := set env
 -- Helpers
 -- ============================================================
 
-private def isIntegerType : Ty → Bool
-  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
-  | _ => false
-
 private def isIntLit : Expr → Bool
   | .intLit _ _ => true
   | .paren _ inner => isIntLit inner
-  | _ => false
-
-private def isFloatType : Ty → Bool
-  | .float32 | .float64 => true
   | _ => false
 
 private def isPointerType : Ty → Bool
@@ -372,31 +364,28 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
   | .paren _ inner => elabExpr inner hint
 
   | .binOp _ op lhs rhs =>
-    let cLhs ← elabExpr lhs hint
-    let lTy := cLhs.ty
-    let cRhs ← elabExpr rhs (some lTy)
-    let rTy := cRhs.ty
-    -- If one operand has the default integer type (`int`/i64) and the other has a
-    -- concrete fixed-width integer type, re-elaborate the default-typed side with
-    -- the concrete type as the hint so its literals fold to that width. This covers
-    -- a bare literal (`0 - x`, x: i32) AND a literal-only sub-expression
-    -- (`(8 + 5) + x`): without it the latter stayed `int + i32` and codegen emitted
-    -- a mismatched binop (E0715). A genuine `Int` value does not change type under a
-    -- hint, so the re-elaboration is only adopted when it actually yields the
-    -- concrete width — a real `Int`-vs-i32 width mismatch still surfaces as before.
-    let (cLhs, cRhs, opTy) ← do
-      if lTy == .int && isIntegerType rTy && rTy != .int then do
-        let cLhs' ← elabExpr lhs (some rTy)
-        if cLhs'.ty == rTy then pure (cLhs', cRhs, rTy) else pure (cLhs, cRhs, lTy)
-      else if rTy == .int && isIntegerType lTy && lTy != .int then do
-        let cRhs' ← elabExpr rhs (some lTy)
-        if cRhs'.ty == lTy then pure (cLhs, cRhs', lTy) else pure (cLhs, cRhs, lTy)
-      else
-        pure (cLhs, cRhs, lTy)
+    -- Same operand-order judgment as Check (TypeJudgment.binOpOperandOrder): type
+    -- the concrete side first so a flexible literal tree adopts its width
+    -- top-down. This replaces the old bottom-up re-elaborate repair that
+    -- special-cased `(8 + 5) + x` (x: i32) — the top-down hint reaches the entire
+    -- flexible subtree, so `int + i32` mismatches (E0715) cannot arise. A genuine
+    -- `Int` value ignores the hint and a real width mismatch still surfaces at
+    -- Check/CoreCheck, exactly as before.
+    let (cLhs, cRhs) ←
+      match TypeJudgment.binOpOperandOrder
+              (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
+      | .rhsFirst => do
+        let cRhs ← elabExpr rhs hint
+        let cLhs ← elabExpr lhs (some cRhs.ty)
+        pure (cLhs, cRhs)
+      | .lhsFirst => do
+        let cLhs ← elabExpr lhs hint
+        let cRhs ← elabExpr rhs (some cLhs.ty)
+        pure (cLhs, cRhs)
     let resultTy := match op with
       | .eq | .neq | .lt | .gt | .leq | .geq => .bool
       | .and_ | .or_ => .bool
-      | _ => opTy
+      | _ => cLhs.ty
     return .binOp op cLhs cRhs resultTy
 
   | .unaryOp _ op operand =>

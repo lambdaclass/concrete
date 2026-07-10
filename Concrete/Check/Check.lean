@@ -96,16 +96,19 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | .binOp _ op lhs rhs =>
     -- A literal-only side is flexible: it adopts the type of the OTHER operand
     -- (mirroring Core elaboration), not the surrounding hint — `inner[64 + i]`
-    -- with i: i32 types 64 as i32 even though the index hint is Int. So type
-    -- the non-literal side first and use its type as the literal side's hint.
+    -- with i: i32 types 64 as i32 even though the index hint is Int. The
+    -- operand-order decision is shared with Elab (TypeJudgment.binOpOperandOrder)
+    -- so both front-end passes type the two sides identically.
     let (lTy, lTyR, rTyR) ←
-      if isFlexibleLit lhs && !(isFlexibleLit rhs) then do
+      match TypeJudgment.binOpOperandOrder
+              (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
+      | .rhsFirst => do
         let rTy ← checkExpr rhs hint
         let rTyR ← resolveType rTy
         let lTy ← checkExpr lhs (some rTyR)
         let lTyR ← resolveType lTy
         pure (lTy, lTyR, rTyR)
-      else do
+      | .lhsFirst => do
         let lTy ← checkExpr lhs hint
         let lTyR ← resolveType lTy
         let rTy ← checkExpr rhs (some lTyR)

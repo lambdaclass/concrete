@@ -10,18 +10,6 @@ import Concrete.Check.Layout
 
 namespace Concrete
 
-/-- A literal-only expression is FLEXIBLE: it adopts its type from context (the
-    other binop operand, or the type hint), mirroring Core elaboration. Covers
-    bare int/float literals, negated or parenthesized ones, and arithmetic over
-    literals only (`(8 + 9) % 1000`). -/
-partial def isFlexibleLit : Expr → Bool
-  | .intLit _ _ => true
-  | .floatLit _ _ => true
-  | .paren _ inner => isFlexibleLit inner
-  | .unaryOp _ .neg inner => isFlexibleLit inner
-  | .binOp _ _ l r => isFlexibleLit l && isFlexibleLit r
-  | _ => false
-
 /-- Source spelling of a binary operator, for diagnostics (E0228). -/
 def binOpSymbol : BinOp → String
   | .add => "+" | .sub => "-" | .mul => "*" | .div => "/" | .mod => "%"
