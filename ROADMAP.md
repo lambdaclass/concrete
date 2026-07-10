@@ -1156,7 +1156,8 @@ the compiler architecture is finished.
    dependency/package boundary, and one negative where report output would
    otherwise disagree with the checker diagnostic.
 
-5. Add stable interned fact IDs.
+5. Add stable interned fact IDs. **(≡ #9 — one substrate: build these AS the
+   `CompilerDB` interned-ID space, not a separate ID scheme to reconcile later.)**
    Before more report/proof/package/editor facts grow, introduce deterministic
    internal identities for resolved names, type constructors, generic
    instantiations, capability sets, target facts, proof obligations, report
@@ -1223,16 +1224,45 @@ the compiler architecture is finished.
    source identity and, where needed, by edges/roles — making semantic facts
    load-bearing without a fact-per-axis constructor churn.
 
-   This is a certificate CHAIN, not one global ledger. `ExprId` dies at Elab, so
-   the source-level `FactLedger` cannot key Core/SSA/backend facts. Each
-   downstream IR is its own certificate (`ValidatedCore`, `ValidatedSSA`,
-   `ValidatedBackendIR`) carrying its own facts on its own ids; the layers are
-   joined by provenance (`SourceKey -> CoreId -> SSAId -> BackendId -> emitted
-   location`). Each fact has exactly one owning layer; no later layer re-derives
-   another's fact. Provenance is itself a certified, fail-closed, many-to-many
-   relation — coverage-asserted per lowering, fold-unions-origins,
-   delete-invalidates (wired into #8) — never silent metadata; a missing or
-   ambiguous link is an error or an explicit `backend-trusted` classification.
+   **Best-long-term shape: ONE unified interned-ID query database, not a
+   per-IR certificate chain.** An earlier framing had separate per-IR stores
+   (`ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR`) joined by hand-maintained
+   `SourceKey -> CoreId -> SSAId -> BackendId` provenance maps. Superseded: if
+   those links must be maintained/proved, they ARE part of the fact system, so
+   they belong as first-class graph edges in ONE database, not ad hoc side
+   mappings. The design is a single `CompilerDB` with a universal interned-ID
+   space (`SourceNodeId`, `DeclId`, `TypeId`, `CoreNodeId`, `SSAValueId`,
+   `BlockId`, `BackendOpId`, `ObligationId`, `DiagnosticId`, `FactId`), one fact
+   table, and provenance as native edges in it (`lowersTo`, `emitsAs`,
+   `trapSource`, `proofObligation`). Per-IR "certificates" become query-groups /
+   views over the one DB. Each fact still has exactly one owning stage and no
+   later stage re-derives it; provenance is still fail-closed (coverage-asserted
+   per lowering, fold-unions-origins, delete-invalidates, wired into #8) — but as
+   edges in the DB, not a separate join to keep honest.
+
+   **`#5 ≡ `this item: one substrate.** Interned IDs (#5) and node identity (#9)
+   are the same system — build ONE `CompilerDB` (interned IDs + query-shaped fact
+   DB + certificate views), never a separate `NodeId` ledger now and a query DB
+   later (that is a third migration).
+
+   **Salsa-*shaped*, not Salsa-*now* — with the query monad abstracted from day
+   one.** Access is query-shaped immediately (`typeOf`, `ownershipOf`,
+   `loweredCoreOf`, `obligationsOf`, `evidenceOf`), evaluated EAGERLY at first
+   (no cache, no incrementality — that full engine is a later Phase-19 bet). The
+   Lean-specific catch that makes "the API doesn't change later" true: because
+   Lean has no interior mutability, a pure `db -> id -> Except Ty` query cannot
+   transparently gain a cache — define queries in a `QueryM` (eagerly
+   `ReaderM CompilerDB`; later `StateT QueryCache …` recording deps) from the
+   start, so turning on memoization swaps only `QueryM`'s definition, with zero
+   call-site churn. Writing eager queries non-monadically now = paying the
+   call-site migration later; that is the trap to avoid.
+
+   **Proof-carrying facts.** A `FactEntry` (key, value, ownerStage, deps,
+   evidenceClass, provenance, invalidationPolicy) must be able to grow an
+   optional `proofArtifact` / `replayCommand` so a fact escalates from
+   `checked_by_stage` to `proved_by_kernel` without changing the model — proofs
+   are a field of the fact system, not a separate universe. This is the ultimate
+   form of "types that FORBID drift": the kernel rejects the alternative.
 
    Increment 0 substrate, before any family migration:
    - introduce a distinct `IdentifiedProgram` / identified-tree representation
