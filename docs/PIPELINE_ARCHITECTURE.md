@@ -64,12 +64,12 @@ to *types that forbid it*. Shared predicates and pass-agreement gates (items
 it still leaves the architecture *inviting* the bug — a new pass can always
 re-infer and disagree, and the gate only fires if someone wrote the fixture.
 
-The structural fix is **certificate-carrying IR plus a fail-closed fact
-ledger**: make re-derivation *unrepresentable*. `TypedProgram` can only be
-constructed by Check over an `IdentifiedProgram`; its node/edge-keyed ledger
-contains the committed facts; Elab and later stages require those facts instead
+The structural fix is **certificate-carrying IR plus a fail-closed `CompilerDB`**:
+make re-derivation *unrepresentable*. `TypedProgram` can only be
+constructed by Check over an `IdentifiedProgram`; its node/edge-keyed DB entries
+contain the committed facts; Elab and later stages require those facts instead
 of recomputing them. Some facts are inherently relational (call-site↔parameter
-pass agreement, borrow conflicts, container/context exclusions), so the ledger
+pass agreement, borrow conflicts, container/context exclusions), so `CompilerDB`
 is not scaffolding around a fat AST — it is the certificate substrate. It lives
 in ONE unified interned-ID `CompilerDB`, not a per-IR chain: each IR stage still
 has a certificate, but the certificate is a **view / query-group** over
@@ -97,7 +97,7 @@ the toolchain's own trusted base.
 | Principle | Phase 6.5 items |
 | --- | --- |
 | **1 — one reference semantics** | #1 (arithmetic), #4 (no hidden second pipeline), #14 (feature-matrix interp-vs-compiled), #21 (counterexample-first) |
-| **2 — facts committed once** | #2 (shared predicates), #3 (stage contracts), #3b (certificate IR), #5 (capability fact source), #6 (walker coverage), #7 (CoreCheck hard boundary), #10 (typed fact ledger), #11 (resolved names), #12 (builtin registry), #13 (source-span preservation) |
+| **2 — facts committed once** | shared predicates, stage contracts, `CompilerDB` / certificate IR, capability fact source, walker coverage, CoreCheck boundary, resolved names, builtin registry, source-span preservation |
 | **Evidence the refactor is load-bearing** | #22 (mutation testing), #23 (pass-output replay), #24 (validation artifact) |
 
 Read the phase this way: items under Principle 1 make the oracle true by
@@ -115,9 +115,10 @@ rather than adding it:
 1. Land `Concrete/Semantics/IntArith.lean` (item #1) — Principle 1's beachhead,
    and it already has a real bug to its name (the seed-20260703 fold that
    dropped a trap).
-2. Introduce the **first** certificate type (`TypedProgram`, item #3b) and
-   forbid Elab/CoreCheck from re-inferring what it carries. Prove the pattern on
-   the type axis before widening.
+2. Introduce the **first** source-fact certificate (`TypedProgram` over
+   `IdentifiedProgram` + `CompilerDB`) and forbid Elab/CoreCheck from
+   re-inferring what it carries. Prove the pattern on the type axis before
+   widening.
 3. Widen the fact set one axis at a time — capability, arithmetic policy,
    evidence class, resolved identity — each landing with the differential fuzzer
    as the safety net, exactly as the checked-arithmetic flip was staged.
@@ -130,12 +131,12 @@ rather than adding it:
 ## Relationship to Phase 14
 
 Phase 14 #13b ("one source of typing truth") is Principle 2 completed on the
-type axis: Check emits a `TypedProgram` whose ledger commits type facts over an
-identified tree, and Elab consumes those facts, deleting Elab's re-inference.
-Phase 6.5 introduces the certificate/ledger pattern and the first certificate
-type; Phase 14 finishes the type axis and adds the preservation proofs (each
-pass provably preserves the committed meaning). 6.5 makes the architecture stop
-inviting drift; 14 proves the passes honor it.
+type axis: Check emits a `TypedProgram` whose `CompilerDB` facts commit type
+facts over an identified tree, and Elab consumes those facts, deleting Elab's
+re-inference. Phase 6.5 introduces the certificate/`CompilerDB` pattern and the
+first certificate type; Phase 14 finishes the type axis and adds the
+preservation proofs (each pass provably preserves the committed meaning). 6.5
+makes the architecture stop inviting drift; 14 proves the passes honor it.
 
 ## Non-goals
 
@@ -162,5 +163,5 @@ principles are checkable:
 - **Principle 2:** for each committed fact, a downstream stage cannot construct
   a program that re-derives it to a different answer — enforced by the
   certificate types where they exist and by pass-agreement gates elsewhere
-  (items #2, #3, #3b, #5); mutation testing proves each gate is load-bearing
+  (items #2, #3, #5, #9); mutation testing proves each gate is load-bearing
   (item #22).

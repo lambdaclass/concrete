@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Status: **not started.** Increment-0 substrate is landed and green
-(`FactLedger`, `IdentifiedProgram` + mint, `IdExprKind` mirror with spans-in-ctors).
+(`CompilerDB`, `IdentifiedProgram` + mint, `IdExprKind` mirror with spans-in-ctors).
 This is the execution recipe for step 2, to be driven to a single green commit.
 
 ## Why this is its own dedicated run (not a mid-session edit)
@@ -54,9 +54,9 @@ this the same way (`grep -nE '(partial )?def .*(Expr|Stmt|MatchArm)'`).
 Pipeline wiring (`Concrete/Pipeline/Pipeline.lean`):
 - `mint : ResolvedProgram(post-desugar) → IdentifiedProgram` runs before Check;
 - `check : IdentifiedProgram → Except Diagnostics TypedProgram` (currently returns
-  `Unit`) mints `TypedProgram { identified, ledger }`, asserting per-family
+  `Unit`) mints `TypedProgram { identified, db }`, asserting per-family
   coverage;
-- `elaborate : TypedProgram → …` reads `identified` + `ledger` (no re-inference).
+- `elaborate : TypedProgram → …` reads `identified` + `CompilerDB` (no re-inference).
 
 ## Suggested execution order (each step compiles nothing until the last)
 
@@ -86,6 +86,7 @@ first pass + manual residual fixing is the intended one-shot method.
 ## Roadmap alignment
 
 Matches ROADMAP #9 exactly. One refinement already folded into the docs:
-`FactKey` is keyed by `SourceKey` (expr/stmt/decl/param/type/module + edges), not
-`ExprId`-only — but the literals family only needs `expr` keys, so generalize the
-key space when param/decl/edge facts land, not in this step.
+`CompilerDB` starts with the source-fact slice and `FactKey` is keyed by
+`SourceKey` (expr/stmt/decl/param/type/module + edges), not `ExprId`-only. The
+literals family only needs `expr` keys; Core/SSA/backend ids and wider
+provenance edges arrive when later stages start committing structured facts.

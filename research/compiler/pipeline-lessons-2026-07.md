@@ -136,7 +136,8 @@ What not to copy:
 Roadmap slots:
 
 - Phase 6.5 #23: deterministic pass-output hashes and replay artifacts.
-- Phase 6.5 #3b / Phase 14 #13b: certificate-carrying IR and typed facts.
+- Phase 6.5 #9 / Phase 14 #13b: `CompilerDB`, certificate-carrying IR,
+  and typed facts.
 - Phase 7 #8g / Phase 6 #13s: allocator-as-value research.
 - Phase 7 #29 / Phase 6 #13r: tests-as-docs and doc-snippet gates.
 - Future note: result-location / destination-passing design note for aggregate
@@ -270,7 +271,7 @@ Concrete translation:
 Roadmap slots:
 
 - Phase 6.5 #3: stage contracts.
-- Phase 6.5 #3b: certificate-carrying IR.
+- Phase 6.5 #9: `CompilerDB` and certificate-carrying IR.
 - Phase 6.5 #21: counterexample-first pipeline debugging.
 - Phase 6.5 #23: pass-output replay artifacts.
 - Potential future item: analysis preservation/invalidation contract.

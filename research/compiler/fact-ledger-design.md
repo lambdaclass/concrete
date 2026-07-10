@@ -1,272 +1,206 @@
-# Fact-ledger certificate substrate — increment-0 spec (Phase 6.5 #9 ≡ #13b)
+# CompilerDB certificate substrate — objective spec (Phase 6.5 #9 == #5 == #13b)
 
-Status: **design locked, not yet implemented.** This is the spec the fresh
-identity/ledger run builds against. No codemod has landed; `Concrete/Elab/
-Typed.lean` (commit `f22e211a`) is additive and **superseded by this design** —
-it is pared only once the new identity home exists (see "Migration of f22e211a").
+Status: **objective locked; implementation in progress.** The code currently
+has the first behavior-neutral slice in `Concrete/Semantics/CompilerDB.lean`
+plus `Concrete/Elab/Identified.lean`: a minimal source-keyed fact store,
+`QueryM`, `IdExpr`/`IdentifiedProgram`, and the dead fat `TExpr` removed. The
+objective below is the architecture those slices grow into.
 
-## The decision, and the argument that forces it
+This document is the canonical substrate spec for the Check/Elab typed-fact arc.
+The roadmap states the order; this file states the long-term shape.
 
-The type-axis (and later capability/ownership/proof) certificate is a **thin
-AST carrying stable node identity + a node/edge-keyed, fail-closed fact
-ledger** — *not* a fat typed AST (`TExpr` with `ty`/`mode`/… inline).
+## The Decision
 
-The argument that ends the fat-vs-ledger debate: **some Concrete facts are
-edges, not node fields.**
+Concrete's compiler facts live in one unified interned-ID `CompilerDB`, not in a
+fat typed AST and not in independent per-IR fact stores.
 
-- pass agreement is a call-site ↔ parameter edge;
+The decisive reason is that many load-bearing facts are not node-local:
+
+- pass agreement is a call-site to parameter edge;
 - borrow conflicts are edges;
-- E0293 container-not-in-context is about *pairs* of paths;
-- capability flow, proof dependencies, and invalidation dependencies are edges.
+- E0293 container-not-in-context is about pairs of paths;
+- capability flow, proof dependencies, invalidation dependencies, lowering
+  provenance, and trap origins are edges.
 
-A per-node typed field cannot express any of these, so an edge-keyed structure
-is required *regardless*. A fat AST therefore does not remove the ledger — it
-leaves you with **both**. Given that, the ledger is the substrate and the AST
-stays thin. This is not a preference; once you accept the edge facts, it is
-forced.
+A fat `TExpr` cannot hold those facts. It would leave Concrete with both a fat
+AST and a separate edge-keyed store, which is exactly the second-truth-source
+shape this phase is removing. The AST stays thin-in-facts; facts live in
+`CompilerDB`.
 
-Secondary (Lean-specific) reason: a fact-per-constructor is permanent walker
-churn — every fact axis added to every AST constructor breaks every
-`| .ctor …` match across parser/check/elab/mono/lower/interp/report/proof/
-format, forever. A thin AST (one identity field) + a ledger pays that structural
-cost once, not once per axis.
+## Core Invariant
 
-Withdrawn along the way: the "keep `ty`/`mode` inline (hybrid)" idea. `ty` does
-not exist until Check; inline `ty` forces `Option Ty` on every node (`none`
-until Check), which reintroduces the exact silent-fallback state we are killing.
-The ledger models that lifecycle cleanly: `lookup : Option` while a family is
-unmigrated, `require : fails closed` once it is.
+There is exactly one committed fact.
 
-## The invariant this exists for
+- A conflicting write fails closed.
+- A missing fact in a migrated family fails closed.
+- Later stages require committed facts; they do not silently re-derive them.
 
-> There is exactly one committed fact. Later stages cannot silently re-derive it.
-> Missing (in a migrated family) fails closed. Conflicting fails closed.
+That is the design. The rest of this document is mechanism.
 
-That sentence is the whole design. Everything below is mechanism for it.
+## CompilerDB, Not A Per-IR Store Chain
 
-## Scope: one unified CompilerDB; per-IR certificates are views over it
+The objective is one `CompilerDB` with a universal interned-ID space:
 
-The store is **one unified interned-ID `CompilerDB`**, not a per-IR certificate
-chain of separate stores. An earlier framing argued a chain because "`ExprId`
-dies at Elab, so Core/SSA/Backend have no `ExprId` to key by." That premise is
-true but does NOT force separate stores — it forces separate id *kinds* inside
-*one* store. The DB has a **universal interned-id space** (`SourceNodeId` /
-`ExprId`, `CoreNodeId`, `SSAValueId`, `BackendOpId`, `DeclId`, `TypeId`,
-`ObligationId`, …); a fact keys on whichever id kind owns it. `ExprId` stays
-ephemeral on `IdentifiedProgram` (Decision 1) — nothing re-threads it through
-downstream IRs — because Core/SSA/backend facts key on `CoreId`/`SSAId`/
-`BackendOpId`, not on `ExprId`. Identity is NOT re-added to every IR node; each IR
-mints its own ids into the shared DB as it is built.
+- source ids: expressions, statements, declarations, parameters, types, modules;
+- Core ids;
+- SSA value/block ids;
+- backend operation ids;
+- obligations, diagnostics, and report facts;
+- fact ids.
 
-So the architecture is **one DB, many id kinds, certificate views**:
+Each fact is keyed by the id kind that owns it. Source facts do not force
+`ExprId` through Core/SSA/backend. Core/SSA/backend facts get their own ids in
+the same DB. Provenance between levels is represented as first-class edges such
+as `lowersTo`, `emitsAs`, and `trapSource`.
 
-- source facts (committed by Check) — keyed by source identity (the generalized
-  key space below): type, ownership, capability, pass-agreement, must-use.
-- `ValidatedCore`, `ValidatedSSA`, `ValidatedBackendIR` — each remains a boundary
-  **token**, but its certificate is a **view / query-group** over the same
-  `CompilerDB` (Core shape + typed ops + proof *obligations* under `CoreId`; SSA
-  dominance + traps + widths under `SSAId`; backend ABI/layout + helper calls
-  under `BackendOpId`), NOT a separate fact store.
-- **Provenance is native edges in the DB** (`lowersTo`/`emitsAs`/`trapSource`),
-  joining `SourceKey → CoreId → SSAId → BackendId → emitted location` — not a
-  hand-maintained side map (if those links must be maintained, they ARE facts and
-  belong in the DB as edges).
+`ValidatedCore`, `ValidatedSSA`, and `ValidatedBackendIR` remain important:
+they are typed boundary tokens that prove a stage ran and verified its output.
+They are not separate semantic stores. Their certificates are views/query-groups
+over the same `CompilerDB`.
 
-This preserves the thesis WITHOUT a second store: **each fact has exactly one
-owning layer; no later layer re-derives another's fact; later layers add their own
-facts (keyed by their own id kind) into the one DB; provenance edges link them.**
-One database, not a chain, and not a second source of truth.
+## Current Slice
 
-**Single-owner rule (no fact split across layers):** e.g. proof *eligibility*
-(pure / capability-free) is a **source** fact; proof *obligations / VCs* are
-**Core** facts. A fact belongs to one layer only.
+The current code intentionally starts smaller:
 
-### Provenance is itself a certified, fail-closed relation — not metadata
+- `NodeId` / `ExprId` and `IdentifiedProgram` provide post-desugar source
+  identity.
+- `CompilerDB` has source-oriented keys and edge keys.
+- `FactEntry` already has owner stage, evidence class, dependencies,
+  provenance, and optional proof/replay fields.
+- `QueryM` is eager today, but shaped so memoization and dependency tracking can
+  be added later without changing call sites.
 
-Because "no re-derivation" now leans on the join, provenance must obey the same
-discipline as facts, or misattribution becomes the drift class one level down
-(a report blaming the wrong source line, an obligation over the wrong node):
+This is not a retreat from the objective. It is the first load-bearing slice.
+Docs describe the objective; status notes describe how much of it has landed.
 
-- **Coverage-asserted:** every lowering pass emits a provenance edge for every
-  node it creates; a missing link is an ICE or an explicit `provenance-lost →
-  backend-trusted` classification, never a silent wrong link.
-- **Many-to-many, not 1:1:** one checked `+` → add + overflow-check + trap-block
-  (1→many); optimization fuses/deletes nodes (many→1, and deletions). So
-  provenance is a *relation* that semantics-preserving passes must **preserve /
-  union / invalidate** — wired into the analysis-preservation/invalidation
-  contract (ROADMAP 6.5 #8): fold ⇒ union origins; delete ⇒ invalidate dependent
-  facts + provenance. A naive 1:1 map breaks on the first inline.
+## Identity
 
-## The ladder
+Parser, resolve, and desugar stay id-free. A deterministic mint pass runs after
+desugar and before Check, producing an `IdentifiedProgram`. Check and Elab
+consume that same identified tree.
 
-```
-Parsed AST
-  -> Resolved AST            (id-free)
-  -> Desugared AST           (id-free; desugar may synthesize nodes freely)
-  -> Identified AST          (mint pass: assign NodeIds, post-desugar / pre-Check)
-  -> Check                   (populates the FactLedger; owns type/ownership/cap facts)
-  -> TypedProgram { identified : IdentifiedProgram, ledger : FactLedger }
-  -> Elab                    (READS facts; zero source-type re-inference)  -> Core
-  -> CoreCheck -> ValidatedCore
-       ├─> interpreter (oracle)        first-class consumer
-       ├─> proof extraction / Lean / replay bundle   first-class consumer
-       └─> Mono -> Lower -> SSA -> SSAVerify -> ValidatedSSA -> Emit
-```
+This avoids placeholder ids before Check and avoids asking desugar to preserve
+identity for nodes it synthesizes. Synthetic-node provenance is carried
+separately from identity; source span/origin is not the key.
 
-Boundary objects have hidden constructors so invalid states cannot be built
-casually (`ResolvedProgram → Check → TypedProgram → Elab → CoreProgram →
-CoreCheck → ValidatedCore → … → SSAVerify → ValidatedSSA`).
+Long term, downstream IRs mint their own interned ids into `CompilerDB` as they
+are constructed. Identity is thin-in-facts, not absent: every stage that wants to
+commit facts must have stable ids for the entities it owns.
 
-## Decision 1 — identity representation (was the recurring un-nailed crux)
+## Keys And Edges
 
-**Parser/Resolve/Desugar stay id-free. A post-desugar mint pass produces an
-`IdentifiedProgram`; Check consumes that.** No placeholder IDs anywhere.
+The source-level key space must be broader than expressions. A parameter,
+declaration, type, or module can be an endpoint of a fact.
 
-Why this over "one `Node ExprKind` across the whole compiler":
-
-- It confines the identity representation to the desugar→Check→Elab window —
-  exactly where the ledger is used. Parser/resolve/desugar/mono/lower/interp/
-  report are **untouched** by identity work.
-- It avoids a "meaningless placeholder id" lifecycle state (the alternative
-  makes every pre-Check node carry an id that doesn't exist yet, which must
-  itself be fail-closed against premature reads — a new bug surface).
-- The mint is a single deterministic traversal of the *one* post-desugar tree
-  both Check and Elab consume, so ids are stable across the only boundary that
-  matters, by construction — not recomputed independently (that would be
-  traversal-order keying = span-in-disguise = a silent-desync channel, which is
-  out for a fail-closed design).
-
-`IdentifiedProgram` is a thin id-carrying tree (`id` + `span` + `kind`, **no
-facts**) — a mechanical mirror of the post-desugar AST shapes. It is ephemeral:
-it exists only between mint and Elab; after Elab everything is Core as today.
-
-`NodeId` (currently spelled `ExprId` in `f22e211a`, reused): `{ moduleId :
-String, localId : Nat }`, `BEq`/`Hashable`/`Repr`. Synthetic-node provenance
-(which source construct a desugared node came from) rides a separate
-`origin`/`span`, never conflated with identity.
-
-## Decision 2 — hot-read rule (pure-thin's own 027-shaped risk)
-
-`ty` is the hottest, most universal fact. Pure-thin means type facts live in the
-ledger, so a naive design turns every type access in tight loops into
-`ledger.requireFact id .type` — an O(1) HashMap probe, but not free, on the
-center of the pipeline. That is the shape of bug 027 (this session's O(n²)
-EmitSSA fix) relocated into the ledger. Rules:
-
-- **The ledger is canonical, but the ledger is the Check→Elab *handoff*, not a
-  global per-access oracle.** Elab reads a node's fact **once** to construct
-  typed Core; Mono/Lower/Interp then read types off Core as they do today. The
-  ledger is not hash-probed throughout the backend.
-- Within a single checking/lowering step, a pass **binds a looked-up fact
-  locally** and threads it through the local recursion; it does not re-probe the
-  same fact repeatedly.
-- Storage is `Std.HashMap`, never an assoc list (an assoc-list ledger read per
-  node *is* bug 027 at the hottest path).
-- A complexity/telemetry gate watches the Elab/Lower hot path; measure before
-  declaring victory.
-
-## FactLedger interface (the three fail-closed entry points)
+Conceptual shape:
 
 ```lean
-structure ExprId where            -- the NodeId minted on IdentifiedProgram
-  moduleId : String
-  localId  : Nat
-deriving BEq, Repr, Hashable, Inhabited
+inductive SourceKey
+  | expr (id : ExprId)
+  | stmt (id : StmtId)
+  | decl (id : DeclId)
+  | param (id : ParamId)
+  | type_ (id : TypeId)
+  | module_ (id : ModuleId)
 
--- The key space is NOT ExprId-only: source facts attach to more than
--- expressions (a pass-agreement edge endpoint is a PARAMETER, not an expr).
-inductive SourceKey  | expr (id : ExprId)   | stmt (id : StmtId)
-                     | decl (id : DeclId)   | param (id : ParamId)
-                     | type (id : TypeId)   | module (id : ModuleId)
-deriving BEq, Repr, Hashable
-
-inductive FactRole   | value | arg (idx : Nat) | field (name : String)
-inductive EdgeKind   | passAgreement | borrowConflict | containerExclusion
-                     | capabilityFlow | proofDep | invalidationDep
-inductive FactKey    | node (key : SourceKey) (role : FactRole)
-                     | edge (src dst : SourceKey) (kind : EdgeKind)  -- edges from day one
--- Owner is a SOURCE-level sub-stage only. Core/SSA/Backend facts do NOT live
--- here — they live in ValidatedCore/ValidatedSSA/ValidatedBackendIR, joined by
--- provenance (see "Scope"). This is SourceFactLedger, not a global ledger.
-inductive FactStage  | check                                        -- owning source stage
-inductive EvidenceClass | checked | inferred | assumed | trusted
-inductive Fact       | type (ty : Ty) | ownership (mode : ValueMode)
-                     | capability (caps : CapSet) | relational
-structure FactEntry  where
-  fact : Fact; owner : FactStage; evidence : EvidenceClass := .checked
-  provenance : Span; deps : List FactKey := []
-inductive TypedFamily | literals | binops | casts | calls
-                      | aggregates | controlFlow | patterns
-
-structure FactLedger where
-  facts    : Std.HashMap FactKey FactEntry
-  migrated : List TypedFamily := []
-
--- fail-closed on WRITE: committing a *different* fact for a committed key is an
--- ICE (idempotent re-commit of the identical fact is fine).
-def insertFact  : FactLedger → FactKey → FactEntry → Except LedgerError FactLedger
--- optional read: ONLY for families not yet migrated.
-def lookupFact  : FactLedger → FactKey → Option FactEntry
--- fail-closed on READ: absence in a migrated family is an ICE, never fallback.
-def requireFact : FactLedger → TypedFamily → FactKey → Except LedgerError FactEntry
--- mint-time per-family completeness — the check that makes TypedProgram a
--- CERTIFICATE, not a comment. Runs before TypedProgram is constructed.
-def assertFamilyComplete : FactLedger → TypedFamily → List FactKey → Except LedgerError Unit
+inductive FactKey
+  | node (key : SourceKey) (role : FactRole)
+  | edge (src dst : SourceKey) (kind : EdgeKind)
 ```
 
-`ValueMode` (`copy | move | borrow | reborrow | consume | place`) is the
-ownership-fact payload — reused from `f22e211a`, no longer a syntax field.
+The objective extends this pattern with `CoreKey`, `SSAKey`, `BackendKey`, and
+cross-level provenance edges in the same DB.
 
-## Fail-closed, precisely
+## API Contract
 
-- **conflict (write):** `insertFact` on a key already holding a *different* fact
-  → `LedgerError.conflict` (an ICE). Enforces "exactly one committed fact."
-- **missing in migrated family (read):** `requireFact` on an absent key whose
-  family is migrated → `LedgerError.missingInMigratedFamily` (an ICE). Enforces
-  "no silent re-derive."
-- **completeness (mint):** `assertFamilyComplete` per migrated family runs in
-  `TypedProgram.mk` — a gap is a loud internal error, not a silent pass. This
-  per-family assertion is the operational meaning of "fail-closed per family."
+The fail-closed interface has three distinct operations:
 
-## Staging (one axis/family at a time, in dependency order)
+- `insertFact`: writes a fact. Writing a different fact to an already-committed
+  key is a hard error.
+- `requireFact`: reads a fact required by a migrated family. Absence is a hard
+  error, never a fallback to inference.
+- `factOf` / optional lookup: permitted only for unmigrated or genuinely
+  optional facts.
 
-The ledger schema lists several `Fact`/`TypedFamily` slots, but increment 1 does
-NOT fill them all. Migrate one family at a time, each with its own migration
-flag, differential fuzzer + `test-ci-gates` as the net:
+`assertFamilyComplete` is the mint-time coverage assertion. Before a certificate
+is produced, Check walks the relevant tree and asserts that every node in each
+migrated family has the required facts. That assertion is what makes a
+certificate operational rather than documentary.
 
-literals (the E0228 origin) → binops → casts → calls → aggregates →
-controlFlow → patterns. Then widen fact axes: types → capability → ownership →
-proof-relevant. Each flip: Check commits the fact, Elab switches from
-re-inference to `requireFact`, and a gate proves Check's and Elab's answers
-cannot disagree. When every family is migrated, delete Elab's source-type
-inference.
+## Query Shape
 
-## First-class non-codegen consumers (not a codegen-only ladder)
+Queries are monadic from day one:
 
-- **Interpreter (the differential oracle).** Must hang off the same certified
-  artifact, never a parallel judgment. Partially already true: `IntArith`
-  (Phase 6.5 #1) made interp's *arithmetic* single-sourced with opt/backend by
-  construction — the ledger generalizes that to the type/ownership axes. Interp
-  is the proof the pattern works, extended, not an afterthought.
-- **Proof extraction / obligations / Lean replay.** `extractProofCore` consumes
-  `ValidatedCore`; obligations point at committed facts (keyed by `NodeId`)
-  instead of reconstructing typing side-conditions. The obligation → Lean →
-  replay-bundle ladder is first-class output, not one compressed line.
+```lean
+abbrev QueryM := ReaderM CompilerDB
+```
 
-## Migration of f22e211a
+Today queries are eager. Later, `QueryM` can become a state/cache/dependency
+monad without migrating every call site. This is the Rust/Salsa lesson adapted
+to Lean's lack of interior mutability: make the interface query-shaped now, turn
+on memoization later.
 
-`Concrete/Elab/Typed.lean` (fat `TExpr`/`TStmt`) is **additive and not consuming
-behavior** — nothing reads it. It is superseded by this design. Do NOT pare it
-now: ripping it out before the new identity home (`IdentifiedProgram`) exists is
-churn without value. Delete it as the **first coupled step of the fresh run**,
-alongside introducing `IdentifiedProgram` + `FactLedger` — keeping `ExprId`
-(→ `NodeId`) and `ValueMode` (→ ownership-fact payload).
+## Hot-Read Rule
 
-## Increment-0 → increment-1 boundary
+`CompilerDB` is canonical, but passes must not repeatedly hash-probe the same
+fact in tight loops.
 
-Increment-0 (this spec) is design only. The fresh run's first coupled move:
-1. add `IdentifiedProgram` (thin id-carrying post-desugar tree) + the mint pass;
-2. add `Concrete/Semantics/FactLedger.lean` (interface above);
-3. delete `f22e211a`'s fat `TExpr`, keeping `ExprId`/`ValueMode`;
-4. migrate the **literals** family: Check commits `type` facts, Elab
-   `requireFact`s them, coverage-asserted at mint, differential-fuzzed.
+- Elab/Mono/Lower should bind required facts locally while processing a node or
+  block.
+- Whole-tree passes may materialize dense projections from contiguous ids when
+  that is the right access pattern.
+- Telemetry and complexity gates should watch query counts and scaling.
+
+The goal is to remove semantic drift without recreating bug 027 at the center of
+the compiler.
+
+## Proof-Carrying Facts
+
+`FactEntry` must be able to grow from checked evidence to kernel-checked
+evidence without a model change:
+
+- `evidenceClass = checked_by_stage` means a compiler verifier established it.
+- `evidenceClass = proved_by_kernel` means a proof artifact replayed.
+- `proofArtifact` and `replayCommand` make that replay explicit.
+
+LLM-generated proof text is never evidence until the kernel accepts it and the
+replay bundle works without the LLM.
+
+## First-Class Consumers
+
+The ladder is not only codegen:
+
+- Elab reads source facts and produces Core.
+- The interpreter consumes certified Core and remains the differential oracle.
+- Proof extraction consumes certified Core and emits obligations tied to
+  committed facts.
+- Lower/SSA/backend stages add their own facts and provenance edges into the
+  same DB.
+- Reports, audit, LSP, and agent JSON must wrap DB/compiler facts; they do not
+  restate semantic facts manually.
+
+## Migration Plan
+
+Landed substrate:
+
+1. `CompilerDB.lean` replaces the superseded `FactLedger` name.
+2. `IdentifiedProgram` exists as the post-desugar id-carrying source mirror.
+3. The dead fat `TExpr`/`TStmt` path was removed.
+
+Next load-bearing work:
+
+1. Convert Check to consume `IdentifiedProgram`.
+2. Convert Elab to consume the checked certificate instead of raw source syntax.
+3. Migrate the literal family first: Check commits literal type facts, Elab
+   requires them, and E0228-style Check/Elab type disagreement becomes
+   unrepresentable.
+4. Continue family by family: binops, casts, calls, aggregates, control flow,
+   patterns.
+5. Continue axis by axis: types, capabilities, ownership/value-flow,
+   pass-agreement edges, proof-relevant facts.
+6. Later, widen the same `CompilerDB` to Core/SSA/backend ids and provenance
+   edges as those stages need structured facts, translation validation, and
+   replay.
+
+The docs always describe the objective. Status notes and commit history describe
+the current slice.

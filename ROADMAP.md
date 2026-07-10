@@ -1156,14 +1156,15 @@ the compiler architecture is finished.
    dependency/package boundary, and one negative where report output would
    otherwise disagree with the checker diagnostic.
 
-5. Add stable interned fact IDs. **(≡ #9 — one substrate: build these AS the
-   `CompilerDB` interned-ID space, not a separate ID scheme to reconcile later.)**
-   Before more report/proof/package/editor facts grow, introduce deterministic
-   internal identities for resolved names, type constructors, generic
-   instantiations, capability sets, target facts, proof obligations, report
-   facts, diagnostics, generated names, and source spans after desugaring. Human
-   output should still show source names; caches, pass hashes, evidence bundles,
-   and replay artifacts should use stable IDs.
+5. Add stable interned fact IDs **through #9's `CompilerDB` identity substrate**.
+   This item is explicitly dependent on #9; do not build a separate ID scheme
+   before the post-desugar `IdentifiedProgram` mint and `CompilerDB` key space
+   are in place. Before more report/proof/package/editor facts grow, introduce
+   deterministic internal identities for resolved names, type constructors,
+   generic instantiations, capability sets, target facts, proof obligations,
+   report facts, diagnostics, generated names, and source spans after desugaring.
+   Human output should still show source names; caches, pass hashes, evidence
+   bundles, and replay artifacts should use stable IDs.
 
    Done when the same source + compiler version + target/profile produces
    stable IDs, unrelated edits preserve IDs where possible, generated names use
@@ -1220,8 +1221,8 @@ the compiler architecture is finished.
    fields. Identity does NOT go on the shared `Expr` (a field there forces a
    placeholder id upstream and permanent walker churn); it lives on a distinct,
    ephemeral, id-carrying mirror IR (`IdentifiedProgram`) minted post-desugar and
-   consumed by Check and Elab only. Facts attach in a fail-closed ledger keyed by
-   source identity and, where needed, by edges/roles — making semantic facts
+   consumed by Check and Elab only. Facts attach in fail-closed `CompilerDB`
+   entries keyed by source identity and, where needed, by edges/roles — making semantic facts
    load-bearing without a fact-per-axis constructor churn.
 
    **Best-long-term shape: ONE unified interned-ID query database, not a
@@ -1242,7 +1243,7 @@ the compiler architecture is finished.
 
    **`#5 ≡ `this item: one substrate.** Interned IDs (#5) and node identity (#9)
    are the same system — build ONE `CompilerDB` (interned IDs + query-shaped fact
-   DB + certificate views), never a separate `NodeId` ledger now and a query DB
+   DB + certificate views), never a separate `NodeId` table now and a query DB
    later (that is a third migration).
 
    **Salsa-*shaped*, not Salsa-*now* — with the query monad abstracted from day
@@ -1277,7 +1278,7 @@ the compiler architecture is finished.
      that mirror, never on the shared `Expr`, and never spans, traversal
      positions, or structural hashes (all silent-desync channels);
    - carry source span/origin/desugaring provenance separately from identity;
-   - define a `Std.HashMap`-backed fact ledger, not an assoc list; the ledger is
+   - define a `Std.HashMap`-backed `CompilerDB` fact table, not an assoc list; the DB is
      on a hot compiler path and must not repeat the bug-027 O(n²) pattern;
    - generalize the key space beyond `ExprId`: a source fact attaches to more
      than expressions (a pass-agreement edge endpoint is a PARAMETER, not an
@@ -1298,9 +1299,9 @@ the compiler architecture is finished.
      before capabilities, ownership, proof facts, and backend facts.
 
    There is no separate "typed syntax": `IdentifiedProgram` carries identity +
-   shape but NO facts (types/ownership/etc. live in the ledger, keyed by id).
+   shape but NO facts (types/ownership/etc. live in `CompilerDB`, keyed by id).
    The fat `TExpr`/`TStmt` foundation in `Concrete/Elab/Typed.lean` is superseded
-   by `IdentifiedProgram` + `FactLedger` and is deleted as the first coupled step
+   by `IdentifiedProgram` + `CompilerDB` and is deleted as the first coupled step
    of the run; only `ExprId` (→ `NodeId`) and `ValueMode` (→ the ownership-fact
    payload) survive. No fact may have a second home as an AST field.
 
@@ -1316,10 +1317,10 @@ the compiler architecture is finished.
    changes for the one identity substrate are acceptable; the goal is the best
    long-term architecture, not the smallest diff.
 
-   Hot-read constraint: the ledger is canonical, but passes must not repeatedly
+   Hot-read constraint: `CompilerDB` is canonical, but passes must not repeatedly
    hash-probe the same fact in tight loops. Elab/Mono/Lower should bind required
    facts locally while processing a node or block, and telemetry/complexity
-   gates should watch fact-ledger lookup counts and pass scaling. The goal is
+   gates should watch `CompilerDB` query counts and pass scaling. The goal is
    to avoid replacing a correctness drift bug with a bug-027-shaped performance
    problem at the center of the compiler.
 
@@ -1356,7 +1357,7 @@ the compiler architecture is finished.
     slice may be an intrinsic coverage/matrix gate; the end state is a registry,
     not a grep-based allowlist.
 
-12. Move report/evidence output toward a typed fact ledger.
+12. Move report/evidence output toward `CompilerDB` fact views.
     Internal facts should be typed records until the final renderer, not strings
     assembled at each report site. V1 target: diagnostic-code facts, capability
     facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
@@ -1564,7 +1565,7 @@ the compiler architecture is finished.
     compiler-pipeline corpus exercising arithmetic reference semantics,
     central policy predicates, stage contracts, capability facts, stable fact
     IDs, fact dependencies, pass locality, invalidation, certificate-carrying
-    IR, destination-passing/value flow, intrinsic registry, typed fact ledger,
+    IR, destination-passing/value flow, intrinsic registry, `CompilerDB`,
     no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
     failures, feature matrices, source spans, generated-name hygiene,
     diagnostic quality, panic-to-diagnostic behavior, performance/complexity
@@ -2387,7 +2388,7 @@ lemmas, and actionable failure diagnostics.
     Cache key: toolchain version, source fingerprint, spec/proof link,
     obligation id, ProofKit version, backend engine version, and policy mode.
     Extend the key with typed-fact fingerprints and dependency-fact
-    fingerprints once Phase 6.5's fact ledger / dependency graph exists. Stale
+    fingerprints once Phase 6.5's `CompilerDB` / dependency graph exists. Stale
     or dependency-mismatched entries become `needs_recheck`, never green. An
     LLM-synthesized proof is not cached as evidence until Lean replays it.
     Longer term, the cache should use the same stable interned fact IDs planned
@@ -3264,7 +3265,7 @@ machine-readable.
     facts are compiler errors. Unmigrated families may still be absent only
     while their migration flag says so.
 
-    Ledger substrate requirements: use a `Std.HashMap`-style implementation,
+    `CompilerDB` substrate requirements: use a `Std.HashMap`-style implementation,
     not a linear assoc list; define `FactKey` over `SourceKey` nodes and
     edges/roles (not `ExprId` only — a pass-agreement endpoint is a parameter,
     not an expression); keep `insertFact`, `requireFact`, and `lookupFact` as
@@ -3272,11 +3273,11 @@ machine-readable.
     optional/unmigrated lookup cannot be confused. Facts such as E0293
     container-not-in-context, borrow conflicts, call-site/parameter pass
     agreement, capability dependencies, and proof dependencies are edge facts,
-    not node fields — which is *why* an edge-keyed ledger is required regardless
+    not node fields — which is *why* edge-keyed DB facts are required regardless
     and a fat AST cannot subsume it. There is no separate typed syntax:
-    `IdentifiedProgram` carries identity + shape only; the source ledger is the
-    canonical store for source facts. Implementation must avoid repeated hot-path
-    lookups by binding facts locally within Elab/Lower (the ledger is the
+    `IdentifiedProgram` carries identity + shape only; `CompilerDB` is the
+    canonical store for compiler facts. Implementation must avoid repeated hot-path
+    lookups by binding facts locally within Elab/Lower (`CompilerDB` is the
     Check→Elab handoff, not a per-access backend oracle) and measuring
     lookup/scaling behavior in the Phase 6.5 telemetry and anti-superlinear gates.
 
