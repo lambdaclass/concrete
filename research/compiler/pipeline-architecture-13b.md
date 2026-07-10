@@ -17,14 +17,17 @@ roadmap; the roadmap stays linear and #9/#13b point here.
 
 ## Thesis in one paragraph
 
-Concrete's pipeline is a **certificate chain**, not one global ledger. Every
-semantic fact (type, ownership, capability, pass-agreement, proof-relevance) is
-committed exactly once by the stage that owns it. The **source-level facts**
-(committed by Check) live in one fail-closed `FactLedger` keyed by source
-identity + edges; **each downstream IR** (`ValidatedCore`, `ValidatedSSA`,
-`ValidatedBackendIR`) is its own certificate carrying its own facts on its own
-ids; the layers are joined by **certified provenance**. Later stages *require*
-facts; they never re-derive them. Each stage receives a certified input it
+Concrete's pipeline commits facts into **one unified interned-ID `CompilerDB`**,
+not a per-IR certificate chain. Every semantic fact (type, ownership, capability,
+pass-agreement, proof-relevance) is committed exactly once by the stage that owns
+it. The **source-level facts** (committed by Check) are keyed by source identity
++ edges; **each downstream IR** (`ValidatedCore`, `ValidatedSSA`,
+`ValidatedBackendIR`) remains a boundary token, but its certificate is a **view /
+query-group** over the same DB — its facts live in `CompilerDB` under
+`CoreId`/`SSAId`/`BackendOpId` keys, and the layers are joined by **provenance
+edges IN the DB** (`lowersTo`/`emitsAs`/`trapSource`), not a separate store or a
+hand-maintained side map. Later stages *require* facts; they never re-derive
+them. Each stage receives a certified input it
 cannot fabricate, adds its facts, rejects invalid states, and emits either the
 next certificate or a source-linked diagnostic. This is the Phase 6.5
 fact-centralization thesis — already realized for arithmetic (one `IntArith`
@@ -264,7 +267,7 @@ Mitigation, so this does not become 027-at-the-center:
 
 ### 2.7 Provenance is a certified, fail-closed relation
 
-Because the certificate chain (not one ledger) joins layers by provenance
+Because layers are joined by provenance **edges in the one `CompilerDB`**
 (`SourceKey → CoreId → SSAId → BackendId → emitted location`), provenance is
 load-bearing and must obey the same discipline as facts — otherwise
 misattribution becomes the drift class one level down (a report blaming the

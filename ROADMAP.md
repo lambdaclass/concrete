@@ -1206,7 +1206,7 @@ the compiler architecture is finished.
    type/capability facts but invalidates source-linked diagnostics; and a gate
    proves stale facts cannot remain green after an invalidating pass.
 
-9. Replace source-level re-inference with a certified node/edge fact ledger.
+9. Build the unified CompilerDB: interned IDs, query-shaped facts, certificate views.
    This is the root architectural item for the whole pipeline. Check must
    produce a `TypedProgram` over the exact post-desugar tree that Elab consumes,
    and that certificate must carry the committed source facts Elab needs:
@@ -3237,14 +3237,17 @@ machine-readable.
 
     Long-term architecture, not a staging bridge: Check produces a certified
     `TypedProgram` over a post-desugar tree whose nodes have stable identity.
-    The committed source typing truth lives in a fail-closed, source-level fact
-    ledger keyed by `SourceKey` (expr/stmt/decl/param/type/module) and, for
-    relational facts, by edges/roles. This is a certificate CHAIN, not one
-    global ledger: `ExprId` dies at Elab, so Core/SSA/backend facts live in their
-    own certificates (`ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR`), joined
-    to the source ledger by certified provenance (`SourceKey -> CoreId -> SSAId ->
-    BackendId`). Each fact has one owning layer; provenance is coverage-asserted
-    and fold-unions/delete-invalidates per #8, never silent. The AST stays
+    The committed source typing truth lives in a fail-closed fact table keyed by
+    `SourceKey` (expr/stmt/decl/param/type/module) and, for relational facts, by
+    edges/roles, inside ONE unified interned-ID `CompilerDB` (Phase 6.5 #9) —
+    NOT a per-IR certificate chain. Each IR stage still has a certificate, but the
+    certificate is a VIEW / query-group over `CompilerDB` facts, not a separate
+    store: `ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR` remain boundary
+    tokens, but their facts live in the same `CompilerDB` under `CoreId`/`SSAId`/
+    `BackendOpId` keys, and provenance is native EDGES in the DB
+    (`lowersTo`/`emitsAs`/`trapSource`), not a hand-maintained side map. Each fact
+    has one owning layer; provenance is coverage-asserted and
+    fold-unions/delete-invalidates per #8, never silent. The AST stays
     thin-in-facts but not identity-free: the one identity substrate is the
     unavoidable one-time cost, and it lives on the ephemeral `IdentifiedProgram`
     mirror, not the shared `Expr`. What is forbidden is silent fallback,

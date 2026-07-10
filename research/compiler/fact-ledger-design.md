@@ -44,32 +44,38 @@ unmigrated, `require : fails closed` once it is.
 
 That sentence is the whole design. Everything below is mechanism for it.
 
-## Scope: a source-level ledger + per-IR certificates + provenance joins
+## Scope: one unified CompilerDB; per-IR certificates are views over it
 
-This is NOT one global ledger keyed by `ExprId` for every stage. It cannot be:
-`ExprId` lives on the ephemeral `IdentifiedProgram` and dies at Elab (Decision 1),
-so Core/SSA/Backend nodes have no `ExprId` to key by. A single `ExprId`-keyed
-store spanning all stages would force identity to thread through every downstream
-IR (killing "ephemeral" and re-adding a per-node id to every IR) — the exact cost
-the mirror-IR avoids.
+The store is **one unified interned-ID `CompilerDB`**, not a per-IR certificate
+chain of separate stores. An earlier framing argued a chain because "`ExprId`
+dies at Elab, so Core/SSA/Backend have no `ExprId` to key by." That premise is
+true but does NOT force separate stores — it forces separate id *kinds* inside
+*one* store. The DB has a **universal interned-id space** (`SourceNodeId` /
+`ExprId`, `CoreNodeId`, `SSAValueId`, `BackendOpId`, `DeclId`, `TypeId`,
+`ObligationId`, …); a fact keys on whichever id kind owns it. `ExprId` stays
+ephemeral on `IdentifiedProgram` (Decision 1) — nothing re-threads it through
+downstream IRs — because Core/SSA/backend facts key on `CoreId`/`SSAId`/
+`BackendOpId`, not on `ExprId`. Identity is NOT re-added to every IR node; each IR
+mints its own ids into the shared DB as it is built.
 
-So the architecture is a **certificate chain**, not a monolithic ledger:
+So the architecture is **one DB, many id kinds, certificate views**:
 
-- `FactLedger` (the source-level certificate; read "source fact ledger") —
-  keyed by source identity (see the generalized key space below). Owns type,
-  ownership, capability, pass-agreement, and must-use facts. This is "the
-  ledger"; it is source-level, not global.
-- `ValidatedCore`, `ValidatedSSA`, `ValidatedBackendIR` — each downstream IR is
-  its **own** certificate carrying its **own** facts on its **own** node/value
-  ids (Core shape + typed ops + proof *obligations*; SSA dominance + traps +
-  widths; backend ABI/layout + helper calls).
-- **Provenance** joins the layers: `SourceKey → CoreId → SSAId → BackendId →
-  emitted location`.
+- source facts (committed by Check) — keyed by source identity (the generalized
+  key space below): type, ownership, capability, pass-agreement, must-use.
+- `ValidatedCore`, `ValidatedSSA`, `ValidatedBackendIR` — each remains a boundary
+  **token**, but its certificate is a **view / query-group** over the same
+  `CompilerDB` (Core shape + typed ops + proof *obligations* under `CoreId`; SSA
+  dominance + traps + widths under `SSAId`; backend ABI/layout + helper calls
+  under `BackendOpId`), NOT a separate fact store.
+- **Provenance is native edges in the DB** (`lowersTo`/`emitsAs`/`trapSource`),
+  joining `SourceKey → CoreId → SSAId → BackendId → emitted location` — not a
+  hand-maintained side map (if those links must be maintained, they ARE facts and
+  belong in the DB as edges).
 
-This preserves the thesis without the contradiction: **each fact has exactly one
-owning layer; no later layer re-derives another layer's fact; later layers add
-their own facts; provenance links them.** That is a certificate chain, not a
-second source of truth.
+This preserves the thesis WITHOUT a second store: **each fact has exactly one
+owning layer; no later layer re-derives another's fact; later layers add their own
+facts (keyed by their own id kind) into the one DB; provenance edges link them.**
+One database, not a chain, and not a second source of truth.
 
 **Single-owner rule (no fact split across layers):** e.g. proof *eligibility*
 (pure / capability-free) is a **source** fact; proof *obligations / VCs* are

@@ -70,10 +70,13 @@ constructed by Check over an `IdentifiedProgram`; its node/edge-keyed ledger
 contains the committed facts; Elab and later stages require those facts instead
 of recomputing them. Some facts are inherently relational (call-site↔parameter
 pass agreement, borrow conflicts, container/context exclusions), so the ledger
-is not scaffolding around a fat AST — it is the certificate substrate. It is a
-*source-level* ledger, though: `ExprId` dies at Elab, so Core/SSA/backend facts
-live in their own certificates (`ValidatedCore`/`ValidatedSSA`/`ValidatedBackendIR`),
-joined by certified provenance. A certificate **chain**, not one global store.
+is not scaffolding around a fat AST — it is the certificate substrate. It lives
+in ONE unified interned-ID `CompilerDB`, not a per-IR chain: each IR stage still
+has a certificate, but the certificate is a **view / query-group** over
+`CompilerDB` facts, not a separate store. `ValidatedCore`/`ValidatedSSA`/
+`ValidatedBackendIR` remain boundary tokens, but their facts live in the same DB
+under `CoreId`/`SSAId`/`BackendOpId` keys, and provenance is native **edges** in
+the DB (`lowersTo`/`emitsAs`/`trapSource`), not a hand-maintained join.
 
 This pattern is not greenfield. `Concrete/Pipeline/Pipeline.lean` already applies
 it at **stage granularity**: `ValidatedCore` is constructible only by
