@@ -7,6 +7,7 @@ import Concrete.Resolve.FileSummary
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Resolve.Shared
 import Concrete.Resolve.Resolve
+import Concrete.Semantics.TypeJudgment
 import Concrete.Frontend.Lexer
 import Concrete.Frontend.Parser
 import Concrete.Check.Check

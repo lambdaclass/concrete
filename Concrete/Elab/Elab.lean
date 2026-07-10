@@ -6,6 +6,7 @@ import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
+import Concrete.Semantics.TypeJudgment
 
 namespace Concrete
 
@@ -339,18 +340,12 @@ mutual
 partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
   match e with
   | .intLit _ v =>
-    let ty := match hint with
-      | some ty =>
-        let tyR := ty  -- skip resolve in elab for perf; already resolved at let/call sites
-        if isIntegerType tyR || tyR == .char then tyR
-        else match tyR with | .typeVar _ => tyR | _ => .int
-      | none => .int
-    return .intLit v ty
+    -- Same shared decision as Check (TypeJudgment): Elab stamps CExpr.ty from the
+    -- judgment's `.ty`, so Check's type and Elab's stamp cannot disagree (E0228).
+    -- The hint is already resolved at let/call sites (elab skips re-resolving).
+    return .intLit v (TypeJudgment.intLitType hint)
   | .floatLit _ v =>
-    let ty := match hint with
-      | some ty => if isFloatType ty then ty else .float64
-      | none => .float64
-    return .floatLit v ty
+    return .floatLit v (TypeJudgment.floatLitType hint)
   | .boolLit _ b => return .boolLit b
   | .strLit _ s => return .strLit s
   | .charLit _ c => return .charLit c

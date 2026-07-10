@@ -5,6 +5,7 @@ import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
+import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
 
 namespace Concrete
@@ -34,30 +35,26 @@ mutual
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
-    -- Use hint to infer integer literal type (resolve aliases first)
-    match hint with
-    | some ty =>
-      let tyR ← resolveType ty
-      if isInteger tyR || tyR == .char then
-        -- Reject a literal that cannot fit its target integer type, rather than
-        -- silently truncating it (e.g. `let a: u8 = 300` must not become 44).
-        match intTyRange tyR with
-        | some (lo, hi, nm) =>
-          if n < lo || n > hi then
-            throwCheck (.intLiteralOutOfRange n nm lo hi) (some sp)
-        | none => pure ()
-        return tyR
-      else
-        match tyR with
-        | .typeVar _ => return tyR  -- Type variables accept integer literals
-        | _ => return .int
-    | none => return .int
+    -- One shared decision (TypeJudgment): the adopted type + the range
+    -- obligation. Check stamps the type AND enforces the range; Elab stamps the
+    -- same type from the same judgment, so the two cannot disagree (E0228).
+    -- Rejecting an out-of-range literal here prevents silent truncation
+    -- (e.g. `let a: u8 = 300` must not become 44).
+    let hintR ← match hint with
+      | some ty => do let t ← resolveType ty; pure (some t)
+      | none => pure none
+    let d := TypeJudgment.intLitDecision hintR
+    match d.range with
+    | some (lo, hi, nm) =>
+      if n < lo || n > hi then
+        throwCheck (.intLiteralOutOfRange n nm lo hi) (some sp)
+    | none => pure ()
+    return d.ty
   | .floatLit _ _ =>
-    match hint with
-    | some ty =>
-      let tyR ← resolveType ty
-      if isFloatType tyR then return tyR else return .float64
-    | none => return .float64
+    let hintR ← match hint with
+      | some ty => do let t ← resolveType ty; pure (some t)
+      | none => pure none
+    return TypeJudgment.floatLitType hintR
   | .boolLit _ _ => return .bool
   | .strLit _ _ => return .string
   | .charLit _ _ => return .char
