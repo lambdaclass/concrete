@@ -51,6 +51,23 @@ rejects(){ local label="$1" F="$2" code="$3"
   if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "$code"; then ok "$label"
   else no "$label (want $code, got: $(printf '%s' "$OUT" | head -1))"; fi; }
 
+# both_trap <label> <file>: interp AND the compiled binary both trap on a
+# checked-overflow (interp reports "overflow" and exits non-zero; the binary
+# exits non-zero). This is the load-bearing signal for control-flow branch
+# typing: if the branch value is typed at the RESULT width (e.g. i32), an
+# overflowing branch traps in both. Under the old drift, Elab typed the branch
+# Int (i64) while stamping the node i32, so interp returned the un-truncated i64
+# value (no trap) while the compiled binary silently truncated — a divergence,
+# not a shared trap.
+both_trap(){ local label="$1" F="$2"
+  local IOUT IRC CRC
+  IOUT="$("$COMPILER" "$F" --interp 2>&1)"; IRC=$?
+  # Run the binary inside command substitution so the shell's job-control signal
+  # notice ("Abort trap: 6") is absorbed rather than printed to the gate log.
+  if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then local _o; _o="$("$F.bin" 2>&1)"; CRC=$?; else CRC=200; fi
+  if [ $IRC -ne 0 ] && printf '%s' "$IOUT" | grep -qi "overflow" && [ $CRC -ne 0 ]; then ok "$label"
+  else no "$label (interp rc=$IRC compiled rc=$CRC; interp: $(printf '%s' "$IOUT" | head -1))"; fi; }
+
 echo "=== flexible literal tree adopts the SIBLING's width (no rescuing hint) ==="
 
 # Array index: the index expression's hint is Int, but the concrete width comes
@@ -131,6 +148,49 @@ mod m {
 }
 EOF
 agree "(10 + 2) * (3 + 1)  [both flexible]" "$TMPDIR/both.con" "48"
+
+echo "=== if/match branches adopt the result width (control-flow family) ==="
+
+# Clean sanity: a flexible binop in each branch types at the result width i32.
+cat > "$TMPDIR/ifval.con" <<'EOF'
+mod m { fn main() -> Int {
+    let c: Bool = true;
+    let x: i32 = if c { 40 + 2 } else { 0 };
+    return x as Int;
+} }
+EOF
+agree "if c { 40 + 2 } else { 0 } : i32" "$TMPDIR/ifval.con" "42"
+
+cat > "$TMPDIR/mtval.con" <<'EOF'
+mod m { fn main() -> Int {
+    let i: i32 = 0;
+    let x: i32 = match i { 0 => 40 + 2, _ => 0 };
+    return x as Int;
+} }
+EOF
+agree "match i { 0 => 40 + 2, _ => 0 } : i32" "$TMPDIR/mtval.con" "42"
+
+# Discriminating: an i32-overflowing branch must trap in BOTH interp and compiled
+# (the branch is typed i32, so 2e9 + 2e9 overflows). Under the old drift the
+# branch was Int (i64), interp returned 4000000000 (no trap) and the compiled
+# binary silently truncated — a divergence this case forbids.
+cat > "$TMPDIR/ifovf.con" <<'EOF'
+mod m { fn main() -> Int {
+    let c: Bool = true;
+    let x: i32 = if c { 2000000000 + 2000000000 } else { 0 };
+    return x as Int;
+} }
+EOF
+both_trap "if-branch i32 overflow traps in both (was 4e9 vs -294967296)" "$TMPDIR/ifovf.con"
+
+cat > "$TMPDIR/mtovf.con" <<'EOF'
+mod m { fn main() -> Int {
+    let i: i32 = 0;
+    let x: i32 = match i { 0 => 2000000000 + 2000000000, _ => 0 };
+    return x as Int;
+} }
+EOF
+both_trap "match-arm i32 overflow traps in both" "$TMPDIR/mtovf.con"
 
 echo "=== genuine width mismatch is rejected by BOTH passes (E0228) ==="
 

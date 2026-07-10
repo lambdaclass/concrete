@@ -531,6 +531,14 @@ is to turn that into an incremental verification cache:
 This is incremental compilation reframed for Concrete's thesis: incremental
 proof discharge.
 
+Natural extension: content-address more artifacts, not only source/proof links.
+Obligations, typed-Core fragments, proof bundles, package interface/body
+evidence, and replay artifacts should eventually be keyed by structural content
+hashes rather than names or paths. The real work is deterministic canonical
+serialization: stable schema versions, explicit IDs, normalized ordering, and no
+temp paths or host-dependent formatting. Hashing is easy; making the artifact
+canonical enough that the hash is meaningful is the hard part.
+
 Roadmap fit: Phase 9 proof cache / synthesis; Phase 11 proof-status drift;
 Phase 18 package evidence; Phase 19 editor responsiveness.
 

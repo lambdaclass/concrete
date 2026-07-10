@@ -99,6 +99,14 @@ E0293, provenance, replay, package evidence, LSP, agent facts, or incremental
 checking needs a relational store. It is not a dumping ground for facts that
 typed IR can enforce more strongly.
 
+When that layer is pulled, a Datalog-style or stratified-facts model is a useful
+design reference for relational facts, provenance edges, dependency/invalidation,
+and evidence queries. That does not mean adding a Datalog engine now, and it
+does not mean a user-facing logic language. The first version should be ordinary
+typed compiler code unless a real relation family proves maps/joins too awkward;
+if a rule layer appears later, it must be stratified, replayable, and
+fail-closed rather than a hidden second truth source.
+
 Conceptual key shape when pulled:
 
 ```lean

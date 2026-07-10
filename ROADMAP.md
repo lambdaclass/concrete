@@ -1329,10 +1329,28 @@ the compiler architecture is finished.
      `.lhsFirst` fails 4/7 cases (confirmed). Registered in the CI workflow,
      Makefile, and run_tests smoke.
 
+   - ✅ **control-flow family** (if/match value types) — fixed a real interp-vs-
+     compiled soundness bug: Elab elaborated branch/arm bodies with NO hint, so a
+     flexible binop branch (`let x: i32 = if c { 2e9 + 2e9 } else { 0 }`) typed
+     Int (i64) while the node was stamped i32 — interp returned 4000000000
+     (no trap) while the compiled binary silently truncated to -294967296. Fix:
+     `elabStmts` flows the enclosing value hint into the block's trailing value
+     expression (both if and match), so branches are typed at the result width
+     exactly as Check types them; the no-hint result type now reads the elaborated
+     trailing `CExpr.ty` instead of a shallow surface `peekExprType`. Gate: two
+     `both_trap` rows (if + match) — mutation-tested (ignoring the hint fails both,
+     reproducing the 4e9-vs-truncation divergence).
+
+   Note on casts: Check (`checkExpr inner none`) and Elab (`elabExpr inner none`)
+   already agree by construction — both type the cast's inner operand with NO hint
+   (the "an `as` converts, it does not hint" policy) and both take the result type
+   from the annotation. Casts are not a drift surface, so no ceremony was added; a
+   `TypeJudgment.castType` would be identity-on-`targetTy` (aesthetic, not
+   bug-class-pulled).
+
    Remaining families to migrate through `TypeJudgment` (workload-pulled, same
-   staging): casts, calls/args, aggregates/index, control-flow (if/match/while
-   value types), patterns. Each is a widen of the shared judgment + a
-   `check_type_agreement` row, not new machinery.
+   staging): calls/args, aggregates/index, patterns. Each is a widen of the
+   shared judgment + a `check_type_agreement` row, not new machinery.
 
    Future `CompilerDB` substrate, pulled by relational/evidence/provenance
    consumers:
@@ -3862,6 +3880,30 @@ policies, provenance, and registry protocol.
     class per public function. Package consumers and agents must be able to ask
     "what may this dependency read, write, depend on, assume, trust, or prove?"
     without inspecting private bodies.
+15b. Extend content-addressing beyond proof fingerprints for package/evidence
+    artifacts.
+
+    Concrete already content-addresses proof attachments through
+    `proof_fingerprint`. The natural Phase 18/19 extension is structural hashes
+    for obligations, typed-Core fragments, proof bundles, package interface/body
+    evidence, and replay artifacts, so caches and dependency evidence are keyed
+    by content rather than names or paths. This supports the incremental
+    verification cache, package evidence reuse, registry-retirement work, and
+    editor/agent fact lookup without trusting mutable labels.
+
+    The hard part is not hashing; it is deterministic canonical serialization.
+    Before these hashes are authoritative, each artifact kind must define a
+    stable, versioned, pointer-free canonical encoding: no map iteration order,
+    temp paths, generated-name nondeterminism, host-dependent formatting, or
+    schema-ambiguous fields. Borrow the Zig InternPool lesson here: artifacts
+    that need stable identity must serialize from explicit IDs and normalized
+    structure, not from incidental in-memory shape.
+
+    Done when at least obligations, typed-Core fragments, proof bundles, and
+    package evidence artifacts have versioned canonical encoders; identical
+    semantic content hashes identically across repeated runs; a deliberately
+    nondeterministic encoder is caught by a gate; and package/proof cache keys
+    use these content hashes instead of source paths or human names.
 16. Add the Phase 18 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
@@ -4027,11 +4069,35 @@ forcing example, explicitly deferred, or rejected.
     decision record states whether the approach actually shrinks the TCB, merely
     duplicates it, or creates a second source of truth. Pull forward only if a
     real pass can be checked without weakening the no-second-truth-source rule.
-16. Add the Phase 20 validation artifact: one pressure-test sketch, expected
+16. Research Datalog-style / stratified relational facts only when
+    `CompilerDB` has real consumers.
+
+    Future `CompilerDB` facts — pass-agreement edges, borrow conflicts, E0293
+    container exclusions, provenance edges, dependency/invalidation, package
+    evidence, and proof/evidence queries — are naturally relational. A
+    Datalog-like or stratified-facts model is a good design reference for that
+    layer: derived facts are explicit, dependency edges are queryable, cycles
+    and invalidation have a discipline, and audit/report views can ask
+    relational questions without reparsing prose.
+
+    Park this with the DB. Do not build a Datalog engine, query language, or
+    Salsa-like database now. The trigger is a real `CompilerDB` consumer whose
+    facts are awkward as hand-written maps/joins. The first investigation should
+    compare a small stratified internal rule layer against ordinary typed Lean
+    functions over `CompilerDB`, and it must keep the user language unchanged:
+    no user-facing logic language, no implicit effects, and no hidden second
+    truth source.
+
+    Done when a design note demonstrates one concrete relation family
+    (for example provenance invalidation or package evidence queries), includes
+    an acyclicity/stratification story, shows replayable derived-fact output,
+    and rejects a cyclic or stale derived fact. Until then, this remains a
+    future reference, not Phase 6.5 work.
+17. Add the Phase 20 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
     (concurrency, atomics/memory model, typestate, arena allocation, WCET,
     binary-format DSLs, hardware capability mapping, Miri-style interpreter,
     sized evaluator, persistent rewrite state, row effects, generational
-    dynamic fallback, and compiler self-verification). No research item
-    graduates unless its forcing example, report shape, evidence class, and
-    rejection or pull-forward criteria are recorded.
+    dynamic fallback, compiler self-verification, and Datalog-style relational
+    facts). No research item graduates unless its forcing example, report shape,
+    evidence class, and rejection or pull-forward criteria are recorded.

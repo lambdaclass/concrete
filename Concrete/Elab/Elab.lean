@@ -434,26 +434,22 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
 
   | .ifExpr _ cond then_ else_ =>
     let cCond ← elabExpr cond
-    let cThen ← elabStmts then_
-    let cElse ← elabStmts else_
-    -- Result type: an explicit hint wins; otherwise infer from the branches'
-    -- trailing expression — an if-expression's type IS its branch type. Defaulting
-    -- to `.unit` when there is no hint produced an `alloca void` result slot
-    -- whenever an if-expression was used as a value without one, e.g. a match-arm
-    -- value `=> if c { 0 } else { 1 }` (LLVM rejects `alloca void`).
-    let resultTy ← match hint with
-      | some t => pure t
-      | none =>
-        -- Infer from a branch's TRAILING VALUE expression (isValue=true) only; a
-        -- `;`-terminated last statement or a diverging branch contributes no value,
-        -- so a branch with no trailing value makes the if-expression Unit (#42).
-        let lastExprOf := fun (stmts : List Stmt) =>
-          stmts.reverse.findSome? fun s => match s with | .expr _ e true => some e | _ => none
-        match lastExprOf then_ with
-        | some e => peekExprType e
-        | none => match lastExprOf else_ with
-                  | some e => peekExprType e
-                  | none => pure .unit
+    -- Flow the if-expression's own hint into each branch so a flexible
+    -- literal/binop trailing value adopts the result width (matches Check).
+    let cThen ← elabStmts then_ (valueHint := hint)
+    let cElse ← elabStmts else_ (valueHint := hint)
+    -- Result type: an explicit hint wins (the branches were just typed under it);
+    -- otherwise infer from a branch's elaborated TRAILING VALUE type. Use the
+    -- stamped Core type (`e.ty`), NOT a shallow surface `peekExprType`, so Elab's
+    -- result cannot disagree with the type it actually gave the branch. A branch
+    -- with no trailing value (diverging or `;`-ended) contributes nothing, so the
+    -- other branch wins; if neither yields a value the if-expression is Unit
+    -- (#42 — avoids the `alloca void` result slot).
+    let trailingTy := fun (cs : List CStmt) =>
+      cs.reverse.findSome? fun s => match s with | .expr e true => some e.ty | _ => none
+    let resultTy := match hint with
+      | some t => t
+      | none => (trailingTy cThen <|> trailingTy cElse).getD .unit
     return .ifExpr cCond cThen cElse resultTy
 
   | .call _ fnName typeArgs args =>
@@ -593,23 +589,23 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
               typedBindings := typedBindings ++ [(binding, bty)]
               if binding != "_" then addVar binding bty
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.enumArm enumName armVariant typedBindings cGuard cBody]
           | .litArm _ val guard body =>
             let cVal ← elabExpr val
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm _ binding guard body =>
             if binding != "_" then addVar binding innerTyR
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
           | .rangeArm _ lo hi incl guard body =>
             let cLo ← elabExpr lo (some innerTyR)
             let cHi ← elabExpr hi (some innerTyR)
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
         setEnv envBefore
       | none =>
@@ -620,22 +616,22 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           | .litArm _ val guard body =>
             let cVal ← elabExpr val
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm _ binding guard body =>
             if binding != "_" then addVar binding innerTyR
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
           | .mk _ en v _ guard body =>
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.enumArm en v [] cGuard cBody]
           | .rangeArm _ lo hi incl guard body =>
             let cLo ← elabExpr lo (some innerTyR)
             let cHi ← elabExpr hi (some innerTyR)
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-            let cBody ← elabStmts body
+            let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
         setEnv envBefore
     else
@@ -646,22 +642,22 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         | .litArm _ val guard body =>
           let cVal ← elabExpr val (some innerTyR)
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-          let cBody ← elabStmts body
+          let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.litArm cVal cGuard cBody]
         | .varArm _ binding guard body =>
           if binding != "_" then addVar binding innerTyR
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-          let cBody ← elabStmts body
+          let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
         | .mk _ en v _ guard body =>
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-          let cBody ← elabStmts body
+          let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.enumArm en v [] cGuard cBody]
         | .rangeArm _ lo hi incl guard body =>
           let cLo ← elabExpr lo (some innerTyR)
           let cHi ← elabExpr hi (some innerTyR)
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
-          let cBody ← elabStmts body
+          let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
       setEnv envBefore
     -- Result type: prefer the caller's hint; otherwise infer it from the arm
@@ -1344,12 +1340,32 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
   -- condition is type-checked in Check and scope/purity-checked in the report.
   | .assert_ _ _ | .assume_ _ _ => return []
 
-partial def elabStmts (stmts : List Stmt) : ElabM (List CStmt) := do
+partial def elabStmts (stmts : List Stmt) (valueHint : Option Ty := none) : ElabM (List CStmt) := do
   let mut result : List CStmt := []
   let mut accumulated : Diagnostics := []
+  let lastIdx := stmts.length - 1
+  let mut idx := 0
   for s in stmts do
+    let isLast := idx == lastIdx
+    idx := idx + 1
     let envBefore ← getEnv
-    let r := (elabStmt s).run envBefore |>.run
+    -- Flow an enclosing value hint (from an if/match used as a value) into the
+    -- block's TRAILING value expression only, so a flexible literal/binop in a
+    -- branch adopts the result width instead of defaulting to Int — the same
+    -- decision Check makes when it types each branch's trailing expr with the
+    -- hint. Without this, `let x: i32 = if c { 2e9 + 2e9 } else { 0 }` typed the
+    -- branch Int (i64) while stamping the node i32, so interp (i64, no truncation)
+    -- and the compiled binary (i32 slot, truncates) diverged. Calls keep their
+    -- own elaboration path (print/append desugaring); their type is fixed by the
+    -- signature, so no hint is needed.
+    let action : ElabM (List CStmt) :=
+      match s, valueHint, isLast with
+      | .expr _ e true, some h, true =>
+        match e with
+        | .call .. => elabStmt s
+        | _ => do let cE ← elabExpr e (some h); pure [CStmt.expr cE true]
+      | _, _, _ => elabStmt s
+    let r := action.run envBefore |>.run
     match r with
     | (.ok cs, envAfter) =>
       setEnv envAfter
