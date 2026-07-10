@@ -285,6 +285,9 @@ test-mixed-width-binops: build ## Mixed-width gate: numeric binop operands must 
 test-type-agreement: build ## Type-agreement gate (Phase 6.5 #9): Check and Elab type source expressions through one shared TypeJudgment (E0228/E0715 red-team)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_type_agreement.sh
 
+test-differential-positions: build ## Differential-position gate: flexible overflow across syntactic positions + signed shift width wrapping agree interp==compiled (the 2026-07 sweep's permanent guard)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_differential_positions.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

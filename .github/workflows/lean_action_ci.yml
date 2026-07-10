@@ -408,6 +408,9 @@ jobs:
       - name: Type-agreement gate (Phase 6.5 #9 — Check/Elab type through one TypeJudgment)
         run: bash scripts/tests/check_type_agreement.sh
 
+      - name: Differential-position gate (flexible overflow / signed shift: interp == compiled)
+        run: bash scripts/tests/check_differential_positions.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
