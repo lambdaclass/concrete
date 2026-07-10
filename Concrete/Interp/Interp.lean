@@ -197,7 +197,11 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- width-masking of the result uses the reference's `maskWidth`.
   | .shl, .int a ty, .int b _ =>
     if IntArith.isIntTy ty && !IntArith.shiftAmountInRange ty b then .error "interp: shift amount out of range"
-    else .ok (.int (IntArith.maskWidth ty (a * (2 ^ b.toNat))) ty)
+    -- The shifted value can exceed the SIGNED width (`100 << 1` at i8 = 200),
+    -- so wrap two's-complement into the width — `maskWidth` only wraps unsigned
+    -- and would leave a signed overflow un-truncated, diverging from the
+    -- compiled `shl` (which truncates: 200 -> -56).
+    else .ok (.int (IntArith.wrapToWidth ty (a * (2 ^ b.toNat))) ty)
   | .shr, .int a ty, .int b _ =>
     if IntArith.isIntTy ty && !IntArith.shiftAmountInRange ty b then .error "interp: shift amount out of range"
     else .ok (.int (IntArith.maskWidth ty (a / (2 ^ b.toNat))) ty)

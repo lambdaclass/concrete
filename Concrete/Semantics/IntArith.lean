@@ -118,6 +118,18 @@ def maskWidth (ty : Ty) (n : Int) : Int :=
   | some w => Int.ofNat (BitVec.ofInt w n).toNat
   | none   => n
 
+/-- Wrap a result into `ty`'s width respecting SIGNEDNESS (two's-complement),
+    matching the compiled truncation. Unlike `maskWidth` (which wraps unsigned
+    only and leaves signed values as mathematical `Int`), this sign-extends a
+    signed overflow: `wrapToWidth i8 200 = -56`, matching LLVM `shl i8 100, 1`.
+    Used for the left-shift result, whose signed value can exceed the width. -/
+def wrapToWidth (ty : Ty) (n : Int) : Int :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let bv := BitVec.ofInt w n
+    if signed then bv.toInt else Int.ofNat bv.toNat
+  | none => n
+
 /-- Bitwise op on the two's-complement bit patterns at `ty`'s width, matching
     the compiled LLVM `and`/`or`/`xor`. Goes through the `w`-bit pattern (NOT
     `Int.toNat`, which would clamp a negative operand to 0). -/

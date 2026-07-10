@@ -127,6 +127,21 @@ mod m {
 EOF
 agree "narrowing 300 as i8 truncates to 44" "$TMPDIR/narrow.con" "44"
 
+# A left-shift result that overflows the SIGNED width truncates two's-complement,
+# same as LLVM `shl` (`100 << 1` at i8 = 200 -> -56). The interpreter used to wrap
+# unsigned only (`maskWidth`) and left the signed result un-truncated (200),
+# diverging from the compiled binary — now both go through `IntArith.wrapToWidth`.
+cat > "$TMPDIR/shl.con" <<'EOF'
+mod m {
+    fn main() -> Int {
+        let a: i8 = 100;
+        let x: i8 = a << 1;
+        return x as Int;
+    }
+}
+EOF
+agree "i8 100 << 1 truncates to -56 (signed shl)" "$TMPDIR/shl.con" "-56"
+
 echo
 echo "check_mixed_width_binops: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
