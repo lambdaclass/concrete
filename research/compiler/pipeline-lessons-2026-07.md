@@ -65,16 +65,16 @@ Phase 6.5 is the implementation phase for this thesis. `IntArith` is the first
 load-bearing semantic axis: integer width, signedness, range, overflow/trap
 policy, wrapping, saturation, casts, foldability, interpreter behavior, and
 backend helper choice now route through one reference module. The next axes are
-capabilities/effects, typed facts, intrinsics, resolved identity, and
-certificate-carrying IR. For Concrete-in-Lean, "typed facts" should mean a
-certified node/edge-keyed ledger over a tree with real node identity, not
-necessarily fat constructors carrying every fact as fields. The AST is allowed
-to stay thin in facts, but it must carry identity; the ledger is load-bearing,
-fail-closed certificate data, not optional metadata. Edge facts are decisive:
+capabilities/effects, shared source typing, intrinsics, resolved identity, and
+CompilerDB-backed relational facts. For Concrete-in-Lean, node-local type facts
+should mean typed Core fields (`CExpr.ty`) fed by one `TypeJudgment`, while
+relational/evidence/provenance facts belong in `CompilerDB` when those facts are
+pulled by a real consumer. The unchecked AST is allowed to stay thin; the type
+axis does not need a second typed source tree or a DB. Edge facts are decisive:
 pass agreement, borrow conflicts, scoped-container exclusions, capability
 dependencies, proof dependencies, and invalidation dependencies cannot all live
-as fields on one expression node, so the node/edge ledger is fundamental rather
-than a migration crutch.
+as fields on one expression node, so the typed-Core/future-DB split is
+fundamental rather than a migration crutch.
 
 ## The Named Languages: Are Their Pipelines As Good?
 
@@ -136,8 +136,8 @@ What not to copy:
 Roadmap slots:
 
 - Phase 6.5 #23: deterministic pass-output hashes and replay artifacts.
-- Phase 6.5 #9 / Phase 14 #13b: `CompilerDB`, certificate-carrying IR,
-  and typed facts.
+- Phase 6.5 #9 / Phase 14 #13b: shared `TypeJudgment`, typed Core, and future
+  `CompilerDB` for relational/evidence facts.
 - Phase 7 #8g / Phase 6 #13s: allocator-as-value research.
 - Phase 7 #29 / Phase 6 #13r: tests-as-docs and doc-snippet gates.
 - Future note: result-location / destination-passing design note for aggregate
@@ -271,7 +271,7 @@ Concrete translation:
 Roadmap slots:
 
 - Phase 6.5 #3: stage contracts.
-- Phase 6.5 #9: `CompilerDB` and certificate-carrying IR.
+- Phase 6.5 #9: shared `TypeJudgment`, typed Core, and future `CompilerDB`.
 - Phase 6.5 #21: counterexample-first pipeline debugging.
 - Phase 6.5 #23: pass-output replay artifacts.
 - Potential future item: analysis preservation/invalidation contract.

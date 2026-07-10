@@ -1,92 +1,77 @@
-# Step 2 runbook — convert Check (+ Elab) to consume `IdExpr` (Phase 6.5 #9)
+# Step 2 runbook — shared `TypeJudgment` for literals (Phase 6.5 #9)
 
 Date: 2026-07-10
-Status: **not started.** Increment-0 substrate is landed and green
-(`CompilerDB`, `IdentifiedProgram` + mint, `IdExprKind` mirror with spans-in-ctors).
-This is the execution recipe for step 2, to be driven to a single green commit.
+Status: **not started.** The old Check/Elab → `IdExpr` conversion plan is
+superseded for the type axis. Core `CExpr` is already typed (`ty : Ty` on every
+expression node), so the first type-axis slice is not a new typed source tree.
 
-## Why this is its own dedicated run (not a mid-session edit)
+## Goal
 
-Check is the core. Converting `checkExpr`/`checkStmt` to take `IdExpr` forces every
-helper and the Pipeline entry to convert too, transitively — **there is no
-compiling intermediate**. A partial conversion leaves the whole checker
-non-compiling, so it is all-or-nothing: it either reaches green in one pass or is
-reverted. Two independent scope checks (and one prior burn-and-revert) confirm
-this. Do it as one focused pass, ideally scripted; commit only when green.
+Make literal/defaulting type decisions come from one implementation:
 
-## The transform is mechanical (arms are byte-identical)
+```text
+Concrete/Semantics/TypeJudgment.lean
+        ├─ Check uses it for type-dependent checks
+        └─ Elab uses it to stamp CExpr.ty
+```
 
-`IdExprKind` mirrors `Expr` constructor-for-constructor **including spans**
-(`intLit (span : Span) (val : Int)`, …). So per function the edit is:
+This is the type-axis sibling of `IntArith`: one reference meaning, both
+consumers route through it, and a gate proves they cannot diverge.
 
-- signature: `(x : Expr)` → `(x : IdExpr)`, `(x : Stmt)` → `(x : IdStmt)`,
-  `(x : MatchArm)` → `(x : IdMatchArm)`, `List Expr` → `List IdExpr`, etc.;
-- scrutinee: `match x with` → `match x.kind with` (x is now the struct;
-  `.kind` is the mirrored shape);
-- **arms unchanged** (same constructor names, same span-in-ctor binding);
-- span access on a node: `x.getSpan` → `x.span` (span now lives on the struct);
-- add `import Concrete.Elab.Identified` to each converted file.
+## Why This Replaces The IdExpr Conversion
 
-The only non-mechanical residues: sites that **construct** an `Expr` (rare in
-Check — Check reads, does not build AST), and any interop with passes still on
-`Expr`.
+`Concrete/Elab/Core.lean` already defines typed Core:
 
-## Conversion surface (inventory)
+```lean
+inductive CExpr where
+  | intLit (val : Int) (ty : Ty)
+  | binOp (op : BinOp) (lhs rhs : CExpr) (ty : Ty)
+  -- ...
+```
 
-`Concrete/Check/Check.lean` (2248 lines):
-- `checkExpr (e : Expr) …`
-- `checkStmt (stmt : Stmt) …`
-- `checkStmts (stmts : List Stmt) …`
+The bug class was not "there is no typed carrier." The bug class was that Check
+and Elab had separate source type judgments and sometimes disagreed. Therefore
+the first fix is shared judgment, not another typed source IR.
 
-`Concrete/Check/CheckHelpers.lean` (add the import; ~19 fns):
-- `isFlexibleLit`, `isLitTrueExpr`, `peekExprType`, `borrowPathOf`, `borrowArgParts`
-- divergence family: `exprDiverges`, `armDiverges`, `blockDiverges`, `stmtDiverges`
-- non-terminating family: `exprNonTerminating`, `armNonTerminating`,
-  `blockNonTerminating`, `stmtNonTerminating`
-- exits-function family: `exprExitsFunction`, `armExitsFunction`,
-  `blockExitsFunction`, `stmtExitsFunction`
-- break family: `stmtHasBreak`, `blockHasBreak`
+Future source identity and `CompilerDB` remain useful for relations, evidence,
+provenance, and DB-owned facts. They are not the primary type-drift fix.
 
-`Concrete/Elab/*` — the parallel set (Elab must also consume `IdExpr`, because
-Elab consumes `TypedProgram.identified`). Same mechanical transform; inventory
-this the same way (`grep -nE '(partial )?def .*(Expr|Stmt|MatchArm)'`).
+## First Slice: Literals
 
-Pipeline wiring (`Concrete/Pipeline/Pipeline.lean`):
-- `mint : ResolvedProgram(post-desugar) → IdentifiedProgram` runs before Check;
-- `check : IdentifiedProgram → Except Diagnostics TypedProgram` (currently returns
-  `Unit`) mints `TypedProgram { identified, db }`, asserting per-family
-  coverage;
-- `elaborate : TypedProgram → …` reads `identified` + `CompilerDB` (no re-inference).
+Target the E0228/defaulting family first:
 
-## Suggested execution order (each step compiles nothing until the last)
+1. Extract literal type/defaulting logic into
+   `Concrete/Semantics/TypeJudgment.lean`.
+2. Route Check's literal type-dependent checks through it.
+3. Route Elab's literal `CExpr.ty` stamping through it.
+4. Delete or bypass no private Elab fallback for migrated literal cases; remove
+   the duplicate inference path once the slice is green.
+5. Add a red-team gate proving Check and Elab cannot disagree on literal type
+   selection.
 
-Because there is no compiling intermediate, order is for the *author's* sanity,
-not for intermediate commits:
+For literals, the primary type truth is `CExpr.ty`, stamped from
+`TypeJudgment`. `CompilerDB` may record evidence/provenance for the decision,
+but must not store a second independent literal type answer.
 
-1. `CheckHelpers.lean` — flip all ~19 fns + import (leaf-most; pure predicates).
-2. `Check.lean` — `checkExpr`/`checkStmt`/`checkStmts` + any local helpers.
-3. Elab parallel set.
-4. Pipeline: `mint`, `check` → `TypedProgram`, `elaborate` consumes it.
-5. `lake build`; iterate residual type errors to green.
-6. **Increment-1 payload** (the point of all this): in `checkExpr`'s literal
-   arms, `insertFact` the committed `TypeFact` keyed by `node(expr e.id, .value)`;
-   in Elab's literal arms, switch from re-inference to `requireFact` (family
-   `literals` marked migrated); coverage-asserted at `TypedProgram.mk`.
-7. Gates: `fuzz_differential.py` + `test-ci-gates`; prove Check and Elab cannot
-   disagree on a literal's type (the E0228 origin).
+## Suggested Verification
 
-## Scripting note
+- Build.
+- Main suite.
+- Existing numeric literal / mixed-width / cast gates.
+- New type-agreement gate seeded with the historical E0228 shape:
+  Check's hint/defaulting path and Elab's sibling/defaulting path must produce
+  the same type for the same source literal.
 
-The signature/scrutinee flip is regular enough to script (a careful `sed`/Python
-pass over the two Check files + Elab set), but **not blindly**: `Expr`/`Stmt`
-appear in non-convertible contexts, and `match … with` occurs on non-`Expr`
-scrutinees. Generate the diff, review it, then build+fix residuals. A scripted
-first pass + manual residual fixing is the intended one-shot method.
+## Expansion Order
 
-## Roadmap alignment
+After literals:
 
-Matches ROADMAP #9 exactly. One refinement already folded into the docs:
-`CompilerDB` starts with the source-fact slice and `FactKey` is keyed by
-`SourceKey` (expr/stmt/decl/param/type/module + edges), not `ExprId`-only. The
-literals family only needs `expr` keys; Core/SSA/backend ids and wider
-provenance edges arrive when later stages start committing structured facts.
+1. binops and mixed-width agreement;
+2. casts;
+3. calls and type arguments;
+4. aggregates;
+5. match/if expressions;
+6. patterns and places.
+
+Each family follows the same rule: Check and Elab call `TypeJudgment`; Elab
+stamps typed Core; downstream stages read `CExpr.ty`.

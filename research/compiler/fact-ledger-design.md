@@ -1,20 +1,52 @@
-# CompilerDB certificate substrate — objective spec (Phase 6.5 #9 == #5 == #13b)
+# Typed Core + Future CompilerDB Substrate — Objective Spec (Phase 6.5 #9 == #5 == #13b)
 
-Status: **objective locked; implementation in progress.** The code currently
-has the first behavior-neutral slice in `Concrete/Semantics/CompilerDB.lean`
-plus `Concrete/Elab/Identified.lean`: a minimal source-keyed fact store,
-`QueryM`, `IdExpr`/`IdentifiedProgram`, and the dead fat `TExpr` removed. The
-objective below is the architecture those slices grow into.
+Status: **objective design record.** The current type-axis work should not build
+a second typed source tree or an eager fact database. Core `CExpr` already
+carries `ty : Ty`; the load-bearing first slice is a shared
+`Concrete/Semantics/TypeJudgment.lean` used by both Check and Elab.
 
-This document is the canonical substrate spec for the Check/Elab typed-fact arc.
-The roadmap states the order; this file states the long-term shape.
+This document records the long-term substrate decision. The roadmap states the
+order; this file states where each kind of fact belongs.
 
 ## The Decision
 
-Concrete's compiler facts live in one unified interned-ID `CompilerDB`, not in a
-fat typed AST and not in independent per-IR fact stores.
+Concrete's compiler facts live in their strongest representation:
 
-The decisive reason is that many load-bearing facts are not node-local:
+- **typed Core (`CExpr.ty`)** owns node-local source type facts;
+- **shared `TypeJudgment`** computes those type facts once for both Check and
+  Elab;
+- **future `CompilerDB`** owns relational, cross-node, cross-stage, provenance,
+  dependency, evidence, replay, report, LSP, agent, and query facts when a real
+  consumer pulls that layer;
+- each fact has one owner and one primary home.
+
+The placement rule is:
+
+> Node-local type facts are computed by one shared `TypeJudgment` and carried by
+> typed Core. Relational, cross-node, cross-stage, provenance, dependency,
+> evidence, and query facts go in `CompilerDB` when those facts become
+> load-bearing.
+
+If both are relevant, both may exist at their own level without duplicating
+truth. Example: a literal's type is stamped into `CExpr.ty` by Elab using the
+shared judgment; "this literal argument agrees with parameter 0" is a future
+`CompilerDB` edge; "Lean replayed the proof of this type-preservation lemma" is
+future `CompilerDB` evidence.
+
+## Why Hybrid
+
+The pure typed-source-AST direction fails because Concrete already has the typed
+carrier it needs: Core `CExpr`. Creating another typed source tree would add a
+second shape to maintain without fixing the real bug, which is Check and Elab
+running separate source type judgments.
+
+The pure DB direction also fails as the best verification architecture. A
+mandatory typed field makes a missing local fact unconstructable; a DB entry plus
+`assertFamilyComplete` only detects absence with an ICE. Phase 6.5's own north
+star is "types that forbid drift," and Core already provides the typed field:
+`CExpr.ty`.
+
+But a typed IR cannot hold every fact. Some facts are inherently relational:
 
 - pass agreement is a call-site to parameter edge;
 - borrow conflicts are edges;
@@ -22,77 +54,52 @@ The decisive reason is that many load-bearing facts are not node-local:
 - capability flow, proof dependencies, invalidation dependencies, lowering
   provenance, and trap origins are edges.
 
-A fat `TExpr` cannot hold those facts. It would leave Concrete with both a fat
-AST and a separate edge-keyed store, which is exactly the second-truth-source
-shape this phase is removing. The AST stays thin-in-facts; facts live in
-`CompilerDB`.
+The hybrid gets both properties: structural induction over typed Core for
+preservation proofs, and a relational/evidence/query DB for facts that cannot
+live on one node.
 
 ## Core Invariant
 
 There is exactly one committed fact.
 
-- A conflicting write fails closed.
-- A missing fact in a migrated family fails closed.
-- Later stages require committed facts; they do not silently re-derive them.
+- A source type fact is computed by shared `TypeJudgment` and committed as
+  `CExpr.ty`.
+- A relational/evidence/provenance/query fact is committed as a future
+  `CompilerDB` entry.
+- A conflicting DB write fails closed.
+- A missing required DB fact fails closed.
+- Later stages consume the owning representation; they do not silently re-derive
+  another answer.
 
-That is the design. The rest of this document is mechanism.
+## Typed Core And Shared TypeJudgment
 
-## CompilerDB, Not A Per-IR Store Chain
+Core `CExpr` is already typed: each expression constructor carries `ty : Ty`, and
+downstream stages read `CExpr.ty`. The type-axis problem is not "there is no
+typed carrier"; the problem is that Check and Elab compute source types
+independently and can disagree.
 
-The objective is one `CompilerDB` with a universal interned-ID space:
+The first family is literals:
 
-- source ids: expressions, statements, declarations, parameters, types, modules;
-- Core ids;
-- SSA value/block ids;
-- backend operation ids;
-- obligations, diagnostics, and report facts;
-- fact ids.
+- shared `TypeJudgment` computes the literal's type once;
+- Check uses that judgment for type-dependent checks;
+- Elab uses that judgment to stamp `CExpr.intLit ... ty`;
+- downstream stages consume `CExpr.ty`;
+- no Elab fallback inference exists for migrated literals;
+- future `CompilerDB` may record evidence/provenance for the type, but does not
+  store a second independent type answer.
 
-Each fact is keyed by the id kind that owns it. Source facts do not force
-`ExprId` through Core/SSA/backend. Core/SSA/backend facts get their own ids in
-the same DB. Provenance between levels is represented as first-class edges such
-as `lowersTo`, `emitsAs`, and `trapSource`.
+This moves the DB-vs-typed-carrier decision into Phase 6.5, at the first slice,
+not into Phase 14, while avoiding a redundant typed source AST.
 
-`ValidatedCore`, `ValidatedSSA`, and `ValidatedBackendIR` remain important:
-they are typed boundary tokens that prove a stage ran and verified its output.
-They are not separate semantic stores. Their certificates are views/query-groups
-over the same `CompilerDB`.
+## Future CompilerDB
 
-## Current Slice
+`CompilerDB` is the future unified interned-ID, relation, evidence, provenance,
+and query layer. It should be introduced when pass agreement, borrow conflicts,
+E0293, provenance, replay, package evidence, LSP, agent facts, or incremental
+checking needs a relational store. It is not a dumping ground for facts that
+typed IR can enforce more strongly.
 
-The current code intentionally starts smaller:
-
-- `NodeId` / `ExprId` and `IdentifiedProgram` provide post-desugar source
-  identity.
-- `CompilerDB` has source-oriented keys and edge keys.
-- `FactEntry` already has owner stage, evidence class, dependencies,
-  provenance, and optional proof/replay fields.
-- `QueryM` is eager today, but shaped so memoization and dependency tracking can
-  be added later without changing call sites.
-
-This is not a retreat from the objective. It is the first load-bearing slice.
-Docs describe the objective; status notes describe how much of it has landed.
-
-## Identity
-
-Parser, resolve, and desugar stay id-free. A deterministic mint pass runs after
-desugar and before Check, producing an `IdentifiedProgram`. Check and Elab
-consume that same identified tree.
-
-This avoids placeholder ids before Check and avoids asking desugar to preserve
-identity for nodes it synthesizes. Synthetic-node provenance is carried
-separately from identity; source span/origin is not the key.
-
-Long term, downstream IRs mint their own interned ids into `CompilerDB` as they
-are constructed. Identity is thin-in-facts, not absent: every stage that wants to
-commit facts must have stable ids for the entities it owns.
-
-## Keys And Edges
-
-The source-level key space must be broader than expressions. A parameter,
-declaration, type, or module can be an endpoint of a fact.
-
-Conceptual shape:
+Conceptual key shape when pulled:
 
 ```lean
 inductive SourceKey
@@ -108,99 +115,94 @@ inductive FactKey
   | edge (src dst : SourceKey) (kind : EdgeKind)
 ```
 
-The objective extends this pattern with `CoreKey`, `SSAKey`, `BackendKey`, and
-cross-level provenance edges in the same DB.
+The objective can extend this with Core, SSA, backend, obligation, diagnostic,
+and report ids in the same DB. `ValidatedCore`, `ValidatedSSA`, and
+`ValidatedBackendIR` remain typed boundary tokens. Their DB-facing certificates
+are query views over `CompilerDB`, not independent semantic stores.
 
-## API Contract
+## DB API Contract
 
-The fail-closed interface has three distinct operations:
+For DB-owned facts, the fail-closed interface has three distinct operations:
 
 - `insertFact`: writes a fact. Writing a different fact to an already-committed
   key is a hard error.
-- `requireFact`: reads a fact required by a migrated family. Absence is a hard
-  error, never a fallback to inference.
+- `requireFact`: reads a fact required by a migrated relational/evidence family.
+  Absence is a hard error, never a fallback to inference.
 - `factOf` / optional lookup: permitted only for unmigrated or genuinely
   optional facts.
 
-`assertFamilyComplete` is the mint-time coverage assertion. Before a certificate
-is produced, Check walks the relevant tree and asserts that every node in each
-migrated family has the required facts. That assertion is what makes a
-certificate operational rather than documentary.
+`assertFamilyComplete` remains useful for DB-owned relational facts and for
+transition periods. It is not the primary guarantee for typed node-local facts;
+those are complete by construction because typed Core cannot be built without
+their fields.
 
 ## Query Shape
 
-Queries are monadic from day one:
+When `CompilerDB` is introduced, queries should be monadic from day one:
 
 ```lean
 abbrev QueryM := ReaderM CompilerDB
 ```
 
-Today queries are eager. Later, `QueryM` can become a state/cache/dependency
-monad without migrating every call site. This is the Rust/Salsa lesson adapted
-to Lean's lack of interior mutability: make the interface query-shaped now, turn
-on memoization later.
+The first implementation may be eager. Later, `QueryM` can become a
+state/cache/dependency monad without migrating every call site. This is the
+Rust/Salsa lesson adapted to Lean's lack of interior mutability: make the
+interface query-shaped when the DB exists, turn on memoization later.
 
 ## Hot-Read Rule
 
-`CompilerDB` is canonical, but passes must not repeatedly hash-probe the same
-fact in tight loops.
+Typed IR is the hot path for node-local structural facts. `CompilerDB` is
+canonical for relational/evidence/provenance/query facts, but passes must not
+repeatedly hash-probe the same DB fact in tight loops.
 
-- Elab/Mono/Lower should bind required facts locally while processing a node or
-  block.
-- Whole-tree passes may materialize dense projections from contiguous ids when
-  that is the right access pattern.
+- Elab/Mono/Lower should read typed fields directly for local facts.
+- When a DB fact is needed, bind it locally while processing a node/block.
+- Whole-tree passes may materialize dense projections when that is the right
+  access pattern.
 - Telemetry and complexity gates should watch query counts and scaling.
 
-The goal is to remove semantic drift without recreating bug 027 at the center of
-the compiler.
+## Proof-Carrying Evidence
 
-## Proof-Carrying Facts
-
-`FactEntry` must be able to grow from checked evidence to kernel-checked
-evidence without a model change:
+A `CExpr.ty` field can have evidence recorded in `CompilerDB`; a DB-owned
+relational fact carries evidence directly. `FactEntry` must be able to grow from
+checked evidence to kernel-checked evidence without a model change:
 
 - `evidenceClass = checked_by_stage` means a compiler verifier established it.
 - `evidenceClass = proved_by_kernel` means a proof artifact replayed.
 - `proofArtifact` and `replayCommand` make that replay explicit.
 
-LLM-generated proof text is never evidence until the kernel accepts it and the
-replay bundle works without the LLM.
+The DB is not in tension with obligation-style proofs. The tension is with
+whole-pass preservation proofs: those are easier over typed Core than over
+dynamic lookups. That is why Core owns local type facts.
 
 ## First-Class Consumers
 
 The ladder is not only codegen:
 
-- Elab reads source facts and produces Core.
+- Elab produces typed Core using the shared type judgment.
 - The interpreter consumes certified Core and remains the differential oracle.
-- Proof extraction consumes certified Core and emits obligations tied to
-  committed facts.
-- Lower/SSA/backend stages add their own facts and provenance edges into the
-  same DB.
-- Reports, audit, LSP, and agent JSON must wrap DB/compiler facts; they do not
-  restate semantic facts manually.
+- Proof extraction consumes certified Core and emits obligations tied to typed
+  Core facts and future DB evidence/provenance.
+- Lower/SSA/backend stages may later add relations, evidence, and provenance
+  edges into `CompilerDB` while keeping local type facts in typed Core.
+- Reports, audit, LSP, and agent JSON query typed Core plus future `CompilerDB`;
+  they do not restate semantic facts manually.
 
 ## Migration Plan
 
-Landed substrate:
-
-1. `CompilerDB.lean` replaces the superseded `FactLedger` name.
-2. `IdentifiedProgram` exists as the post-desugar id-carrying source mirror.
-3. The dead fat `TExpr`/`TStmt` path was removed.
-
 Next load-bearing work:
 
-1. Convert Check to consume `IdentifiedProgram`.
-2. Convert Elab to consume the checked certificate instead of raw source syntax.
-3. Migrate the literal family first: Check commits literal type facts, Elab
-   requires them, and E0228-style Check/Elab type disagreement becomes
-   unrepresentable.
-4. Continue family by family: binops, casts, calls, aggregates, control flow,
+1. Extract `Concrete/Semantics/TypeJudgment.lean` as the type-axis sibling of
+   `IntArith`.
+2. Route Check's literal type-dependent checks through it.
+3. Route Elab's literal `CExpr.ty` stamping through it.
+4. Add a type-agreement gate with the E0228 literal/defaulting red-team.
+5. Continue family by family: binops, casts, calls, aggregates, control flow,
    patterns.
-5. Continue axis by axis: types, capabilities, ownership/value-flow,
+6. Continue axis by axis: types, capabilities, ownership/value-flow,
    pass-agreement edges, proof-relevant facts.
-6. Later, widen the same `CompilerDB` to Core/SSA/backend ids and provenance
-   edges as those stages need structured facts, translation validation, and
-   replay.
+7. Introduce `CompilerDB` only when relational/evidence/provenance consumers
+   require it, then use the API/query/evidence shape above.
 
 The docs always describe the objective. Status notes and commit history describe
 the current slice.
