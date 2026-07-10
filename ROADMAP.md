@@ -1111,6 +1111,23 @@ mutation-tested gates proving the checks are load-bearing. Until then, public
 language claims should say "pipeline hardening in progress" rather than imply
 the compiler architecture is finished.
 
+**Judgment-module contract.** `IntArith`, `TypeJudgment`,
+`CapabilityJudgment`, and `CopyJudgment` / `InstantiationJudgment` are not
+ordinary helper modules. They are the pipeline's named semantic decision points.
+Every judgment module must be pure and deterministic, return a decision record
+rather than a bare `Bool`/`Ty`/`CapSet`, be the only implementation of that
+decision, feed diagnostics/reports/audit rows from the same record, name the
+owning stage and downstream consumers, state what is intentionally out of scope,
+and land with a red-team agreement gate proving old divergent consumers cannot
+disagree. Each judgment must also be consumed by or checked against the
+interpreter/oracle when the fact affects runtime behavior; prove completeness
+when deleting a prior implementation (the new judgment covers the old behavior
+matrix, not merely the cases where consumers already agree); and obey the
+fact-home rule (node-local structural facts become typed-IR fields, relational
+or cross-node/cross-stage facts live in `CompilerDB` when that DB is pulled). If
+a later pass recomputes a judgment fact instead of consuming the record or typed
+IR field, that is a pipeline bug.
+
 1. **[DONE] Unify integer/arithmetic evaluation semantics.**
    `Concrete/Semantics/IntArith.lean` is the single source of truth for integer
    bit width, signedness, range, checked/wrapping/saturating behavior,
@@ -1127,13 +1144,42 @@ the compiler architecture is finished.
    the code handles it through helper predicates, the gate/docs drift must catch
    it. This item is the model for every later semantic-axis migration.
 
-2. **[DONE] Centralize type and policy predicates used across the pipeline.**
-   `isCopy`, conditional Copy after substitution, type substitution/type-var
-   matching, and the main type-policy helpers should have one implementation
-   used by Check, Verify, CoreCheck, Mono, Elab/Lower as needed. Keep the
-   regression gate with generic `Option<T>` / `Result<T,E>`, user generic
-   structs/enums, trait bounds through turbofish/caller type params, arrays,
-   newtypes, and post-mono demotion cases proving all stages agree.
+2. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
+   `CopyJudgment` / `InstantiationJudgment`.**
+   The predicate centralization work landed the first slice (`isCopy`,
+   conditional Copy after substitution, type substitution/type-var matching),
+   but the long-term target is a real judgment axis, not a bag of shared
+   booleans. Conditional `Copy`, trait-bound satisfaction, generic
+   substitution, type-var matching, turbofish/caller type params, post-mono
+   Copy demotion, and generated specialization facts are one semantic decision
+   family and must not be reimplemented across Check, Elab/Core, Mono,
+   CoreCheck, Verify, reports, or generated-name logic.
+
+   The judgment record should model both stages of knowledge: a **conditional**
+   form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
+   post-substitution form (`Option<i32>` is `Copy`; `Option<File>` is linear).
+   Include at least: the original type, substituted concrete type when known,
+   instantiation site, conditional requirements, concrete `is_copy`, why it is
+   `Copy` (`primitive`, `declared_copy`, `conditional_aggregate`,
+   `type_param_bound`, etc.), the first failing field/payload when it is not
+   `Copy`, satisfied or failing trait bounds, any caller/turbofish type
+   arguments used, diagnostic reason, ownership/linearity consequence, and
+   report/audit payload. Consumers should read that record; they should not ask
+   their own version of "is this Copy?" after substitution. This judgment feeds
+   the ownership axis directly: `Copy` decides whether a value may duplicate,
+   whether `_`/statement discard is legal, and whether a specialization is
+   linear or copyable.
+
+   Gate with **consistency under refinement**, not naive stage equality:
+   applying the pre-mono conditional judgment to a concrete instantiation must
+   equal the post-mono concrete judgment. Cover generic `Option<T>` /
+   `Result<T,E>`, user generic structs/enums, nested generic fields, trait
+   bounds through turbofish/caller type params, arrays, newtypes, post-mono
+   demotion cases, non-Copy payloads, missing bounds, and one red-team where
+   Check accepts but Mono/CoreCheck/Verify would otherwise instantiate the
+   condition differently. Sequence after the core `TypeJudgment` work (you need
+   the type before asking whether it is `Copy`) and treat it as a peer of
+   `CapabilityJudgment`, not a distant report/database item.
 
 3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
@@ -1178,12 +1224,25 @@ the compiler architecture is finished.
    intrinsics, externs, dependency/package capability budgets, and audit diffs
    should all render from the same capability decision record.
 
+   Practical purity/discard slice: once `CapabilityJudgment` can say an
+   expression is known **pure and trap-free/total** (`with()` / empty authority,
+   no mutation, no checked-arithmetic trap, no narrowing trap, no bounds trap,
+   no runtime obligation that can fail) and returns a non-`Unit` value, make
+   `expr;` over that expression an error with an explicit acknowledgement
+   escape (`discard(expr)` or equivalent). This is not row-effect theory and not
+   a user-facing effect system; it is the same concrete discard discipline
+   already used for fallible and non-`Copy` values. A total pure non-`Unit`
+   result discarded as a statement is almost always a lost computation.
+   Potentially trapping pure expressions are excluded until the trap judgment
+   can prove they are total; their traps are observable runtime behavior.
+
    Gate with an ordinary `File`/`Network` call, a capability-polymorphic
    callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
-   dependency/package boundary, and one negative where report output would
-   otherwise disagree with the checker diagnostic. The accepted design is the
-   useful Flix/Koka lesson — one capability/effect decision — without importing
-   their user-facing effect systems.
+   dependency/package boundary, a pure non-`Unit` discarded statement, and one
+   negative where report output would otherwise disagree with the checker
+   diagnostic. The accepted design is the useful Flix/Koka lesson — one
+   capability/effect decision — without importing their user-facing effect
+   systems.
 
 5. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
    facts.
@@ -1348,9 +1407,32 @@ the compiler architecture is finished.
    `TypeJudgment.castType` would be identity-on-`targetTy` (aesthetic, not
    bug-class-pulled).
 
-   Remaining families to migrate through `TypeJudgment` (workload-pulled, same
-   staging): calls/args, aggregates/index, patterns. Each is a widen of the
-   shared judgment + a `check_type_agreement` row, not new machinery.
+   Remaining families — **VERIFIED TO ALREADY AGREE 2026-07-10.** The type-axis
+   drift surface is closed. The families that could still have diverged were
+   probed with the same overflow oracle that exposed the control-flow bug
+   (`f(2e9 + 2e9)` at an i32 context: if the flexible operand is typed at the
+   context width, both interp and the compiled binary trap; if one defaults to
+   Int they diverge). Results:
+   - calls/args — AGREE. Check (`checkExpr arg (some pTy)`) and Elab
+     (`elabExpr arg (some pTy)`, user-fn and fn-ptr paths) both flow the
+     parameter type as the argument hint.
+   - aggregates — AGREE. Array-literal elements flow the element type; struct-lit
+     fields flow the field type (`elabExpr … (some fieldTy)`), matching Check.
+   - index — AGREE. Result is the element type in both; the index expression is
+     hinted `Int` in both.
+   - patterns — range/literal arm values are hinted by the scrutinee type in both.
+   Only **control-flow** actually drifted (branches were elaborated with no hint),
+   because it was the one place a context type existed but was NOT flowed into the
+   sub-expression. That is fixed. `check_type_agreement.sh` carries regression
+   guards for calls and aggregates (both mutation-relevant: dropping the
+   param/element hint re-opens the divergence and fails the gate), so a future
+   change that stops flowing a context type is caught.
+
+   No new `TypeJudgment` function was extracted for these families: the shared
+   decision is a *policy* — "a sub-expression in a typed context is typed under
+   that context's type" — which both passes now honor, not a pure computation to
+   centralize (unlike `intLitDecision`/`binOpOperandOrder`). Adding identity-style
+   helpers would be ceremony, not bug-class-pulled.
 
    Future `CompilerDB` substrate, pulled by relational/evidence/provenance
    consumers:

@@ -192,6 +192,45 @@ mod m { fn main() -> Int {
 EOF
 both_trap "match-arm i32 overflow traps in both" "$TMPDIR/mtovf.con"
 
+echo "=== families that flow a context type already agree (regression guard) ==="
+
+# Call argument: a flexible binop arg adopts the PARAMETER width (i32). Both Check
+# and Elab flow the param type as the arg hint, so this already agrees; the row
+# guards against a future change dropping that hint (which would re-open the
+# interp-vs-compiled drift, caught here as a non-shared trap).
+cat > "$TMPDIR/callarg.con" <<'EOF'
+mod m {
+    fn takes(v: i32) -> i32 { return v; }
+    fn main() -> Int { return takes(2000000000 + 2000000000) as Int; }
+}
+EOF
+both_trap "call arg adopts param width i32 (overflow traps in both)" "$TMPDIR/callarg.con"
+
+cat > "$TMPDIR/callclean.con" <<'EOF'
+mod m {
+    fn takes(v: i32) -> i32 { return v; }
+    fn main() -> Int { return takes(40 + 2) as Int; }
+}
+EOF
+agree "call arg flexible binop : i32" "$TMPDIR/callclean.con" "42"
+
+# Array literal element: a flexible binop element adopts the array element width.
+cat > "$TMPDIR/arr.con" <<'EOF'
+mod m { fn main() -> Int {
+    let a: [i32; 2] = [2000000000 + 2000000000, 0];
+    return a[0] as Int;
+} }
+EOF
+both_trap "array-literal element adopts element width i32 (overflow traps in both)" "$TMPDIR/arr.con"
+
+cat > "$TMPDIR/arrclean.con" <<'EOF'
+mod m { fn main() -> Int {
+    let a: [i32; 2] = [40 + 2, 0];
+    return a[0] as Int;
+} }
+EOF
+agree "array-literal element flexible binop : i32" "$TMPDIR/arrclean.con" "42"
+
 echo "=== genuine width mismatch is rejected by BOTH passes (E0228) ==="
 
 # An `Int` VALUE (not a flexible literal) + i32 is a real mismatch: it must be
