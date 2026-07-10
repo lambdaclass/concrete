@@ -1,5 +1,5 @@
 import Concrete.Frontend.AST
-import Concrete.Semantics.FactLedger
+import Concrete.Semantics.CompilerDB
 
 /-!
 # Identified AST — stable node identity, minted post-desugar (Phase 6.5 #9 ≡ #13b)
