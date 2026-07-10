@@ -1279,14 +1279,31 @@ the compiler architecture is finished.
    `proved_by_kernel` without changing the model. Proof artifacts are attached
    to the fact/evidence system, not hidden in reports.
 
-   First implementation slice:
-   - extract `Concrete/Semantics/TypeJudgment.lean` with literal/defaulting
-     source typing;
-   - route Check's literal type-dependent checks through it;
-   - route Elab's literal `CExpr.ty` stamping through it;
-   - delete Elab-side private re-inference for migrated literal cases;
-   - add an E0228 red-team agreement gate proving Check and Elab cannot select
-     different literal types.
+   First implementation slice — **LANDED 2026-07-10** (504011cc literals,
+   69f2e685 binops):
+   - ✅ extracted `Concrete/Semantics/TypeJudgment.lean` — decision records, not
+     bare `Ty` (the IntArith lesson): `intLitDecision {ty, range}` so Check reads
+     the range obligation from the judgment instead of re-deriving it, plus
+     `floatLitType`, `isFlexibleLit`, and `binOpOperandOrder`;
+   - ✅ routed Check's literal type-dependent checks through it;
+   - ✅ routed Elab's literal `CExpr.ty` stamping through it;
+   - ✅ extended past literals to the **binop family** — the actual E0228/E0715
+     fix: Check and Elab now share one operand-order judgment
+     (`binOpOperandOrder`), and Elab's bottom-up re-elaborate repair is DELETED
+     in favor of Check's top-down flexible-tree rule (verified to subsume every
+     case the repair fixed; Check's mixed-width rejection covers the residue);
+   - ✅ deleted Elab-side private re-inference for the migrated cases
+     (`isIntegerType`/`isFloatType`); `isFlexibleLit` moved out of `CheckHelpers`;
+   - ✅ added `scripts/tests/check_type_agreement.sh` — the E0228/E0715 red-team.
+     Every `agree` case takes its width from a SIBLING operand (no rescuing hint),
+     so it is mutation-testable: flipping `binOpOperandOrder` to always
+     `.lhsFirst` fails 4/7 cases (confirmed). Registered in the CI workflow,
+     Makefile, and run_tests smoke.
+
+   Remaining families to migrate through `TypeJudgment` (workload-pulled, same
+   staging): casts, calls/args, aggregates/index, control-flow (if/match/while
+   value types), patterns. Each is a widen of the shared judgment + a
+   `check_type_agreement` row, not new machinery.
 
    Future `CompilerDB` substrate, pulled by relational/evidence/provenance
    consumers:

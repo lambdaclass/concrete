@@ -1736,7 +1736,7 @@ echo ""
 flush_jobs
 if section_active gatesmoke; then
 echo "=== gate smoke (lex escapes, mixed-width, trailing values) ==="
-for g in check_lex_escapes check_mixed_width_binops check_trailing_value_blocks; do
+for g in check_lex_escapes check_mixed_width_binops check_type_agreement check_trailing_value_blocks; do
     if bash "scripts/tests/$g.sh" >/dev/null 2>&1; then
         echo "  ok  $g"
         PASS=$((PASS + 1))

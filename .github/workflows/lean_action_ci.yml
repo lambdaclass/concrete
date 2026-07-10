@@ -405,6 +405,9 @@ jobs:
       - name: Mixed-width binop gate (E0228 + flexible literals + interp cast normalization)
         run: bash scripts/tests/check_mixed_width_binops.sh
 
+      - name: Type-agreement gate (Phase 6.5 #9 — Check/Elab type through one TypeJudgment)
+        run: bash scripts/tests/check_type_agreement.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

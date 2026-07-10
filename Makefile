@@ -282,6 +282,9 @@ test-lex-escapes: build ## Escape gate: unknown string/char escapes and untermin
 test-mixed-width-binops: build ## Mixed-width gate: numeric binop operands must agree exactly (E0228); literals stay flexible; interp normalizes as-casts
 	$(NIX_DEVELOP) bash ./scripts/tests/check_mixed_width_binops.sh
 
+test-type-agreement: build ## Type-agreement gate (Phase 6.5 #9): Check and Elab type source expressions through one shared TypeJudgment (E0228/E0715 red-team)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_type_agreement.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 
