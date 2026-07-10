@@ -1143,18 +1143,47 @@ the compiler architecture is finished.
    introduced. The long-term form is `concrete inspect --pipeline-contracts
    --json`, but the V1 gate is already the phase's contract backstop.
 
-4. Centralize capabilities/effects as the next semantic axis.
-   Capabilities are as central to Concrete as arithmetic. Add or identify the
-   shared cap/effect fact layer for required caps, inferred callback caps,
-   trusted/Unsafe caps, package/import cap facts, diagnostic rendering, report
-   rendering, audit diffs, LSP/agent JSON, and proof/audit summaries. Check,
-   CoreCheck, Report, packages, and audit should render the same fact rather
-   than recomputing a capability string or capset shape independently.
+4. Centralize capability checking and callback propagation into
+   `CapabilityJudgment` after the type-axis core is stable.
+   Capabilities are as central to Concrete as arithmetic and source typing, but
+   this must stay practical: **do not add algebraic effects, effect handlers,
+   row-polymorphism syntax, implicit context, or theoretical effect-system
+   vocabulary to the user surface.** Concrete keeps explicit authority headers:
+   `fn f(...) with(File, Network) -> T`. The improvement is internal:
+   `CapabilityJudgment` becomes the capability-axis sibling of `IntArith` and
+   `TypeJudgment`, producing one decision record for why a call/expression needs
+   authority and how that fact should be diagnosed, reported, audited, and
+   surfaced to tools.
+
+   The decision record should include at least: required caps, source of the
+   requirement (`direct_call`, `callback`, `trusted_wrapper`,
+   `unsafe_intrinsic`, `package_import`), callee/callback parameter identity
+   where relevant, purity (`with()` / empty cap set), evidence class,
+   diagnostic reason, and report/audit payload. Check, CoreCheck, Report, audit,
+   LSP/agent JSON, and package gates must consume this one decision instead of
+   recomputing capability containment, callback cap propagation, Unsafe/trusted
+   policy, or human report rows independently.
+
+   First slice: direct calls. A function call requiring `File` or `Network`
+   should be rejected/accepted, diagnosed, and reported from the same
+   `CapabilityJudgment` decision. Add one red-team where checker output and
+   report/audit output would otherwise disagree.
+
+   Second slice: capability-polymorphic callbacks and callable values. Existing
+   callable rules stay; `CapabilityJudgment` centralizes the practical decision:
+   "this callback requires `C`, therefore the combinator/caller requires `C`."
+   Cover `for_each_with`, `for_each_ctx`, scoped callbacks, and callable values.
+
+   Third slice: trusted/Unsafe/package boundaries. Trusted wrappers, Unsafe
+   intrinsics, externs, dependency/package capability budgets, and audit diffs
+   should all render from the same capability decision record.
 
    Gate with an ordinary `File`/`Network` call, a capability-polymorphic
    callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
    dependency/package boundary, and one negative where report output would
-   otherwise disagree with the checker diagnostic.
+   otherwise disagree with the checker diagnostic. The accepted design is the
+   useful Flix/Koka lesson — one capability/effect decision — without importing
+   their user-facing effect systems.
 
 5. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
    facts.

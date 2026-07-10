@@ -1,6 +1,6 @@
 # Capability facts — one source of truth
 
-ROADMAP Phase 6.5 #5. Capabilities/effects are the second identity-defining
+ROADMAP Phase 6.5 #4. Capabilities/effects are the second identity-defining
 semantic axis of Concrete (after integer arithmetic, #1). This note records
 where capability facts live so no stage re-derives them.
 
@@ -10,7 +10,7 @@ where capability facts live so no stage re-derives them.
 `normalize`, `concreteCaps`, `isEmpty`, `expandAliases`, and the `stdCaps` /
 `validCaps` name lists. These were never duplicated.
 
-## The derived facts (centralized in Phase 6.5 #5)
+## The derived facts (centralized in Phase 6.5 #4)
 
 `Concrete/Semantics/Capabilities.lean` is the one place the *derived* capability
 facts are defined:
@@ -27,6 +27,60 @@ The two Unsafe questions are deliberately distinct and must not be conflated:
 the CoreCheck raw-pointer/unsafe-cast gates; **literal membership**
 (`capSetHasUnsafe`) drives report counts. A cap-polymorphic function has
 authority (its variable satisfies) but does not *literally* list Unsafe.
+
+## The next layer: `CapabilityJudgment` (planned)
+
+The long-term capability axis should mirror `IntArith` and `TypeJudgment`: a
+single compiler-internal decision record, not a new user-facing effect system.
+Concrete's surface stays explicit and practical:
+
+```con
+fn read(path: Path) with(File) -> Result<Bytes, IOError>
+fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U
+```
+
+Do **not** add algebraic effects, effect handlers, row-polymorphism syntax,
+implicit context, or theoretical effect terminology to the language surface.
+The useful lesson from effect-polymorphic languages is only this: one stage
+should decide why a computation needs authority, and every other consumer should
+read that decision.
+
+`CapabilityJudgment` should return a decision record, not just a `CapSet`:
+
+```text
+CapabilityDecision {
+  required_caps
+  source: direct_call | callback | trusted_wrapper | unsafe_intrinsic | package_import
+  callee
+  callback_param
+  purity
+  evidence_class
+  diagnostic_reason
+  report_payload
+}
+```
+
+The exact Lean shape may differ, but the ownership rule should not: Check,
+CoreCheck, Report, audit, LSP/agent JSON, and package gates consume the same
+decision. They must not independently recompute why `File`, `Network`, `Alloc`,
+`Unsafe`, or a capability variable is required.
+
+Staged implementation:
+
+1. **Direct calls.** Decide required caps for a normal function call once; use
+   that decision for checker accept/reject, diagnostics, `--report caps`, and
+   audit output.
+2. **Callbacks/callable values.** Preserve the existing callable model. A
+   callback typed `fn(T) with(C) -> U` makes the caller/combinator require `C`;
+   `CapabilityJudgment` records that propagation and why it happened.
+3. **Trusted/Unsafe/package boundaries.** Trusted wrappers, Unsafe intrinsics,
+   extern functions, dependency capability budgets, and audit diffs all render
+   from the same decision record.
+
+The first gate should include a direct `File`/`Network` call and a red-team where
+checker and report output would otherwise disagree. Later gates add a
+capability-polymorphic callback, scoped callback, trusted wrapper, Unsafe
+intrinsic, and dependency/package boundary.
 
 ## Why it matters
 
