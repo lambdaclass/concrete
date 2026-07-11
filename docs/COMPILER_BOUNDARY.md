@@ -34,32 +34,35 @@ must make `concrete -o` fail). The *stage* that rejects it:
 |---|---|---|---|
 | 1 | Unresolved `Ty.typeVar` after mono | `verifyPostMono` (`verifyNoTypeVars`) | ✅ boundary |
 | 2 | Illegal Copy specialization (Copy aggregate, non-Copy field) | `verifyPostMono` (`verifyCopyFieldsPostMono`) | ✅ boundary |
-| 3 | Mixed-width binop (`i8 + i32`, E0228/E0715) | Check | ❌ front-end only |
+| 3 | Mixed-width binop (`i8 + i32`, E0228/E0715) | Check (E0228) **and** CoreCheck (E0502) | ✅ Core boundary |
 | 4 | Capability misuse (call needs a cap the caller lacks) | CoreCheck | ✅ Core boundary |
 | 5 | Unsafe op without capability (raw-ptr deref in a safe fn) | CoreCheck | ✅ Core boundary |
 | 6 | Returning a second-class reference | Check | ❌ front-end only |
 
-Classes 1, 2, 4, 5 are enforced *at a boundary token* (`ValidatedCore` or
-`MonomorphizedProgram`). Classes 3 and 6 are caught once, in Check — the observable
-guarantee holds (nothing compiles), but they are not re-asserted after
-monomorphization, so a future Check hole or a pass that *introduces* a mixed-width
-binop post-Check would not be caught until SSA-verify (historically E0715, an
-internal-error class).
+Classes 1, 2, 3, 4, 5 are enforced *at a boundary token* (`ValidatedCore` or
+`MonomorphizedProgram`). Only class 6 is caught once, in Check.
+
+Class 3 is worth a note: it is enforced BOTH in Check (E0228, exact-type) and,
+independently, at the CoreCheck boundary (E0502, `binaryOperandMismatch`) — so
+even a `Check` hole is caught before Lower. This was confirmed by mutation
+testing: disabling Check's E0228 leaves `i8 + i32` rejected by CoreCheck E0502. A
+speculative post-mono mixed-width verifier was prototyped and then **removed** as
+redundant — CoreCheck already owns this boundary. (Note the width axis: E0715 is a
+*bit-width* mismatch — `Uint`/`Int` are both 64-bit and lower to one SSA op, so a
+same-width/different-signedness pair produced by a monomorphized generic is NOT a
+width residue; it reaches Lower and lowers fine.)
 
 ## Defense-in-depth follow-ups (staged)
 
-Turning "Check caught it" into "the boundary re-asserts it" for classes 3 and 6:
+Class 6 is the one residue class caught only in Check:
 
-- **Class 3 — post-mono mixed-width verifier.** Walk every Core `CExpr.binOp` and
-  assert operand widths agree, via `Shared.binOpOperandsAgree`. NOTE the
-  exemptions that must NOT be flagged: shifts (`a << b` — the shift amount may be
-  a different width than the value), pointer arithmetic (`ptr + int`), and the
-  boolean short-circuit ops. Getting these wrong would false-positive *in the
-  trust-critical boundary itself*, so the exact legal/illegal rule must mirror
-  Check's line-122 rule (`isNumeric ∧ isNumeric ∧ ≠`, minus the exemptions)
-  before this lands.
-- **Class 6 — reference-in-return verifier.** Assert no monomorphized function's
-  return type is `.ref`/`.refMut` (the second-class-reference invariant).
+- **Class 6 — reference-in-return verifier.** NOT a blanket "no `.ref`/`.refMut`
+  return type": accessors legitimately borrow from `&self` and return `&T`
+  (`pub fn get(&self, at) -> &T`). What Check actually rejects is returning a ref
+  to a *local* (`fn bad(x) -> &i32 { return &x }`) — a lifetime/borrow property,
+  not a shape property. A post-mono re-assertion would therefore need the borrow
+  facts, not just the return type; it is not a simple structural walk. (This is
+  the accessor case the ownership model flags as "accessor migration deferred".)
 - **Class 4 capability erasure.** Confirm whether `CapSet.var` can legitimately
   survive to `Lower` (capabilities are largely erased at codegen). If it cannot,
   add `verifyNoCapVars` mirroring `verifyNoTypeVars`; if it can, document that

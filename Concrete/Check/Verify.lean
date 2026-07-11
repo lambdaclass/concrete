@@ -292,7 +292,9 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
   violations
 
 /-- **Post-Mono verifier**: checks no `Ty.typeVar` survives monomorphization,
-    and validates Copy struct fields after generic instantiation. -/
+    and validates Copy struct fields after generic instantiation. Mixed-width
+    binops (class 3) are already re-asserted at the CoreCheck boundary (E0502),
+    so they need no separate post-mono check here — see docs/COMPILER_BOUNDARY.md. -/
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules
 
