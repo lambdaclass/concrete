@@ -478,6 +478,45 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
             | _ => .error "interp: string_length: ref does not point to a string"
           | _ => .error "interp: string_length: argument is not a string")
         return (env, .val (.int (Int.ofNat s.length) .int))
+      -- Pure string library (matches EmitBuiltins runtime; extends the oracle so
+      -- string programs are differential-testable instead of PENDING).
+      | "string_eq", [a, b] => do
+        match ← autoDeref env a, ← autoDeref env b with
+        | .string sa, .string sb => return (env, .val (.bool (sa == sb)))
+        | _, _ => .error "interp: string_eq: arguments are not strings"
+      | "string_concat", [a, b] => do
+        match ← autoDeref env a, ← autoDeref env b with
+        | .string sa, .string sb => return (env, .val (.string (sa ++ sb)))
+        | _, _ => .error "interp: string_concat: arguments are not strings"
+      | "string_char_at", [s, i] => do
+        match ← autoDeref env s, ← autoDeref env i with
+        | .string str, .int idx _ =>
+          match str.toList[idx.toNat]? with
+          | some c => return (env, .val (.int (Int.ofNat c.toNat) .char))
+          | none => return (env, .val (.int 0 .char))
+        | _, _ => .error "interp: string_char_at: bad arguments"
+      | "string_contains", [h, n] => do
+        match ← autoDeref env h, ← autoDeref env n with
+        | .string sh, .string sn =>
+          return (env, .val (.bool (sn == "" || (sh.splitOn sn).length > 1)))
+        | _, _ => .error "interp: string_contains: bad arguments"
+      | "int_to_string", [n] => do
+        match ← autoDeref env n with
+        | .int v _ => return (env, .val (.string (toString v)))
+        | _ => .error "interp: int_to_string: argument is not an integer"
+      | "string_slice", [s, st, en] => do
+        match ← autoDeref env s, ← autoDeref env st, ← autoDeref env en with
+        | .string str, .int a _, .int b _ =>
+          let sub := (str.toList.drop a.toNat).take (b.toNat - a.toNat)
+          return (env, .val (.string (String.ofList sub)))
+        | _, _, _ => .error "interp: string_slice: bad arguments"
+      | "string_trim", [s] => do
+        match ← autoDeref env s with
+        | .string str =>
+          let ws := fun (c : Char) => c == ' ' || c == '\t' || c == '\n' || c == '\r'
+          let cs := ((str.toList.dropWhile ws).reverse.dropWhile ws).reverse
+          return (env, .val (.string (String.ofList cs)))
+        | _ => .error "interp: string_trim: argument is not a string"
       | "drop_string", [_] =>
         -- Linear-discipline no-op: ownership transfer + heap free in the
         -- compiled binary; the interpreter has no heap, so the consume

@@ -109,6 +109,20 @@ agree_or_trap "continue outer skips the outer-body tail (=> 0)" "$TMPDIR/lc.con"
 printf 'mod m { fn main() -> Int { let mut sum: Int = 0; let mut i: Int = 0; \047outer: while i < 10 { let mut j: Int = 0; while j < 10 { sum = sum + 1; j = j + 1; if sum >= 25 { break \047outer; } } i = i + 1; } return sum; } }\n' > "$TMPDIR/lb.con"
 agree_or_trap "break outer exits the outer loop (=> 25)" "$TMPDIR/lb.con"
 
+echo "=== string library: interp oracle matches the compiled runtime ==="
+
+# The interpreter implements the pure string builtins (eq/concat/char_at/slice/
+# contains/int_to_string), so string programs are differential-testable instead
+# of PENDING. Strings are linear — each is drop_string'd.
+emit seq 'mod m { fn main() -> Int { let a: String = "hi"; let b: String = "hi"; let e: Bool = string_eq(&a, &b); drop_string(a); drop_string(b); if e { return 1; } else { return 0; } } }'
+agree_or_trap "string_eq equal strings (=> 1)" "$TMPDIR/seq.con"
+
+emit sca 'mod m { fn main() -> Int { let s: String = "ABC"; let c: Int = string_char_at(&s, 1) as Int; drop_string(s); return c; } }'
+agree_or_trap "string_char_at index 1 of ABC (=> 66)" "$TMPDIR/sca.con"
+
+emit scc 'mod m { fn main() -> Int { let a: String = "ab"; let b: String = "cde"; let c: String = string_concat(a, b); let n: Int = string_length(&c) as Int; drop_string(c); return n; } }'
+agree_or_trap "string_concat length (=> 5)" "$TMPDIR/scc.con"
+
 echo "=== clean sanity (values fit; not overflow) ==="
 
 emit c1  'mod m { fn main() -> Int { let c: Bool = true; let x: i32 = if c { 40 + 2 } else { 0 }; return x as Int; } }'
