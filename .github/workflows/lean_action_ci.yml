@@ -408,10 +408,10 @@ jobs:
       - name: Type-agreement gate (Phase 6.5 #9 — Check/Elab type through one TypeJudgment)
         run: bash scripts/tests/check_type_agreement.sh
 
-      - name: Differential-position gate (flexible overflow / signed shift: interp == compiled)
+      - name: "Differential-position gate (flexible overflow / signed shift, interp == compiled)"
         run: bash scripts/tests/check_differential_positions.sh
 
-      - name: Copy-judgment gate (Phase 6.5 — one Copy judgment: Check and Core cannot drift)
+      - name: "Copy-judgment gate (Phase 6.5 — one Copy judgment shared by Check and Core)"
         run: bash scripts/tests/check_copy_judgment.sh
 
       - name: Trailing-value gate (if/match as value-block trailing values)
