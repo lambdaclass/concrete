@@ -402,6 +402,14 @@ Fully completed Phase 6 work has been moved to [CHANGELOG.md](CHANGELOG.md).
 The active roadmap below contains only deferred, conditional, or not-yet-done
 Phase 6 work.
 
+The ownership hardening ratchets below are not separate from Phase 6B's
+`OwnershipJudgment` / `ValueFlowJudgment`. Treat 13h, 13i, and 13k as the
+practical checker-facing prerequisite slices: first make ownership transitions
+go through narrow APIs, then make ownership transfer/overwrite and control-flow
+exit modes explicit data, then promote the result into the Phase 6B judgment and
+agreement gate. Do not build a large ownership fact database before these local
+refactors make the current checker decisions auditable.
+
 13h. **Deferred hardening ratchet — centralize ownership-transfer and overwrite
    policy helpers.** This is valuable checker cleanup, but it is not an open
    soundness blocker after 13c-13g; do it when touching the checker next or
@@ -909,6 +917,12 @@ makes pipeline failures reproducible.
 The item numbers in this phase are ordered within the phase and may be
 renumbered when the phase is reorganized. Keep cross-references updated in the
 same change, and use subsection headings to make the dependency order clear.
+At this point the Phase 6B / 6C plan is frozen unless implementation exposes a
+real missing invariant. The execution frontier is: finish
+`CopyJudgment` / `InstantiationJudgment` first, because `Copy` feeds ownership;
+then build `OwnershipJudgment` / `ValueFlowJudgment`, because it is the
+memory-safety axis; then ship `diff-caps` as the first external-facing
+credibility artifact once the internal semantic axes stop moving.
 
 **North star ([docs/PIPELINE_ARCHITECTURE.md](docs/PIPELINE_ARCHITECTURE.md)):**
 every item below is an instance of one principle — *each program has exactly one
@@ -1089,7 +1103,29 @@ typed node.
    context, divergent branch, loop exit, match arms, `_` discard, assignment
    overwrite, aggregate construction, and non-Copy projection.
 
-   Second slice: define the decision-record shape and central computation for
+   Second slice: refactor the checker around a narrow ownership-transition API.
+   Direct mutation of `env.vars`, consumed states, borrow/ref lists, or branch
+   snapshots should disappear outside helpers such as `declareVar`, `moveVar`,
+   `copyVar`, `borrowPlace`, `markConsumed`, `reserveForDefer`, `restoreScope`,
+   and `mergeBranchStates`. This is the local, low-risk prerequisite for a
+   judgment: make every current ownership transition auditable before exporting
+   decisions to later stages.
+
+   Third slice: centralize ownership-transfer and overwrite policy. One helper
+   should answer "this expression transfers ownership" for args, returns,
+   `break value`, assignment RHS, array/struct literals, destructuring, stores,
+   `?`, and `defer`; another helper should answer "this place may be
+   overwritten" for rebinds, fields, indices, `&mut` pointees, and trusted
+   uninitialized-slot boundaries. These helpers own the E0219/E0291 family and
+   should replace scattered per-AST `if ident then consumeVarIfExists` logic.
+
+   Fourth slice: represent control-flow exit modes as data. Branches, match
+   arms, loops, `return`, `break value`, `continue`, `abort`, and future
+   `noreturn` calls should produce `fallsThrough | returns | breaks(value?) |
+   continues | diverges`; linear merge rules should consume that value instead
+   of re-deriving reachability and ownership state in each path.
+
+   Fifth slice: define the decision-record shape and central computation for
    the cases already covered by the value-flow spec. It is acceptable for the
    first implementation to be "shared computation + agreement gate" rather than
    a fully committed per-node record, but the roadmap target is stronger:
