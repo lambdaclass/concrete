@@ -921,204 +921,14 @@ IR field, that is a pipeline bug.
 
 ### Semantic Judgment Axes
 
-These items give each major semantic axis one owner: arithmetic, Copy and
-instantiation, ownership/value-flow, source typing, capabilities, and the
-relations that cannot live on one typed node.
+These items give each remaining semantic axis one owner. Completed arithmetic
+(`IntArith`) and source typing (`TypeJudgment`) are recorded in
+[CHANGELOG.md](CHANGELOG.md); the active work here is Copy/instantiation,
+ownership/value-flow, capabilities, and the relations that cannot live on one
+typed node.
 
-1. **[DONE] Unify integer/arithmetic evaluation semantics.**
-   `Concrete/Semantics/IntArith.lean` is the single source of truth for integer
-   bit width, signedness, range, checked/wrapping/saturating behavior,
-   cast-normalization, div/rem semantics, shift-range predicates,
-   overflow/trap predicates, and foldability. `Interp`, `SSACleanup`,
-   `SSAVerify`, `EmitSSA`, report obligations, and diagnostic/range helpers all
-   read the relevant facts from it; codegen owns LLVM mechanics and helper text,
-   not a separate arithmetic policy.
-
-   Gate: `scripts/tests/check_int_arith_semantics.sh` proves
-   `interpret == fold-then-interpret == compiled` over the integer matrix and
-   includes trap-preservation red-team cases. Keep the documentation/API check:
-   if `IntArith` comments claim an operation family is handled by one API while
-   the code handles it through helper predicates, the gate/docs drift must catch
-   it. This item is the model for every later semantic-axis migration.
-
-2. Unify Check/Elab source typing through `TypeJudgment`; reserve `CompilerDB`
-   for relational facts.
-   This is the root architectural item for the whole pipeline. Check must
-   stop being a second source-type inference engine. Core `CExpr` is already a
-   typed IR: every expression node carries `ty : Ty`, and downstream passes
-   already read `CExpr.ty`. The type-axis fix is therefore a shared
-   `TypeJudgment` module, sibling to `IntArith` and the capability fact source:
-   Check uses it for type-dependent checks, Elab uses it to stamp `CExpr.ty`, and
-   a gate proves the two cannot disagree. Elab may stamp Core with the shared
-   judgment; it may not infer a second source-level answer.
-
-   The best long-term representation for Concrete-in-Lean is hybrid, but do not
-   build a second typed source AST for the type axis. The typed carrier already
-   exists downstream as Core `CExpr`; use it. The unchecked source AST stays
-   thin. Node-local type truth is committed by the shared type judgment and
-   carried by `CExpr.ty`. `CompilerDB` is still the right future tool for facts
-   that typed Core cannot carry: pass agreement, borrow conflicts, E0293
-   container-not-in-context, capability flow edges, lowering provenance,
-   proof-relevant dependencies, proof/replay artifacts, diagnostics/report
-   facts, LSP/agent views, and incrementality. It is pulled by those relational
-   consumers; it is not built speculatively to fix type drift.
-
-   **Best-long-term shape: typed Core for structural type facts; one unified
-   interned-ID query database when relational facts need it.** An earlier
-   framing had separate per-IR stores (`ValidatedCore`/`ValidatedSSA`/
-   `ValidatedBackendIR`) joined by hand-maintained
-   `SourceKey -> CoreId -> SSAId -> BackendId` provenance maps. Superseded for
-   future DB-owned facts: if those links must be maintained/proved, they ARE
-   part of the fact system, so they belong as first-class graph edges in one
-   database, not ad hoc side mappings. But that database is not the primary home
-   for source expression types. The design is typed Core (`CExpr.ty`) as the
-   node-local type carrier plus, when pulled, a single `CompilerDB` with a
-   universal interned-ID space (`SourceNodeId`, `DeclId`, `TypeId`,
-   `CoreNodeId`, `SSAValueId`, `BlockId`, `BackendOpId`, `ObligationId`,
-   `DiagnosticId`, `FactId`), one fact table for relational/provenance/evidence/
-   query facts, and provenance as native edges in it (`lowersTo`, `emitsAs`,
-   `trapSource`, `proofObligation`). Per-IR certificates remain typed boundary
-   tokens whose structural facts live in typed IR; the future DB provides
-   query-groups / views over those certificates and owns the facts that cannot
-   live on one node. Each fact still has exactly one owning stage and one home;
-   no later stage re-derives it.
-
-   **Item #10 and this item share one future DB substrate.** Interned IDs
-   (item #10) and DB-owned identity from this item are the same system. Do not build a separate
-   `NodeId` table now and a query DB later. Also do not build either one merely
-   to fix type drift: the type-axis slice needs `TypeJudgment`, not identity.
-
-   **Salsa-*shaped*, not Salsa-*now* — with the query monad abstracted from day
-   one when `CompilerDB` exists.** Access should be query-shaped immediately
-   (`typeEvidenceOf`, `passAgreementOf`, `loweredCoreOf`, `obligationsOf`,
-   `evidenceOf`), evaluated EAGERLY at first (no cache, no incrementality — that
-   full engine is a later Phase-19 bet). The Lean-specific catch that makes "the
-   API doesn't change later" true: because Lean has no interior mutability, a
-   pure `db -> id -> Except Ty` query cannot transparently gain a cache — define
-   DB queries in a `QueryM` (eagerly `ReaderM CompilerDB`; later
-   `StateT QueryCache …` recording deps) from the start, so turning on
-   memoization swaps only `QueryM`'s definition, with zero call-site churn.
-   Writing eager DB queries non-monadically first = paying the call-site
-   migration later; that is the trap to avoid.
-
-   **Proof-carrying evidence.** A `CExpr.ty` field can be accompanied by a DB
-   evidence entry, and a DB-owned relational fact can carry evidence directly.
-   `FactEntry` (key, value, ownerStage, deps, evidenceClass, provenance,
-   invalidationPolicy) must be able to grow an optional `proofArtifact` /
-   `replayCommand` so evidence escalates from `checked_by_stage` to
-   `proved_by_kernel` without changing the model. Proof artifacts are attached
-   to the fact/evidence system, not hidden in reports.
-
-   First implementation slice — **LANDED 2026-07-10** (504011cc literals,
-   69f2e685 binops):
-   - ✅ extracted `Concrete/Semantics/TypeJudgment.lean` — decision records, not
-     bare `Ty` (the IntArith lesson): `intLitDecision {ty, range}` so Check reads
-     the range obligation from the judgment instead of re-deriving it, plus
-     `floatLitType`, `isFlexibleLit`, and `binOpOperandOrder`;
-   - ✅ routed Check's literal type-dependent checks through it;
-   - ✅ routed Elab's literal `CExpr.ty` stamping through it;
-   - ✅ extended past literals to the **binop family** — the actual E0228/E0715
-     fix: Check and Elab now share one operand-order judgment
-     (`binOpOperandOrder`), and Elab's bottom-up re-elaborate repair is DELETED
-     in favor of Check's top-down flexible-tree rule (verified to subsume every
-     case the repair fixed; Check's mixed-width rejection covers the residue);
-   - ✅ deleted Elab-side private re-inference for the migrated cases
-     (`isIntegerType`/`isFloatType`); `isFlexibleLit` moved out of `CheckHelpers`;
-   - ✅ added `scripts/tests/check_type_agreement.sh` — the E0228/E0715 red-team.
-     Every `agree` case takes its width from a SIBLING operand (no rescuing hint),
-     so it is mutation-testable: flipping `binOpOperandOrder` to always
-     `.lhsFirst` fails 4/7 cases (confirmed). Registered in the CI workflow,
-     Makefile, and run_tests smoke.
-
-   - ✅ **control-flow family** (if/match value types) — fixed a real interp-vs-
-     compiled soundness bug: Elab elaborated branch/arm bodies with NO hint, so a
-     flexible binop branch (`let x: i32 = if c { 2e9 + 2e9 } else { 0 }`) typed
-     Int (i64) while the node was stamped i32 — interp returned 4000000000
-     (no trap) while the compiled binary silently truncated to -294967296. Fix:
-     `elabStmts` flows the enclosing value hint into the block's trailing value
-     expression (both if and match), so branches are typed at the result width
-     exactly as Check types them; the no-hint result type now reads the elaborated
-     trailing `CExpr.ty` instead of a shallow surface `peekExprType`. Gate: two
-     `both_trap` rows (if + match) — mutation-tested (ignoring the hint fails both,
-     reproducing the 4e9-vs-truncation divergence).
-
-   Note on casts: Check (`checkExpr inner none`) and Elab (`elabExpr inner none`)
-   already agree by construction — both type the cast's inner operand with NO hint
-   (the "an `as` converts, it does not hint" policy) and both take the result type
-   from the annotation. Casts are not a drift surface, so no ceremony was added; a
-   `TypeJudgment.castType` would be identity-on-`targetTy` (aesthetic, not
-   bug-class-pulled).
-
-   Remaining families — **VERIFIED TO ALREADY AGREE 2026-07-10.** The type-axis
-   drift surface is closed. The families that could still have diverged were
-   probed with the same overflow oracle that exposed the control-flow bug
-   (`f(2e9 + 2e9)` at an i32 context: if the flexible operand is typed at the
-   context width, both interp and the compiled binary trap; if one defaults to
-   Int they diverge). Results:
-   - calls/args — AGREE. Check (`checkExpr arg (some pTy)`) and Elab
-     (`elabExpr arg (some pTy)`, user-fn and fn-ptr paths) both flow the
-     parameter type as the argument hint.
-   - aggregates — AGREE. Array-literal elements flow the element type; struct-lit
-     fields flow the field type (`elabExpr … (some fieldTy)`), matching Check.
-   - index — AGREE. Result is the element type in both; the index expression is
-     hinted `Int` in both.
-   - patterns — range/literal arm values are hinted by the scrutinee type in both.
-   Only **control-flow** actually drifted (branches were elaborated with no hint),
-   because it was the one place a context type existed but was NOT flowed into the
-   sub-expression. That is fixed. `check_type_agreement.sh` carries regression
-   guards for calls and aggregates (both mutation-relevant: dropping the
-   param/element hint re-opens the divergence and fails the gate), so a future
-   change that stops flowing a context type is caught.
-
-   No new `TypeJudgment` function was extracted for these families: the shared
-   decision is a *policy* — "a sub-expression in a typed context is typed under
-   that context's type" — which both passes now honor, not a pure computation to
-   centralize (unlike `intLitDecision`/`binOpOperandOrder`). Adding identity-style
-   helpers would be ceremony, not bug-class-pulled.
-
-   Future `CompilerDB` substrate, pulled by relational/evidence/provenance
-   consumers:
-   - introduce source identity only when a DB-owned relation needs it; parser,
-     resolve, and desugar should stay id-free until that need exists;
-   - use a `Std.HashMap`-backed fact table, not an assoc list; the DB is on hot
-     compiler paths and must not repeat the bug-027 O(n²) pattern;
-   - generalize the key space beyond expressions: a pass-agreement endpoint is a
-     parameter, not an expression, so key on source/core/ssa/backend ids and
-     edges/roles as the consuming facts require;
-   - expose three distinct fail-closed APIs for DB-owned facts: `insertFact`
-     rejects conflicting writes to the same committed key, `requireFact` errors
-     on missing DB facts for migrated families, and `lookupFact` is reserved for
-     unmigrated or optional facts only.
-
-   Placement rule, searchable and enforced in review: **node-local type facts
-   are computed by the shared type judgment and carried by typed Core;
-   relational, cross-node, cross-stage,
-   provenance, dependency, evidence, and query facts go in `CompilerDB`.** If
-   both are relevant, typed Core owns the structural fact and `CompilerDB`
-   owns only the relation/evidence/provenance about it. `CompilerDB` must not
-   duplicate a structural typed-Core fact as another source of truth.
-
-   Boundary chain:
-   `ResolvedProgram -> DesugaredProgram -> Check -> Elab -> CoreProgram ->
-   CoreCheck -> ValidatedCore -> Mono ->
-   ValidatedMonoCore -> Lower -> SSA -> SSAVerify -> ValidatedSSA`.
-   Done when Check and Elab share one type judgment for literals first, then
-   binops, casts, calls, aggregates, match/if, patterns, and places; Elab's
-   private re-inference for migrated families is deleted; `CExpr.ty` is stamped
-   from the shared judgment; and regressions prove the historical E0228/H12
-   class cannot be represented. `CompilerDB` / source identity remain future
-   infrastructure for relations, evidence, and provenance; they are not the
-   type-drift fix.
-
-   Hot-read constraint: typed Core is the hot path for node-local structural facts.
-   `CompilerDB` remains canonical for relational/evidence/provenance/query
-   facts, but passes must not repeatedly hash-probe the same DB fact in tight
-   loops. Elab/Mono/Lower should bind required DB facts locally while processing
-   a node or block, and telemetry/complexity gates should watch `CompilerDB`
-   query counts and pass scaling.
-
-3. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
-   `CopyJudgment` / `InstantiationJudgment`.**
+1. Promote Copy / trait-bound / instantiation policy into
+   `CopyJudgment` / `InstantiationJudgment`.
    The predicate centralization work landed the first slice (`isCopy`,
    conditional Copy after substitution, type substitution/type-var matching),
    but the long-term target is a real judgment axis, not a bag of shared
@@ -1185,7 +995,7 @@ relations that cannot live on one typed node.
    the type before asking whether it is `Copy`) and treat it as a peer of
    `CapabilityJudgment`, not a distant report/database item.
 
-4. Promote ownership / value-flow into
+2. Promote ownership / value-flow into
    `OwnershipJudgment` / `ValueFlowJudgment`.
    Concrete's defining promise is linear
    ownership, but the Phase 6B / 6.5 judgment list currently names arithmetic, type,
@@ -1247,7 +1057,7 @@ relations that cannot live on one typed node.
    without it, the less central axes are cleaner than Concrete's own linearity
    model.
 
-5. Centralize capability checking and callback propagation into
+3. Centralize capability checking and callback propagation into
    `CapabilityJudgment` after the type-axis core is stable.
    Capabilities are as central to Concrete as arithmetic and source typing, but
    this must stay practical: **do not add algebraic effects, effect handlers,
@@ -1376,7 +1186,7 @@ These items make the interpreter, runtime order, traps, drops, and deterministic
 artifacts explicit contracts instead of assumptions scattered across fuzzers and
 reports.
 
-6. Add an interpreter reference-semantics contract.
+4. Add an interpreter reference-semantics contract.
    The interpreter is the compiler's executable oracle, so its boundary must be
    explicit instead of implicit in scattered differential tests. Define what the
    interpreter is authoritative for (source expression evaluation, integer
@@ -1416,7 +1226,7 @@ reports.
    genuinely target-specific trap difference must be an explicit, reported target
    assumption, never a silent one.
 
-7. Add an evaluation-order, trap, and drop sequencing contract.
+5. Add an evaluation-order, trap, and drop sequencing contract.
    Concrete needs one owner for "what happens when" just as much as it needs one
    owner for types or capabilities. Evaluation order decides when arguments,
    receivers, array/struct elements, conditions, branch values, match
@@ -1443,7 +1253,7 @@ reports.
    lowering mutation that moves a trap, drop, or capability check across another
    observable event must fail.
 
-8. Add a pipeline determinism gate.
+6. Add a pipeline determinism gate.
    Content-addressed artifacts, proof replay, package evidence, deterministic
    reports, and future `CompilerDB` caching all assume the compiler is
    deterministic for the same source, compiler version, target/profile, and
@@ -1475,7 +1285,7 @@ These items keep the pipeline itself honest: each stage has a contract, facts
 have stable homes, and production/audit/proof/test entry points do not grow
 hidden alternate pipelines.
 
-9. **[DONE V1] Add stage contracts and pass-agreement assertions.**
+7. Add stage contracts and pass-agreement assertions.
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
    establishes that user-triggerable violations are caught at the first
    responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
@@ -1483,9 +1293,10 @@ hidden alternate pipelines.
    introduced. The long-term form is `concrete inspect --pipeline-contracts
    --json`, but the V1 gate is already the phase's contract backstop.
 
-10. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
+8. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
    facts.
-   This item is explicitly dependent on item #2, but it is NOT a prerequisite for the
+   This item depends on the completed `TypeJudgment` / typed Core
+   architecture recorded in the changelog, but it is NOT a prerequisite for the
    type-axis fix. Do not build a separate ID scheme for source expression types:
    typed Core already carries those facts. When pass-agreement edges, borrow
    conflicts, E0293 path-pair facts, provenance, replay, package evidence, or
@@ -1502,7 +1313,7 @@ hidden alternate pipelines.
    the same hygiene source, and a gate proves reports/agents can join facts by
    ID without reparsing human strings.
 
-11. Add a lightweight compiler fact dependency graph.
+9. Add a lightweight compiler fact dependency graph.
    Do not build the full rustc-style demand-driven query engine yet, but record
    dependency edges as first-class trace/replay data:
    `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
@@ -1515,7 +1326,7 @@ hidden alternate pipelines.
    capability fact, diagnostic, or backend artifact changed, and a replay gate
    marks dependent facts stale when an upstream source/fact hash changes.
 
-12. Add pass locality and mutation rules.
+10. Add pass locality and mutation rules.
    Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
    it may mutate, what facts it may write, and what prior stage contract makes
    its assumptions legal. A report/audit pass may not recompute semantic facts;
@@ -1527,7 +1338,7 @@ hidden alternate pipelines.
    for illegal cross-level read, illegal fact write, hidden sibling inspection,
    and report-side semantic recomputation.
 
-13. Add analysis preservation and invalidation contracts.
+11. Add analysis preservation and invalidation contracts.
    Once facts are cached or reused, every pass must state which facts it reads,
    writes, preserves, and invalidates. This is the guardrail that prevents
    future incremental checking, proof caching, package facts, or editor facts
@@ -1543,7 +1354,7 @@ hidden alternate pipelines.
 These items connect semantic facts to lowering, intrinsics, reports, and the
 single composed compiler pipeline.
 
-14. Define Concrete's result-location / destination-passing model.
+12. Define Concrete's result-location / destination-passing model.
     Adapt Zig's result-location idea to Concrete's linear value model. Write the
     Concrete-specific contract for value context, place context, borrow context,
     callArg context, destination context, return destination, aggregate literal
@@ -1563,7 +1374,7 @@ single composed compiler pipeline.
     and scoped callback rows, and at least one old H10/H11-style conservation
     bug is expressible as a violated destination/ownership contract.
 
-15. Add a single builtin/intrinsic registry.
+13. Add a single builtin/intrinsic registry.
     Builtins and intrinsics must not be separately described in signatures,
     checker behavior, elab/lower special cases, interpreter behavior, report
     facts, stdlib assumptions, and Unsafe/trusted policy. A registry row should
@@ -1577,7 +1388,7 @@ single composed compiler pipeline.
     slice may be an intrinsic coverage/matrix gate; the end state is a registry,
     not a grep-based allowlist.
 
-16. Move report/evidence output toward `CompilerDB` fact views.
+14. Move report/evidence output toward `CompilerDB` fact views.
     Internal facts should be typed records until the final renderer, not strings
     assembled at each report site. V1 target: diagnostic-code facts, capability
     facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
@@ -1589,7 +1400,7 @@ single composed compiler pipeline.
     row and report entry, and add one negative where a stale hand-written report
     string disagrees with the compiler fact.
 
-17. Eliminate hidden second pipelines.
+15. Eliminate hidden second pipelines.
     Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
     proof extraction, and tests must call the same composed pass functions or
     declare a checked reason for diverging. The specific risk is a verifier
@@ -1606,7 +1417,7 @@ single composed compiler pipeline.
 These items prevent new syntax, constructors, parser forms, generic surfaces, or
 desugar rewrites from bypassing the semantic contracts above.
 
-18. Enforce the name-resolution / qualified-name boundary.
+16. Enforce the name-resolution / qualified-name boundary.
     Resolve should be the only stage that decides what a source name means.
     Later stages may consume resolved IDs / qualified names but must not
     reconstruct lookup from bare strings. This matters for modules, aliases,
@@ -1617,7 +1428,7 @@ desugar rewrites from bypassing the semantic contracts above.
     name, generated mono names, and report/audit attribution proving later
     stages use resolved identity.
 
-19. Unify tree-walker coverage across AST/Core/SSA consumers.
+17. Unify tree-walker coverage across AST/Core/SSA consumers.
     There are recursive walkers in Check, Verify, Mono, ProofCore, Report,
     Lower, interpreter, and tests. Every new constructor risks one walker
     missing it. Keep the constructor-coverage manifest/gate proving every
@@ -1626,7 +1437,7 @@ desugar rewrites from bypassing the semantic contracts above.
     differential/oracle coverage or an explicit compile-only/proof-only
     rationale.
 
-20. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
+18. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
     CoreCheck should catch frontend/checker/elab/mono misses before Lower. Add
     or verify checks for unresolved generic/typevar leakage after mono, illegal
     Copy specialization, mixed-width binops, illegal non-Copy value-flow residue,
@@ -1635,13 +1446,13 @@ desugar rewrites from bypassing the semantic contracts above.
     panics. Gate with one accepted Core fixture per valid class and one rejected
     fixture per invalid class.
 
-21. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
+19. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
     The differential fuzzer is necessary but not sufficient. Maintain a feature
     matrix: every language construct has at least one interp-vs-compiled test,
     fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
     new constructor cannot be added without a coverage row.
 
-22. Add the third fuzzer: generics / monomorphization / type-policy drift.
+20. Add the third fuzzer: generics / monomorphization / type-policy drift.
     Concrete already has value/runtime fuzzing (`fuzz_differential`) and
     ownership/conservation fuzzing (`fuzz_linearity`). Add
     `scripts/fuzz_generics.py` (or equivalent) for user structs/enums,
@@ -1659,17 +1470,17 @@ desugar rewrites from bypassing the semantic contracts above.
     disagreements as minimized `.con` fixtures naming the first disagreeing
     phase.
 
-23. Add parser/AST grammar-conformance fuzzing.
+21. Add parser/AST grammar-conformance fuzzing.
     The LL(1) checker proves grammar shape, but it is not a parser/AST stress
     net. Generate valid grammar-shaped programs, expected rejects, deeply nested
     but bounded expressions, pattern/control-flow combinations, module/import
     shapes, generic syntax, and statement/expression boundary cases. The oracle:
     parser accepts the valid corpus, rejects the invalid corpus with stable
     diagnostics, preserves source spans for representative nodes, and produces
-    AST forms whose feature rows are covered by item #21. When a formatter or
+    AST forms whose feature rows are covered by item #19. When a formatter or
     printer exists, extend this to parse -> print/normalize -> parse round-trip.
 
-24. Add a desugar-preservation contract.
+22. Add a desugar-preservation contract.
     Desugar is a semantic compiler stage, not an invisible parser cleanup pass.
     It rewrites surface forms such as `for`, `if let` / `while let`, scoped
     blocks, trailing-value blocks, `defer`, destructuring sugar, and future
@@ -1701,14 +1512,14 @@ desugar rewrites from bypassing the semantic contracts above.
 These items make failures reviewable and keep compiler-internal artifacts from
 leaking as user-facing truth.
 
-25. Define diagnostic code ownership by phase.
+23. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; now each
     phase/category should own a code range or category (parse, check, corecheck,
     mono, lower, proof, report, runtime trap), with source, hint, JSON payload,
     and report behavior documented. Gate that a new diagnostic code declares
     owner/category and appears in the ledger.
 
-26. Add a pipeline diagnostic-quality contract.
+24. Add a pipeline diagnostic-quality contract.
     Every user-facing pipeline diagnostic must have a phase owner, stable code,
     primary source span, human message, machine-readable JSON fields, and a
     clear reason why that phase owns the rejection. When an actionable recovery
@@ -1722,14 +1533,14 @@ leaking as user-facing truth.
     human and JSON output, and a red-team fixture fails when an error lacks a
     source span, code, hint, owner, or JSON field.
 
-27. Add source-span preservation audits across the pipeline.
+25. Add source-span preservation audits across the pipeline.
     After lexer/parser/check/elab/mono/lower, diagnostics, reports, traps, and
     proof obligations should still point to original source. Gate representative
     constructs: submodules, generic instantiations, desugared `if let`/`while
     let`, method calls, match arms, lowered runtime traps, and generated proof
     obligations. A fixture with a stale main-file span must fail.
 
-28. Encapsulate generated names and stringly internal sentinels.
+26. Encapsulate generated names and stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
     naming API. Mono, elab, lower, proof extraction, and reports should use the
@@ -1737,7 +1548,7 @@ leaking as user-facing truth.
     and that generated names round-trip through reports/source maps without
     becoming user-visible authority or value-flow facts.
 
-29. Define the panic-to-diagnostic boundary.
+27. Define the panic-to-diagnostic boundary.
     `panic!` in layout/type/lowering paths is acceptable only for compiler
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
@@ -1752,7 +1563,7 @@ leaking as user-facing truth.
 These items make the pipeline inspectable under large workloads and ensure the
 gates themselves are load-bearing.
 
-30. Add pass timing, memory, and IR-size telemetry.
+28. Add pass timing, memory, and IR-size telemetry.
     This is not a public performance claim. Record per-pass timing, peak memory
     / RSS when available, allocation or output-buffer size if available,
     module/function counts, AST/Core/SSA node counts, mono instantiation count,
@@ -1761,7 +1572,7 @@ gates themselves are load-bearing.
     platform-specific memory fields; benchmarks/performance claims remain Phase
     17 release work.
 
-31. Add an anti-superlinear compiler complexity guard.
+29. Add an anti-superlinear compiler complexity guard.
     Telemetry tells us what happened; this gate fails when a compiler pass
     quietly becomes quadratic or worse on ordinary generated programs. Build a
     scaling corpus that generates the same program family at multiple sizes:
@@ -1772,7 +1583,7 @@ gates themselves are load-bearing.
     deliberately reintroduced quadratic renderer/collector, an intentionally
     excessive memory-growth variant, and the bug 027 family.
 
-32. Add `concrete trace-pipeline --json`.
+30. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
     obligations, mono instances, CoreCheck status, SSA blocks, runtime traps,
     trusted/Unsafe facts, dependency edges, fact IDs, invalidation decisions,
@@ -1780,7 +1591,7 @@ gates themselves are load-bearing.
     failing program where the trace names the first phase that introduced,
     preserved, invalidated, or rejected the relevant fact.
 
-33. Add counterexample-first pipeline debugging.
+31. Add counterexample-first pipeline debugging.
     Any pipeline panic, proof failure, fuzzer mismatch, optimizer trap issue,
     backend leak, linker leak, or stage-contract failure should reduce to a
     minimized `.con` fixture plus a replay command. Reuse the existing reducer
@@ -1788,7 +1599,7 @@ gates themselves are load-bearing.
     interp-vs-compiled mismatch, one fold/trap-preservation failure, and one
     backend/linker leak proving the counterexample can be saved as a regression.
 
-34. Add mutation testing for the pipeline gates.
+32. Add mutation testing for the pipeline gates.
     Mutate or patch-disable one representative rule in each major family and
     prove the corresponding gate fails: CoreCheck type rule, Copy predicate,
     arithmetic trap preservation, capability requirement, walker constructor
@@ -1796,7 +1607,7 @@ gates themselves are load-bearing.
     contract, fact invalidation, and report/evidence schema row. This proves the
     pipeline gates are load-bearing instead of decorative.
 
-35. Add round-trip/replay artifacts for pass outputs.
+33. Add round-trip/replay artifacts for pass outputs.
     For a selected program, users and agents should ask what each stage
     received, what it emitted, what facts changed, and what command replays that
     claim. V1 artifact: per-stage summary hashes and optional minimized dumps
@@ -1810,7 +1621,7 @@ gates themselves are load-bearing.
 These are deliberately scoped follow-ups: only pull them when the earlier gates
 or proof work show that the structure is now the limiting factor.
 
-36. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+34. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
     remains ad hoc.
     Historical bugs clustered around branch/loop/snapshot reconciliation. The
     extracted builder should own if/match result values, loop headers/exits, phi
@@ -1820,14 +1631,14 @@ or proof work show that the structure is now the limiting factor.
     fixtures remain green, and a mutation that drops scope filtering or trap
     preservation is caught.
 
-37. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+35. Reduce ProofCore partial-def opacity only where proof preservation needs it.
     ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
     full rewrite here. Add non-partial wrappers or structural recursion only for
     constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
     with one theorem that would fail if the wrapper delegated to an opaque
     partial-def shape.
 
-38. Add the Phase 6B / 6.5 validation artifact.
+36. Add the Phase 6B / 6.5 validation artifact.
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
     compiler-pipeline corpus exercising arithmetic reference semantics,
     central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
@@ -3505,7 +3316,8 @@ machine-readable.
     (`CExpr.ty`) stamping, deleting Elab's private re-inference and CoreCheck's
     overlapping rules down to genuine Core-shape validation.
 
-    Phase 6B / 6.5 #2 is where the architecture lands, not this phase: Core `CExpr`
+    The completed Phase 6B / 6.5 `TypeJudgment` work is where the architecture
+    lands, not this phase: Core `CExpr`
     is already the typed IR, and the type-axis work is to centralize the source
     type judgment so Check and Elab stamp/read the same answer. Future
     `CompilerDB` work owns relational, provenance, evidence, dependency, and

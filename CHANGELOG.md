@@ -10,6 +10,41 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6B completed semantic-axis items moved out of the active roadmap (2026-07-11)
+
+The fully completed Phase 6B / 6.5 compiler-pipeline items were moved from
+`ROADMAP.md` into this changelog so the active roadmap only tracks remaining
+pipeline hardening work.
+
+Completed Phase 6B semantic-axis items:
+
+- **Integer/arithmetic semantics unified in `Concrete/Semantics/IntArith.lean`.**
+  Integer width, signedness, ranges, checked/wrapping/saturating behavior,
+  cast normalization, div/rem behavior, shift-range predicates, trap predicates,
+  and optimizer foldability now have one source of truth. `Interp`,
+  `SSACleanup`, `SSAVerify`, `EmitSSA`, report obligations, and range
+  diagnostics read from the same arithmetic policy instead of maintaining
+  parallel implementations. The arithmetic gate proves
+  `interpret == fold-then-interpret == compiled` over the integer matrix and
+  carries trap-preservation red-team cases.
+- **Check/Elab source typing unified through `TypeJudgment`.** Core `CExpr` was
+  already the typed carrier; the drift bug was Check and Elab computing source
+  expression types independently. `Concrete/Semantics/TypeJudgment.lean` now
+  owns the source-type decisions that matter: literal/defaulting records,
+  flexible-literal binop operand order, and the context-hint policy used by
+  calls, aggregates, index expressions, patterns, and control-flow values.
+  Elab's divergent re-elaborate repair path was deleted, and Check/Elab share
+  the same decision for migrated families.
+- **E0228/E0715-style typing drift closed for the covered surface.** Literal,
+  binop, call/argument, aggregate, index, pattern, if, and match value typing now
+  agree by construction or by verified policy. The work also fixed the
+  control-flow overflow soundness bug where branch bodies ignored the enclosing
+  value hint, causing interpreter and compiled behavior to diverge.
+- **Type-agreement regression gate landed.** `scripts/tests/check_type_agreement.sh`
+  carries the red-team rows for the historical Check/Elab disagreement class and
+  includes regression coverage for the context-hint families that were verified
+  to agree by construction.
+
 ### Phase 6 completed language/usability core moved out of the active roadmap (2026-07-10)
 
 The fully completed and gated Phase 6 items were moved from `ROADMAP.md` into
