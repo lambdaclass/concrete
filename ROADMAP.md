@@ -877,8 +877,8 @@ language's operational meaning, and the folder/backend are derived from or
 checked against it, so the oracle is true by construction, not by fuzzing
 (`IntArith`, feature matrices, counterexample/replay gates); and (2) **facts
 committed once** — every semantic fact (type, cap,
-ownership, arithmetic policy, evidence class, resolved identity) is stamped once
-and never re-derived downstream. The key escalation this phase drives is from
+ownership/value-flow, arithmetic policy, evidence class, resolved identity) is
+stamped once and never re-derived downstream. The key escalation this phase drives is from
 *gates that DETECT drift* to *types that FORBID it*: shared predicates and
 pass-agreement gates catch disagreement after the fact, but certificate-carrying
 IR makes re-derivation unrepresentable. That is the
@@ -898,8 +898,9 @@ language claims should say "pipeline hardening in progress" rather than imply
 the compiler architecture is finished.
 
 **Judgment-module contract.** `IntArith`, `TypeJudgment`,
-`CapabilityJudgment`, and `CopyJudgment` / `InstantiationJudgment` are not
-ordinary helper modules. They are the pipeline's named semantic decision points.
+`CapabilityJudgment`, `CopyJudgment` / `InstantiationJudgment`, and the new
+`OwnershipJudgment` / `ValueFlowJudgment` are not ordinary helper modules. They
+are the pipeline's named semantic decision points.
 Every judgment module must be pure and deterministic, return a decision record
 rather than a bare `Bool`/`Ty`/`CapSet`, be the only implementation of that
 decision, feed diagnostics/reports/audit rows from the same record, name the
@@ -997,6 +998,68 @@ IR field, that is a pipeline bug.
    condition differently. Sequence after the core `TypeJudgment` work (you need
    the type before asking whether it is `Copy`) and treat it as a peer of
    `CapabilityJudgment`, not a distant report/database item.
+
+2a. **[CRUCIAL NEXT] Promote ownership / value-flow into
+   `OwnershipJudgment` / `ValueFlowJudgment`.**
+   This is the missing headline axis. Concrete's defining promise is linear
+   ownership, but the Phase 6.5 judgment list currently names arithmetic, type,
+   Copy/instantiation, and capability before the ownership decision itself. The
+   value-flow spec and H9-H17 work made Check much more disciplined, but they
+   are still framed mainly as "the checker rejects bad programs." That is not
+   enough for the long-term pipeline: ownership facts are consumed by Check,
+   Lower/codegen, the interpreter, reports, and eventually proof extraction.
+   If those consumers re-derive "move vs copy vs borrow vs drop" separately,
+   Concrete keeps the same drift shape that `TypeJudgment`, `IntArith`, and
+   `CopyJudgment` were created to eliminate.
+
+   The judgment should own the use-site/value-flow decision record, not just a
+   boolean. Include at least: source place/expression, input type, `Copy`
+   decision from `CopyJudgment`, use mode (`copy`, `move`, `borrow`, `mut_borrow`,
+   `reborrow`, `consume`, `place_write`, `init`, `overwrite`, `discard`,
+   `diverge`), whether the site is a last use, liveness before/after the site,
+   scope-exit destroy/drop obligations, control-flow-edge obligations (`return`,
+   `break`, loop exit, match/if arm, diverging branch), rejection reason,
+   diagnostic payload, and report/audit payload. For aggregate/destructure/
+   assignment/return/callback cases, the record should also name the destination
+   or pass-agreement fact it depends on.
+
+   Consumers:
+   - **Check** uses the record to reject use-after-move, double consume, live
+     overwrite, illegal discard, illegal non-Copy projection, and borrow
+     conflicts.
+   - **Lower** uses the same record, or a plan derived from it, to choose
+     move/copy/borrow lowering and to insert `Destroy`/drop operations on the
+     exact live-linear paths. Lower must not run a parallel liveness/drop
+     analysis that can disagree with Check without an agreement gate.
+   - **Interpreter** models consumption from the same decision family so the
+     differential oracle agrees on ownership-sensitive programs.
+   - **Reports/audit/proofs** explain why a value was copied, moved, borrowed,
+     destroyed, rejected, or considered live on a path.
+
+   First slice: audit the current ownership consumers. Identify every place
+   Check, Lower, the interpreter, and reports decide move-vs-copy, last-use, drop
+   placement, or discard independently. Turn that into a small ownership
+   agreement matrix before building a giant database: H14/H15/H17-style
+   break-value consume, live overwrite, param consume, reborrowed callback
+   context, divergent branch, loop exit, match arms, `_` discard, assignment
+   overwrite, aggregate construction, and non-Copy projection.
+
+   Second slice: define the decision-record shape and central computation for
+   the cases already covered by the value-flow spec. It is acceptable for the
+   first implementation to be "shared computation + agreement gate" rather than
+   a fully committed per-node record, but the roadmap target is stronger:
+   Check-owned value-flow decisions become facts that later stages consume or
+   derive mechanically, not policy they rediscover.
+
+   Gate: promote the linearity fuzzer into an ownership agreement gate:
+   `Check ownership decision == Lower move/drop plan == interpreter consumption
+   behavior` over the matrix above. Red-team by disabling one drop edge,
+   treating a non-Copy value as Copy, treating a moved value as live, or letting
+   Lower insert a destroy on a path Check considered already consumed. The gate
+   must fail with a minimized `.con` fixture and a replay command. This item is
+   a prerequisite for claiming the pipeline has first-class fact discipline:
+   without it, the less central axes are cleaner than Concrete's own linearity
+   model.
 
 3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
@@ -1310,14 +1373,15 @@ IR field, that is a pipeline bug.
     storage, why by-value projection of a non-Copy subplace is rejected, and how
     parameter-directed pass agreement interacts with borrows and reborrows.
 
-    This model should be committed as typed ledger facts on nodes/edges, not
+    This model should feed `OwnershipJudgment` / `ValueFlowJudgment`, not be
     rediscovered during Lower: aggregate construction, returns, destructures,
     assignments, and scoped callbacks should carry destination/pass facts from
-    Check through Elab into Core. Done when `docs/VALUE_FLOW_SPEC.md` or a new
+    Check through Elab into Core or into future `CompilerDB` edge facts when
+    they are relational. Done when `docs/VALUE_FLOW_SPEC.md` or a new
     destination-passing note names the modes, the checker/lowerer tests include
     aggregate construction, return, destructure, assignment, borrow, callArg,
     and scoped callback rows, and at least one old H10/H11-style conservation
-    bug is expressible as a violated destination contract.
+    bug is expressible as a violated destination/ownership contract.
 
 11. Add a single builtin/intrinsic registry.
     Builtins and intrinsics must not be separately described in signatures,
@@ -1539,9 +1603,11 @@ IR field, that is a pipeline bug.
 33. Add the Phase 6.5 validation artifact.
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
     compiler-pipeline corpus exercising arithmetic reference semantics,
-    central policy predicates, stage contracts, capability facts, stable fact
-    IDs, fact dependencies, pass locality, invalidation, certificate-carrying
-    IR, destination-passing/value flow, intrinsic registry, `CompilerDB`,
+    central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
+    `OwnershipJudgment` / `ValueFlowJudgment`, stage contracts, capability
+    facts, stable fact IDs, fact dependencies, pass locality, invalidation,
+    certificate-carrying IR, destination-passing/value flow, intrinsic registry,
+    `CompilerDB`,
     no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
     failures, feature matrices, source spans, generated-name hygiene,
     diagnostic quality, panic-to-diagnostic behavior, performance/complexity
