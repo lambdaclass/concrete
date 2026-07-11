@@ -414,6 +414,9 @@ jobs:
       - name: "Copy-judgment gate (Phase 6.5 — one Copy judgment shared by Check and Core)"
         run: bash scripts/tests/check_copy_judgment.sh
 
+      - name: "Ownership-judgment matrix (Check == Lower move/drop == interp consumption)"
+        run: bash scripts/tests/check_ownership_judgment.sh
+
       - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
         run: bash scripts/tests/check_corecheck_boundary.sh
 

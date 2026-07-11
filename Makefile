@@ -291,6 +291,9 @@ test-differential-positions: build ## Differential-position gate: flexible overf
 test-copy-judgment: build ## Copy-judgment gate (Phase 6.5): the one Copy judgment (Layout.isCopyTyGeneric) is shared by Check and the Core stages so they cannot drift on Copy-ness
 	$(NIX_DEVELOP) bash ./scripts/tests/check_copy_judgment.sh
 
+test-ownership-judgment: build ## Ownership matrix (Phase 6.5): Check accept/reject == Lower move/drop == interp consumption, across the linearity matrix
+	$(NIX_DEVELOP) bash ./scripts/tests/check_ownership_judgment.sh
+
 test-corecheck-boundary: build ## CoreCheck boundary gate (Phase 6.5 #4): every frontend/mono/type-policy residue class is rejected before Lower (see docs/COMPILER_BOUNDARY.md)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_corecheck_boundary.sh
 
