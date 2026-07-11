@@ -1558,12 +1558,58 @@ leaking as user-facing truth.
     memory/time before reporting a diagnostic. Any remaining `panic!` must be
     documented as unreachable after a named prior phase contract.
 
-### Observability, Replay, And Scaling
+### Targeted Structural Follow-Ups And Exit Artifact
 
-These items make the pipeline inspectable under large workloads and ensure the
-gates themselves are load-bearing.
+These are deliberately scoped follow-ups: only pull them when the earlier gates
+or proof work show that the structure is now the limiting factor.
 
-28. Add pass timing, memory, and IR-size telemetry.
+28. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+    remains ad hoc.
+    Historical bugs clustered around branch/loop/snapshot reconciliation. The
+    extracted builder should own if/match result values, loop headers/exits, phi
+    construction, scope-local variable filtering, internal trailing-value
+    handling, and defer cleanup boundaries. Acceptance gate: previous nested
+    match, loop-after-loop-branch, `__last_expr`, defer, and value-block
+    fixtures remain green, and a mutation that drops scope filtering or trap
+    preservation is caught.
+
+29. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+    ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
+    full rewrite here. Add non-partial wrappers or structural recursion only for
+    constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
+    with one theorem that would fail if the wrapper delegated to an opaque
+    partial-def shape.
+
+30. Add the Phase 6B / 6.5 validation artifact.
+    `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
+    compiler-pipeline corpus exercising arithmetic reference semantics,
+    central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
+    `OwnershipJudgment` / `ValueFlowJudgment`, stage contracts, capability
+    facts, stable fact IDs, fact dependencies, pass locality, invalidation,
+    certificate-carrying IR, destination-passing/value flow, intrinsic registry,
+    `CompilerDB`,
+    no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
+    failures, feature matrices, source spans, generated-name hygiene,
+    diagnostic quality and panic-to-diagnostic behavior. The artifact must prove
+    these refactors are behavior preserving for accepted programs and fail closed
+    for malformed or unsupported programs.
+
+## Phase 6C / 6.c: Pipeline Observability, Replay, And Scaling
+
+Goal: make the already-unified pipeline inspectable, replayable, and scalable
+under real workloads without keeping Phase 6B open-ended.
+
+Done when: compiler-owned telemetry, scaling checks, trace output, minimized
+counterexamples, gate mutation tests, and pass-output replay artifacts exist as
+tooling around the pipeline. Phase 6C must not add new semantic truth sources; it
+observes and replays facts owned by Phase 6B and later phases.
+
+This phase was split out of Phase 6B because these tools are valuable but do not
+gate Phase 6B's core criterion: one opinion per program. Keep the minimal
+Phase 6B fact-provenance requirement there (explain where a fact was introduced
+or lost); put the heavier trace/replay/scaling machinery here.
+
+1. Add pass timing, memory, and IR-size telemetry.
     This is not a public performance claim. Record per-pass timing, peak memory
     / RSS when available, allocation or output-buffer size if available,
     module/function counts, AST/Core/SSA node counts, mono instantiation count,
@@ -1572,7 +1618,7 @@ gates themselves are load-bearing.
     platform-specific memory fields; benchmarks/performance claims remain Phase
     17 release work.
 
-29. Add an anti-superlinear compiler complexity guard.
+2. Add an anti-superlinear compiler complexity guard.
     Telemetry tells us what happened; this gate fails when a compiler pass
     quietly becomes quadratic or worse on ordinary generated programs. Build a
     scaling corpus that generates the same program family at multiple sizes:
@@ -1583,7 +1629,7 @@ gates themselves are load-bearing.
     deliberately reintroduced quadratic renderer/collector, an intentionally
     excessive memory-growth variant, and the bug 027 family.
 
-30. Add `concrete trace-pipeline --json`.
+3. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
     obligations, mono instances, CoreCheck status, SSA blocks, runtime traps,
     trusted/Unsafe facts, dependency edges, fact IDs, invalidation decisions,
@@ -1591,7 +1637,7 @@ gates themselves are load-bearing.
     failing program where the trace names the first phase that introduced,
     preserved, invalidated, or rejected the relevant fact.
 
-31. Add counterexample-first pipeline debugging.
+4. Add counterexample-first pipeline debugging.
     Any pipeline panic, proof failure, fuzzer mismatch, optimizer trap issue,
     backend leak, linker leak, or stage-contract failure should reduce to a
     minimized `.con` fixture plus a replay command. Reuse the existing reducer
@@ -1599,7 +1645,7 @@ gates themselves are load-bearing.
     interp-vs-compiled mismatch, one fold/trap-preservation failure, and one
     backend/linker leak proving the counterexample can be saved as a regression.
 
-32. Add mutation testing for the pipeline gates.
+5. Add mutation testing for the pipeline gates.
     Mutate or patch-disable one representative rule in each major family and
     prove the corresponding gate fails: CoreCheck type rule, Copy predicate,
     arithmetic trap preservation, capability requirement, walker constructor
@@ -1607,7 +1653,7 @@ gates themselves are load-bearing.
     contract, fact invalidation, and report/evidence schema row. This proves the
     pipeline gates are load-bearing instead of decorative.
 
-33. Add round-trip/replay artifacts for pass outputs.
+6. Add round-trip/replay artifacts for pass outputs.
     For a selected program, users and agents should ask what each stage
     received, what it emitted, what facts changed, and what command replays that
     claim. V1 artifact: per-stage summary hashes and optional minimized dumps
@@ -1616,43 +1662,6 @@ gates themselves are load-bearing.
     dependency set must produce stable pass-output hashes unless a field is
     explicitly marked nondeterministic and excluded from the hash.
 
-### Targeted Structural Follow-Ups And Exit Artifact
-
-These are deliberately scoped follow-ups: only pull them when the earlier gates
-or proof work show that the structure is now the limiting factor.
-
-34. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
-    remains ad hoc.
-    Historical bugs clustered around branch/loop/snapshot reconciliation. The
-    extracted builder should own if/match result values, loop headers/exits, phi
-    construction, scope-local variable filtering, internal trailing-value
-    handling, and defer cleanup boundaries. Acceptance gate: previous nested
-    match, loop-after-loop-branch, `__last_expr`, defer, and value-block
-    fixtures remain green, and a mutation that drops scope filtering or trap
-    preservation is caught.
-
-35. Reduce ProofCore partial-def opacity only where proof preservation needs it.
-    ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
-    full rewrite here. Add non-partial wrappers or structural recursion only for
-    constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
-    with one theorem that would fail if the wrapper delegated to an opaque
-    partial-def shape.
-
-36. Add the Phase 6B / 6.5 validation artifact.
-    `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
-    compiler-pipeline corpus exercising arithmetic reference semantics,
-    central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
-    `OwnershipJudgment` / `ValueFlowJudgment`, stage contracts, capability
-    facts, stable fact IDs, fact dependencies, pass locality, invalidation,
-    certificate-carrying IR, destination-passing/value flow, intrinsic registry,
-    `CompilerDB`,
-    no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
-    failures, feature matrices, source spans, generated-name hygiene,
-    diagnostic quality, panic-to-diagnostic behavior, performance/complexity
-    guards, counterexample saving, mutation checks, pass-output replay, and
-    trace output. The artifact must prove these refactors are behavior
-    preserving for accepted programs and fail closed for malformed or
-    unsupported programs.
 
 ## Phase 7: Standard Library And Core APIs
 
