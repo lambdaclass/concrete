@@ -417,6 +417,9 @@ jobs:
       - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
         run: bash scripts/tests/check_corecheck_boundary.sh
 
+      - name: "Capability-judgment gate (Phase 6.5 — one direct-call capability decision)"
+        run: bash scripts/tests/check_capability_judgment.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

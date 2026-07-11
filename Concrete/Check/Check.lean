@@ -702,11 +702,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
-        let (resolvedCaps, _) := resolvedCapSet.normalize
-        let (callerCaps, callerVars) := env.currentCapSet.normalize
-        for cap in resolvedCaps do
-          unless callerCaps.contains cap || callerVars.contains cap do
-            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- One shared direct-call decision (Capabilities.missingCaps): the caps the
+        -- caller lacks for this call. Same computation CoreCheck's satisfaction
+        -- check and the reports read, so they cannot disagree.
+        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do

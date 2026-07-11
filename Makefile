@@ -294,6 +294,9 @@ test-copy-judgment: build ## Copy-judgment gate (Phase 6.5): the one Copy judgme
 test-corecheck-boundary: build ## CoreCheck boundary gate (Phase 6.5 #4): every frontend/mono/type-policy residue class is rejected before Lower (see docs/COMPILER_BOUNDARY.md)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_corecheck_boundary.sh
 
+test-capability-judgment: build ## Capability-judgment gate (Phase 6.5): direct-call capability satisfaction/missing is one decision (Capabilities.decideCall) shared by Check, CoreCheck, and reports
+	$(NIX_DEVELOP) bash ./scripts/tests/check_capability_judgment.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

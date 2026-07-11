@@ -773,10 +773,9 @@ partial def inferMethodParamAndRetTys
       | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
       | none => throwCheck (.cannotInferCapVariable cv callName) (some sp)
     let env ← getEnv
-    let (callerCaps, callerVars) := env.currentCapSet.normalize
-    for cap in resolvedCaps do
-      unless callerCaps.contains cap || callerVars.contains cap do
-        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
+    -- Shared direct-call decision (Capabilities.missingCaps) — see Check.lean.
+    for cap in Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps) do
+      throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
   -- 4. Resolve cap variables inside fn-typed param types so a pure/empty-cap
   --    callback argument matches the declared `with(C)` parameter.
   let resolveCapInTy : Ty → Ty := fun ty =>

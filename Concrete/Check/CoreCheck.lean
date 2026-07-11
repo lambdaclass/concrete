@@ -381,8 +381,12 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     match ← lookupFnCaps fn with
     | some calleeCaps =>
       let env ← getEnv
-      if !capsContain env.currentCapSet calleeCaps then
-        addCCError (.insufficientCapabilities fn (capSetToString calleeCaps) (capSetToString env.currentCapSet))
+      -- Same direct-call decision as Check (Capabilities.decideCall): CoreCheck
+      -- renders the whole-set E0520 from the record's satisfaction, Check renders
+      -- the per-cap E0240 from the record's `missing` — one decision, two views.
+      let capD := Capabilities.decideCall env.currentCapSet calleeCaps
+      if !capD.satisfied then
+        addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
     | none =>
       -- Not a known function: if it is a local fn-pointer variable, the call
       -- exercises the authority the fn TYPE declares — enforce it like a

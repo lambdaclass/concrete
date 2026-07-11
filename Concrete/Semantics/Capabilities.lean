@@ -71,5 +71,36 @@ def capsAllowUnsafeOp (inTrusted : Bool) (cs : CapSet) : Bool :=
 def externFnRequiredCaps (isTrusted : Bool) : CapSet :=
   if isTrusted then .empty else .concrete [unsafeCapName]
 
+/-- The concrete capabilities a `callee` requires that a `caller` does NOT hold
+    (in its concrete caps or as a capability variable). This is the specific
+    "what is missing" behind the per-capability E0240 diagnostic; it was
+    open-coded identically at every direct-call site (Check + CheckHelpers). It
+    considers only the required set's CONCRETE caps — a required capability
+    variable is not a per-cap miss (its satisfaction is the polymorphic-callback
+    contract, decided by `capsContain`). -/
+def missingCaps (caller callee : CapSet) : List String :=
+  let (callerCaps, callerVars) := caller.normalize
+  let (calleeCaps, _calleeVars) := callee.normalize
+  calleeCaps.filter fun c => !(callerCaps.contains c || callerVars.contains c)
+
+/-- The one direct-call capability DECISION (Phase 6.5 CapabilityJudgment, slice
+    1): whether `caller`'s authority covers a call requiring `callee`, and — when
+    it does not — which concrete caps are missing. `satisfied` is authoritative
+    (`capsContain`, honoring unions and polymorphic variables); `missing` is the
+    per-cap detail for diagnostics. Check (per-cap E0240) and CoreCheck (whole-set
+    E0520) build their diagnostics from THIS record, and reports read it — so they
+    cannot disagree on satisfaction or on which caps are missing. -/
+structure CallCapDecision where
+  required  : CapSet
+  callerHas : CapSet
+  satisfied : Bool
+  missing   : List String
+  deriving Repr
+
+def decideCall (caller callee : CapSet) : CallCapDecision :=
+  { required := callee, callerHas := caller
+    satisfied := capsContain caller callee
+    missing := missingCaps caller callee }
+
 end Capabilities
 end Concrete
