@@ -414,6 +414,9 @@ jobs:
       - name: "Copy-judgment gate (Phase 6.5 — one Copy judgment shared by Check and Core)"
         run: bash scripts/tests/check_copy_judgment.sh
 
+      - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
+        run: bash scripts/tests/check_corecheck_boundary.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
