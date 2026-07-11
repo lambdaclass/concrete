@@ -901,9 +901,21 @@ mutation-tested gates proving the checks are load-bearing. Until then, public
 language claims should say "pipeline hardening in progress" rather than imply
 the compiler architecture is finished.
 
+**Correctness-evidence rule.** `interp == compiled` is an agreement check, not
+a proof that the shared meaning is correct. Each runtime-facing semantic axis
+must therefore name its source of correctness: a small reference semantics or
+policy module (`IntArith`, `TypeJudgment`, future `OwnershipJudgment` /
+`TotalityJudgment`), an external/profiled spec where the language deliberately
+inherits one (UTF-8/string policy, target ABI, future float profile), adversarial
+red-team fixtures for plausible shared wrong assumptions, and eventually proof
+obligations for preservation-critical subsets. Differential equality catches
+drift between implementations; reference specs, external policies, and proofs
+are what prevent two implementations from agreeing on the same wrong rule.
+
 **Judgment-module contract.** `IntArith`, `TypeJudgment`,
-`CapabilityJudgment`, `CopyJudgment` / `InstantiationJudgment`, and the new
-`OwnershipJudgment` / `ValueFlowJudgment` are not ordinary helper modules. They
+`CapabilityJudgment`, `CopyJudgment` / `InstantiationJudgment`,
+`OwnershipJudgment` / `ValueFlowJudgment`, and `TotalityJudgment` are not
+ordinary helper modules. They
 are the pipeline's named semantic decision points.
 Every judgment module must be pure and deterministic, return a decision record
 rather than a bare `Bool`/`Ty`/`CapSet`, be the only implementation of that
@@ -1168,8 +1180,9 @@ typed node.
    a user-facing effect system; it is the same concrete discard discipline
    already used for fallible and non-`Copy` values. A total pure non-`Unit`
    result discarded as a statement is almost always a lost computation.
-   Potentially trapping pure expressions are excluded until the trap judgment
-   can prove they are total; their traps are observable runtime behavior.
+   Potentially trapping pure expressions are excluded until
+   `TotalityJudgment` proves they are total; their traps are observable runtime
+   behavior.
 
    Gate with an ordinary `File`/`Network` call, a capability-polymorphic
    callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
@@ -1182,9 +1195,9 @@ typed node.
 
 ### Runtime And Oracle Contracts
 
-These items make the interpreter, runtime order, traps, drops, and deterministic
-artifacts explicit contracts instead of assumptions scattered across fuzzers and
-reports.
+These items make the interpreter, runtime order, traps, drops, unsupported
+runtime families, and deterministic artifacts explicit contracts instead of
+assumptions scattered across fuzzers and reports.
 
 4. Add an interpreter reference-semantics contract.
    The interpreter is the compiler's executable oracle, so its boundary must be
@@ -1212,6 +1225,17 @@ reports.
    diagnostics, and a gate fails if a new runtime-affecting judgment is added
    without either interpreter consumption or an explicit out-of-contract row.
 
+   This contract must state the evidence ladder explicitly: differential parity
+   means the interpreter and compiled artifact agree, but correctness needs an
+   owning semantic definition. For every supported runtime family, name the
+   reference policy the interpreter implements or checks against (`IntArith` for
+   integers, the string/UTF-8 policy for string builtins, `OwnershipJudgment` for
+   consumption/drop behavior, `CapabilityJudgment` for authority traps, and
+   future float profiles for floating point). A supported family with no named
+   policy is not fully specified; a family with no interpreter support must be
+   unsupported-loud and listed in the feature matrix. Red-team rows should target
+   shared-wrong assumptions, not only interp-vs-compiled disagreement.
+
    Trap-parity as recorded evidence (Garnet's "cross-OS trap parity recorded as
    evidence, not asserted"). The contract must cover not just which features the
    interpreter models but that **traps agree across interp, compiled, and each
@@ -1226,7 +1250,30 @@ reports.
    genuinely target-specific trap difference must be an explicit, reported target
    assumption, never a silent one.
 
-5. Add an evaluation-order, trap, and drop sequencing contract.
+5. Add interpreter-vs-compiled coverage by feature and classify unsupported
+   oracle families.
+   The differential fuzzer and corpus sweep are necessary but not sufficient.
+   Maintain a feature matrix: every language construct has at least one
+   interp-vs-compiled test, fuzzer generator, or explicit compile-only/proof-only
+   rationale. Gate that a new constructor cannot be added without a coverage row.
+
+   The corpus sweep found the current frontier: remaining divergences are loud
+   interpreter limitations, not silent wrong-code. Treat that as an oracle-coverage
+   backlog, not an excuse to stop checking. First classify unsupported cases by
+   family (for example `Vec` / heap allocation, floats, host I/O, or specific
+   builtins), record each family in the interpreter contract, and require stable
+   unsupported diagnostics. Then implement the highest-leverage family when it
+   unlocks meaningful differential coverage. If `Vec` / heap dominates, it is
+   the natural first implementation target because it also unlocks the future
+   ownership runtime-conservation oracle. Do not rush floats before their
+   profile/proof policy is ready.
+
+   Done when the feature matrix can say, for each family, `supported and compared`,
+   `unsupported and fails loud`, or `compile-only/proof-only with rationale`; the
+   largest unsupported family is quantified; and adding support for a family adds
+   permanent interp-vs-compiled rows rather than ad hoc probes.
+
+6. Add an evaluation-order, trap, and drop sequencing contract.
    Concrete needs one owner for "what happens when" just as much as it needs one
    owner for types or capabilities. Evaluation order decides when arguments,
    receivers, array/struct elements, conditions, branch values, match
@@ -1253,7 +1300,41 @@ reports.
    lowering mutation that moves a trap, drop, or capability check across another
    observable event must fail.
 
-6. Add a pipeline determinism gate.
+7. Build `TotalityJudgment` / the totality fact.
+   Totality is the foundational fact that turns several deferred checks from
+   hand-wavy policy into a shared decision. It should answer: can this
+   expression/function complete normally without trapping, diverging, failing a
+   runtime obligation, or relying on hidden cleanup/control-flow behavior? This
+   is stricter than purity: a checked add, narrowing cast, bounds/index access,
+   or failing runtime obligation may be pure but still not total because its trap
+   is observable.
+
+   Inputs: trap facts from `IntArith` and typed Core, context-width decisions from
+   completed `TypeJudgment`, ownership/drop/diverge facts from
+   `OwnershipJudgment` / `ValueFlowJudgment`, authority/purity facts from
+   `CapabilityJudgment`, and evaluation/drop/trap order from item #6. The record
+   should include at least: subject expression/function, total vs non-total,
+   first failing reason (`may_trap`, `may_diverge`, `may_fail_runtime_obligation`,
+   `unknown_cleanup`, `unsupported_interp_family`, etc.), source span, dependent
+   facts, diagnostic/report payload, and evidence class.
+
+   Consumers: the pure non-`Unit` discard rule in `CapabilityJudgment` (only
+   total pure values are accidental lost computations), the class-6
+   second-class-reference boundary verifier (borrow escape checks need to know
+   which paths complete and which diverge/trap), report/audit explanations, and
+   proof eligibility. A program should not be called "pure discardable",
+   "safe reference-return impossible", or "predictable/provable" by
+   re-deriving totality at each call site.
+
+   Gate with total and non-total rows: literal arithmetic that cannot trap,
+   checked arithmetic that can trap, narrowing casts, bounds/index operations,
+   match/if branches with one trapping arm, loops with known divergence, function
+   calls with runtime obligations, and a class-6 borrow-verifier fixture whose
+   result changes if a diverging/trapping path is incorrectly treated as normal
+   completion. Red-team by forcing a trapping expression to total and proving
+   pure-discard or borrow-boundary gates fail.
+
+8. Add a pipeline determinism gate.
    Content-addressed artifacts, proof replay, package evidence, deterministic
    reports, and future `CompilerDB` caching all assume the compiler is
    deterministic for the same source, compiler version, target/profile, and
@@ -1285,7 +1366,7 @@ These items keep the pipeline itself honest: each stage has a contract, facts
 have stable homes, and production/audit/proof/test entry points do not grow
 hidden alternate pipelines.
 
-7. Add stage contracts and pass-agreement assertions.
+9. Add stage contracts and pass-agreement assertions.
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
    establishes that user-triggerable violations are caught at the first
    responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
@@ -1293,7 +1374,25 @@ hidden alternate pipelines.
    introduced. The long-term form is `concrete inspect --pipeline-contracts
    --json`, but the V1 gate is already the phase's contract backstop.
 
-8. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
+10. Add a judgment-contract conformance-audit gate.
+   The prose judgment-module contract above should become a small mechanical
+   gate so existing and future judgment axes do not drift back into
+   helper-module habits. For every judgment named in this phase
+   (`CopyJudgment`, `InstantiationJudgment`, `OwnershipJudgment`,
+   `CapabilityJudgment`, `TotalityJudgment`, plus completed `IntArith` /
+   `TypeJudgment`), the gate should audit the actual code/docs/test surface and
+   require a decision-record type or explicit typed-IR field, an owning stage,
+   named downstream consumers, a report/audit consumer or explicit
+   non-reportable reason, an interpreter relationship or out-of-contract row,
+   and a red-team agreement/completeness gate.
+
+   This is not a new semantic axis; it is the meta-contract that keeps the axes
+   uniform. Done when `check_judgment_contracts.sh` (or equivalent) fails if an
+   existing judgment lacks one of the required contract clauses, or if adding a
+   new `*Judgment` mention to the roadmap/docs/code omits a decision record,
+   consumer list, interpreter relationship, or gate.
+
+11. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
    facts.
    This item depends on the completed `TypeJudgment` / typed Core
    architecture recorded in the changelog, but it is NOT a prerequisite for the
@@ -1313,7 +1412,7 @@ hidden alternate pipelines.
    the same hygiene source, and a gate proves reports/agents can join facts by
    ID without reparsing human strings.
 
-9. Add a lightweight compiler fact dependency graph.
+12. Add a lightweight compiler fact dependency graph.
    Do not build the full rustc-style demand-driven query engine yet, but record
    dependency edges as first-class trace/replay data:
    `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
@@ -1326,7 +1425,7 @@ hidden alternate pipelines.
    capability fact, diagnostic, or backend artifact changed, and a replay gate
    marks dependent facts stale when an upstream source/fact hash changes.
 
-10. Add pass locality and mutation rules.
+13. Add pass locality and mutation rules.
    Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
    it may mutate, what facts it may write, and what prior stage contract makes
    its assumptions legal. A report/audit pass may not recompute semantic facts;
@@ -1338,7 +1437,7 @@ hidden alternate pipelines.
    for illegal cross-level read, illegal fact write, hidden sibling inspection,
    and report-side semantic recomputation.
 
-11. Add analysis preservation and invalidation contracts.
+14. Add analysis preservation and invalidation contracts.
    Once facts are cached or reused, every pass must state which facts it reads,
    writes, preserves, and invalidates. This is the guardrail that prevents
    future incremental checking, proof caching, package facts, or editor facts
@@ -1354,7 +1453,7 @@ hidden alternate pipelines.
 These items connect semantic facts to lowering, intrinsics, reports, and the
 single composed compiler pipeline.
 
-12. Define Concrete's result-location / destination-passing model.
+15. Define Concrete's result-location / destination-passing model.
     Adapt Zig's result-location idea to Concrete's linear value model. Write the
     Concrete-specific contract for value context, place context, borrow context,
     callArg context, destination context, return destination, aggregate literal
@@ -1374,7 +1473,7 @@ single composed compiler pipeline.
     and scoped callback rows, and at least one old H10/H11-style conservation
     bug is expressible as a violated destination/ownership contract.
 
-13. Add a single builtin/intrinsic registry.
+16. Add a single builtin/intrinsic registry.
     Builtins and intrinsics must not be separately described in signatures,
     checker behavior, elab/lower special cases, interpreter behavior, report
     facts, stdlib assumptions, and Unsafe/trusted policy. A registry row should
@@ -1388,7 +1487,7 @@ single composed compiler pipeline.
     slice may be an intrinsic coverage/matrix gate; the end state is a registry,
     not a grep-based allowlist.
 
-14. Move report/evidence output toward `CompilerDB` fact views.
+17. Move report/evidence output toward `CompilerDB` fact views.
     Internal facts should be typed records until the final renderer, not strings
     assembled at each report site. V1 target: diagnostic-code facts, capability
     facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
@@ -1400,7 +1499,7 @@ single composed compiler pipeline.
     row and report entry, and add one negative where a stale hand-written report
     string disagrees with the compiler fact.
 
-15. Eliminate hidden second pipelines.
+18. Eliminate hidden second pipelines.
     Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
     proof extraction, and tests must call the same composed pass functions or
     declare a checked reason for diverging. The specific risk is a verifier
@@ -1417,7 +1516,7 @@ single composed compiler pipeline.
 These items prevent new syntax, constructors, parser forms, generic surfaces, or
 desugar rewrites from bypassing the semantic contracts above.
 
-16. Enforce the name-resolution / qualified-name boundary.
+19. Enforce the name-resolution / qualified-name boundary.
     Resolve should be the only stage that decides what a source name means.
     Later stages may consume resolved IDs / qualified names but must not
     reconstruct lookup from bare strings. This matters for modules, aliases,
@@ -1428,7 +1527,7 @@ desugar rewrites from bypassing the semantic contracts above.
     name, generated mono names, and report/audit attribution proving later
     stages use resolved identity.
 
-17. Unify tree-walker coverage across AST/Core/SSA consumers.
+20. Unify tree-walker coverage across AST/Core/SSA consumers.
     There are recursive walkers in Check, Verify, Mono, ProofCore, Report,
     Lower, interpreter, and tests. Every new constructor risks one walker
     missing it. Keep the constructor-coverage manifest/gate proving every
@@ -1437,7 +1536,7 @@ desugar rewrites from bypassing the semantic contracts above.
     differential/oracle coverage or an explicit compile-only/proof-only
     rationale.
 
-18. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
+21. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
     CoreCheck should catch frontend/checker/elab/mono misses before Lower. Add
     or verify checks for unresolved generic/typevar leakage after mono, illegal
     Copy specialization, mixed-width binops, illegal non-Copy value-flow residue,
@@ -1446,13 +1545,7 @@ desugar rewrites from bypassing the semantic contracts above.
     panics. Gate with one accepted Core fixture per valid class and one rejected
     fixture per invalid class.
 
-19. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
-    The differential fuzzer is necessary but not sufficient. Maintain a feature
-    matrix: every language construct has at least one interp-vs-compiled test,
-    fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
-    new constructor cannot be added without a coverage row.
-
-20. Add the third fuzzer: generics / monomorphization / type-policy drift.
+22. Add the third fuzzer: generics / monomorphization / type-policy drift.
     Concrete already has value/runtime fuzzing (`fuzz_differential`) and
     ownership/conservation fuzzing (`fuzz_linearity`). Add
     `scripts/fuzz_generics.py` (or equivalent) for user structs/enums,
@@ -1470,17 +1563,17 @@ desugar rewrites from bypassing the semantic contracts above.
     disagreements as minimized `.con` fixtures naming the first disagreeing
     phase.
 
-21. Add parser/AST grammar-conformance fuzzing.
+23. Add parser/AST grammar-conformance fuzzing.
     The LL(1) checker proves grammar shape, but it is not a parser/AST stress
     net. Generate valid grammar-shaped programs, expected rejects, deeply nested
     but bounded expressions, pattern/control-flow combinations, module/import
     shapes, generic syntax, and statement/expression boundary cases. The oracle:
     parser accepts the valid corpus, rejects the invalid corpus with stable
     diagnostics, preserves source spans for representative nodes, and produces
-    AST forms whose feature rows are covered by item #19. When a formatter or
+    AST forms whose feature rows are covered by item #5. When a formatter or
     printer exists, extend this to parse -> print/normalize -> parse round-trip.
 
-22. Add a desugar-preservation contract.
+24. Add a desugar-preservation contract.
     Desugar is a semantic compiler stage, not an invisible parser cleanup pass.
     It rewrites surface forms such as `for`, `if let` / `while let`, scoped
     blocks, trailing-value blocks, `defer`, destructuring sugar, and future
@@ -1512,14 +1605,14 @@ desugar rewrites from bypassing the semantic contracts above.
 These items make failures reviewable and keep compiler-internal artifacts from
 leaking as user-facing truth.
 
-23. Define diagnostic code ownership by phase.
+25. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; now each
     phase/category should own a code range or category (parse, check, corecheck,
     mono, lower, proof, report, runtime trap), with source, hint, JSON payload,
     and report behavior documented. Gate that a new diagnostic code declares
     owner/category and appears in the ledger.
 
-24. Add a pipeline diagnostic-quality contract.
+26. Add a pipeline diagnostic-quality contract.
     Every user-facing pipeline diagnostic must have a phase owner, stable code,
     primary source span, human message, machine-readable JSON fields, and a
     clear reason why that phase owns the rejection. When an actionable recovery
@@ -1533,14 +1626,14 @@ leaking as user-facing truth.
     human and JSON output, and a red-team fixture fails when an error lacks a
     source span, code, hint, owner, or JSON field.
 
-25. Add source-span preservation audits across the pipeline.
+27. Add source-span preservation audits across the pipeline.
     After lexer/parser/check/elab/mono/lower, diagnostics, reports, traps, and
     proof obligations should still point to original source. Gate representative
     constructs: submodules, generic instantiations, desugared `if let`/`while
     let`, method calls, match arms, lowered runtime traps, and generated proof
     obligations. A fixture with a stale main-file span must fail.
 
-26. Encapsulate generated names and stringly internal sentinels.
+28. Encapsulate generated names and stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
     naming API. Mono, elab, lower, proof extraction, and reports should use the
@@ -1548,7 +1641,7 @@ leaking as user-facing truth.
     and that generated names round-trip through reports/source maps without
     becoming user-visible authority or value-flow facts.
 
-27. Define the panic-to-diagnostic boundary.
+29. Define the panic-to-diagnostic boundary.
     `panic!` in layout/type/lowering paths is acceptable only for compiler
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
@@ -1563,7 +1656,7 @@ leaking as user-facing truth.
 These are deliberately scoped follow-ups: only pull them when the earlier gates
 or proof work show that the structure is now the limiting factor.
 
-28. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+30. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
     remains ad hoc.
     Historical bugs clustered around branch/loop/snapshot reconciliation. The
     extracted builder should own if/match result values, loop headers/exits, phi
@@ -1573,19 +1666,20 @@ or proof work show that the structure is now the limiting factor.
     fixtures remain green, and a mutation that drops scope filtering or trap
     preservation is caught.
 
-29. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+31. Reduce ProofCore partial-def opacity only where proof preservation needs it.
     ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
     full rewrite here. Add non-partial wrappers or structural recursion only for
     constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
     with one theorem that would fail if the wrapper delegated to an opaque
     partial-def shape.
 
-30. Add the Phase 6B / 6.5 validation artifact.
+32. Add the Phase 6B / 6.5 validation artifact.
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
     compiler-pipeline corpus exercising arithmetic reference semantics,
     central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
-    `OwnershipJudgment` / `ValueFlowJudgment`, stage contracts, capability
-    facts, stable fact IDs, fact dependencies, pass locality, invalidation,
+    `OwnershipJudgment` / `ValueFlowJudgment`, `TotalityJudgment`,
+    judgment-contract enforcement, stage contracts, capability facts, stable fact
+    IDs, fact dependencies, pass locality, invalidation,
     certificate-carrying IR, destination-passing/value flow, intrinsic registry,
     `CompilerDB`,
     no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
