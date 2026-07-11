@@ -198,56 +198,25 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
     conditional-generic policy is intentionally identical, so a change to what
     "Copy" means must be mirrored in both (tracked toward Phase 14 #13b, one
     source of typing truth). -/
-partial def isCopyType (ty : Ty) : CheckM Bool := do
-  match ty with
-  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => return true
-  | .bool | .float64 | .float32 | .char | .unit => return true
-  | .string => return false    -- String is linear
-  | .ref _ => return true      -- References are Copy
-  | .refMut _ => return false  -- Mutable refs are not Copy (exclusive)
-  | .ptrMut _ | .ptrConst _ => return true  -- Raw pointers are Copy
-  | .fn_ _ _ _ => return true  -- Function pointers are Copy (no captures, just a code address)
-  | .placeholder => return true
-  | .never => return true      -- Never type is compatible with anything
-  | .heap _ => return false    -- Heap pointers are linear
-  | .heapArray _ => return false
-  | .named name =>
-    -- Check if the struct/enum has isCopy = true, or newtype wraps a Copy type
-    let env ← getEnv
-    match env.structs.find? fun sd => sd.name == name with
-    | some sd => return sd.isCopy
-    | none =>
-      match env.enums.find? fun ed => ed.name == name with
-      | some ed => return ed.isCopy
-      | none =>
-        match env.newtypes.find? fun nt => nt.name == name with
-        | some nt => isCopyType nt.innerTy
-        | none => return false
-  | .generic name args =>
-    -- CONDITIONAL Copy (Phase 7 #3): a declared-Copy generic is Copy iff every
-    -- field/payload is Copy AFTER substituting this instantiation's args —
-    -- `Option<i32>` is Copy, `Option<String>` is not. A Copy instantiation can
-    -- therefore never contain a non-Copy value (the hard rule); a non-Copy
-    -- instantiation is simply linear, not an error. Undeclared stays linear.
-    let env ← getEnv
-    match env.structs.find? fun sd => sd.name == name with
-    | some sd =>
-      if !sd.isCopy then return false
-      let mapping := sd.typeParams.zip args
-      sd.fields.allM fun f => isCopyType (substTy mapping f.ty)
-    | none =>
-      match env.enums.find? fun ed => ed.name == name with
-      | some ed =>
-        if !ed.isCopy then return false
-        let mapping := ed.typeParams.zip args
-        ed.variants.allM fun v => v.fields.allM fun f => isCopyType (substTy mapping f.ty)
-      | none => return false
-  | .typeVar name =>
-    -- Check if the type parameter has a Copy bound
-    let env ← getEnv
-    let bounds := (env.currentTypeBounds.find? fun (n, _) => n == name).map Prod.snd |>.getD []
-    return bounds.contains "Copy"
-  | .array t _ => isCopyType t  -- Array of copy types is copy
+-- The Copy judgment is single-sourced in `Layout.isCopyTyGeneric` (Phase 6.5
+-- CopyJudgment axis). This is the front-end entry point: a thin monadic wrapper
+-- that feeds the shared judgment its lookups from the checker env — struct/enum
+-- defs, newtype inner types (recursed), and a bounds-based `typeVar` policy
+-- (`T: Copy`). Core stages (Mono/Verify/CoreCheck) call `Layout.isCopyTyCore`,
+-- the same judgment with Core defs. There is now ONE Copy recursion, so the two
+-- cannot drift (they previously disagreed on typeVar/newtype).
+def isCopyType (ty : Ty) : CheckM Bool := do
+  let env ← getEnv
+  return Layout.isCopyTyGeneric
+    (fun name =>
+      match env.structs.find? fun sd => sd.name == name with
+      | some sd => some (sd.isCopy, sd.typeParams, sd.fields.map (fun f => f.ty))
+      | none => match env.enums.find? fun ed => ed.name == name with
+        | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap (fun v => v.fields.map (fun f => f.ty)))
+        | none => none)
+    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => nt.innerTy))
+    (fun name => (((env.currentTypeBounds.find? fun b => b.1 == name).map Prod.snd).getD []).contains "Copy")
+    ty
 
 def lookupVarInfo (name : String) : CheckM (Option VarInfo) := do
   let env ← getEnv

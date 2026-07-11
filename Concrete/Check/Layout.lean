@@ -116,49 +116,66 @@ def substEnumTypeArgs (ed : CEnumDef) (typeArgs : List Ty) : CEnumDef :=
 -- Copy predicate over Core types (one source of truth)
 -- ============================================================
 
-/-- Canonical `Copy` predicate over post-Elab Core types.
+/-- The ONE Copy judgment (Phase 6.5 CopyJudgment axis). A type is `Copy` (freely
+    duplicated) or linear (use-once). This decision used to be implemented TWICE —
+    once over front-end `StructDef`/`EnumDef`/`NewtypeDef` (`CheckHelpers.isCopyType`)
+    and once over Core `CStructDef`/`CEnumDef` (`isCopyTyCore`) — the two copies
+    drifting on `typeVar` (bounds vs a fixed flag) and `newtype` (recurse vs
+    absent). This is the single recursion + primitive set both now call,
+    parameterized by lookups so each representation feeds its own data:
 
-    This is the single definition the Core-side passes share — CoreCheck's
-    decl-time check, Mono's demotion, and Verify's post-mono verifier — so they
-    can never drift on what "Copy" means (a class of "Check says yes,
-    Mono/Verify disagree" bugs).
-
-    `typeVarIsCopy` selects the phase policy for an *unsubstituted* type
-    parameter: pre-mono checking assumes type params are Copy (they are
-    re-validated after substitution — pass `true`), while post-mono
-    verification treats any surviving `.typeVar` as not-Copy (it should have
-    been substituted away — pass `false`).
-
-    Conditional Copy (Phase 7 #3): a declared-Copy generic is Copy iff every
-    field/payload is Copy *after* substituting the instantiation's arguments —
-    `Option<i32>` is Copy, `Option<String>` is not. Names are unique across the
-    struct/enum tables, so the struct-first / enum-first lookup order is
-    immaterial. -/
-partial def isCopyTyCore (structs : List CStructDef) (enums : List CEnumDef)
-    (typeVarIsCopy : Bool) : Ty → Bool
+    * `lookupAgg name` → `(isCopy, typeParams, fieldTys)` for a struct or enum:
+      the declared-Copy flag plus every field/payload type (a generic aggregate
+      is Copy iff declared Copy AND every field is Copy after substituting the
+      instantiation's args).
+    * `lookupNewtype name` → the wrapped inner type (front-end only; Core has no
+      newtypes, so it passes `fun _ => none`).
+    * `typeVarIsCopy name` → is an unresolved type variable Copy — bounds-based in
+      Check (`T: Copy`), a fixed per-stage policy in the Core stages. -/
+partial def isCopyTyGeneric
+    (lookupAgg : String → Option (Bool × List String × List Ty))
+    (lookupNewtype : String → Option Ty)
+    (typeVarIsCopy : String → Bool) : Ty → Bool
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
   | .bool | .float64 | .float32 | .char | .unit => true
   | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
   | .fn_ _ _ _ => true
-  | .typeVar _ => typeVarIsCopy
+  | .placeholder => true  -- unknown type during error recovery: assume Copy to
+                          -- avoid cascading spurious linear errors (Core stages
+                          -- never see `.placeholder`, so this is Check-only).
+  | .typeVar n => typeVarIsCopy n
   | .named name =>
-    match structs.find? fun sd => sd.name == name with
-    | some sd => sd.isCopy
-    | none => match enums.find? fun ed => ed.name == name with
-      | some ed => ed.isCopy
+    match lookupAgg name with
+    | some (isC, _, _) => isC
+    | none => match lookupNewtype name with
+      | some inner => isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy inner
       | none => false
   | .generic name args =>
-    match structs.find? fun sd => sd.name == name with
-    | some sd =>
-      sd.isCopy && sd.fields.all fun (_, fty) =>
-        isCopyTyCore structs enums typeVarIsCopy (substTyVars (sd.typeParams.zip args) fty)
-    | none => match enums.find? fun ed => ed.name == name with
-      | some ed =>
-        ed.isCopy && ed.variants.all fun (_, vfields) => vfields.all fun (_, fty) =>
-          isCopyTyCore structs enums typeVarIsCopy (substTyVars (ed.typeParams.zip args) fty)
-      | none => false
-  | .array elem _ => isCopyTyCore structs enums typeVarIsCopy elem
+    match lookupAgg name with
+    | some (isC, typeParams, fieldTys) =>
+      isC && fieldTys.all fun fty =>
+        isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy (substTyVars (typeParams.zip args) fty)
+    | none => false
+  | .array elem _ => isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy elem
   | _ => false
+
+/-- Copy judgment over Core defs (post-elaboration): the shared judgment with
+    struct/enum lookups from the given lists, no newtypes (resolved away), and a
+    fixed `typeVarIsCopy` policy (Check gates unbounded type vars first; CoreCheck
+    passes `true` where type params are checked at instantiation, Mono/Verify
+    `false`). -/
+partial def isCopyTyCore (structs : List CStructDef) (enums : List CEnumDef)
+    (typeVarIsCopy : Bool) (ty : Ty) : Bool :=
+  isCopyTyGeneric
+    (fun name =>
+      match structs.find? fun sd => sd.name == name with
+      | some sd => some (sd.isCopy, sd.typeParams, sd.fields.map Prod.snd)
+      | none => match enums.find? fun ed => ed.name == name with
+        | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap fun v => v.2.map Prod.snd)
+        | none => none)
+    (fun _ => none)
+    (fun _ => typeVarIsCopy)
+    ty
 
 -- ============================================================
 -- Type size (bytes)

@@ -52,6 +52,55 @@ and codegen becomes a theorem to state, not a bug to catch.
 Phase 6.5 item #1 (`Concrete/Semantics/IntArith.lean`) is the beachhead of this
 principle on the arithmetic axis.
 
+## Judgment modules
+
+The reusable shape is a **judgment module**: one pure compiler module that owns a
+semantic decision and returns the whole decision record. It is not a helper that
+answers only "yes/no" or "what type?" while other passes re-derive the rest.
+
+Current and planned judgment modules:
+
+- `IntArith` owns integer width, signedness, ranges, checked/wrapping/
+  saturating behavior, trap predicates, and foldability.
+- `TypeJudgment` owns source-expression type decisions that Check and Elab both
+  need; Elab stamps the resulting type into already-typed Core.
+- `CapabilityJudgment` should own required capabilities, callback propagation,
+  purity, trusted/Unsafe/package-boundary reasons, and the report/audit payload
+  for those decisions.
+- `CopyJudgment` / `InstantiationJudgment` should own conditional `Copy`,
+  trait-bound satisfaction, substitution, turbofish/caller type params,
+  specialization demotion, ownership/linearity consequences, and the
+  diagnostic/report evidence for generic instantiations. Its gate is
+  consistency under refinement: the pre-mono conditional answer, instantiated
+  with concrete type arguments, must equal the post-mono concrete answer.
+
+Each judgment module must satisfy the same contract:
+
+- pure and deterministic;
+- returns a decision record, not a bare `Bool`, `Ty`, or `CapSet`;
+- is the only implementation of that semantic decision;
+- is consumed by every relevant stage instead of being re-derived downstream;
+- drives diagnostics, reports, audit rows, and tooling facts from the same
+  record;
+- names its owning stage, downstream consumers, and intentional non-scope;
+- is consumed by or checked against the interpreter/oracle when the fact affects
+  runtime behavior;
+- ships with a red-team agreement gate proving historical divergent consumers
+  cannot disagree;
+- proves completeness when replacing an old implementation, so the new judgment
+  covers the old behavior matrix instead of only the cases where consumers
+  already agreed;
+- obeys the fact-home rule: node-local structural facts are typed-IR fields;
+  relational, cross-node, cross-stage, provenance, evidence, and query facts
+  live in `CompilerDB` when that DB is pulled.
+
+The practical purity rule belongs to this same pattern. Once capability
+judgment can prove an expression is pure, trap-free/total, and returns
+non-`Unit`, silently discarding it as `expr;` should be rejected with an explicit
+acknowledgement escape: this is ordinary discard hygiene, not a user-facing
+row-effect system. Pure expressions that may trap are excluded until the trap
+judgment proves they are total, because their traps are observable behavior.
+
 ### Principle 2 — Facts committed once, read-only downstream
 
 Every semantic fact about a node — its type, capability set, ownership state,

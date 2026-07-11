@@ -10,6 +10,61 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 completed language/usability core moved out of the active roadmap (2026-07-10)
+
+The fully completed and gated Phase 6 items were moved from `ROADMAP.md` into
+the changelog so the active roadmap contains only deferred, conditional, or
+not-yet-done work.
+
+Completed Phase 6 language/tooling items:
+
+- `concrete fmt` subcommand with semantics-preserving formatting.
+- Canonical LL(1) grammar and grammar docs, including `as` precedence and
+  escape/literal lexing fixes.
+- Transparent type aliases.
+- Loop control: `break`, `continue`, labels, while-expression values, and
+  linear cleanup.
+- Pattern ergonomics: ranges, `if let`/`while let`, guards, OR-patterns,
+  match-on-reference, struct update, and wildcard destructuring; anonymous
+  tuples and nested patterns remain workload-gated, not active debt.
+- Numeric model: out-of-range literal rejection, mixed-width binop rejection,
+  and sibling-width inference for literal-only operands.
+- `defer` with LIFO cleanup on every exit path.
+- Build profiles and checked arithmetic with trapping checked ops,
+  wrapping/saturating intrinsics, float-to-int H2 closure, and arithmetic
+  reports.
+- Permanent no-v1-macros stance.
+- Ignored-result diagnostics for discarded `Result`/`Option` values, aligned
+  with the later linear discard rules.
+- Style guide, iteration protocol, stdlib handoff, and memory model.
+- Semantic-darkness red-team gate and differential oracle bug-hunt.
+- Statement-vs-trailing-expression model with `isValue` on source/Core
+  expression statements.
+- Sub-file diagnostics now name the correct file: `Module.sourceFile` is
+  stamped by the project loader and threaded through Check/Elab/CoreCheck, so
+  diagnostics from `mod x;` files render the sub-file path and snippet rather
+  than the main file.
+
+Completed Phase 6 value-flow / linearity hardening:
+
+- H9/wildcard/nested-scope discard closure: `_` may ignore only `Copy`, `let _`
+  removed, nested-scope locals must discharge correctly, and unreachable block
+  ends do not produce false leaks.
+- H11 closure: by-value projection of a non-`Copy` subplace rejects; projection
+  bases, borrow targets, assignment targets, and auto-borrowed receivers are
+  checked as places.
+- Value-flow spec and constructor-coverage gate: every source construct states
+  whether it copies, moves, borrows, consumes, overwrites, rejects, or diverges.
+- Full front-end checker coverage for every source body, including submodules
+  and `std`.
+- H13-H17 conservation/discharge sweep: rebind consumes RHS, `break value`
+  consumes, non-`Copy` overwrites reject, live-linear shadowing rejects, and
+  by-value params are owned locals that must be consumed.
+- Linearity fuzzer (`fuzz_linearity.py`) as the ownership analogue of the
+  differential fuzzer.
+- Explicit expression checking modes (`value`, `callArg`, `place`) so ownership
+  transfer and projection behavior are centralized instead of per-handler.
+
 ### #35 validation project (conlog) — first workload; two checker/codegen bugs fixed (2026-07-07)
 
 Started the log-analyzer validation project (`examples/conlog`) — the first

@@ -411,6 +411,9 @@ jobs:
       - name: Differential-position gate (flexible overflow / signed shift: interp == compiled)
         run: bash scripts/tests/check_differential_positions.sh
 
+      - name: Copy-judgment gate (Phase 6.5 — one Copy judgment: Check and Core cannot drift)
+        run: bash scripts/tests/check_copy_judgment.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

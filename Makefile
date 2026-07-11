@@ -288,6 +288,9 @@ test-type-agreement: build ## Type-agreement gate (Phase 6.5 #9): Check and Elab
 test-differential-positions: build ## Differential-position gate: flexible overflow across syntactic positions + signed shift width wrapping agree interp==compiled (the 2026-07 sweep's permanent guard)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_differential_positions.sh
 
+test-copy-judgment: build ## Copy-judgment gate (Phase 6.5): the one Copy judgment (Layout.isCopyTyGeneric) is shared by Check and the Core stages so they cannot drift on Copy-ness
+	$(NIX_DEVELOP) bash ./scripts/tests/check_copy_judgment.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

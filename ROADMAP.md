@@ -361,208 +361,9 @@ keeps grammar/control-flow ergonomics, daily commands, examples, docs, linting,
 profiling, and editor-adjacent usability separate from the smaller core-slab
 gate.
 
-### Completed in Phase 6 (folded out of the active list)
-
-Fully done + gated; kept here as a one-line index. See CHANGELOG.md and the
-linked docs/gates for detail. Decisions that are *deferred with a pull-condition*
-(e.g. #9, #15, #26, #27) stay in the active list below — only fully-shipped items
-are folded out.
-
-- **#1 `concrete fmt`** — subcommand, semantics-preserving (fingerprints
-  byte-identical across format). `check_concrete_fmt.sh`.
-- **#2 grammar** — canonical `grammar/concrete.ebnf` (LL(1), 3 checkers) +
-  `docs/GRAMMAR.md`. 2026-07-01: EBNF aligned with the implemented `as`-cast
-  precedence (postfix > unary > `as` > binop) and the unimplemented
-  `match_stmt_tail` removed; unknown string/char escapes and unterminated
-  literals are lex errors, never silently mangled (`check_lex_escapes.sh`).
-- **#3 type aliases** — transparent, deeply expanded; `docs/TYPE_ALIASES.md`,
-  `check_type_alias.sh`.
-- **#4 loop control** — `break`/`continue`/labels/while-expr value + linear
-  cleanup; `docs/LOOP_CONTROL.md`, `check_loop_control.sh`.
-- **#5 pattern ergonomics** — ranges, `if let`/`while let`, guards, OR-patterns,
-  match-on-`&T`, struct update `..base`, `_` in destructuring. No anonymous
-  tuples and nested patterns deferred (workload-gated). `docs/PATTERN_ERGONOMICS.md`.
-  2026-07-01: `if let`/`while let` over a NON-Copy enum reject by design (E0288,
-  same rule as let-else; `neg_if_let_noncopy`); a variable arm over `&T` binds
-  the deref'd VALUE when the inner type is Copy.
-- **#6 numeric model** — de-facto integer model locked; out-of-range literals
-  rejected (E0227). Literal suffixes deferred. `check_numeric_literals.sh`.
-  2026-07-01: mixed-width binop operands rejected at check time (E0228, exact
-  width+signedness; cast explicitly) — kills the accepted-then-E0715 class —
-  and literal-only operands unify with the sibling operand (matching Elab), so
-  `a[64 + i]` / literal match arms infer the right width.
-  `check_mixed_width_binops.sh`; LANGUAGE_INVARIANTS #19.
-- **#7 `defer`** — LIFO, runs on every exit path; block-form rejected.
-  `docs/DEFER.md`, `check_defer.sh`.
-- **#10 build profiles + checked arithmetic** — `--profile`, full checked
-  `+ - * / % << >>` with trapping, `wrapping_*`/`saturating_*`, float→int H2
-  closed, `--report arithmetic`. `docs/ARITHMETIC_POLICY.md` + the arith gates.
-- **#11 macro stance** — permanent decision: no v1 macros. `docs/MACRO_STANCE.md`,
-  `check_no_macros.sh`.
-- **#13 ignored-result diagnostics** — discarding a `Result`/`Option` statement
-  is E0286 unless handled explicitly. The later linearity tightening removed
-  `let _ = …;`; `_` may ignore only `Copy` values, and non-`Copy` fallible
-  values must be destructured, consumed, returned, or otherwise handled.
-  `docs/IGNORED_RESULT.md`, `check_ignored_result.sh`.
-- **#16 style guide** — `docs/STYLE.md` (advisory; mechanical layout owned by
-  `concrete fmt`).
-- **#17 iteration protocol** — blessed traversal forms, no `Iterator` trait;
-  `docs/ITERATION_PROTOCOL.md`.
-- **#19 stdlib handoff** — required surfaces stable/provisional, none blocked;
-  `docs/stdlib/STDLIB_HANDOFF.md`, `check_stdlib_handoff.sh`.
-- **#33 memory model** — user-facing narrative; "no uninitialized reads" is a
-  grammar-level guarantee. `docs/MEMORY_MODEL.md`, `check_memory_model.sh`.
-- **#35a semantic-darkness / red-team gate** — `check_phase6_redteam.sh`.
-- **#35b differential oracle bug-hunt** — six interp-vs-compiled fixes for
-  mutable place borrows, value expressions, `while` values, `else if` value
-  parsing, and negative bitwise ops; `tests/oracle/vectors.txt`. 2026-07-01:
-  the fuzzer generates across the full integer width lattice with explicit
-  casts (reject rate 61% -> 0%) and immediately found the interp `as`-cast
-  retag bug (`(-11) as u32` stayed -11); `evalCast` now wraps into the target
-  range and the codegen-differential EXPECTED_DIVERGE list is EMPTY.
-- **#36 statement-vs-trailing-expression** — `isValue` on `Stmt.expr`/`CStmt.expr`;
-  `docs/STATEMENT_EXPRESSION_MODEL.md`. 2026-07-01: trailing `match`/`if-else`
-  in VALUE blocks (if-expression branches, while-else, match-arm blocks) are
-  the block's value when a branch/arm ends with a value; all-statement forms
-  stay statements. `check_trailing_value_blocks.sh`.
-
-13a. ✅ **DONE (2026-06-28) — wildcard/discard and nested-scope locals no longer
-   bypass linearity.** The `_`/discard half landed first (E0286 must-use, E0287
-   bare/deferred non-Copy discard, E0288 `_` over a non-`Copy` value, E0289
-   `let _` removed; gate `check_linear_discard.sh`). `_` may ignore only
-   `Copy`; non-`Copy` values are linear and must be consumed, moved, returned,
-   borrowed, or explicitly destroyed. The
-   nested-scope half landed here (KNOWN_HOLES H9, gate `check_linear_nested_scope.sh`):
-   move-through-let (`let g = f` consumes `f`); per-block scope-exit so a linear
-   value declared in an `if`/`else` branch or match arm must be consumed before the
-   block exits, including on `return`/`break` paths (E0208); `return value;` in an
-   arm now consumes the payload; and a `blockNonTerminating` exemption (`while true {}`
-   / `abort()`) so an unreachable block end is not a false leak. Two value-view
-   types the hole had masked were corrected to `Copy` and `Bytes::into_raw_parts`
-   added for trusted ownership transfer. Historical hole details live in
-   `docs/KNOWN_HOLES.md` and the changelog; this roadmap keeps only the active
-   contract and gates.
-
-13b. ✅ **DONE (2026-07-05) — H11 closed: by-value projection of a non-`Copy`
-   sub-place is rejected (E0290).** Position-aware fix: `checkExpr` gained an
-   `asPlace` flag; projection bases, borrow targets, assignment targets, and
-   auto-borrowed receivers check as places, so `&w.f`, `w.f.g`, `arr[i] = v`,
-   and `&self` method calls stay legal while `let g = w.f;`, `sink(w.f)`,
-   `let a = arr[i];`, and by-value-`self` on a projection reject. `p->f` heap
-   reads are explicitly excluded (heap-shell destructure idiom; interiors
-   untracked by design). Gate: 5 reject + 3 accept rows in
-   `check_linear_conservation.sh`; KNOWN_HOLES H11 moved to closed. Std
-   fallout: 2 sites (HashSet/OrderedSet drop → destructure). Follow-up
-   (workload-gated): ARRAY DESTRUCTURE patterns (`let [a, b] = arr;`) — an
-   owned array of linear values now has no whole-owner move-out (borrow or
-   Copy-leaf reads only); pull when a real workload needs to consume linear
-   array elements.
-
-13c. ✅ **DONE / KEEP RATCHEting — value-flow spec + constructor-coverage
-   gate.** The linearity work has three distinct failure classes: discard (a
-   value vanishes), conservation (a value duplicates or aliases), and scope (a
-   value falls out of nested control flow). This is now a mechanical contract,
-   not a prose afterthought: `docs/VALUE_FLOW_SPEC.md` records every
-   expression/statement constructor and classifies whether it copies, moves,
-   borrows, consumes, initializes storage, overwrites storage, rejects, or
-   diverges. `scripts/tests/check_value_flow_spec.sh` is the constructor-
-   coverage gate: every AST constructor must have a value-flow row and at
-   least one gate fixture or explicit rationale. Future syntax cannot land
-   without updating this table and fixture set. The spec exists to prevent the
-   exact 2026-07 bug families from recurring: assignment RHS not consumed,
-   `break` value not consumed, non-`Copy` overwrite leaks, live-linear
-   shadowing, parameter silent discard, H11 sub-place read duplication, and
-   fallible-result discard drifting with conditional `Copy`. Partial-pattern
-   forms are conservation/discard sites too: `let-else`, `if let`, and
-   `while let` lower through an unmatched path, so over non-`Copy` enums they
-   reject by design (`E0288`) until the whole instantiated enum is `Copy`
-   (for example, after conditional `Copy` makes `Option<i32>` genuinely
-   `Copy`). The same spec is also the searchable **pass-agreement /
-   argument-passing contract**: every call, method receiver, callback context,
-   `&T`, `&mut T`, owned param, reborrow, and return must state whether the
-   value is copied, moved, borrowed, consumed, or rejected. Callable values and
-   future stdlib combinators must add rows here before landing, so callback
-   ergonomics cannot bypass the ordinary linearity rules.
-   This is also the named **feature-interaction checklist**: every new language
-   or stdlib feature must answer in the spec/gate whether it copies, moves,
-   borrows, consumes, or rejects; whether it changes required capabilities;
-   whether it changes proof extraction / ProofCore meaning; whether interpreter
-   and compiled code agree; and whether report/audit output exposes the same
-   fact. The checklist exists because the hardest bugs came from feature
-   intersections, not isolated constructs.
-   Do not add variant-aware weakening as a special case. Keep
-   `docs/VALUE_FLOW_SPEC.md` as the canonical bridge between
-   `docs/OWNERSHIP_MODEL.md`, `check_linear_discard.sh`,
-   `check_linear_conservation.sh`, `check_linear_nested_scope.sh`, and the
-   linearity fuzzer.
-
-13d. ✅ **DONE (2026-07-02) — front-end checker coverage includes every source
-   body, including std.** The root bug was that `Check` consumed submodule
-   signatures but skipped submodule function bodies, so `mod x;` files and
-   nested modules could bypass source-level type, mutability, capability, and
-   linearity diagnostics until a coarser Core-level backstop caught them. This is
-   fixed for all source: `checkProgram` mirrors Elab's submodule context,
-   recursively checks user and std submodule bodies, and
-   `scripts/tests/check_submodule_check_coverage.sh` proves that bad user
-   submodules cannot bypass the primary front-end checks: linear leak (E0208),
-   use-after-move (E0205), immutable assignment (E0217), missing capability
-   (E0520), mixed-width binop (E0228), and a sibling-submodule type-reference
-   positive case. H12 closed when the `std` exemption was removed after the
-   384 -> 0 std burn-down; the gate now asserts the exemption machinery cannot
-   quietly return and std stays at zero front-end violations.
-
-13e. ✅ **Post-H11 conservation audit sweep — RUN 2026-07-05, H13–H17 ALL
-   FIXED 2026-07-06** (disclosed in docs/KNOWN_HOLES.md before fixing, per
-   the H-pattern). H13 rebind consumes the RHS, H14 `break f;` consumes, H15
-   non-Copy overwrite via `arr[i]=`/`*&mut=` rejects (E0291), H16 live-linear
-   shadowing rejects (E0292), H17 params are OWNED LOCALS and must be
-   consumed (`&mut T` params are borrows, exempt; no terminal parameter
-   sinks, incl. Destroy impls). Burn-down: 16 std sites (terminal consumers
-   destructure into Copy raw parts), ~95 fixtures, 3 examples; it also
-   yielded `Vec::swap_remove` (std was missing the linear-safe O(1) removal)
-   and a `checkTraitBounds` fix (caller's own type param as turbofish arg
-   failed its own Copy bound; non-Copy trait bounds on type-var args were
-   silently skipped). `[linear; N]` remains an EXPRESSIVENESS gap that fails
-   closed (E0208) until array destructure lands. The remaining 13e tail
-   (callable-value capture probes) folds into #18's landing gates.
-   The prevention program is split into 13c and 13f-13j below; keep those
-   gates/refactors ahead of new language surface.
-
-13f. ✅ **DONE / KEEP RUNNING — linearity fuzzer.** Add
-   `scripts/tests/fuzz_linearity.py` as the ownership analogue of
-   `fuzz_differential.py`: generate programs that thread one or more linear
-   resources through assignment, shadowing, branches, loops, `break`, `return`,
-   matches, projections, stores, params, calls, destructuring, and fallible
-   wrappers. The generator carries the ground-truth consume count per path:
-   exactly once must compile; zero-consume and double-consume variants must
-   reject. Wire a smoke run into CI and a rotating nightly campaign. This
-   fuzzer's first run already found a real checker bug: `if`-EXPRESSION arms
-   were checked sequentially against the same env, so `if c { v } else { v }`
-   was a spurious E0205; `ifExpr` now mirrors the statement branch-merge
-   machinery. Keep adding shapes here before adding syntax that moves,
-   borrows, overwrites, or exits with linear values.
-
-13g. ✅ **DONE (2026-07-06) — expression checking refactored to explicit
-   modes.** `checkExpr` takes `UseMode`: `value` (default — a value-position
-   ident read AUTO-CONSUMES a non-Copy binding, in ONE place; the frozen
-   check applies to Copy reads too), `callArg` (arguments only — H11 rules
-   apply but consumption is PARAMETER-TYPE-directed at the site: `&T` never,
-   `&mut T` only borrow-block refs, owned always; its 18 use sites are
-   PINNED by `check_value_flow_spec.sh` so it cannot become an escape
-   hatch), and `place` (projection bases, borrow/assignment targets,
-   `..base`, deref inners — reading THROUGH a ref never consumes the
-   binding). ~25 scattered per-handler consume blocks deleted. Kept-explicit
-   exceptions: newtype `.0` whole-owner move, by-value `self` receivers,
-   `break f;` depth-exempt consume (transient env flag), `a = a` self-assign
-   (checked as place so E0219 holds), `*heap` load-and-free. The spec gained
-   a per-constructor Expression-modes table, gate-checked. Verified: fuzzer
-   2,400 cases/6 seeds, linearity trio, full suite 1585/0, examples,
-   goldens, SSA, differential, `test-ci-gates`. Forgetting a mode on new
-   syntax now over-rejects visibly instead of silently leaking. Future refactors
-   must preserve the invariant that `UseMode` and the value-flow spec are the
-   single implementation/source-of-truth pair for pass agreement; individual
-   syntax handlers should not grow ad hoc "consume this ident" logic again
-   without a spec row and gate.
+Fully completed Phase 6 work has been moved to [CHANGELOG.md](CHANGELOG.md).
+The active roadmap below contains only deferred, conditional, or not-yet-done
+Phase 6 work.
 
 13h. **Deferred hardening ratchet — centralize ownership-transfer and overwrite
    policy helpers.** This is valuable checker cleanup, but it is not an open
@@ -910,21 +711,6 @@ are folded out.
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-24a. ✅ **DONE (2026-07-02)** — sub-file diagnostics name the right file:
-    `Module.sourceFile` stamped by the project loader (incl. dependency roots),
-    threaded through Check/Elab/CoreCheck via `Diagnostics.stampFile`; the
-    renderer keys location AND snippet off `Diagnostic.file`; gate row in
-    `check_submodule_check_coverage.sh`. Original item: a diagnostic from a
-    `mod x;` file renders with the MAIN file's path (the span's line/col are
-    the sub-file's, so the shown snippet is wrong too — e.g. an error in
-    `src/helper.con:4` prints as `src/main.con:4` with main.con's line 4
-    quoted). The machinery exists (`Diagnostic.file` + the multi-file
-    `SourceMap` built by `runFrontend`); producers never stamp `file`. Thread
-    a source-file attribution through `Module` (set in
-    `Project.resolveModules`) and stamp module-scoped diagnostics in
-    Check/Elab/CoreCheck. Newly URGENT: submodule bodies are front-end checked
-    as of 2026-07-02 (H12), so sub-file errors are now common and every one of
-    them names the wrong file.
 25. Add basic LSP/editor diagnostics early: parse/type errors, capability
     summaries, hover for inferred types, and jump-to-definition. Deeper
     proof/evidence LSP features remain in the later editor phase.
@@ -1154,6 +940,22 @@ IR field, that is a pipeline bug.
    Copy demotion, and generated specialization facts are one semantic decision
    family and must not be reimplemented across Check, Elab/Core, Mono,
    CoreCheck, Verify, reports, or generated-name logic.
+
+   **Landed 2026-07-10 — the boolean `isCopy` recursion is now single-sourced.**
+   There were TWO implementations of "is this type Copy?": the monadic front-end
+   `CheckHelpers.isCopyType` (over `StructDef`/`EnumDef`/`NewtypeDef`) and the
+   pure `Layout.isCopyTyCore` (over `CStructDef`/`CEnumDef`, shared by Mono/
+   Verify/CoreCheck). They drifted on `typeVar` (bounds vs a fixed flag) and
+   `newtype` (recurse vs absent), kept in agreement only by ordering luck (Check
+   gates unbounded type vars first; newtypes resolve before the Core stages run).
+   Both now delegate to ONE recursion, `Layout.isCopyTyGeneric`, parameterized by
+   lookups (`lookupAgg` / `lookupNewtype` / `typeVarIsCopy`) so each
+   representation feeds its own data — the primitive set, the newtype recursion,
+   and the conditional-aggregate field check exist once. Gate:
+   `scripts/tests/check_copy_judgment.sh` (mutation-tested: breaking the newtype
+   recursion fails the newtype-over-Copy case). REMAINING: promote the boolean to
+   the full decision RECORD below (conditional + concrete forms, provenance,
+   failing field, trait bounds) and fold in `InstantiationJudgment`.
 
    The judgment record should model both stages of knowledge: a **conditional**
    form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
