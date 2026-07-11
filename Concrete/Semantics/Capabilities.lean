@@ -91,6 +91,19 @@ def missingCaps (caller callee : CapSet) : List String :=
   let (calleeCaps, _calleeVars) := callee.normalize
   calleeCaps.filter fun c => !(callerCaps.contains c || callerVars.contains c)
 
+/-- Like `missingCaps`, but a required capability VARIABLE also counts as a
+    requirement the caller must hold. This is the anti-smuggling rule for calls
+    THROUGH a function pointer (Phase 6.5 CapabilityJudgment, slice 3): a caller
+    with no authority must not invoke `f : fn() with(C)` merely because `C` is a
+    variable — that would smuggle authority past the caller's own header. A
+    *direct* call treats a callee variable as satisfied (`missingCaps` / the
+    polymorphic-callback contract); an *indirect* call through the pointer type
+    does not. (ROADMAP Phase 5 #24a red-team.) -/
+def missingCapsThroughPtr (caller callee : CapSet) : List String :=
+  let (callerCaps, callerVars) := caller.normalize
+  let (calleeCaps, calleeVars) := callee.normalize
+  (calleeCaps ++ calleeVars).filter fun c => !(callerCaps.contains c || callerVars.contains c)
+
 /-- The one direct-call capability DECISION (Phase 6.5 CapabilityJudgment, slice
     1): whether `caller`'s authority covers a call requiring `callee`, and — when
     it does not — which concrete caps are missing. `satisfied` is authoritative

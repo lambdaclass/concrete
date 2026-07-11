@@ -1061,6 +1061,85 @@ IR field, that is a pipeline bug.
    without it, the less central axes are cleaner than Concrete's own linearity
    model.
 
+2b. Add an interpreter reference-semantics contract.
+   The interpreter is the compiler's executable oracle, so its boundary must be
+   explicit instead of implicit in scattered differential tests. Define what the
+   interpreter is authoritative for (source expression evaluation, integer
+   semantics through `IntArith`, ownership consumption once
+   `OwnershipJudgment` lands, capability/trap behavior where supported, standard
+   control-flow behavior, and observable runtime errors), what it intentionally
+   does not model yet (for example unsupported allocation/runtime families,
+   host I/O, platform-specific backend behavior, or currently unsupported
+   literal/runtime forms), and how unsupported cases fail loud rather than
+   silently escaping the oracle.
+
+   Every judgment whose decision affects runtime behavior must either be
+   consumed by the interpreter or explicitly marked outside the interpreter
+   contract with a reason and a coverage replacement. This is the permanent home
+   for the "interp tie" clause in the judgment-module contract: `IntArith`,
+   `TypeJudgment` decisions that affect runtime width/traps,
+   `CapabilityJudgment` runtime traps, `OwnershipJudgment` consumption, and
+   future intrinsic/runtime judgments must name their interpreter relationship.
+
+   Done when `docs/INTERPRETER_CONTRACT.md` (or equivalent) lists supported and
+   unsupported feature families, `check_differential_positions.sh` / feature
+   matrix rows point at that contract, unsupported interpreter cases have stable
+   diagnostics, and a gate fails if a new runtime-affecting judgment is added
+   without either interpreter consumption or an explicit out-of-contract row.
+
+2c. Add an evaluation-order, trap, and drop sequencing contract.
+   Concrete needs one owner for "what happens when" just as much as it needs one
+   owner for types or capabilities. Evaluation order decides when arguments,
+   receivers, array/struct elements, conditions, branch values, match
+   scrutinees, assignments, returns, callbacks, and `defer`/cleanup paths run.
+   Trap/drop sequencing decides whether a checked-arithmetic trap fires before a
+   destroy, whether a bounds trap prevents later side effects, whether a
+   capability check happens before a callback body, and where linear cleanup runs
+   on normal, return, break, and diverging paths. Interp, Check, Lower, and the
+   backend must not each carry a private order model.
+
+   This contract should be practical, not theoretical effect sequencing. It
+   should state left-to-right / receiver-before-args / condition-before-branch /
+   scrutinee-before-arm / element-order rules where Concrete commits to them,
+   and state any intentionally unspecified order explicitly. It should connect
+   to `OwnershipJudgment` for drops/destroys, `IntArith` for arithmetic traps,
+   `CapabilityJudgment` for authority checks, and the interpreter contract for
+   executable behavior.
+
+   Gate with fixtures that observe order through traps or safe capabilities:
+   argument order, receiver vs argument order, array/struct literal element
+   order, if/match condition/scrutinee before selected branch/arm, short-circuit
+   behavior if supported, trap-before-drop, drop-on-return, drop-on-break,
+   no-drop-after-diverge, and callback authority before callback body. A red-team
+   lowering mutation that moves a trap, drop, or capability check across another
+   observable event must fail.
+
+2d. Add a pipeline determinism gate.
+   Content-addressed artifacts, proof replay, package evidence, deterministic
+   reports, and future `CompilerDB` caching all assume the compiler is
+   deterministic for the same source, compiler version, target/profile, and
+   dependency set. Phase 6.5 should make that assumption explicit rather than
+   leaving it as a Phase 18/19 surprise. The gate does not need to claim
+   byte-identical native binaries when LLVM/clang introduce outside
+   nondeterminism, but Concrete-owned artifacts must be stable.
+
+   Cover report modes, diagnostics JSON, emitted Core/SSA/LLVM text where
+   Concrete controls ordering, proof obligation fingerprints, capability/evidence
+   rows, pass-output hashes, generated names, source spans, and any snapshot or
+   replay bundle fields. Canonical serialization is the real work: map/set
+   iteration, temp paths, timestamps, generated-name counters, absolute paths,
+   host locale/timezone, and filesystem traversal order must not leak into
+   hashed or reviewable artifacts unless explicitly excluded and labeled
+   nondeterministic.
+
+   Done when `scripts/tests/test_determinism.sh` (or a Phase 6.5-specific gate)
+   runs the same program twice in clean temp dirs and compares canonical outputs,
+   includes at least one generic/mono case, one capability/report case, one proof
+   obligation case, one generated-name case, and one failure diagnostic case, and
+   mutation-testing proves that introducing map-iteration-order or temp-path
+   output makes the gate fail. This is the floor under content addressing,
+   replay artifacts, and future query/cache invalidation.
+
 3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
    establishes that user-triggerable violations are caught at the first
@@ -1099,9 +1178,15 @@ IR field, that is a pipeline bug.
    record. Gate `check_capability_judgment.sh` (mutation-tested). DEFERRED to the
    callback slice: the fn-pointer anti-smuggling check (Check.lean:589) is a
    stricter policy (caller must hold the callee's cap *variables*), not the
-   direct-call decision. STILL TODO in this slice: route the report/audit/JSON
-   rows to read `decideCall` (they currently recompute cap membership in
-   `ReportInterface`/`Report`) — that is slice 2's "reports from the same record".
+   direct-call decision.
+
+   Reports slice — **Landed 2026-07-11 (`e4a9dcc0`).** The report/audit surfaces
+   recomputed capability *membership* ("does this callee declare cap X") inline at
+   four sites (`ReportInterface`, two `Report.lean` why-traces, `ReportObligations`
+   Unsafe count). `Capabilities.capSetHas (cs) (cap)` now owns that fact and
+   `capSetHasUnsafe` delegates to it; the four sites route through it, so report
+   provenance and the checker read the ONE membership fact. Covered by
+   `check_capability_facts.sh`, now backed by `capSetHas`.
 
    Second slice: capability-polymorphic callbacks and callable values. Existing
    callable rules stay; `CapabilityJudgment` centralizes the practical decision:
@@ -1111,6 +1196,49 @@ IR field, that is a pipeline bug.
    Third slice: trusted/Unsafe/package boundaries. Trusted wrappers, Unsafe
    intrinsics, externs, dependency/package capability budgets, and audit diffs
    should all render from the same capability decision record.
+
+   `diff-caps` slice — capability-surface diff as an acceptance gate (the
+   agent-review headline for this axis, and a consumer that makes the whole
+   capability machinery visible rather than internal plumbing).
+   `CapabilityJudgment` already computes a function's required caps transitively;
+   emit that as a first-class **capability manifest** — the transitively-closed
+   required-cap set per function/module/package — and add
+   `concrete diff-caps <old> <new>` comparing two manifests (two commits, a PR,
+   or an old-vs-new dependency version) to report the AUTHORITY DELTA: what caps
+   the change newly grants. The reviewer of AI-authored code asks "what can this
+   now do that it couldn't?", answered without line-by-line review. The contract
+   IS the gate and is load-bearing (byte-stable, never reworded casually): exit
+   `0` = no authority expansion, `1` = authority expanded (a human reviews the
+   delta), `2` = usage/parse error; `--machine` emits a deterministic
+   single-line, schema-versioned JSON verdict (`concrete.diff-caps/1`) with
+   identical exit codes; on error stdout is empty and the diagnostic goes to
+   stderr; scoped to the declared/inferred capability surface ONLY (no
+   other-axis claim, and it says so). Depends on a determinism gate — the
+   manifest and machine JSON must be byte-deterministic across runs or the
+   contract is worthless; this is the concrete consumer that makes a determinism
+   gate load-bearing rather than abstract hygiene. Gate: a change adding a
+   transitive `File`/`Network` cap -> exit `1` with the delta in both human and
+   machine output; a no-op refactor -> exit `0`; a dependency bump that widens a
+   transitive cap -> exit `1` (ties to Phase 18 budgets); identical inputs ->
+   byte-identical machine JSON across two runs; a parse error -> exit `2`, empty
+   stdout. Prior art: Garnet's `diff-caps` (Island-Dev-Crew/garnet) — the
+   three-value exit-code contract and narrow-scope discipline; see
+   `research/compiler/pipeline-lessons-2026-07.md`.
+
+   Generalize to `diff-evidence` only when pulled (Phase 11/18, agent-review
+   workload). `diff-caps` is the first instance of a family: the same
+   manifest + delta + three-value-exit-code + byte-stable/`--machine` contract,
+   applied one evidence axis at a time, each an HONEST SEPARATE delta (never a
+   muddy "changed"): cap-diff (this slice); trust-diff (change newly requires
+   `Unsafe`/`trusted` or widens the TCB — Phase 12/14 trust facts); proof-diff
+   (a function lost its proof or dropped `proved -> stale/missing/assumed` —
+   Phase 11 proof-status drift); evidence-class-diff (any claim's evidence class
+   weakened — Phase 10/17 evidence ledger). Each reads committed decision
+   records / the evidence ledger, never recomputed. The full agent-review
+   question — "what new authority AND what weaker evidence does this change
+   introduce?" — is recompute-don't-trust applied to the delta, a strictly
+   stronger acceptance story than a caps-only diff. Do not build the other axes
+   before their evidence sources are stable.
 
    Practical purity/discard slice: once `CapabilityJudgment` can say an
    expression is known **pure and trap-free/total** (`with()` / empty authority,

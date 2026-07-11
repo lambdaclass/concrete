@@ -581,6 +581,38 @@ query engine.
 
 Roadmap fit: Phase 6.5 #20/#23, Phase 19 editor tooling.
 
+## Garnet — Convergent Capability/Evidence Project (`diff-caps`)
+
+Garnet (Island-Dev-Crew/garnet, v0.8.1 research prototype) independently reached
+Concrete's core thesis from the AI-authored-code angle: "AI writes the code,
+human review is the bottleneck, so acceptance decisions run on capability
+evidence the toolchain RECOMPUTES, not on model claims." Capabilities are
+language-level (`@caps(fs|net|time|proc|ffi)`), verified transitively at check
+time (the CapCaps propagator), and enforced identically on both backends
+(interpreter + VM) with cross-OS trap parity "recorded as evidence, not
+asserted" — the same interp-as-oracle discipline Concrete relies on.
+
+The idea worth copying is **`diff-caps`**. The capability surface is a
+first-class, transitively-closed manifest, and `diff-caps <old> <new>` reports
+the AUTHORITY DELTA of a change (PR / dependency bump / agent edit). The contract
+is the gate and is deliberately minimal + byte-stable: exit `0` = no expansion,
+`1` = authority expanded (review the delta), `2` = usage/parse error; a
+`--machine` deterministic schema-versioned single-line JSON verdict with
+identical exit codes; scoped to the declared capability surface ONLY (no
+other-axis claim, and it says so). Recorded as ROADMAP Phase 6.5 #4 `diff-caps`
+slice, generalizing to `diff-evidence` (cap / trust / proof / evidence-class
+deltas) when pulled — Concrete has more evidence axes than Garnet, so the
+generalized delta is a strictly stronger agent-review story than caps-only.
+
+Also validating: Garnet's deterministic + signed builds (byte-identical
+manifests, Ed25519 signing, SBOM, BLAKE3 fingerprints) reinforce Concrete's
+determinism-gate and content-addressing (#15b) directions.
+
+Not to copy: Garnet's dual managed-ARC / safe-ownership modes, exceptions,
+actor-memory keywords (`memory episodic|semantic|working|procedural`), and VM
+backend — all cut against Concrete's single-mode linear, Result/trap, native
+design and its no-speculative-vocabulary discipline.
+
 ## What Concrete Should Not Adopt
 
 - Lazy checking of unused code.

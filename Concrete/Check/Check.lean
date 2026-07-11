@@ -586,11 +586,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- capability smuggling (ROADMAP Phase 5 #24a red-team gate).
       do
         let env ← getEnv
-        let (ptrCaps, ptrVars) := fnPtrCapSet.normalize
-        let (callerCaps, callerVars) := env.currentCapSet.normalize
-        for cap in ptrCaps ++ ptrVars do
-          unless callerCaps.contains cap || callerVars.contains cap do
-            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- Anti-smuggling: an indirect call must hold the pointer type's caps AND
+        -- its cap variables (Capabilities.missingCapsThroughPtr) — the stricter
+        -- through-pointer variant of the one shared missing-caps decision.
+        for cap in Capabilities.missingCapsThroughPtr env.currentCapSet fnPtrCapSet do
+          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
         throwCheck (.wrongArgCount s!"function pointer '{fnName}'" paramTys.length args.length) (some e.getSpan)

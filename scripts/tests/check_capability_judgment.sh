@@ -42,6 +42,17 @@ rejects "caller has a different cap (missing the required one)" missingone
 emit pure 'mod m { fn pure_fn() -> Int { return 1; } fn main() -> Int { return pure_fn(); } }'
 accepts "pure callee needs no cap" pure
 
+echo "=== calls THROUGH a function pointer must hold the pointer type's caps (anti-smuggling) ==="
+
+# A caller with no authority must NOT invoke a `fn() with(Network)` pointer — that
+# would smuggle Network past its own header (Capabilities.missingCapsThroughPtr).
+emit smuggle 'mod m { fn caller(f: fn() with(Network) -> Int) -> Int { return f(); } fn main() -> Int { return 0; } }'
+rejects "pure caller invokes a fn()with(Network) pointer" smuggle
+
+# Declaring the capability makes the same indirect call legal.
+emit legit 'mod m { fn caller(f: fn() with(Network) -> Int) with(Network) -> Int { return f(); } fn main() -> Int { return 0; } }'
+accepts "caller with(Network) invokes the pointer" legit
+
 echo
 echo "check_capability_judgment: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
