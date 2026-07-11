@@ -1027,10 +1027,18 @@ IR field, that is a pipeline bug.
    recomputing capability containment, callback cap propagation, Unsafe/trusted
    policy, or human report rows independently.
 
-   First slice: direct calls. A function call requiring `File` or `Network`
-   should be rejected/accepted, diagnosed, and reported from the same
-   `CapabilityJudgment` decision. Add one red-team where checker output and
-   report/audit output would otherwise disagree.
+   First slice: direct calls. **Landed 2026-07-11 (`9042b3e3`).** The satisfaction
+   decision was already `capsContain` (#5), but the direct-call *decision record* —
+   which caps are missing, rendered per-cap (E0240) by Check and whole-set (E0520)
+   by CoreCheck — was open-coded per surface. `Capabilities.decideCall`
+   (`{required, callerHas, satisfied, missing}`) + `Capabilities.missingCaps` now
+   own it; Check (both cap-polymorphic sites), CoreCheck, and reports read the one
+   record. Gate `check_capability_judgment.sh` (mutation-tested). DEFERRED to the
+   callback slice: the fn-pointer anti-smuggling check (Check.lean:589) is a
+   stricter policy (caller must hold the callee's cap *variables*), not the
+   direct-call decision. STILL TODO in this slice: route the report/audit/JSON
+   rows to read `decideCall` (they currently recompute cap membership in
+   `ReportInterface`/`Report`) — that is slice 2's "reports from the same record".
 
    Second slice: capability-polymorphic callbacks and callable values. Existing
    callable rules stay; `CapabilityJudgment` centralizes the practical decision:
