@@ -1087,6 +1087,20 @@ IR field, that is a pipeline bug.
    diagnostics, and a gate fails if a new runtime-affecting judgment is added
    without either interpreter consumption or an explicit out-of-contract row.
 
+   Trap-parity as recorded evidence (Garnet's "cross-OS trap parity recorded as
+   evidence, not asserted"). The contract must cover not just which features the
+   interpreter models but that **traps agree across interp, compiled, and each
+   backend/target** — capability traps, checked-arithmetic traps, bounds traps,
+   cast/narrowing traps, and unsafe/trusted traps — and that this agreement is a
+   first-class evidence class surfaced in `--report`, not an implicit property of
+   scattered `both_trap` gate rows. Generalize the arithmetic `both_trap` row
+   into a trap-parity matrix (trap kind x interp / compiled / target) whose
+   result is recorded, so "the oracle and the artifact trap identically here" is
+   stated evidence a reviewer or agent can read, not luck the fuzzer happens to
+   catch. A divergence (one side traps, another does not) is a hard failure; any
+   genuinely target-specific trap difference must be an explicit, reported target
+   assumption, never a silent one.
+
 2c. Add an evaluation-order, trap, and drop sequencing contract.
    Concrete needs one owner for "what happens when" just as much as it needs one
    owner for types or capabilities. Evaluation order decides when arguments,
@@ -1224,6 +1238,16 @@ IR field, that is a pipeline bug.
    stdout. Prior art: Garnet's `diff-caps` (Island-Dev-Crew/garnet) — the
    three-value exit-code contract and narrow-scope discipline; see
    `research/compiler/pipeline-lessons-2026-07.md`.
+
+   The capability manifest is itself a stable, schema-versioned, deterministic
+   artifact — not merely an internal input to `diff-caps`. It is defined and
+   emitted HERE, at its owning stage (`CapabilityJudgment` + the determinism
+   gate), because it is the atom every later evidence feature consumes: Phase 18
+   dependency capability budgets, package evidence summaries, supply-chain
+   review, and signed release bundles all assemble from it. Defining the schema
+   at the judgment that owns the fact — rather than retrofitting a manifest
+   format in Phase 18 — is the "commit the fact once, at its owner" discipline
+   applied across the phase boundary.
 
    Generalize to `diff-evidence` only when pulled (Phase 11/18, agent-review
    workload). `diff-caps` is the first instance of a family: the same
