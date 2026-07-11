@@ -196,11 +196,15 @@ def interpProgram (inputPath : String) : IO UInt32 := do
     | .error msg =>
       IO.eprintln msg
       return 1
-    | .ok (exitCode, out) =>
-      -- Match compiled binary contract byte-for-byte: program output first
-      -- (the print_* buffer), then the return value on its own line, exit 0.
+    | .ok (retVal, out) =>
+      -- Match compiled binary contract byte-for-byte: program output first (the
+      -- print_* buffer), then the return value on its own line — but ONLY when
+      -- `main` returns a value. A Unit `main` prints no value line, exactly like
+      -- the compiled binary (which used to diverge: interp printed a stray `0`).
       IO.print out
-      IO.println s!"{exitCode}"
+      match retVal with
+      | some n => IO.println s!"{n}"
+      | none => pure ()
       return 0
 
 /-- Compile and run tests: Parse → ... → EmitSSA (test mode) → clang → run -/

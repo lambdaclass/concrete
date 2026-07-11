@@ -958,7 +958,7 @@ end -- mutual
 
 /-- Interpret a program from its validated Core modules.
     Finds and runs `main`, returns exit code. -/
-def interpret (modules : List CModule) : Except String (Int × String) := do
+def interpret (modules : List CModule) : Except String (Option Int × String) := do
   let fns := collectFns modules
   let enums := collectEnums modules
   match fns.find? (fun f => f.name == "main") with
@@ -971,10 +971,13 @@ def interpret (modules : List CModule) : Except String (Int × String) := do
     let out := match envGet finalEnv stdoutVar with
       | some (.string buf) => buf
       | _ => ""
+    -- `some n`: `main` returned a value (printed on its own line, matching the
+    -- compiled binary). `none`: a Unit `main` fell off the end — the compiled
+    -- binary prints NO value line, so neither does the interpreter.
     match flow with
-    | .ret (.int n _) => return (n, out)
-    | .ret _ => return (0, out)
-    | .val _ => return (0, out)
+    | .ret (.int n _) => return (some n, out)
+    | .ret _ => return (none, out)
+    | .val _ => return (none, out)
     | _ => .error "interp: main did not return normally"
 
 -- ============================================================
