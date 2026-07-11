@@ -57,6 +57,13 @@ document as one queue:
 
 Cross-cutting items that must stay visible while the linear queue advances:
 
+- **Compiler pipeline spine:** Phase 6B establishes semantic truth ("one meaning
+  per program"), Phase 6C makes that truth observable/replayable, Phase 8
+  validates it on external-facing examples, Phase 9 measures and reduces proof
+  cost, Phases 10-14 turn evidence into source/proof/release claims, and Phase
+  15 validates the backend boundary. Do not let later proof/backend/tooling work
+  bypass this order: semantic facts first, observability second, external
+  validation third, proof/evidence/backend validation after that.
 - **Pattern ergonomics and daily language friction** live in Phase 6 #5 and #7:
   match guards, OR patterns, `if let` / `while let`, match-on-reference,
   the no-tuples decision, struct update, wildcard destructuring, and `defer` /
@@ -101,6 +108,26 @@ something real to run. The compiler-pipeline transcript
 (`examples/compiler_pipeline_probe/`) is part of the closed-Phase-4 deferred tail
 (now tracked across Phases 10/14/19); Phase 8 carries the later
 `examples/credibility_slice/packet_window/` replayable flagship.
+
+The next three verdict-deciding risks get early, narrow probes rather than
+waiting for their full later phases:
+
+1. **External credibility:** `diff-caps` is the first external-facing evidence
+   artifact. It lives in Phase 6B under `CapabilityJudgment`, but it is the
+   early proof that Concrete can answer a useful review question ("what new
+   authority does this change grant?") with a deterministic replayable artifact.
+   It depends on the capability manifest and determinism gate; it does not wait
+   for the full Phase 18 package-evidence story.
+2. **Proof cost:** Phase 9 begins with proof-effort telemetry before investing
+   in automation. The first flagship/proof-cost table is the early measurement
+   of whether evidence-carrying source is affordable; if manual proof authoring
+   is too expensive, the LLM-guided synthesis/review loop is measured next
+   before the project assumes proof authoring will scale.
+3. **Backend soundness:** Phase 15's translation-validation item starts with a
+   narrow `ValidatedSSA -> BackendIR -> ValidatedBackendIR` subset as soon as
+   SSA/backend facts are stable enough. This is the early check for the central
+   backend trust risk: source/Core facts are not native-code evidence unless the
+   backend boundary is either validated or explicitly trusted.
 
 Every phase must leave behind checked evidence that it works. A phase item is
 not complete because code exists; it is complete when the behavior has positive
@@ -2231,6 +2258,12 @@ changelog. This phase maintains the graduated showcase, deepens theorem
 coverage where it strengthens public claims, and adds new examples only when
 they force a named surface or public claim.
 
+This phase is also the external-credibility probe for the compiler/evidence
+pipeline: Phase 6B's `diff-caps` artifact gives the first narrow reviewable
+delta, and this phase turns that style of replayable evidence into a non-author
+example or workload transcript before the larger package/release machinery
+depends on it.
+
 1. Maintain the five graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
    and `hmac_sha256`.
@@ -2415,6 +2448,11 @@ of one-off `simp` scripts.
 
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
+
+This phase owns the proof-cost probe from the roadmap spine: before assuming the
+proof discipline scales, measure manual proof effort on real flagships, then
+measure review effort for the LLM-guided synthesis loop if manual authoring is
+too expensive.
 
 0a. Instrument the flagships with PROOF-EFFORT TELEMETRY before investing in
    automation, so the external-validation gate's "was the proof discipline
@@ -3576,6 +3614,10 @@ and incremental build contracts are explicit enough for release evidence.
     Concrete lowering into the backend contract preserves the facts Concrete
     claims. Add `examples/translation_validation/` with straight-line,
     branch/loop, struct/array, runtime-check, and deliberate mismatch fixtures.
+    This is the roadmap's early backend-soundness probe: start with the small
+    subset as soon as SSA/backend facts are stable enough, rather than waiting
+    for a full native-backend story before learning whether Concrete's evidence
+    can cross the backend boundary.
     Prior art: CompCert for proved compilation/pass-correctness discipline and
     Alive2 for SMT-checked LLVM IR equivalence/optimization validation. The
     concrete threat model here is the class differential fuzzing has already
