@@ -942,426 +942,6 @@ relations that cannot live on one typed node.
    the code handles it through helper predicates, the gate/docs drift must catch
    it. This item is the model for every later semantic-axis migration.
 
-2. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
-   `CopyJudgment` / `InstantiationJudgment`.**
-   The predicate centralization work landed the first slice (`isCopy`,
-   conditional Copy after substitution, type substitution/type-var matching),
-   but the long-term target is a real judgment axis, not a bag of shared
-   booleans. Conditional `Copy`, trait-bound satisfaction, generic
-   substitution, type-var matching, turbofish/caller type params, post-mono
-   Copy demotion, and generated specialization facts are one semantic decision
-   family and must not be reimplemented across Check, Elab/Core, Mono,
-   CoreCheck, Verify, reports, or generated-name logic.
-
-   **Landed 2026-07-10 — the boolean `isCopy` recursion is now single-sourced.**
-   There were TWO implementations of "is this type Copy?": the monadic front-end
-   `CheckHelpers.isCopyType` (over `StructDef`/`EnumDef`/`NewtypeDef`) and the
-   pure `Layout.isCopyTyCore` (over `CStructDef`/`CEnumDef`, shared by Mono/
-   Verify/CoreCheck). They drifted on `typeVar` (bounds vs a fixed flag) and
-   `newtype` (recurse vs absent), kept in agreement only by ordering luck (Check
-   gates unbounded type vars first; newtypes resolve before the Core stages run).
-   Both now delegate to ONE recursion, `Layout.isCopyTyGeneric`, parameterized by
-   lookups (`lookupAgg` / `lookupNewtype` / `typeVarIsCopy`) so each
-   representation feeds its own data — the primitive set, the newtype recursion,
-   and the conditional-aggregate field check exist once. Gate:
-   `scripts/tests/check_copy_judgment.sh` (mutation-tested: breaking the newtype
-   recursion fails the newtype-over-Copy case).
-
-   **Landed 2026-07-11 — type-arg inference (`unifyTypes`) is single-sourced.**
-   The first `InstantiationJudgment` slice: `unifyTypes` (structural matching of a
-   parameter type against an argument type to bind generic type args) was likewise
-   defined TWICE — `Elab.lean` (private) and `CheckHelpers.lean` — two copies of
-   one algorithm. Differential probing confirmed Check and Elab infer/reject
-   generic calls identically today, so this was a behavior-neutral dedup into
-   `Shared.unifyTypes` that removes the latent drift; a turbofish-generic agree
-   row was added to `check_type_agreement.sh`.
-
-   REMAINING: promote the boolean `isCopy` to the full decision RECORD below
-   (conditional + concrete forms, provenance, failing field, trait bounds), and
-   the rest of `InstantiationJudgment` (turbofish/caller type params, post-mono
-   specialization facts). A known adjacent usability gap surfaced during probing:
-   generic inference does not flow the return/let-context type into type-arg
-   inference (`let v: i32 = id(42)` needs `id::<i32>(42)`); consistent across
-   interp/compiled, so a feature gap, not drift.
-
-   The judgment record should model both stages of knowledge: a **conditional**
-   form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
-   post-substitution form (`Option<i32>` is `Copy`; `Option<File>` is linear).
-   Include at least: the original type, substituted concrete type when known,
-   instantiation site, conditional requirements, concrete `is_copy`, why it is
-   `Copy` (`primitive`, `declared_copy`, `conditional_aggregate`,
-   `type_param_bound`, etc.), the first failing field/payload when it is not
-   `Copy`, satisfied or failing trait bounds, any caller/turbofish type
-   arguments used, diagnostic reason, ownership/linearity consequence, and
-   report/audit payload. Consumers should read that record; they should not ask
-   their own version of "is this Copy?" after substitution. This judgment feeds
-   the ownership axis directly: `Copy` decides whether a value may duplicate,
-   whether `_`/statement discard is legal, and whether a specialization is
-   linear or copyable.
-
-   Gate with **consistency under refinement**, not naive stage equality:
-   applying the pre-mono conditional judgment to a concrete instantiation must
-   equal the post-mono concrete judgment. Cover generic `Option<T>` /
-   `Result<T,E>`, user generic structs/enums, nested generic fields, trait
-   bounds through turbofish/caller type params, arrays, newtypes, post-mono
-   demotion cases, non-Copy payloads, missing bounds, and one red-team where
-   Check accepts but Mono/CoreCheck/Verify would otherwise instantiate the
-   condition differently. Sequence after the core `TypeJudgment` work (you need
-   the type before asking whether it is `Copy`) and treat it as a peer of
-   `CapabilityJudgment`, not a distant report/database item.
-
-2a. **[CRUCIAL NEXT] Promote ownership / value-flow into
-   `OwnershipJudgment` / `ValueFlowJudgment`.**
-   This is the missing headline axis. Concrete's defining promise is linear
-   ownership, but the Phase 6.5 judgment list currently names arithmetic, type,
-   Copy/instantiation, and capability before the ownership decision itself. The
-   value-flow spec and H9-H17 work made Check much more disciplined, but they
-   are still framed mainly as "the checker rejects bad programs." That is not
-   enough for the long-term pipeline: ownership facts are consumed by Check,
-   Lower/codegen, the interpreter, reports, and eventually proof extraction.
-   If those consumers re-derive "move vs copy vs borrow vs drop" separately,
-   Concrete keeps the same drift shape that `TypeJudgment`, `IntArith`, and
-   `CopyJudgment` were created to eliminate.
-
-   The judgment should own the use-site/value-flow decision record, not just a
-   boolean. Include at least: source place/expression, input type, `Copy`
-   decision from `CopyJudgment`, use mode (`copy`, `move`, `borrow`, `mut_borrow`,
-   `reborrow`, `consume`, `place_write`, `init`, `overwrite`, `discard`,
-   `diverge`), whether the site is a last use, liveness before/after the site,
-   scope-exit destroy/drop obligations, control-flow-edge obligations (`return`,
-   `break`, loop exit, match/if arm, diverging branch), rejection reason,
-   diagnostic payload, and report/audit payload. For aggregate/destructure/
-   assignment/return/callback cases, the record should also name the destination
-   or pass-agreement fact it depends on.
-
-   Consumers:
-   - **Check** uses the record to reject use-after-move, double consume, live
-     overwrite, illegal discard, illegal non-Copy projection, and borrow
-     conflicts.
-   - **Lower** uses the same record, or a plan derived from it, to choose
-     move/copy/borrow lowering and to insert `Destroy`/drop operations on the
-     exact live-linear paths. Lower must not run a parallel liveness/drop
-     analysis that can disagree with Check without an agreement gate.
-   - **Interpreter** models consumption from the same decision family so the
-     differential oracle agrees on ownership-sensitive programs.
-   - **Reports/audit/proofs** explain why a value was copied, moved, borrowed,
-     destroyed, rejected, or considered live on a path.
-
-   First slice: audit the current ownership consumers. Identify every place
-   Check, Lower, the interpreter, and reports decide move-vs-copy, last-use, drop
-   placement, or discard independently. Turn that into a small ownership
-   agreement matrix before building a giant database: H14/H15/H17-style
-   break-value consume, live overwrite, param consume, reborrowed callback
-   context, divergent branch, loop exit, match arms, `_` discard, assignment
-   overwrite, aggregate construction, and non-Copy projection.
-
-   Second slice: define the decision-record shape and central computation for
-   the cases already covered by the value-flow spec. It is acceptable for the
-   first implementation to be "shared computation + agreement gate" rather than
-   a fully committed per-node record, but the roadmap target is stronger:
-   Check-owned value-flow decisions become facts that later stages consume or
-   derive mechanically, not policy they rediscover.
-
-   Gate: promote the linearity fuzzer into an ownership agreement gate:
-   `Check ownership decision == Lower move/drop plan == interpreter consumption
-   behavior` over the matrix above. Red-team by disabling one drop edge,
-   treating a non-Copy value as Copy, treating a moved value as live, or letting
-   Lower insert a destroy on a path Check considered already consumed. The gate
-   must fail with a minimized `.con` fixture and a replay command. This item is
-   a prerequisite for claiming the pipeline has first-class fact discipline:
-   without it, the less central axes are cleaner than Concrete's own linearity
-   model.
-
-### Runtime And Oracle Contracts
-
-These items make the interpreter, runtime order, traps, drops, and deterministic
-artifacts explicit contracts instead of assumptions scattered across fuzzers and
-reports.
-
-2b. Add an interpreter reference-semantics contract.
-   The interpreter is the compiler's executable oracle, so its boundary must be
-   explicit instead of implicit in scattered differential tests. Define what the
-   interpreter is authoritative for (source expression evaluation, integer
-   semantics through `IntArith`, ownership consumption once
-   `OwnershipJudgment` lands, capability/trap behavior where supported, standard
-   control-flow behavior, and observable runtime errors), what it intentionally
-   does not model yet (for example unsupported allocation/runtime families,
-   host I/O, platform-specific backend behavior, or currently unsupported
-   literal/runtime forms), and how unsupported cases fail loud rather than
-   silently escaping the oracle.
-
-   Every judgment whose decision affects runtime behavior must either be
-   consumed by the interpreter or explicitly marked outside the interpreter
-   contract with a reason and a coverage replacement. This is the permanent home
-   for the "interp tie" clause in the judgment-module contract: `IntArith`,
-   `TypeJudgment` decisions that affect runtime width/traps,
-   `CapabilityJudgment` runtime traps, `OwnershipJudgment` consumption, and
-   future intrinsic/runtime judgments must name their interpreter relationship.
-
-   Done when `docs/INTERPRETER_CONTRACT.md` (or equivalent) lists supported and
-   unsupported feature families, `check_differential_positions.sh` / feature
-   matrix rows point at that contract, unsupported interpreter cases have stable
-   diagnostics, and a gate fails if a new runtime-affecting judgment is added
-   without either interpreter consumption or an explicit out-of-contract row.
-
-   Trap-parity as recorded evidence (Garnet's "cross-OS trap parity recorded as
-   evidence, not asserted"). The contract must cover not just which features the
-   interpreter models but that **traps agree across interp, compiled, and each
-   backend/target** — capability traps, checked-arithmetic traps, bounds traps,
-   cast/narrowing traps, and unsafe/trusted traps — and that this agreement is a
-   first-class evidence class surfaced in `--report`, not an implicit property of
-   scattered `both_trap` gate rows. Generalize the arithmetic `both_trap` row
-   into a trap-parity matrix (trap kind x interp / compiled / target) whose
-   result is recorded, so "the oracle and the artifact trap identically here" is
-   stated evidence a reviewer or agent can read, not luck the fuzzer happens to
-   catch. A divergence (one side traps, another does not) is a hard failure; any
-   genuinely target-specific trap difference must be an explicit, reported target
-   assumption, never a silent one.
-
-2c. Add an evaluation-order, trap, and drop sequencing contract.
-   Concrete needs one owner for "what happens when" just as much as it needs one
-   owner for types or capabilities. Evaluation order decides when arguments,
-   receivers, array/struct elements, conditions, branch values, match
-   scrutinees, assignments, returns, callbacks, and `defer`/cleanup paths run.
-   Trap/drop sequencing decides whether a checked-arithmetic trap fires before a
-   destroy, whether a bounds trap prevents later side effects, whether a
-   capability check happens before a callback body, and where linear cleanup runs
-   on normal, return, break, and diverging paths. Interp, Check, Lower, and the
-   backend must not each carry a private order model.
-
-   This contract should be practical, not theoretical effect sequencing. It
-   should state left-to-right / receiver-before-args / condition-before-branch /
-   scrutinee-before-arm / element-order rules where Concrete commits to them,
-   and state any intentionally unspecified order explicitly. It should connect
-   to `OwnershipJudgment` for drops/destroys, `IntArith` for arithmetic traps,
-   `CapabilityJudgment` for authority checks, and the interpreter contract for
-   executable behavior.
-
-   Gate with fixtures that observe order through traps or safe capabilities:
-   argument order, receiver vs argument order, array/struct literal element
-   order, if/match condition/scrutinee before selected branch/arm, short-circuit
-   behavior if supported, trap-before-drop, drop-on-return, drop-on-break,
-   no-drop-after-diverge, and callback authority before callback body. A red-team
-   lowering mutation that moves a trap, drop, or capability check across another
-   observable event must fail.
-
-2d. Add a pipeline determinism gate.
-   Content-addressed artifacts, proof replay, package evidence, deterministic
-   reports, and future `CompilerDB` caching all assume the compiler is
-   deterministic for the same source, compiler version, target/profile, and
-   dependency set. Phase 6.5 should make that assumption explicit rather than
-   leaving it as a Phase 18/19 surprise. The gate does not need to claim
-   byte-identical native binaries when LLVM/clang introduce outside
-   nondeterminism, but Concrete-owned artifacts must be stable.
-
-   Cover report modes, diagnostics JSON, emitted Core/SSA/LLVM text where
-   Concrete controls ordering, proof obligation fingerprints, capability/evidence
-   rows, pass-output hashes, generated names, source spans, and any snapshot or
-   replay bundle fields. Canonical serialization is the real work: map/set
-   iteration, temp paths, timestamps, generated-name counters, absolute paths,
-   host locale/timezone, and filesystem traversal order must not leak into
-   hashed or reviewable artifacts unless explicitly excluded and labeled
-   nondeterministic.
-
-   Done when `scripts/tests/test_determinism.sh` (or a Phase 6.5-specific gate)
-   runs the same program twice in clean temp dirs and compares canonical outputs,
-   includes at least one generic/mono case, one capability/report case, one proof
-   obligation case, one generated-name case, and one failure diagnostic case, and
-   mutation-testing proves that introducing map-iteration-order or temp-path
-   output makes the gate fail. This is the floor under content addressing,
-   replay artifacts, and future query/cache invalidation.
-
-### Stage Boundaries And Fact Infrastructure
-
-These items keep the pipeline itself honest: each stage has a contract, facts
-have stable homes, and production/audit/proof/test entry points do not grow
-hidden alternate pipelines.
-
-3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
-   `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
-   establishes that user-triggerable violations are caught at the first
-   responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
-   or Lean panics. Keep extending this gate whenever a new boundary rule is
-   introduced. The long-term form is `concrete inspect --pipeline-contracts
-   --json`, but the V1 gate is already the phase's contract backstop.
-
-4. Centralize capability checking and callback propagation into
-   `CapabilityJudgment` after the type-axis core is stable.
-   Capabilities are as central to Concrete as arithmetic and source typing, but
-   this must stay practical: **do not add algebraic effects, effect handlers,
-   row-polymorphism syntax, implicit context, or theoretical effect-system
-   vocabulary to the user surface.** Concrete keeps explicit authority headers:
-   `fn f(...) with(File, Network) -> T`. The improvement is internal:
-   `CapabilityJudgment` becomes the capability-axis sibling of `IntArith` and
-   `TypeJudgment`, producing one decision record for why a call/expression needs
-   authority and how that fact should be diagnosed, reported, audited, and
-   surfaced to tools.
-
-   The decision record should include at least: required caps, source of the
-   requirement (`direct_call`, `callback`, `trusted_wrapper`,
-   `unsafe_intrinsic`, `package_import`), callee/callback parameter identity
-   where relevant, purity (`with()` / empty cap set), evidence class,
-   diagnostic reason, and report/audit payload. Check, CoreCheck, Report, audit,
-   LSP/agent JSON, and package gates must consume this one decision instead of
-   recomputing capability containment, callback cap propagation, Unsafe/trusted
-   policy, or human report rows independently.
-
-   First slice: direct calls. **Landed 2026-07-11 (`9042b3e3`).** The satisfaction
-   decision was already `capsContain` (#5), but the direct-call *decision record* —
-   which caps are missing, rendered per-cap (E0240) by Check and whole-set (E0520)
-   by CoreCheck — was open-coded per surface. `Capabilities.decideCall`
-   (`{required, callerHas, satisfied, missing}`) + `Capabilities.missingCaps` now
-   own it; Check (both cap-polymorphic sites), CoreCheck, and reports read the one
-   record. Gate `check_capability_judgment.sh` (mutation-tested). DEFERRED to the
-   callback slice: the fn-pointer anti-smuggling check (Check.lean:589) is a
-   stricter policy (caller must hold the callee's cap *variables*), not the
-   direct-call decision.
-
-   Reports slice — **Landed 2026-07-11 (`e4a9dcc0`).** The report/audit surfaces
-   recomputed capability *membership* ("does this callee declare cap X") inline at
-   four sites (`ReportInterface`, two `Report.lean` why-traces, `ReportObligations`
-   Unsafe count). `Capabilities.capSetHas (cs) (cap)` now owns that fact and
-   `capSetHasUnsafe` delegates to it; the four sites route through it, so report
-   provenance and the checker read the ONE membership fact. Covered by
-   `check_capability_facts.sh`, now backed by `capSetHas`.
-
-   Second slice: capability-polymorphic callbacks and callable values. Existing
-   callable rules stay; `CapabilityJudgment` centralizes the practical decision:
-   "this callback requires `C`, therefore the combinator/caller requires `C`."
-   Cover `for_each_with`, `for_each_ctx`, scoped callbacks, and callable values.
-
-   Third slice: trusted/Unsafe/package boundaries. Trusted wrappers, Unsafe
-   intrinsics, externs, dependency/package capability budgets, and audit diffs
-   should all render from the same capability decision record.
-
-   `diff-caps` slice — capability-surface diff as an acceptance gate (the
-   agent-review headline for this axis, and a consumer that makes the whole
-   capability machinery visible rather than internal plumbing).
-   `CapabilityJudgment` already computes a function's required caps transitively;
-   emit that as a first-class **capability manifest** — the transitively-closed
-   required-cap set per function/module/package — and add
-   `concrete diff-caps <old> <new>` comparing two manifests (two commits, a PR,
-   or an old-vs-new dependency version) to report the AUTHORITY DELTA: what caps
-   the change newly grants. The reviewer of AI-authored code asks "what can this
-   now do that it couldn't?", answered without line-by-line review. The contract
-   IS the gate and is load-bearing (byte-stable, never reworded casually): exit
-   `0` = no authority expansion, `1` = authority expanded (a human reviews the
-   delta), `2` = usage/parse error; `--machine` emits a deterministic
-   single-line, schema-versioned JSON verdict (`concrete.diff-caps/1`) with
-   identical exit codes; on error stdout is empty and the diagnostic goes to
-   stderr; scoped to the declared/inferred capability surface ONLY (no
-   other-axis claim, and it says so). Depends on a determinism gate — the
-   manifest and machine JSON must be byte-deterministic across runs or the
-   contract is worthless; this is the concrete consumer that makes a determinism
-   gate load-bearing rather than abstract hygiene. Gate: a change adding a
-   transitive `File`/`Network` cap -> exit `1` with the delta in both human and
-   machine output; a no-op refactor -> exit `0`; a dependency bump that widens a
-   transitive cap -> exit `1` (ties to Phase 18 budgets); identical inputs ->
-   byte-identical machine JSON across two runs; a parse error -> exit `2`, empty
-   stdout. Prior art: Garnet's `diff-caps` (Island-Dev-Crew/garnet) — the
-   three-value exit-code contract and narrow-scope discipline; see
-   `research/compiler/pipeline-lessons-2026-07.md`.
-
-   The capability manifest is itself a stable, schema-versioned, deterministic
-   artifact — not merely an internal input to `diff-caps`. It is defined and
-   emitted HERE, at its owning stage (`CapabilityJudgment` + the determinism
-   gate), because it is the atom every later evidence feature consumes: Phase 18
-   dependency capability budgets, package evidence summaries, supply-chain
-   review, and signed release bundles all assemble from it. Defining the schema
-   at the judgment that owns the fact — rather than retrofitting a manifest
-   format in Phase 18 — is the "commit the fact once, at its owner" discipline
-   applied across the phase boundary.
-
-   Generalize to `diff-evidence` only when pulled (Phase 11/18, agent-review
-   workload). `diff-caps` is the first instance of a family: the same
-   manifest + delta + three-value-exit-code + byte-stable/`--machine` contract,
-   applied one evidence axis at a time, each an HONEST SEPARATE delta (never a
-   muddy "changed"): cap-diff (this slice); trust-diff (change newly requires
-   `Unsafe`/`trusted` or widens the TCB — Phase 12/14 trust facts); proof-diff
-   (a function lost its proof or dropped `proved -> stale/missing/assumed` —
-   Phase 11 proof-status drift); evidence-class-diff (any claim's evidence class
-   weakened — Phase 10/17 evidence ledger). Each reads committed decision
-   records / the evidence ledger, never recomputed. The full agent-review
-   question — "what new authority AND what weaker evidence does this change
-   introduce?" — is recompute-don't-trust applied to the delta, a strictly
-   stronger acceptance story than a caps-only diff. Do not build the other axes
-   before their evidence sources are stable.
-
-   Practical purity/discard slice: once `CapabilityJudgment` can say an
-   expression is known **pure and trap-free/total** (`with()` / empty authority,
-   no mutation, no checked-arithmetic trap, no narrowing trap, no bounds trap,
-   no runtime obligation that can fail) and returns a non-`Unit` value, make
-   `expr;` over that expression an error with an explicit acknowledgement
-   escape (`discard(expr)` or equivalent). This is not row-effect theory and not
-   a user-facing effect system; it is the same concrete discard discipline
-   already used for fallible and non-`Copy` values. A total pure non-`Unit`
-   result discarded as a statement is almost always a lost computation.
-   Potentially trapping pure expressions are excluded until the trap judgment
-   can prove they are total; their traps are observable runtime behavior.
-
-   Gate with an ordinary `File`/`Network` call, a capability-polymorphic
-   callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
-   dependency/package boundary, a pure non-`Unit` discarded statement, and one
-   negative where report output would otherwise disagree with the checker
-   diagnostic. The accepted design is the useful Flix/Koka lesson — one
-   capability/effect decision — without importing their user-facing effect
-   systems.
-
-5. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
-   facts.
-   This item is explicitly dependent on #9, but it is NOT a prerequisite for the
-   type-axis fix. Do not build a separate ID scheme for source expression types:
-   typed Core already carries those facts. When pass-agreement edges, borrow
-   conflicts, E0293 path-pair facts, provenance, replay, package evidence, or
-   editor/agent fact queries need stable identity, introduce deterministic
-   internal identities for resolved names, type constructors, generic
-   instantiations, capability sets, target facts, proof obligations, report
-   facts, diagnostics, generated names, source nodes, Core nodes, SSA values,
-   backend operations, and source spans after desugaring. Human output should
-   still show source names; caches, pass hashes, evidence bundles, and replay
-   artifacts should use stable IDs.
-
-   Done when the same source + compiler version + target/profile produces
-   stable IDs, unrelated edits preserve IDs where possible, generated names use
-   the same hygiene source, and a gate proves reports/agents can join facts by
-   ID without reparsing human strings.
-
-6. Add a lightweight compiler fact dependency graph.
-   Do not build the full rustc-style demand-driven query engine yet, but record
-   dependency edges as first-class trace/replay data:
-   `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
-   corecheck -> lower/ssa -> obligations -> reports -> backend`. Every cached
-   or replayable fact must name the source/fact/version/profile inputs it
-   depends on. If a fact cannot name its dependencies, it is not eligible for
-   cache reuse or evidence replay.
-
-   Done when `concrete trace-pipeline --json` can show why a proof obligation,
-   capability fact, diagnostic, or backend artifact changed, and a replay gate
-   marks dependent facts stale when an upstream source/fact hash changes.
-
-7. Add pass locality and mutation rules.
-   Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
-   it may mutate, what facts it may write, and what prior stage contract makes
-   its assumptions legal. A report/audit pass may not recompute semantic facts;
-   a lowering pass may not mutate source-level facts; a function-local pass may
-   not inspect sibling functions unless explicitly declared; a proof extraction
-   pass may not silently invent checker facts.
-
-   Done when the pipeline-contract gate includes at least one red-team fixture
-   for illegal cross-level read, illegal fact write, hidden sibling inspection,
-   and report-side semantic recomputation.
-
-8. Add analysis preservation and invalidation contracts.
-   Once facts are cached or reused, every pass must state which facts it reads,
-   writes, preserves, and invalidates. This is the guardrail that prevents
-   future incremental checking, proof caching, package facts, or editor facts
-   from becoming a stale second truth source.
-
-   Done when a pass that changes Core invalidates dependent CoreCheck, proof,
-   report, and backend facts; a pass that only changes source spans preserves
-   type/capability facts but invalidates source-linked diagnostics; and a gate
-   proves stale facts cannot remain green after an invalidating pass.
-
 9. Unify Check/Elab source typing through `TypeJudgment`; reserve `CompilerDB`
    for relational facts.
    This is the root architectural item for the whole pipeline. Check must
@@ -1537,6 +1117,427 @@ hidden alternate pipelines.
    loops. Elab/Mono/Lower should bind required DB facts locally while processing
    a node or block, and telemetry/complexity gates should watch `CompilerDB`
    query counts and pass scaling.
+
+2. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
+   `CopyJudgment` / `InstantiationJudgment`.**
+   The predicate centralization work landed the first slice (`isCopy`,
+   conditional Copy after substitution, type substitution/type-var matching),
+   but the long-term target is a real judgment axis, not a bag of shared
+   booleans. Conditional `Copy`, trait-bound satisfaction, generic
+   substitution, type-var matching, turbofish/caller type params, post-mono
+   Copy demotion, and generated specialization facts are one semantic decision
+   family and must not be reimplemented across Check, Elab/Core, Mono,
+   CoreCheck, Verify, reports, or generated-name logic.
+
+   **Landed 2026-07-10 — the boolean `isCopy` recursion is now single-sourced.**
+   There were TWO implementations of "is this type Copy?": the monadic front-end
+   `CheckHelpers.isCopyType` (over `StructDef`/`EnumDef`/`NewtypeDef`) and the
+   pure `Layout.isCopyTyCore` (over `CStructDef`/`CEnumDef`, shared by Mono/
+   Verify/CoreCheck). They drifted on `typeVar` (bounds vs a fixed flag) and
+   `newtype` (recurse vs absent), kept in agreement only by ordering luck (Check
+   gates unbounded type vars first; newtypes resolve before the Core stages run).
+   Both now delegate to ONE recursion, `Layout.isCopyTyGeneric`, parameterized by
+   lookups (`lookupAgg` / `lookupNewtype` / `typeVarIsCopy`) so each
+   representation feeds its own data — the primitive set, the newtype recursion,
+   and the conditional-aggregate field check exist once. Gate:
+   `scripts/tests/check_copy_judgment.sh` (mutation-tested: breaking the newtype
+   recursion fails the newtype-over-Copy case).
+
+   **Landed 2026-07-11 — type-arg inference (`unifyTypes`) is single-sourced.**
+   The first `InstantiationJudgment` slice: `unifyTypes` (structural matching of a
+   parameter type against an argument type to bind generic type args) was likewise
+   defined TWICE — `Elab.lean` (private) and `CheckHelpers.lean` — two copies of
+   one algorithm. Differential probing confirmed Check and Elab infer/reject
+   generic calls identically today, so this was a behavior-neutral dedup into
+   `Shared.unifyTypes` that removes the latent drift; a turbofish-generic agree
+   row was added to `check_type_agreement.sh`.
+
+   REMAINING: promote the boolean `isCopy` to the full decision RECORD below
+   (conditional + concrete forms, provenance, failing field, trait bounds), and
+   the rest of `InstantiationJudgment` (turbofish/caller type params, post-mono
+   specialization facts). A known adjacent usability gap surfaced during probing:
+   generic inference does not flow the return/let-context type into type-arg
+   inference (`let v: i32 = id(42)` needs `id::<i32>(42)`); consistent across
+   interp/compiled, so a feature gap, not drift.
+
+   The judgment record should model both stages of knowledge: a **conditional**
+   form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
+   post-substitution form (`Option<i32>` is `Copy`; `Option<File>` is linear).
+   Include at least: the original type, substituted concrete type when known,
+   instantiation site, conditional requirements, concrete `is_copy`, why it is
+   `Copy` (`primitive`, `declared_copy`, `conditional_aggregate`,
+   `type_param_bound`, etc.), the first failing field/payload when it is not
+   `Copy`, satisfied or failing trait bounds, any caller/turbofish type
+   arguments used, diagnostic reason, ownership/linearity consequence, and
+   report/audit payload. Consumers should read that record; they should not ask
+   their own version of "is this Copy?" after substitution. This judgment feeds
+   the ownership axis directly: `Copy` decides whether a value may duplicate,
+   whether `_`/statement discard is legal, and whether a specialization is
+   linear or copyable.
+
+   Gate with **consistency under refinement**, not naive stage equality:
+   applying the pre-mono conditional judgment to a concrete instantiation must
+   equal the post-mono concrete judgment. Cover generic `Option<T>` /
+   `Result<T,E>`, user generic structs/enums, nested generic fields, trait
+   bounds through turbofish/caller type params, arrays, newtypes, post-mono
+   demotion cases, non-Copy payloads, missing bounds, and one red-team where
+   Check accepts but Mono/CoreCheck/Verify would otherwise instantiate the
+   condition differently. Sequence after the core `TypeJudgment` work (you need
+   the type before asking whether it is `Copy`) and treat it as a peer of
+   `CapabilityJudgment`, not a distant report/database item.
+
+2a. **[CRUCIAL NEXT] Promote ownership / value-flow into
+   `OwnershipJudgment` / `ValueFlowJudgment`.**
+   This is the missing headline axis. Concrete's defining promise is linear
+   ownership, but the Phase 6.5 judgment list currently names arithmetic, type,
+   Copy/instantiation, and capability before the ownership decision itself. The
+   value-flow spec and H9-H17 work made Check much more disciplined, but they
+   are still framed mainly as "the checker rejects bad programs." That is not
+   enough for the long-term pipeline: ownership facts are consumed by Check,
+   Lower/codegen, the interpreter, reports, and eventually proof extraction.
+   If those consumers re-derive "move vs copy vs borrow vs drop" separately,
+   Concrete keeps the same drift shape that `TypeJudgment`, `IntArith`, and
+   `CopyJudgment` were created to eliminate.
+
+   The judgment should own the use-site/value-flow decision record, not just a
+   boolean. Include at least: source place/expression, input type, `Copy`
+   decision from `CopyJudgment`, use mode (`copy`, `move`, `borrow`, `mut_borrow`,
+   `reborrow`, `consume`, `place_write`, `init`, `overwrite`, `discard`,
+   `diverge`), whether the site is a last use, liveness before/after the site,
+   scope-exit destroy/drop obligations, control-flow-edge obligations (`return`,
+   `break`, loop exit, match/if arm, diverging branch), rejection reason,
+   diagnostic payload, and report/audit payload. For aggregate/destructure/
+   assignment/return/callback cases, the record should also name the destination
+   or pass-agreement fact it depends on.
+
+   Consumers:
+   - **Check** uses the record to reject use-after-move, double consume, live
+     overwrite, illegal discard, illegal non-Copy projection, and borrow
+     conflicts.
+   - **Lower** uses the same record, or a plan derived from it, to choose
+     move/copy/borrow lowering and to insert `Destroy`/drop operations on the
+     exact live-linear paths. Lower must not run a parallel liveness/drop
+     analysis that can disagree with Check without an agreement gate.
+   - **Interpreter** models consumption from the same decision family so the
+     differential oracle agrees on ownership-sensitive programs.
+   - **Reports/audit/proofs** explain why a value was copied, moved, borrowed,
+     destroyed, rejected, or considered live on a path.
+
+   First slice: audit the current ownership consumers. Identify every place
+   Check, Lower, the interpreter, and reports decide move-vs-copy, last-use, drop
+   placement, or discard independently. Turn that into a small ownership
+   agreement matrix before building a giant database: H14/H15/H17-style
+   break-value consume, live overwrite, param consume, reborrowed callback
+   context, divergent branch, loop exit, match arms, `_` discard, assignment
+   overwrite, aggregate construction, and non-Copy projection.
+
+   Second slice: define the decision-record shape and central computation for
+   the cases already covered by the value-flow spec. It is acceptable for the
+   first implementation to be "shared computation + agreement gate" rather than
+   a fully committed per-node record, but the roadmap target is stronger:
+   Check-owned value-flow decisions become facts that later stages consume or
+   derive mechanically, not policy they rediscover.
+
+   Gate: promote the linearity fuzzer into an ownership agreement gate:
+   `Check ownership decision == Lower move/drop plan == interpreter consumption
+   behavior` over the matrix above. Red-team by disabling one drop edge,
+   treating a non-Copy value as Copy, treating a moved value as live, or letting
+   Lower insert a destroy on a path Check considered already consumed. The gate
+   must fail with a minimized `.con` fixture and a replay command. This item is
+   a prerequisite for claiming the pipeline has first-class fact discipline:
+   without it, the less central axes are cleaner than Concrete's own linearity
+   model.
+
+4. Centralize capability checking and callback propagation into
+   `CapabilityJudgment` after the type-axis core is stable.
+   Capabilities are as central to Concrete as arithmetic and source typing, but
+   this must stay practical: **do not add algebraic effects, effect handlers,
+   row-polymorphism syntax, implicit context, or theoretical effect-system
+   vocabulary to the user surface.** Concrete keeps explicit authority headers:
+   `fn f(...) with(File, Network) -> T`. The improvement is internal:
+   `CapabilityJudgment` becomes the capability-axis sibling of `IntArith` and
+   `TypeJudgment`, producing one decision record for why a call/expression needs
+   authority and how that fact should be diagnosed, reported, audited, and
+   surfaced to tools.
+
+   The decision record should include at least: required caps, source of the
+   requirement (`direct_call`, `callback`, `trusted_wrapper`,
+   `unsafe_intrinsic`, `package_import`), callee/callback parameter identity
+   where relevant, purity (`with()` / empty cap set), evidence class,
+   diagnostic reason, and report/audit payload. Check, CoreCheck, Report, audit,
+   LSP/agent JSON, and package gates must consume this one decision instead of
+   recomputing capability containment, callback cap propagation, Unsafe/trusted
+   policy, or human report rows independently.
+
+   First slice: direct calls. **Landed 2026-07-11 (`9042b3e3`).** The satisfaction
+   decision was already `capsContain` (#5), but the direct-call *decision record* —
+   which caps are missing, rendered per-cap (E0240) by Check and whole-set (E0520)
+   by CoreCheck — was open-coded per surface. `Capabilities.decideCall`
+   (`{required, callerHas, satisfied, missing}`) + `Capabilities.missingCaps` now
+   own it; Check (both cap-polymorphic sites), CoreCheck, and reports read the one
+   record. Gate `check_capability_judgment.sh` (mutation-tested). DEFERRED to the
+   callback slice: the fn-pointer anti-smuggling check (Check.lean:589) is a
+   stricter policy (caller must hold the callee's cap *variables*), not the
+   direct-call decision.
+
+   Reports slice — **Landed 2026-07-11 (`e4a9dcc0`).** The report/audit surfaces
+   recomputed capability *membership* ("does this callee declare cap X") inline at
+   four sites (`ReportInterface`, two `Report.lean` why-traces, `ReportObligations`
+   Unsafe count). `Capabilities.capSetHas (cs) (cap)` now owns that fact and
+   `capSetHasUnsafe` delegates to it; the four sites route through it, so report
+   provenance and the checker read the ONE membership fact. Covered by
+   `check_capability_facts.sh`, now backed by `capSetHas`.
+
+   Second slice: capability-polymorphic callbacks and callable values. Existing
+   callable rules stay; `CapabilityJudgment` centralizes the practical decision:
+   "this callback requires `C`, therefore the combinator/caller requires `C`."
+   Cover `for_each_with`, `for_each_ctx`, scoped callbacks, and callable values.
+
+   Third slice: trusted/Unsafe/package boundaries. Trusted wrappers, Unsafe
+   intrinsics, externs, dependency/package capability budgets, and audit diffs
+   should all render from the same capability decision record.
+
+   `diff-caps` slice — capability-surface diff as an acceptance gate (the
+   agent-review headline for this axis, and a consumer that makes the whole
+   capability machinery visible rather than internal plumbing).
+   `CapabilityJudgment` already computes a function's required caps transitively;
+   emit that as a first-class **capability manifest** — the transitively-closed
+   required-cap set per function/module/package — and add
+   `concrete diff-caps <old> <new>` comparing two manifests (two commits, a PR,
+   or an old-vs-new dependency version) to report the AUTHORITY DELTA: what caps
+   the change newly grants. The reviewer of AI-authored code asks "what can this
+   now do that it couldn't?", answered without line-by-line review. The contract
+   IS the gate and is load-bearing (byte-stable, never reworded casually): exit
+   `0` = no authority expansion, `1` = authority expanded (a human reviews the
+   delta), `2` = usage/parse error; `--machine` emits a deterministic
+   single-line, schema-versioned JSON verdict (`concrete.diff-caps/1`) with
+   identical exit codes; on error stdout is empty and the diagnostic goes to
+   stderr; scoped to the declared/inferred capability surface ONLY (no
+   other-axis claim, and it says so). Depends on a determinism gate — the
+   manifest and machine JSON must be byte-deterministic across runs or the
+   contract is worthless; this is the concrete consumer that makes a determinism
+   gate load-bearing rather than abstract hygiene. Gate: a change adding a
+   transitive `File`/`Network` cap -> exit `1` with the delta in both human and
+   machine output; a no-op refactor -> exit `0`; a dependency bump that widens a
+   transitive cap -> exit `1` (ties to Phase 18 budgets); identical inputs ->
+   byte-identical machine JSON across two runs; a parse error -> exit `2`, empty
+   stdout. Prior art: Garnet's `diff-caps` (Island-Dev-Crew/garnet) — the
+   three-value exit-code contract and narrow-scope discipline; see
+   `research/compiler/pipeline-lessons-2026-07.md`.
+
+   The capability manifest is itself a stable, schema-versioned, deterministic
+   artifact — not merely an internal input to `diff-caps`. It is defined and
+   emitted HERE, at its owning stage (`CapabilityJudgment` + the determinism
+   gate), because it is the atom every later evidence feature consumes: Phase 18
+   dependency capability budgets, package evidence summaries, supply-chain
+   review, and signed release bundles all assemble from it. Defining the schema
+   at the judgment that owns the fact — rather than retrofitting a manifest
+   format in Phase 18 — is the "commit the fact once, at its owner" discipline
+   applied across the phase boundary.
+
+   Generalize to `diff-evidence` only when pulled (Phase 11/18, agent-review
+   workload). `diff-caps` is the first instance of a family: the same
+   manifest + delta + three-value-exit-code + byte-stable/`--machine` contract,
+   applied one evidence axis at a time, each an HONEST SEPARATE delta (never a
+   muddy "changed"): cap-diff (this slice); trust-diff (change newly requires
+   `Unsafe`/`trusted` or widens the TCB — Phase 12/14 trust facts); proof-diff
+   (a function lost its proof or dropped `proved -> stale/missing/assumed` —
+   Phase 11 proof-status drift); evidence-class-diff (any claim's evidence class
+   weakened — Phase 10/17 evidence ledger). Each reads committed decision
+   records / the evidence ledger, never recomputed. The full agent-review
+   question — "what new authority AND what weaker evidence does this change
+   introduce?" — is recompute-don't-trust applied to the delta, a strictly
+   stronger acceptance story than a caps-only diff. Do not build the other axes
+   before their evidence sources are stable.
+
+   Practical purity/discard slice: once `CapabilityJudgment` can say an
+   expression is known **pure and trap-free/total** (`with()` / empty authority,
+   no mutation, no checked-arithmetic trap, no narrowing trap, no bounds trap,
+   no runtime obligation that can fail) and returns a non-`Unit` value, make
+   `expr;` over that expression an error with an explicit acknowledgement
+   escape (`discard(expr)` or equivalent). This is not row-effect theory and not
+   a user-facing effect system; it is the same concrete discard discipline
+   already used for fallible and non-`Copy` values. A total pure non-`Unit`
+   result discarded as a statement is almost always a lost computation.
+   Potentially trapping pure expressions are excluded until the trap judgment
+   can prove they are total; their traps are observable runtime behavior.
+
+   Gate with an ordinary `File`/`Network` call, a capability-polymorphic
+   callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
+   dependency/package boundary, a pure non-`Unit` discarded statement, and one
+   negative where report output would otherwise disagree with the checker
+   diagnostic. The accepted design is the useful Flix/Koka lesson — one
+   capability/effect decision — without importing their user-facing effect
+   systems.
+
+
+### Runtime And Oracle Contracts
+
+These items make the interpreter, runtime order, traps, drops, and deterministic
+artifacts explicit contracts instead of assumptions scattered across fuzzers and
+reports.
+
+2b. Add an interpreter reference-semantics contract.
+   The interpreter is the compiler's executable oracle, so its boundary must be
+   explicit instead of implicit in scattered differential tests. Define what the
+   interpreter is authoritative for (source expression evaluation, integer
+   semantics through `IntArith`, ownership consumption once
+   `OwnershipJudgment` lands, capability/trap behavior where supported, standard
+   control-flow behavior, and observable runtime errors), what it intentionally
+   does not model yet (for example unsupported allocation/runtime families,
+   host I/O, platform-specific backend behavior, or currently unsupported
+   literal/runtime forms), and how unsupported cases fail loud rather than
+   silently escaping the oracle.
+
+   Every judgment whose decision affects runtime behavior must either be
+   consumed by the interpreter or explicitly marked outside the interpreter
+   contract with a reason and a coverage replacement. This is the permanent home
+   for the "interp tie" clause in the judgment-module contract: `IntArith`,
+   `TypeJudgment` decisions that affect runtime width/traps,
+   `CapabilityJudgment` runtime traps, `OwnershipJudgment` consumption, and
+   future intrinsic/runtime judgments must name their interpreter relationship.
+
+   Done when `docs/INTERPRETER_CONTRACT.md` (or equivalent) lists supported and
+   unsupported feature families, `check_differential_positions.sh` / feature
+   matrix rows point at that contract, unsupported interpreter cases have stable
+   diagnostics, and a gate fails if a new runtime-affecting judgment is added
+   without either interpreter consumption or an explicit out-of-contract row.
+
+   Trap-parity as recorded evidence (Garnet's "cross-OS trap parity recorded as
+   evidence, not asserted"). The contract must cover not just which features the
+   interpreter models but that **traps agree across interp, compiled, and each
+   backend/target** — capability traps, checked-arithmetic traps, bounds traps,
+   cast/narrowing traps, and unsafe/trusted traps — and that this agreement is a
+   first-class evidence class surfaced in `--report`, not an implicit property of
+   scattered `both_trap` gate rows. Generalize the arithmetic `both_trap` row
+   into a trap-parity matrix (trap kind x interp / compiled / target) whose
+   result is recorded, so "the oracle and the artifact trap identically here" is
+   stated evidence a reviewer or agent can read, not luck the fuzzer happens to
+   catch. A divergence (one side traps, another does not) is a hard failure; any
+   genuinely target-specific trap difference must be an explicit, reported target
+   assumption, never a silent one.
+
+2c. Add an evaluation-order, trap, and drop sequencing contract.
+   Concrete needs one owner for "what happens when" just as much as it needs one
+   owner for types or capabilities. Evaluation order decides when arguments,
+   receivers, array/struct elements, conditions, branch values, match
+   scrutinees, assignments, returns, callbacks, and `defer`/cleanup paths run.
+   Trap/drop sequencing decides whether a checked-arithmetic trap fires before a
+   destroy, whether a bounds trap prevents later side effects, whether a
+   capability check happens before a callback body, and where linear cleanup runs
+   on normal, return, break, and diverging paths. Interp, Check, Lower, and the
+   backend must not each carry a private order model.
+
+   This contract should be practical, not theoretical effect sequencing. It
+   should state left-to-right / receiver-before-args / condition-before-branch /
+   scrutinee-before-arm / element-order rules where Concrete commits to them,
+   and state any intentionally unspecified order explicitly. It should connect
+   to `OwnershipJudgment` for drops/destroys, `IntArith` for arithmetic traps,
+   `CapabilityJudgment` for authority checks, and the interpreter contract for
+   executable behavior.
+
+   Gate with fixtures that observe order through traps or safe capabilities:
+   argument order, receiver vs argument order, array/struct literal element
+   order, if/match condition/scrutinee before selected branch/arm, short-circuit
+   behavior if supported, trap-before-drop, drop-on-return, drop-on-break,
+   no-drop-after-diverge, and callback authority before callback body. A red-team
+   lowering mutation that moves a trap, drop, or capability check across another
+   observable event must fail.
+
+2d. Add a pipeline determinism gate.
+   Content-addressed artifacts, proof replay, package evidence, deterministic
+   reports, and future `CompilerDB` caching all assume the compiler is
+   deterministic for the same source, compiler version, target/profile, and
+   dependency set. Phase 6.5 should make that assumption explicit rather than
+   leaving it as a Phase 18/19 surprise. The gate does not need to claim
+   byte-identical native binaries when LLVM/clang introduce outside
+   nondeterminism, but Concrete-owned artifacts must be stable.
+
+   Cover report modes, diagnostics JSON, emitted Core/SSA/LLVM text where
+   Concrete controls ordering, proof obligation fingerprints, capability/evidence
+   rows, pass-output hashes, generated names, source spans, and any snapshot or
+   replay bundle fields. Canonical serialization is the real work: map/set
+   iteration, temp paths, timestamps, generated-name counters, absolute paths,
+   host locale/timezone, and filesystem traversal order must not leak into
+   hashed or reviewable artifacts unless explicitly excluded and labeled
+   nondeterministic.
+
+   Done when `scripts/tests/test_determinism.sh` (or a Phase 6.5-specific gate)
+   runs the same program twice in clean temp dirs and compares canonical outputs,
+   includes at least one generic/mono case, one capability/report case, one proof
+   obligation case, one generated-name case, and one failure diagnostic case, and
+   mutation-testing proves that introducing map-iteration-order or temp-path
+   output makes the gate fail. This is the floor under content addressing,
+   replay artifacts, and future query/cache invalidation.
+
+### Stage Boundaries And Fact Infrastructure
+
+These items keep the pipeline itself honest: each stage has a contract, facts
+have stable homes, and production/audit/proof/test entry points do not grow
+hidden alternate pipelines.
+
+3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
+   `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
+   establishes that user-triggerable violations are caught at the first
+   responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
+   or Lean panics. Keep extending this gate whenever a new boundary rule is
+   introduced. The long-term form is `concrete inspect --pipeline-contracts
+   --json`, but the V1 gate is already the phase's contract backstop.
+
+5. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
+   facts.
+   This item is explicitly dependent on #9, but it is NOT a prerequisite for the
+   type-axis fix. Do not build a separate ID scheme for source expression types:
+   typed Core already carries those facts. When pass-agreement edges, borrow
+   conflicts, E0293 path-pair facts, provenance, replay, package evidence, or
+   editor/agent fact queries need stable identity, introduce deterministic
+   internal identities for resolved names, type constructors, generic
+   instantiations, capability sets, target facts, proof obligations, report
+   facts, diagnostics, generated names, source nodes, Core nodes, SSA values,
+   backend operations, and source spans after desugaring. Human output should
+   still show source names; caches, pass hashes, evidence bundles, and replay
+   artifacts should use stable IDs.
+
+   Done when the same source + compiler version + target/profile produces
+   stable IDs, unrelated edits preserve IDs where possible, generated names use
+   the same hygiene source, and a gate proves reports/agents can join facts by
+   ID without reparsing human strings.
+
+6. Add a lightweight compiler fact dependency graph.
+   Do not build the full rustc-style demand-driven query engine yet, but record
+   dependency edges as first-class trace/replay data:
+   `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
+   corecheck -> lower/ssa -> obligations -> reports -> backend`. Every cached
+   or replayable fact must name the source/fact/version/profile inputs it
+   depends on. If a fact cannot name its dependencies, it is not eligible for
+   cache reuse or evidence replay.
+
+   Done when `concrete trace-pipeline --json` can show why a proof obligation,
+   capability fact, diagnostic, or backend artifact changed, and a replay gate
+   marks dependent facts stale when an upstream source/fact hash changes.
+
+7. Add pass locality and mutation rules.
+   Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
+   it may mutate, what facts it may write, and what prior stage contract makes
+   its assumptions legal. A report/audit pass may not recompute semantic facts;
+   a lowering pass may not mutate source-level facts; a function-local pass may
+   not inspect sibling functions unless explicitly declared; a proof extraction
+   pass may not silently invent checker facts.
+
+   Done when the pipeline-contract gate includes at least one red-team fixture
+   for illegal cross-level read, illegal fact write, hidden sibling inspection,
+   and report-side semantic recomputation.
+
+8. Add analysis preservation and invalidation contracts.
+   Once facts are cached or reused, every pass must state which facts it reads,
+   writes, preserves, and invalidates. This is the guardrail that prevents
+   future incremental checking, proof caching, package facts, or editor facts
+   from becoming a stale second truth source.
+
+   Done when a pass that changes Core invalidates dependent CoreCheck, proof,
+   report, and backend facts; a pass that only changes source spans preserves
+   type/capability facts but invalidates source-linked diagnostics; and a gate
+   proves stale facts cannot remain green after an invalidating pass.
 
 ### Value Flow, Builtins, Reports, And Pipeline Composition
 
