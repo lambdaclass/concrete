@@ -71,6 +71,20 @@ emit prophave 'mod m {
 }'
 accepts "main with(File) applies the File-requiring callback" prophave
 
+echo "=== Unsafe-op authority (trusted OR with(Unsafe); Capabilities.capsAllowUnsafeOp) ==="
+
+# A raw-pointer deref needs authority: rejected in a plain function, allowed inside
+# a `trusted` function or one that declares `with(Unsafe)`. One decision behind all
+# four of CoreCheck's unsafe-op gates.
+emit unsafeplain 'mod m { fn main() -> Int { let x: i32 = 5; let p: *const i32 = &x as *const i32; let v: i32 = *p; return v as Int; } }'
+rejects "raw-ptr deref in a plain fn (no authority)" unsafeplain
+
+emit unsafetrusted 'mod m { trusted fn d() -> Int { let x: i32 = 5; let p: *const i32 = &x as *const i32; let v: i32 = *p; return v as Int; } fn main() -> Int { return d(); } }'
+accepts "raw-ptr deref inside a trusted fn" unsafetrusted
+
+emit unsafecap 'mod m { fn d() with(Unsafe) -> Int { let x: i32 = 5; let p: *const i32 = &x as *const i32; let v: i32 = *p; return v as Int; } fn main() with(Unsafe) -> Int { return d(); } }'
+accepts "raw-ptr deref in a fn with(Unsafe)" unsafecap
+
 echo
 echo "check_capability_judgment: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
