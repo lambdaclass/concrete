@@ -49,12 +49,20 @@ def capsContain (caller callee : CapSet) : Bool :=
   | .var _ => true  -- capability variable, can't check statically here
   | .union a b => capsContain caller a && capsContain caller b
 
-/-- Does this cap set LITERALLY list `Unsafe`? This is membership of the
-    declared concrete caps (a capability *variable* is not literal Unsafe) — the
-    right question for report counting ("how many functions declare Unsafe"),
-    NOT for authority. For authority use `capsAllowUnsafeOp`. -/
+/-- Does this cap set LITERALLY declare capability `cap`? Membership of the
+    concrete caps (a capability *variable* is not a literal declaration). This is
+    the fact behind report/audit provenance ("which callee contributes each
+    declared cap"), single-sourced so a report cannot classify a cap set
+    differently than the checker. For *authority* (coverage) use `capsContain`;
+    this is declaration membership only. -/
+def capSetHas (cs : CapSet) (cap : String) : Bool :=
+  cs.concreteCaps.contains cap
+
+/-- Does this cap set LITERALLY list `Unsafe`? The `Unsafe`-specialized
+    `capSetHas` — the right question for report counting ("how many functions
+    declare Unsafe"), NOT for authority. For authority use `capsAllowUnsafeOp`. -/
 def capSetHasUnsafe (cs : CapSet) : Bool :=
-  cs.concreteCaps.contains unsafeCapName
+  capSetHas cs unsafeCapName
 
 /-- Does the current context have AUTHORITY to perform an `Unsafe` operation
     (raw-pointer deref/assign, pointer arithmetic, unsafe cast)? True inside a

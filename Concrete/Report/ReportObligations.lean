@@ -10,6 +10,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Frontend.Format
 import Concrete.Report.ReportBase
 import Concrete.Semantics.IntArith
+import Concrete.Semantics.Capabilities
 -- Obligation collectors need only the contract/VC helper cluster, not the
 -- capability/arith/unsafe/layout report renderers (pipeline #34).
 import Concrete.Report.ReportVC
@@ -924,7 +925,7 @@ def provenViolationDiagnostics (modules : List Module) : Diagnostics := Id.run d
   -- Safe-code only: functions marked `trusted` or holding the `Unsafe`
   -- capability carry audit responsibility and are exempt (ROADMAP Phase 12 #0).
   let unsafeQuals : List String := (modules.flatMap allFunctions).filterMap fun (pfx, f) =>
-    if f.isTrusted || f.capSet.concreteCaps.contains "Unsafe" then some (pfx ++ f.name) else none
+    if f.isTrusted || Capabilities.capSetHasUnsafe f.capSet then some (pfx ++ f.name) else none
   let mut ds : Diagnostics := []
   for o in boundsObligations modules do
     if o.closedVerdict == some false && !unsafeQuals.contains o.fnQual then

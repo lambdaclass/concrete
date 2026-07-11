@@ -42,9 +42,7 @@ def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String) : List Strin
       -- Find callees that require this cap
       let contributors := callees.filter fun callee =>
         match lookupCalleeCap lookup callee with
-        | some cs =>
-          let (calleeCaps, _) := cs.normalize
-          calleeCaps.contains cap
+        | some cs => Capabilities.capSetHas cs cap
         | none => false
       let contribStr := if contributors.isEmpty then "<- declared"
         else

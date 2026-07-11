@@ -3402,7 +3402,7 @@ private def capToFact (lookup : CapLookup) (qualName : String) (f : CFnDef) : Va
   let traces := concreteCaps.map fun cap =>
     let contributors := callees.filter fun callee =>
       match lookupCalleeCap lookup callee with
-      | some cs => let (cc, _) := cs.normalize; cc.contains cap
+      | some cs => Capabilities.capSetHas cs cap
       | none => false
     .obj [
       ("capability", .str cap),
@@ -3772,7 +3772,7 @@ private partial def traceCapability
         -- Find callees that contribute this cap
         let contributors := callees.filter fun callee =>
           match lookupCalleeCap capLookup callee with
-          | some cs => let (cc, _) := cs.normalize; cc.contains cap
+          | some cs => Capabilities.capSetHas cs cap
           | none => false
         if contributors.isEmpty then
           -- No callee contributes it → declared via with(...)
