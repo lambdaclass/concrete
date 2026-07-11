@@ -809,7 +809,7 @@ Phase 6 work.
     three stale-fixture CI failures on 2026-07-01/02 hid inside per-gate
     heredocs. `check_cast_matrix.sh` is the first consumer; new gates should
     source it, and existing gates migrate opportunistically when touched.
-35. **Immediate next forcing workload — add the Phase 6 validation project:**
+35. Add the Phase 6 validation project:
     a small C/Rust-style CLI using the
     Phase 5 core slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, narrow const
@@ -869,10 +869,9 @@ splits. A task belongs here only if it prevents "Check says one thing, another
 stage says another" bugs, catches a missed constructor/stage interaction, or
 makes pipeline failures reproducible.
 
-The item numbers in this phase are stable historical references. Do not
-renumber the phase after moving completed work to the changelog; use subsection
-headings and lettered inserts (`2a`, `19a`, etc.) so existing docs, tests,
-commits, and research notes keep pointing at the same work.
+The item numbers in this phase are ordered within the phase and may be
+renumbered when the phase is reorganized. Keep cross-references updated in the
+same change, and use subsection headings to make the dependency order clear.
 
 **North star ([docs/PIPELINE_ARCHITECTURE.md](docs/PIPELINE_ARCHITECTURE.md)):**
 every item below is an instance of one principle — *each program has exactly one
@@ -942,7 +941,7 @@ relations that cannot live on one typed node.
    the code handles it through helper predicates, the gate/docs drift must catch
    it. This item is the model for every later semantic-axis migration.
 
-9. Unify Check/Elab source typing through `TypeJudgment`; reserve `CompilerDB`
+2. Unify Check/Elab source typing through `TypeJudgment`; reserve `CompilerDB`
    for relational facts.
    This is the root architectural item for the whole pipeline. Check must
    stop being a second source-type inference engine. Core `CExpr` is already a
@@ -984,8 +983,8 @@ relations that cannot live on one typed node.
    live on one node. Each fact still has exactly one owning stage and one home;
    no later stage re-derives it.
 
-   **`#5 ≡ `this item when the DB is pulled: one substrate.** Interned IDs (#5)
-   and DB-owned identity (#9) are the same system. Do not build a separate
+   **Item #10 and this item share one future DB substrate.** Interned IDs
+   (item #10) and DB-owned identity from this item are the same system. Do not build a separate
    `NodeId` table now and a query DB later. Also do not build either one merely
    to fix type drift: the type-axis slice needs `TypeJudgment`, not identity.
 
@@ -1118,7 +1117,7 @@ relations that cannot live on one typed node.
    a node or block, and telemetry/complexity gates should watch `CompilerDB`
    query counts and pass scaling.
 
-2. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
+3. **[PARTIAL] Promote Copy / trait-bound / instantiation policy into
    `CopyJudgment` / `InstantiationJudgment`.**
    The predicate centralization work landed the first slice (`isCopy`,
    conditional Copy after substitution, type substitution/type-var matching),
@@ -1186,10 +1185,10 @@ relations that cannot live on one typed node.
    the type before asking whether it is `Copy`) and treat it as a peer of
    `CapabilityJudgment`, not a distant report/database item.
 
-2a. **[CRUCIAL NEXT] Promote ownership / value-flow into
-   `OwnershipJudgment` / `ValueFlowJudgment`.**
-   This is the missing headline axis. Concrete's defining promise is linear
-   ownership, but the Phase 6.5 judgment list currently names arithmetic, type,
+4. Promote ownership / value-flow into
+   `OwnershipJudgment` / `ValueFlowJudgment`.
+   Concrete's defining promise is linear
+   ownership, but the Phase 6B / 6.5 judgment list currently names arithmetic, type,
    Copy/instantiation, and capability before the ownership decision itself. The
    value-flow spec and H9-H17 work made Check much more disciplined, but they
    are still framed mainly as "the checker rejects bad programs." That is not
@@ -1248,7 +1247,7 @@ relations that cannot live on one typed node.
    without it, the less central axes are cleaner than Concrete's own linearity
    model.
 
-4. Centralize capability checking and callback propagation into
+5. Centralize capability checking and callback propagation into
    `CapabilityJudgment` after the type-axis core is stable.
    Capabilities are as central to Concrete as arithmetic and source typing, but
    this must stay practical: **do not add algebraic effects, effect handlers,
@@ -1377,7 +1376,7 @@ These items make the interpreter, runtime order, traps, drops, and deterministic
 artifacts explicit contracts instead of assumptions scattered across fuzzers and
 reports.
 
-2b. Add an interpreter reference-semantics contract.
+6. Add an interpreter reference-semantics contract.
    The interpreter is the compiler's executable oracle, so its boundary must be
    explicit instead of implicit in scattered differential tests. Define what the
    interpreter is authoritative for (source expression evaluation, integer
@@ -1417,7 +1416,7 @@ reports.
    genuinely target-specific trap difference must be an explicit, reported target
    assumption, never a silent one.
 
-2c. Add an evaluation-order, trap, and drop sequencing contract.
+7. Add an evaluation-order, trap, and drop sequencing contract.
    Concrete needs one owner for "what happens when" just as much as it needs one
    owner for types or capabilities. Evaluation order decides when arguments,
    receivers, array/struct elements, conditions, branch values, match
@@ -1444,11 +1443,11 @@ reports.
    lowering mutation that moves a trap, drop, or capability check across another
    observable event must fail.
 
-2d. Add a pipeline determinism gate.
+8. Add a pipeline determinism gate.
    Content-addressed artifacts, proof replay, package evidence, deterministic
    reports, and future `CompilerDB` caching all assume the compiler is
    deterministic for the same source, compiler version, target/profile, and
-   dependency set. Phase 6.5 should make that assumption explicit rather than
+   dependency set. Phase 6B / 6.5 should make that assumption explicit rather than
    leaving it as a Phase 18/19 surprise. The gate does not need to claim
    byte-identical native binaries when LLVM/clang introduce outside
    nondeterminism, but Concrete-owned artifacts must be stable.
@@ -1462,7 +1461,7 @@ reports.
    hashed or reviewable artifacts unless explicitly excluded and labeled
    nondeterministic.
 
-   Done when `scripts/tests/test_determinism.sh` (or a Phase 6.5-specific gate)
+   Done when `scripts/tests/test_determinism.sh` (or a Phase 6B-specific gate)
    runs the same program twice in clean temp dirs and compares canonical outputs,
    includes at least one generic/mono case, one capability/report case, one proof
    obligation case, one generated-name case, and one failure diagnostic case, and
@@ -1476,7 +1475,7 @@ These items keep the pipeline itself honest: each stage has a contract, facts
 have stable homes, and production/audit/proof/test entry points do not grow
 hidden alternate pipelines.
 
-3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
+9. **[DONE V1] Add stage contracts and pass-agreement assertions.**
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
    establishes that user-triggerable violations are caught at the first
    responsible boundary instead of leaking to Lower, LLVM, the linker, runtime,
@@ -1484,9 +1483,9 @@ hidden alternate pipelines.
    introduced. The long-term form is `concrete inspect --pipeline-contracts
    --json`, but the V1 gate is already the phase's contract backstop.
 
-5. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
+10. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
    facts.
-   This item is explicitly dependent on #9, but it is NOT a prerequisite for the
+   This item is explicitly dependent on item #2, but it is NOT a prerequisite for the
    type-axis fix. Do not build a separate ID scheme for source expression types:
    typed Core already carries those facts. When pass-agreement edges, borrow
    conflicts, E0293 path-pair facts, provenance, replay, package evidence, or
@@ -1503,7 +1502,7 @@ hidden alternate pipelines.
    the same hygiene source, and a gate proves reports/agents can join facts by
    ID without reparsing human strings.
 
-6. Add a lightweight compiler fact dependency graph.
+11. Add a lightweight compiler fact dependency graph.
    Do not build the full rustc-style demand-driven query engine yet, but record
    dependency edges as first-class trace/replay data:
    `source -> parse -> resolve -> type -> ownership -> caps -> mono ->
@@ -1516,7 +1515,7 @@ hidden alternate pipelines.
    capability fact, diagnostic, or backend artifact changed, and a replay gate
    marks dependent facts stale when an upstream source/fact hash changes.
 
-7. Add pass locality and mutation rules.
+12. Add pass locality and mutation rules.
    Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
    it may mutate, what facts it may write, and what prior stage contract makes
    its assumptions legal. A report/audit pass may not recompute semantic facts;
@@ -1528,7 +1527,7 @@ hidden alternate pipelines.
    for illegal cross-level read, illegal fact write, hidden sibling inspection,
    and report-side semantic recomputation.
 
-8. Add analysis preservation and invalidation contracts.
+13. Add analysis preservation and invalidation contracts.
    Once facts are cached or reused, every pass must state which facts it reads,
    writes, preserves, and invalidates. This is the guardrail that prevents
    future incremental checking, proof caching, package facts, or editor facts
@@ -1544,7 +1543,7 @@ hidden alternate pipelines.
 These items connect semantic facts to lowering, intrinsics, reports, and the
 single composed compiler pipeline.
 
-10. Define Concrete's result-location / destination-passing model.
+14. Define Concrete's result-location / destination-passing model.
     Adapt Zig's result-location idea to Concrete's linear value model. Write the
     Concrete-specific contract for value context, place context, borrow context,
     callArg context, destination context, return destination, aggregate literal
@@ -1564,7 +1563,7 @@ single composed compiler pipeline.
     and scoped callback rows, and at least one old H10/H11-style conservation
     bug is expressible as a violated destination/ownership contract.
 
-11. Add a single builtin/intrinsic registry.
+15. Add a single builtin/intrinsic registry.
     Builtins and intrinsics must not be separately described in signatures,
     checker behavior, elab/lower special cases, interpreter behavior, report
     facts, stdlib assumptions, and Unsafe/trusted policy. A registry row should
@@ -1578,7 +1577,7 @@ single composed compiler pipeline.
     slice may be an intrinsic coverage/matrix gate; the end state is a registry,
     not a grep-based allowlist.
 
-12. Move report/evidence output toward `CompilerDB` fact views.
+16. Move report/evidence output toward `CompilerDB` fact views.
     Internal facts should be typed records until the final renderer, not strings
     assembled at each report site. V1 target: diagnostic-code facts, capability
     facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
@@ -1590,7 +1589,7 @@ single composed compiler pipeline.
     row and report entry, and add one negative where a stale hand-written report
     string disagrees with the compiler fact.
 
-13. Eliminate hidden second pipelines.
+17. Eliminate hidden second pipelines.
     Production compile, tolerant diagnostics, verify gates, fuzzers, audit,
     proof extraction, and tests must call the same composed pass functions or
     declare a checked reason for diverging. The specific risk is a verifier
@@ -1607,7 +1606,7 @@ single composed compiler pipeline.
 These items prevent new syntax, constructors, parser forms, generic surfaces, or
 desugar rewrites from bypassing the semantic contracts above.
 
-14. Enforce the name-resolution / qualified-name boundary.
+18. Enforce the name-resolution / qualified-name boundary.
     Resolve should be the only stage that decides what a source name means.
     Later stages may consume resolved IDs / qualified names but must not
     reconstruct lookup from bare strings. This matters for modules, aliases,
@@ -1618,7 +1617,7 @@ desugar rewrites from bypassing the semantic contracts above.
     name, generated mono names, and report/audit attribution proving later
     stages use resolved identity.
 
-15. Unify tree-walker coverage across AST/Core/SSA consumers.
+19. Unify tree-walker coverage across AST/Core/SSA consumers.
     There are recursive walkers in Check, Verify, Mono, ProofCore, Report,
     Lower, interpreter, and tests. Every new constructor risks one walker
     missing it. Keep the constructor-coverage manifest/gate proving every
@@ -1627,7 +1626,7 @@ desugar rewrites from bypassing the semantic contracts above.
     differential/oracle coverage or an explicit compile-only/proof-only
     rationale.
 
-16. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
+20. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
     CoreCheck should catch frontend/checker/elab/mono misses before Lower. Add
     or verify checks for unresolved generic/typevar leakage after mono, illegal
     Copy specialization, mixed-width binops, illegal non-Copy value-flow residue,
@@ -1636,13 +1635,13 @@ desugar rewrites from bypassing the semantic contracts above.
     panics. Gate with one accepted Core fixture per valid class and one rejected
     fixture per invalid class.
 
-17. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
+21. Add interpreter-vs-compiled coverage by feature, not only by corpus count.
     The differential fuzzer is necessary but not sufficient. Maintain a feature
     matrix: every language construct has at least one interp-vs-compiled test,
     fuzzer generator, or explicit compile-only/proof-only rationale. Gate that a
     new constructor cannot be added without a coverage row.
 
-18. Add the third fuzzer: generics / monomorphization / type-policy drift.
+22. Add the third fuzzer: generics / monomorphization / type-policy drift.
     Concrete already has value/runtime fuzzing (`fuzz_differential`) and
     ownership/conservation fuzzing (`fuzz_linearity`). Add
     `scripts/fuzz_generics.py` (or equivalent) for user structs/enums,
@@ -1660,17 +1659,17 @@ desugar rewrites from bypassing the semantic contracts above.
     disagreements as minimized `.con` fixtures naming the first disagreeing
     phase.
 
-19. Add parser/AST grammar-conformance fuzzing.
+23. Add parser/AST grammar-conformance fuzzing.
     The LL(1) checker proves grammar shape, but it is not a parser/AST stress
     net. Generate valid grammar-shaped programs, expected rejects, deeply nested
     but bounded expressions, pattern/control-flow combinations, module/import
     shapes, generic syntax, and statement/expression boundary cases. The oracle:
     parser accepts the valid corpus, rejects the invalid corpus with stable
     diagnostics, preserves source spans for representative nodes, and produces
-    AST forms whose feature rows are covered by item #17. When a formatter or
+    AST forms whose feature rows are covered by item #21. When a formatter or
     printer exists, extend this to parse -> print/normalize -> parse round-trip.
 
-19a. Add a desugar-preservation contract.
+24. Add a desugar-preservation contract.
     Desugar is a semantic compiler stage, not an invisible parser cleanup pass.
     It rewrites surface forms such as `for`, `if let` / `while let`, scoped
     blocks, trailing-value blocks, `defer`, destructuring sugar, and future
@@ -1702,14 +1701,14 @@ desugar rewrites from bypassing the semantic contracts above.
 These items make failures reviewable and keep compiler-internal artifacts from
 leaking as user-facing truth.
 
-20. Define diagnostic code ownership by phase.
+25. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; now each
     phase/category should own a code range or category (parse, check, corecheck,
     mono, lower, proof, report, runtime trap), with source, hint, JSON payload,
     and report behavior documented. Gate that a new diagnostic code declares
     owner/category and appears in the ledger.
 
-21. Add a pipeline diagnostic-quality contract.
+26. Add a pipeline diagnostic-quality contract.
     Every user-facing pipeline diagnostic must have a phase owner, stable code,
     primary source span, human message, machine-readable JSON fields, and a
     clear reason why that phase owns the rejection. When an actionable recovery
@@ -1723,14 +1722,14 @@ leaking as user-facing truth.
     human and JSON output, and a red-team fixture fails when an error lacks a
     source span, code, hint, owner, or JSON field.
 
-22. Add source-span preservation audits across the pipeline.
+27. Add source-span preservation audits across the pipeline.
     After lexer/parser/check/elab/mono/lower, diagnostics, reports, traps, and
     proof obligations should still point to original source. Gate representative
     constructs: submodules, generic instantiations, desugared `if let`/`while
     let`, method calls, match arms, lowered runtime traps, and generated proof
     obligations. A fixture with a stale main-file span must fail.
 
-23. Encapsulate generated names and stringly internal sentinels.
+28. Encapsulate generated names and stringly internal sentinels.
     Internal names such as `__last_expr`, `__destr_*`, mono suffixes, generated
     temporaries, and lowered helper names must be produced through one hygienic
     naming API. Mono, elab, lower, proof extraction, and reports should use the
@@ -1738,7 +1737,7 @@ leaking as user-facing truth.
     and that generated names round-trip through reports/source maps without
     becoming user-visible authority or value-flow facts.
 
-24. Define the panic-to-diagnostic boundary.
+29. Define the panic-to-diagnostic boundary.
     `panic!` in layout/type/lowering paths is acceptable only for compiler
     invariant violations, not user-triggerable programs. Add a gate that runs
     malformed/internal-edge programs through parser/check/elab/mono/corecheck/
@@ -1753,7 +1752,7 @@ leaking as user-facing truth.
 These items make the pipeline inspectable under large workloads and ensure the
 gates themselves are load-bearing.
 
-25. Add pass timing, memory, and IR-size telemetry.
+30. Add pass timing, memory, and IR-size telemetry.
     This is not a public performance claim. Record per-pass timing, peak memory
     / RSS when available, allocation or output-buffer size if available,
     module/function counts, AST/Core/SSA node counts, mono instantiation count,
@@ -1762,7 +1761,7 @@ gates themselves are load-bearing.
     platform-specific memory fields; benchmarks/performance claims remain Phase
     17 release work.
 
-26. Add an anti-superlinear compiler complexity guard.
+31. Add an anti-superlinear compiler complexity guard.
     Telemetry tells us what happened; this gate fails when a compiler pass
     quietly becomes quadratic or worse on ordinary generated programs. Build a
     scaling corpus that generates the same program family at multiple sizes:
@@ -1773,7 +1772,7 @@ gates themselves are load-bearing.
     deliberately reintroduced quadratic renderer/collector, an intentionally
     excessive memory-growth variant, and the bug 027 family.
 
-27. Add `concrete trace-pipeline --json`.
+32. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
     obligations, mono instances, CoreCheck status, SSA blocks, runtime traps,
     trusted/Unsafe facts, dependency edges, fact IDs, invalidation decisions,
@@ -1781,7 +1780,7 @@ gates themselves are load-bearing.
     failing program where the trace names the first phase that introduced,
     preserved, invalidated, or rejected the relevant fact.
 
-28. Add counterexample-first pipeline debugging.
+33. Add counterexample-first pipeline debugging.
     Any pipeline panic, proof failure, fuzzer mismatch, optimizer trap issue,
     backend leak, linker leak, or stage-contract failure should reduce to a
     minimized `.con` fixture plus a replay command. Reuse the existing reducer
@@ -1789,7 +1788,7 @@ gates themselves are load-bearing.
     interp-vs-compiled mismatch, one fold/trap-preservation failure, and one
     backend/linker leak proving the counterexample can be saved as a regression.
 
-29. Add mutation testing for the pipeline gates.
+34. Add mutation testing for the pipeline gates.
     Mutate or patch-disable one representative rule in each major family and
     prove the corresponding gate fails: CoreCheck type rule, Copy predicate,
     arithmetic trap preservation, capability requirement, walker constructor
@@ -1797,7 +1796,7 @@ gates themselves are load-bearing.
     contract, fact invalidation, and report/evidence schema row. This proves the
     pipeline gates are load-bearing instead of decorative.
 
-30. Add round-trip/replay artifacts for pass outputs.
+35. Add round-trip/replay artifacts for pass outputs.
     For a selected program, users and agents should ask what each stage
     received, what it emitted, what facts changed, and what command replays that
     claim. V1 artifact: per-stage summary hashes and optional minimized dumps
@@ -1811,7 +1810,7 @@ gates themselves are load-bearing.
 These are deliberately scoped follow-ups: only pull them when the earlier gates
 or proof work show that the structure is now the limiting factor.
 
-31. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
+36. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
     remains ad hoc.
     Historical bugs clustered around branch/loop/snapshot reconciliation. The
     extracted builder should own if/match result values, loop headers/exits, phi
@@ -1821,14 +1820,14 @@ or proof work show that the structure is now the limiting factor.
     fixtures remain green, and a mutation that drops scope filtering or trap
     preservation is caught.
 
-32. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+37. Reduce ProofCore partial-def opacity only where proof preservation needs it.
     ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
     full rewrite here. Add non-partial wrappers or structural recursion only for
     constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
     with one theorem that would fail if the wrapper delegated to an opaque
     partial-def shape.
 
-33. Add the Phase 6.5 validation artifact.
+38. Add the Phase 6B / 6.5 validation artifact.
     `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
     compiler-pipeline corpus exercising arithmetic reference semantics,
     central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
@@ -3506,7 +3505,7 @@ machine-readable.
     (`CExpr.ty`) stamping, deleting Elab's private re-inference and CoreCheck's
     overlapping rules down to genuine Core-shape validation.
 
-    Phase 6.5 #9 is where the architecture lands, not this phase: Core `CExpr`
+    Phase 6B / 6.5 #2 is where the architecture lands, not this phase: Core `CExpr`
     is already the typed IR, and the type-axis work is to centralize the source
     type judgment so Check and Elab stamp/read the same answer. Future
     `CompilerDB` work owns relational, provenance, evidence, dependency, and
