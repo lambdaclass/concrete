@@ -68,11 +68,14 @@ inductive IVal where
 inductive Flow where
   | val (v : IVal)
   | ret (v : IVal)
-  -- `break` carries an optional value: `break v` in a while-EXPRESSION yields `v`
-  -- as the loop's value; a bare `break` (and any break in a while-STATEMENT)
-  -- carries `none`.
-  | brk (v : Option IVal)
-  | cont
+  -- `break`/`continue` carry an optional LABEL (`break 'outer`): a loop catches
+  -- the signal only when the label is `none` (bare — innermost loop) or equals
+  -- the loop's own label; otherwise it re-propagates up so the targeted OUTER
+  -- loop handles it. Without this the interpreter caught every labeled
+  -- break/continue at the innermost loop, diverging from the compiled binary.
+  -- `break` also carries an optional value (`break v` yields the loop's value).
+  | brk (v : Option IVal) (label : Option String)
+  | cont (label : Option String)
   deriving Repr
 
 -- ============================================================
@@ -629,8 +632,8 @@ partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) 
   match f with
   | .val v => return (env, v)
   | .ret _ => .error "interp: unexpected return in value position"
-  | .brk _ => .error "interp: unexpected break in value position"
-  | .cont => .error "interp: unexpected continue in value position"
+  | .brk _ _ => .error "interp: unexpected break in value position"
+  | .cont _ => .error "interp: unexpected continue in value position"
 
 partial def evalCallArgs (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
   match args with
@@ -746,16 +749,16 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     match f with
     | .val v => return (envBind env name v, .val .unit)
     | .ret v => return (env, .ret v)
-    | .brk v => return (env, .brk v)
-    | .cont => return (env, .cont)
+    | .brk v l => return (env, .brk v l)
+    | .cont l => return (env, .cont l)
 
   | .assign name value => do
     let (env, f) ← evalExpr fns enums env value
     match f with
     | .val v => return (envSet env name v, .val .unit)
     | .ret v => return (env, .ret v)
-    | .brk v => return (env, .brk v)
-    | .cont => return (env, .cont)
+    | .brk v l => return (env, .brk v l)
+    | .cont l => return (env, .cont l)
 
   | .return_ (some expr) _ => do
     let (env, f) ← evalExpr fns enums env expr
@@ -774,8 +777,8 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     -- Without this, a value-bearing `if`/`match` block evaluated to `unit`.
     | .val v => return (env, .val (if isValue then v else .unit))
     | .ret v => return (env, .ret v)
-    | .brk v => return (env, .brk v)
-    | .cont => return (env, .cont)
+    | .brk v l => return (env, .brk v l)
+    | .cont l => return (env, .cont l)
 
   | .ifElse cond thenBody elseBody => do
     let (env, cf) ← evalExpr fns enums env cond
@@ -795,11 +798,11 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
       | none => return (env, .val .unit)
     | .val _ => .error "interp: if condition is not a boolean"
     | .ret v => return (env, .ret v)
-    | .brk v => return (env, .brk v)
-    | .cont => return (env, .cont)
+    | .brk v l => return (env, .brk v l)
+    | .cont l => return (env, .cont l)
 
-  | .while_ cond body _label step =>
-    evalWhile fns enums env cond body step 10000000
+  | .while_ cond body label step =>
+    evalWhile fns enums env cond body step 10000000 label
 
   | .fieldAssign obj field value => do
     let (env, newVal) ← evalExprVal fns enums env value
@@ -846,13 +849,13 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
         return (env', .val .unit)
     | _ => .error "interp: deref-assign on non-ref value"
 
-  | .break_ value _ => do
+  | .break_ value label => do
     match value with
     | some e =>
       let (env, v) ← evalExprVal fns enums env e
-      return (env, .brk (some v))
-    | none => return (env, .brk none)
-  | .continue_ _ => return (env, .cont)
+      return (env, .brk (some v) label)
+    | none => return (env, .brk none label)
+  | .continue_ label => return (env, .cont label)
   | .defer _ => .error "interp: defer not yet supported"
   | .borrowIn var ref _region isMut _refTy body => do
     -- `borrow var as ref in 'region { body }` — bind `ref` to a path that
@@ -865,8 +868,8 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     let restored := postEnv.drop (postEnv.length - outerLen)
     match flow with
     | .ret v => return (restored, .ret v)
-    | .brk v => return (restored, .brk v)
-    | .cont => return (restored, .cont)
+    | .brk v l => return (restored, .brk v l)
+    | .cont l => return (restored, .cont l)
     | .val _ => return (restored, .val .unit)
 
 partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
@@ -876,8 +879,8 @@ partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
     let (env', flow) ← evalStmt fns enums env s
     match flow with
     | .ret v => return (env', .ret v)
-    | .brk v => return (env', .brk v)
-    | .cont => return (env', .cont)
+    | .brk v l => return (env', .brk v l)
+    | .cont l => return (env', .cont l)
     | .val v =>
       -- Propagate the LAST statement's value as the block's value (so a
       -- value-bearing `if`/`match`/block yields its trailing expression);
@@ -887,7 +890,7 @@ partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
       | [] => return (env', .val v)
       | _  => evalStmts fns enums env' rest
 
-partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
+partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : Except String (Env × Flow) := do
   if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
   else
     let (env, cv) ← evalExprVal fns enums env cond
@@ -897,15 +900,24 @@ partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (c
       let (bodyEnv, flow) ← evalStmts fns enums env body
       match flow with
       | .ret v => return (bodyEnv, .ret v)
-      | .brk _ => return (bodyEnv, .val .unit)
+      | .brk bv brkLabel =>
+        -- Caught here only if bare (`none`) or targeting THIS loop's label;
+        -- otherwise re-propagate so the targeted outer loop breaks.
+        if brkLabel == none || brkLabel == loopLabel then return (bodyEnv, .val .unit)
+        else return (bodyEnv, .brk bv brkLabel)
       | .val _ =>
         -- Step is already included in body (for-loop desugaring appends it).
         -- Only run step explicitly on continue (where body was cut short).
-        evalWhile fns enums bodyEnv cond body step (fuel - 1)
-      | .cont =>
-        -- Continue skips the rest of body, so run step before looping.
-        let (stepEnv, _) ← evalStmts fns enums bodyEnv step
-        evalWhile fns enums stepEnv cond body step (fuel - 1)
+        evalWhile fns enums bodyEnv cond body step (fuel - 1) loopLabel
+      | .cont contLabel =>
+        if contLabel == none || contLabel == loopLabel then
+          -- Continue skips the rest of body, so run step before looping.
+          let (stepEnv, _) ← evalStmts fns enums bodyEnv step
+          evalWhile fns enums stepEnv cond body step (fuel - 1) loopLabel
+        else
+          -- Continue targets an OUTER loop: this loop terminates and the signal
+          -- propagates up (the outer loop runs its own next iteration).
+          return (bodyEnv, .cont contLabel)
     | _ => .error "interp: while condition is not a boolean"
 
 /-- `while cond { body } else { elseBody }` as a value-producing expression
@@ -927,10 +939,15 @@ partial def evalWhileExpr (fns : List CFnDef) (enums : List CEnumDef) (baseLen :
       let (bodyEnv, flow) ← evalStmts fns enums env body
       match flow with
       | .ret v        => return (restore bodyEnv, .ret v)
-      | .brk (some v) => return (restore bodyEnv, .val v)
-      | .brk none     => return (restore bodyEnv, .val .unit)
+      -- A while-EXPRESSION has no label; a bare break/continue is handled here, a
+      -- LABELED one targets an outer loop and re-propagates.
+      | .brk bv brkLabel =>
+        if brkLabel == none then return (restore bodyEnv, .val (bv.getD .unit))
+        else return (restore bodyEnv, .brk bv brkLabel)
       | .val _        => evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
-      | .cont         => evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
+      | .cont contLabel =>
+        if contLabel == none then evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
+        else return (restore bodyEnv, .cont contLabel)
     | _ => .error "interp: while condition is not a boolean"
 
 end -- mutual

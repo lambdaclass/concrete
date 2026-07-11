@@ -96,6 +96,19 @@ agree_or_trap "i8 (-50) << 1 via variable" "$TMPDIR/s3.con"
 emit s4  'mod m { fn main() -> Int { let x: u16 = 40000 << 1; return x as Int; } }'
 agree_or_trap "u16 40000 << 1 (unsigned shl wraps)" "$TMPDIR/s4.con"
 
+echo "=== labeled break/continue reach the TARGETED loop (interp == compiled) ==="
+
+# `break 'outer` / `continue 'outer` from an inner loop must act on the OUTER
+# loop (the \047 in printf is the label apostrophe). The interpreter used to
+# discard the label and catch every labeled signal at the innermost loop,
+# diverging from the compiled binary (continue: interp 50 vs compiled 0; nested
+# break: interp 32 vs compiled 25).
+printf 'mod m { fn main() -> Int { let mut sum: Int = 0; let mut i: Int = 0; \047outer: while i < 5 { i = i + 1; let mut j: Int = 0; while j < 5 { j = j + 1; if j == 3 { continue \047outer; } } sum = sum + 10; } return sum; } }\n' > "$TMPDIR/lc.con"
+agree_or_trap "continue outer skips the outer-body tail (=> 0)" "$TMPDIR/lc.con"
+
+printf 'mod m { fn main() -> Int { let mut sum: Int = 0; let mut i: Int = 0; \047outer: while i < 10 { let mut j: Int = 0; while j < 10 { sum = sum + 1; j = j + 1; if sum >= 25 { break \047outer; } } i = i + 1; } return sum; } }\n' > "$TMPDIR/lb.con"
+agree_or_trap "break outer exits the outer loop (=> 25)" "$TMPDIR/lb.con"
+
 echo "=== clean sanity (values fit; not overflow) ==="
 
 emit c1  'mod m { fn main() -> Int { let c: Bool = true; let x: i32 = if c { 40 + 2 } else { 0 }; return x as Int; } }'
