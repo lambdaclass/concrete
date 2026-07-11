@@ -953,9 +953,24 @@ IR field, that is a pipeline bug.
    representation feeds its own data — the primitive set, the newtype recursion,
    and the conditional-aggregate field check exist once. Gate:
    `scripts/tests/check_copy_judgment.sh` (mutation-tested: breaking the newtype
-   recursion fails the newtype-over-Copy case). REMAINING: promote the boolean to
-   the full decision RECORD below (conditional + concrete forms, provenance,
-   failing field, trait bounds) and fold in `InstantiationJudgment`.
+   recursion fails the newtype-over-Copy case).
+
+   **Landed 2026-07-11 — type-arg inference (`unifyTypes`) is single-sourced.**
+   The first `InstantiationJudgment` slice: `unifyTypes` (structural matching of a
+   parameter type against an argument type to bind generic type args) was likewise
+   defined TWICE — `Elab.lean` (private) and `CheckHelpers.lean` — two copies of
+   one algorithm. Differential probing confirmed Check and Elab infer/reject
+   generic calls identically today, so this was a behavior-neutral dedup into
+   `Shared.unifyTypes` that removes the latent drift; a turbofish-generic agree
+   row was added to `check_type_agreement.sh`.
+
+   REMAINING: promote the boolean `isCopy` to the full decision RECORD below
+   (conditional + concrete forms, provenance, failing field, trait bounds), and
+   the rest of `InstantiationJudgment` (turbofish/caller type params, post-mono
+   specialization facts). A known adjacent usability gap surfaced during probing:
+   generic inference does not flow the return/let-context type into type-arg
+   inference (`let v: i32 = id(42)` needs `id::<i32>(42)`); consistent across
+   interp/compiled, so a feature gap, not drift.
 
    The judgment record should model both stages of knowledge: a **conditional**
    form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
