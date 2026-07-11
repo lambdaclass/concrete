@@ -123,5 +123,29 @@ def decideCall (caller callee : CapSet) : CallCapDecision :=
     satisfied := capsContain caller callee
     missing := missingCaps caller callee }
 
+/-- Resolve a cap-polymorphic signature's declared cap set against inferred
+    capability-variable bindings (Phase 6.5 CapabilityJudgment, slice 3 — the
+    "callback requires `C` ⇒ the caller requires `C`" propagation). A declared cap
+    that is a cap PARAMETER is replaced by its bound caps; every other cap passes
+    through. `Except.error` carries the capability variable that could NOT be
+    inferred (the caller renders it as `cannotInferCapVariable`). This is the one
+    resolution shared by the call path (Check) and the method-call path
+    (CheckHelpers), which had verbatim copies. -/
+def resolveCaps (capParams : List String) (capBindings : List (String × List String))
+    (declared : CapSet) : Except String (List String) := do
+  let (concreteCaps, capVars) := declared.normalize
+  let mut resolved : List String := []
+  for cap in concreteCaps do
+    if capParams.contains cap then
+      match capBindings.find? fun (n, _) => n == cap with
+      | some (_, caps) => resolved := resolved ++ caps
+      | none => throw cap
+    else resolved := resolved ++ [cap]
+  for cv in capVars do
+    match capBindings.find? fun (n, _) => n == cv with
+    | some (_, caps) => resolved := resolved ++ caps
+    | none => throw cv
+  return resolved
+
 end Capabilities
 end Concrete

@@ -53,6 +53,24 @@ rejects "pure caller invokes a fn()with(Network) pointer" smuggle
 emit legit 'mod m { fn caller(f: fn() with(Network) -> Int) with(Network) -> Int { return f(); } fn main() -> Int { return 0; } }'
 accepts "caller with(Network) invokes the pointer" legit
 
+echo "=== capability-polymorphic propagation (callback needs C => caller needs C) ==="
+
+# `apply<cap C>(f: fn(..) with(C) ..) with(C)`: passing a File-requiring callback
+# resolves C := File (Capabilities.resolveCaps), so the caller must hold File.
+emit propmiss 'mod m {
+    fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U { return f(x); }
+    fn io(x: Int) with(File) -> Int { return x; }
+    fn main() -> Int { return apply(io, 5); }
+}'
+rejects "pure main applies a File-requiring callback (C := File)" propmiss
+
+emit prophave 'mod m {
+    fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U { return f(x); }
+    fn io(x: Int) with(File) -> Int { return x; }
+    fn main() with(File) -> Int { return apply(io, 5); }
+}'
+accepts "main with(File) applies the File-requiring callback" prophave
+
 echo
 echo "check_capability_judgment: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

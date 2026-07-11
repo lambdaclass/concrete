@@ -760,18 +760,10 @@ partial def inferMethodParamAndRetTys
   -- 3. Resolve the method's declared capset against the inferred bindings, and
   --    check the caller holds the result.
   if !sig.capParams.isEmpty then
-    let (concreteCaps, capVars) := sig.capSet.normalize
-    let mut resolvedCaps : List String := []
-    for cap in concreteCaps do
-      if sig.capParams.contains cap then
-        match capBindings.find? fun (n, _) => n == cap with
-        | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
-        | none => throwCheck (.cannotInferCapVariable cap callName) (some sp)
-      else resolvedCaps := resolvedCaps ++ [cap]
-    for cv in capVars do
-      match capBindings.find? fun (n, _) => n == cv with
-      | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
-      | none => throwCheck (.cannotInferCapVariable cv callName) (some sp)
+    -- Same cap-poly resolution as the call path (Capabilities.resolveCaps).
+    let resolvedCaps ← match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
+      | .ok caps => pure caps
+      | .error cv => throwCheck (.cannotInferCapVariable cv callName) (some sp)
     let env ← getEnv
     -- Shared direct-call decision (Capabilities.missingCaps) — see Check.lean.
     for cap in Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps) do

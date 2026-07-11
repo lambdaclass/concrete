@@ -665,22 +665,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
                   let (argCaps, _) := argCapSet.normalize
                   capBindings := capBindings ++ [(cap, argCaps)]
             | _ => pure ()
-          -- Build resolved capSet
-          let (concreteCaps, capVars) := sig.capSet.normalize
-          let mut resolvedCaps : List String := []
-          for cap in concreteCaps do
-            if sig.capParams.contains cap then
-              match capBindings.find? fun (name, _) => name == cap with
-              | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
-              | none => throwCheck (.cannotInferCapVariable cap fnName) (some e.getSpan)
-            else
-              resolvedCaps := resolvedCaps ++ [cap]
-          -- Also resolve cap variables (e.g. .var "C" → bound caps)
-          for cv in capVars do
-            match capBindings.find? fun (name, _) => name == cv with
-            | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
-            | none => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
-          pure (CapSet.concrete resolvedCaps)
+          -- Resolve the cap-poly signature against the bindings (shared with the
+          -- method-call path: Capabilities.resolveCaps). Error carries the cap
+          -- variable that could not be inferred.
+          match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
+          | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps)
+          | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
       -- Resolve cap variables in parameter types for type comparison
       let capBindings' := if sig.capParams.isEmpty then [] else
         sig.capParams.map fun cp =>
