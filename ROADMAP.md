@@ -1346,6 +1346,18 @@ assumptions scattered across fuzzers and reports.
    largest unsupported family is quantified; and adding support for a family adds
    permanent interp-vs-compiled rows rather than ad hoc probes.
 
+   Current oracle-growth backlog from the corpus sweep, after string and core
+   `Vec` support: function pointers/callables in the interpreter are the next
+   small high-leverage slice (`undefined variable 'double'` / `add_op`-style
+   failures in phase3/integration programs) because they unblock callback-heavy
+   programs and exercise capability/callable semantics. Small finishers after
+   that are `vec_pop` and `string_to_int`, both of which need Option/Result enum
+   result modeling. `alloc`/`malloc` and the heap model remain larger work and
+   should be pulled when ownership runtime-conservation needs it. Floats stay
+   last among these oracle gaps unless a workload forces them, because they need
+   the named float profile/proof policy before the interpreter can claim more
+   than tested parity.
+
 6. Add an evaluation-order, trap, and drop sequencing contract.
    Concrete needs one owner for "what happens when" just as much as it needs one
    owner for types or capabilities. Evaluation order decides when arguments,
