@@ -110,24 +110,34 @@ something real to run. The compiler-pipeline transcript
 `examples/credibility_slice/packet_window/` replayable flagship.
 
 The next three verdict-deciding risks get early, narrow probes rather than
-waiting for their full later phases:
+waiting for their full later phases. Each probe must name a minimal scope, an
+early trigger, and the later phase that owns the full version:
 
-1. **External credibility:** `diff-caps` is the first external-facing evidence
-   artifact. It lives in Phase 6B under `CapabilityJudgment`, but it is the
-   early proof that Concrete can answer a useful review question ("what new
-   authority does this change grant?") with a deterministic replayable artifact.
-   It depends on the capability manifest and determinism gate; it does not wait
-   for the full Phase 18 package-evidence story.
-2. **Proof cost:** Phase 9 begins with proof-effort telemetry before investing
-   in automation. The first flagship/proof-cost table is the early measurement
-   of whether evidence-carrying source is affordable; if manual proof authoring
-   is too expensive, the LLM-guided synthesis/review loop is measured next
-   before the project assumes proof authoring will scale.
-3. **Backend soundness:** Phase 15's translation-validation item starts with a
-   narrow `ValidatedSSA -> BackendIR -> ValidatedBackendIR` subset as soon as
-   SSA/backend facts are stable enough. This is the early check for the central
-   backend trust risk: source/Core facts are not native-code evidence unless the
-   backend boundary is either validated or explicitly trusted.
+1. **External credibility:** near-term probe = Phase 6B `diff-caps`, a
+   deterministic runnable answer to one skeptical-review question: "what new
+   authority does this change grant?" Minimal scope: capability manifest +
+   `diff-caps --machine` over one authority-widening change, one no-op refactor,
+   and one dependency/callee widening case. Trigger: as soon as
+   `CapabilityJudgment` can emit the stable manifest and the determinism gate can
+   keep the machine output byte-stable. Full home: Phase 8's non-author
+   workload/trial, and later Phase 18 package evidence. Do not wait for the full
+   external trial before shipping this narrow artifact.
+2. **Proof cost:** near-term probe = Phase 9 proof-effort telemetry on the first
+   real flagship/proof slice. Minimal scope: per proved function, record source
+   complexity, proof lines, tactic depth, solver time, replay time, and manual
+   review notes for one concrete example. Trigger: the first flagship or
+   credibility slice that makes a public proof/evidence claim. Full home: Phase
+   9 proof authoring/automation, with the LLM-guided synthesis/review loop
+   measured next if manual proof authoring is too expensive.
+3. **Backend soundness:** near-term probe = a narrow Phase 15 translation
+   validation slice, not the full backend phase. Minimal scope:
+   `ValidatedSSA -> BackendIR -> ValidatedBackendIR` over integer arithmetic,
+   structs/fixed arrays, direct calls, branches, bounded loops, runtime checks,
+   and source-map annotations. Trigger: once Phase 6B has stabilized SSA/backend
+   facts enough for those constructs. Full home: Phase 15 backend contracts and
+   translation validation. The probe exists to learn early whether Concrete's
+   source/Core evidence can cross the backend boundary; anything outside the
+   slice remains explicitly backend-trusted.
 
 Every phase must leave behind checked evidence that it works. A phase item is
 not complete because code exists; it is complete when the behavior has positive
