@@ -59,6 +59,10 @@ inductive IVal where
   | array (elems : Array IVal) (elemTy : Ty) (size : Nat)
   | unit
   | ref (path : RefPath)
+  -- A function pointer: the name of the function it points to. Produced by a
+  -- `fnRef` or by naming a function in value position; a call through a variable
+  -- holding one dispatches to that function.
+  | fnPtr (name : String)
   deriving Repr, Inhabited
 
 -- ============================================================
@@ -423,7 +427,10 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
   | .ident name _ =>
     match envGet env name with
     | some v => return (env, .val v)
-    | none => .error s!"interp: undefined variable '{name}'"
+    | none =>
+      -- A bare function name in value position is a function pointer.
+      if (findFn fns name).isSome then return (env, .val (.fnPtr name))
+      else .error s!"interp: undefined variable '{name}'"
 
   | .binOp op lhs rhs _ => do
     let (env, lv) ← evalExprVal fns enums env lhs
@@ -445,6 +452,11 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
   | .call fnName _ args _ => do
     let (env, argVals) ← evalCallArgs fns enums env args
+    -- A call `f(args)` where `f` is a local bound to a function pointer
+    -- dispatches to the pointed-to function; a direct call resolves to itself.
+    let fnName := match envGet env fnName with
+      | some (.fnPtr real) => real
+      | _ => fnName
     match findFn fns fnName with
     | some fdef =>
       if fdef.params.length != argVals.length then
@@ -678,7 +690,7 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
       return (env, .val target)
     | _ => .error "interp: deref of non-ref value"
 
-  | .fnRef _ _ => .error "interp: function references not yet supported"
+  | .fnRef name _ => return (env, .val (.fnPtr name))
   | .try_ inner _ => do
     -- Mirrors Concrete/Lower.lean's `.try_` lowering: if `inner` is the
     -- enum's first variant (tag 0 — by convention `Ok` / `Some`), unwrap
@@ -1085,6 +1097,7 @@ partial def IVal.toString : IVal → String
       | .index i => s!"[{i}]"
     let pfx := if p.isMut then "&mut " else "&"
     pfx ++ p.base ++ String.join (p.steps.map stepStr)
+  | .fnPtr name => "fn " ++ name
 
 instance : ToString IVal := ⟨IVal.toString⟩
 

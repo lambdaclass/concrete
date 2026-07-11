@@ -136,6 +136,13 @@ agree_or_trap "vec len after 3 pushes (=> 3)" "$TMPDIR/vlen.con"
 emit vset 'mod m { fn main() with(Std) -> Int { let mut v: Vec<Int> = vec_new::<Int>(); vec_push(&mut v, 1); vec_push(&mut v, 2); vec_set(&mut v, 0, 99); let n: Int = vec_get(&v, 0); vec_free(v); return n; } }'
 agree_or_trap "vec set then get (=> 99)" "$TMPDIR/vset.con"
 
+echo "=== function pointers: interp dispatches through the pointer ==="
+
+# Passing a function as a value and calling through a fn-pointer parameter must
+# agree interp==compiled (the interp resolves a fn-ptr variable to its function).
+emit fnp 'mod m { fn add_one(x: Int) -> Int { return x + 1; } fn apply(f: fn(Int) -> Int, x: Int) -> Int { return f(x); } fn main() -> Int { return apply(add_one, 41); } }'
+agree_or_trap "call through fn-pointer param (=> 42)" "$TMPDIR/fnp.con"
+
 echo "=== clean sanity (values fit; not overflow) ==="
 
 emit c1  'mod m { fn main() -> Int { let c: Bool = true; let x: i32 = if c { 40 + 2 } else { 0 }; return x as Int; } }'

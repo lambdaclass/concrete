@@ -37,7 +37,10 @@ EXPECTED_DIVERGE=" "
 # checked-arithmetic overflow: both sides trap (no value on either side).
 EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap trap_elision_mul_zero "
 # interpreter cannot execute these shapes yet.
-INTERP_UNSUPPORTED=" fn_pointer "
+# (empty) — the interpreter now runs the former entries (fn_pointer: function
+# pointers are supported as of the fn-ptr oracle slice; it is now a full
+# interp==compiled differential test rather than compile-only).
+INTERP_UNSUPPORTED=" "
 
 in_list() { case "$2" in *" $1 "*) return 0;; *) return 1;; esac }
 
