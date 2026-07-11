@@ -843,7 +843,7 @@ Phase 6 work.
     harness or is marked `pseudocode`/`text` with a reason. This item is a
     prerequisite for pulling the verified profile forward.
 
-## Phase 6.5: Compiler Pipeline Refactor And Invariant Hardening
+## Phase 6B / 6.5: Compiler Pipeline Refactor And Invariant Hardening
 
 Goal: make the compiler pipeline have one opinion about each program before
 Phase 7 expands the stdlib and daily workload surface.
@@ -868,6 +868,11 @@ This phase is for refactors pulled by real bug classes, not aesthetic file
 splits. A task belongs here only if it prevents "Check says one thing, another
 stage says another" bugs, catches a missed constructor/stage interaction, or
 makes pipeline failures reproducible.
+
+The item numbers in this phase are stable historical references. Do not
+renumber the phase after moving completed work to the changelog; use subsection
+headings and lettered inserts (`2a`, `19a`, etc.) so existing docs, tests,
+commits, and research notes keep pointing at the same work.
 
 **North star ([docs/PIPELINE_ARCHITECTURE.md](docs/PIPELINE_ARCHITECTURE.md)):**
 every item below is an instance of one principle — *each program has exactly one
@@ -914,6 +919,12 @@ fact-home rule (node-local structural facts become typed-IR fields, relational
 or cross-node/cross-stage facts live in `CompilerDB` when that DB is pulled). If
 a later pass recomputes a judgment fact instead of consuming the record or typed
 IR field, that is a pipeline bug.
+
+### Semantic Judgment Axes
+
+These items give each major semantic axis one owner: arithmetic, Copy and
+instantiation, ownership/value-flow, source typing, capabilities, and the
+relations that cannot live on one typed node.
 
 1. **[DONE] Unify integer/arithmetic evaluation semantics.**
    `Concrete/Semantics/IntArith.lean` is the single source of truth for integer
@@ -1061,6 +1072,12 @@ IR field, that is a pipeline bug.
    without it, the less central axes are cleaner than Concrete's own linearity
    model.
 
+### Runtime And Oracle Contracts
+
+These items make the interpreter, runtime order, traps, drops, and deterministic
+artifacts explicit contracts instead of assumptions scattered across fuzzers and
+reports.
+
 2b. Add an interpreter reference-semantics contract.
    The interpreter is the compiler's executable oracle, so its boundary must be
    explicit instead of implicit in scattered differential tests. Define what the
@@ -1153,6 +1170,12 @@ IR field, that is a pipeline bug.
    mutation-testing proves that introducing map-iteration-order or temp-path
    output makes the gate fail. This is the floor under content addressing,
    replay artifacts, and future query/cache invalidation.
+
+### Stage Boundaries And Fact Infrastructure
+
+These items keep the pipeline itself honest: each stage has a contract, facts
+have stable homes, and production/audit/proof/test entry points do not grow
+hidden alternate pipelines.
 
 3. **[DONE V1] Add stage contracts and pass-agreement assertions.**
    `docs/PIPELINE_CONTRACTS.md` plus `scripts/tests/check_pipeline_contracts.sh`
@@ -1515,6 +1538,11 @@ IR field, that is a pipeline bug.
    a node or block, and telemetry/complexity gates should watch `CompilerDB`
    query counts and pass scaling.
 
+### Value Flow, Builtins, Reports, And Pipeline Composition
+
+These items connect semantic facts to lowering, intrinsics, reports, and the
+single composed compiler pipeline.
+
 10. Define Concrete's result-location / destination-passing model.
     Adapt Zig's result-location idea to Concrete's linear value model. Write the
     Concrete-specific contract for value context, place context, borrow context,
@@ -1572,6 +1600,11 @@ IR field, that is a pipeline bug.
     audit, proof, and gate modes as configured variants over the same stages.
     Gate with one fixture that would fail if `runVerifyGates` or the fuzzer
     re-runs mono/lower differently from production.
+
+### Coverage, Fuzzing, And Frontend Preservation
+
+These items prevent new syntax, constructors, parser forms, generic surfaces, or
+desugar rewrites from bypassing the semantic contracts above.
 
 14. Enforce the name-resolution / qualified-name boundary.
     Resolve should be the only stage that decides what a source name means.
@@ -1663,6 +1696,11 @@ IR field, that is a pipeline bug.
     on synthetic failures. A mutation that changes desugar order, drops
     provenance, or introduces an extra move/drop/trap must fail.
 
+### Diagnostics, Spans, Names, And Failure Boundaries
+
+These items make failures reviewable and keep compiler-internal artifacts from
+leaking as user-facing truth.
+
 20. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; now each
     phase/category should own a code range or category (parse, check, corecheck,
@@ -1708,6 +1746,11 @@ IR field, that is a pipeline bug.
     backend/linker errors, exhausted recursion, or consumed excessive compile
     memory/time before reporting a diagnostic. Any remaining `panic!` must be
     documented as unreachable after a named prior phase contract.
+
+### Observability, Replay, And Scaling
+
+These items make the pipeline inspectable under large workloads and ensure the
+gates themselves are load-bearing.
 
 25. Add pass timing, memory, and IR-size telemetry.
     This is not a public performance claim. Record per-pass timing, peak memory
@@ -1761,6 +1804,11 @@ IR field, that is a pipeline bug.
     report facts. Same source, compiler version, target triple, profile, and
     dependency set must produce stable pass-output hashes unless a field is
     explicitly marked nondeterministic and excluded from the hash.
+
+### Targeted Structural Follow-Ups And Exit Artifact
+
+These are deliberately scoped follow-ups: only pull them when the earlier gates
+or proof work show that the structure is now the limiting factor.
 
 31. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
     remains ad hoc.
