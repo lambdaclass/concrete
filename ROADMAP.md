@@ -1612,6 +1612,33 @@ IR field, that is a pipeline bug.
     AST forms whose feature rows are covered by item #17. When a formatter or
     printer exists, extend this to parse -> print/normalize -> parse round-trip.
 
+19a. Add a desugar-preservation contract.
+    Desugar is a semantic compiler stage, not an invisible parser cleanup pass.
+    It rewrites surface forms such as `for`, `if let` / `while let`, scoped
+    blocks, trailing-value blocks, `defer`, destructuring sugar, and future
+    convenience syntax into the core source forms that Check and Elab consume.
+    If a desugared program behaves differently from the equivalent hand-written
+    core form, every later stage can be perfectly correct and still compile the
+    wrong program. This contract makes that stage auditable.
+
+    The contract should state, per desugaring: the source construct, the target
+    core form, the evaluation order it preserves, how source spans/provenance are
+    assigned to synthetic nodes, how ownership/drop/trap sequencing is preserved,
+    and which facts later stages are allowed to assume came from desugar rather
+    than user syntax. Synthetic nodes must be visible to diagnostics/reports as
+    compiler-generated provenance, not as a second source program, and they must
+    not create authority, ownership movement, or trap behavior that the source
+    construct did not specify.
+
+    Gate with paired fixtures: each surface construct and its hand-written core
+    expansion must agree under Check, interpreter, compiled output, source-span
+    diagnostics, ownership/drop behavior, and capability/trap behavior where
+    applicable. Include at least one red-team per high-risk family: `defer`
+    cleanup order, destructuring of non-`Copy` values, `if let` / `while let`
+    pattern failure, loop `break` values, trailing-value blocks, and source spans
+    on synthetic failures. A mutation that changes desugar order, drops
+    provenance, or introduces an extra move/drop/trap must fail.
+
 20. Define diagnostic code ownership by phase.
     The diagnostic ledger completeness gate prevents missing codes; now each
     phase/category should own a code range or category (parse, check, corecheck,
