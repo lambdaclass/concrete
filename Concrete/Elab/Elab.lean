@@ -255,33 +255,8 @@ private def addGhostVar (name : String) : ElabM Unit := do
 
 
 
-/-- Unify a pattern type with an actual type to discover type variable bindings. -/
-private partial def unifyTypes (pattern actual : Ty) (typeParams : List String) : List (String × Ty) :=
-  match pattern with
-  | .named name => if typeParams.contains name then [(name, actual)] else []
-  | .typeVar name => if typeParams.contains name then [(name, actual)] else []
-  | .ref inner => match actual with
-    | .ref a => unifyTypes inner a typeParams
-    | _ => []
-  | .refMut inner => match actual with
-    | .refMut a => unifyTypes inner a typeParams
-    | _ => []
-  | .generic _ pArgs => match actual with
-    | .generic _ aArgs =>
-      (pArgs.zip aArgs).foldl (fun acc (pp, ap) => acc ++ unifyTypes pp ap typeParams) []
-    | _ => []
-  | .heap inner => match actual with
-    | .heap a => unifyTypes inner a typeParams
-    | _ => []
-  | .array elem _ => match actual with
-    | .array aElem _ => unifyTypes elem aElem typeParams
-    | _ => []
-  | .fn_ pParams _ pRet => match actual with
-    | .fn_ aParams _ aRet =>
-      let pb := (pParams.zip aParams).foldl (fun acc (pp, ap) => acc ++ unifyTypes pp ap typeParams) []
-      pb ++ unifyTypes pRet aRet typeParams
-    | _ => []
-  | _ => []
+-- Type-arg inference is single-sourced in `Shared.unifyTypes` (Phase 6.5
+-- InstantiationJudgment axis); this pass and Check share that one algorithm.
 
 /-- Peek at an expression's type without any side effects, for type inference. -/
 private partial def peekExprType (e : Expr) : ElabM Ty := do

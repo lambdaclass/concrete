@@ -231,6 +231,23 @@ mod m { fn main() -> Int {
 EOF
 agree "array-literal element flexible binop : i32" "$TMPDIR/arrclean.con" "42"
 
+echo "=== generic instantiation: Check and Elab infer the same type args ==="
+
+# Type-arg inference is single-sourced (Shared.unifyTypes, InstantiationJudgment
+# axis). A turbofish generic call must produce the same value under interp and
+# compiled — if Check and Elab inferred/stamped different type args the compiled
+# specialization would diverge or fail.
+cat > "$TMPDIR/gen.con" <<'EOF'
+mod m {
+    fn id<T>(x: T) -> T { return x; }
+    fn main() -> Int {
+        let v: i32 = id::<i32>(42);
+        return v as Int;
+    }
+}
+EOF
+agree "id::<i32>(42) turbofish generic" "$TMPDIR/gen.con" "42"
+
 echo "=== genuine width mismatch is rejected by BOTH passes (E0228) ==="
 
 # An `Int` VALUE (not a flexible literal) + i32 is a real mismatch: it must be

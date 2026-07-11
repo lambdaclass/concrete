@@ -115,4 +115,38 @@ partial def substSelf (ty : Ty) (replacement : Ty) : Ty :=
   | .fn_ params caps ret => .fn_ (params.map (substSelf · replacement)) caps (substSelf ret replacement)
   | t => t
 
+/-- Infer generic type-argument bindings by structurally matching a parameter
+    `pattern` type against the `actual` argument type, collecting `(typeParam,
+    ty)` pairs (Phase 6.5 InstantiationJudgment axis). This is the ONE type-arg
+    inference used by both Check (call type-checking) and Elab (`CExpr` type-arg
+    stamping) — it was duplicated as two hand-maintained copies that could drift
+    on which constructors unify. Capability sets carry no type-var bindings, so
+    `fn_`'s cap set is not matched. -/
+partial def unifyTypes (pattern actual : Ty) (typeParams : List String) : List (String × Ty) :=
+  match pattern with
+  | .named name => if typeParams.contains name then [(name, actual)] else []
+  | .typeVar name => if typeParams.contains name then [(name, actual)] else []
+  | .ref inner => match actual with
+    | .ref a => unifyTypes inner a typeParams
+    | _ => []
+  | .refMut inner => match actual with
+    | .refMut a => unifyTypes inner a typeParams
+    | _ => []
+  | .generic _ pArgs => match actual with
+    | .generic _ aArgs =>
+      (pArgs.zip aArgs).foldl (fun acc (pp, ap) => acc ++ unifyTypes pp ap typeParams) []
+    | _ => []
+  | .heap inner => match actual with
+    | .heap a => unifyTypes inner a typeParams
+    | _ => []
+  | .array elem _ => match actual with
+    | .array aElem _ => unifyTypes elem aElem typeParams
+    | _ => []
+  | .fn_ pParams _ pRet => match actual with
+    | .fn_ aParams _ aRet =>
+      let pb := (pParams.zip aParams).foldl (fun acc (pp, ap) => acc ++ unifyTypes pp ap typeParams) []
+      pb ++ unifyTypes pRet aRet typeParams
+    | _ => []
+  | _ => []
+
 end Concrete

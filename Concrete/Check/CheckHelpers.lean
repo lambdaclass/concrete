@@ -612,50 +612,8 @@ def peekExprType (e : Expr) : CheckM Ty := do
     | _ => return .placeholder
   | _ => return .placeholder
 
-/-- Unify a pattern type with an actual type to discover type variable bindings. -/
-partial def unifyTypes (pattern actual : Ty) (typeParams : List String) : List (String × Ty) :=
-  match pattern with
-  | .named name =>
-    if typeParams.contains name then [(name, actual)]
-    else []
-  | .typeVar name =>
-    if typeParams.contains name then [(name, actual)]
-    else []
-  | .ref inner =>
-    match actual with
-    | .ref aInner => unifyTypes inner aInner typeParams
-    | _ => []
-  | .refMut inner =>
-    match actual with
-    | .refMut aInner => unifyTypes inner aInner typeParams
-    | _ => []
-  | .fn_ pParams pCapSet pRet =>
-    match actual with
-    | .fn_ aParams _aCapSet aRet =>
-      let paramBindings := (pParams.zip aParams).foldl (fun acc (pp, ap) =>
-        acc ++ unifyTypes pp ap typeParams) []
-      let retBindings := unifyTypes pRet aRet typeParams
-      -- Also try to unify cap set names
-      let capBindings := match pCapSet with
-        | .concrete _ => []  -- concrete caps don't bind type vars
-        | _ => []
-      paramBindings ++ retBindings ++ capBindings
-    | _ => []
-  | .generic _name pArgs =>
-    match actual with
-    | .generic _aName aArgs =>
-      (pArgs.zip aArgs).foldl (fun acc (pp, ap) =>
-        acc ++ unifyTypes pp ap typeParams) []
-    | _ => []
-  | .heap inner =>
-    match actual with
-    | .heap aInner => unifyTypes inner aInner typeParams
-    | _ => []
-  | .array elem _ =>
-    match actual with
-    | .array aElem _ => unifyTypes elem aElem typeParams
-    | _ => []
-  | _ => []
+-- Type-arg inference (`unifyTypes`) is single-sourced in `Shared.unifyTypes`
+-- (Phase 6.5 InstantiationJudgment axis); Check and Elab share the one algorithm.
 
 /-- Does `ty` (transitively) own a resource — would silently dropping a value of
     this type leak? True if it has a `Destroy` impl, is a heap-owning builtin
