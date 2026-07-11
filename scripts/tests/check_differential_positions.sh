@@ -123,6 +123,19 @@ agree_or_trap "string_char_at index 1 of ABC (=> 66)" "$TMPDIR/sca.con"
 emit scc 'mod m { fn main() -> Int { let a: String = "ab"; let b: String = "cde"; let c: String = string_concat(a, b); let n: Int = string_length(&c) as Int; drop_string(c); return n; } }'
 agree_or_trap "string_concat length (=> 5)" "$TMPDIR/scc.con"
 
+echo "=== Vec: interp oracle matches the compiled runtime ==="
+
+# The interpreter models Vec (new/push/get/len/set/free), so Vec programs are
+# differential-testable. Vec is linear — vec_free consumes it.
+emit vget 'mod m { fn main() with(Std) -> Int { let mut v: Vec<Int> = vec_new::<Int>(); vec_push(&mut v, 10); vec_push(&mut v, 20); let n: Int = vec_get(&v, 1); vec_free(v); return n; } }'
+agree_or_trap "vec push/get (=> 20)" "$TMPDIR/vget.con"
+
+emit vlen 'mod m { fn main() with(Std) -> Int { let mut v: Vec<Int> = vec_new::<Int>(); vec_push(&mut v, 1); vec_push(&mut v, 2); vec_push(&mut v, 3); let n: Int = vec_len(&v); vec_free(v); return n; } }'
+agree_or_trap "vec len after 3 pushes (=> 3)" "$TMPDIR/vlen.con"
+
+emit vset 'mod m { fn main() with(Std) -> Int { let mut v: Vec<Int> = vec_new::<Int>(); vec_push(&mut v, 1); vec_push(&mut v, 2); vec_set(&mut v, 0, 99); let n: Int = vec_get(&v, 0); vec_free(v); return n; } }'
+agree_or_trap "vec set then get (=> 99)" "$TMPDIR/vset.con"
+
 echo "=== clean sanity (values fit; not overflow) ==="
 
 emit c1  'mod m { fn main() -> Int { let c: Bool = true; let x: i32 = if c { 40 + 2 } else { 0 }; return x as Int; } }'

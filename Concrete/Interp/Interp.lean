@@ -517,6 +517,46 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
           let cs := ((str.toList.dropWhile ws).reverse.dropWhile ws).reverse
           return (env, .val (.string (String.ofList cs)))
         | _ => .error "interp: string_trim: argument is not a string"
+      -- Vec: a growable container, modeled as the `.array` value (elemTy is
+      -- cosmetic here — elements are stored as IVals). Mutating ops write back
+      -- through the `&mut v` ref (`.ref path`) via updatePath, exactly like
+      -- field/index assignment. Matches the EmitBuiltins runtime; grows the
+      -- oracle so Vec programs are differential-testable. (vec_pop, returning
+      -- Option<T>, is deferred to the enum/Option slice.)
+      | "vec_new", [] => return (env, .val (.array #[] .placeholder 0))
+      | "vec_push", [vref, x] =>
+        match vref with
+        | .ref path => do
+          match ← lookupPath env path with
+          | .array elems ety _ =>
+            let elems' := elems.push x
+            let env' ← updatePath env path (.array elems' ety elems'.size)
+            return (env', .val .unit)
+          | _ => .error "interp: vec_push: receiver is not a vec"
+        | _ => .error "interp: vec_push: first argument is not a mutable ref"
+      | "vec_get", [v, i] => do
+        match ← autoDeref env v, ← autoDeref env i with
+        | .array elems _ _, .int idx _ =>
+          match elems[idx.toNat]? with
+          | some e => return (env, .val e)
+          | none => .error s!"interp: vec_get: index {idx} out of bounds (len {elems.size})"
+        | _, _ => .error "interp: vec_get: bad arguments"
+      | "vec_len", [v] => do
+        match ← autoDeref env v with
+        | .array elems _ _ => return (env, .val (.int (Int.ofNat elems.size) .int))
+        | _ => .error "interp: vec_len: receiver is not a vec"
+      | "vec_set", [vref, i, x] =>
+        match vref, (← autoDeref env i) with
+        | .ref path, .int idx _ => do
+          match ← lookupPath env path with
+          | .array elems ety sz =>
+            if idx.toNat < elems.size then
+              let env' ← updatePath env path (.array (elems.set! idx.toNat x) ety sz)
+              return (env', .val .unit)
+            else .error s!"interp: vec_set: index {idx} out of bounds (len {elems.size})"
+          | _ => .error "interp: vec_set: receiver is not a vec"
+        | _, _ => .error "interp: vec_set: bad arguments"
+      | "vec_free", [_] => return (env, .val .unit)
       | "drop_string", [_] =>
         -- Linear-discipline no-op: ownership transfer + heap free in the
         -- compiled binary; the interpreter has no heap, so the consume
