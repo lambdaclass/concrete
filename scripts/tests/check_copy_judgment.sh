@@ -89,6 +89,57 @@ emit badcopy 'mod m {
 }'
 rejects "Copy struct with non-Copy field rejected" badcopy "non-copy field"
 
+echo "=== consistency under refinement: a conditional-Copy generic refines to the ==="
+echo "=== concrete Copy-ness of its instantiation (roadmap CopyJudgment gate) ==="
+
+# `struct Copy Wrap<T>` is Copy MODULO {T : Copy}. Instantiated with a Copy type
+# it IS Copy (freely duplicated); instantiated with a non-Copy type it refines to
+# LINEAR (a second use after move is E0205) — not an error, just not Copy. The
+# same judgment (Layout.isCopyTyGeneric) drives Check pre-mono and Verify
+# post-mono, so the conditional decision and its concrete refinement agree.
+emit wcopy 'mod m {
+    struct Copy Wrap<T> { v: T }
+    fn main() -> Int {
+        let w: Wrap<i32> = Wrap::<i32> { v: 5 };
+        let a: Wrap<i32> = w;
+        let b: Wrap<i32> = w;
+        return (a.v + b.v) as Int;
+    }
+}'
+value "Copy Wrap<i32> refines to Copy (duplicated)" wcopy "10"
+
+emit wlin 'mod m {
+    struct Copy Wrap<T> { v: T }
+    fn main() -> Int {
+        let w: Wrap<String> = Wrap::<String> { v: "x" };
+        let a: Wrap<String> = w;
+        let b: Wrap<String> = w;
+        return 0;
+    }
+}'
+rejects "Copy Wrap<String> refines to linear (use-after-move)" wlin "E0205"
+
+# The same refinement on a builtin conditional-Copy enum (Option<T>).
+emit ocopy 'mod m {
+    fn main() -> Int {
+        let o: Option<i32> = Option::<i32>::Some { value: 7 };
+        let a: Option<i32> = o;
+        let b: Option<i32> = o;
+        return 0;
+    }
+}'
+value "Option<i32> refines to Copy (duplicated)" ocopy "0"
+
+emit olin 'mod m {
+    fn main() -> Int {
+        let o: Option<String> = Option::<String>::Some { value: "x" };
+        let a: Option<String> = o;
+        let b: Option<String> = o;
+        return 0;
+    }
+}'
+rejects "Option<String> refines to linear (use-after-move)" olin "E0205"
+
 echo
 echo "check_copy_judgment: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
