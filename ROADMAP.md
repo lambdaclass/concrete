@@ -150,6 +150,17 @@ user-facing claim without a replay command or checked report. If a task cannot
 yet have a red-team gate, the roadmap item must say why and name the first gate
 that will make it testable.
 
+The biggest multiplier is not another roadmap item; it is applying this gate
+discipline uniformly. Every drift-prevention gate should be mutation-tested
+where practical, every unsupported case must fail closed and loud, every
+evidence claim should carry a replay command, and every completed semantic
+item should name the gate or proof that protects it. A feature that passes only
+because no one tried to break its gate is not done. The largest remaining trust
+boundary is the backend, so the early narrow translation-validation probe in
+Phase 15 is the backend-side version of the same rule: do not let source/Core
+evidence become native-code evidence unless the boundary is validated or
+explicitly marked trusted.
+
 North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
 keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
