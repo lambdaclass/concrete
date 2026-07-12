@@ -55,6 +55,29 @@ Other forms that are *not* discards and so never trip E0286:
 - a **trailing value expression** (no `;`) — it is the block's value, not a
   discard, so `if c { maybe(1) } else { maybe(2) }` as a block value is fine.
 
+## Discarding a pure Copy value is a dead computation (E0294)
+
+The must-use rule above keys on *fallibility*; a parallel rule keys on
+*effect-freedom*. A statement expression that discards a **pure, trap-free,
+non-Unit Copy** value computes something with no effect and throws it away — a
+dead computation:
+
+```concrete
+2 + 3;            // error[check]: (E0294) pure value of type 'i64' is computed
+x;                //               and then discarded — a dead computation
+discard(2 + 3);   // ok — `discard(expr)` acknowledges an intentional discard
+```
+
+Only *locally-provable-pure* forms are flagged: literals, variable/field reads,
+and arithmetic/comparison/logical/bitwise/shift operators over them. **Calls are
+never flagged** — Concrete's capability model does not track mutation through
+`&mut` params (nor `trusted`/`extern` FFI) as a capability, so an empty capability
+set does not prove a call pure (`env_assign(&mut e, …)`, `fclose(fp)`), and a
+call's discarded result may well be intentional. Trap-assertions (`/`, `%`) are
+not flagged either. `discard(x)` is the acknowledgement, and is **Copy-only**: a
+non-Copy resource must be consumed or `destroy()`d (**E0295**), never `discard`ed
+— dropping it would leak it. (This is CapabilityJudgment slice 5.)
+
 ## Soundness: `_` cannot silence a resource
 
 `_` may ignore only a `Copy` value, so it can never drop a resource owner. A
@@ -80,7 +103,11 @@ impossible, not merely discouraged.
   `_` may ignore only a Copy value) lives in the match-arm checks (emits `E0288`,
   `wildcardDiscardsNonCopy`); `let _ =` is removed (`E0289`).
 - Diagnostic: `CheckError.discardedMustUse` → **E0286**;
-  `CheckError.wildcardDiscardsNonCopy` → **E0288**.
+  `CheckError.wildcardDiscardsNonCopy` → **E0288**. The pure-Copy-discard rule is
+  `exprPureDiscardable` (a local structural purity predicate) + the same
+  `Stmt.expr` check → `CheckError.discardedPureValue` **E0294**; the `discard`
+  intrinsic is intercepted in Check/Elab and rejects a non-Copy arg with
+  `CheckError.discardNonCopy` **E0295**.
 - Fixtures: `tests/programs/ignored_result/`.
 - Gate: `scripts/tests/check_ignored_result.sh` (Makefile `test-ignored-result`
   + CI).

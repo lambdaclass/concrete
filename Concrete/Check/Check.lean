@@ -30,6 +30,39 @@ inductive UseMode where
   | value | callArg | place
   deriving Repr, BEq
 
+/-- CapabilityJudgment slice 5: is `e` a LOCALLY-PROVABLE pure, trap-free,
+    value-producing expression whose silent discard (`e;`) is a dead computation?
+
+    Conservative — `true` only when the discard provably has no effect and no
+    runtime trap-assertion, so it never fires on an effectful or assertion
+    statement: literals, variable reads, field reads, and arithmetic /
+    comparison / logical / bitwise / shift operators over such. `+ - *` can
+    overflow, but that is incidental (not the point of the statement), so they
+    stay flaggable; `/` and `%` ARE trap-assertions (division by zero) and are
+    NOT flagged.
+
+    Function / method calls are deliberately NOT treated as pure. Concrete's
+    capability model does not track mutation through `&mut` parameters — nor the
+    effects of `trusted` / `extern` FFI — as a capability, so an EMPTY capability
+    set does not imply an effect-free call: `env_assign(&mut e, …)` (mutation)
+    and `fclose(fp)` (extern) both carry empty caps yet have real effects.
+    Soundly flagging a pure call would need an inter-procedural effect analysis
+    Concrete does not have; it is deferred until the effect model tracks mutation
+    (or a workload pulls the safe-fn + no-`&mut`-param + non-trusted refinement).
+    So every call, cast, index, deref, borrow, and control-flow expression is
+    conservatively NOT flagged. -/
+def exprPureDiscardable : Expr → Bool
+  | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. => true
+  | .ident .. => true
+  | .paren _ inner => exprPureDiscardable inner
+  | .fieldAccess _ obj _ => exprPureDiscardable obj
+  | .unaryOp _ _ operand => exprPureDiscardable operand
+  | .binOp _ op l r =>
+    match op with
+    | .div | .mod => false  -- trap-assertion: division by zero
+    | _ => exprPureDiscardable l && exprPureDiscardable r
+  | _ => false
+
 mutual
 
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
@@ -417,6 +450,17 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       | some _ =>
         return .unit
       | none => throwCheck (.typeDoesNotImplDestroy typeName) (some e.getSpan)
+    -- Intercept discard() calls — the acknowledged-discard escape (slice 5).
+    -- `discard(e)` evaluates `e` and drops its value, marking the discard
+    -- intentional so a pure statement is not flagged as a dead computation
+    -- (E0294). Only a Copy value may be discarded this way; a non-Copy resource
+    -- must be consumed or `destroy()`d (dropping it would leak it).
+    if intrinsic == some .discard then
+      if args.length != 1 then throwCheck (.builtinWrongArgCount "discard" 1) (some e.getSpan)
+      let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
+      let argTy ← checkExpr arg
+      if !(← isCopyType argTy) then throwCheck (.discardNonCopy (tyToString argTy)) (some e.getSpan)
+      return .unit
     -- Intercept alloc(val) calls
     if intrinsic == some .alloc then
       if args.length != 1 then throwCheck (.builtinWrongArgCount "alloc" 1) (some e.getSpan)
@@ -1502,6 +1546,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | none =>
           if !(← isCopyType eTy) then
             throwCheck (.discardedLinear (tyToString eTy)) (some stmt.getSpan)
+          -- Slice 5: the value is Copy and non-fallible. If the expression is
+          -- also locally-provable pure and trap-free, computing it and dropping
+          -- the result is a dead computation with no effect — flag it (acknowledge
+          -- intent with `discard(expr)`, which is Unit-typed and reaches the
+          -- branch above).
+          else if exprPureDiscardable e then
+            throwCheck (.discardedPureValue (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
     let _condTy ← checkExpr cond

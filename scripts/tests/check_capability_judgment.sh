@@ -24,6 +24,12 @@ emit(){ printf '%s\n' "$2" > "$TMPDIR/$1.con"; }
 accepts(){ local F="$TMPDIR/$2.con"; if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then ok "$1"; else no "$1 (rejected: $("$COMPILER" "$F" -o "$F.bin" 2>&1 | head -1))"; fi; }
 # rejects <label> <name>: does not compile (missing authority).
 rejects(){ local F="$TMPDIR/$2.con"; if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then no "$1 (compiled — missing cap not caught!)"; else ok "$1"; fi; }
+# rejects_code <label> <name> <code>: rejected with a SPECIFIC diagnostic code.
+rejects_code(){ local F="$TMPDIR/$2.con" want="$3" out
+  out="$("$COMPILER" "$F" -o "$F.bin" 2>&1)"
+  if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then no "$1 (compiled — $want not raised!)"
+  elif printf '%s' "$out" | grep -q "$want"; then ok "$1"
+  else no "$1 (rejected but not $want: $(printf '%s' "$out" | head -1))"; fi; }
 
 echo "=== direct-call capability decision (caller must cover callee) ==="
 
@@ -84,6 +90,45 @@ accepts "raw-ptr deref inside a trusted fn" unsafetrusted
 
 emit unsafecap 'mod m { fn d() with(Unsafe) -> Int { let x: i32 = 5; let p: *const i32 = &x as *const i32; let v: i32 = *p; return v as Int; } fn main() with(Unsafe) -> Int { return d(); } }'
 accepts "raw-ptr deref in a fn with(Unsafe)" unsafecap
+
+echo "=== slice 5: discarding a pure, trap-free Copy value is a dead computation (E0294) ==="
+
+# A pure, trap-free, non-Unit Copy value used as a statement (`expr;`) computes
+# something and throws it away — an accidental lost computation. The value is
+# Copy (non-Copy is E0287) and non-fallible (E0286); the flagged forms are
+# literals, variable/field reads, and pure operators over such.
+emit deadconst 'mod m { fn main() -> Int { 2 + 3; return 0; } }'
+rejects_code "pure constant arithmetic discarded (2 + 3;)" deadconst "E0294"
+
+emit deadvar 'mod m { fn main() -> Int { let x: Int = 10; x; return 0; } }'
+rejects_code "bare variable read discarded (x;)" deadvar "E0294"
+
+emit deadbin 'mod m { fn main() -> Int { let a: Int = 1; let b: Int = 2; a + b; return 0; } }'
+rejects_code "pure variable arithmetic discarded (a + b;)" deadbin "E0294"
+
+# The escape: `discard(expr)` acknowledges an intentional discard of a Copy value.
+emit ackconst 'mod m { fn main() -> Int { discard(2 + 3); return 0; } }'
+accepts "discard(2 + 3) acknowledges the discard" ackconst
+
+# NOT flagged: a trap-assertion (division by zero is a real runtime check).
+emit trapdiv 'mod m { fn main() -> Int { let a: Int = 10; let b: Int = 2; a / b; return 0; } }'
+accepts "division discarded is a trap-assertion, not dead (a / b;)" trapdiv
+
+# NOT flagged: an effectful call is legitimately invoked for its effect. The
+# capability model does not track `&mut`/FFI effects, so calls are never flagged
+# as pure — this row pins that a Console-effect call's discarded result is fine.
+emit effcall 'mod m { fn h() with(Console) -> i32 { print_int(7); return 9; } fn main() with(Console) -> Int { h(); return 0; } }'
+accepts "effectful (Console) call discarded is allowed (h();)" effcall
+
+# NOT flagged: even an empty-cap user call is not treated as pure (calls excluded
+# — empty caps != pure because &mut mutation is untracked).
+emit purecall 'mod m { fn add2(a: i32, b: i32) -> i32 { return a + b; } fn main() -> Int { add2(1, 2); return 0; } }'
+accepts "empty-cap user call discarded is allowed (add2(1,2);)" purecall
+
+# `discard(...)` is the Copy-only escape; a non-Copy resource must be consumed or
+# `destroy()`d (dropping it via discard would leak it).
+emit discardlinear 'mod m { fn main() with(Std) -> Int { let s: String = int_to_string(5); discard(s); return 0; } }'
+rejects_code "discard() of a non-Copy value is rejected (String)" discardlinear "E0295"
 
 echo
 echo "check_capability_judgment: PASS=$PASS FAIL=$FAIL"

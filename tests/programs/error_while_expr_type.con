@@ -3,7 +3,7 @@ fn main() -> Int {
     let x: Int = while true {
         break true;
     } else {
-        42;
+        42
     };
     return x;
 }

@@ -4832,6 +4832,8 @@ def diagnosticCodesReport : String :=
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
     entry "E0292" "check" "error" "shadowing a still-live non-Copy binding",
     entry "E0293" "check" "error" "overlapping borrows of one place in a single call",
+    entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
+    entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

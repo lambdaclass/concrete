@@ -1296,18 +1296,21 @@ typed node.
    stronger acceptance story than a caps-only diff. Do not build the other axes
    before their evidence sources are stable.
 
-   Practical purity/discard slice: once `CapabilityJudgment` can say an
-   expression is known **pure and trap-free/total** (`with()` / empty authority,
-   no mutation, no checked-arithmetic trap, no narrowing trap, no bounds trap,
-   no runtime obligation that can fail) and returns a non-`Unit` value, make
-   `expr;` over that expression an error with an explicit acknowledgement
-   escape (`discard(expr)` or equivalent). This is not row-effect theory and not
-   a user-facing effect system; it is the same concrete discard discipline
-   already used for fallible and non-`Copy` values. A total pure non-`Unit`
-   result discarded as a statement is almost always a lost computation.
-   Potentially trapping pure expressions are excluded until
-   `TotalityJudgment` proves they are total; their traps are observable runtime
-   behavior.
+   Practical purity/discard slice: `expr;` over a **pure, trap-free, non-`Unit`
+   Copy** value is an error (**E0294**), with `discard(expr)` as the explicit
+   acknowledgement escape (Copy-only; a non-`Copy` resource uses `destroy()` —
+   **E0295**). This is not row-effect theory and not a user-facing effect system;
+   it is the same concrete discard discipline already used for fallible and
+   non-`Copy` values. The landed rule flags only *locally-provable-pure* forms —
+   literals, variable/field reads, and pure operators over them — and excludes
+   trap-assertions (`/`, `%`). **Calls remain excluded**: Concrete's capability
+   model does not track mutation through `&mut` params (nor `trusted`/`extern`
+   FFI) as a capability, so empty authority does not imply a pure call
+   (`env_assign(&mut e, …)`, `fclose(fp)` both have empty caps yet real effects).
+   Extending the rule to pure calls is deferred until the effect model tracks
+   mutation (or a workload pulls the safe-fn + no-`&mut`-param + non-trusted
+   refinement) — the missing predicate is "this *call* has no observable effect,"
+   not the totality already provided by `TotalityJudgment`.
 
    Gate with an ordinary `File`/`Network` call, a capability-polymorphic
    callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a

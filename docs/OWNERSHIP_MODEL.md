@@ -44,6 +44,22 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
 - **A bare statement expression** discarding a non-Copy value is rejected
   (**E0287**); a `Result`/`Option` discard gets the must-use nudge (**E0286**). A
   deferred non-Copy-returning call (`defer make();`) is **E0287**.
+- **A bare statement expression discarding a *pure, trap-free Copy* value** is
+  rejected (**E0294**, `discardedPureValue`) — computing a value with no effect
+  and throwing it away is a dead computation (`2 + 3;`, `x;`, `a + b;`). This is
+  CapabilityJudgment slice 5. Only *locally-provable-pure* forms are flagged:
+  literals, variable/field reads, and arithmetic/comparison/logical/bitwise/shift
+  operators over them. **Calls are deliberately not flagged** — Concrete's
+  capability model does not track mutation through `&mut` params (nor `trusted`/
+  `extern` FFI effects) as a capability, so an empty capability set does not imply
+  a pure call (`env_assign(&mut e, …)` and `fclose(fp)` both have empty caps yet
+  real effects); flagging pure calls awaits an effect model that tracks mutation.
+  A trap-assertion (`/`, `%`) is not flagged either (division by zero is a real
+  runtime check). Acknowledge an intentional discard of a Copy value with
+  **`discard(expr)`**; `discard` is Copy-only — a non-Copy resource must be
+  consumed or `destroy()`d (**E0295**, `discardNonCopy`), since dropping it would
+  leak it. So the two verbs stay distinct: `destroy(x)` runs a linear resource's
+  destructor; `discard(x)` acknowledges dropping a trivial Copy value.
 - **A named linear local** left unconsumed at scope exit is rejected (**E0208**) —
   including locals in `if`/`else` branches and match arms (nested-scope checking),
   and including on `return`/`break` paths. `let g = f;` over a linear `f` **moves**

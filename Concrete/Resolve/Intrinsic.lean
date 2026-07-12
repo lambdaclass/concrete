@@ -19,6 +19,7 @@ inductive IntrinsicId where
   | alloc           -- alloc(x) → Heap<T>
   | free            -- free(h) → T
   | destroy         -- destroy(x) → Unit (linear type destructor)
+  | discard         -- discard(x) → Unit (acknowledge discarding a Copy value)
 
   -- Vec operations
   | vecNew | vecPush | vecGet | vecSet | vecLen | vecPop | vecFree
@@ -70,6 +71,7 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   | "alloc" => some .alloc
   | "free" => some .free
   | "destroy" => some .destroy
+  | "discard" => some .discard
 
   -- Vec (snake_case and method-call PascalCase)
   | "vec_new"  | "Vec_new"  => some .vecNew
@@ -149,6 +151,7 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .alloc => "alloc"
   | .free => "free"
   | .destroy => "destroy"
+  | .discard => "discard"
   | .vecNew => "vec_new"
   | .vecPush => "vec_push"
   | .vecGet => "vec_get"
@@ -290,7 +293,7 @@ def newtypeFieldName : String := "0"
 /-- Function names reserved by the compiler.
     User code cannot define functions with these names. -/
 def reservedFnNames : List String :=
-  ["destroy", "abort", "alloc", "free", "alloc_array", "free_array", "realloc_array"]
+  ["destroy", "discard", "abort", "alloc", "free", "alloc_array", "free_array", "realloc_array"]
 
 /-- Builtin function names that need special resolve treatment but
     are NOT in `resolveIntrinsic`.  These are compiler-emitted helpers

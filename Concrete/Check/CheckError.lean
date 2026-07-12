@@ -179,12 +179,13 @@ inductive CheckError where
   | intLiteralOutOfRange (value : Int) (tyName : String) (lo : Int) (hi : Int)
   -- A `Result`/`Option` value produced by a statement expression (`expr;`) is
   -- silently discarded. Phase 6 #13: discarding a fallible result is an error
-  -- unless explicitly acknowledged with `let _ = expr;`.
+  -- (handle it — match/`?`/pass it on).
   | discardedMustUse (tyName : String)
   -- A non-Copy (linear) value produced by a statement expression (`expr;`) is
   -- silently discarded without being consumed — e.g. `make_resource();` or
   -- `Token { .. };`. H6: every linear value must be consumed; a silent drop is an
-  -- error. Acknowledge an intentional discard with `let _ = expr;`.
+  -- error. Consume it (move/return it), destructure it, or `destroy()` it. (A pure
+  -- *Copy* value silently discarded is E0294 `discardedPureValue`, not this.)
   | discardedLinear (tyName : String)
   -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
   -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
@@ -218,6 +219,19 @@ inductive CheckError where
   -- This is what keeps a scoped callback's context from reaching the borrowed
   -- container (`m.with_value_mut(&k, &mut m, f)` rejects here).
   | conflictingCallBorrows (name : String)
+  -- Slice 5 (CapabilityJudgment): a locally-provable PURE, trap-free, non-Unit
+  -- value produced by a statement expression (`expr;`) is silently discarded. The
+  -- value is Copy (a non-Copy discard is E0287) and non-fallible (E0286), the
+  -- expression is a literal / variable / field read or a pure operator over such
+  -- (calls are NOT flagged — the capability model does not track `&mut`/FFI
+  -- effects, so empty caps ≠ pure for a call), and it performs no trap-assertion
+  -- (`/`, `%`) — so the whole computation is dead. Acknowledge an intentional
+  -- discard with `discard(expr)`.
+  | discardedPureValue (tyName : String)
+  -- `discard(e)` is the acknowledged-discard escape, and only for a Copy value:
+  -- a non-Copy (linear) value is a resource that must be consumed or `destroy()`d
+  -- (dropping it via `discard` would leak it).
+  | discardNonCopy (tyName : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -308,6 +322,8 @@ def CheckError.message : CheckError → String
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
+  | .discardedPureValue tyName => s!"pure value of type '{tyName}' is computed and then discarded — this is a dead computation with no effect"
+  | .discardNonCopy tyName => s!"`discard(...)` only acknowledges discarding a Copy value; '{tyName}' is a non-Copy resource"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
@@ -339,6 +355,8 @@ def CheckError.hint : CheckError → Option String
   | .discardedMustUse _ => some "handle it: match it, `?` it, or pass it on"
   | .discardedLinear _ => some "consume it: bind and pass it on / return it / destroy() it, destructure it exhaustively, or `?` it"
   | .wildcardDiscardsNonCopy _ => some "bind the value/field (not `_`) and consume it — pass it on, return it, or destroy() it; `_` may ignore only Copy values"
+  | .discardedPureValue _ => some "use its value, or wrap it in `discard(expr)` to acknowledge an intentional discard"
+  | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
   | .ifBranchTypeMismatch thenTy elseTy =>
@@ -447,6 +465,8 @@ def CheckError.code : CheckError → String
   | .cannotOverwriteLinearPlace _ _ => "E0291"
   | .shadowsLiveLinear _ => "E0292"
   | .conflictingCallBorrows _ => "E0293"
+  | .discardedPureValue _ => "E0294"
+  | .discardNonCopy _ => "E0295"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=

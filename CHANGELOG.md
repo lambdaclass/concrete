@@ -63,6 +63,21 @@ Completed Phase 6B semantic-axis items:
   callback resolution (`resolveCaps`) are single-sourced; Check, CoreCheck, and
   reports read one decision. `scripts/tests/check_capability_judgment.sh`
   (mutation-tested).
+- **CapabilityJudgment slice 5 — pure non-`Unit` discard (`discard`/E0294).**
+  `expr;` over a pure, trap-free, non-`Unit` **Copy** value (a dead computation:
+  `2 + 3;`, `x;`, `a + b;`) is now rejected (**E0294**, `discardedPureValue`), with
+  a new `discard(expr)` intrinsic as the explicit acknowledgement escape. The
+  purity predicate (`exprPureDiscardable`) is deliberately conservative — it flags
+  only locally-provable-pure forms (literals, variable/field reads, pure operators)
+  and excludes trap-assertions (`/`, `%`). **Calls are not flagged**: the corpus
+  proved empty capabilities ≠ pure for a call, because the capability model does
+  not track mutation through `&mut` params or `trusted`/`extern` FFI as an effect
+  (`env_assign(&mut e, …)`, `fclose(fp)`); pure-call flagging is deferred to an
+  effect model that tracks mutation. `discard` is Copy-only — a non-`Copy` resource
+  must be consumed or `destroy()`d (**E0295**, `discardNonCopy`), keeping the two
+  verbs distinct (`destroy` = linear destructor, `discard` = acknowledge a trivial
+  Copy drop). Rows in `scripts/tests/check_capability_judgment.sh` (mutation-tested
+  load-bearing); this closes the last CapabilityJudgment slice.
 - **Ownership agreement matrix (`scripts/tests/check_ownership_judgment.sh`).**
   Proves Check accept/reject ≡ Lower move/drop plan ≡ interpreter consumption
   across the linearity matrix (move, Copy-dup, branch/match consume agreement,
