@@ -426,6 +426,9 @@ jobs:
       - name: "Capability-judgment gate (Phase 6.5 — one direct-call capability decision)"
         run: bash scripts/tests/check_capability_judgment.sh
 
+      - name: "Pipeline-refactor contract (Phase 6B capstone — behavior-preserving + fail-closed)"
+        run: bash scripts/tests/check_pipeline_refactor_contract.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

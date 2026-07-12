@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6B closed — capstone validation artifact + control-flow builder (2026-07-12)
+
+The compiler-pipeline refactor phase reaches its exit criterion.
+
+- **Item 32 — Phase 6B validation artifact.** `scripts/tests/check_pipeline_refactor_contract.sh`
+  is the capstone contract: a compact corpus proving the *composed* pipeline is
+  (A) **behavior-preserving for accepted programs** — interp (the reference
+  semantics) and the compiled binary produce the same value or trap together,
+  across arithmetic, mixed-width casts, Copy duplication, value/unit-bearing
+  if/while, and the discard escape — and (B) **fail-closed for malformed
+  programs** — each axis violation (mixed-width E0228, use-after-move E0205,
+  unconsumed-linear E0208, pure-discard E0294, returned-reference, missing
+  capability) is rejected before Lower, never miscompiled. 16 rows, wired into
+  CI and `make test-pipeline-refactor-contract`.
+- **Item 30 — control-flow builder, acceptance met.** The result-materialization
+  path (unit/void slot guard, branch-value store, merge load) is unified behind
+  `freshResultSlot` / `storeBranchResult` / `loadResult` in `Concrete/IR/Lower.lean`,
+  removing the duplicated store/load bookkeeping where the void-store and
+  wrong-width-store bug classes lived, and closing the surface-reachable unit
+  if/while-expr `alloca void` hole. Item 30's acceptance gate is satisfied:
+  control-flow fixtures stay green and a mutation dropping the while-exit
+  scope-local variable filtering is caught (invalid SSA, via
+  `regress_while_expr_unit_slot.con`). Full consolidation of the remaining
+  terminator sites is not bug-pulled and left as optional follow-up.
+- **Item 31 — ProofCore partial-def reduction: deferred by its own criteria.**
+  The item scopes itself to "only constructs pulled by Phase 12/14 preservation
+  proofs; do not chase a full rewrite." Phase 12/14 are not active, so this
+  stays deferred rather than becoming a speculative rewrite.
+
 ### Interpreter oracle grows `defer` — 36 fixtures differential-testable (2026-07-12)
 
 `--interp` previously refused `defer` (`interp: defer not yet supported`), so
