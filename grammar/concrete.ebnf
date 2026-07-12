@@ -54,7 +54,7 @@ decl_after_pub = 'trusted' decl_after_trusted
 decl_after_trusted = decl_keyword ;
 
 (* Each keyword-led declaration form starts with a unique keyword.  *)
-decl_keyword = 'fn' IDENT [ '!' ] [ type_params ] '(' [ param_list ] ')' [ cap_clause ] [ '->' type ] block
+decl_keyword = 'fn' IDENT [ type_params ] '(' [ param_list ] ')' [ cap_clause ] [ '->' type ] block
              | 'struct' [ 'Copy' ] IDENT [ type_params ] '{' struct_fields '}'
              | 'enum' [ 'Copy' ] IDENT [ type_params ] '{' enum_variants '}'
              | 'newtype' IDENT [ type_params ] '=' type ';'

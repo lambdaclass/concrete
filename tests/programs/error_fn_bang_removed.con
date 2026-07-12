@@ -1,0 +1,6 @@
+// Phase 6D item 1: `fn name!` is dead grammar (removed from the EBNF). The parser
+// never implemented the optional `!`, so this must be a parse error.
+mod m {
+    fn foo!() -> Int { return 1; }
+    fn main() -> Int { return foo(); }
+}
