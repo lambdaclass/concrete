@@ -345,18 +345,24 @@ partial def lexToken (s : LexerState) : LexerState × TokenKind :=
 
 /-- Tokenize entire source string. -/
 partial def tokenize (source : String) : List Token :=
-  go (LexerState.init source) []
+  -- Accumulate REVERSED (prepend is O(1)) and reverse once at the end. The old
+  -- `acc ++ [tok]` appended per token — O(tokens) each, i.e. O(tokens²) to lex the
+  -- whole source. This is the dominant FRONTEND O(N²): every path (parse, fmt,
+  -- resolve, check) lexes first, so a module of N declarations was quadratic to
+  -- tokenize before any later stage even ran (which is why later-stage fixes did
+  -- not move the needle). Token order is preserved (reverse of reverse).
+  (go (LexerState.init source) []).reverse
 where
   go (s : LexerState) (acc : List Token) : List Token :=
     let sp := (skipWhitespace s).span
     let (s', kind) := lexToken s
     let tok : Token := { kind, span := sp }
     match kind with
-    | .eof => acc ++ [tok]
+    | .eof => tok :: acc
     -- Stop at the first malformed lexeme: the rest of the stream would be
     -- garbage, and some error states (unterminated literal at end of input)
     -- cannot advance, so continuing would not terminate.
-    | .lexError _ => acc ++ [tok]
-    | _ => go s' (acc ++ [tok])
+    | .lexError _ => tok :: acc
+    | _ => go s' (tok :: acc)
 
 end Concrete

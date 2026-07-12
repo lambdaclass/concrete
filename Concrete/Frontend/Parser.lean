@@ -2204,7 +2204,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
           if tk == .extern_ then
             let ext ← parseExternFn
-            externFns := externFns ++ [{ ext with isPublic := isPub, isTrusted }]
+            externFns := { ext with isPublic := isPub, isTrusted } :: externFns
           else if tk == .enum_ then
             let e ← parseEnumDef
             enums := enums ++ [{ e with isPublic := isPub }]
@@ -2287,8 +2287,12 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
                         , fingerprint := pendingFingerprint }
               else none
             match f with
-            | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow }]
-            | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
+            -- Prepend (O(1)); reversed at module assembly. The old `fns ++ [..]`
+            -- per top-level declaration was O(decls) each, i.e. O(N²) to parse a
+            -- module of N functions — the frontend O(N²) the complexity guard's
+            -- many-functions family exposed (it is PARSE, not resolve/check).
+            | .inl fnDef => fns := { fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow } :: fns
+            | .inr extDef => externFns := { extDef with isPublic := isPub } :: externFns
             pendingIsTest := false
             pendingOverflow := false
             pendingEnsures := []
@@ -2334,8 +2338,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       pendingFingerprint := none
       skipToTopLevelBoundary itemStartPos stopToken
     tk ← peek
-  return { name := "", structs, enums, functions := fns, imports, implBlocks, traits,
-           traitImpls, constants, typeAliases, capAliases, externFns, specFns, newtypes, submodules }
+  return { name := "", structs, enums, functions := fns.reverse, imports, implBlocks, traits,
+           traitImpls, constants, typeAliases, capAliases, externFns := externFns.reverse, specFns, newtypes, submodules }
 
 partial def parseModule : ParseM Module := do
   expect .«mod»

@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Token
@@ -71,6 +72,19 @@ def ResolveError.message : ResolveError → String
 
 structure Scope where
   symbols : List (String × SymKind)
+  /-- name → kind, built once from `symbols` (keeps the FIRST occurrence, matching
+      the old `symbols.find?`/`.any` semantics). Global-symbol lookup was an
+      assoc-list scan PER identifier reference — O(symbols) each, i.e. O(N²) for a
+      module of N mutually-referencing functions (`--emit-core` alone was O(N²)).
+      Built at scope-assembly time (bounded), read O(1) per reference. -/
+  symbolMap : Std.HashMap String SymKind := ∅
+
+/-- Build a `Scope` from a symbol list, materializing the O(1) lookup map (first
+    occurrence wins, matching `find?`). Use instead of `{ symbols := … }` so every
+    scope carries a consistent map. -/
+def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
+  { symbols := symbols,
+    symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅ }
 
 structure ResolvedModule where
   module : Module
@@ -139,12 +153,12 @@ private def addLocal (ctx : ResolveCtx) (name : String) (kind : SymKind) : Resol
 private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   -- Check local scopes (innermost first)
   ctx.localScopes.any (fun scope => scope.any fun (n, _) => n == name) ||
-  -- Check global scope
-  ctx.globalScope.symbols.any fun (n, _) => n == name
+  -- Check global scope (O(1) via symbolMap)
+  ctx.globalScope.symbolMap.contains name
 
 private def lookupSymKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
   (ctx.localScopes.findSome? (fun scope => scope.find? (fun (n, _) => n == name) |>.map (·.2)))
-  <|> (ctx.globalScope.symbols.find? (fun (n, _) => n == name) |>.map (·.2))
+  <|> (ctx.globalScope.symbolMap.get? name)
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
@@ -414,7 +428,7 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.typeAliases.map (·.name))
     ++ (subS.traits.map (·.name))
   ) []
-  ({ symbols := symbols }, types)
+  (Scope.ofSymbols symbols, types)
 
 -- ============================================================
 -- Resolve a module
@@ -508,8 +522,8 @@ def resolveShallow (moduleSummaries : List FileSummary)
   -- Build combined global scope from all module summaries
   let (combinedScope, combinedTypes) := moduleSummaries.foldl (fun (scope, types) s =>
     let (sScope, sTypes) := buildGlobalScopeFromSummary s
-    ({ symbols := scope.symbols ++ sScope.symbols }, types ++ sTypes)
-  ) ({ symbols := [] : Scope }, ([] : List String))
+    (Scope.ofSymbols (scope.symbols ++ sScope.symbols), types ++ sTypes)
+  ) (Scope.ofSymbols [], ([] : List String))
   -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
   -- so that B can use A::fn() syntax (parsed as A_fn).
   let siblingQualified : List (String × SymKind) := moduleSummaries.foldl (fun acc s =>
@@ -526,7 +540,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
           (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
       acc ++ qualFns ++ qualExterns ++ qualImpls
   ) []
-  let combinedScope : Scope := { symbols := combinedScope.symbols ++ siblingQualified }
+  let combinedScope : Scope := Scope.ofSymbols (combinedScope.symbols ++ siblingQualified)
   -- Collect trait methods and trait impls from all summaries
   let traitMethods := moduleSummaries.foldl (fun acc s =>
     acc ++ s.traits.map fun t => (t.name, t.methods.map (·.name))) []
@@ -575,7 +589,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
         ) (errs, syms, tys)
     ) (errs, syms, tys)
   ) (([] : Diagnostics), ([] : List (String × SymKind)), ([] : List String))
-  let combinedScope := { symbols := combinedScope.symbols ++ importedSymbols }
+  let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes
   { globalScope := combinedScope
   , knownTypes := combinedTypes
