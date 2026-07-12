@@ -315,6 +315,9 @@ test-ssa-verify-agreement: build ## SSAVerify behavior preservation (trust pass)
 test-compiler-complexity: build ## Phase 6C #2: anti-superlinear guard — fails if a compiler pass grows super-linearly on a scaling corpus (caught the SSAVerify dominator cubic; bug-027 family)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_compiler_complexity.sh
 
+test-no-quadratic-append: ## Ratchet: no new `xs ++ [x]` (O(n²) per-element append) in the hot pipeline files — the shape behind the 6C#2 O(n²) family
+	bash ./scripts/tests/check_no_quadratic_append.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

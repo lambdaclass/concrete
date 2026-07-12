@@ -438,6 +438,9 @@ jobs:
       - name: "Compiler complexity guard (Phase 6C #2 — no super-linear pass on scaling corpus)"
         run: bash scripts/tests/check_compiler_complexity.sh
 
+      - name: "O(n^2) append ratchet (no new `xs ++ [x]` in hot pipeline files)"
+        run: bash scripts/tests/check_no_quadratic_append.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
