@@ -110,6 +110,11 @@ rejects_code "pure variable arithmetic discarded (a + b;)" deadbin "E0294"
 emit ackconst 'mod m { fn main() -> Int { discard(2 + 3); return 0; } }'
 accepts "discard(2 + 3) acknowledges the discard" ackconst
 
+# `discard(e)` is Unit-typed in value position too (`let u = discard(e)`), not the
+# inner expr's type — Check and Core agree on Unit (no silent type drift).
+emit ackval 'mod m { fn main() -> Int { let u = discard(2 + 3); return 0; } }'
+accepts "discard in value position is Unit-typed (let u = discard(..))" ackval
+
 # NOT flagged: a trap-assertion (division by zero is a real runtime check).
 emit trapdiv 'mod m { fn main() -> Int { let a: Int = 10; let b: Int = 2; a / b; return 0; } }'
 accepts "division discarded is a trap-assertion, not dead (a / b;)" trapdiv

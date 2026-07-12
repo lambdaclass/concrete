@@ -835,14 +835,18 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
       | .named n => n | .generic n _ => n | _ => ""
     return .call (destroyFnNameFor typeName) [] [cArg] .unit
   -- Intercept discard(arg) — acknowledged discard of a Copy value (slice 5).
-  -- Erase to the inner expression: `discard(e)` is only ever a statement
-  -- (`discard(e);`), so the enclosing statement's `isValue := false` evaluates
-  -- `e` (preserving any effect) and drops its Copy result — exactly the plain
-  -- `e;` discard path. Check has already blessed the discard (so it is not
-  -- flagged E0294) and required `e` to be Copy (so no destructor is needed).
+  -- Desugar to a unit-valued `if true { arg; }`: evaluate `arg` (preserving any
+  -- effect) and drop its Copy result, yielding `.unit`. This keeps `discard(e)`
+  -- typed `Unit` in EVERY position — including value position (`let u =
+  -- discard(e)`) — matching Check's `.unit`, rather than erasing to the inner
+  -- expr (which would give `u` the inner type: a silent Check↔Core type
+  -- disagreement). The unit-typed if-expr lowers cleanly now that result slots
+  -- guard unit/never (`freshResultSlot`); Check already required `e` to be Copy,
+  -- so the discarded statement needs no destructor.
   if intrinsic == some .discard then
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
-    return ← elabExpr arg
+    let cArg ← elabExpr arg
+    return .ifExpr (.boolLit true) [.expr cArg false] [] .unit
   -- Intercept alloc(val)
   if intrinsic == some .alloc then
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
