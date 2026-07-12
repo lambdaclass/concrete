@@ -16,8 +16,8 @@ The anti-superlinear complexity guard (`scripts/tests/check_compiler_complexity.
 found a real pre-existing bug on its first run: compiling wide `match` chains was
 super-linear (8× arms → ~38× time; 800 arms = 17.5s). Isolation (`--emit-core`
 linear, `--emit-ssa-unverified` linear, `--emit-ssa` explodes) pinned it to
-**SSAVerify**, re-attributing the **bug-027 family from EmitSSA to SSAVerify's
-dominator/predecessor computation**. Root cause: `computeDominators` used *Jacobi*
+**SSAVerify's dominator/predecessor computation** (the wide match lowers to a long
+block chain). Root cause: `computeDominators` used *Jacobi*
 iterative dataflow (each pass reads only the prior pass), so dominator info
 advanced one block per pass → ~N passes over a long block chain, each O(N) over
 assoc-list/list-set structures = O(N³–N⁴); and SSAVerify runs twice per compile.
@@ -32,11 +32,19 @@ loops, diamonds, value while-expr) must still accept and stay codegen-correct
 (interp==compiled). SSA suite 806/0, examples 130/0, invalid-SSA mutation still
 caught. Both gates wired into CI + Makefile.
 
-Disclosed follow-up (not loosened): SSAVerify dominance is still ~O(N²) in block
-count at very large N (dom *sets* are inherently O(N²) for a chain); the
-idom/Cooper-Harvey-Kennedy + dense-ID-array near-linear rewrite is tracked, with
-the behavior gate as its safety net. The complexity guard tests the practical
-regime where the cubic manifested.
+Disclosed follow-ups (not loosened):
+- SSAVerify dominance is still ~O(N²) in block count at very large N (dom *sets*
+  are inherently O(N²) for a chain); the idom/Cooper-Harvey-Kennedy + dense-ID-array
+  near-linear rewrite is tracked, with the behavior gate as its safety net.
+- A SEPARATE, still-open O(N²) exists on many-instructions-in-one-block programs
+  (large array literals: N stores in one block, trivial dominators). Localization
+  shows it in **lower AND SSAVerify/cleanup, not EmitSSA** (the `--emit-llvm` gap
+  over `--emit-ssa` is negligible) — which also **corrects the original bug-027
+  attribution** (filed as "EmitSSA O(n²)"; the cost is earlier, in lower + verify
+  over long instruction lists, most likely `acc ++ x` list-append patterns). This
+  is NOT fixed by the dominator change above and is tracked distinctly. The
+  complexity guard tests the practical regime (≤200) where the match cubic
+  manifested; the large-N array/instruction tail is a separate follow-up.
 
 ### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
 
