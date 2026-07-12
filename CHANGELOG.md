@@ -44,6 +44,54 @@ Completed Phase 6B semantic-axis items:
   carries the red-team rows for the historical Check/Elab disagreement class and
   includes regression coverage for the context-hint families that were verified
   to agree by construction.
+- **Copy judgment single-sourced (`Layout.isCopyTyGeneric`).** The two Copy
+  recursions (front-end monadic over `StructDef`/`EnumDef`/`NewtypeDef`, and the
+  pure Core version) that drifted on `typeVar` (bounds vs flag) and `newtype`
+  (recurse vs absent) now delegate to one lookup-parameterized judgment.
+  `scripts/tests/check_copy_judgment.sh` adds the consistency-under-refinement
+  gate: a conditional-Copy generic refines to the concrete Copy-ness of its
+  instantiation (`Wrap<i32>`/`Option<i32>` Copy, `Wrap<String>`/`Option<String>`
+  linear), with Check pre-mono and Verify post-mono agreeing. The full "why-Copy"
+  decision record is deferred until a report/audit/Ownership consumer pulls it.
+- **Type-argument inference single-sourced (`Shared.unifyTypes`).** The
+  `InstantiationJudgment` slice: the verbatim-duplicated `unifyTypes` (Elab +
+  CheckHelpers) is now one shared algorithm.
+- **Capability decision family unified in `Concrete/Semantics/Capabilities.lean`.**
+  Beyond the `capsContain`/Unsafe/extern facts (Phase 6.5 #5), the direct-call
+  decision (`decideCall`/`missingCaps`), report membership (`capSetHas`),
+  through-pointer anti-smuggling (`missingCapsThroughPtr`), and cap-polymorphic
+  callback resolution (`resolveCaps`) are single-sourced; Check, CoreCheck, and
+  reports read one decision. `scripts/tests/check_capability_judgment.sh`
+  (mutation-tested).
+- **Ownership agreement matrix (`scripts/tests/check_ownership_judgment.sh`).**
+  Proves Check accept/reject ≡ Lower move/drop plan ≡ interpreter consumption
+  across the linearity matrix (move, Copy-dup, branch/match consume agreement,
+  return/param consume, borrow-no-consume, assignment overwrite, break-value;
+  and the reject cases). No drift found, so no shared ownership record was built.
+- **Totality matrix (`scripts/tests/check_totality_judgment.sh`).** Audit found
+  the trap/divergence facts already single-sourced (divergence in `CheckHelpers`,
+  arithmetic-trap in `IntArith` with the const folder routing through it,
+  cast-trap in `checkedToType`, bounds in `Lower`); the gate proves total/partial
+  classification agrees interp==compiled. Gate-only, no new helper or record.
+- **CoreCheck / pre-Lower boundary audit + gate.** `docs/COMPILER_BOUNDARY.md`
+  maps the constructor-guarded `ValidatedCore`/`MonomorphizedProgram` tokens and
+  which stage rejects each frontend/mono/type-policy residue class;
+  `scripts/tests/check_corecheck_boundary.sh` proves every class is rejected
+  before Lower.
+- **Differential-sweep soundness/parity fixes.** Interpreter signed left-shift
+  now truncates to width; labeled `break`/`continue` now dispatch to the targeted
+  loop; `--interp` prints `main`'s return value only for a value-returning `main`.
+  Each with a permanent gate row.
+- **Differential oracle grown (`scripts/tests/check_differential_positions.sh`).**
+  The interpreter gained the pure string library, `Vec`, and function pointers,
+  turning ~45 previously-PENDING corpus programs into real interp==compiled
+  differential tests (corpus divergences 174 → 129; the remainder are documented
+  loud interp-coverage gaps, not miscompiles).
+
+Method note: the later audits (Instantiation, Capability boundaries, Ownership,
+Totality) repeatedly found the facts already single-sourced, so the deliverable
+was an agreement gate, not a new data model. Abstractions were built only where a
+consumer or a failing gate pulled them; speculative records were deferred.
 
 ### Phase 6 completed language/usability core moved out of the active roadmap (2026-07-10)
 
