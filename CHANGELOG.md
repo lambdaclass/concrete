@@ -66,15 +66,26 @@ masked hot spots fixed alongside: `Parser.parseModuleBody` decl accumulation
 (`fns ++ [x]` → reverse-accumulate) and Resolve global-symbol lookup
 (`globalScope.symbols` scan per reference → build-once `Scope.symbolMap` HashMap).
 
-Still open, tracked (the guard will red if any regresses past its regime):
-- A **verify/cleanup O(N²)/cubic on reassignment chains** (many `x = x + k` → many
-  SSA versions of one register in one block) — now UNMASKED by the lexer fix
-  (statements `--emit-ssa` ~19s at 4000). Distinct from the array many-instruction
-  cleanup O(N²) already fixed; likely the SSACleanup const-fold/rewrite folds
-  (`acc ++ [..]`) plus fixpoint iteration. Newly the largest remaining.
-- **SSAVerify dominance** remains ~O(N²) in block count at very large N (dom *sets*
-  are inherently O(N²) for a chain); the idom/Cooper-Harvey-Kennedy + dense-ID-array
-  near-linear rewrite is the tracked follow-up, behavior gate as safety net.
+- **Reassignment chains** (many `x = x + k` → many SSA versions of one register in
+  one block; realistic in accumulation loops, unrolled arithmetic, state machines)
+  were O(N²)/cubic in SSACleanup, unmasked by the lexer fix (statements `--emit-ssa`
+  ~19s at 4000). Fixed: `applyReplacements` → resolved replacement HashMap;
+  `foldConstants` build/apply de-quadratified; and **forward constant propagation**
+  (a reg→const env resolving operands before folding) so a chain folds in ONE pass
+  instead of one fold-level per cleanup-fixpoint iteration. **19391ms → 125ms
+  (155×), near-linear.** Behavior-preserving (const-fold is semantics-critical):
+  fuzz 200/0, differential 30/0, agreement 5/0.
+
+**O(N²) family closed** on the principle *fix residuals that hit realistic code;
+track the synthetic-only ones.* Every realistic hot spot the guard exposed is now
+near-linear (lexer, block-building, dead-code, dominators, cleanup chains). The
+one remaining residual is **synthetic-only and tracked, not chased**:
+- **SSAVerify dominance** stays ~O(N²) in block count at *very large N* (dom *sets*
+  are inherently O(N²) for a long block chain — needs a function with hundreds of
+  blocks, e.g. an 800-arm match, not real code). The idom/Cooper-Harvey-Kennedy +
+  dense-ID-array near-linear rewrite is the tracked follow-up (behavior gate as its
+  safety net); the complexity guard tracks it but doesn't obligate the rewrite. The
+  guard's job is detection, not an infinite perf sweep.
 
 ### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
 

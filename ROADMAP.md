@@ -1787,17 +1787,22 @@ or lost); put the heavier trace/replay/scaling machinery here.
     `acc ++ [tok]` = O(tokens²); every path lexes first, which is why later-stage
     fixes did not move it). Reverse-accumulate: 4000 functions `--emit-core`
     9698ms → 241ms (40×); arrays now linear. Parser decl accumulation + Resolve
-    global-lookup (Scope.symbolMap) fixed alongside. STILL OPEN, tracked (the
-    guard reds if any regresses):
-      - **verify/cleanup O(N²)/cubic on reassignment chains** (many `x = x + k` →
-        many SSA versions in one block), unmasked by the lexer fix (statements
-        `--emit-ssa` ~19s at 4000) — the largest remaining; likely SSACleanup
-        const-fold/rewrite folds + fixpoint iteration.
-      - SSAVerify dominance still ~O(N²) in block count at very large N (dom sets
-        are O(N²) for a chain) → the idom/Cooper-Harvey-Kennedy near-linear rewrite,
-        guarded by `check_ssa_verify_agreement.sh`.
-    Guard-threshold tightening + large-N coverage is gated on these fixes (do not
-    loosen; extend the guard's regime once they are closed).
+    global-lookup (Scope.symbolMap) fixed alongside. Reassignment chains (many
+    `x = x + k` → many SSA versions of one register in one block; realistic in
+    accumulation loops / unrolled arithmetic / state machines) were O(N²)/cubic in
+    SSACleanup → fixed (applyReplacements map, foldConstants de-quadratified, +
+    forward constant propagation so a chain folds in ONE pass): statements
+    `--emit-ssa` 19391ms → 125ms (155×), near-linear.
+
+    **O(N²) family CLOSED** on the principle *fix residuals that hit realistic
+    code; track the synthetic-only ones* (see CHANGELOG). The guard's job is
+    detection, not an obligation to fix every synthetic curve. One residual is
+    tracked, NOT chased: SSAVerify dominance stays ~O(N²) in block count at very
+    large N (dom sets are O(N²) for a long block chain — needs hundreds of blocks,
+    e.g. an 800-arm match, not real code); the idom/Cooper-Harvey-Kennedy
+    near-linear rewrite is the follow-up if a realistic workload ever demands it,
+    guarded by `check_ssa_verify_agreement.sh`. Do not loosen the guard; extend its
+    regime only alongside that rewrite.
 
 3. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
