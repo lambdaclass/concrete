@@ -2682,6 +2682,17 @@ invalidation; no-op and leaf edits reuse semantic and object artifacts; cache
 corruption/schema/tool drift recompute or fail closed; and no cached partial or
 stale artifact can fabricate a validated boundary or stronger evidence class.
 
+Timing of query-shaping (a deliberate decision, not an omission): the
+query/`CompilerSession` form below is built HERE, as part of this
+validation-gated driver — it is NOT pulled forward as a pre-GO "query monad
+seam." Because this whole engine is gated on the external-validation GO,
+threading a query monad through the pipeline earlier would be speculative
+insurance against a build that may never happen, plus churn against the
+still-moving Phase 6B fact graph. The bounded call-site conversion from the
+batch/eager pipeline into queries is accepted as part of this build, post-GO.
+Do not re-open a "do the seam early" debate: the seam's only payoff is avoiding
+that conversion, and that payoff exists only if the bet validates.
+
 0. Freeze every build revision into an immutable `ProjectInputSnapshot` before
    evaluating queries.
    The snapshot owns canonical project/file/module discovery and exact file
