@@ -114,3 +114,7 @@ examples/contract_negatives/obligation_redteam/obligation_redteam
 examples/smt/policy_forbid/smt_policy_forbid
 examples/patterns/byte_ranges/byte_ranges
 examples/defer/cleanup_order/cleanup_order
+
+# Python bytecode cache (compiled test/tooling scripts)
+__pycache__/
+*.pyc
