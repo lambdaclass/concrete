@@ -1981,6 +1981,79 @@ or lost); put the heavier trace/replay/scaling machinery here.
    and publishes the handoff manifest; Phase 6C does not depend on future work.
 
 
+## Phase 6D / 6.d: Grammar And Surface Simplification
+
+Goal: remove the remaining surface special cases that make Concrete harder to
+read or maintain without weakening the semantic model hardened in Phase 6B.
+This phase is grammar hygiene, not a feature-growth phase: it should reduce
+syntax, preserve LL(1), and keep Concrete unusual only where the language's
+guarantees require it.
+
+Done when: the EBNF, parser, formatter, examples, docs, and syntax gates agree
+on the simplified surface; `scripts/check_ll1.py grammar/concrete.ebnf` stays
+green; removed forms have migration fixtures; and no semantic guarantee from
+Phase 6B regresses.
+
+Non-goals: do not redesign `if`/`match` expression semantics here, do not remove
+C-style `for` before a real iteration/range design exists, do not remove
+`borrow ... as ... in ...` unless scoped APIs fully replace it, and do not
+replace enum `#` unless a new form remains LL(1)-clean.
+
+Context: `discard(expr)` is already shipped as E0294, not a Phase 6D task. The
+shipped rule rejects bare pure non-`Unit` `Copy` non-call expression statements;
+calls are excluded because empty capability sets do not prove purity, and
+non-`Copy` values remain owned by linearity/`destroy`.
+
+1. Remove stale `fn name!` grammar if the audit confirms it has no active
+   semantic meaning.
+   The current implementation tags entry points by name, and current `.con`
+   sources do not use `fn name!`. If this spelling is truly dead grammar, delete
+   it from the EBNF/parser/formatter and add a negative parse fixture. If the
+   audit finds a live meaning, document that meaning and keep the syntax
+   intentionally.
+
+2. Remove value `while ... else`; keep `while` statement-only.
+   Expression-valued `while ... else` is the oddest position-sensitive control
+   form and has historically touched parser, type, lowering, and interpreter
+   behavior. Migrate the small fixture surface to explicit state or a clearer
+   later value-block design. Acceptance gate: no `whileExpr` constructor or
+   parser branch remains unless intentionally retained for compatibility, and
+   prior loop/break/continue/interp-vs-compiled gates stay green.
+
+3. Remove postfix member `p->field`; keep function return arrows.
+   Function types and declarations still use `-> T`. Only member access through
+   heap/raw/ref values should migrate from `p->field` to `p.field`. Field access
+   should auto-deref one permitted layer consistently with indexed access, and
+   unsafe/raw access must remain visible through types, capabilities, and trust
+   reports rather than a second member-access token. Acceptance gate: heap/raw
+   field reads and writes previously covered by `->` pass through `.`, while an
+   invalid field-through-non-accessible type still fails with a structured
+   diagnostic.
+
+4. Keep C-style `for` for now, and record `for-in` as a later iteration feature,
+   not Phase 6D cleanup.
+   C-style `for(init; cond; step)` is heavily used in current examples and
+   proofs. A future `for i in 0..n` / `for item in items` design would require
+   range expressions, a built-in or library iteration model, and linearity rules
+   for borrow-vs-consume iteration. Do not bundle that feature into this
+   simplification phase.
+
+5. Keep `if-let` / `while-let`, enum `#`, `borrow ... as ... in ...`, and the
+   current `if`/`match` statement-value model.
+   These forms either carry real ergonomics without macros, preserve LL(1), or
+   have extensive borrow/value-flow coverage. Revisit them only in a deliberate
+   later language-design pass with migration evidence, not as opportunistic
+   grammar cleanup.
+
+6. Add the Phase 6D validation artifact.
+   `scripts/tests/check_phase6d_surface_simplification.sh` should run the LL(1)
+   checker, parser/formatter fixtures, removed-syntax negative tests, migrated
+   heap/raw field-access fixtures, loop-control regressions, and the relevant
+   Phase 6B semantic gates. It must prove this phase reduced syntax without
+   weakening ownership, capabilities, diagnostics, or interp-vs-compiled
+   agreement.
+
+
 ## Phase 7: Standard Library And Core APIs
 
 Goal: build the small standard library people need before real workloads,
