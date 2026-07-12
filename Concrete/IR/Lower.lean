@@ -101,7 +101,12 @@ private def freshLabel (pfx : String := "bb") : LowerM String := do
 
 private def emit (inst : SInst) : LowerM Unit := do
   let s ← getState
-  setState { s with currentInsts := s.currentInsts ++ [inst] }
+  -- Accumulate REVERSED (prepend is O(1)); `terminateBlock` reverses once when it
+  -- freezes the block. The old `++ [inst]` was O(current length) per emit, i.e.
+  -- O(n^2) to build a block of n instructions — the array/many-instruction O(n^2)
+  -- (a large array literal lowers to n stores in one block). `currentInsts` is
+  -- only appended here and read at `terminateBlock`, so the reverse is local.
+  setState { s with currentInsts := inst :: s.currentInsts }
 
 /-- Coerce an SSA value to `ty` with an explicit cast when its type differs
     (e.g. an `Int` branch value into an `i32` result slot). No-op when the types
@@ -180,7 +185,8 @@ private def insertStoreBeforeTerm (blockLabel : String) (val : SVal) (dst : SVal
 
 private def terminateBlock (term : STerm) : LowerM Unit := do
   let s ← getState
-  let block : SBlock := { label := s.currentLabel, insts := s.currentInsts, term := term }
+  -- `currentInsts` is accumulated reversed by `emit`; restore program order here.
+  let block : SBlock := { label := s.currentLabel, insts := s.currentInsts.reverse, term := term }
   setState { s with blocks := s.blocks ++ [block], currentInsts := [], blockTerminated := true }
 
 private def startBlock (label : String) : LowerM Unit := do
