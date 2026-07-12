@@ -117,6 +117,20 @@ private def coerceVal (val : SVal) (ty : Ty) (pfx : String := "cast.") : LowerM 
     pure (.reg castReg ty)
   else pure val
 
+/-- Allocate a result slot for a value-bearing control-flow construct (if-expr,
+    while-expr), UNLESS the result type lowers to LLVM void: `unit`/`never` carry
+    no runtime value and `alloca void` is illegal IR (the `%ifslot = alloca void`
+    miscompile). Returns `none` when no slot is needed — the construct yields
+    `.unit`, so the caller must skip the per-branch store and the merge load. This
+    is the single unit/void guard for slot-based result materialization (the
+    analogue of the `match_` phi guard), and the first shared piece of the
+    structured control-flow builder (ROADMAP #5). -/
+private def freshResultSlot (pfx : String) (ty : Ty) : LowerM (Option String) := do
+  if ty == .unit || ty == .never then return none
+  let slot ← freshReg pfx
+  emit (.alloca slot ty)
+  return some slot
+
 /-- Static length of an array type, peeling one ref/ptr/heap layer (so `&[T; N]`
     and `[T; N]` both yield `N`). `none` for non-array types. -/
 private def arrayLenOfTy : Ty → Option Nat
@@ -1242,9 +1256,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let headerLabel ← freshLabel "while.hdr"
     let bodyLabel ← freshLabel "while.body"
     let exitLabel ← freshLabel "while.exit"
-    -- Create result slot for while-as-expression
-    let resultSlot ← freshReg "wslot."
-    emit (.alloca resultSlot _ty)
+    -- Create result slot for while-as-expression (skipped for a unit/never result
+    -- — no value to materialize, and `alloca void` is illegal IR). The break arm
+    -- and else/load paths below all guard on this being `some`.
+    let resultSlot? ← freshResultSlot "wslot." _ty
     let preLoopVars ← snapshotVars
     let preLoopLabel ← getCurrentLabel
     let mut headerPhis : List (String × String × SVal × Ty) := []
@@ -1278,7 +1293,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       headerLabel := headerLabel
       exitLabel := exitLabel
       headerPhis := headerPhis
-      resultSlot := some resultSlot
+      resultSlot := resultSlot?
       resultTy := _ty
     }
     pushLoop loopInfo
@@ -1355,9 +1370,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       startBlock elseBlockLabel
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
-        let elseVal ← lastExprVal _elseBody _ty
-        let elseVal ← coerceVal elseVal _ty "ecast."
-        emit (.store elseVal (.reg resultSlot _ty))
+        match resultSlot? with
+        | some slot =>
+          let elseVal ← lastExprVal _elseBody _ty
+          let elseVal ← coerceVal elseVal _ty "ecast."
+          emit (.store elseVal (.reg slot _ty))
+        | none => pure ()
       terminateBlock (.br finalLabel)
       -- Final block: load result
       startBlock finalLabel
@@ -1370,9 +1388,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           removePromotedAllocas [name]
           setVar name (.reg loadDst ty)
         | none => pure ()
-      let loadDst ← freshReg "wload."
-      emit (.load loadDst (.reg resultSlot _ty) _ty)
-      return .reg loadDst _ty
+      match resultSlot? with
+      | some slot =>
+        let loadDst ← freshReg "wload."
+        emit (.load loadDst (.reg slot _ty) _ty)
+        return .reg loadDst _ty
+      | none => return .unit
     else
       -- No breaks: simple exit
       startBlock exitLabel
@@ -1392,22 +1413,28 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- to the result type as in the break path.
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
-        let elseVal ← lastExprVal _elseBody _ty
-        let elseVal ← coerceVal elseVal _ty "ecast."
-        emit (.store elseVal (.reg resultSlot _ty))
+        match resultSlot? with
+        | some slot =>
+          let elseVal ← lastExprVal _elseBody _ty
+          let elseVal ← coerceVal elseVal _ty "ecast."
+          emit (.store elseVal (.reg slot _ty))
+        | none => pure ()
       -- Load result from slot
-      let loadDst ← freshReg "wload."
-      emit (.load loadDst (.reg resultSlot _ty) _ty)
-      return .reg loadDst _ty
+      match resultSlot? with
+      | some slot =>
+        let loadDst ← freshReg "wload."
+        emit (.load loadDst (.reg slot _ty) _ty)
+        return .reg loadDst _ty
+      | none => return .unit
 
   | .ifExpr cond then_ else_ ty =>
     let condVal ← lowerExpr cond
     let thenLabel ← freshLabel "ifexpr.then"
     let elseLabel ← freshLabel "ifexpr.else"
     let mergeLabel ← freshLabel "ifexpr.merge"
-    -- Create result slot in the entry block
-    let resultSlot ← freshReg "ifslot."
-    emit (.alloca resultSlot ty)
+    -- Create result slot (skipped for a unit/never-typed if-expr — no value to
+    -- materialize, and `alloca void` is illegal IR).
+    let resultSlot? ← freshResultSlot "ifslot." ty
     let preIfVars ← snapshotVars
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block. Compute termination BEFORE storing the branch value: a branch
@@ -1419,9 +1446,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     lowerStmts then_
     let term1 ← currentBlockTerminated
     if !term1 then
-      let thenVal ← lastExprVal then_ ty
-      let thenVal ← coerceVal thenVal ty "ifcast."
-      emit (.store thenVal (.reg resultSlot ty))
+      match resultSlot? with
+      | some slot =>
+        let thenVal ← lastExprVal then_ ty
+        let thenVal ← coerceVal thenVal ty "ifcast."
+        emit (.store thenVal (.reg slot ty))
+      | none => pure ()
     let thenEndVars ← snapshotVars
     let thenEndLabel ← getCurrentLabel
     if !term1 then
@@ -1433,9 +1463,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     lowerStmts else_
     let term2 ← currentBlockTerminated
     if !term2 then
-      let elseVal ← lastExprVal else_ ty
-      let elseVal ← coerceVal elseVal ty "ifcast."
-      emit (.store elseVal (.reg resultSlot ty))
+      match resultSlot? with
+      | some slot =>
+        let elseVal ← lastExprVal else_ ty
+        let elseVal ← coerceVal elseVal ty "ifcast."
+        emit (.store elseVal (.reg slot ty))
+      | none => pure ()
     let elseEndVars ← snapshotVars
     let elseEndLabel ← getCurrentLabel
     if !term2 then
@@ -1476,10 +1509,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           else match incoming with
             | [(val, _)] => setVar name val
             | _ => pure ()
-    -- Load result from slot
-    let loadDst ← freshReg "ifload."
-    emit (.load loadDst (.reg resultSlot ty) ty)
-    return .reg loadDst ty
+    -- Load result from slot (a unit/never if-expr has no slot — yields unit).
+    match resultSlot? with
+    | some slot =>
+      let loadDst ← freshReg "ifload."
+      emit (.load loadDst (.reg slot ty) ty)
+      return .reg loadDst ty
+    | none => return .unit
 
 /-- Extract a value from the last statement of a body, for phi nodes.
     Uses the __last_expr var that lowerStmt(.expr) sets. -/

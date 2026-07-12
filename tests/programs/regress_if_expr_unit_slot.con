@@ -1,0 +1,9 @@
+// Regression (ROADMAP #5): a unit-typed if-EXPRESSION in value position (here a
+// let-RHS whose branches are assignments, so the if yields unit) must not emit
+// `%ifslot = alloca void` — illegal LLVM IR. match_ already guarded this; if/
+// while-expr did not until the shared `freshResultSlot` unit/void guard landed.
+fn main() -> Int {
+    let mut acc: Int = 0;
+    let u = if acc == 0 { acc = 5; } else { acc = 9; };
+    return acc;
+}

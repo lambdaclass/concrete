@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Structured control-flow builder, slice 1 — `alloca void` hole closed (2026-07-12)
+
+First slice of the Lower/SSA structured control-flow builder (ROADMAP #5),
+bug-class-pulled. A unit/never-typed **if-expression or while-expression in value
+position** — e.g. `let u = if c { acc = 5; } else { acc = 9; };` — emitted
+`%ifslot = alloca void` (illegal LLVM IR) and failed codegen. The 2026-06-18
+changelog entry "fixed" this only in Elab (inferring a hintless if's type from its
+branches so a unit-typed if wouldn't *reach* Lower); the structural hole in Lower
+survived and stayed reachable (any value-position if/while-expr whose branches are
+statements is unit-typed). `match_` already guarded it; if/while-expr did not.
+
+The fix introduces `freshResultSlot` in `Concrete/IR/Lower.lean` — the single
+unit/void guard for slot-based result materialization (returns `none` for
+`unit`/`never`, so callers skip the per-branch store and the merge load). Both
+`lowerExpr.ifExpr` and `lowerExpr.whileExpr` now route their result slot through
+it (`LoopInfo.resultSlot` was already `Option`, and the break arm already guarded
+it). This is the first shared piece of the builder — consolidating the three
+inconsistent result-materialization idioms (alloca-slot for if/while/short-circuit,
+phi for match) is future work, pulled incrementally by bugs rather than a big-bang
+rewrite. Regressions: `tests/programs/regress_{if,while}_expr_unit_slot.con`.
+
 ### Phase 6B completed semantic-axis items moved out of the active roadmap (2026-07-11)
 
 The fully completed Phase 6B / 6.5 compiler-pipeline items were moved from

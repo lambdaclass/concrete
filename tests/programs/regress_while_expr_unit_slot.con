@@ -1,0 +1,8 @@
+// Regression (ROADMAP #5): a unit-typed while-EXPRESSION in value position must
+// not emit `%wslot = alloca void`. Same shared `freshResultSlot` guard.
+fn main() -> Int {
+    let mut i: Int = 0;
+    let mut acc: Int = 0;
+    let u = while i < 3 { i = i + 1; acc = acc + i; } else { };
+    return acc;
+}
