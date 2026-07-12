@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Elab.Core
 import Concrete.Resolve.Shared
 import Concrete.Check.Layout
@@ -329,6 +330,11 @@ private def inferTypeArgs (typeParams : List String) (formalParams : List (Strin
 structure MonoState where
   /-- All original function definitions (for lookup). -/
   allFns : List CFnDef
+  /-- name → definition index, built once from `allFns` (keeps the FIRST
+      occurrence, matching the old `allFns.find?`). O(1) call resolution: the
+      per-call linear `allFns.find?` was O(fns) per call site, i.e. O(fns^2) to
+      monomorphize a program of mutually-calling functions. -/
+  fnMap : Std.HashMap String CFnDef := ∅
   /-- Linker aliases from all modules (local name → prefixed definition name). -/
   linkerAliases : List (String × String) := []
   /-- Queue of monomorphized functions to process. -/
@@ -340,13 +346,13 @@ abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
 private def lookupFn (name : String) : MonoM (Option CFnDef) := do
   let st ← get
-  -- Try direct lookup first
-  match st.allFns.find? fun f => f.name == name with
+  -- Try direct lookup first (O(1) via fnMap)
+  match st.fnMap.get? name with
   | some f => return some f
   | none =>
     -- Try resolving through linker aliases (e.g., HashMap_contains → map_HashMap_contains)
     match st.linkerAliases.lookup name with
-    | some resolvedName => return st.allFns.find? fun f => f.name == resolvedName
+    | some resolvedName => return st.fnMap.get? resolvedName
     | none => return none
 
 /-- Get names of all generic functions (non-empty typeParams). -/
@@ -879,7 +885,11 @@ private partial def monoStructsInProgram (modules : List CModule) : List CModule
 def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
   let allFns := modules.foldl (fun acc m => acc ++ collectAllModuleFns m) []
   let allAliases := modules.foldl (fun acc m => acc ++ collectAllModuleAliases m) []
-  let initState : MonoState := { allFns := allFns, linkerAliases := allAliases }
+  -- Build the name→def map once, keeping the FIRST occurrence (matches the old
+  -- `allFns.find?` semantics) — O(1) call resolution instead of O(fns) per call.
+  let fnMap : Std.HashMap String CFnDef :=
+    allFns.foldl (fun m f => if m.contains f.name then m else m.insert f.name f) ∅
+  let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms => .ok (monoStructsInProgram ms)
