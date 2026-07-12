@@ -51,7 +51,7 @@ def flagValue (args : List String) (name : String) : Option String :=
 end Cli
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--emit-trace-json] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit|arithmetic] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--emit-trace-json] [--trace-pipeline] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit|arithmetic] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -156,6 +156,55 @@ def traceTelemetry (inputPath : String) : IO UInt32 := do
     return 1
   | .ok ssa =>
   IO.println (Pipeline.telemetryJson git validCore mono ssa 0)
+  return 0
+
+/-- Phase 6C #3: per-stage pipeline trace as JSON. Runs the pipeline stage by
+    stage, recording which stages passed and — for a rejected program — the FIRST
+    stage that failed plus its diagnostic code. An accepted program reports every
+    stage `ok` plus the telemetry counts. Backs `concrete <file> --trace-pipeline`. -/
+def tracePipeline (inputPath : String) : IO UInt32 := do
+  let source ← readFile inputPath
+  let git ← compilerIdentity
+  let firstCode : Diagnostics → String := fun ds => match ds.head? with | some d => d.code | none => ""
+  let emit := fun (okRev : List String) (fail : Option (String × String)) (counts : String) =>
+    IO.println (Pipeline.traceJson git inputPath okRev.reverse fail counts)
+  match Pipeline.parse source with
+  | .error ds => emit [] (some ("parse", firstCode ds)) "null"; return 0
+  | .ok parsed =>
+  let ok := ["parse"]
+  let baseDir := let parts := inputPath.splitOn "/"
+    match parts.reverse with | _ :: rest => "/".intercalate rest.reverse | [] => "."
+  match ← Pipeline.resolveFiles baseDir parsed inputPath resolveAllModules with
+  | .error ds => emit ok (some ("resolve-files", firstCode ds)) "null"; return 0
+  | .ok (resolved, _) =>
+  let ok := "resolve-files" :: ok
+  let summary := Pipeline.buildSummary resolved
+  match Pipeline.resolve resolved summary with
+  | .error ds => emit ok (some ("resolve", firstCode ds)) "null"; return 0
+  | .ok resolvedProg =>
+  let ok := "resolve" :: ok
+  let resolvedProg := Pipeline.desugar resolvedProg
+  match Pipeline.check resolvedProg summary with
+  | .error ds => emit ok (some ("check", firstCode ds)) "null"; return 0
+  | .ok () =>
+  let ok := "check" :: ok
+  match Pipeline.elaborate resolvedProg summary with
+  | .error ds => emit ok (some ("elaborate", firstCode ds)) "null"; return 0
+  | .ok elabProg =>
+  let ok := "elaborate" :: ok
+  match Pipeline.coreCheck elabProg with
+  | .error ds => emit ok (some ("coreCheck", firstCode ds)) "null"; return 0
+  | .ok validCore =>
+  let ok := "coreCheck" :: ok
+  match Pipeline.monomorphize validCore with
+  | .error ds => emit ok (some ("monomorphize", firstCode ds)) "null"; return 0
+  | .ok mono =>
+  let ok := "monomorphize" :: ok
+  match Pipeline.lower mono with
+  | .error ds => emit ok (some ("lower", firstCode ds)) "null"; return 0
+  | .ok ssa =>
+  let ok := "lower" :: ok
+  emit ok none (Pipeline.telemetryJson git validCore mono ssa 0)
   return 0
 
 /-- Compile via SSA pipeline: Parse → Resolve → Check → Elab → CoreCanonicalize → CoreCheck → Mono → Lower → SSAVerify → SSACleanup → EmitSSA → clang -/
@@ -2075,6 +2124,8 @@ def main (args : List String) : IO UInt32 := do
     compileAndEmit inputPath "ssa-unverified"
   | [inputPath, "--emit-trace-json"] =>
     traceTelemetry inputPath
+  | [inputPath, "--trace-pipeline"] =>
+    tracePipeline inputPath
   | [inputPath, "-o", outputPath] =>
     compileSSA inputPath outputPath false
   | [inputPath, "--check", checkType] =>

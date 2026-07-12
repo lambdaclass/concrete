@@ -405,5 +405,36 @@ def telemetryJson (compiler : String) (core : ValidatedCore)
      ++ "\"diagnostics\":" ++ toString diagnostics
      ++ rb
 
+-- ============================================================
+-- Phase 6C #3: per-stage pipeline trace (`concrete trace-pipeline --json`)
+-- ============================================================
+
+/-- Build the pipeline-trace JSON. `okStages` are the stages that passed, in
+    order; `fail` names the FIRST failing stage and its diagnostic code (`none`
+    for an accepted program); `counts` is a telemetry-JSON body (or `"null"`).
+    The point of the trace is to name the first phase that introduced/preserved/
+    rejected the relevant fact — `firstFailingStage` for a rejected program, all
+    stages `ok` for an accepted one. -/
+def traceJson (compiler input : String) (okStages : List String)
+    (fail : Option (String × String)) (counts : String) : String :=
+  let esc := fun (t : String) => t.replace "\\" "\\\\" |>.replace "\"" "\\\""
+  let lb := "{"; let rb := "}"
+  let okJsons := okStages.map (fun s =>
+    lb ++ "\"stage\":\"" ++ s ++ "\",\"status\":\"ok\"" ++ rb)
+  let failJsons := match fail with
+    | some (s, c) => [lb ++ "\"stage\":\"" ++ s ++ "\",\"status\":\"error\",\"code\":\"" ++ esc c ++ "\"" ++ rb]
+    | none => []
+  let stageArr := "[" ++ String.intercalate "," (okJsons ++ failJsons) ++ "]"
+  let outcome := if fail.isSome then "rejected" else "accepted"
+  let failStage := match fail with | some (s, _) => "\"" ++ s ++ "\"" | none => "null"
+  lb ++ "\"schema\":\"concrete.pipeline.trace.v1\","
+     ++ "\"compiler\":\"" ++ esc compiler ++ "\","
+     ++ "\"input\":\"" ++ esc input ++ "\","
+     ++ "\"outcome\":\"" ++ outcome ++ "\","
+     ++ "\"firstFailingStage\":" ++ failStage ++ ","
+     ++ "\"stages\":" ++ stageArr ++ ","
+     ++ "\"counts\":" ++ counts
+     ++ rb
+
 end Pipeline
 end Concrete

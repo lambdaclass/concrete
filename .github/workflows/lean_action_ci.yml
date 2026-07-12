@@ -441,6 +441,9 @@ jobs:
       - name: "O(n^2) append ratchet (no new `xs ++ [x]` in hot pipeline files)"
         run: bash scripts/tests/check_no_quadratic_append.sh
 
+      - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
+        run: bash scripts/tests/check_trace_pipeline.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
