@@ -43,6 +43,11 @@ document as one queue:
    workload: Gleam-sized coherence first, Zig-style allocator/authority
    explicitness, Rust/Ada/SPARK-style safety/proof discipline, and Go/Odin
    breadth only after workload pressure;
+5a. after the stdlib/workload slab exists and the external-validation gate
+   returns **GO**, turn the stable compiler facts into a real incremental
+   artifact engine: persistent typed queries, conservative dependency
+   invalidation, content-addressed reuse, cached codegen units, and one driver
+   shared by build/check/test/prove/audit/LSP;
 6. finish remaining proof-authoring cleanup: colocate example Lean proofs with
    their Concrete examples, keep generated proof workspaces source-linked and
    replayable, and leave the deeper `ProofCore` / spec-registry split deferred
@@ -58,12 +63,26 @@ document as one queue:
 Cross-cutting items that must stay visible while the linear queue advances:
 
 - **Compiler pipeline spine:** Phase 6B establishes semantic truth ("one meaning
-  per program"), Phase 6C makes that truth observable/replayable, Phase 8
-  validates it on external-facing examples, Phase 9 measures and reduces proof
-  cost, Phases 10-14 turn evidence into source/proof/release claims, and Phase
-  15 validates the backend boundary. Do not let later proof/backend/tooling work
-  bypass this order: semantic facts first, observability second, external
-  validation third, proof/evidence/backend validation after that.
+  per program") and structured validation records, Phase 6C makes that truth
+  observable/replayable and records a shadow query graph, Phase 8 validates the
+  bet on external-facing examples, and Phase 8.5 turns the graph into the real
+  incremental artifact driver only after a GO verdict. Phase 9 measures and
+  reduces proof cost; Phases 10-14 turn evidence into source/proof claims and
+  extract the independent Core-certificate checker; Phase 15 extends independent
+  checking across the BackendIR translation slice; Phase 17 binds checked
+  artifacts into release roots; Phases 18-19 reuse the same graph for packages
+  and editor tooling. Do not let later proof/backend/tooling work bypass this
+  order: semantic facts first, observability second, external validation third,
+  incremental reuse fourth, independently checked evidence after that.
+- **Incremental / certificate trust split:** Phase 8.5 cache reuse is initially
+  a compiler optimization over strict successful artifacts, guarded by
+  conservative over-invalidation and clean-vs-incremental equivalence. A cache
+  hit is not a proof and cannot upgrade an evidence class. Phase 14's independent
+  checker first makes canonical Core artifacts and their transport/cache
+  untrusted for the named `CoreCertificateV1` predicate; Phase 15 extends that
+  statement only through the supported BackendIR translation slice. Parser,
+  resolver, source-to-Core correspondence outside proved rules, LLVM, linking,
+  runtime, OS, and hardware remain explicitly trusted until separately checked.
 - **Pattern ergonomics and daily language friction** live in Phase 6 #5 and #7:
   match guards, OR patterns, `if let` / `while let`, match-on-reference,
   the no-tuples decision, struct update, wildcard destructuring, and `defer` /
@@ -109,7 +128,7 @@ something real to run. The compiler-pipeline transcript
 (now tracked across Phases 10/14/19); Phase 8 carries the later
 `examples/credibility_slice/packet_window/` replayable flagship.
 
-The next three verdict-deciding risks get early, narrow probes rather than
+The next four verdict-deciding risks get early, narrow probes rather than
 waiting for their full later phases. Each probe must name a minimal scope, an
 early trigger, and the later phase that owns the full version:
 
@@ -138,6 +157,15 @@ early trigger, and the later phase that owns the full version:
    translation validation. The probe exists to learn early whether Concrete's
    source/Core evidence can cross the backend boundary; anything outside the
    slice remains explicitly backend-trusted.
+4. **Iterative pipeline scale:** near-term probe = Phase 6C's shadow query and
+   invalidation transcript over one Phase 8 workload. Minimal scope: unchanged
+   rebuild, comment/span edit, private-body edit, public-interface edit,
+   contract/spec edit, policy edit, and target/profile edit; show which
+   file/module/function/obligation/codegen facts would be reused or invalidated,
+   but do not reuse them yet. Trigger: stable fact IDs, deterministic canonical
+   summaries, and the Phase 6B dependency/invalidation contracts. Full home:
+   Phase 8.5's persistent incremental artifact driver, and only after the
+   external-validation gate says the project is worth scaling.
 
 Every phase must leave behind checked evidence that it works. A phase item is
 not complete because code exists; it is complete when the behavior has positive
@@ -337,8 +365,10 @@ user needs *some* slab to write anything real. So the gate is:
    `Option<i32>` is legal for the right reason), and the **H12 std migration**
    (Phase 7 #38b): the trial evaluates enforcement claims against a stdlib
    that is checked like user code.
-3. **Run the trial and treat the result as an explicit go / no-go on the rest
-   of Phases 11-19.**
+3. **Run the trial and treat the result as an explicit go / no-go on Phase 8.5
+   and the rest of Phases 11-19.** The persistent incremental driver is a large
+   investment in scaling the bet; its Phase 6B/6C prerequisites and shadow
+   transcript may land before the verdict, but cache activation does not.
 
 The trial should be implemented as the first external-user workload in the
 Phase 8 real-workload ladder, after the Phase 5 core slab and Phase 7
@@ -350,21 +380,26 @@ the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
 cost. Until this passes, the back half of Phases 11-19 is flagged **at-risk**,
 not green.
 
-**Scope of the gate.** Phases 8-10 (flagships, proof authoring, audit commands)
-are NOT gated — they proceed regardless, because they are what the trial runs
-on and what a negative result would teach against. A **fail** verdict does not
-silently park Phases 11-19 either: it forces an explicit decision recorded in
+**Scope of the gate.** Phases 8, 9, and 10 (flagships, proof authoring, audit
+commands) are NOT gated — they proceed regardless, because they are what the
+trial runs on and what a negative result would teach against. Phase 8.5 is
+explicitly gated: do not turn the shadow graph into a persistent cache/build
+engine unless the trial returns GO. A **fail** verdict does not silently park
+Phase 8.5 or Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
-audience, or stop — before any Phase 11+ item may start.
+audience, or stop — before Phase 8.5 or any Phase 11+ item may start.
 
 If the trial fails because human proof authoring is too expensive, the next
 experiment is not "verification failed as a product idea." Run the same
-workload through the Phase 9 LLM-guided proof-synthesis loop and measure review
-cost instead of authoring cost: the non-author reviews the spec, assumptions,
-and replayed evidence while the tool/agent searches for invariants, lemmas, and
-proof scripts under kernel verification. The gate result should distinguish
-"the discipline is not worth it even with synthesis" from "manual proof
-authoring is not worth it."
+workload through the narrow Phase 9 LLM-guided proof-synthesis **probe**, pulled
+forward into this trial, and measure review cost instead of authoring cost; do
+not wait for or start the whole Phase 9 queue merely to settle the Phase 8.5
+trigger. The non-author reviews the spec, assumptions, and replayed evidence
+while the tool/agent searches for invariants, lemmas, and proof scripts under
+kernel verification. Record the final GO/NO (or an explicit decision to reject/
+defer Phase 8.5) before the Phase 8 slot closes. The gate result should
+distinguish "the discipline is not worth it even with synthesis" from "manual
+proof authoring is not worth it."
 
 ### Stdlib runway checkpoint (recorded 2026-07-07)
 
@@ -908,7 +943,9 @@ Done when: shared type/policy/evaluation/effect decisions live in one place,
 every major stage states and checks its invariants, new syntax cannot bypass
 walker coverage, production/verification/test paths use the same composed
 pipeline unless explicitly justified, and pipeline debugging/reporting can
-explain where a fact was introduced or lost.
+explain where a fact was introduced or lost. Cacheable stage boundaries also
+emit structured producer validation records and a versioned chain contract,
+without claiming independent certification.
 
 Design rule for this phase: borrow the useful workflow lessons from Zig, Rust,
 Odin, SPARK, and Lean, but not their hidden ambiguity. Concrete should keep
@@ -929,7 +966,11 @@ The item numbers in this phase are ordered within the phase and may be
 renumbered when the phase is reorganized. Keep cross-references updated in the
 same change, and use subsection headings to make the dependency order clear.
 At this point the Phase 6B / 6C plan is frozen unless implementation exposes a
-real missing invariant. The execution frontier is: finish
+real missing invariant. Item #14a is the one recorded exception: planning the
+incremental/certifying path exposed that a stage token plus a `Unit`-returning
+verifier is not yet a portable validation record, so the record/chain contract
+must exist before later phases cache those artifacts. The execution frontier is
+still: finish
 `CopyJudgment` / `InstantiationJudgment` first, because `Copy` feeds ownership;
 then build `OwnershipJudgment` / `ValueFlowJudgment`, because it is the
 memory-safety axis; then ship `diff-caps` as the first external-facing
@@ -1519,7 +1560,9 @@ hidden alternate pipelines.
 
    Done when `concrete trace-pipeline --json` can show why a proof obligation,
    capability fact, diagnostic, or backend artifact changed, and a replay gate
-   marks dependent facts stale when an upstream source/fact hash changes.
+   marks dependent facts stale when an upstream source/fact hash changes. Phase
+   6C exercises this graph in cache-free shadow mode; Phase 8.5, after the
+   external GO verdict, is the only owner of persistent reuse and scheduling.
 
 13. Add pass locality and mutation rules.
    Borrow the MLIR lesson: each pass declares what IR level it may inspect, what
@@ -1536,13 +1579,63 @@ hidden alternate pipelines.
 14. Add analysis preservation and invalidation contracts.
    Once facts are cached or reused, every pass must state which facts it reads,
    writes, preserves, and invalidates. This is the guardrail that prevents
-   future incremental checking, proof caching, package facts, or editor facts
+   Phase 8.5 incremental checking, proof caching, package facts, or editor facts
    from becoming a stale second truth source.
 
    Done when a pass that changes Core invalidates dependent CoreCheck, proof,
    report, and backend facts; a pass that only changes source spans preserves
    type/capability facts but invalidates source-linked diagnostics; and a gate
    proves stale facts cannot remain green after an invalidating pass.
+
+14a. Define the structured validation-record and certificate-chain contract
+    before compiler artifacts become persistently cacheable.
+
+    Today a boundary such as `ValidatedCore` means "the in-process checker ran,"
+    while the underlying checker returns `Unit` and the wrapper carries no
+    machine-readable account of what was checked. Replace that shape
+    incrementally with versioned **producer validation records**. At minimum a
+    record names the canonical subject/artifact id and digest, input and
+    dependency ids/digests, compiler/schema/target/profile identity, verifier
+    and invariant-set version, producer-claimed checked/unsupported predicates,
+    diagnostics, source/provenance roots, referenced evidence classes, and
+    replay command. The **consumer boundary**, not the producer, owns the
+    required predicate set for an invariant-set version: omitting a required
+    predicate cannot still construct the boundary. CoreCheck,
+    post-Mono verification, SSA verification, and later BackendIR verification
+    should return or attach these records rather than only `Unit`.
+
+    Terminology is load-bearing: a producer record from the same compiler is
+    in pipeline state `compiler_validated`; that is not an evidence class, may
+    not satisfy a proof/package/verified-profile policy, is not independently
+    certified, and does not make the compiler untrusted. Reserve
+    `certificate_structurally_checked` for a
+    predicate recomputed by Phase 14's independent checker,
+    `translation_validated_v1` for Phase 15's checked input/output relation, and
+    `kernel_replayed` for an artifact-specific theorem actually replayed by
+    Lean's kernel. Never emit an unqualified `certified` status. Unsupported
+    regions remain `unsupported`, `translation_trusted`, or `trusted`.
+
+    Define the chain shape now so Phase 8.5 can serialize/cache without inventing
+    a cache-only truth source:
+    `source/input roots -> typed Core + relational facts -> obligations/proofs ->
+    mono/SSA -> BackendIR -> emitted/link artifact`. Each edge names the exact
+    dependency relation, invalidation owner, and relation status:
+    `identity_bound_only`, `producer_validated`, or the specific independently
+    checked predicate/relation. A digest proves identity only for dependencies
+    present in the chain; merely naming an edge does not validate its claimed
+    relation, prove dependency completeness, or prove semantic correctness.
+
+    Deliverable: `docs/COMPILER_CERTIFICATES.md`, versioned record types, and
+    `scripts/tests/check_validation_records.sh`. Gate missing invariant rows,
+    subject/certificate swapping, changed dependency hashes, duplicate ids,
+    unsupported predicates mislabeled as checked, and a downstream artifact
+    whose validation record does not bind the exact upstream digest. Include a
+    coordinated-forgery negative where artifact, producer record, digests, and
+    dependency list agree internally while encoding a false semantic claim;
+    the result must remain only producer/compiler-trusted rather than acquiring
+    an independent status. Canonical
+    cross-process serialization and cache activation remain Phase 8.5;
+    independent checking remains Phase 14/15.
 
 ### Value Flow, Builtins, Reports, And Pipeline Composition
 
@@ -1775,7 +1868,8 @@ or proof work show that the structure is now the limiting factor.
     central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
     `OwnershipJudgment` / `ValueFlowJudgment`, `TotalityJudgment`,
     judgment-contract enforcement, stage contracts, capability facts, stable fact
-    IDs, fact dependencies, pass locality, invalidation,
+    IDs, fact dependencies, pass locality, invalidation, structured producer
+    validation records, the versioned certificate-chain contract,
     certificate-carrying IR, destination-passing/value flow, intrinsic registry,
     `CompilerDB`,
     no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
@@ -1790,9 +1884,10 @@ Goal: make the already-unified pipeline inspectable, replayable, and scalable
 under real workloads without keeping Phase 6B open-ended.
 
 Done when: compiler-owned telemetry, scaling checks, trace output, minimized
-counterexamples, gate mutation tests, and pass-output replay artifacts exist as
-tooling around the pipeline. Phase 6C must not add new semantic truth sources; it
-observes and replays facts owned by Phase 6B and later phases.
+counterexamples, gate mutation tests, pass-output replay artifacts, and a
+cache-free shadow query/invalidation manifest exist as tooling around the
+pipeline. Phase 6C must not add new semantic truth sources or reuse compiled
+results; it observes and replays facts owned by Phase 6B and later phases.
 
 This phase was split out of Phase 6B because these tools are valuable but do not
 gate Phase 6B's core criterion: one opinion per program. Keep the minimal
@@ -1851,6 +1946,33 @@ or lost); put the heavier trace/replay/scaling machinery here.
     report facts. Same source, compiler version, target triple, profile, and
     dependency set must produce stable pass-output hashes unless a field is
     explicitly marked nondeterministic and excluded from the hash.
+
+7. Add a cache-free incremental shadow manifest and edit corpus.
+   `concrete trace-pipeline --incremental-shadow <prior-manifest> --json` (or an
+   equivalent internal test surface) records the future typed query key/kind and
+   owner, semantic input digest, dependency keys/digests, output digest,
+   cacheability reason, validation-record id, and
+   `would_reuse | would_invalidate` verdict. It must still recompute the fresh
+   batch result every time; Phase 6C stores manifests and hashes, never reusable
+   compiler artifacts. Compare every predicted hit with the recomputed digest;
+   a false hit is a hard failure and a missing dependency edge must be
+   minimizable to the responsible edit.
+
+   Cover no-op, comment/span-only, private-body, public signature/type,
+   capability/contract/spec, generic instantiation, target/profile/policy,
+   file add/delete/rename, dependency-interface, and error-then-repair edits.
+   The first model may conservatively over-invalidate. It may become finer only
+   when a gate demonstrates dependency completeness for that query family.
+   Mutate away one import, call, proof, policy, and target dependency edge and
+   prove the shadow comparison catches every false reuse. Wire
+   `scripts/tests/check_incremental_shadow.sh`.
+
+8. Add the Phase 6C validation artifact.
+   `scripts/tests/check_phase6c_observability.sh` runs telemetry, complexity
+   slopes, trace/replay, minimization, mutation testing, deterministic pass
+   hashes, and the shadow edit corpus over a small project plus one Phase 8
+   workload. It publishes the cold baseline, predicted invalidation sets, and
+   query-family census that Phase 8.5 must use; it does not enable caching.
 
 
 ## Phase 7: Standard Library And Core APIs
@@ -2405,7 +2527,8 @@ depends on it.
     report (`WORKLOAD_REPORT.md` or manifest fields) naming: missing stdlib
     APIs, painful syntax, ownership/copy friction, error-handling friction,
     proof/contract friction, runtime trap/debug friction, capability/authority
-    surprises, docs/tooling gaps, and which later roadmap item should absorb
+    surprises, cold and representative edit/rebuild latency, predicted Phase 6C
+    invalidation fanout, docs/tooling gaps, and which later roadmap item should absorb
     each lesson. A workload is not complete if it only builds; it must either
     feed the linear roadmap or prove that no new item is needed.
     Sequence:
@@ -2508,7 +2631,212 @@ depends on it.
     coverage, property-test/counterexample-regression coverage where relevant,
     runtime-obligation audit, trust/assumption classification, and release-CI
     replay. The first external-user workload in this dashboard is the
-    external-validation-gate trial.
+    external-validation-gate trial. Also publish representative cold pipeline
+    timings and Phase 6C shadow invalidation traces for no-op, private-body,
+    public-interface, proof/contract, policy, and target edits; those traces are
+    the workload-derived input to Phase 8.5, not a cache implementation here.
+
+## Phase 8.5 / 8B: Incremental Compiler Driver And Artifact Reuse
+
+Goal: make unchanged compiler, proof, report, and backend work reusable without
+creating a second semantic pipeline or letting stale evidence remain green.
+
+Trigger: start implementation only after the Phase 8 external-validation gate
+returns **GO**, Phase 6B has stable identities/dependency/invalidation contracts
+and structured validation records, Phase 6C's shadow edit corpus is green, and
+at least one medium Phase 8 workload is large enough to choose granularity from
+measurements rather than toy programs.
+
+**Conditional phase rule.** The roadmap remains linear. After Phase 8, a GO
+verdict executes this phase before Phase 9. A NO verdict must produce the
+required decision record and mark Phase 8.5 explicitly
+`rejected-by-validation` or `deferred-by-decision` before Phase 9 proceeds; this
+slot may not remain silently blocked while later work advances. A later reversal
+requires a new forcing workload and recorded decision.
+
+Prerequisites: Phase 6B determinism, one composed pipeline, stable fact IDs,
+dependency graph, pass locality/invalidation, and validation-record contract;
+Phase 6C telemetry/replay/shadow manifests; Phase 8 workload edit traces. The
+general engine must land before Phase 9's proof cache so proof reuse does not
+become a second private database.
+
+Non-goals for V1: no per-token/per-expression query graph, no Datalog or
+user-facing rule language, no public long-term compatibility promise for the
+opaque internal cache encoding, no remote cache, and no evidence upgrade from a
+cache hit or hash match. Start serial and conservatively module/function-grained;
+refine granularity and add parallelism only after measurements and equivalence
+gates justify them.
+
+Done when: clean, incremental-off, incremental-on, and verify/dual-run modes
+produce the same facts, diagnostics, obligations, reports, Core/SSA/LLVM
+behavior, and native result; the edit matrix proves conservative bounded
+invalidation; no-op and leaf edits reuse semantic and object artifacts; cache
+corruption/schema/tool drift recompute or fail closed; and no cached partial or
+stale artifact can fabricate a validated boundary or stronger evidence class.
+
+1. Define one typed query/artifact contract and one `CompilerSession` driver.
+   Add a closed `QueryKey` family and typed result envelope containing subject
+   identity, canonical output digest, dependency keys/digests, validation-record
+   identity, diagnostics/fact ids, provenance, cacheability, evidence class,
+   replay command, and dependency-root digest. Required initial families:
+
+   - file: source/lex/parse/interface-summary/body;
+   - module: resolve/check/elaborate/CoreCheck;
+   - function or explicit SCC: calls, ownership/capabilities/effects, ProofCore,
+     obligations, discharge inputs, and typed report facts;
+   - monomorphized instance: stable definition id + canonical type arguments;
+   - codegen unit: lower/SSA verify/backend emission/object;
+   - project: module graph, reachability, policy aggregation, link plan, and
+     release/bundle view.
+
+   Expose `--incremental=off|on|verify` (or equivalent internal modes). Strict,
+   tolerant, audit, proof, test, report, and codegen operations are demand sets
+   over the same stage functions, never alternate pipelines. Formatting,
+   redaction, proof-tool, target, profile, and policy inputs invalidate only
+   query families that declare them. The eager `off` mode remains the oracle
+   and debugging path.
+
+2. Add deterministic indexed compiler data and linear-time builders before
+   persisting today's hot whole-program scans.
+   Introduce measured `ProgramIndex`/`OrderedIndex`-style structures for modules,
+   symbols, types, functions, layouts, obligations, stable-id lookup, reverse
+   imports/calls, and monomorphized users. Maps/intern tables may serve lookup;
+   canonically ordered arrays/lists own iteration, serialization, and output so
+   hash-table order never leaks. Use dense arrays where stable ids permit them
+   and builders/reverse accumulation for large strings and collections.
+
+   This is profiler-driven, not a blanket ban on `List`: replace hot repeated
+   `find?`/`contains`, `acc ++ [x]`, growing-string append, and repeated global
+   scans selected by Phase 6C telemetry and bug 027's corpus. Add duplicate-key
+   and index-finalization verifiers, plus a mutation that reintroduces a
+   quadratic builder and must fail the scaling gate.
+
+3. Make reusable frontend artifact boundaries operational.
+   Add or validate durable `ParsedFile`, split `InterfaceSummary` and body
+   summary, `ResolvedModule`, checked module/program artifact, elaborated module,
+   and validated Core-module boundaries. Check may no longer return only `Unit`
+   if downstream reuse needs its ownership/capability/value-flow decisions; it
+   must produce the durable facts or typed artifact that Elab and later queries
+   consume. A module query depends on its own semantic body plus imported
+   **interface** digests, so a dependency's private-body edit does not invalidate
+   importers.
+
+   Strict and tolerant/partial artifacts use different result types. A partial,
+   recovered, cancelled, or internal-error artifact cannot satisfy strict
+   codegen, proof, policy, package, or release queries. Introduce only boundaries
+   demonstrated useful by the workload; `CheckedModule` is a candidate name,
+   not permission to add a redundant typed tree.
+
+4. Implement the serial in-memory query engine and conservative
+   reverse-dependency invalidation.
+   Record every actual dependency read while evaluating a query and maintain
+   reverse edges. Initial recomputation units are file, module, function/SCC,
+   mono instance, codegen unit, and project as listed above; do not create a
+   query per expression merely because an id exists. Call/import/recursive
+   cycles are explicit SCC or fixed-point query families, not accidental query
+   recursion.
+
+   V1 uses a **complete conservative dependency envelope**. A result may be
+   reused only when that whole envelope is unchanged. A digest authenticates
+   declared inputs; it cannot detect an omitted semantic dependency. Missing a
+   reuse opportunity is acceptable; stale reuse is not. Narrow an envelope only
+   after a gate or theorem demonstrates completeness for that query family.
+
+5. Add an opaque compiler-versioned local content-addressed store under
+   `.build/concrete-cache/` (or an equivalent project-local path).
+   Keys include compiler build/internal schema, semantic input/dependency
+   digests, invariant-set version, target/data layout, build/test profile,
+   policy only where consumed, and relevant proof/backend/tool identity. Add
+   atomic writes, locking, checksums, interrupted-write recovery, size/GC policy,
+   `concrete cache status --json`, and `concrete clean --cache --dry-run`.
+
+   Serialized cache entries are untrusted bytes. Loading must follow an explicit
+   `UntrustedCached* -> decode/schema/digest/dependency/subject validation ->
+   compiler_validated artifact` API; deserialization cannot directly construct
+   `ValidatedCore`, `ValidatedSSA`, a proof result, or a release fact. Before
+   Phase 14 this still trusts the producing compiler's validation record—it is
+   not independent certification. Unknown schema/compiler/invariant versions,
+   truncated content, conflicting ids, or mismatched dependencies cause clean
+   recomputation or a loud diagnostic, never a green hit.
+
+6. Turn proof, obligation, and report work into queries rather than cached
+   rendered strings.
+   Cache per-function ProofCore extraction, call/SCC classification,
+   obligations, typed evidence/report rows, and discharge attempts. Project
+   reports are deterministic views/joins over those typed facts. A cache hit
+   preserves the original evidence class and replay provenance; it never turns
+   `tested`, `solver_trusted`, `assumed`, `trusted`, or `compiler_validated`
+   into proof. Lean, ProofKit, solver, synthesis-model, toolchain, spec,
+   theorem, dependency-fact, and policy identities affect only the query
+   families that consume them.
+
+   Fold Phase 9 #15 into this store/query namespace rather than creating a
+   second `.build/concrete-proof-cache/` database. Cache only successful strict
+   artifacts first. Negative/tolerant diagnostics, filesystem discovery,
+   environment-dependent operations, solver results, and cancelled work need
+   explicit cache contracts before reuse.
+
+7. Add stable codegen units, an object cache, and deterministic relinking.
+   V1 uses one codegen unit per source module plus stable runtime and test-harness
+   units; if a measured large module needs subdivision, use deterministic
+   stable-id buckets or explicit mono SCCs, never traversal-order chunks. Give
+   every monomorphized instance one stable owner. Each unit emits a manifest of
+   imports, exports, layouts, helpers, globals, source-map identities, trust
+   labels, and mono instances so collision/missing-symbol checks happen before
+   linking.
+
+   The object key includes validated SSA/BackendIR unit digest, backend schema,
+   target triple/data layout, optimization/debug/sanitizer profile, runtime ABI,
+   and clang/LLVM identity and flags. The link key includes canonically ordered
+   object digests plus linker/startup/runtime identities. Gate that a leaf edit
+   rebuilds only its declared reverse dependencies plus link, a warm no-op with
+   retained outputs invokes neither clang nor linker, target/toolchain changes invalidate every affected
+   object, build/test share ordinary units but not harness units, and corrupt or
+   substituted objects fail closed. Phase 15 later adds independent translation
+   checking; an object-cache hit before then remains backend/compiler-trusted.
+
+8. Add a long-lived service/watch surface over the same session, then
+   deterministic independent-query scheduling.
+   The initial engine is serial. Once serial reuse is correct, allow independent
+   file/module/codegen-unit queries to execute in parallel with cancellation and
+   bounded resources. Serial and parallel **Concrete-owned canonical**
+   artifacts/facts must be byte- and schema-equivalent; external LLVM/object
+   nondeterminism follows the explicit Phase 15 policy and must not change
+   compiler facts or native behavior. Cancellation or a worker crash must not
+   commit partial cache state. The internal service exists to preserve a session across CLI or
+   scripted edits; Phase 19's LSP must wrap this exact session rather than a
+   batch `runFrontend` or editor-only cache.
+
+9. Add cache/query observability and a conservative rollout.
+   Extend pipeline events with `executed | memory_hit | disk_hit | invalidated |
+   uncacheable`, reason, dependency ids, bytes, time, validation-record id, and
+   evidence class. Roll out `shadow -> opt-in -> CI verify/dual-run -> default-on`
+   only after each stage's corpus is green. `verify` recomputes selected hits and
+   compares canonical results; any false hit disables that query family and
+   persists a minimized regression. Audit/why/diff output may explain reuse but
+   may not cite reuse as correctness evidence.
+
+10. Add the Phase 8.5 validation artifact.
+    Create `examples/incremental_driver/`,
+    `tests/perf/compiler_pipeline/incremental_driver/edits.json`,
+    `scripts/tests/check_incremental_driver.sh`,
+    `scripts/tests/check_codegen_object_cache.sh`,
+    `scripts/tests/check_incremental_failure_recovery.sh`, and the umbrella
+    `scripts/tests/check_phase8_5_incremental.sh`.
+
+    Cover no-op; whitespace/comment; private leaf body; public
+    signature/type/capability/contract; dependency private body versus
+    interface; generic body/new instantiation; proof link/theorem/spec; policy;
+    target/profile; file add/delete/rename; syntax/type error then repair;
+    cancellation; cache truncation/corruption; schema/compiler/checker/tool
+    drift; object substitution; and serial/parallel modes. Compare
+    incremental-off/on/verify facts, diagnostics, obligations, reports,
+    Core/SSA/LLVM, native behavior, and query execution sets—not only wall time.
+    On the Phase 8 large workload, a warm no-op must execute zero semantic or
+    backend queries and a leaf edit must rebuild only declared reverse
+    dependencies. Record relative latency (target probes: at least 20x no-op and
+    5x leaf-edit versus cold median) without turning those probes into a public
+    release claim; Phase 17 owns release performance budgets.
 
 ## Phase 9: Proof Authoring And Automation
 
@@ -2675,20 +3003,23 @@ too expensive.
     source of truth so agents can discover the workflow without reading the
     repository docs.
 15. Add proof-result caching once proof artifacts and fingerprints are stable.
-    Cache key: toolchain version, source fingerprint, spec/proof link,
-    obligation id, ProofKit version, backend engine version, and policy mode.
-    Extend the key with typed-fact fingerprints and dependency-fact
-    fingerprints once Phase 6.5's `CompilerDB` / dependency graph exists. Stale
-    or dependency-mismatched entries become `needs_recheck`, never green. An
-    LLM-synthesized proof is not cached as evidence until Lean replays it.
-    Longer term, the cache should use the same stable interned fact IDs planned
-    for the compiler pipeline so obligations serialize, replay, and invalidate
-    without a second proof database.
-    Store under `.build/concrete-proof-cache/` and expose
+    This item is active only when Phase 8.5 completed after a GO verdict; if
+    Phase 8.5 was rejected/deferred, proof replay remains uncached rather than
+    growing a private workaround. Implement caching as Phase 8.5 query families in the one
+    `.build/concrete-cache/` content-addressed store, not as a separate proof
+    database. Cache key: compiler/query schema, toolchain version, source and
+    typed-Core fingerprints, spec/proof link, obligation id, dependency-fact
+    fingerprints, ProofKit version, proof/solver/synthesis engine version, and
+    policy mode where it affects the verdict. Stale or dependency-mismatched
+    entries become `needs_recheck`, never green. An LLM-synthesized proof is not
+    cacheable as evidence until Lean replays it, and a hit preserves the
+    recorded evidence class rather than upgrading it.
+    Expose
     `concrete prove --cache-status --json`. Wire
     `scripts/tests/check_proof_cache.sh`; the gate must prove cache hits do not
     mask stale source, stale theorem names, changed policies, or changed solver
-    trust settings.
+    trust settings, and that `--incremental=off|on|verify` produces identical
+    proof statuses and replay artifacts.
 16. Add simple auto-discharge for structural obligations that do not need human
     proof search. V1 shapes: reflexive field projection, tuple/struct
     constructor-destructor round trips, enum tag preservation, fixed-array
@@ -2828,7 +3159,10 @@ too expensive.
    composition, bounded quantified specs, ghost, stale, missing, partial, and
    repair cases. The gate must typecheck generated stubs, reject any
    `proof-registry.json`, and verify that failing Lean proofs map back to stable
-   obligation ids.
+   obligation ids. It must also exercise Phase 8.5 proof-query memory/disk hits,
+   stale dependency invalidation, proof-tool/policy drift, corrupt-entry
+   recovery, and cache-off/on/verify equivalence without treating a hit as
+   proof evidence.
 
 ## Phase 10: Audit Commands And Review Artifacts
 
@@ -3004,14 +3338,19 @@ five graduated flagships and one package-scale example.
 20. [relocated from closed Phase 4 — #42] Add compiler self-audit: `concrete audit
     --compiler` renders the `CompilerLedger` / `ObligationCore` as a reviewable
     bundle (ledger-from-ledger), proving the compiler's own facts are
-    audit-visible through the same surface user programs use.
+    audit-visible through the same surface user programs use. It must consume
+    Phase 8.5 typed query/fact results and show cache/query provenance separately
+    from evidence; it may not recompute a private audit-only compiler model or
+    present a cache hit as validation.
 21. Add the Phase 10 validation artifact: one package-scale audit bundle fixture
     with human and JSON output, semantic diff before/after a change, artifact
     viewer smoke test, oracle manifest, property-test manifest, persisted
     counterexample regression, spec-provenance facts, redaction check, replay
     command, and a README showing how a reviewer answers authority, proof,
     trust, assumption, and runtime-obligation questions without reading compiler
-    internals.
+    internals. Cold, warm, and cache-off audit/diff/why output must be identical
+    after normalizing timing/cache-observability fields, and corrupt/stale query
+    artifacts must recompute or fail closed.
 
 ## Phase 11: Proof Status And Trust Gates
 
@@ -3130,7 +3469,10 @@ under a stronger badge.
     `scripts/tests/check_clean_checkout_replay.sh` (the flagship corpus —
     `hmac_sha256`, `constant_time_tag` — must replay green from a pristine
     copy, and a deliberately corrupted source-vs-artifact mismatch must fail
-    loudly, not reuse the stale artifact).
+    loudly, not reuse the stale artifact). Seed Phase 8.5's local cache with a
+    stale proof result, wrong dependency root, truncated entry, and valid entry
+    from another compiler/toolchain; clean-checkout replay must reject/recompute
+    all four before any evidence becomes green.
 17. [relocated from closed Phase 3 — #15/#16 tail] Convert `--report proof-status`
     and `concrete prove`'s obligation facts from consistency-gated recompute to
     literal `ObligationCore`-ledger views — the last Phase 3 surfaces that
@@ -3143,7 +3485,9 @@ under a stronger badge.
     portfolio / disagreement handling, evidence mutation testing, axiom
     inventory and clean-checkout replay, weaker-evidence
     monotonicity, and a release gate proving each status cannot be silently
-    presented as stronger evidence.
+    presented as stronger evidence. Include cache-off/on/verify parity and
+    stale/corrupt-cache negatives so the trust gates cover the operational path
+    users actually run.
 
 ## Phase 12: Provable And Predictable Subsets
 
@@ -3413,8 +3757,26 @@ marketing claims that Concrete already matches them.
 
 Done when: each flagship-used ProofCore construct is classified as
 shape-preserved, eval/source-semantics-preserved, or still trusted; proof-report
-facts agree with compiler state; and the remaining trusted base is
-machine-readable.
+facts agree with compiler state; a small independent checker re-derives the
+named `CoreCertificateV1` predicate from canonical artifacts rather than
+trusting producer summaries; and the remaining trusted base is machine-readable.
+
+**Endgame (north star): the compiler becomes a mechanically-verified artifact,
+out of the trusted base.** The per-rule discharge below (R-01..R-21), the
+`CoreCertificateV1` independent checker, and Phase 15 #18 translation validation
+are not the finish line — they are the incremental ladder toward proving each
+pass semantics-preserving in Lean against the interpreter reference, so the
+compiler leaves the TCB entirely. Concrete is uniquely positioned for this: it
+is Lean-hosted, so the compiler's correctness proof and users' program proofs
+share ONE kernel — collapsing "trust the prover" and "trust the compiler" into a
+single trusted base no other verified-compiler effort (CompCert, CakeML) has.
+The 6B fact-centralized IR and interpreter-as-oracle are the runway: each pass
+is a clean function over committed facts with a reference semantics to prove
+against, so passes should be built PROVABLE-FIRST, not merely consistent. This
+names the endpoint so intermediate design choices bend toward it; it does not
+schedule a multi-year proof now, and it must not starve the near-term or the
+external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
+#15; the shorter path is proving the existing Lean-hosted passes here.
 
 1. Add a compiler-soundness rule-status dashboard over R-01..R-21:
    `shape-preserved`, `eval-preserved`, `source-preserved`, `trusted`, or
@@ -3529,9 +3891,9 @@ machine-readable.
     The completed Phase 6B / 6.5 `TypeJudgment` work is where the architecture
     lands, not this phase: Core `CExpr`
     is already the typed IR, and the type-axis work is to centralize the source
-    type judgment so Check and Elab stamp/read the same answer. Future
-    `CompilerDB` work owns relational, provenance, evidence, dependency, and
-    query facts when those facts are pulled. This Phase 14 item proves and
+    type judgment so Check and Elab stamp/read the same answer. The Phase 8.5
+    `CompilerDB` owns relational, provenance, evidence, dependency, and query
+    facts pulled by real consumers. This Phase 14 item proves and
     preserves that architecture. The work here is to delete remaining
     overlapping typing judgments, prove passes preserve typed Core meaning, and
     ensure proof extraction / reports / backend validation consume typed Core
@@ -3542,12 +3904,12 @@ machine-readable.
     the type carrier and should not be built just to fix source typing. Typed
     Core is the type carrier. For migrated type families, Check and Elab must
     call the shared judgment. For migrated relational/evidence families, DB
-    coverage checks apply once `CompilerDB` exists. Missing DB facts or
+    coverage checks apply to the Phase 8.5 `CompilerDB`. Missing DB facts or
     conflicting DB facts are compiler errors. Unmigrated families may still be
     absent only while their migration flag says so.
 
     The preservation split is explicit: typed Core is primary for node-local
-    type facts; future `CompilerDB` is primary for relational facts such as E0293
+    type facts; the Phase 8.5 `CompilerDB` is primary for relational facts such as E0293
     container-not-in-context, borrow conflicts, call-site/parameter pass
     agreement, capability/proof dependencies, provenance, evidence, and
     invalidation. A proof obligation may reference both, but it must not create a
@@ -3561,18 +3923,82 @@ machine-readable.
     downstream stage wants a source type, local value-flow mode, capability
     requirement, pass-agreement decision, or resolved callee, it consumes the
     owning representation: `CExpr.ty` / typed Core for type facts,
-    future `CompilerDB` edges/evidence for relational facts. It may validate
+    Phase 8.5 `CompilerDB` edges/evidence for relational facts. It may validate
     shape; it may not create a second source-level judgment. Done when Elab's
     re-inference code is deleted, not merely bypassed, and regressions prove the
     literal/defaulting, mixed-width, std-bypass, conditional-Copy, and
     capability/type-drift classes cannot be expressed through the typed
-    boundary. Future identity/DB work remains available for edge facts, but it
+    boundary. Later identity/DB refinement remains available for edge facts, but it
     is not on the critical path for type drift.
+13c. Add an independent Core-certificate checker for a narrow, explicit
+    validated-Core predicate.
+
+    Define a versioned canonical `CoreCertificateV1` and a small separate
+    `concrete-cert` library/executable target. Enforce a dependency firewall: it
+    may import the canonical artifact/schema decoder, hash/id layer, small
+    semantic specification/judgment definitions, and checker theorems; it may
+    not import Parser, Check, Elab, Mono, Lower, Report, CLI, project loader, the
+    Phase 8.5 scheduler/cache, or producer verifier implementations. Publish its
+    source/binary hash, import inventory, `partial`/unsafe/axiom inventory,
+    rule-set version, and size so "small checker" remains measurable.
+
+    V1 independently derives its verdict from the canonical Core artifact and
+    small specifications. It checks at least: canonical/schema validity;
+    artifact, subject, predecessor, and dependency-root binding; unique stable
+    identities and referenced-node/provenance existence; constructor-local type
+    consistency; direct-call arity and argument/result agreement; absence of
+    unresolved placeholders/type variables where the Core boundary forbids
+    them; direct-call capability containment; proof-target/body-fingerprint and
+    obligation dependency binding; and the Phase 6B validation-chain shape. It
+    must not merely compare a producer-emitted fact table with a second
+    producer-emitted summary.
+
+    Ownership/borrow/value-flow claims enter V1 only where the artifact carries
+    enough independently checkable decisions and path edges to validate them.
+    Checking that an ownership field exists is not ownership-checker soundness.
+    Extend the predicate one rule family at a time with a mutation fixture and,
+    where practical, a bounded soundness theorem such as
+    `checkCoreCertificate a c = true -> CoreCertificateV1.Valid a c`.
+
+    Emit `certificate_structurally_checked`, `certificate_mismatch`, or
+    `certificate_unsupported`; never `certified` or `proved_by_lean` merely
+    because the structural checker passed. An artifact-specific preservation
+    theorem actually replayed by Lean may separately emit `kernel_replayed`.
+    State the remaining TCB precisely: V1 does **not** prove parsing,
+    resolution, Check/source-to-Core correspondence, ownership/capability
+    soundness beyond named local rules, spec adequacy, ProofCore extraction
+    beyond discharged Phase 14 rules, native-code behavior, or dependency
+    completeness beyond the conservative Phase 8.5 envelope. Its own TCB still
+    includes adequacy of the named predicate, canonical decoder, hash algorithm
+    and collision assumption, checker implementation unless covered by the
+    stated soundness theorem, Lean compiler/runtime and host execution when
+    running a compiled checker, and every imported trusted/axiomatic primitive.
+    `kernel_replayed` is reserved for an artifact-specific theorem actually
+    checked by the kernel; a theorem about the checker does not make execution
+    of the compiled checker kernel-only.
+
+    Bind the checker to the Phase 8.5 query DAG: cached canonical bytes and the
+    producing compiler are untrusted for the named V1 predicate only after this
+    checker recomputes it. A verification receipt names artifact digest,
+    dependency root, checker/rule-set version, checked and unsupported
+    predicates, theorem/replay identity where any, and exact trust boundary.
+
+    Gate altered expression types, wrong call signatures/results, missing
+    capabilities, unresolved type variables, duplicate ids, missing provenance,
+    stale dependency roots, artifact/certificate swapping, fabricated proof
+    links, mismatched obligation subjects, malformed/noncanonical encodings,
+    unsupported constructs mislabeled checked, and a producer record that
+    agrees with itself about a false artifact fact. Wire
+    `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
     regressions proving report facts (`proved`, `stale`, `blocked`, `missing`,
-    `ineligible`, `trusted`) agree with compiler state.
+    `ineligible`, `trusted`) agree with compiler state. Include the
+    `CoreCertificateV1` predicate/rule-set version, checker binary/source hash,
+    soundness theorem names, independent receipt per artifact, mutation corpus,
+    cache-off/on receipt parity, and a machine-readable list of every boundary
+    V1 still leaves producer/compiler-trusted.
 
 ## Phase 15: Backend, Target, And Stdlib Contracts
 
@@ -3580,7 +4006,9 @@ Goal: make backend/toolchain/stdlib assumptions explicit, and state exactly
 where source-level proof stops.
 
 Done when: SSA, target/toolchain, optimization, ABI/layout, stdlib evidence,
-and incremental build contracts are explicit enough for release evidence.
+and Phase 8.5 incremental build contracts are explicit enough for release
+evidence; the supported SSA-to-BackendIR translation slice is independently
+replayable; and every boundary after that slice remains explicitly trusted.
 
 1. Stabilize SSA as the only backend contract.
 2. Document target/toolchain model: triple, data layout, linker, runtime/startup,
@@ -3599,8 +4027,10 @@ and incremental build contracts are explicit enough for release evidence.
    that a real application can debug them without reverse-engineering the abort
    site. This is not proof evidence; it is usability for enforced/runtime-
    checked facts.
-5. Add clean-build versus incremental-build equivalence checks: facts,
-   obligations, diagnostics, reports, and codegen must agree.
+5. Extend Phase 8.5 clean-build versus incremental-build equivalence across
+   backend variants: facts, obligations, diagnostics, reports, BackendIR,
+   codegen units/objects, link manifests, and native behavior must agree under
+   target, ABI/layout, optimization, sanitizer, debug, and toolchain changes.
 6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
    calling conventions.
 6a. Design and, if pulled by a workload, implement first-class alignment facts.
@@ -3677,7 +4107,7 @@ and incremental build contracts are explicit enough for release evidence.
     integer arithmetic, fixed arrays, structs, direct calls, branches, bounded
     loops, runtime checks, capability calls, and source-map annotations. The
     validator compares checked Core / typed IR / SSA facts against BackendIR
-    facts and reports one of: `translation_validated`, `translation_trusted`,
+    facts and reports one of: `translation_validated_v1`, `translation_trusted`,
     `translation_blocked`, or `translation_mismatch`. This is not a promise to
     prove the whole LLVM/native stack; it is a per-artifact check that the
     Concrete lowering into the backend contract preserves the facts Concrete
@@ -3696,13 +4126,48 @@ and incremental build contracts are explicit enough for release evidence.
     Lean-proved/Core-level claim cannot be presented as native-code evidence
     unless the backend artifact is either translation-validated or explicitly
     backend-trusted in the audit bundle.
+18a. Make the Phase 15 translation-validation slice independently replayable.
+    Extend the Phase 14 `concrete-cert` target with a versioned canonical
+    `BackendTranslationCertificateV1` over hash-bound
+    `ValidatedSSA -> BackendIR -> ValidatedBackendIR` artifacts. The checker
+    validates the explicit input/output relation; it does not trust
+    producer-emitted `preserved` flags or compare two summaries produced by the
+    same lowering pass.
+
+    V1 covers integer width/signedness and operator selection, bools, direct
+    calls and signatures, returns, branches, fixed-layout structs/arrays,
+    required arithmetic/bounds/runtime traps, layout/target constants,
+    source-map identities, helper/intrinsic calls, and capability/trust labels
+    for the subset admitted by item #18. Unsupported operations make only the
+    affected function/region `translation_trusted` or `translation_blocked`;
+    they may not be hidden under a module-wide validated badge.
+
+    Bind Phase 8.5 codegen-unit manifests and object/link identities into the
+    dependency root so the release graph cannot combine checked BackendIR from
+    one build with objects or a link plan from another. The independent semantic
+    check stops at `ValidatedBackendIR`: LLVM optimization, LLVM text-to-object
+    translation, object writer, linker, ABI/runtime behavior, and native
+    execution remain trusted/tested unless a later validator explicitly covers
+    them. Object and binary hashes prove identity, not semantics.
+
+    Mutate signed versus unsigned division, integer width, required overflow or
+    bounds trap, branch target, field offset/layout, direct-call target/signature,
+    capability/trust label, source-map id, target/profile, codegen-unit owner,
+    object/link manifest, and certificate/build binding. Include an unsupported
+    instruction mislabeled as validated. Independent replay must reject each
+    mutation without calling the producer backend. Wire
+    `scripts/tests/check_backend_translation_certificates.sh`.
 19. Add the Phase 15 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, C/ABI glue generation/import checks,
     the C ABI classification matrix, alignment-fact fixtures if Phase 15 #6a is
     pulled into implementation, backend-IR emission/verifier checks,
-    translation-validation checks, sanitizer runs, compiled-oracle differential
+    producer translation-validation checks, independent
+    `BackendTranslationCertificateV1` replay and mutations, sanitizer runs,
+    compiled-oracle differential
     tests, native debug/source-map smoke tests, clean-vs-incremental fact
-    equivalence, and stdlib authority/allocation/evidence gates.
+    equivalence, cached-object substitution negatives, and stdlib
+    authority/allocation/evidence gates. The artifact must show the exact point
+    at which independent checking stops and backend/toolchain trust begins.
 
 ## Phase 16: Freestanding And Embedded Target
 
@@ -3761,7 +4226,8 @@ Goal: make Concrete understandable and usable by someone who did not build the
 compiler.
 
 Done when: a fresh user can install Concrete, run a proof-bearing example,
-inspect its audit bundle, and understand the claim matrix in under ten minutes.
+inspect its audit bundle, independently verify its evidence root offline, and
+understand the claim matrix and remaining trust boundary in under ten minutes.
 
 **Language graduation is a gate, not a date.** Concrete can graduate individual
 examples before the language graduates. The language reaches **alpha** only
@@ -3796,6 +4262,10 @@ audience):**
   must remain absent.
 - Release bundles have stable schemas, replay commands, assumption/trust
   reports, and proof-link provenance.
+- An installed independent `concrete-cert verify-bundle` path can validate a
+  release evidence root offline from untrusted bundle bytes, report the precise
+  Core/backend predicates it checked, replay kernel evidence where claimed, and
+  keep every unsupported/native boundary visibly trusted.
 - A verified-profile policy gate exists and is used by every release-facing
   proof/audit claim; public examples cannot bypass it with stale proofs,
   unapproved assumptions, or hidden trusted/Unsafe boundaries.
@@ -3860,7 +4330,8 @@ audience):**
      flagship theorem (e.g. remove it from the axiom-inventory allowlist or
      break its fingerprint) and must show the release bundle flips to
      failing with the downgraded claim named — no false green on a revoked
-     proof.
+     proof. Phase 17 #18d's independent verifier must reject the old evidence
+     root and any cached receipt that still names the revoked theorem.
 9c. Add a certification-style assurance bundle profile before any
     SPARK-class comparison claim. The bundle must include the claim matrix,
     authority/capability report, obligation ledger, proof status, runtime-safety
@@ -3887,17 +4358,25 @@ audience):**
     `dist/SIGNATURES` if signing is enabled, `INSTALL.md`,
     `RELEASE_NOTES.md`, and uninstall/upgrade notes. Nix/Homebrew or similar
     channels may be added only if they can be kept reproducible and
-    version-pinned.
+    version-pinned. The archive must ship the independently built
+    `concrete-cert` verifier, expose `concrete-cert --version --json`, record its
+    source/binary/rule-set hashes separately from the producer compiler, and let
+    `verify-bundle` run without repository state or network access.
 17. Add release performance budgets:
     `scripts/tests/check_release_performance.sh` must measure compiler startup,
-    small-project build, stdlib build, `concrete test`, audit/report generation,
-    and proof-check latency against `release/perf-baseline.json`. Done when
+    cold small-project/stdlib builds, Phase 8.5 warm no-op, private-leaf and
+    public-interface edits, proof-query/object-cache hits, relink latency,
+    `concrete test`, audit/report generation, proof-check latency, and
+    independent bundle-verification latency against
+    `release/perf-baseline.json`. Done when
     release CI blocks unexplained regressions and prints the regressed command.
 18. Add reproducible release artifact hashes:
     `concrete release --manifest --json` must record source tree hash,
     compiler commit/version, schema versions, target triple, build profile,
-    dependency lock hash, stdlib hash, emitted binary hash, release-bundle hash,
-    and replay command. V1 does not support old release manifests; schema
+    dependency lock hash, stdlib hash, canonical query/artifact dependency root,
+    Phase 14/15 checker and rule-set identities, typed-Core/BackendIR/codegen-unit
+    roots, emitted object/binary identity, release-bundle evidence root, and
+    replay command. V1 does not support old release manifests; schema
     mismatches fail loudly with a regeneration command. Wire
     `scripts/tests/check_reproducible_release_hash.sh`; the gate must build the
     same release artifact twice from a clean tree and compare all hashes.
@@ -3949,6 +4428,44 @@ audience):**
     public copy may not imply "fast systems language" unless `concrete bench`
     and release performance gates publish replayable numbers; otherwise docs
     must say performance claims are not made yet.
+18d. Add a Merkle-rooted release evidence DAG and offline independent bundle
+    verification.
+
+    Every release bundle carries a canonical graph whose nodes include source
+    and lock inputs, compiler/query schemas, typed-Core artifacts and Phase 14
+    receipts, obligation/proof artifacts, SSA/BackendIR artifacts and Phase 15
+    translation receipts, codegen-unit/object/link manifests, emitted binary
+    identity, policy/profile, assumptions/trust facts, checker identities, and
+    toolchain identity. Every edge names the declared dependency relation and
+    the bundle exposes one evidence root. A signature may authenticate that root;
+    it is not correctness evidence.
+
+    Ship the narrow independent command `concrete-cert verify-bundle <bundle>`
+    with a `concrete verify-bundle` convenience alias only if the alias invokes
+    the same checker. It operates without repository state or network access,
+    treats the bundle as hostile input, recomputes canonical node/edge/root
+    digests, reruns Phase 14/15 certificate predicates, validates checker and
+    rule-set/toolchain/target/profile/policy binding, and invokes the pinned offline
+    Lean replay path for facts labeled `kernel_replayed` or `proved_by_lean`.
+    Producer reports and cached verification receipts are inputs to compare, not
+    verdicts to trust.
+
+    Output separate dimensions—`bundle_integrity`, `core_certificate`,
+    `backend_translation`, `proof_replay`, `policy`, `assumptions`, and
+    `remaining_trust`—rather than one ambiguous `verified` badge. The root binds
+    exact artifacts and checked relationships; it does not make unchecked LLVM,
+    object generation, linking, runtime, OS, hardware, trusted/Unsafe/FFI code,
+    or spec adequacy correct. Default structural verification and the stricter
+    release/verified-profile policy are separate modes.
+
+    Reject a proof from build A combined with Core from B; BackendIR, object, or
+    binary substitution; a deleted/changed dependency edge; a stale Phase 8.5
+    cache artifact under a new root; schema/checker/toolchain/target/profile/
+    policy mismatch; a revoked proof; an unsupported region reported validated;
+    malformed graph cycles/duplicate ids; and a missing checker or theorem
+    identity. Wire `scripts/tests/check_verify_bundle.sh`; a deliberately
+    modified byte in every node family must either change the root and fail or
+    be explicitly excluded as nondeterministic/non-evidentiary metadata.
 19. Ship the first narrow public release only after the above are green.
 20. [relocated from closed Phase 4] Artifact and docs stability hardening:
     schema-version rejection gates (refuse to silently misread an artifact whose
@@ -3970,7 +4487,11 @@ audience):**
     the deprecation policy and a clean `api-diff` classification (#18b), and
     the tutorial transcript from someone who did not build the compiler. It
     must also run the proof-revocation drill (#9b) against the candidate
-    bundle.
+    bundle, verify the evidence DAG offline through #18d from the installed
+    independent checker, and run tamper cases for source/Core/proof/BackendIR/
+    object/binary/dependency-edge substitution. Release replay begins with a
+    clean cache or `--incremental=off`; a local cache cannot be an undeclared
+    release input.
 
 ## Phase 18: Packages And Dependency Evidence
 
@@ -3978,16 +4499,19 @@ Goal: let package users inspect proof, trust, capability, and assumption facts
 before adopting a dependency.
 
 Done when: packages have manifests, lockfiles, package-aware facts, trust
-policies, provenance, and registry protocol.
+policies, provenance, independently checked interface/evidence receipts,
+Phase 8.5-aware reuse/invalidation, and registry protocol.
 
 1. Expand package artifacts only after reports, policies, assumptions,
    interface artifacts, and CI gates prove what packages must carry. The first
    package artifact refactor must define exact files:
    `Concrete.package.json` (manifest summary), `Concrete.lock`,
    `.concrete/interfaces/<module>.json`, `.concrete/facts/<module>.json`,
-   `.concrete/evidence/<module>.json`, and `.concrete/docs/<module>.json`.
+   `.concrete/evidence/<module>.json`, `.concrete/certificates/<module>.json`,
+   and `.concrete/docs/<module>.json`.
    Each artifact must name compiler version, schema version, package id,
-   source hash, interface hash, dependency hashes, authority budget,
+   source hash, interface/body hash, dependency/evidence root, Phase 14/15
+   checker/rule-set identities and receipts where applicable, authority budget,
    assumptions, proof/evidence summaries, and replay commands. Add
    `scripts/tests/check_package_artifacts.sh`; the gate must prove package
    consumers read these artifacts rather than source-private side channels.
@@ -4000,6 +4524,9 @@ policies, provenance, and registry protocol.
 4. Add workspace and multi-package support.
 5. Add package-aware test selection.
 6. Split interface artifacts from body artifacts at package/workspace scale.
+   Promote the Phase 8.5 internal split and stable ids into versioned public
+   package artifacts; do not expose or rename the opaque internal cache format
+   as a package protocol.
    Interface artifacts expose public names, types, capabilities, contracts,
    allocation/effect summaries, deprecation/version facts, and evidence classes.
    Body artifacts contain implementation fingerprints, private obligations,
@@ -4014,6 +4541,25 @@ policies, provenance, and registry protocol.
    `partial`, `stale`, `vacuous`, `missing`, and `ineligible`. The artifact
    must record whether evidence is package-local, inherited from a dependency,
    or trusted through a boundary.
+7a. Verify dependency interface certificates before consuming package facts or
+    reusable artifacts.
+    A content hash establishes identity, not semantic validity. Run the Phase 14
+    Core checker and any applicable Phase 15 translation checker over the
+    dependency's canonical interface/evidence artifacts, cache the independent
+    receipt by bundle root + checker/rule-set version, and bind the receipt into
+    the importing project's Phase 8.5 dependency graph. Invalid, stale,
+    unsupported-schema, or unsupported-predicate certificates trigger a source
+    rebuild when source and policy permit it, or a loud policy failure; they
+    never silently become trusted facts.
+
+    Import authority/evidence constraints may consume independently checked
+    interface facts or facts explicitly labeled `compiler_validated` with the
+    producing compiler still trusted; they may not erase that distinction. Gate
+    a valid package, tampered interface fact,
+    certificate from another package/build, stale private body with unchanged
+    public interface, changed public interface, old checker version, unsupported
+    predicate, proof revocation, and source-rebuild fallback. Wire
+    `scripts/tests/check_package_certificates.sh`.
 8. Add module/package authority budgets after package graphs are real, and make
    imports fact-checked boundaries. Imports do not grant capabilities; they
    declare and constrain facts about the imported interface. The first concrete
@@ -4039,7 +4585,9 @@ policies, provenance, and registry protocol.
    `import json as j requires(no File, no Network, no Unsafe, no trusted)`;
    `import hmac.compute requires(proved_by_lean, no Unsafe)`; package-wide
    `allowed_caps = ["Alloc"]`; or `requires(freestanding, deterministic,
-   license = "MIT OR Apache-2.0")`. The checked fact set must include at least:
+   license = "MIT OR Apache-2.0")`. The checked fact set—read through item
+   #7a's independently-checked-or-explicitly-trusted boundary—must include at
+   least:
    public capability set, allocation authority/profile, `trusted`/extern/FFI/
    `Unsafe` use, assumption set, evidence class floor, proof staleness/vacuity,
    runtime-failure policy, arithmetic-site classification, hosted/freestanding/platform facts,
@@ -4109,7 +4657,9 @@ policies, provenance, and registry protocol.
 15b. Extend content-addressing beyond proof fingerprints for package/evidence
     artifacts.
 
-    Concrete already content-addresses proof attachments through
+    Extend Phase 8.5's opaque internal artifact roots into stable, versioned
+    **public package** encodings rather than implementing a second hashing/cache
+    system. Concrete already content-addresses proof attachments through
     `proof_fingerprint`. The natural Phase 18/19 extension is structural hashes
     for obligations, typed-Core fragments, proof bundles, package interface/body
     evidence, and replay artifacts, so caches and dependency evidence are keyed
@@ -4130,24 +4680,62 @@ policies, provenance, and registry protocol.
     semantic content hashes identically across repeated runs; a deliberately
     nondeterministic encoder is caught by a gate; and package/proof cache keys
     use these content hashes instead of source paths or human names.
+15c. Add optional shared/remote artifact reuse only after the local Phase 8.5
+    store and independent package verification are mature.
+    Define an authenticated transport/protocol for content-addressed package,
+    proof, and codegen artifacts; the server is an untrusted blob store, not a
+    compiler authority. Every download must pass size/schema/digest and
+    dependency-root checks, the applicable Phase 14/15 certificate checker, target/profile/
+    toolchain binding, and package policy before entering the local store.
+    Upload only deterministic canonical artifacts with explicit privacy/
+    redaction policy; never upload source, diagnostics, proof attempts, or
+    credentials implicitly. A signature authenticates provenance, not
+    correctness.
+
+    This item is optional for the first package release and must not complicate
+    local builds. Gate hostile/corrupt server responses, cache poisoning,
+    replayed old roots, cross-target objects, revoked proofs, concurrent upload,
+    offline fallback, and local recomputation parity. Record CI/team speedups,
+    but keep correctness independent of network/cache availability.
 16. Add the Phase 18 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
-    budgets, provenance, evidence-typed imports, published docs, and
-    release-bundle evidence for every dependency. Wire it as
+    budgets, provenance, independently checked dependency certificates,
+    evidence-typed imports, published docs, downstream reuse after a dependency
+    private-body edit, invalidation after a public-interface edit, and
+    release-bundle evidence for every dependency. Include remote-cache hostile
+    input/offline fallback if #15c is implemented. Wire it as
     `examples/package_workspace/` plus
-    `scripts/tests/check_phase17_packages.sh`.
+    `scripts/tests/check_phase18_packages.sh`.
 
 ## Phase 19: Editor And Human Tooling
 
 Goal: make evidence visible where developers work.
 
 Done when: editor/LSP/tooling exposes the same facts as CI and command-line
-reports without inventing a second truth source.
+reports through the Phase 8.5 session/query graph, with bounded edit
+invalidation and certificate freshness, without inventing a second truth source.
 
 1. Add artifact viewer integration for proof/evidence facts.
 2. Add compiler-as-service / LSP entrypoints after diagnostics and facts are
-   structured.
+   structured. The service must host the Phase 8.5 `CompilerSession`; it may not
+   wrap batch `runFrontend` as its normal edit path.
+2a. Reuse the incremental query/certificate graph as the only editor fact
+    engine.
+    LSP/editor requests use the same typed query keys, dependency edges, local
+    store, invalidation rules, validation records, independently checked package
+    receipts, and evidence views as CLI/CI. Tag each response with project
+    revision, subject/dependency root, completeness (`strict | partial`),
+    freshness, checker/rule-set version where applicable, and cache/query
+    provenance kept separate from evidence status. Cancelled or tolerant
+    partial computations cannot enter complete caches or answer proof/release
+    queries.
+
+    Gate a scripted edit sequence covering comment/span-only, private body,
+    public signature/capability/contract, target/profile, policy, proof, and
+    dependency-certificate changes. Assert the bounded Phase 8.5 query execution
+    set as well as CLI/LSP fact equality; an editor-only database, stale hover,
+    or batch whole-project rebuild for a private leaf edit fails the gate.
 3. Add hover/type info for capability status, proof status, predictable status,
    assumptions, obligations, and trusted boundaries.
 4. Add obligation navigation: jump from source contract/index/mod/loop to the
@@ -4213,11 +4801,14 @@ reports without inventing a second truth source.
      proof synthesis, replay, capability diffs, and counterexample saving from
      the installed binary alone.
 14. Add the Phase 19 validation artifact:
-   `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
+   `scripts/tests/check_phase19_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,
    obligation navigation, proof/evidence facts, dependency audit UI, refactor
    behavior, docs integration, deprecation diagnostics, and playground output
-   match CLI facts rather than inventing a second truth source.
+   match CLI facts rather than inventing a second truth source. It also checks
+   revision/freshness tags, cancellation safety, minimal incremental
+   recomputation, independently checked dependency receipt changes, and
+   cache-off/on equivalence.
 
 ## Phase 20: Concurrency And Research-Gated Extensions
 
@@ -4285,7 +4876,13 @@ forcing example, explicitly deferred, or rejected.
     to reduce the trusted base of the toolchain itself. This is NOT a near-term
     migration commitment and must not block Phase 7-19 work; it is a research
     bet to keep visible so the project does not stop at verifying user programs
-    while leaving the compiler as an opaque trust-me artifact.
+    while leaving the compiler as an opaque trust-me artifact. This rewrite-in-Concrete route is complementary to the Phase 14 verified-compiler endgame; the primary route there is proving the existing Lean-hosted passes semantics-preserving, not re-implementing them.
+
+    This is distinct from the Phase 14/15 independent certificate checker. That
+    checker re-derives narrow predicates over compiler artifacts in a small Lean
+    target; this research item asks whether selected compiler passes should be
+    implemented or mirrored in Concrete itself. Do not delay the independent
+    checker while waiting for self-hosting evidence.
 
     First pressure-test only: choose one narrow pass or checker helper with a
     small state space (for example a value-flow checker slice, a type-policy
@@ -4295,10 +4892,11 @@ forcing example, explicitly deferred, or rejected.
     decision record states whether the approach actually shrinks the TCB, merely
     duplicates it, or creates a second source of truth. Pull forward only if a
     real pass can be checked without weakening the no-second-truth-source rule.
-16. Research Datalog-style / stratified relational facts only when
-    `CompilerDB` has real consumers.
+16. Research a Datalog-style / stratified relational **rule layer** only when
+    the shipped Phase 8.5 `CompilerDB` has real relational consumers that typed
+    queries/maps cannot express cleanly.
 
-    Future `CompilerDB` facts — pass-agreement edges, borrow conflicts, E0293
+    `CompilerDB` facts — pass-agreement edges, borrow conflicts, E0293
     container exclusions, provenance edges, dependency/invalidation, package
     evidence, and proof/evidence queries — are naturally relational. A
     Datalog-like or stratified-facts model is a good design reference for that
@@ -4306,19 +4904,21 @@ forcing example, explicitly deferred, or rejected.
     and invalidation have a discipline, and audit/report views can ask
     relational questions without reparsing prose.
 
-    Park this with the DB. Do not build a Datalog engine, query language, or
-    Salsa-like database now. The trigger is a real `CompilerDB` consumer whose
-    facts are awkward as hand-written maps/joins. The first investigation should
-    compare a small stratified internal rule layer against ordinary typed Lean
-    functions over `CompilerDB`, and it must keep the user language unchanged:
-    no user-facing logic language, no implicit effects, and no hidden second
-    truth source.
+    Phase 8.5 already owns the typed acyclic query/cache driver, scheduling, and
+    invalidation; do not reopen or replace it here. What remains deferred is a
+    general Datalog/stratified derivation layer or user-visible query language.
+    The trigger is a real `CompilerDB` relation family whose rules are awkward
+    as ordinary typed Lean functions/maps/joins. The first investigation should
+    compare a small stratified internal rule layer against those ordinary typed
+    functions, reuse Phase 8.5 dependency/certificate machinery, and keep the
+    user language unchanged: no user-facing logic language, no implicit effects,
+    and no hidden second truth source.
 
     Done when a design note demonstrates one concrete relation family
     (for example provenance invalidation or package evidence queries), includes
     an acyclicity/stratification story, shows replayable derived-fact output,
     and rejects a cyclic or stale derived fact. Until then, this remains a
-    future reference, not Phase 6.5 work.
+    future rule-layer reference, not unfinished incremental-compiler work.
 17. Add the Phase 20 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
     (concurrency, atomics/memory model, typestate, arena allocation, WCET,
