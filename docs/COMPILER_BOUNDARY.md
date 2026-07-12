@@ -37,10 +37,11 @@ must make `concrete -o` fail). The *stage* that rejects it:
 | 3 | Mixed-width binop (`i8 + i32`, E0228/E0715) | Check (E0228) **and** CoreCheck (E0502) | ✅ Core boundary |
 | 4 | Capability misuse (call needs a cap the caller lacks) | CoreCheck | ✅ Core boundary |
 | 5 | Unsafe op without capability (raw-ptr deref in a safe fn) | CoreCheck | ✅ Core boundary |
-| 6 | Returning a second-class reference | Check | ❌ front-end only |
+| 6 | Returning a second-class reference | Check (E-ret) **and** `verifyPostMono` (`verifyNoReturnedRefs`, E0236) | ✅ boundary |
 
-Classes 1, 2, 3, 4, 5 are enforced *at a boundary token* (`ValidatedCore` or
-`MonomorphizedProgram`). Only class 6 is caught once, in Check.
+Classes 1, 2, 3, 4, 5, 6 are all enforced *at a boundary token* (`ValidatedCore`
+or `MonomorphizedProgram`). There is no longer a residue class caught only in
+Check.
 
 Class 3 is worth a note: it is enforced BOTH in Check (E0228, exact-type) and,
 independently, at the CoreCheck boundary (E0502, `binaryOperandMismatch`) — so
@@ -52,22 +53,30 @@ redundant — CoreCheck already owns this boundary. (Note the width axis: E0715 
 same-width/different-signedness pair produced by a monomorphized generic is NOT a
 width residue; it reaches Lower and lowers fine.)
 
+## Class 6 — returned-reference boundary (landed)
+
+- **Class 6 — returned-reference verifier (`verifyNoReturnedRefs`, E0236).** The
+  long-term policy is **Option A**, the strictest form of the second-class-reference
+  rule from `docs/VALUE_MODEL.md`: **no function may return `&T` / `&mut T`** —
+  not safe, and not trusted — directly or nested in any aggregate/alias/generic
+  instantiation. Former `&self -> &T` accessor shapes migrate to scoped access
+  (`with_value`, `with_value_mut` / `modify`), value returns for `Copy` data, or
+  owned views; trusted low-level code that must hand back a borrow uses a raw
+  pointer (`*const T` / `*mut T`), which is the sole escape and is not a reference
+  type. This is now re-asserted structurally at the post-mono boundary:
+  `verifyNoReturnedRefs` (in `Concrete/Check/Verify.lean`) walks the fully
+  substituted return type of every `CModule` function — via `tyExposesRef`, which
+  descends through `.ref`/`.refMut`, `.generic` args, and `.array` elements — and
+  rejects any reference-return with E0236, with **no trust/safety exemption**. It
+  is wired into `verifyPostMono` alongside `verifyNoTypeVars` and
+  `verifyCopyFieldsPostMono`, gated by `check_corecheck_boundary.sh`, and confirmed
+  load-bearing by mutation testing. No lifetime/provenance verifier is required
+  unless the deferred `from(param)` escape valve is deliberately admitted later; if
+  that happens, it needs its own evidence-gated provenance design and must not
+  weaken this default rule.
+
 ## Defense-in-depth follow-ups (staged)
 
-Class 6 is the one residue class caught only in Check:
-
-- **Class 6 — safe returned-reference verifier.** Long-term policy is now the
-  simple second-class-reference rule from `docs/VALUE_MODEL.md`: a safe callable
-  may not return `&T` / `&mut T`, directly or nested in an aggregate/alias/generic
-  instantiation. Former `&self -> &T` accessor shapes migrate to scoped access
-  (`with_value`, `with_value_mut` / `modify`), value returns for `Copy` data,
-  owned views, or explicit trusted/raw-pointer boundaries. Therefore the
-  post-mono re-assertion should be structural over the fully substituted return
-  type plus the function trust/safety class: safe Core must not expose a
-  reference-return type. No lifetime/provenance verifier is required unless the
-  deferred `from(param)` escape valve is deliberately admitted later; if that
-  happens, it needs its own evidence-gated provenance design and must not weaken
-  this default rule.
 - **Class 4 capability erasure.** Confirm whether `CapSet.var` can legitimately
   survive to `Lower` (capabilities are largely erased at codegen). If it cannot,
   add `verifyNoCapVars` mirroring `verifyNoTypeVars`; if it can, document that

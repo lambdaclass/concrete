@@ -3986,9 +3986,11 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     ARITHMETIC_POLICY truncation/reinterpretation claims. And (b) the defense-in-depth
     ref-return lowering fix — a reference-typed return materialized from a ref
     identifier / `&place` emits a spurious extra load. (b) is unreachable from
-    safe code (reference returns are rejected at the type level — H1), so it is
-    internal-lowering hardening; fixtures must distinguish rejected safe returns,
-    allowed trusted raw-pointer returns, and a correct internal ref-valued return.
+    source under Option A: reference returns are rejected at the type level for
+    *every* function, safe and trusted (H1; Check + `verifyNoReturnedRefs`/E0236),
+    so it is dead-path internal-lowering hardening; fixtures must distinguish
+    rejected reference returns (safe and trusted alike) from allowed trusted
+    raw-pointer (`*const`/`*mut`) returns, which are not reference types.
 13a. Add a semantic-darkness audit and red-team gate. The goal is to catch the
     checked-arithmetic class of bug before it repeats: a construct looks
     ordinary in source, but its real behavior depends on width, profile, target,

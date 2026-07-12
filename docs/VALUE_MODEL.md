@@ -31,9 +31,17 @@ For FFI and trust boundaries, see [FFI.md](FFI.md).
 
 **Invariant (language-level).** References (`&T`, `&mut T`) are *scoped access*,
 not values you return and carry around. They may flow **downward** — into
-function/method calls, into callback parameters, and into borrow blocks — but a
-**safe-callable function or function *type* may not *return* a reference**,
-directly or nested inside any aggregate, alias, or generic instantiation.
+function/method calls, into callback parameters, and into borrow blocks — but
+**no function or function *type* may *return* a reference**, directly or nested
+inside any aggregate, alias, or generic instantiation.
+
+This is **Option A**, the strict form of the rule: the ban is *not* limited to
+safe code — a `trusted` function may not return a reference either. Trusted
+low-level code that must hand back a borrow uses a **raw pointer** (`*const T` /
+`*mut T`), which is not a reference type and is the sole low-level escape. There
+is deliberately no "trusted returns are exempt" carve-out, so the boundary
+verifier (`verifyNoReturnedRefs`, E0236) can reject *every* reference-return
+structurally, with no trust/safety class to special-case.
 
 This is intentionally the Hylo/Val-style mutable-value-semantics choice:
 mutation is allowed, but references are second-class, non-storable,

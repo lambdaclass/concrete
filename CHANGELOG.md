@@ -78,6 +78,23 @@ Completed Phase 6B semantic-axis items:
   which stage rejects each frontend/mono/type-policy residue class;
   `scripts/tests/check_corecheck_boundary.sh` proves every class is rejected
   before Lower.
+- **References made strictly second-class (Option A) + returned-reference boundary
+  verifier.** The long-term policy is now the strictest form: **no function returns
+  `&T` / `&mut T`** — not safe, not trusted — directly or nested in any
+  aggregate/alias/generic instantiation. Borrowed access in safe code goes through
+  scoped accessors (`with_value` / `with_value_mut` / `modify`); `Copy` data returns
+  by value; trusted low-level code that must hand back a borrow uses a raw pointer
+  (`*const T` / `*mut T`), the sole escape and not a reference type. Enforced in
+  Check at the front end and **re-asserted structurally at the post-mono boundary**
+  by `verifyNoReturnedRefs` (E0236) in `Concrete/Check/Verify.lean` — it walks each
+  monomorphized function's fully substituted return type via `tyExposesRef`
+  (descending through `.ref`/`.refMut`, `.generic` args, `.array` elements) with no
+  trust/safety exemption, wired into `verifyPostMono` and gated by
+  `check_corecheck_boundary.sh`, confirmed load-bearing by mutation testing. This
+  closes residue class 6 in `docs/COMPILER_BOUNDARY.md` (no class is caught only in
+  Check) and resolves returned-reference provenance (H1) by subtraction. The
+  `from(param)` escape valve remains deeply deferred and evidence-gated. See
+  `docs/VALUE_MODEL.md`.
 - **Differential-sweep soundness/parity fixes.** Interpreter signed left-shift
   now truncates to width; labeled `break`/`continue` now dispatch to the targeted
   loop; `--interp` prints `main`'s return value only for a value-returning `main`.
