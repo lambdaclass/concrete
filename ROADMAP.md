@@ -1396,8 +1396,8 @@ hidden alternate pipelines.
    new `*Judgment` mention to the roadmap/docs/code omits a decision record,
    consumer list, interpreter relationship, or gate.
 
-11. Add stable interned fact IDs when `CompilerDB` is pulled by real relational
-   facts.
+11. Define the stable fact-ID contract. (The full interned-ID store is Phase
+   8.5, which lists this contract among its prerequisites; 6B fixes the scheme.)
    This item depends on the completed `TypeJudgment` / typed Core
    architecture recorded in the changelog, but it is NOT a prerequisite for the
    type-axis fix. Do not build a separate ID scheme for source expression types:
@@ -1443,11 +1443,12 @@ hidden alternate pipelines.
    for illegal cross-level read, illegal fact write, hidden sibling inspection,
    and report-side semantic recomputation.
 
-14. Add analysis preservation and invalidation contracts.
-   Once facts are cached or reused, every pass must state which facts it reads,
-   writes, preserves, and invalidates. This is the guardrail that prevents
-   Phase 8.5 incremental checking, proof caching, package facts, or editor facts
-   from becoming a stale second truth source.
+14. Define the analysis preservation and invalidation contract.
+   Each pass declares which facts it reads, writes, preserves, and invalidates —
+   defined now, as a 6B contract, independent of any cache. This is the guardrail
+   that prevents Phase 8.5 incremental checking, proof caching, package facts, or
+   editor facts (all of which later enforce this contract) from becoming a stale
+   second truth source.
 
    Done when a pass that changes Core invalidates dependent CoreCheck, proof,
    report, and backend facts; a pass that only changes source spans preserves
@@ -1543,13 +1544,14 @@ single composed compiler pipeline.
     slice may be an intrinsic coverage/matrix gate; the end state is a registry,
     not a grep-based allowlist.
 
-17. Move report/evidence output toward `CompilerDB` fact views.
+17. Make report/evidence output typed fact records, not strings.
     Internal facts should be typed records until the final renderer, not strings
     assembled at each report site. V1 target: diagnostic-code facts, capability
     facts, runtime-trap facts, Copy/linear facts, trusted/Unsafe facts, proof
     status facts, and package/import facts. Reports, diagnostics, audit, replay,
     PR diffs, editor hovers, and agent JSON should render the same typed records
-    / `CompilerDB` views rather than recompute meaning from strings.
+    rather than recompute meaning from strings. (Phase 8.5 later exposes these
+    same records as `CompilerDB` views; 6B only fixes the typed-record shape.)
 
     Gate that a new diagnostic/evidence fact cannot be emitted without a schema
     row and report entry, and add one negative where a stale hand-written report
