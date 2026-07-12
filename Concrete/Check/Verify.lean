@@ -291,12 +291,46 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
   ) ([] : Diagnostics)
   violations
 
-/-- **Post-Mono verifier**: checks no `Ty.typeVar` survives monomorphization,
-    and validates Copy struct fields after generic instantiation. Mixed-width
-    binops (class 3) are already re-asserted at the CoreCheck boundary (E0502),
-    so they need no separate post-mono check here — see docs/COMPILER_BOUNDARY.md. -/
+/-- Does `ty` expose a reference (`&T`/`&mut T`) — directly or nested in a generic
+    instantiation or array element? A function-POINTER type is not itself a
+    reference (returning one is fine); a fn TYPE that returns a reference is
+    rejected separately in Check. -/
+partial def tyExposesRef : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | .generic _ args => args.any tyExposesRef
+  | .array elem _ => tyExposesRef elem
+  | _ => false
+
+/-- **Returned-reference verifier** (Phase 6.5 #4, class 6). References are
+    second-class: NO function may return a reference type, directly or nested in
+    an aggregate/generic instantiation (docs/VALUE_MODEL.md). `Check.lean` already
+    rejects this at the front end for every function (the low-level escape is a
+    raw pointer `*const`/`*mut`, not a returned reference); this is the post-mono
+    re-assertion at the pipeline boundary — the one residue class that was
+    otherwise caught only in Check (see docs/COMPILER_BOUNDARY.md). Structural, no
+    lifetime/provenance analysis. Post-mono, so the return type is fully
+    substituted (a generic instantiated to a reference is caught too). -/
+partial def verifyNoReturnedRefs : List CModule → Diagnostics
+  | [] => []
+  | m :: ms =>
+    let here := m.functions.foldl (fun acc fn =>
+      if tyExposesRef fn.retTy then
+        acc ++ [({ severity := .error
+                   message := s!"function '{fn.name}' returns a reference type ({tyToStr fn.retTy}); references are second-class and may not be returned — use a value, an owned view, a scoped accessor (with_value), or a raw pointer for low-level access"
+                   pass := "post-mono"
+                   span := fn.declSpan
+                   hint := some "see docs/VALUE_MODEL.md — references are second-class"
+                   code := "E0236" } : Diagnostic)]
+      else acc) ([] : Diagnostics)
+    here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
+
+/-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
+    fields validate after instantiation, and no SAFE function exposes a
+    reference-return type (references are second-class). Mixed-width binops
+    (class 3) are already re-asserted at the CoreCheck boundary (E0502) — see
+    docs/COMPILER_BOUNDARY.md. -/
 def verifyPostMono (modules : List CModule) : Diagnostics :=
-  verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules
+  verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
 
 -- ============================================================
 -- Rendering
