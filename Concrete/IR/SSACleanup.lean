@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Std.Data.HashMap
 import Concrete.IR.SSA
 import Concrete.Semantics.IntArith
 
@@ -148,22 +149,73 @@ private def findTrivialPhis (blocks : List SBlock) : List (String × SVal) :=
     ) acc
   ) []
 
+/-- Collect all register uses in an SVal. -/
+private def svalUses : SVal → List String
+  | .reg name _ => [name]
+  | _ => []
+
+/-- Collect all register uses in an instruction. -/
+private def instUses : SInst → List String
+  | .binOp _ _ lhs rhs _ => svalUses lhs ++ svalUses rhs
+  | .unaryOp _ _ operand _ => svalUses operand
+  | .call _ fn args _ =>
+    let argUses := args.foldl (fun acc a => acc ++ svalUses a) []
+    -- If the call target is a %-prefixed register (indirect fn-pointer call),
+    -- include the register name as a use so DCE preserves the producing instruction.
+    if fn.startsWith "%" then (fn.drop 1).toString :: argUses
+    else argUses
+  | .alloca _ _ => []
+  | .load _ ptr _ => svalUses ptr
+  | .store val ptr => svalUses val ++ svalUses ptr
+  | .gep _ base indices _ => svalUses base ++ indices.foldl (fun acc i => acc ++ svalUses i) []
+  | .phi _ incoming _ => incoming.foldl (fun acc (v, _) => acc ++ svalUses v) []
+  | .cast _ val _ => svalUses val
+  | .memcpy dst src _ => svalUses dst ++ svalUses src
+
+/-- Collect register uses in a terminator. -/
+private def termUses : STerm → List String
+  | .ret (some v) => svalUses v
+  | .ret none => []
+  | .br _ => []
+  | .condBr cond _ _ => svalUses cond
+  | .unreachable => []
+
 /-- Apply register replacements across all blocks. -/
 private def applyReplacements (blocks : List SBlock)
     (replacements : List (String × SVal)) : List SBlock :=
   if replacements.isEmpty then blocks
   else
+    -- Build an O(1)-lookup map, fully resolving reg→reg chains (fuel-bounded).
+    -- The old code applied EACH replacement with a full `insts.map` pass —
+    -- O(replacements × insts) = O(n²) when a reassignment chain (`x = x + k`)
+    -- const-folds to n reg→value replacements over n instructions in one block.
+    -- Now: resolve once, then a single pass substitutes every used reg via the
+    -- map (O(1) each). Chains are resolved so a single substitution is final.
+    let raw : Std.HashMap String SVal :=
+      replacements.foldl (fun m (old, new) => m.insert old new) ∅
+    let rec chase (v : SVal) (fuel : Nat) : SVal :=
+      match fuel, v with
+      | 0, _ => v
+      | f + 1, .reg r _ => match raw.get? r with
+        | some v' => chase v' f
+        | none => v
+      | _, _ => v
+    let rmap : Std.HashMap String SVal :=
+      raw.fold (fun m k v => m.insert k (chase v replacements.length)) ∅
     blocks.map fun b =>
       let insts := b.insts.filter fun inst =>
         match inst with
-        | .phi dst _ _ => !(replacements.any fun (d, _) => d == dst)
+        | .phi dst _ _ => !rmap.contains dst
         | _ => true
-      let insts := replacements.foldl (fun insts (oldReg, newVal) =>
-        insts.map fun inst => replaceRegInInst inst oldReg newVal
-      ) insts
-      let term := replacements.foldl (fun t (oldReg, newVal) =>
-        replaceRegInTerm t oldReg newVal
-      ) b.term
+      let insts := insts.map fun inst =>
+        (instUses inst).foldl (fun i r =>
+          match rmap.get? r with
+          | some v => replaceRegInInst i r v
+          | none => i) inst
+      let term := (termUses b.term).foldl (fun t r =>
+        match rmap.get? r with
+        | some v => replaceRegInTerm t r v
+        | none => t) b.term
       { b with insts := insts, term := term }
 
 /-- Repeatedly eliminate trivial phis until fixpoint. -/
@@ -230,37 +282,6 @@ private def instDst : SInst → Option String
   | .phi dst _ _ => some dst
   | .cast dst _ _ => some dst
   | .memcpy _ _ _ => none
-
-/-- Collect all register uses in an SVal. -/
-private def svalUses : SVal → List String
-  | .reg name _ => [name]
-  | _ => []
-
-/-- Collect all register uses in an instruction. -/
-private def instUses : SInst → List String
-  | .binOp _ _ lhs rhs _ => svalUses lhs ++ svalUses rhs
-  | .unaryOp _ _ operand _ => svalUses operand
-  | .call _ fn args _ =>
-    let argUses := args.foldl (fun acc a => acc ++ svalUses a) []
-    -- If the call target is a %-prefixed register (indirect fn-pointer call),
-    -- include the register name as a use so DCE preserves the producing instruction.
-    if fn.startsWith "%" then (fn.drop 1).toString :: argUses
-    else argUses
-  | .alloca _ _ => []
-  | .load _ ptr _ => svalUses ptr
-  | .store val ptr => svalUses val ++ svalUses ptr
-  | .gep _ base indices _ => svalUses base ++ indices.foldl (fun acc i => acc ++ svalUses i) []
-  | .phi _ incoming _ => incoming.foldl (fun acc (v, _) => acc ++ svalUses v) []
-  | .cast _ val _ => svalUses val
-  | .memcpy dst src _ => svalUses dst ++ svalUses src
-
-/-- Collect register uses in a terminator. -/
-private def termUses : STerm → List String
-  | .ret (some v) => svalUses v
-  | .ret none => []
-  | .br _ => []
-  | .condBr cond _ _ => svalUses cond
-  | .unreachable => []
 
 /-- Collect all used registers across all blocks, as a HashSet. The old
     `List` version built the set with `acc ++ instUses i` per instruction (O(n^2)
@@ -467,8 +488,18 @@ private def isUnsignedTy : Ty → Bool
     Also performs strength reduction (mul/div by power-of-2 → shift). -/
 private def foldConstants (blocks : List SBlock) : List SBlock :=
   -- Collect replacements (dst → value) and instruction rewrites (dst → new inst)
-  let (replacements, rewrites) := blocks.foldl (fun (acc : List (String × SVal) × List (String × SInst)) b =>
-    b.insts.foldl (fun (acc : List (String × SVal) × List (String × SInst)) inst =>
+  -- Forward constant propagation in ONE pass: `env` maps a register to its
+  -- proven constant value; binop/neg operands are RESOLVED through it before
+  -- folding, so a reassignment chain (acc.1 = 0+k, acc.2 = acc.1+k, …) folds to
+  -- its final constants in a single pass. The final SSA is unchanged — the
+  -- cleanup fixpoint reached the same result, just one fold-level per iteration
+  -- (O(fixpoint iterations) = O(chain length) = O(n²)); resolving operands here
+  -- converges it in ~1 iteration. env only ever holds values FOLDBINOP already
+  -- proved constant + in-range, so substitution is sound (never introduces a trap).
+  let (replacements0, rewrites0, _) := blocks.foldl (fun (acc : List (String × SVal) × List (String × SInst) × Std.HashMap String SVal) b =>
+    b.insts.foldl (fun (acc : List (String × SVal) × List (String × SInst) × Std.HashMap String SVal) inst =>
+      let env := acc.2.2
+      let rv : SVal → SVal := fun v => match v with | .reg r _ => (env.get? r).getD v | _ => v
       match inst with
       -- Constant negation: fold `neg (const)` to the negated constant when the
       -- RESULT fits the type — range-check the result, not the inner literal, so
@@ -476,11 +507,14 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
       -- of a runtime `0 - 128` that overflows and traps. If the result does NOT
       -- fit (e.g. `-(i8::MIN)` after constant propagation), leave the op live so
       -- the checked negation helper traps at runtime — matching the interpreter.
-      | .unaryOp dst .neg (.intConst n _) ty =>
-        if IntArith.fitsType ty (-n) then (acc.1 ++ [(dst, .intConst (-n) ty)], acc.2) else acc
+      | .unaryOp dst .neg operand ty =>
+        match rv operand with
+        | .intConst n _ =>
+          if IntArith.fitsType ty (-n) then ((dst, .intConst (-n) ty) :: acc.1, acc.2.1, env.insert dst (.intConst (-n) ty)) else acc
+        | _ => acc
       | .binOp dst op lhs rhs ty =>
-        match foldBinOp op lhs rhs ty with
-        | some val => (acc.1 ++ [(dst, val)], acc.2)
+        match foldBinOp op (rv lhs) (rv rhs) ty with
+        | some val => ((dst, val) :: acc.1, acc.2.1, env.insert dst val)
         | none =>
           -- NO mul → shl strength reduction: under checked arithmetic (ROADMAP
           -- #10) `x * k` traps on overflow, but the checked shift helper only
@@ -494,26 +528,33 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
             match rhs with
             | .intConst n _ =>
               match isPowerOfTwo n with
-              | some exp => (acc.1, acc.2 ++ [(dst, SInst.binOp dst .shr lhs (.intConst exp ty) ty)])
+              | some exp => (acc.1, (dst, SInst.binOp dst .shr lhs (.intConst exp ty) ty) :: acc.2.1, acc.2.2)
               | none => acc
             | _ => acc
           else acc
       | _ => acc
-    ) acc) ([], [])
+    ) acc) ([], [], ∅)
+  -- Prepend-built above (O(1)); restore source order. The old `acc.1 ++ [x]` per
+  -- foldable instruction was O(n²) (a reassignment chain const-folds to n entries).
+  let replacements := replacements0.reverse
+  let rewrites := rewrites0.reverse
   -- Apply value replacements
   let blocks :=
     if replacements.isEmpty then blocks
     else applyReplacements blocks replacements
   -- Apply instruction rewrites (replace instruction in-place)
   if rewrites.isEmpty then blocks
-  else blocks.map fun b =>
-    { b with insts := b.insts.map fun inst =>
-      match instDst inst with
-      | some dst =>
-        match rewrites.find? fun (d, _) => d == dst with
-        | some (_, newInst) => newInst
-        | none => inst
-      | none => inst }
+  else
+    let rwMap : Std.HashMap String SInst :=
+      rewrites.foldl (fun m (d, ni) => if m.contains d then m else m.insert d ni) ∅
+    blocks.map fun b =>
+      { b with insts := b.insts.map fun inst =>
+        match instDst inst with
+        | some dst =>
+          match rwMap.get? dst with
+          | some newInst => newInst
+          | none => inst
+        | none => inst }
 
 -- ============================================================
 -- Pass 6: GEP-zero elimination
