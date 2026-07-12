@@ -482,27 +482,28 @@ These are much more realistic than trying to build a general differential compil
 
 ## Roadmap Fit
 
-This work belongs mostly in:
+The active roadmap now assigns the practical subset to:
 
-- **Phase J**
-  - package graph
-  - incremental compilation
-  - explicit driver/build graph
-  - cache reuse
+- **Phase 6B/6C:** stable facts, dependencies/invalidation, telemetry, and a
+  cache-free shadow graph;
+- **conditional Phase 8.5:** the explicit driver/build graph, local query/cache
+  reuse, codegen units, and typed report/proof queries after the external GO
+  verdict;
+- **Phases 14/15/17:** independent certificate checks and the release evidence
+  root;
+- **Phases 18/19:** package graph/public artifacts and editor-maintained views.
 
-- **Phase L**
-  - stable artifact identity/versioning
-  - maintained machine-readable reports
-  - evidence/trust bundles
-  - report-first operational workflows
-
-It does **not** belong as an immediate Phase H or language-surface task.
+It does **not** belong as immediate language-surface work or as a general
+differential/Datalog engine. `ROADMAP.md` is the execution queue; this note is
+design rationale.
 
 ## Recommended First Design Moves
 
 1. stabilize artifact boundaries first
-2. make the package graph explicit
-3. add incremental cache reuse on top of that
+2. validate the dependency graph in cache-free shadow mode and on a real
+   workload edit corpus
+3. after the GO gate, add conservative incremental cache reuse and the project
+   graph; extend it to the package graph in Phase 18
 4. only then experiment with maintained derived views for reports
 5. only after that consider more ambitious frontier/readiness tracking
 6. add per-function inspection before adding heavy new optimizer architecture

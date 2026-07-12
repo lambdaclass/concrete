@@ -223,19 +223,20 @@ Concrete translation:
 
 - Do not jump to a query engine during Phase 6.5. The language and IR are still
   moving.
-- Design facts and pass artifacts so a later query engine is possible:
+- Design facts and pass artifacts so the conditional Phase 8.5 query engine is possible:
   deterministic hashes, stable IDs, explicit dependencies, schema versions, and
   replay commands.
-- A future `FactGraph` should model dependencies among parse, resolve, type,
+- The Phase 8.5 `CompilerDB` should model dependencies among parse, resolve, type,
   capability, ownership, mono, CoreCheck, proof obligation, report, and codegen
   facts.
 
 Roadmap slots:
 
 - Phase 6.5 #23: replay artifacts and deterministic pass-output hashes.
-- Phase 19: editor/LSP responsiveness.
+- Conditional Phase 8.5: persistent `CompilerSession`, query engine, local
+  content-addressed store, and codegen-unit reuse.
+- Phase 19: editor/LSP reuse of that session.
 - Phase 18/11: proof and package evidence cache invalidation.
-- Potential future item: stable fact-query dependency graph.
 
 ## MLIR
 
@@ -575,11 +576,12 @@ source file
   -> backend output
 ```
 
-This does not need to replace the batch pipeline immediately. First, record the
-edges as trace/replay metadata. Later, those edges can become a demand-driven
-query engine.
+This does not replace the batch pipeline during Phase 6B. Phase 6C first records
+the edges as cache-free trace/replay metadata; conditional Phase 8.5 turns the
+validated graph into the demand-driven query engine after the external GO gate.
 
-Roadmap fit: Phase 6.5 #20/#23, Phase 19 editor tooling.
+Roadmap fit: Phase 6B dependency/invalidation contracts, Phase 6C shadow graph,
+Phase 8.5 engine, and Phase 19 editor tooling.
 
 ## Garnet — Convergent Capability/Evidence Project (`diff-caps`)
 
@@ -624,7 +626,7 @@ design and its no-speculative-vocabulary discipline.
 - Runtime/profile switches that change the meaning of source expressions.
 - Cache reuse without explicit dependency facts and stale-evidence handling.
 
-## Priority If This Becomes Work
+## Accepted Roadmap Order
 
 1. Finish Phase 6.5's current path: capability fact source, certificate-carrying
    IR, no hidden second pipeline, typed evidence ledger.
@@ -632,6 +634,9 @@ design and its no-speculative-vocabulary discipline.
    move/destination bugs recur or Phase 14 needs the formalization.
 3. Add stable interned IDs before package evidence, editor facts, or proof-cache
    invalidation become broad.
-4. Add fingerprint-keyed incremental verification cache after proof replay and
-   synthesis are usable enough to benefit from it.
-5. Add analysis preservation/invalidation contracts when cached analyses exist.
+4. Record the cache-free shadow query graph and edit corpus in Phase 6C.
+5. After a Phase 8 GO verdict, implement the conservative Phase 8.5 query engine,
+   local artifact store, and codegen-unit cache before Phase 9 proof reuse grows
+   a separate database.
+6. Add the independent Core and BackendIR certificate checkers in Phases 14/15;
+   a cache hit or producer validation record remains non-proof evidence.

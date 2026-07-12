@@ -1,6 +1,8 @@
 # Artifact-Driven Compiler Architecture
 
-Status: exploratory
+Status: accepted direction; implementation scheduled across Roadmap Phases
+6B/6C, conditional 8.5, 14/15, 18, and 19. Representation details remain
+workload- and gate-driven.
 
 This note covers the biggest architectural multiplier still missing from Concrete's compiler story:
 
@@ -281,10 +283,19 @@ The best order for this work is probably:
 
 ## Roadmap Placement
 
-This work cuts across multiple roadmap phases:
+The active roadmap now assigns the work explicitly:
 
-- **Phase H**: interface/body artifact split, package/dependency graph, summary/import discipline
-- **Phase J**: driver layer, serialization policy, stable cache artifacts, operational artifact ownership
-- **Later proof/evidence work**: source-to-Core traceability, stable proof/export subjects, evidence bundles
+- **Phase 6B #14a:** structured producer validation records and certificate-chain
+  schema;
+- **Phase 6C:** cache-free query/dependency shadow manifests and edit corpus;
+- **conditional Phase 8.5:** the real `CompilerSession`, typed query engine,
+  interface/body split, local content-addressed store, codegen units/object
+  cache, and rollout;
+- **Phases 14/15:** independent Core and BackendIR certificate checking over
+  canonical artifacts;
+- **Phase 18:** stable public package artifacts, independently checked
+  dependency receipts, and optional untrusted remote reuse;
+- **Phase 19:** LSP/editor reuse of the same session and fact graph.
 
-It is not a separate "compiler architecture phase" only because the work is foundational to package, operational, and proof maturity rather than isolated from them.
+This note remains design rationale, not a second queue. `ROADMAP.md` owns order,
+triggers, evidence classes, and validation gates.

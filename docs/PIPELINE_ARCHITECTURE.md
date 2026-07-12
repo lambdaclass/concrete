@@ -92,7 +92,8 @@ Each judgment module must satisfy the same contract:
   already agreed;
 - obeys the fact-home rule: node-local structural facts are typed-IR fields;
   relational, cross-node, cross-stage, provenance, evidence, and query facts
-  live in `CompilerDB` when that DB is pulled.
+  live in `CompilerDB` when that DB is pulled by Phase 6B consumers and becomes
+  the persistent incremental driver in Roadmap Phase 8.5.
 
 The practical purity rule belongs to this same pattern. Once capability
 judgment can prove an expression is pure, trap-free/total, and returns
@@ -124,7 +125,7 @@ downstream stages consume typed Core. Some facts are inherently relational
 (call-site↔parameter pass agreement, borrow conflicts, container/context
 exclusions), so `CompilerDB` is the relational/evidence/provenance/query
 substrate when those facts become load-bearing. `ValidatedCore`/
-`ValidatedSSA`/`ValidatedBackendIR` remain boundary tokens; future provenance is
+`ValidatedSSA`/`ValidatedBackendIR` remain boundary tokens; provenance becomes
 native **edges** in the DB (`lowersTo`/`emitsAs`/`trapSource`), not a
 hand-maintained join.
 
@@ -176,17 +177,30 @@ rather than adding it:
    EmitLLVM`. This is valuable even if LLVM remains the only emitter because it
    gives reports, translation validation, and source maps a structured backend
    contract instead of raw LLVM text.
+5. Replace `Unit`-only verifier results with Phase 6B structured producer
+   validation records and a versioned chain contract. These records are
+   `compiler_validated`, not independent certificates.
+6. Record the prospective query/dependency graph in Phase 6C shadow mode while
+   still recomputing the batch pipeline; use real Phase 8 edit traces to test
+   invalidation completeness.
+7. Only after the Phase 8 external-validation verdict is GO, implement Roadmap
+   Phase 8.5's persistent `CompilerSession`, conservative query engine, local
+   content-addressed store, and codegen-unit cache. Phase 14/15 then add the
+   independent Core and BackendIR certificate checkers over those canonical
+   artifacts.
 
 ## Relationship to Phase 14
 
 Phase 6.5, not Phase 14, decides the representation: Core `CExpr` is the typed
-carrier, a shared `TypeJudgment` feeds Check and Elab, and future `CompilerDB`
-carries relational/evidence/provenance facts when those facts are pulled. Phase
-14 #13b then proves and preserves that choice: Elab's re-inference is deleted,
-Check/Elab type agreement is structural through the shared judgment, and
-preservation proofs show each pass keeps the committed Core meaning. 6.5 makes
-the architecture stop inviting
-drift; 14 proves the passes honor it.
+carrier, a shared `TypeJudgment` feeds Check and Elab, and `CompilerDB` carries
+relational/evidence/provenance facts when those facts are pulled. Phase 8.5
+makes those artifacts persistently reusable. Phase 14 #13b then proves and
+preserves that choice, while #13c extracts an independent checker for the named
+`CoreCertificateV1` predicate. Elab's re-inference is deleted, Check/Elab type
+agreement is structural through the shared judgment, and preservation proofs
+show each pass keeps the committed Core meaning. Phase 6.5 makes the
+architecture stop inviting drift; Phase 8.5 makes it operational; Phase 14
+proves/checks the explicitly supported relations.
 
 ## Non-goals
 
@@ -194,12 +208,18 @@ drift; 14 proves the passes honor it.
   once and the reference semantics is single-sourced — not that every pass ships
   a Lean preservation proof today. Preservation proofs are Phase 14, pulled by
   need.
-- **Not the incremental/demand-driven rearchitecture.** Turning the batch
-  pipeline into a memoized query engine (salsa / rust-analyzer style) is a real
-  200x lever for *tooling* — it would make `concrete why`, `concrete diff`,
-  `explain`, and the Phase 19 LSP surface instant — but it is the wrong bet
-  while the language surface and IR are still moving. It is a Phase 19
-  architectural note, not Phase 6.5 work.
+- **Not the incremental/demand-driven rearchitecture during Phase 6.5.**
+  Turning the batch pipeline into a memoized query engine (salsa /
+  rust-analyzer style) is a real 200x lever for *tooling* — it can make
+  `concrete why`, `concrete diff`, `explain`, proof replay, and the Phase 19 LSP
+  surface effectively instant on unchanged work. The Roadmap now schedules that
+  implementation in conditional Phase 8.5, after semantic boundaries stabilize
+  and the Phase 8 external-validation gate says the project is worth scaling.
+  Phase 6B owns prerequisites, not cache activation.
+- **Not a claim that hashes or producer records certify semantics.** Phase 8.5
+  cache hits preserve existing evidence classes. Only Phase 14/15's independent
+  checker may emit the named structural/translation certificate statuses, and
+  only for its documented predicate/subset.
 
 ## Evidence
 
@@ -212,6 +232,9 @@ principles are checkable:
   interp-vs-compiled coverage row (item #14).
 - **Principle 2:** for each committed fact, a downstream stage cannot construct
   a program that re-derives it to a different answer — enforced by the
-  certificate types where they exist and by pass-agreement gates elsewhere
+  typed boundaries/producer validation records where they exist and by
+  pass-agreement gates elsewhere
   (items #2, #3, #5, #9); mutation testing proves each gate is load-bearing
-  (item #22).
+  (item #22). Independent certificate claims begin later in Roadmap Phase 14;
+  this document does not use `certificate` as a synonym for an in-process stage
+  token.

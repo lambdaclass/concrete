@@ -1,6 +1,8 @@
 # Semantic Query Interface
 
-**Status:** Open
+**Status:** accepted direction. Roadmap Phase 8.5 owns the underlying typed
+query engine; Phase 10 owns reviewer-facing semantic queries; Phase 19 exposes
+the same facts to editor/agent tools.
 
 Concrete should eventually expose compiler-produced facts through a query interface that humans, scripts, editors, CI, and LLM agents can use without grepping source code.
 

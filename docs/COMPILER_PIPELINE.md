@@ -306,13 +306,25 @@ codegen(function)
 release_bundle(project)
 ```
 
-The first implementation can recompute everything. The important part is
-recording dependencies now so a later cache does not guess.
+The Phase 6B/6C implementation may recompute everything while recording and
+shadow-checking dependencies. Roadmap Phase 8.5 is the explicit transition to a
+persistent `CompilerSession`, conservative red/green invalidation, a local
+content-addressed store, and cached codegen units after the external-validation
+gate returns GO.
 
 The intended shape is query-first: each compiler fact has a named key, stable
 inputs, and declared dependencies. This borrows the useful discipline from
 query-based compilers without committing Concrete to a caching framework before
-the pass boundaries and diagnostics are stable.
+the pass boundaries and diagnostics are stable. Phase 8.5 starts coarse—file,
+module, function/SCC, mono instance, codegen unit, project—and narrows only when
+dependency-completeness gates justify it. A missing reuse opportunity is
+acceptable; a stale semantic hit is not.
+
+All commands are demand sets over the same queries. `check` should not build
+objects; `audit` and `prove` should not reconstruct a private frontend; LSP
+should not own a second cache. Serialized cache bytes cross an
+`UntrustedCached* -> validate -> compiler_validated artifact` boundary and a hit
+preserves, never strengthens, the artifact's evidence class.
 
 ## Deterministic Replay
 
@@ -332,6 +344,25 @@ The same project should produce the same:
 across repeated runs, clean builds, retained-artifact replay, and serial versus
 parallel pass scheduling where parallelism exists. If two modes differ, the
 compiler should report a pipeline bug, not silently pick one answer.
+
+## Validation Records And Independent Certificates
+
+An in-process stage token and a producer validation record mean that the
+compiler ran a named verifier. They do not make the compiler independently
+checked. Phase 6B defines versioned producer records so cached artifacts bind
+their exact subject, dependencies, invariant-set version, provenance, and replay
+command. Phase 14 adds a separate small checker for the named
+`CoreCertificateV1` predicate; Phase 15 extends it only through the supported
+SSA-to-BackendIR translation relation; Phase 17 binds those receipts into an
+offline-verifiable release evidence root.
+
+Keep proof evidence, pipeline validation, independent-certificate status, and
+kernel replay as orthogonal dimensions. Qualified values such as
+`compiler_validated`, `certificate_structurally_checked`,
+`translation_validated_v1`, and `kernel_replayed` answer different questions;
+none may silently upgrade another or become a proof-evidence class. A hash
+authenticates declared content, a cache hit proves nothing, and
+unsupported/native regions remain visibly trusted.
 
 Metamorphic tests should exercise the same idea at the source level. Renaming
 locals, reordering independent declarations, changing whitespace/comments, or

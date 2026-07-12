@@ -99,7 +99,7 @@ The summary-based frontend is now implemented. Here is what landed:
 
 ### "Done enough" criteria met
 
-1. `FileSummary` is the single cross-file interface artifact — all passes consume it rather than rebuilding views from raw ASTs. **Caveat:** FileSummary and ResolvedImports carry full impl/trait-impl blocks with method bodies (not just signatures) because Check and Elab need them for cross-module method type-checking and elaboration. Splitting into interface-only and body portions is a future incremental-compilation concern.
+1. `FileSummary` is the single cross-file interface artifact — all passes consume it rather than rebuilding views from raw ASTs. **Caveat:** FileSummary and ResolvedImports carry full impl/trait-impl blocks with method bodies (not just signatures) because Check and Elab need them for cross-module method type-checking and elaboration. Conditional Roadmap Phase 8.5 owns the interface/body split needed for incremental reuse.
 2. `ResolvedImports` is an explicit stable artifact (documented, not ad hoc)
 3. No early pass rebuilds import/export/signature views ad hoc
 4. Resolve is purely shallow/interface-oriented
@@ -107,7 +107,7 @@ The summary-based frontend is now implemented. Here is what landed:
 6. CoreCheck owns all post-elaboration legality rules
 7. The artifact flow is explicit in the pipeline
 
-### What remains for future incremental compilation
+### What remains for Roadmap Phase 8.5
 
 - Split `FileSummary` into interface-only and body portions (currently carries `implBlocks`/`traitImpls` for Elab)
 - Cache summaries by file content hash
@@ -409,10 +409,12 @@ This is the architecture most consistent with:
 - the absence of macros
 - the long-term verification goal
 
-That part is now implemented. The remaining future refinement is narrower:
+That part is now implemented. The remaining scheduled refinement is narrower:
 
-- if incremental compilation becomes a priority, split interface-only and body-bearing portions of `FileSummary` / `ResolvedImports`
-- otherwise keep the current coarse-grained artifact boundary and move on to the next architecture item
+- after the Phase 8 external-validation gate returns GO, split interface-only
+  and body-bearing portions of `FileSummary` / `ResolvedImports` in Phase 8.5;
+- until then keep the current coarse-grained artifact boundary and the Phase 6C
+  cache-free shadow model.
 
 That single move would turn the current whole-program frontend from an implementation convenience into a more principled architecture, while keeping the existing compiler understandable.
 

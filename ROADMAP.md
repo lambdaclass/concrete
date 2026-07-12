@@ -1970,9 +1970,12 @@ or lost); put the heavier trace/replay/scaling machinery here.
 8. Add the Phase 6C validation artifact.
    `scripts/tests/check_phase6c_observability.sh` runs telemetry, complexity
    slopes, trace/replay, minimization, mutation testing, deterministic pass
-   hashes, and the shadow edit corpus over a small project plus one Phase 8
-   workload. It publishes the cold baseline, predicted invalidation sets, and
+   hashes, and the shadow edit corpus over a small project plus a generated
+   local scaling fixture available before Phase 7/8. It publishes
+   the cold baseline, predicted invalidation sets, and
    query-family census that Phase 8.5 must use; it does not enable caching.
+   Phase 8 #19 later reruns/extends this already-landed gate on the real workload
+   and publishes the handoff manifest; Phase 6C does not depend on future work.
 
 
 ## Phase 7: Standard Library And Core APIs
@@ -2635,6 +2638,11 @@ depends on it.
     timings and Phase 6C shadow invalidation traces for no-op, private-body,
     public-interface, proof/contract, policy, and target edits; those traces are
     the workload-derived input to Phase 8.5, not a cache implementation here.
+    If the external-validation trial finds manual proof authoring too costly,
+    this artifact must also run the exact narrow Phase 9 #14a synthesis probe
+    selected by the gate, preserve its transcript and review-cost measurements,
+    and record the final GO/NO decision consumed by the Phase 8.5 trigger. It
+    may not silently broaden that probe into the general synthesis roadmap.
 
 ## Phase 8.5 / 8B: Incremental Compiler Driver And Artifact Reuse
 
@@ -2674,20 +2682,63 @@ invalidation; no-op and leaf edits reuse semantic and object artifacts; cache
 corruption/schema/tool drift recompute or fail closed; and no cached partial or
 stale artifact can fabricate a validated boundary or stronger evidence class.
 
-1. Define one typed query/artifact contract and one `CompilerSession` driver.
-   Add a closed `QueryKey` family and typed result envelope containing subject
-   identity, canonical output digest, dependency keys/digests, validation-record
-   identity, diagnostics/fact ids, provenance, cacheability, evidence class,
-   replay command, and dependency-root digest. Required initial families:
+0. Freeze every build revision into an immutable `ProjectInputSnapshot` before
+   evaluating queries.
+   The snapshot owns canonical project/file/module discovery and exact file
+   bytes; manifest/lock/policy/profile/target; stdlib and dependency roots;
+   configured cwd/path normalization, symlink and case policy; SDK/sysroot and
+   runtime/startup inputs; allowlisted environment variables; and compiler,
+   checker, solver, clang/LLVM, linker, and other tool identities. Watch events
+   only trigger resnapshot/content hashing. Query evaluation may perform no
+   ambient filesystem/environment/tool discovery outside declared input queries,
+   and an edit during a build belongs to the next revision rather than mutating
+   the active snapshot.
 
+   Give source-bearing artifacts two identities where justified: an exact-source
+   revision digest for bytes/spans/diagnostics/provenance, and a canonical
+   semantic AST/interface digest for semantics-preserving reuse. Reusing a
+   semantic result across whitespace/comment/span edits requires a checked
+   semantic-hash equivalence rule plus a refreshed revision/span map; span-bearing
+   output always depends on the exact revision. Gate changed environment/std
+   path, SDK/sysroot/tool binary, symlink/case alias, add/delete/rename, and
+   edit-during-build snapshots.
+
+1. Define one typed query/artifact contract and one `CompilerSession` driver.
+   Add a closed `QueryKey` family and an explicit typed `CompilerDB` fact/edge
+   store owned by the session. Split every result into (a) a canonical hashed
+   payload + semantic dependency manifest and (b) non-hashed operational/view
+   metadata. Only normalized semantic fields, schema, subject identity, and
+   declared dependency digests enter `output_digest`/the dependency root.
+   Timings, hit/miss state, cache path/location, absolute/local paths, rendered
+   replay commands, redaction/display choices, and other operational metadata do
+   not. Exact-revision diagnostics/provenance use their own revision-bound
+   digest.
+
+   Keep orthogonal status dimensions: the existing proof/evidence class;
+   `pipeline_validation_status` (`unvalidated | compiler_validated`);
+   independent `certificate_status`; and `replay_status`. Cache/integrity/
+   certificate states may not become new proof-evidence classes. The result
+   envelope also carries dependency keys/digests, producer validation-record id,
+   fact/diagnostic ids, provenance roots, cacheability, and replay-plan identity.
+   Required initial families:
+
+   - project input: snapshot, loaded-file/module graph, manifest/dependencies;
    - file: source/lex/parse/interface-summary/body;
-   - module: resolve/check/elaborate/CoreCheck;
+   - module: resolve, desugar, check, elaborate, Core canonicalize, CoreCheck;
    - function or explicit SCC: calls, ownership/capabilities/effects, ProofCore,
      obligations, discharge inputs, and typed report facts;
-   - monomorphized instance: stable definition id + canonical type arguments;
-   - codegen unit: lower/SSA verify/backend emission/object;
+   - monomorphized instance: stable definition id + canonical type arguments,
+     monomorphization and post-Mono verification;
+   - codegen unit: lower, raw-SSA verify, SSA cleanup, post-cleanup verify, LLVM
+     emission/object from `ValidatedSSAUnit` in V1;
    - project: module graph, reachability, policy aggregation, link plan, and
      release/bundle view.
+
+   If several production stages remain one composite query, its contract must
+   name every enclosed stage and verifier so `runFrontend`, desugar,
+   canonicalization, cleanup, or post-pass verification cannot disappear from
+   the incremental path. Phase 15 schema-bumps codegen inputs from validated SSA
+   to `ValidatedBackendIR`; Phase 8.5 does not depend on future BackendIR.
 
    Expose `--incremental=off|on|verify` (or equivalent internal modes). Strict,
    tolerant, audit, proof, test, report, and codegen operations are demand sets
@@ -2695,6 +2746,13 @@ stale artifact can fabricate a validated boundary or stronger evidence class.
    redaction, proof-tool, target, profile, and policy inputs invalidate only
    query families that declare them. The eager `off` mode remains the oracle
    and debugging path.
+
+   Add a query-effect firewall: filesystem reads/discovery, environment
+   variables, locale/timezone/time, tool/solver discovery and identity, target
+   data, policy, and external process results enter computation only through
+   declared input/query APIs. Dynamic dependency recording cannot see ambient
+   inputs read behind the query engine, so bypassing the firewall is a cache
+   correctness bug and fails a mutation gate.
 
 2. Add deterministic indexed compiler data and linear-time builders before
    persisting today's hot whole-program scans.
@@ -2717,9 +2775,18 @@ stale artifact can fabricate a validated boundary or stronger evidence class.
    and validated Core-module boundaries. Check may no longer return only `Unit`
    if downstream reuse needs its ownership/capability/value-flow decisions; it
    must produce the durable facts or typed artifact that Elab and later queries
-   consume. A module query depends on its own semantic body plus imported
-   **interface** digests, so a dependency's private-body edit does not invalidate
-   importers.
+   consume. Initially keep imported body digests in the conservative dependency
+   envelope anywhere resolution, trait/method lookup, Check, or Elab can still
+   inspect bodies. A module may depend on imported **interface-only** digests—and
+   therefore survive a dependency-private body edit—only after the interface
+   completeness gate proves every consumer uses the split artifact rather than
+   a body side channel. Public API identity and implementation-evidence identity
+   remain separate. Even then, the unchanged interface permits reuse only for
+   importer frontend/interface queries: referenced generic bodies,
+   call/effect/proof facts, monomorphized instances, implementation evidence,
+   and codegen still depend on the applicable body digest. Gate both an unused
+   nongeneric private-body edit whose importer frontend remains a hit and a
+   referenced generic-body edit that invalidates the affected mono/object path.
 
    Strict and tolerant/partial artifacts use different result types. A partial,
    recovered, cancelled, or internal-error artifact cannot satisfy strict
@@ -2742,58 +2809,110 @@ stale artifact can fabricate a validated boundary or stronger evidence class.
    reuse opportunity is acceptable; stale reuse is not. Narrow an envelope only
    after a gate or theorem demonstrates completeness for that query family.
 
+4a. Define deterministic internal codecs before persisting an artifact family.
+    Each cacheable type needs a compiler-versioned canonical encoder/decoder,
+    explicit ordering and normalization, `decode(encode(x))` semantic equality,
+    canonical re-encoding, malformed-input/size-limit fuzzing, and a round-trip
+    boundary verifier. Summary hashes from Phase 6C are not a serialization
+    format. Internal codecs may invalidate wholesale across compiler versions;
+    Phase 18 separately owns stable public package encodings.
+
 5. Add an opaque compiler-versioned local content-addressed store under
    `.build/concrete-cache/` (or an equivalent project-local path).
-   Keys include compiler build/internal schema, semantic input/dependency
-   digests, invariant-set version, target/data layout, build/test profile,
-   policy only where consumed, and relevant proof/backend/tool identity. Add
+   Separate the memo/action table from the content store:
+   `QueryKey + canonical input/dependency fingerprint -> ResultManifest +
+   output digest`, then `output digest -> canonical artifact bytes`. Keys include
+   compiler build/internal schema, semantic input/dependency digests,
+   invariant-set version, target/data layout, build/test profile, policy only
+   where consumed, and relevant proof/backend/tool identity. Add
    atomic writes, locking, checksums, interrupted-write recovery, size/GC policy,
    `concrete cache status --json`, and `concrete clean --cache --dry-run`.
 
-   Serialized cache entries are untrusted bytes. Loading must follow an explicit
-   `UntrustedCached* -> decode/schema/digest/dependency/subject validation ->
-   compiler_validated artifact` API; deserialization cannot directly construct
+   Serialized cache entries are untrusted bytes for decoding/integrity purposes.
+   Loading must follow an explicit `UntrustedCached* ->
+   UntrustedDecodedArtifact` API after schema/digest/dependency/subject checks;
+   those checks yield only `cache_integrity_checked` bytes bound to the
+   **original** producer validation record; they cannot reconstruct
    `ValidatedCore`, `ValidatedSSA`, a proof result, or a release fact. Before
-   Phase 14 this still trusts the producing compiler's validation record—it is
-   not independent certification. Unknown schema/compiler/invariant versions,
-   truncated content, conflicting ids, or mismatched dependencies cause clean
-   recomputation or a loud diagnostic, never a green hit.
+   Phase 14/15, rerun the current
+   semantic boundary verifier over every loaded strict Core/SSA artifact before
+   constructing its in-process validated token and fresh producer record. If no verifier can reconstruct
+   a boundary, that artifact is not safely cacheable for strict codegen, proof,
+   policy, package, or release use. This still trusts the compiler's verifier—it
+   is not independent certification.
+
+   Treat the project-local store as inside the same user's integrity boundary:
+   hashes/checksums detect accidental corruption and substitution relative to a
+   trusted action mapping, not a malicious same-user rewrite of both mapping and
+   result. Unknown schema/compiler/invariant versions, truncated content,
+   conflicting ids, or mismatched dependencies are quarantined and treated as
+   ordinary cache misses whenever source inputs allow recomputation. Fail only
+   in an explicit artifact-only/offline operation where recomputation is
+   impossible. A coordinated malicious rewrite of action mapping, result,
+   manifest, and internal hashes is outside the local-cache threat model until
+   an authenticated expected action/root exists; tests must not misdescribe
+   internal consistency checks as detecting it.
 
 6. Turn proof, obligation, and report work into queries rather than cached
    rendered strings.
    Cache per-function ProofCore extraction, call/SCC classification,
-   obligations, typed evidence/report rows, and discharge attempts. Project
+   stable normalized obligations, typed proof inputs, and typed evidence/report
+   rows whose schemas already exist. Project
    reports are deterministic views/joins over those typed facts. A cache hit
-   preserves the original evidence class and replay provenance; it never turns
-   `tested`, `solver_trusted`, `assumed`, `trusted`, or `compiler_validated`
-   into proof. Lean, ProofKit, solver, synthesis-model, toolchain, spec,
-   theorem, dependency-fact, and policy identities affect only the query
-   families that consume them.
+   preserves the original proof/evidence class and replay provenance; pipeline
+   validation remains a separate dimension. It never turns `tested`,
+   `solver_trusted`, `assumed`, or `trusted` into proof. Lean, ProofKit, solver,
+   synthesis-model, toolchain, spec, theorem, dependency-fact, and policy
+   identities affect only the query families that consume them.
 
-   Fold Phase 9 #15 into this store/query namespace rather than creating a
-   second `.build/concrete-proof-cache/` database. Cache only successful strict
-   artifacts first. Negative/tolerant diagnostics, filesystem discovery,
-   environment-dependent operations, solver results, and cancelled work need
-   explicit cache contracts before reuse.
+   Do not restore `proved_by_lean`, `proved_by_kernel_decision`, or
+   `kernel_replayed` from an untrusted cached verdict alone. Cache proof inputs,
+   normalized obligations, generated artifacts, exact proof-workspace/import
+   dependency digests, and replay plans; replay the
+   kernel before emitting the current strong status unless a separately
+   authenticated replay receipt is explicitly admitted by policy and named in
+   the TCB. Solver/LLM results retain their weaker class and replay provenance.
+
+   Phase 8.5 supplies the query namespace and store; Phase 9 #4a/#15 owns the
+   shared proof-artifact schema and activation of reusable Lean/solver verdicts,
+   rather than creating a second `.build/concrete-proof-cache/` database. Cache
+   only successful strict non-verdict artifacts first. Negative/tolerant
+   diagnostics, filesystem discovery, environment-dependent operations, solver
+   results, and cancelled work need explicit cache contracts before reuse.
 
 7. Add stable codegen units, an object cache, and deterministic relinking.
-   V1 uses one codegen unit per source module plus stable runtime and test-harness
-   units; if a measured large module needs subdivision, use deterministic
-   stable-id buckets or explicit mono SCCs, never traversal-order chunks. Give
-   every monomorphized instance one stable owner. Each unit emits a manifest of
-   imports, exports, layouts, helpers, globals, source-map identities, trust
-   labels, and mono instances so collision/missing-symbol checks happen before
-   linking.
+   First define `ToolchainIdentityV1` / `BackendInvocationV1`: exact clang/linker
+   executable digests (not version strings alone), SDK/sysroot, allowlisted
+   environment, target/data layout and ABI, optimization/debug/sanitizer flags,
+   runtime/startup objects, and every effective tool flag. These inputs come
+   from `ProjectInputSnapshot` and participate in action keys.
 
-   The object key includes validated SSA/BackendIR unit digest, backend schema,
-   target triple/data layout, optimization/debug/sanitizer profile, runtime ABI,
-   and clang/LLVM identity and flags. The link key includes canonically ordered
-   object digests plus linker/startup/runtime identities. Gate that a leaf edit
-   rebuilds only its declared reverse dependencies plus link, a warm no-op with
-   retained outputs invokes neither clang nor linker, target/toolchain changes invalidate every affected
-   object, build/test share ordinary units but not harness units, and corrupt or
-   substituted objects fail closed. Phase 15 later adds independent translation
-   checking; an object-cache hit before then remains backend/compiler-trusted.
+   Then add a deterministic `ProgramCodegenPlan` / global ABI-symbol index that
+   owns reachability, symbol naming/collisions, whole-program signature/layout
+   facts, builtin/helper/type universe, global/string ownership, externs,
+   monomorphized-instance ownership, unit imports/exports, and common-versus-test
+   partitioning. The current whole-program Mono/SSA/emitter decisions must become
+   explicit plan inputs before a module can emit safely in isolation. V1 unit
+   input is `ValidatedSSAUnit`; Phase 15 migrates it to validated BackendIR.
+   Start with one unit per source module plus stable runtime/test-harness units
+   only if the partitionability gate passes. Later subdivision uses deterministic
+   stable-id buckets or explicit mono SCCs, never traversal-order chunks.
+
+   The object action key includes validated-SSA unit + codegen-plan digest,
+   backend schema, and `BackendInvocationV1`. The link action key includes
+   canonically ordered object digests plus linker/startup/runtime identities.
+   Cache/materialize the final linked artifact by link key if a retained-output
+   warm no-op is expected to skip the linker; otherwise a missing final artifact
+   may relink while still reusing every object.
+
+   Gate isolated unit emission, duplicate/orphan mono ownership, missing/
+   colliding symbols, common/test partitioning, target/toolchain invalidation,
+   corrupt local objects/action mappings, and requested-output materialization.
+   A leaf edit recompiles only its measured affected units plus link; a retained
+   warm no-op invokes neither clang nor linker. Phase 15 later adds independent
+   BackendIR relation checking. Before a native/object validator, an object hit
+   remains backend/compiler-trusted and its hash proves identity only relative
+   to the trusted local action mapping—not that LLVM produced correct code.
 
 8. Add a long-lived service/watch surface over the same session, then
    deterministic independent-query scheduling.
@@ -2803,14 +2922,16 @@ stale artifact can fabricate a validated boundary or stronger evidence class.
    artifacts/facts must be byte- and schema-equivalent; external LLVM/object
    nondeterminism follows the explicit Phase 15 policy and must not change
    compiler facts or native behavior. Cancellation or a worker crash must not
-   commit partial cache state. The internal service exists to preserve a session across CLI or
-   scripted edits; Phase 19's LSP must wrap this exact session rather than a
-   batch `runFrontend` or editor-only cache.
+   commit partial cache state. Canonically sort diagnostics/events whose order
+   is otherwise scheduling-dependent. The internal service exists to preserve a
+   session across CLI or scripted edits; Phase 19's LSP must wrap this exact
+   session rather than a batch `runFrontend` or editor-only cache.
 
 9. Add cache/query observability and a conservative rollout.
    Extend pipeline events with `executed | memory_hit | disk_hit | invalidated |
    uncacheable`, reason, dependency ids, bytes, time, validation-record id, and
-   evidence class. Roll out `shadow -> opt-in -> CI verify/dual-run -> default-on`
+   the separate evidence/pipeline-validation/certificate/replay statuses. Roll
+   out `shadow -> opt-in -> CI verify/dual-run -> default-on`
    only after each stage's corpus is green. `verify` recomputes selected hits and
    compares canonical results; any false hit disables that query family and
    persists a minimized regression. Audit/why/diff output may explain reuse but
@@ -2829,14 +2950,24 @@ stale artifact can fabricate a validated boundary or stronger evidence class.
     interface; generic body/new instantiation; proof link/theorem/spec; policy;
     target/profile; file add/delete/rename; syntax/type error then repair;
     cancellation; cache truncation/corruption; schema/compiler/checker/tool
-    drift; object substitution; and serial/parallel modes. Compare
+    drift; coordinated action-map/artifact/dependency rewrite (recorded as
+    outside the unauthenticated local-cache threat model, never falsely
+    "detected"); object
+    substitution; ambient-input firewall bypass; and serial/parallel modes. Compare
     incremental-off/on/verify facts, diagnostics, obligations, reports,
-    Core/SSA/LLVM, native behavior, and query execution sets—not only wall time.
-    On the Phase 8 large workload, a warm no-op must execute zero semantic or
-    backend queries and a leaf edit must rebuild only declared reverse
-    dependencies. Record relative latency (target probes: at least 20x no-op and
-    5x leaf-edit versus cold median) without turning those probes into a public
-    release claim; Phase 17 owns release performance budgets.
+    Concrete-owned canonical Core/SSA/LLVM and manifests byte-for-byte; compare
+    normalized external-object metadata and native behavior unless the pinned
+    toolchain is separately proved reproducible. Assert query execution sets,
+    named unaffected sentinel modules/functions/objects that must remain hits,
+    affected outputs that must change, and maximum query-family execution counts
+    per edit—not only wall time or the tautology "declared dependencies rebuilt."
+    On the Phase 8 large workload, a warm no-op must execute zero **producer
+    recomputation** beyond required decode/integrity/boundary-validation queries,
+    and a leaf edit must rebuild only declared reverse
+    dependencies within the stated count bound. Publish observed/baseline-derived
+    no-op and leaf-edit speedups (20x/5x are investigation targets, not phase
+    gates or public claims); Phase 17 owns platform-specific release performance
+    budgets.
 
 ## Phase 9: Proof Authoring And Automation
 
@@ -3159,10 +3290,11 @@ too expensive.
    composition, bounded quantified specs, ghost, stale, missing, partial, and
    repair cases. The gate must typecheck generated stubs, reject any
    `proof-registry.json`, and verify that failing Lean proofs map back to stable
-   obligation ids. It must also exercise Phase 8.5 proof-query memory/disk hits,
-   stale dependency invalidation, proof-tool/policy drift, corrupt-entry
-   recovery, and cache-off/on/verify equivalence without treating a hit as
-   proof evidence.
+   obligation ids. If Phase 8.5 completed, it must also exercise proof-query
+   memory/disk hits, stale dependency invalidation, proof-tool/policy drift,
+   corrupt-entry recovery, and cache-off/on/verify equivalence without treating
+   a hit as proof evidence. If Phase 8.5 was rejected/deferred, the validation
+   artifact runs eagerly and does not create a private proof cache.
 
 ## Phase 10: Audit Commands And Review Artifacts
 
@@ -3184,6 +3316,11 @@ five graduated flagships and one package-scale example.
    compiler facts or generated snapshots, not restate evidence status by hand.
    Add a drift fixture proving a stale hand-written claim is caught or marked
    explicitly non-authoritative.
+   Keep pipeline validation, independent-certificate, and kernel-replay status
+   in separate shared dimensions from that evidence-class enum. In particular,
+   `compiler_validated`, `certificate_structurally_checked`, a named checked
+   relation, and `kernel_replayed` answer different questions and may not be
+   collapsed into or used to upgrade a proof/evidence class.
 2. Add `concrete audit`: one human-readable plus machine-readable bundle
    covering authority, trust, allocation, proof status, obligations,
    assumptions, policy, snapshots, backend/target assumptions, replay, and the
@@ -3338,19 +3475,21 @@ five graduated flagships and one package-scale example.
 20. [relocated from closed Phase 4 — #42] Add compiler self-audit: `concrete audit
     --compiler` renders the `CompilerLedger` / `ObligationCore` as a reviewable
     bundle (ledger-from-ledger), proving the compiler's own facts are
-    audit-visible through the same surface user programs use. It must consume
-    Phase 8.5 typed query/fact results and show cache/query provenance separately
-    from evidence; it may not recompute a private audit-only compiler model or
-    present a cache hit as validation.
+    audit-visible through the same surface user programs use. When Phase 8.5
+    completed, it must consume its typed query/fact results and show cache/query
+    provenance separately from evidence. Otherwise it consumes the eager shared
+    pipeline facts. Neither branch may recompute a private audit-only compiler
+    model, create a private cache, or present a cache hit as validation.
 21. Add the Phase 10 validation artifact: one package-scale audit bundle fixture
     with human and JSON output, semantic diff before/after a change, artifact
     viewer smoke test, oracle manifest, property-test manifest, persisted
     counterexample regression, spec-provenance facts, redaction check, replay
     command, and a README showing how a reviewer answers authority, proof,
     trust, assumption, and runtime-obligation questions without reading compiler
-    internals. Cold, warm, and cache-off audit/diff/why output must be identical
-    after normalizing timing/cache-observability fields, and corrupt/stale query
-    artifacts must recompute or fail closed.
+    internals. When Phase 8.5 exists, cold, warm, and cache-off audit/diff/why
+    output must be identical after normalizing timing/cache-observability fields,
+    and corrupt/stale query artifacts must recompute or fail closed; otherwise
+    the same fixture runs eagerly with no private caching.
 
 ## Phase 11: Proof Status And Trust Gates
 
@@ -3935,10 +4074,13 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
 
     Define a versioned canonical `CoreCertificateV1` and a small separate
     `concrete-cert` library/executable target. Enforce a dependency firewall: it
-    may import the canonical artifact/schema decoder, hash/id layer, small
-    semantic specification/judgment definitions, and checker theorems; it may
+    may import the canonical artifact/schema decoder, hash/id datatypes,
+    **independent declarative specifications and shared data types**, and checker
+    theorems; it may
     not import Parser, Check, Elab, Mono, Lower, Report, CLI, project loader, the
-    Phase 8.5 scheduler/cache, or producer verifier implementations. Publish its
+    Phase 8.5 scheduler/cache, producer executable judgments such as
+    `TypeJudgment`/Layout/fingerprint helpers, or producer verifier
+    implementations. Publish its
     source/binary hash, import inventory, `partial`/unsafe/axiom inventory,
     rule-set version, and size so "small checker" remains measurable.
 
@@ -3949,16 +4091,23 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     consistency; direct-call arity and argument/result agreement; absence of
     unresolved placeholders/type variables where the Core boundary forbids
     them; direct-call capability containment; proof-target/body-fingerprint and
-    obligation dependency binding; and the Phase 6B validation-chain shape. It
+    obligation dependency binding; and the Phase 6B validation-chain shape.
+    Proof-target/fingerprint/obligation/provenance checks establish identity and
+    binding only; they do not establish extraction correctness, theorem/spec
+    adequacy, or source correspondence. It
     must not merely compare a producer-emitted fact table with a second
     producer-emitted summary.
 
     Ownership/borrow/value-flow claims enter V1 only where the artifact carries
     enough independently checkable decisions and path edges to validate them.
     Checking that an ownership field exists is not ownership-checker soundness.
-    Extend the predicate one rule family at a time with a mutation fixture and,
-    where practical, a bounded soundness theorem such as
-    `checkCoreCertificate a c = true -> CoreCertificateV1.Valid a c`.
+    Extend the predicate one rule family at a time with a mutation fixture. Give
+    every predicate an explicit checker-proof status:
+    `checker_trusted` for executable checking without a soundness theorem,
+    `checker_soundness_kernel_proved` only when Lean proves a theorem such as
+    `checkCoreCertificate a c = true -> CoreCertificateV1.Valid a c`, and
+    `kernel_replayed` only for the artifact-specific theorem. An unproved checker
+    may not appear under the same badge as a proved checker.
 
     Emit `certificate_structurally_checked`, `certificate_mismatch`, or
     `certificate_unsupported`; never `certified` or `proved_by_lean` merely
@@ -3977,9 +4126,11 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     checked by the kernel; a theorem about the checker does not make execution
     of the compiled checker kernel-only.
 
-    Bind the checker to the Phase 8.5 query DAG: cached canonical bytes and the
-    producing compiler are untrusted for the named V1 predicate only after this
-    checker recomputes it. A verification receipt names artifact digest,
+    Bind the checker to the Phase 8.5 query DAG: an **independent consumer** may
+    distrust cached canonical bytes and the producing compiler for the named V1
+    predicate only after that consumer reruns the checker. A receipt rendered by
+    the producer remains producer output until external replay. A verification
+    receipt names artifact digest,
     dependency root, checker/rule-set version, checked and unsupported
     predicates, theorem/replay identity where any, and exact trust boundary.
 
@@ -3988,7 +4139,9 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     stale dependency roots, artifact/certificate swapping, fabricated proof
     links, mismatched obligation subjects, malformed/noncanonical encodings,
     unsupported constructs mislabeled checked, and a producer record that
-    agrees with itself about a false artifact fact. Wire
+    agrees with itself about a false artifact fact. Break a producer judgment/
+    layout/fingerprint helper and prove the checker still rejects the bad
+    artifact without importing that helper. Wire
     `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
@@ -4107,7 +4260,7 @@ replayable; and every boundary after that slice remains explicitly trusted.
     integer arithmetic, fixed arrays, structs, direct calls, branches, bounded
     loops, runtime checks, capability calls, and source-map annotations. The
     validator compares checked Core / typed IR / SSA facts against BackendIR
-    facts and reports one of: `translation_validated_v1`, `translation_trusted`,
+    facts and reports one of: `translation_compiler_validated_v1`, `translation_trusted`,
     `translation_blocked`, or `translation_mismatch`. This is not a promise to
     prove the whole LLVM/native stack; it is a per-artifact check that the
     Concrete lowering into the backend contract preserves the facts Concrete
@@ -4132,20 +4285,29 @@ replayable; and every boundary after that slice remains explicitly trusted.
     `ValidatedSSA -> BackendIR -> ValidatedBackendIR` artifacts. The checker
     validates the explicit input/output relation; it does not trust
     producer-emitted `preserved` flags or compare two summaries produced by the
-    same lowering pass.
+    same lowering pass. Its operator, trap, intrinsic/helper, ABI-layout, and
+    target specifications must be independent declarative definitions; it may
+    not reuse Lower/Emit/Layout decision helpers whose common-mode bug it is
+    intended to catch.
 
     V1 covers integer width/signedness and operator selection, bools, direct
     calls and signatures, returns, branches, fixed-layout structs/arrays,
     required arithmetic/bounds/runtime traps, layout/target constants,
     source-map identities, helper/intrinsic calls, and capability/trust labels
-    for the subset admitted by item #18. Unsupported operations make only the
-    affected function/region `translation_trusted` or `translation_blocked`;
-    they may not be hidden under a module-wide validated badge.
+    for the subset admitted by item #18. V1 admission is whole-function: if an
+    unsupported operation can influence control flow, memory, calls/arguments,
+    or the return value, that entire function is `translation_trusted` or
+    `translation_blocked`. Region-level validation is forbidden until explicit
+    compositional boundaries and a composition theorem exist. Track call-closure
+    separately: a caller may satisfy the local V1 lowering relation while a
+    reachable callee remains backend-trusted, so that is not end-to-end validated
+    function behavior.
 
     Bind Phase 8.5 codegen-unit manifests and object/link identities into the
-    dependency root so the release graph cannot combine checked BackendIR from
-    one build with objects or a link plan from another. The independent semantic
-    check stops at `ValidatedBackendIR`: LLVM optimization, LLVM text-to-object
+    dependency root with explicit edge status. The independent V1 **relation**
+    check stops at `ValidatedBackendIR`: `BackendIR -> object` and
+    `object -> binary` are `identity_bound_only` / `backend_trusted`, not
+    semantically checked. LLVM optimization, LLVM text-to-object
     translation, object writer, linker, ABI/runtime behavior, and native
     execution remain trusted/tested unless a later validator explicitly covers
     them. Object and binary hashes prove identity, not semantics.
@@ -4155,7 +4317,10 @@ replayable; and every boundary after that slice remains explicitly trusted.
     capability/trust label, source-map id, target/profile, codegen-unit owner,
     object/link manifest, and certificate/build binding. Include an unsupported
     instruction mislabeled as validated. Independent replay must reject each
-    mutation without calling the producer backend. Wire
+    checked-relation mutation without calling the producer backend. Also combine
+    BackendIR A with object B and consistently rehash a fresh internal graph: in
+    the absence of an externally expected root the checker must report an
+    unvalidated backend edge, not claim semantic mismatch detection. Wire
     `scripts/tests/check_backend_translation_certificates.sh`.
 19. Add the Phase 15 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, C/ABI glue generation/import checks,
@@ -4330,7 +4495,7 @@ audience):**
      flagship theorem (e.g. remove it from the axiom-inventory allowlist or
      break its fingerprint) and must show the release bundle flips to
      failing with the downgraded claim named — no false green on a revoked
-     proof. Phase 17 #18d's independent verifier must reject the old evidence
+     proof. Phase 17 #15a's independent verifier must reject the old evidence
      root and any cached receipt that still names the revoked theorem.
 9c. Add a certification-style assurance bundle profile before any
     SPARK-class comparison claim. The bundle must include the claim matrix,
@@ -4352,6 +4517,58 @@ audience):**
    wrap libraries honestly, what stays outside Concrete.
 15. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
+15a. Define the canonical release-evidence DAG and offline independent bundle
+    verifier before packaging or benchmarking it.
+
+    Move the common public/verifier codecs here: versioned canonical encoders
+    for source/lock inputs, typed-Core artifacts and Phase 14 receipts,
+    obligations/proof bundles, SSA/BackendIR artifacts and Phase 15 receipts,
+    codegen-unit/object/link manifests, binary identity, policy/profile,
+    assumptions/trust facts, checker/toolchain identities, and proof replay
+    payloads. Phase 18 #15b later wraps these in package interface/body formats;
+    it does not first define encoders required by this release gate.
+
+    Every edge declares its relation and status (`identity_bound_only`,
+    `producer_validated`, or a named independently checked relation), and the
+    graph schema names mandatory edges. The bundle exposes one computed evidence
+    root, but self-consistency is not authenticity: verification requires an
+    externally supplied pinned expected root or a policy-accepted signature/
+    builder attestation over that root. A root/signature authenticates identity
+    and provenance, not semantic correctness.
+
+    Define `concrete-cert verify-bundle <bundle> --expected-root <root>` plus a
+    `concrete verify-bundle` alias only if it invokes the same checker. It runs
+    without repository/network state, treats bundle bytes as hostile, recomputes
+    canonical nodes/edges/root, reruns Phase 14/15 certificate predicates, and
+    validates checker/rule-set/toolchain/target/profile/policy binding. Output
+    separate dimensions: `internally_consistent`, `root_matches_expected`,
+    `provenance_authenticated`, `core_certificate`, `backend_translation`,
+    `proof_replay`, `policy`, `assumptions`, and `remaining_trust`—never one
+    ambiguous `verified` badge.
+
+    The schema can reject a missing mandatory edge; the Merkle graph cannot
+    discover an arbitrary omitted semantic dependency unless completeness is
+    separately proved. Proof/Core and SSA/BackendIR substitutions may fail their
+    independently checked relations. Object/binary substitutions fail only the
+    expected-root/provenance binding; `BackendIR -> object -> binary` remains
+    backend-trusted. A fresh internally consistent root over different native
+    bytes is not a semantic mismatch.
+
+    Specify a self-contained offline proof-replay payload and runtime: theorem
+    sources or checked proof objects, generated workspace/manifest, exact Lean/
+    ProofKit dependencies, kernel/tool versions and hashes, and licenses. If a
+    platform bundle cannot provide that replay surface, report
+    `proof_replay=unavailable`; it may not satisfy the beta/release bar for a
+    claim advertised as offline kernel-replayable.
+
+    Gate expected-root mismatch, accepted/bad signature, proof from build A with
+    Core from B, SSA/BackendIR substitution, object/binary substitution,
+    schema-required edge deletion, declared dependency-root mismatch, revoked
+    proof, unsupported relation mislabeled checked, malformed cycles/duplicate
+    ids, and missing checker/theorem identity. A byte mutation must produce a
+    different root and fail against the pinned expected root (or lose accepted
+    authentication), not necessarily fail internal-consistency parsing. Wire
+    `scripts/tests/check_verify_bundle.sh`.
 16. Add concrete distribution UX:
     `concrete --version --json`, `scripts/release/build_dist.sh`,
     `dist/concrete-<version>-<target>.tar.gz`, `dist/SHA256SUMS`,
@@ -4361,7 +4578,11 @@ audience):**
     version-pinned. The archive must ship the independently built
     `concrete-cert` verifier, expose `concrete-cert --version --json`, record its
     source/binary/rule-set hashes separately from the producer compiler, and let
-    `verify-bundle` run without repository state or network access.
+    `verify-bundle` run without repository state or network access. It must also
+    ship item #15a's pinned proof-replay runtime/payload dependencies—or report
+    `proof_replay=unavailable` and fail any release profile that requires offline
+    kernel replay. Include every shipped Lean/ProofKit/runtime component in
+    checksums, the supply-chain lock, and `THIRD_PARTY.md`.
 17. Add release performance budgets:
     `scripts/tests/check_release_performance.sh` must measure compiler startup,
     cold small-project/stdlib builds, Phase 8.5 warm no-op, private-leaf and
@@ -4428,44 +4649,6 @@ audience):**
     public copy may not imply "fast systems language" unless `concrete bench`
     and release performance gates publish replayable numbers; otherwise docs
     must say performance claims are not made yet.
-18d. Add a Merkle-rooted release evidence DAG and offline independent bundle
-    verification.
-
-    Every release bundle carries a canonical graph whose nodes include source
-    and lock inputs, compiler/query schemas, typed-Core artifacts and Phase 14
-    receipts, obligation/proof artifacts, SSA/BackendIR artifacts and Phase 15
-    translation receipts, codegen-unit/object/link manifests, emitted binary
-    identity, policy/profile, assumptions/trust facts, checker identities, and
-    toolchain identity. Every edge names the declared dependency relation and
-    the bundle exposes one evidence root. A signature may authenticate that root;
-    it is not correctness evidence.
-
-    Ship the narrow independent command `concrete-cert verify-bundle <bundle>`
-    with a `concrete verify-bundle` convenience alias only if the alias invokes
-    the same checker. It operates without repository state or network access,
-    treats the bundle as hostile input, recomputes canonical node/edge/root
-    digests, reruns Phase 14/15 certificate predicates, validates checker and
-    rule-set/toolchain/target/profile/policy binding, and invokes the pinned offline
-    Lean replay path for facts labeled `kernel_replayed` or `proved_by_lean`.
-    Producer reports and cached verification receipts are inputs to compare, not
-    verdicts to trust.
-
-    Output separate dimensions—`bundle_integrity`, `core_certificate`,
-    `backend_translation`, `proof_replay`, `policy`, `assumptions`, and
-    `remaining_trust`—rather than one ambiguous `verified` badge. The root binds
-    exact artifacts and checked relationships; it does not make unchecked LLVM,
-    object generation, linking, runtime, OS, hardware, trusted/Unsafe/FFI code,
-    or spec adequacy correct. Default structural verification and the stricter
-    release/verified-profile policy are separate modes.
-
-    Reject a proof from build A combined with Core from B; BackendIR, object, or
-    binary substitution; a deleted/changed dependency edge; a stale Phase 8.5
-    cache artifact under a new root; schema/checker/toolchain/target/profile/
-    policy mismatch; a revoked proof; an unsupported region reported validated;
-    malformed graph cycles/duplicate ids; and a missing checker or theorem
-    identity. Wire `scripts/tests/check_verify_bundle.sh`; a deliberately
-    modified byte in every node family must either change the root and fail or
-    be explicitly excluded as nondeterministic/non-evidentiary metadata.
 19. Ship the first narrow public release only after the above are green.
 20. [relocated from closed Phase 4] Artifact and docs stability hardening:
     schema-version rejection gates (refuse to silently misread an artifact whose
@@ -4487,9 +4670,12 @@ audience):**
     the deprecation policy and a clean `api-diff` classification (#18b), and
     the tutorial transcript from someone who did not build the compiler. It
     must also run the proof-revocation drill (#9b) against the candidate
-    bundle, verify the evidence DAG offline through #18d from the installed
+    bundle, verify the evidence DAG offline through #15a from the installed
     independent checker, and run tamper cases for source/Core/proof/BackendIR/
-    object/binary/dependency-edge substitution. Release replay begins with a
+    object/binary/dependency-edge substitution. The report must distinguish
+    Core/proof or SSA/BackendIR relation failures from object/binary failures
+    against the expected root/authentication; native semantic edges remain
+    explicitly backend-trusted. Release replay begins with a
     clean cache or `--incremental=off`; a local cache cannot be an undeclared
     release input.
 
@@ -4502,13 +4688,18 @@ Done when: packages have manifests, lockfiles, package-aware facts, trust
 policies, provenance, independently checked interface/evidence receipts,
 Phase 8.5-aware reuse/invalidation, and registry protocol.
 
+Prerequisite: Phase 8.5 completed. If it was rejected/deferred, Phase 18 may
+start only after an explicit roadmap amendment replaces these artifact/query
+dependencies; package work may not grow a private cache/driver as a workaround.
+
 1. Expand package artifacts only after reports, policies, assumptions,
    interface artifacts, and CI gates prove what packages must carry. The first
    package artifact refactor must define exact files:
    `Concrete.package.json` (manifest summary), `Concrete.lock`,
    `.concrete/interfaces/<module>.json`, `.concrete/facts/<module>.json`,
    `.concrete/evidence/<module>.json`, `.concrete/certificates/<module>.json`,
-   and `.concrete/docs/<module>.json`.
+   optional `.concrete/verifier-inputs/<module>.car`, and
+   `.concrete/docs/<module>.json`.
    Each artifact must name compiler version, schema version, package id,
    source hash, interface/body hash, dependency/evidence root, Phase 14/15
    checker/rule-set identities and receipts where applicable, authority budget,
@@ -4534,6 +4725,29 @@ Phase 8.5-aware reuse/invalidation, and registry protocol.
    may compile against interface artifacts without seeing private bodies, but
    audit/release bundles must still show when a public claim depends on a
    private body proof, trusted boundary, or assumption.
+6a. Define the public package codecs and `PackageInterfaceCertificateV1` before
+    consuming certificates.
+    Canonically encode the package manifest, public interface/API payload,
+    body/evidence root, optional verifier input, and certificate/receipt
+    envelope. Keep `api_identity` separate from `implementation_evidence_root`:
+    a private body edit may preserve exported names/types while invalidating
+    capabilities/effects inferred from bodies, proof/trust/allocation/runtime
+    summaries, mono/codegen facts, or other implementation evidence.
+
+    `PackageInterfaceCertificateV1` checks package/schema/root binding and,
+    where a canonical checked-Core/body verifier input is shipped, derives the
+    supported exported facts from that hash-bound artifact plus Phase 14/15
+    receipts. It may not validate a summary against a self-authored summary.
+    When private verifier input is withheld, public API shape can remain
+    structurally checked, but body-derived capability/trust/allocation/evidence
+    summaries stay `compiler_validated` with the producer trusted unless backed
+    by a separately replayable proof. The package report must expose that split.
+
+    Gate canonical round trips, old schema, interface/body-root swapping,
+    private-body edit with stable API identity but changed evidence root, and a
+    coordinated tamper that changes interface summary + matching certificate
+    while retaining the old body root. Wire
+    `scripts/tests/check_package_interface_certificate_schema.sh`.
 7. Add proof-aware package artifacts: facts, obligations, proof status, trusted
    assumptions, policy declarations, package-boundary evidence summaries.
    Required statuses: `proved_by_lean`, `proved_by_kernel_decision`,
@@ -4543,22 +4757,25 @@ Phase 8.5-aware reuse/invalidation, and registry protocol.
    or trusted through a boundary.
 7a. Verify dependency interface certificates before consuming package facts or
     reusable artifacts.
-    A content hash establishes identity, not semantic validity. Run the Phase 14
-    Core checker and any applicable Phase 15 translation checker over the
-    dependency's canonical interface/evidence artifacts, cache the independent
-    receipt by bundle root + checker/rule-set version, and bind the receipt into
-    the importing project's Phase 8.5 dependency graph. Invalid, stale,
-    unsupported-schema, or unsupported-predicate certificates trigger a source
-    rebuild when source and policy permit it, or a loud policy failure; they
-    never silently become trusted facts.
+    A content hash establishes identity, not semantic validity. Run item #6a's
+    dedicated package-interface checker and, only over embedded canonical
+    verifier inputs of the right type, the Phase 14 Core / applicable Phase 15
+    translation checker. Cache the independent receipt by package root +
+    checker/rule-set version and bind it into the importing project's Phase 8.5
+    dependency graph. Invalid, stale, unsupported-schema, or unsupported-
+    predicate certificates trigger a source rebuild when source and policy
+    permit it, or a loud policy failure; they never silently become trusted
+    facts. Source rebuild first produces `compiler_validated` facts and becomes
+    independently checked only after the applicable checker reruns.
 
     Import authority/evidence constraints may consume independently checked
     interface facts or facts explicitly labeled `compiler_validated` with the
     producing compiler still trusted; they may not erase that distinction. Gate
-    a valid package, tampered interface fact,
-    certificate from another package/build, stale private body with unchanged
-    public interface, changed public interface, old checker version, unsupported
-    predicate, proof revocation, and source-rebuild fallback. Wire
+    a valid package, tampered interface fact, certificate from another
+    package/build, interface+certificate consistently changed against an old
+    body root, stale private body with unchanged public API but changed evidence
+    root, changed public interface, old checker version, withheld verifier input,
+    unsupported predicate, proof revocation, and source-rebuild fallback. Wire
     `scripts/tests/check_package_certificates.sh`.
 8. Add module/package authority budgets after package graphs are real, and make
    imports fact-checked boundaries. Imports do not grant capabilities; they
@@ -4659,44 +4876,56 @@ Phase 8.5-aware reuse/invalidation, and registry protocol.
 
     Extend Phase 8.5's opaque internal artifact roots into stable, versioned
     **public package** encodings rather than implementing a second hashing/cache
-    system. Concrete already content-addresses proof attachments through
-    `proof_fingerprint`. The natural Phase 18/19 extension is structural hashes
-    for obligations, typed-Core fragments, proof bundles, package interface/body
-    evidence, and replay artifacts, so caches and dependency evidence are keyed
-    by content rather than names or paths. This supports the incremental
-    verification cache, package evidence reuse, registry-retirement work, and
-    editor/agent fact lookup without trusting mutable labels.
+    system. Reuse the canonical typed-Core, obligation/proof, BackendIR,
+    certificate, and release-node encoders already required by Phases 9/14/15
+    and Phase 17 #15a. This item owns package interface/body/evidence/docs
+    wrappers, public schema compatibility, and package-root composition—not the
+    first encoding of common verifier inputs.
 
     The hard part is not hashing; it is deterministic canonical serialization.
-    Before these hashes are authoritative, each artifact kind must define a
+    Before package hashes are authoritative, each package wrapper must define a
     stable, versioned, pointer-free canonical encoding: no map iteration order,
     temp paths, generated-name nondeterminism, host-dependent formatting, or
     schema-ambiguous fields. Borrow the Zig InternPool lesson here: artifacts
     that need stable identity must serialize from explicit IDs and normalized
     structure, not from incidental in-memory shape.
 
-    Done when at least obligations, typed-Core fragments, proof bundles, and
-    package evidence artifacts have versioned canonical encoders; identical
-    semantic content hashes identically across repeated runs; a deliberately
-    nondeterministic encoder is caught by a gate; and package/proof cache keys
-    use these content hashes instead of source paths or human names.
+    Done when package interface/body/evidence/docs wrappers have versioned
+    canonical encoders over the earlier common nodes; identical semantic package
+    content hashes identically across repeated runs; a deliberately
+    nondeterministic wrapper is caught by a gate; and package cache/dependency
+    keys use these roots instead of source paths or human names.
 15c. Add optional shared/remote artifact reuse only after the local Phase 8.5
     store and independent package verification are mature.
     Define an authenticated transport/protocol for content-addressed package,
     proof, and codegen artifacts; the server is an untrusted blob store, not a
-    compiler authority. Every download must pass size/schema/digest and
-    dependency-root checks, the applicable Phase 14/15 certificate checker, target/profile/
-    toolchain binding, and package policy before entering the local store.
+    compiler authority. V1 permits only fetch-by-digest where that expected
+    digest is already authorized by a lockfile, pinned release root, or
+    policy-trusted builder attestation. An untrusted remote action-key-to-digest
+    mapping is never an authority for semantic reuse. Every download must pass
+    size/schema/digest and dependency-root checks, the applicable Phase 14/15
+    certificate checker, target/profile/toolchain binding, and package policy
+    before entering the local store.
+
+    Remote object, link, and binary outputs may not enter a strict build merely
+    because their hashes are internally consistent: the Phase 14/15 independent
+    relation stops at BackendIR. Regenerate native outputs locally. A separately
+    opt-in trusted-builder mode may accept signed native outputs only as
+    `builder_attested` / `backend_trusted`; its signature authenticates producer
+    provenance, not object semantics.
     Upload only deterministic canonical artifacts with explicit privacy/
     redaction policy; never upload source, diagnostics, proof attempts, or
     credentials implicitly. A signature authenticates provenance, not
     correctness.
 
     This item is optional for the first package release and must not complicate
-    local builds. Gate hostile/corrupt server responses, cache poisoning,
-    replayed old roots, cross-target objects, revoked proofs, concurrent upload,
-    offline fallback, and local recomputation parity. Record CI/team speedups,
-    but keep correctness independent of network/cache availability.
+    local builds. Gate hostile/corrupt server responses, replayed old roots,
+    cross-target objects, revoked proofs, concurrent upload, offline fallback,
+    and local recomputation parity. Include coordinated poisoning where a
+    server rewrites the action mapping, artifact, manifest, and every internal
+    hash consistently; it must still fail without an independently authorized
+    expected digest. Record CI/team speedups, but keep correctness independent
+    of network/cache availability.
 16. Add the Phase 18 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
@@ -4715,6 +4944,10 @@ Goal: make evidence visible where developers work.
 Done when: editor/LSP/tooling exposes the same facts as CI and command-line
 reports through the Phase 8.5 session/query graph, with bounded edit
 invalidation and certificate freshness, without inventing a second truth source.
+
+Prerequisite: Phase 8.5 completed. If it was rejected/deferred, Phase 19 needs a
+recorded replacement architecture before starting; an editor-only fact database
+or cache remains forbidden.
 
 1. Add artifact viewer integration for proof/evidence facts.
 2. Add compiler-as-service / LSP entrypoints after diagnostics and facts are
