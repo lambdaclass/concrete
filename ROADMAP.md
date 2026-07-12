@@ -4108,7 +4108,16 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     layout/fingerprint helper and prove the checker still rejects the bad
     artifact without importing that helper. Wire
     `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
-14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
+14. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+    (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
+    contains many `partial def` walkers/wrappers, which are opaque to the kernel.
+    Do not chase a full rewrite. Add non-partial wrappers or structural recursion
+    ONLY for the constructs pulled by the R-rule preservation proofs above, so a
+    lifted rule can be reasoned about structurally. Gate each lifted rule with one
+    theorem that would fail if the wrapper still delegated to an opaque
+    partial-def shape.
+
+15. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
     regressions proving report facts (`proved`, `stale`, `blocked`, `missing`,
@@ -4117,15 +4126,6 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     soundness theorem names, independent receipt per artifact, mutation corpus,
     cache-off/on receipt parity, and a machine-readable list of every boundary
     V1 still leaves producer/compiler-trusted.
-
-15. Reduce ProofCore partial-def opacity only where proof preservation needs it.
-    (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
-    contains many `partial def` walkers/wrappers, which are opaque to the kernel.
-    Do not chase a full rewrite. Add non-partial wrappers or structural recursion
-    ONLY for the constructs pulled by the R-rule preservation proofs above, so a
-    lifted rule can be reasoned about structurally. Gate each lifted rule with one
-    theorem that would fail if the wrapper still delegated to an opaque
-    partial-def shape.
 
 ## Phase 15: Backend, Target, And Stdlib Contracts
 
