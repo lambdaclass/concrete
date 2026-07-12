@@ -966,15 +966,15 @@ The item numbers in this phase are ordered within the phase and may be
 renumbered when the phase is reorganized. Keep cross-references updated in the
 same change, and use subsection headings to make the dependency order clear.
 At this point the Phase 6B / 6C plan is frozen unless implementation exposes a
-real missing invariant. Item #14a is the one recorded exception: planning the
+real missing invariant. Fully completed semantic-axis work is recorded in
+[CHANGELOG.md](CHANGELOG.md) and removed from the active roadmap. The remaining
+Phase 6B work is the unfixed tail: external capability-diff artifacts,
+determinism, interpreter/ordering contracts, fact infrastructure, structural
+builder work, fuzzing/coverage, diagnostics, and the validation artifact. Item
+#14a is the recorded exception to "no more planning": the
 incremental/certifying path exposed that a stage token plus a `Unit`-returning
 verifier is not yet a portable validation record, so the record/chain contract
-must exist before later phases cache those artifacts. The execution frontier is
-still: finish
-`CopyJudgment` / `InstantiationJudgment` first, because `Copy` feeds ownership;
-then build `OwnershipJudgment` / `ValueFlowJudgment`, because it is the
-memory-safety axis; then ship `diff-caps` as the first external-facing
-credibility artifact once the internal semantic axes stop moving.
+must exist before later phases cache those artifacts.
 
 **North star ([docs/PIPELINE_ARCHITECTURE.md](docs/PIPELINE_ARCHITECTURE.md)):**
 every item below is an instance of one principle — *each program has exactly one
@@ -1036,53 +1036,24 @@ IR field, that is a pipeline bug.
 
 ### Semantic Judgment Axes
 
-These items give each remaining semantic axis one owner. Completed arithmetic
-(`IntArith`) and source typing (`TypeJudgment`) are recorded in
-[CHANGELOG.md](CHANGELOG.md); the active work here is Copy/instantiation,
-ownership/value-flow, capabilities, and the relations that cannot live on one
-typed node.
+These items track only semantic-axis work that is not fully done. Completed
+arithmetic (`IntArith`), source typing (`TypeJudgment`), Copy boolean
+single-sourcing, type-argument unification, capability slices 1-5, the ownership
+agreement matrix, and the totality matrix are recorded in
+[CHANGELOG.md](CHANGELOG.md). Do not keep landed implementation notes here unless
+they are required to explain remaining work.
 
-1. Promote Copy / trait-bound / instantiation policy into
-   `CopyJudgment` / `InstantiationJudgment`.
-   The predicate centralization work landed the first slice (`isCopy`,
-   conditional Copy after substitution, type substitution/type-var matching),
-   but the long-term target is a real judgment axis, not a bag of shared
-   booleans. Conditional `Copy`, trait-bound satisfaction, generic
-   substitution, type-var matching, turbofish/caller type params, post-mono
-   Copy demotion, and generated specialization facts are one semantic decision
-   family and must not be reimplemented across Check, Elab/Core, Mono,
-   CoreCheck, Verify, reports, or generated-name logic.
-
-   **Landed 2026-07-10 — the boolean `isCopy` recursion is now single-sourced.**
-   There were TWO implementations of "is this type Copy?": the monadic front-end
-   `CheckHelpers.isCopyType` (over `StructDef`/`EnumDef`/`NewtypeDef`) and the
-   pure `Layout.isCopyTyCore` (over `CStructDef`/`CEnumDef`, shared by Mono/
-   Verify/CoreCheck). They drifted on `typeVar` (bounds vs a fixed flag) and
-   `newtype` (recurse vs absent), kept in agreement only by ordering luck (Check
-   gates unbounded type vars first; newtypes resolve before the Core stages run).
-   Both now delegate to ONE recursion, `Layout.isCopyTyGeneric`, parameterized by
-   lookups (`lookupAgg` / `lookupNewtype` / `typeVarIsCopy`) so each
-   representation feeds its own data — the primitive set, the newtype recursion,
-   and the conditional-aggregate field check exist once. Gate:
-   `scripts/tests/check_copy_judgment.sh` (mutation-tested: breaking the newtype
-   recursion fails the newtype-over-Copy case).
-
-   **Landed 2026-07-11 — type-arg inference (`unifyTypes`) is single-sourced.**
-   The first `InstantiationJudgment` slice: `unifyTypes` (structural matching of a
-   parameter type against an argument type to bind generic type args) was likewise
-   defined TWICE — `Elab.lean` (private) and `CheckHelpers.lean` — two copies of
-   one algorithm. Differential probing confirmed Check and Elab infer/reject
-   generic calls identically today, so this was a behavior-neutral dedup into
-   `Shared.unifyTypes` that removes the latent drift; a turbofish-generic agree
-   row was added to `check_type_agreement.sh`.
-
-   REMAINING: promote the boolean `isCopy` to the full decision RECORD below
-   (conditional + concrete forms, provenance, failing field, trait bounds), and
-   the rest of `InstantiationJudgment` (turbofish/caller type params, post-mono
-   specialization facts). A known adjacent usability gap surfaced during probing:
-   generic inference does not flow the return/let-context type into type-arg
-   inference (`let v: i32 = id(42)` needs `id::<i32>(42)`); consistent across
-   interp/compiled, so a feature gap, not drift.
+1. Finish the remaining `CopyJudgment` / `InstantiationJudgment` surfaces only
+   when a real consumer pulls them.
+   The shipped boolean `isCopy` recursion and `Shared.unifyTypes` slice are
+   complete and recorded in the changelog. Remaining work is narrower: promote
+   the boolean `isCopy` to a full decision record only when a report/audit/
+   ownership consumer needs the explanation, and extend `InstantiationJudgment`
+   only when turbofish/caller type params, post-mono specialization facts, or
+   return/let-context generic inference become active work. The known usability
+   gap remains: `let v: i32 = id(42)` still needs `id::<i32>(42)` because generic
+   inference does not flow the return/let-context type into type-arg inference;
+   this is consistent across interp/compiled, so it is a feature gap, not drift.
 
    The judgment record should model both stages of knowledge: a **conditional**
    form (`Copy` modulo requirements such as `{T : Copy}`) and a **concrete**
@@ -1110,18 +1081,13 @@ typed node.
    the type before asking whether it is `Copy`) and treat it as a peer of
    `CapabilityJudgment`, not a distant report/database item.
 
-2. Promote ownership / value-flow into
-   `OwnershipJudgment` / `ValueFlowJudgment`.
-   Concrete's defining promise is linear
-   ownership, but the Phase 6B / 6.5 judgment list currently names arithmetic, type,
-   Copy/instantiation, and capability before the ownership decision itself. The
-   value-flow spec and H9-H17 work made Check much more disciplined, but they
-   are still framed mainly as "the checker rejects bad programs." That is not
-   enough for the long-term pipeline: ownership facts are consumed by Check,
-   Lower/codegen, the interpreter, reports, and eventually proof extraction.
-   If those consumers re-derive "move vs copy vs borrow vs drop" separately,
-   Concrete keeps the same drift shape that `TypeJudgment`, `IntArith`, and
-   `CopyJudgment` were created to eliminate.
+2. Keep the remaining ownership / value-flow refactors scoped to consumers.
+   The ownership agreement matrix is complete and recorded in the changelog: no
+   drift was found between Check accept/reject behavior, Lower move/drop plans,
+   and interpreter consumption on the covered matrix. Do not build a broad
+   ownership database or decision-record layer without a failing gate or a
+   concrete report/proof/lowering consumer. The remaining work here is structural
+   cleanup that makes the already-tested ownership behavior easier to audit.
 
    The judgment should own the use-site/value-flow decision record, not just a
    boolean. Include at least: source place/expression, input type, `Copy`
@@ -1147,15 +1113,8 @@ typed node.
    - **Reports/audit/proofs** explain why a value was copied, moved, borrowed,
      destroyed, rejected, or considered live on a path.
 
-   First slice: audit the current ownership consumers. Identify every place
-   Check, Lower, the interpreter, and reports decide move-vs-copy, last-use, drop
-   placement, or discard independently. Turn that into a small ownership
-   agreement matrix before building a giant database: H14/H15/H17-style
-   break-value consume, live overwrite, param consume, reborrowed callback
-   context, divergent branch, loop exit, match arms, `_` discard, assignment
-   overwrite, aggregate construction, and non-Copy projection.
-
-   Second slice: refactor the checker around a narrow ownership-transition API.
+   First remaining slice: refactor the checker around a narrow
+   ownership-transition API.
    Direct mutation of `env.vars`, consumed states, borrow/ref lists, or branch
    snapshots should disappear outside helpers such as `declareVar`, `moveVar`,
    `copyVar`, `borrowPlace`, `markConsumed`, `reserveForDefer`, `restoreScope`,
@@ -1163,7 +1122,7 @@ typed node.
    judgment: make every current ownership transition auditable before exporting
    decisions to later stages.
 
-   Third slice: centralize ownership-transfer and overwrite policy. One helper
+   Second remaining slice: centralize ownership-transfer and overwrite policy. One helper
    should answer "this expression transfers ownership" for args, returns,
    `break value`, assignment RHS, array/struct literals, destructuring, stores,
    `?`, and `defer`; another helper should answer "this place may be
@@ -1171,77 +1130,33 @@ typed node.
    uninitialized-slot boundaries. These helpers own the E0219/E0291 family and
    should replace scattered per-AST `if ident then consumeVarIfExists` logic.
 
-   Fourth slice: represent control-flow exit modes as data. Branches, match
+   Third remaining slice: represent control-flow exit modes as data. Branches, match
    arms, loops, `return`, `break value`, `continue`, `abort`, and future
    `noreturn` calls should produce `fallsThrough | returns | breaks(value?) |
    continues | diverges`; linear merge rules should consume that value instead
    of re-deriving reachability and ownership state in each path.
 
-   Fifth slice: define the decision-record shape and central computation for
+   Fourth remaining slice: define the decision-record shape and central computation for
    the cases already covered by the value-flow spec. It is acceptable for the
    first implementation to be "shared computation + agreement gate" rather than
    a fully committed per-node record, but the roadmap target is stronger:
    Check-owned value-flow decisions become facts that later stages consume or
    derive mechanically, not policy they rediscover.
 
-   Gate: promote the linearity fuzzer into an ownership agreement gate:
+   Gate any new refactor by extending the existing ownership agreement matrix:
    `Check ownership decision == Lower move/drop plan == interpreter consumption
-   behavior` over the matrix above. Red-team by disabling one drop edge,
-   treating a non-Copy value as Copy, treating a moved value as live, or letting
-   Lower insert a destroy on a path Check considered already consumed. The gate
-   must fail with a minimized `.con` fixture and a replay command. This item is
-   a prerequisite for claiming the pipeline has first-class fact discipline:
-   without it, the less central axes are cleaner than Concrete's own linearity
-   model.
+   behavior`. A change that disables one drop edge, treats a non-Copy value as
+   Copy, treats a moved value as live, or lets Lower insert a destroy on a path
+   Check considered already consumed must fail with a minimized `.con` fixture
+   and a replay command.
 
-3. Centralize capability checking and callback propagation into
-   `CapabilityJudgment` after the type-axis core is stable.
-   Capabilities are as central to Concrete as arithmetic and source typing, but
-   this must stay practical: **do not add algebraic effects, effect handlers,
-   row-polymorphism syntax, implicit context, or theoretical effect-system
-   vocabulary to the user surface.** Concrete keeps explicit authority headers:
-   `fn f(...) with(File, Network) -> T`. The improvement is internal:
-   `CapabilityJudgment` becomes the capability-axis sibling of `IntArith` and
-   `TypeJudgment`, producing one decision record for why a call/expression needs
-   authority and how that fact should be diagnosed, reported, audited, and
-   surfaced to tools.
-
-   The decision record should include at least: required caps, source of the
-   requirement (`direct_call`, `callback`, `trusted_wrapper`,
-   `unsafe_intrinsic`, `package_import`), callee/callback parameter identity
-   where relevant, purity (`with()` / empty cap set), evidence class,
-   diagnostic reason, and report/audit payload. Check, CoreCheck, Report, audit,
-   LSP/agent JSON, and package gates must consume this one decision instead of
-   recomputing capability containment, callback cap propagation, Unsafe/trusted
-   policy, or human report rows independently.
-
-   First slice: direct calls. **Landed 2026-07-11 (`9042b3e3`).** The satisfaction
-   decision was already `capsContain` (#5), but the direct-call *decision record* —
-   which caps are missing, rendered per-cap (E0240) by Check and whole-set (E0520)
-   by CoreCheck — was open-coded per surface. `Capabilities.decideCall`
-   (`{required, callerHas, satisfied, missing}`) + `Capabilities.missingCaps` now
-   own it; Check (both cap-polymorphic sites), CoreCheck, and reports read the one
-   record. Gate `check_capability_judgment.sh` (mutation-tested). DEFERRED to the
-   callback slice: the fn-pointer anti-smuggling check (Check.lean:589) is a
-   stricter policy (caller must hold the callee's cap *variables*), not the
-   direct-call decision.
-
-   Reports slice — **Landed 2026-07-11 (`e4a9dcc0`).** The report/audit surfaces
-   recomputed capability *membership* ("does this callee declare cap X") inline at
-   four sites (`ReportInterface`, two `Report.lean` why-traces, `ReportObligations`
-   Unsafe count). `Capabilities.capSetHas (cs) (cap)` now owns that fact and
-   `capSetHasUnsafe` delegates to it; the four sites route through it, so report
-   provenance and the checker read the ONE membership fact. Covered by
-   `check_capability_facts.sh`, now backed by `capSetHas`.
-
-   Second slice: capability-polymorphic callbacks and callable values. Existing
-   callable rules stay; `CapabilityJudgment` centralizes the practical decision:
-   "this callback requires `C`, therefore the combinator/caller requires `C`."
-   Cover `for_each_with`, `for_each_ctx`, scoped callbacks, and callable values.
-
-   Third slice: trusted/Unsafe/package boundaries. Trusted wrappers, Unsafe
-   intrinsics, externs, dependency/package capability budgets, and audit diffs
-   should all render from the same capability decision record.
+3. Ship the remaining capability artifacts: deterministic manifests and
+   `diff-caps`.
+   CapabilityJudgment itself is complete and recorded in the changelog: direct
+   calls, report membership, capability-polymorphic callbacks/callables,
+   through-pointer anti-smuggling, trusted/Unsafe facts, and the `discard` /
+   E0294 slice are single-sourced and gated. The active roadmap should now track
+   the external artifact that makes those facts reviewable.
 
    `diff-caps` slice — capability-surface diff as an acceptance gate (the
    agent-review headline for this axis, and a consumer that makes the whole
@@ -1296,29 +1211,12 @@ typed node.
    stronger acceptance story than a caps-only diff. Do not build the other axes
    before their evidence sources are stable.
 
-   Practical purity/discard slice: `expr;` over a **pure, trap-free, non-`Unit`
-   Copy** value is an error (**E0294**), with `discard(expr)` as the explicit
-   acknowledgement escape (Copy-only; a non-`Copy` resource uses `destroy()` —
-   **E0295**). This is not row-effect theory and not a user-facing effect system;
-   it is the same concrete discard discipline already used for fallible and
-   non-`Copy` values. The landed rule flags only *locally-provable-pure* forms —
-   literals, variable/field reads, and pure operators over them — and excludes
-   trap-assertions (`/`, `%`). **Calls remain excluded**: Concrete's capability
-   model does not track mutation through `&mut` params (nor `trusted`/`extern`
-   FFI) as a capability, so empty authority does not imply a pure call
-   (`env_assign(&mut e, …)`, `fclose(fp)` both have empty caps yet real effects).
-   Extending the rule to pure calls is deferred until the effect model tracks
-   mutation (or a workload pulls the safe-fn + no-`&mut`-param + non-trusted
-   refinement) — the missing predicate is "this *call* has no observable effect,"
-   not the totality already provided by `TotalityJudgment`.
-
-   Gate with an ordinary `File`/`Network` call, a capability-polymorphic
-   callable, a scoped callback, a trusted wrapper, an Unsafe intrinsic, a
-   dependency/package boundary, a pure non-`Unit` discarded statement, and one
-   negative where report output would otherwise disagree with the checker
-   diagnostic. The accepted design is the useful Flix/Koka lesson — one
-   capability/effect decision — without importing their user-facing effect
-   systems.
+   Extending E0294 to pure calls is deliberately not active work. Concrete's
+   capability model does not track mutation through `&mut` params, nor
+   `trusted`/`extern` FFI, as a capability, so empty authority does not imply a
+   pure call (`env_assign(&mut e, ...)`, `fclose(fp)`). Only revisit pure-call
+   discard when an effect model tracks mutation or a workload pulls the
+   safe-function / no-`&mut`-param / non-trusted refinement.
 
 
 ### Runtime And Oracle Contracts
@@ -1439,40 +1337,6 @@ assumptions scattered across fuzzers and reports.
    no-drop-after-diverge, and callback authority before callback body. A red-team
    lowering mutation that moves a trap, drop, or capability check across another
    observable event must fail.
-
-7. Build `TotalityJudgment` / the totality fact.
-   Totality is the foundational fact that turns several deferred checks from
-   hand-wavy policy into a shared decision. It should answer: can this
-   expression/function complete normally without trapping, diverging, failing a
-   runtime obligation, or relying on hidden cleanup/control-flow behavior? This
-   is stricter than purity: a checked add, narrowing cast, bounds/index access,
-   or failing runtime obligation may be pure but still not total because its trap
-   is observable.
-
-   Inputs: trap facts from `IntArith` and typed Core, context-width decisions from
-   completed `TypeJudgment`, ownership/drop/diverge facts from
-   `OwnershipJudgment` / `ValueFlowJudgment`, authority/purity facts from
-   `CapabilityJudgment`, and evaluation/drop/trap order from item #6. The record
-   should include at least: subject expression/function, total vs non-total,
-   first failing reason (`may_trap`, `may_diverge`, `may_fail_runtime_obligation`,
-   `unknown_cleanup`, `unsupported_interp_family`, etc.), source span, dependent
-   facts, diagnostic/report payload, and evidence class.
-
-   Consumers: the pure non-`Unit` discard rule in `CapabilityJudgment` (only
-   total pure values are accidental lost computations), report/audit
-   explanations, and proof eligibility. A program should not be called
-   "pure discardable" or "predictable/provable" by re-deriving totality at each
-   call site. The class-6 second-class-reference boundary is now a separate
-   structural verifier under the safe-no-returned-refs policy; it needs totality
-   only if a future `from(param)` returned-reference escape valve is deliberately
-   admitted.
-
-   Gate with total and non-total rows: literal arithmetic that cannot trap,
-   checked arithmetic that can trap, narrowing casts, bounds/index operations,
-   match/if branches with one trapping arm, loops with known divergence, function
-   calls with runtime obligations, and one future-proof row for any admitted
-   returned-reference escape valve. Red-team by forcing a trapping expression to
-   total and proving pure-discard or proof-eligibility gates fail.
 
 8. Add a pipeline determinism gate.
    Content-addressed artifacts, proof replay, package evidence, deterministic
@@ -1727,15 +1591,6 @@ desugar rewrites from bypassing the semantic contracts above.
     extraction, report/audit, interpreter, lowering, value-flow spec, and
     differential/oracle coverage or an explicit compile-only/proof-only
     rationale.
-
-21. Strengthen CoreCheck into the hard "no invalid Core proceeds" boundary.
-    CoreCheck should catch frontend/checker/elab/mono misses before Lower. Add
-    or verify checks for unresolved generic/typevar leakage after mono, illegal
-    Copy specialization, mixed-width binops, illegal non-Copy value-flow residue,
-    unresolved capability-polymorphic calls, unsupported unsafe/trusted ops
-    without facts, and user-triggerable layout/type holes that can become Lower
-    panics. Gate with one accepted Core fixture per valid class and one rejected
-    fixture per invalid class.
 
 22. Add the third fuzzer: generics / monomorphization / type-policy drift.
     Concrete already has value/runtime fuzzing (`fuzz_differential`) and
