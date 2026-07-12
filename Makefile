@@ -309,6 +309,12 @@ test-pipeline-refactor-contract: build ## Phase 6B capstone (item 32): a corpus 
 test-pipeline-telemetry: build ## Phase 6C #1: `concrete <file> --emit-trace-json` emits a stable-schema per-stage structural-count trace (schema stability + no private paths gated; timing/RSS deferred to Phase 17)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_pipeline_telemetry.sh
 
+test-ssa-verify-agreement: build ## SSAVerify behavior preservation (trust pass): valid complex CFGs still accepted + codegen correct; hard merge blocker for dominator/predecessor/use-def changes
+	$(NIX_DEVELOP) bash ./scripts/tests/check_ssa_verify_agreement.sh
+
+test-compiler-complexity: build ## Phase 6C #2: anti-superlinear guard — fails if a compiler pass grows super-linearly on a scaling corpus (caught the SSAVerify dominator cubic; bug-027 family)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_compiler_complexity.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

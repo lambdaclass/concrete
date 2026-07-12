@@ -199,22 +199,34 @@ private partial def computeDominators (blocks : List SBlock) (predecessors : Lis
     let init := allLabels.map fun lbl =>
       if lbl == entry.label then (lbl, [lbl])
       else (lbl, allLabels)
-    -- Iteratively refine until fixpoint
+    -- Iteratively refine until fixpoint, GAUSS-SEIDEL style: within one pass we
+    -- process labels in block order and read each predecessor's dom set from the
+    -- values ALREADY UPDATED THIS PASS (`acc`) when available, falling back to the
+    -- previous pass (`doms`). Dominators are a monotone dataflow framework, so
+    -- this reaches the SAME least fixpoint as a Jacobi update — but when blocks
+    -- are in forward/RPO order (as Lower emits them) it converges in ~2 passes
+    -- instead of the O(n) passes a Jacobi update needs (each Jacobi pass moves
+    -- information only one block forward). That is the fix for the O(n^3) blowup
+    -- on wide match chains: a long block chain took ~n passes × O(n) work.
     let rec iterate (doms : List (String × List String)) (fuel : Nat) : List (String × List String) :=
       match fuel with
       | 0 => doms
       | fuel + 1 =>
-        let newDoms := allLabels.map fun lbl =>
-          if lbl == entry.label then (lbl, [lbl])
-          else
-            let preds := (predecessors.find? fun (l, _) => l == lbl).map (·.2) |>.getD []
-            let predDomSets := preds.filterMap fun p =>
-              (doms.find? fun (l, _) => l == p).map (·.2)
-            -- Intersection of all predecessor dom sets
-            let intersection := match predDomSets with
-              | [] => []
-              | first :: rest => rest.foldl (fun acc s => acc.filter (s.contains ·)) first
-            (lbl, lbl :: intersection)
+        let newDoms := allLabels.foldl (fun (acc : List (String × List String)) lbl =>
+          let val :=
+            if lbl == entry.label then [lbl]
+            else
+              let preds := (predecessors.find? fun (l, _) => l == lbl).map (·.2) |>.getD []
+              let predDomSets := preds.filterMap fun p =>
+                match acc.find? fun (l, _) => l == p with
+                | some (_, s) => some s
+                | none => (doms.find? fun (l, _) => l == p).map (·.2)
+              -- Intersection of all predecessor dom sets
+              let intersection := match predDomSets with
+                | [] => []
+                | first :: rest => rest.foldl (fun a s => a.filter (s.contains ·)) first
+              lbl :: intersection
+          acc ++ [(lbl, val)]) []
         if newDoms == doms then doms
         else iterate newDoms fuel
     iterate init (allLabels.length * 2 + 10)

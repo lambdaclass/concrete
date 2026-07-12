@@ -432,6 +432,12 @@ jobs:
       - name: "Pipeline telemetry trace (Phase 6C #1 — stable-schema JSON, no private paths)"
         run: bash scripts/tests/check_pipeline_telemetry.sh
 
+      - name: "SSA-verify behavior preservation (trust pass keeps its verdicts on complex CFGs)"
+        run: bash scripts/tests/check_ssa_verify_agreement.sh
+
+      - name: "Compiler complexity guard (Phase 6C #2 — no super-linear pass on scaling corpus)"
+        run: bash scripts/tests/check_compiler_complexity.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
