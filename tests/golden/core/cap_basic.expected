@@ -28,7 +28,7 @@ fn greet() -> () with(Console) {
   print_int(42);
 }
 
-fn main() -> Int with(File, Network, Clock, Env, Random, Process, Console, Alloc) {
+fn main() -> Int with(File, Network, Time, Env, Random, Process, Console, Alloc) {
   greet();
   return 0;
 }

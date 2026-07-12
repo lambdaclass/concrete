@@ -56,7 +56,7 @@ Allocation is gated by the `Alloc` capability. Functions that allocate (`alloc`,
 
 ### Blocking and Host Interaction
 
-Host interaction is gated by capabilities: `File`, `Network`, `Process`, `Clock`, `Env`, `Random`, `Console`. The `--check predictable` profile additionally flags blocking I/O (`File`, `Network`, `Process`) as a separate concern.
+Host interaction is gated by capabilities: `File`, `Network`, `Process`, `Time`, `Env`, `Random`, `Console`. The `--check predictable` profile additionally flags blocking I/O (`File`, `Network`, `Process`) as a separate concern.
 
 | Host interaction state | Proof status | Evidence level |
 |-----------------------|--------------|----------------|

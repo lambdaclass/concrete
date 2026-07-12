@@ -9,7 +9,7 @@ enum Result<T, E> {
   Err { error: E },
 }
 
-fn main() -> Int with(File, Network, Clock, Env, Random, Process, Console, Alloc) {
+fn main() -> Int with(File, Network, Time, Env, Random, Process, Console, Alloc) {
   let mut result: Int = 0;
   let mut i: Int = 0;
   while (i < 100) {

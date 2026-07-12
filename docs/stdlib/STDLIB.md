@@ -24,6 +24,13 @@ The Concrete stdlib should stay:
 - small and sharp rather than broad
 - neutral about the eventual concurrency/runtime model unless a dependency is unavoidable
 
+Every public module should also have an API contract in the style described in
+[STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md): exported surface,
+ownership behavior, capability requirements, allocation behavior, failure mode,
+cleanup rule, and proof/oracle status. This is the concrete lesson from the
+minimal-language survey: grow by small, inspectable modules with explicit
+contracts, not by broad helper piles or hidden runtime assumptions.
+
 For low-level internals, the split is now:
 
 - semantic effects remain visible in public signatures (`with(Alloc)`, `with(File)`, etc.)
@@ -122,7 +129,7 @@ The stdlib is classified into three layers by host dependency, documented in [EX
 | **Alloc** | `alloc`, `vec`, `string`, `bytes`, `text`, `deque`, `heap`, `ordered_map`, `ordered_set`, `bitset`, `map`, `set`, `path` | malloc/realloc/free + abort |
 | **Hosted** | `io`, `fs`, `env`, `process`, `net`, `time`, `rand` | Full POSIX libc |
 
-Every Alloc-layer module inherits abort-on-OOM from `std.alloc`. Hosted-layer modules use `Unsafe` (for raw libc extern calls inside trusted wrappers) plus domain-specific capabilities where defined: `Network` for net, `Process` for process, `Random` for rand, `Console` for io print/println. Some hosted modules (`fs`, `env`, `time`) currently use only `Unsafe` without a domain capability — adding dedicated capabilities (e.g., `File`, `Env`, `Clock`) is future work. This means:
+Every Alloc-layer module inherits abort-on-OOM from `std.alloc`. Hosted-layer modules use `Unsafe` (for raw libc extern calls inside trusted wrappers) plus domain-specific capabilities where defined: `Network` for net, `Process` for process, `Random` for rand, `Console` for io print/println. Some hosted modules (`fs`, `env`, `time`) currently use only `Unsafe` without a domain capability — adding dedicated capabilities (e.g., `File`, `Env`, `Time`) is future work. This means:
 
 - `--report caps` shows the full authority chain for any stdlib usage
 - `--report alloc` shows which functions allocate and whether cleanup exists

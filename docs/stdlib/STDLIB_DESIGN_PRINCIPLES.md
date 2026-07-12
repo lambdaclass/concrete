@@ -31,6 +31,42 @@ Each module does one thing. Modules do not overlap in purpose. If two modules co
 
 ---
 
+## 1a. Every Module Has An API Contract
+
+The language survey sharpened one stdlib rule: Concrete modules should feel
+closer to small Wirth/ML-style signatures than to a growing bag of helpers. A
+module is not done when its functions compile. It is done when a reviewer can
+read the public surface and answer the operational questions without opening
+the implementation.
+
+Every stdlib module should state, in source docs or the module reference:
+
+- exported types and functions
+- ownership behavior: consumes, borrows, returns owned values, or mutates in
+  place
+- capability requirements (`Alloc`, `File`, `Network`, `Process`, `Time`,
+  `Random`, `Env`, `Console`, `Unsafe`)
+- allocation behavior: no allocation, may allocate, or allocates through a
+  named allocator/API
+- failure behavior: `Option`, `Result`, trap, abort-on-OOM, or trusted/FFI
+  assumption
+- cleanup rule for every linear resource
+- proof/oracle status: pure/proof-eligible, runtime/oracle-tested,
+  trusted/FFI-only, or unsupported by the interpreter
+- one small example and at least one negative or failure-path test for hosted
+  modules
+
+This is the practical synthesis from Oberon/Wirth minimalism, ML module
+signatures, Zig/Hare explicit systems APIs, and Concrete's own capability
+reports: keep the module small enough that its contract is inspectable, then
+make that contract explicit.
+
+**The Concrete rule**: if an API's allocation, authority, ownership, or failure
+mode cannot be described in one short line, the API is too implicit or too
+broad.
+
+---
+
 ## 2. Obvious Naming
 
 Names should be guessable. A programmer who has never read the docs should be able to predict what `bytes.get(5)` returns and what `vec.push(x)` does. If a name requires explanation, it is the wrong name.

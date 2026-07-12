@@ -98,7 +98,7 @@ Most systems languages have one escape hatch. Rust has `unsafe`. C has... everyt
 
 **What `trusted` specifically permits:** pointer arithmetic, raw pointer dereference, raw pointer assignment, pointer-involving casts. Nothing else. It does NOT suppress capabilities, does NOT permit FFI without `with(Unsafe)`, does NOT relax linearity.
 
-**Nine capabilities:** `File`, `Network`, `Clock`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`. A function can only call functions whose capabilities are a subset of its own.
+**Nine capabilities:** `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`. A function can only call functions whose capabilities are a subset of its own.
 
 ## The Compiler as Audit Machine
 

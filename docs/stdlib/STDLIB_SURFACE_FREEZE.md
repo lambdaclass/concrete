@@ -477,9 +477,9 @@ Minimal time support.
 | Item | Kind | Capability |
 |------|------|-----------|
 | `Duration::from_secs`, `from_millis`, `from_nanos` | construction | -- |
-| `Instant::now`, `Instant::elapsed` | methods | `Clock` |
-| `sleep` | fn | `Clock` |
-| `unix_timestamp` | fn | `Clock` |
+| `Instant::now`, `Instant::elapsed` | methods | `Time` |
+| `sleep` | fn | `Time` |
+| `unix_timestamp` | fn | `Time` |
 
 Source: [STDLIB_TARGET.md](STDLIB_TARGET.md)
 
@@ -686,7 +686,7 @@ The capability set is fixed. Each capability maps to a class of host resource or
 |-----------|----------|-------------|
 | `File` | Filesystem access | `std.fs` operations |
 | `Network` | Socket operations | `std.net` operations |
-| `Clock` | Time queries, sleep | `std.time` operations |
+| `Time` | Time queries, sleep | `std.time` operations |
 | `Env` | Environment variables | `std.env` operations |
 | `Random` | RNG state | `std.rand` operations |
 | `Process` | Fork, spawn, kill, exit | `std.process` operations |

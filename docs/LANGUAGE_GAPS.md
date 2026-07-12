@@ -79,7 +79,7 @@ a missing core collection feature.
 
 ### ~~11. Standalone benchmark programs lack an easy timing path (Bug 012)~~ — FIXED
 
-**Status:** Fixed. Added `clock_monotonic_ns() -> Int` builtin with `Clock` capability. Returns nanoseconds from monotonic clock via `clock_gettime`.
+**Status:** Fixed. Added `clock_monotonic_ns() -> Int` builtin with `Time` capability. Returns nanoseconds from monotonic clock via `clock_gettime`.
 
 ### ~~12. No statement-vs-trailing-expression distinction in blocks/match arms~~ — FIXED (core)
 

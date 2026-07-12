@@ -154,6 +154,166 @@ Concrete differs by pushing harder on:
 - predictable execution reporting and enforcement
 - Lean-backed proof direction
 
+### Wirth Languages / Oberon
+
+**Status:** Adapted
+
+Concrete takes:
+
+- small-language discipline: a compact grammar, few concepts, and little syntax
+  that exists only for convenience
+- modules as the main scaling mechanism, not macros or pervasive language
+  extension
+- the habit of growing capability through libraries and tooling before adding
+  surface syntax
+- implementation simplicity as an assurance feature, not just an aesthetic
+
+Concrete does not take:
+
+- GC as the default systems-programming model
+- unsafe escapes hidden behind implementation convention
+- a minimalism that avoids explicit authority, ownership, or proof artifacts
+
+The lesson for Concrete is especially relevant to Phase 6D and the stdlib:
+remove special cases that do not earn their keep, but do not remove ergonomic
+forms that keep ordinary programs clear.
+
+### Hare
+
+**Status:** Adapted
+
+Concrete takes:
+
+- small, predictable systems programming as a first-order goal
+- simple modules and explicit OS-facing APIs
+- a bias toward boring syntax and straightforward control flow
+
+Concrete does not take:
+
+- C-like memory unsafety as the ordinary programming model
+- a language surface that leaves authority and trust boundaries implicit
+
+Hare is useful as a reminder that a systems language can stay direct without
+turning its standard library into a framework.
+
+### Pony
+
+**Status:** Adapted
+
+Concrete takes:
+
+- capability thinking as a way to make authority explicit
+- the idea that aliasing/authority restrictions can be part of a practical
+  programming model, not only a theorem
+
+Concrete does not take:
+
+- actor concurrency as the core execution model
+- a large reference-capability surface
+
+Pony is a reference for authority discipline, not for Concrete's concurrency or
+object model.
+
+### SML / OCaml
+
+**Status:** Adapted
+
+Concrete takes:
+
+- module signatures as a discipline for stable, inspectable APIs
+- a clear separation between implementation and public interface
+- small, principled libraries with predictable naming
+- the value of a real language specification rather than only tests and prose
+
+Concrete does not take:
+
+- GC as the runtime assumption
+- pervasive higher-order functional style as the systems-programming default
+- module/functor power that would make the surface harder to audit
+
+The concrete stdlib lesson is that every module should have a signature-like
+contract: exported surface, ownership behavior, capabilities, allocation,
+failure modes, and examples.
+
+### Gleam / Roc
+
+**Status:** Adapted cautiously
+
+Concrete takes:
+
+- friendly error messages and approachable documentation style
+- simple data-first APIs
+- effect visibility as a user-facing design concern
+- example-driven testing as part of the library contract
+
+Concrete does not take:
+
+- managed runtimes as the base assumption
+- fast-moving language features as a substitute for a small stable core
+
+These are references for stdlib documentation and workflow polish, not for
+Concrete's runtime model.
+
+### Lua / Wren / Janet
+
+**Status:** Adapted cautiously
+
+Concrete takes:
+
+- compact language references
+- embeddability and host-boundary clarity
+- small standard libraries that are easy to learn as a whole
+
+Concrete does not take:
+
+- dynamic typing
+- metatables, macros, or runtime reflection as the main extension mechanism
+- implicit authority through host APIs
+
+The useful lesson is documentation and host-boundary clarity: if a feature
+touches the host, the boundary should be visible and easy to audit.
+
+### Koka / Flix
+
+**Status:** Internal influence, not surface-language target
+
+Concrete takes:
+
+- effect/capability facts as compiler-owned decisions
+- callback capability propagation as a real semantic axis
+- query/fact-store ideas for future relational facts, provenance, and
+  invalidation
+
+Concrete does not take:
+
+- user-facing row-polymorphic effects for v1
+- algebraic effect handlers as a language feature
+- Datalog as a user-facing programming model
+
+The lesson is internal: `CapabilityJudgment`-style decision records and future
+CompilerDB facts should be precise, but the surface language should remain
+ordinary and explicit.
+
+### Cyclone / ATS
+
+**Status:** Adapted cautiously
+
+Concrete takes:
+
+- region/escape-discipline lessons for safe low-level references
+- proof/resource-safety ambition for systems code
+- the warning that powerful static systems can become too hard for daily
+  programming if exposed directly
+
+Concrete does not take:
+
+- a full region/lifetime surface
+- dependent/resource proof terms in ordinary code
+
+These languages support Concrete's "no returned safe references" and
+proof-boundary direction: keep the invariant strong, but keep the daily surface
+small.
+
 ### SPARK / Ada
 
 **Status:** Adapted

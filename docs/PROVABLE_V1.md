@@ -43,7 +43,7 @@ A function is inside `ProvableV1` only if all of these hold:
 | Calls | Direct calls only; registered proof specs must be FnTable-complete. |
 | Recursion | No recursion. |
 | Allocation | No heap allocation and no `Alloc` capability. |
-| Blocking effects | No `File`, `Network`, `Process`, `Console`, `Clock`, `Random`, or `Env` capability. |
+| Blocking effects | No `File`, `Network`, `Process`, `Console`, `Time`, `Random`, or `Env` capability. |
 | Raw operations | No raw pointer operations and no `Unsafe` capability. |
 | Body | Every body construct must be in the supported ProofCore surface below. |
 | Registry | Any proved claim must have `body_fingerprint`, `spec`, `proof`, and `coverage`. |

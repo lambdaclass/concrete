@@ -540,7 +540,7 @@ Concrete does not yet implement concurrency. This section documents the intended
 2. **Structured over detached.** Concurrent work should belong to explicit scopes with defined lifetimes. Fire-and-forget spawning should be rare and marked.
 3. **Threads first, async later.** OS threads are the base primitive. Evented I/O and executor-driven async are specialized later additions, not the default.
 4. **Ownership across threads.** Values moved into spawned threads are consumed (linear move). Shared mutable state requires explicit synchronization types.
-5. **Capability-gated.** Spawning, blocking, waiting, synchronization, time, and eventual async/evented I/O should be visible as capabilities or explicit runtime values. The current research candidates include `Async`, `Concurrent`, `Sync`, `Clock`, and `Cancellable`; exact names are not implemented or frozen.
+5. **Capability-gated.** Spawning, blocking, waiting, synchronization, time, and eventual async/evented I/O should be visible as capabilities or explicit runtime values. The current research candidates include `Async`, `Concurrent`, `Sync`, `Time`, and `Cancellable`; exact names are not implemented or frozen.
 
 ### First concurrency model (future Phase 12 work)
 
@@ -574,7 +574,7 @@ This is illustrative, not current syntax. The intended signature makes visible:
 this function creates concurrent work and allocates. `--report caps` should
 eventually show exactly which functions in a module require optional overlap
 (`Async`), required concurrent progress (`Concurrent`), synchronization
-(`Sync`), clock access (`Clock`), or cancellation (`Cancellable`).
+(`Sync`), clock access (`Time`), or cancellation (`Cancellable`).
 
 ### Staging
 

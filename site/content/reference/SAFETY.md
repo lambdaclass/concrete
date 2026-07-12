@@ -35,7 +35,7 @@ Capabilities are named, compile-time effects declared in function signatures:
 fn serve() with(Network, Alloc) -> Int { ... }
 ```
 
-The nine capabilities are: `File`, `Network`, `Clock`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
+The nine capabilities are: `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
 
 A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
 

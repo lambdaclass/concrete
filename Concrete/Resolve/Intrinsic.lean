@@ -208,8 +208,8 @@ def IntrinsicId.capability : IntrinsicId → Option String
   -- Console
   | .printString | .printInt | .printChar | .printBool
   | .print | .println => some "Console"
-  -- Clock
-  | .clockMonotonicNs => some "Clock"
+  -- Time
+  | .clockMonotonicNs => some "Time"
   -- Pure (no capability required)
   | _ => none
 

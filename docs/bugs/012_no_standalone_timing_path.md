@@ -38,7 +38,7 @@ For Phase H comparative workloads, this means:
 
 Added `clock_monotonic_ns() -> Int` as a compiler builtin (Option A).
 Returns nanoseconds from the monotonic clock via `clock_gettime(CLOCK_MONOTONIC)`.
-Requires `Clock` capability.
+Requires `Time` capability.
 
 ```con
 let t1: Int = clock_monotonic_ns();

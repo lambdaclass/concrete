@@ -10,6 +10,6 @@ no_unsafe              = true
 no_trusted             = true
 no_externs             = true
 max_stack_bytes        = 200
-forbidden_capabilities = ["Alloc", "File", "Net", "Unsafe", "Console", "Clock"]
+forbidden_capabilities = ["Alloc", "File", "Net", "Unsafe", "Console", "Time"]
 allowed_capabilities   = []
 deny                   = ["Unsafe"]

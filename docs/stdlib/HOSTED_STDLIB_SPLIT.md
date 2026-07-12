@@ -130,7 +130,7 @@ Allocation needs only malloc/realloc/free — three symbols with well-defined be
 
 ### Properties of hosted modules
 
-- **Require OS-specific capabilities.** `Network`, `Process`, `Console`, `Random`, `File`, `Clock`, `Env` — each maps to a real OS facility. Visible in `--report caps`.
+- **Require OS-specific capabilities.** `Network`, `Process`, `Console`, `Random`, `File`, `Time`, `Env` — each maps to a real OS facility. Visible in `--report caps`.
 - **Require `Unsafe` internally.** Hosted modules call libc functions through `trusted extern fn` declarations. The `Unsafe` is contained inside trusted wrappers — callers see domain capabilities, not raw `Unsafe`.
 - **Not freestanding-compatible.** These modules assume POSIX libc is linked. They cannot run on bare metal, in a kernel, or in a minimal WASM environment.
 - **Non-deterministic.** File contents change. Network connections fail. Clocks advance. PIDs vary. Environment variables are mutable global state.
@@ -188,7 +188,7 @@ The recommended pattern from [TRUSTED_BOUNDARY_GUIDE.md](../TRUSTED_BOUNDARY_GUI
 |-------|----------------------|-----------------------------------|
 | Core | None (`caps: (pure)`) | No capabilities needed |
 | Alloc | `Alloc` | Yes — `with(Alloc)` |
-| Hosted | Domain caps (`File`, `Network`, `Process`, `Console`, `Clock`, `Env`, `Random`) + internal `Unsafe` | Yes — domain caps visible; `Unsafe` contained in trusted wrappers |
+| Hosted | Domain caps (`File`, `Network`, `Process`, `Console`, `Time`, `Env`, `Random`) + internal `Unsafe` | Yes — domain caps visible; `Unsafe` contained in trusted wrappers |
 | FFI | `Unsafe` (for raw extern calls) | Yes — `with(Unsafe)` or absorbed by `trusted extern fn` |
 
 ### What "capability-declared" means

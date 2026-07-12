@@ -16,13 +16,13 @@ inductive CapSet where
 
 /-- The standard capability set (Std = everything except Unsafe). -/
 def stdCaps : List String :=
-  ["File", "Network", "Clock", "Env", "Random", "Process", "Console", "Alloc"]
+  ["File", "Network", "Time", "Env", "Random", "Process", "Console", "Alloc"]
 
 /-- All valid capability names. (`Device` for MMIO/hardware is a planned future
     addition — deferred until the freestanding/embedded path needs it; see
     ROADMAP and research/language/capability-sandboxing.md §4a.) -/
 def validCaps : List String :=
-  ["File", "Network", "Clock", "Env", "Random", "Process", "Console", "Alloc", "Unsafe"]
+  ["File", "Network", "Time", "Env", "Random", "Process", "Console", "Alloc", "Unsafe"]
 
 /-- Normalize a CapSet to a flat sorted list of concrete caps + list of cap variables. -/
 def CapSet.normalize : CapSet → List String × List String

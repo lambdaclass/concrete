@@ -138,7 +138,7 @@ Each entry has:
 
 **Why:** Full algebraic effect systems (as in Koka, Eff, or research languages) are powerful but add significant complexity to the type system, make function signatures harder to read, and require runtime support for effect handlers. Concrete's capability system is deliberately simpler: a fixed set of named capabilities checked at compile time with no runtime cost.
 
-**What Concrete does instead:** Nine named capabilities (`File`, `Network`, `Clock`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`) declared in function signatures. Compile-time subset checking. `--report caps` and `--report authority` for audit. Capability aliases for convenience.
+**What Concrete does instead:** Nine named capabilities (`File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`) declared in function signatures. Compile-time subset checking. `--report caps` and `--report authority` for audit. Capability aliases for convenience.
 
 **Status:** Permanent for the current fixed-capability model. The set of capability names may grow, but the mechanism (named capabilities in signatures, compile-time subset checking) is structural.
 

@@ -38,7 +38,7 @@ Capabilities are named, compile-time effects declared in function signatures:
 fn serve() with(Network, Alloc) -> Int { ... }
 ```
 
-The nine capabilities are: `File`, `Network`, `Clock`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
+The nine capabilities are: `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
 
 `Random` is authority over **external entropy** (the OS/hardware RNG — a genuine
 nondeterminism source), not permission to run a PRNG: a deterministic PRNG seeded
