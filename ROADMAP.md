@@ -1773,6 +1773,26 @@ or lost); put the heavier trace/replay/scaling machinery here.
     deliberately reintroduced quadratic renderer/collector, an intentionally
     excessive memory-growth variant, and the bug 027 family.
 
+    STATUS (landed `scripts/tests/check_compiler_complexity.sh`): the guard is
+    live and, on its first run, exposed a **family of pre-existing O(N²) hot
+    spots** — all the same shape (assoc-list / list-set where a map/set was
+    needed). FIXED + behavior-gated (see CHANGELOG): SSAVerify dominators
+    (Jacobi→Gauss-Seidel; wide-match cubic 17.5s→1.3s), SSACleanup `collectAllUses`
+    + SSAVerify memberships (→ HashSet; large-array `--emit-ssa` 2757ms→647ms),
+    `Lower.emit` block-building (→ O(1) accumulate), `Mono.lookupFn` call
+    resolution (→ HashMap). bug-027 re-attributed: it is NOT EmitSSA — the cost
+    was cleanup/verify/emit-block building, now fixed. STILL OPEN, tracked
+    (each a same-shape map conversion; the guard reds if any regresses):
+      - **Frontend `check`/`resolve` call resolution is O(N²)** on many
+        mutually-calling functions (`env.fnNames.lookup` assoc-list scan per call;
+        `--emit-core` alone O(N²), ~9s at 4000 fns) — the largest remaining.
+      - SSAVerify dominance still ~O(N²) in block count at very large N (dom sets
+        are O(N²) for a chain) → the idom/Cooper-Harvey-Kennedy near-linear rewrite,
+        guarded by `check_ssa_verify_agreement.sh`.
+      - A smaller within-function O(N²) on many-statement bodies (needs profiling).
+    Guard-threshold tightening + large-N coverage is gated on these fixes (do not
+    loosen; extend the guard's regime once the frontend/idom O(N²) are closed).
+
 3. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
     obligations, mono instances, CoreCheck status, SSA blocks, runtime traps,

@@ -10,7 +10,7 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Phase 6C #2 — complexity guard caught (and fixed) an SSAVerify dominator cubic (2026-07-12)
+### Phase 6C #2 — complexity guard exposed a family of pipeline O(N²) bugs (2026-07-12)
 
 The anti-superlinear complexity guard (`scripts/tests/check_compiler_complexity.sh`)
 found a real pre-existing bug on its first run: compiling wide `match` chains was
@@ -32,19 +32,42 @@ loops, diamonds, value while-expr) must still accept and stay codegen-correct
 (interp==compiled). SSA suite 806/0, examples 130/0, invalid-SSA mutation still
 caught. Both gates wired into CI + Makefile.
 
-Disclosed follow-ups (not loosened):
-- SSAVerify dominance is still ~O(N²) in block count at very large N (dom *sets*
+Continuing the hunt (the guard is now a live detector) surfaced that this was not
+one bug but a **family of independent O(N²) hot spots** — all the same shape
+(association-list / list-set operations where a map/set was needed) in different
+stages. Fixed, each behavior-preserving (SSA suite 806/0, examples 130/0,
+`check_ssa_verify_agreement` 5/0, main suite 1635/0):
+
+- **SSAVerify dominators** (wide match → long block chain): Jacobi → Gauss-Seidel
+  (above). 800 arms 17.5s → 1.3s.
+- **SSACleanup `collectAllUses`** (large arrays → many instructions in one block):
+  was built with `acc ++ instUses` per instruction (O(N²)) AND membership-checked
+  per instruction in dead-code elimination (O(N²)) → `Std.HashSet`. This was the
+  dominant verify/cleanup array cost: `--emit-ssa` delta over lower-only went
+  2110ms → ~0 at n=8000; array `--emit-ssa` n=8000 2757ms → 647ms (4.3×).
+- **`Lower.emit`**: `currentInsts ++ [inst]` → O(1) reverse-accumulate + reverse
+  at `terminateBlock` (universal block-building win).
+- **SSAVerify `running`/`seen` memberships** and **`Mono.lookupFn`** call
+  resolution (`allFns.find?` per call) → `Std.HashSet` / name→def `HashMap`
+  (defensive: real O(N²) in the verify and generic-call-resolution paths).
+
+Bug-027 re-attributed and refined: it was filed as "EmitSSA O(n²)"; the isolation
+shows EmitSSA/emit is negligible — the array cost was cleanup+verify+emit-block
+building, now fixed above.
+
+Still open, tracked (each a separate deliberate fix; the guard will red if any
+regresses past its regime):
+- **Frontend `check`/`resolve` call resolution is O(N²)** on programs with many
+  mutually-calling functions — the largest remaining (N functions × N call sites,
+  `env.fnNames.lookup` is an assoc-list linear scan; `--emit-core` alone is O(N²):
+  4000 functions ≈ 9s). Fix = the same map conversion, in Check/Resolve. NEWLY
+  FOUND by the guard; not yet fixed.
+- **SSAVerify dominance** remains ~O(N²) in block count at very large N (dom *sets*
   are inherently O(N²) for a chain); the idom/Cooper-Harvey-Kennedy + dense-ID-array
-  near-linear rewrite is tracked, with the behavior gate as its safety net.
-- A SEPARATE, still-open O(N²) exists on many-instructions-in-one-block programs
-  (large array literals: N stores in one block, trivial dominators). Localization
-  shows it in **lower AND SSAVerify/cleanup, not EmitSSA** (the `--emit-llvm` gap
-  over `--emit-ssa` is negligible) — which also **corrects the original bug-027
-  attribution** (filed as "EmitSSA O(n²)"; the cost is earlier, in lower + verify
-  over long instruction lists, most likely `acc ++ x` list-append patterns). This
-  is NOT fixed by the dominator change above and is tracked distinctly. The
-  complexity guard tests the practical regime (≤200) where the match cubic
-  manifested; the large-N array/instruction tail is a separate follow-up.
+  near-linear rewrite is the tracked follow-up, behavior gate as safety net.
+- A smaller **within-function** O(N²) on many-statement bodies (not yet localized;
+  needs profiling). The complexity guard tests the ≤200 regime; the large-N tails
+  above are separate follow-ups.
 
 ### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
 
