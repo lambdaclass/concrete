@@ -936,6 +936,21 @@ refactors make the current checker decisions auditable.
 
 ## Phase 6B / 6.5: Compiler Pipeline Refactor And Invariant Hardening
 
+**Status: closed (core).** The load-bearing work is done and verified, recorded in
+[CHANGELOG.md](CHANGELOG.md): the semantic-judgment axes (arithmetic, type, Copy,
+instantiation, capability, ownership, totality), the CoreCheck pre-Lower boundary,
+walker-coverage, the control-flow builder's result-materialization path, and the
+capstone contract gate (`scripts/tests/check_pipeline_refactor_contract.sh`, which
+proves the composed pipeline behavior-preserving for accepted programs and
+fail-closed per axis for malformed ones). What remains below is deliberately
+**pull-gated follow-up** — build only when a real consumer or a failing gate pulls
+it — not open blockers. Two items were rehomed to where their trigger actually
+lives: ProofCore partial-def reduction → **Phase 14** (pulled by preservation
+proofs); the full interned-fact-ID store / `CompilerDB` → **Phase 8.5** (where the
+incremental driver and fact database are built). The stage-boundary *contracts*
+(fact-ID contract, preservation/invalidation contract, typed fact records) stay
+here as contracts; only the heavy database implementation is deferred.
+
 Goal: make the compiler pipeline have one opinion about each program before
 Phase 7 expands the stdlib and daily workload surface.
 
@@ -1705,38 +1720,22 @@ leaking as user-facing truth.
 These are deliberately scoped follow-ups: only pull them when the earlier gates
 or proof work show that the structure is now the limiting factor.
 
-30. Extract a structured Lower/SSA control-flow builder if branch/loop/phi logic
-    remains ad hoc.
-    Historical bugs clustered around branch/loop/snapshot reconciliation. The
-    extracted builder should own if/match result values, loop headers/exits, phi
-    construction, scope-local variable filtering, internal trailing-value
-    handling, and defer cleanup boundaries. Acceptance gate: previous nested
-    match, loop-after-loop-branch, `__last_expr`, defer, and value-block
-    fixtures remain green, and a mutation that drops scope filtering or trap
-    preservation is caught.
+30. Control-flow builder — remaining terminator-site consolidation (deferred).
+    The result-materialization path (unit/void slot guard, branch-value store,
+    merge load) is unified behind `freshResultSlot` / `storeBranchResult` /
+    `loadResult`, and the surface-reachable unit if/while-expr `alloca void` hole
+    is closed (recorded in CHANGELOG; the acceptance gate is met — control-flow
+    fixtures stay green and a mutation dropping the while-exit scope-local filter
+    is caught). The remaining ~30 hand-rolled `terminateBlock`/`startBlock` sites
+    are still ad hoc but not bug-pulled; consolidate them behind the builder only
+    if another codegen bug pulls it. `SBlock.params` (SSA block args) stays
+    available and unused until a consumer needs it.
 
-31. Reduce ProofCore partial-def opacity only where proof preservation needs it.
-    ProofCore still contains many `partial def` walkers/wrappers. Do not chase a
-    full rewrite here. Add non-partial wrappers or structural recursion only for
-    constructs pulled by Phase 12/14 preservation proofs. Gate each lifted rule
-    with one theorem that would fail if the wrapper delegated to an opaque
-    partial-def shape.
-
-32. Add the Phase 6B / 6.5 validation artifact.
-    `scripts/tests/check_pipeline_refactor_contract.sh` runs a small
-    compiler-pipeline corpus exercising arithmetic reference semantics,
-    central policy predicates, `CopyJudgment` / `InstantiationJudgment`,
-    `OwnershipJudgment` / `ValueFlowJudgment`, `TotalityJudgment`,
-    judgment-contract enforcement, stage contracts, capability facts, stable fact
-    IDs, fact dependencies, pass locality, invalidation, structured producer
-    validation records, the versioned certificate-chain contract,
-    certificate-carrying IR, destination-passing/value flow, intrinsic registry,
-    `CompilerDB`,
-    no-hidden-second-pipeline checks, walker coverage, CoreCheck boundary
-    failures, feature matrices, source spans, generated-name hygiene,
-    diagnostic quality and panic-to-diagnostic behavior. The artifact must prove
-    these refactors are behavior preserving for accepted programs and fail closed
-    for malformed or unsupported programs.
+    (Item 31, ProofCore partial-def reduction, is rehomed to Phase 14 — it is
+    pulled by preservation proofs, not by this phase. Item 32, the Phase 6B
+    validation artifact, is done and verified —
+    `scripts/tests/check_pipeline_refactor_contract.sh`, CI-registered — see
+    CHANGELOG.)
 
 ## Phase 6C / 6.c: Pipeline Observability, Replay, And Scaling
 
@@ -4098,6 +4097,15 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     soundness theorem names, independent receipt per artifact, mutation corpus,
     cache-off/on receipt parity, and a machine-readable list of every boundary
     V1 still leaves producer/compiler-trusted.
+
+15. Reduce ProofCore partial-def opacity only where proof preservation needs it.
+    (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
+    contains many `partial def` walkers/wrappers, which are opaque to the kernel.
+    Do not chase a full rewrite. Add non-partial wrappers or structural recursion
+    ONLY for the constructs pulled by the R-rule preservation proofs above, so a
+    lifted rule can be reasoned about structurally. Gate each lifted rule with one
+    theorem that would fail if the wrapper still delegated to an opaque
+    partial-def shape.
 
 ## Phase 15: Backend, Target, And Stdlib Contracts
 
