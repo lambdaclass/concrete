@@ -8,13 +8,18 @@ time. This is not a promise to copy the surface. It is an inventory plus a
 Concrete classification.
 
 Comparison set: Zig, Odin, Rust, C++, Go, Clojure, Elixir, Roc, Gleam, and
-OCaml. These cover low-level systems libraries, pragmatic command-line/runtime
-libraries, and functional data/sequence libraries.
+OCaml, plus Austral, Hare, and SPARK/Ada (added 2026-07-12). These cover
+low-level systems libraries, pragmatic command-line/runtime libraries,
+functional data/sequence libraries, and — for the last three — the
+linear/capability/proof-oriented languages closest to Concrete's own shape.
 
 Detailed packets:
 
 - [languages/zig.md](languages/zig.md)
 - [languages/rust.md](languages/rust.md)
+- [languages/austral.md](languages/austral.md) — closest structural relative (linear + capabilities + no GC)
+- [languages/hare.md](languages/hare.md) — minimalist systems + closed stdlib mandate
+- [languages/spark.md](languages/spark.md) — proof-friendly pure-core discipline
 - [languages/cpp.md](languages/cpp.md)
 - [languages/odin.md](languages/odin.md)
 - [languages/clojure.md](languages/clojure.md)

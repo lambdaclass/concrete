@@ -94,15 +94,15 @@ If you want the highest-leverage current research first:
 ## Stdlib And Runtime
 
 - [stdlib/stdlib-design.md](stdlib/stdlib-design.md) — stdlib direction, priorities, and style rules (`P1`, `Open`, partially adopted)
-- [stdlib/stdlib-comparative-inventory.md](stdlib/stdlib-comparative-inventory.md) — inventory of what Zig, Odin, Rust, C++, Go, Clojure, Elixir, Roc, Gleam, and OCaml expose, and how Concrete should classify each family (`P0`, `Open`)
+- [stdlib/stdlib-comparative-inventory.md](stdlib/stdlib-comparative-inventory.md) — inventory of what Zig, Odin, Rust, C++, Go, Clojure, Elixir, Roc, Gleam, OCaml, Austral, Hare, and SPARK/Ada expose, and how Concrete should classify each family (`P0`, `Open`)
 - [stdlib/stdlib-api-cleanup.md](stdlib/stdlib-api-cleanup.md) — cleaning builtin-shaped names and ownership surprises out of the public stdlib (`P1`, `Open`)
 - [stdlib/text-and-output-design.md](stdlib/text-and-output-design.md) — mixed-arg printing first, interpolation later if needed (`P0`, `Open`)
 - [stdlib/runtime-collections.md](stdlib/runtime-collections.md) — collection maturity for interpreter/runtime workloads (`P1`, `Open`)
-- [stdlib/iterators.md](stdlib/iterators.md) — explicit traversal support and the case against a broad iterator ecosystem (`P1`, `Open`)
+- [stdlib/iterators.md](stdlib/iterators.md) — explicit traversal support and the case against a broad iterator ecosystem (`P1`, `Closed` — per-container traversal landed, no iterator tower)
 - [stdlib/arena-allocation.md](stdlib/arena-allocation.md) — arena/bump allocation for parser/interpreter-style workloads (`P1`, `Open`)
 - [stdlib/allocation-budgets.md](stdlib/allocation-budgets.md) — `NoAlloc`, `BoundedAlloc(N)`, and allocation reporting (`P0`, `Open`)
 - [stdlib/execution-cost.md](stdlib/execution-cost.md) — structural cost reports and bounded execution direction (`P1`, `Open`)
-- [stdlib/execution-cost-tracking.md](stdlib/execution-cost-tracking.md) — tracking/externalizing execution-cost obligations (`P1`, `Open`)
+- [stdlib/execution-cost-tracking.md](stdlib/execution-cost-tracking.md) — tracking/externalizing execution-cost obligations (`P1`, `Closed` — merged into execution-cost.md, kept as a pointer)
 - [stdlib/layout-reports.md](stdlib/layout-reports.md) — layout/ABI audit report improvements (`P1`, `Open`)
 - [stdlib/concurrency.md](stdlib/concurrency.md) — near-term concurrency direction (`P1`, `Open`)
 - [stdlib/long-term-concurrency.md](stdlib/long-term-concurrency.md) — long-horizon layered concurrency model (`P1`, `Open`)

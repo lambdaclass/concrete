@@ -98,3 +98,39 @@ Revisit only if:
 - real programs show a repeated early-exit pattern that `fold` + `for_each` + materialization cannot cover well
 - there is repeated evidence for a tiny shared protocol that does not introduce hidden semantics
 - thin syntax sugar can be justified without creating a second traversal model
+
+## Cross-Language Validation (2026-07-12)
+
+A verified survey (Ruby, Smalltalk, Kotlin, Clojure, Hylo, Swift, Roc) confirms
+this resolution and sharpens the end-game. The external-iterator object is
+literally *unconstructable* under Concrete's second-class-reference invariant
+(H1): Rust's `slice::iter()` returns `Iter<'a,T>` holding a stored borrow, and
+`next(&mut self) -> Option<&'a T>` returns a reference *out* of the collection —
+exactly the shape H1 forbids. Internal iteration (element-by-parameter, not
+element-by-return) is the natural fit: an element is live only for one callback
+invocation and provably cannot escape.
+
+Two refinements to the already-planned end-game:
+
+1. **Early-exit mechanism = the callback returns a `Continue|Break` tag.**
+   Convergent across Rust (`ControlFlow` / `try_fold`), Roc (`walk_until` with
+   `[Continue s, Break s]`), and Clojure (`reduced`). This is the concrete shape
+   for the `find`/`any`/`all`/`try_fold` helpers already anticipated above —
+   allocation-free and reference-safe, and the single most important ergonomic
+   decision for internal iteration.
+2. **The optional `for` sugar = a per-iteration projection**, à la Hylo's
+   `let`/`inout` element subscript (desugaring to
+   `start_position`/`position(after:)`/element-subscript). The loop variable is a
+   scoped projection, never an escapable reference, so it fits the existing
+   `verifyNoReturnedRefs` boundary with no new escape hatch — and `for let x` /
+   `for inout x` recover the read/mut distinction without lifetimes.
+
+Conscious give-ups (unchanged, now cross-validated): no lazy fused pipelines or
+infinite streams; no lock-step `zip` (use an index-based `for` with
+`xs[i]`/`ys[i]` projections — indexing is a projection, not a returned ref); no
+user-defined external iterators (custom iteration = implement `fold`/`for_each`,
+the Ruby-`Enumerable`-from-`each` pattern). Swift's copyable value-iterator was
+rejected — it hands out *owned* elements via copy-on-write, requiring Copy and
+silently allocating for non-Copy, clashing with both no-hidden-alloc and linear
+ownership. Roc's implicit uniqueness inference was rejected as contrary to
+Concrete's explicit-linear philosophy. Per-language detail: the `languages/` packets.

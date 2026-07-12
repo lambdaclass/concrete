@@ -1,6 +1,6 @@
 # Rust Stdlib Packet
 
-Status: research
+Status: research (API-shape claims verified 2026-07-12 — see verified section below)
 
 Source pointers: Rust `std` documentation, especially `alloc`, `collections`,
 `ffi`, `fs`, `io`, `net`, `path`, `process`, `sync`, `thread`, `time`, `env`,
@@ -67,4 +67,28 @@ Source pointers: Rust `std` documentation, especially `alloc`, `collections`,
 - Stdlib later: uuid, csv, tempfile, terminal helpers.
 - Package later: regex, serde-like broad serialization, HTTP, broad crypto.
 - Non-goal: macro/derive ecosystem.
+
+## Verified API-Shape Findings (2026-07-12)
+
+Checked against the Rust API Guidelines (rust-lang.github.io/api-guidelines) and
+the `std` reference:
+
+- **Cost/ownership encoded in the name (C-CONV):** `as_` = free borrow→borrow
+  view; `to_` = expensive; `into_` = consumes. Plus `iter`/`iter_mut`/`into_iter`
+  and `new()` (no allocation) vs `with_capacity()` (allocates). The prefix states
+  cost + ownership transfer before you read the signature — copy the vocabulary.
+- **`#[must_use]`** on `Result`/`Iterator` is an *advisory lint* — silenceable,
+  with a silent `Drop` fallback. Concrete promotes the same intent to a
+  **mandatory linear type rule** (not-consuming is a type error; no silent drop).
+  Keep the message-carrying attribute and the `let _ =` discard idiom; drop the
+  escapability.
+- **Failure-naming families:** `try_` (fallible → `Result`), `checked_`
+  (optional → `Option`), `saturating_`/`overflowing_`/`wrapping_`, and
+  `_unchecked` (precondition shifted to the caller → in Concrete a **proof
+  obligation, not UB**).
+- **Reject** (these guidelines exist only for the trait/lifetime machinery
+  Concrete drops): C-GENERIC (generic-bound proliferation), C-OBJECT (`dyn`
+  trait objects), C-CALLER-CONTROL (lifetime-parameterized borrowing
+  flexibility), `From`/`Into` conversion webs, and lifetime elision. Keep only
+  the naming vocabulary, receiver-as-contract, and must-use-as-a-type-rule.
 

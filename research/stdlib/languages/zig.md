@@ -1,6 +1,6 @@
 # Zig Stdlib Packet
 
-Status: research
+Status: research (API-shape claims verified 2026-07-12 — see verified section below)
 
 Source pointers: Zig language documentation and stdlib docs (`std`), including
 allocator, fs, io, fmt, json, crypto/hash, compress/archive, net, time, process,
@@ -63,4 +63,27 @@ thread/atomic, target, testing, and debug surfaces.
 - Stdlib later: temp files, terminal helpers, CRC/Adler, varint.
 - Package later: compression/archive, broad crypto.
 - Research later: atomics/threads/sync.
+
+## Verified API-Shape Findings (2026-07-12)
+
+Checked against `ziglang.org` master stdlib source (`lib/std/array_list.zig`,
+`lib/std/mem/Allocator.zig`, `lib/std/hash_map.zig`):
+
+- **Master Zig moved `ArrayList`/`HashMap` to the *unmanaged* form** — the
+  allocator is threaded per call, not stored; the allocator-storing form is now
+  `ArrayList.Managed` and is **deprecated**. Cheap construction is `.empty` (a
+  `const`), not `init()`. Direct evidence *for* the allocator-as-value question
+  (Phase 7 #2): Zig is moving toward explicit threaded allocators (arenas,
+  testability), not away from them.
+- **Allocation is signalled by two things together**: an `Allocator` parameter
+  *and* an `Allocator.Error!T` return. So **no allocator param + no `!` ⇒
+  provably non-allocating** — a syntactic, checkable classification. Concrete's
+  `with(Alloc)` + `Result` gives the same property; preserve "absence is provable."
+- Ownership transfer is named by verb: `toOwnedSlice` / `dupe` hand the buffer to
+  the caller; `deinit` / `free` take it back. Allocation failure is one canonical
+  `error{OutOfMemory}` in the error channel — never null, never a sentinel.
+- **Anti-pattern under linearity:** `defer x.deinit()` fights move-consumption
+  (scope-exit cleanup runs regardless of moves) — do NOT port it; linear
+  ownership replaces it. `errdefer` (drop a partially-built value only on the
+  error path) is the one idiom worth adapting.
 
