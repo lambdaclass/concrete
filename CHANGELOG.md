@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
+
+`concrete <file> --emit-trace-json` emits a stable-schema JSON trace of per-stage
+structural counts for an accepted program: Core (modules/functions/enums/structs),
+post-mono (modules/functions), and SSA (modules/functions/blocks/instructions),
+plus the opaque compiler identity and the diagnostic count. Built in
+`Pipeline.telemetryJson` (with `countCore`/`countSSA`, recursing through
+submodules); wired into Main as the `--emit-trace-json` emit flag. This is
+deliberately **not** a performance claim — per-pass timing and RSS are omitted
+from v1 (platform-specific; benchmarking is Phase 17). The gate
+(`scripts/tests/check_pipeline_telemetry.sh`, 17 rows, CI + Makefile) pins exactly
+what the roadmap says to: schema stability, counts present and varying with
+program size, and no private absolute paths leaking into the trace. Foundation for
+the 6C complexity guard / trace / replay-hash items, which consume these per-stage
+summaries.
+
 ### Phase 6B closed — capstone validation artifact + control-flow builder (2026-07-12)
 
 The compiler-pipeline refactor phase reaches its exit criterion.

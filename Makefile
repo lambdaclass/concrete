@@ -306,6 +306,9 @@ test-capability-judgment: build ## Capability-judgment gate (Phase 6.5): direct-
 test-pipeline-refactor-contract: build ## Phase 6B capstone (item 32): a corpus proving the composed pipeline is behavior-preserving for accepted programs (interp==compiled) and fail-closed per axis for malformed ones
 	$(NIX_DEVELOP) bash ./scripts/tests/check_pipeline_refactor_contract.sh
 
+test-pipeline-telemetry: build ## Phase 6C #1: `concrete <file> --emit-trace-json` emits a stable-schema per-stage structural-count trace (schema stability + no private paths gated; timing/RSS deferred to Phase 17)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_pipeline_telemetry.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

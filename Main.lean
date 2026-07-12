@@ -51,7 +51,7 @@ def flagValue (args : List String) (name : String) : Option String :=
 end Cli
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit|arithmetic] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--emit-trace-json] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit|arithmetic] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -133,6 +133,30 @@ def validateLLVMIR (llPath : String) : IO Bool := do
     return false
   return true
 
+
+/-- Phase 6C #1: emit the pipeline telemetry trace (stable-schema JSON) for an
+    accepted program. Runs the real pipeline (frontend → mono → lower) and prints
+    per-stage structural counts; backs `concrete <file> --emit-trace-json`. -/
+def traceTelemetry (inputPath : String) : IO UInt32 := do
+  let source ← readFile inputPath
+  let git ← compilerIdentity
+  match ← Pipeline.runFrontend inputPath source resolveAllModules with
+  | .error ds =>
+    IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
+    return 1
+  | .ok (_, _, validCore, srcMap) =>
+  match Pipeline.monomorphize validCore with
+  | .error ds =>
+    IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
+    return 1
+  | .ok mono =>
+  match Pipeline.lower mono with
+  | .error ds =>
+    IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
+    return 1
+  | .ok ssa =>
+  IO.println (Pipeline.telemetryJson git validCore mono ssa 0)
+  return 0
 
 /-- Compile via SSA pipeline: Parse → Resolve → Check → Elab → CoreCanonicalize → CoreCheck → Mono → Lower → SSAVerify → SSACleanup → EmitSSA → clang -/
 def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO UInt32 := do
@@ -2049,6 +2073,8 @@ def main (args : List String) : IO UInt32 := do
     compileAndEmit inputPath "ssa"
   | [inputPath, "--emit-ssa-unverified"] =>
     compileAndEmit inputPath "ssa-unverified"
+  | [inputPath, "--emit-trace-json"] =>
+    traceTelemetry inputPath
   | [inputPath, "-o", outputPath] =>
     compileSSA inputPath outputPath false
   | [inputPath, "--check", checkType] =>

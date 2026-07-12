@@ -429,6 +429,9 @@ jobs:
       - name: "Pipeline-refactor contract (Phase 6B capstone — behavior-preserving + fail-closed)"
         run: bash scripts/tests/check_pipeline_refactor_contract.sh
 
+      - name: "Pipeline telemetry trace (Phase 6C #1 — stable-schema JSON, no private paths)"
+        run: bash scripts/tests/check_pipeline_telemetry.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

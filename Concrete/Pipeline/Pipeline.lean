@@ -356,5 +356,54 @@ def runFrontendDiagnostics (inputPath source : String)
         | .error cds => return (base ++ cds, false)
         | .ok _ => return (base, false)
 
+-- ============================================================
+-- Phase 6C #1: per-stage structural telemetry (stable-schema JSON)
+-- ============================================================
+
+/-- Count `(modules, functions, enums, structs)` across a Core module forest,
+    recursing through submodules. Shared by the core and post-mono stages. -/
+partial def countCore (ms : List CModule) : Nat × Nat × Nat × Nat :=
+  ms.foldl (fun (acc : Nat × Nat × Nat × Nat) cm =>
+    let (m, f, e, s) := acc
+    let (sm, sf, se, ss) := countCore cm.submodules
+    (m + 1 + sm, f + cm.functions.length + sf,
+     e + cm.enums.length + se, s + cm.structs.length + ss)) (0, 0, 0, 0)
+
+/-- Count `(modules, functions, blocks, instructions)` across the SSA forest. -/
+def countSSA (ms : List SModule) : Nat × Nat × Nat × Nat :=
+  ms.foldl (fun (acc : Nat × Nat × Nat × Nat) sm =>
+    let (mods, fns, blks, insts) := acc
+    let fBlks := sm.functions.foldl (fun a fn => a + fn.blocks.length) 0
+    let fInsts := sm.functions.foldl (fun a fn =>
+      a + fn.blocks.foldl (fun b blk => b + blk.insts.length) 0) 0
+    (mods + 1, fns + sm.functions.length, blks + fBlks, insts + fInsts)) (0, 0, 0, 0)
+
+/-- Phase 6C #1: build the pipeline telemetry trace as a stable-schema JSON string.
+    Records per-stage structural counts (Core / post-mono / SSA) plus the opaque
+    compiler identity and the accepted-program diagnostic count. This is NOT a
+    performance claim: per-pass timing and RSS are deliberately omitted from v1
+    (platform-specific, and benchmarking is Phase 17) — the schema is what the
+    gate pins. Built by concatenation (not `s!` with literal braces) to keep the
+    JSON unambiguous. -/
+def telemetryJson (compiler : String) (core : ValidatedCore)
+    (mono : MonomorphizedProgram) (ssa : SSAProgram) (diagnostics : Nat) : String :=
+  let (cMods, cFns, cEnums, cStructs) := countCore core.coreModules
+  let (mMods, mFns, _, _) := countCore mono.coreModules
+  let (sMods, sFns, sBlks, sInsts) := countSSA ssa.ssaModules
+  let esc := fun (t : String) => t.replace "\\" "\\\\" |>.replace "\"" "\\\""
+  let lb := "{"; let rb := "}"
+  lb ++ "\"schema\":\"concrete.pipeline.telemetry.v1\","
+     ++ "\"compiler\":\"" ++ esc compiler ++ "\","
+     ++ "\"stages\":" ++ lb
+       ++ "\"core\":" ++ lb
+         ++ s!"\"modules\":{cMods},\"functions\":{cFns},\"enums\":{cEnums},\"structs\":{cStructs}" ++ rb ++ ","
+       ++ "\"mono\":" ++ lb
+         ++ s!"\"modules\":{mMods},\"functions\":{mFns}" ++ rb ++ ","
+       ++ "\"ssa\":" ++ lb
+         ++ s!"\"modules\":{sMods},\"functions\":{sFns},\"blocks\":{sBlks},\"instructions\":{sInsts}" ++ rb
+     ++ rb ++ ","
+     ++ "\"diagnostics\":" ++ toString diagnostics
+     ++ rb
+
 end Pipeline
 end Concrete
