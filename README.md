@@ -29,6 +29,10 @@ That is Concrete's thesis: **systems control plus evidence accounting**.
 - **Simple syntax:** the grammar is LL(1) and checked as part of the project.
 - **Linear ownership:** non-`Copy` values are used exactly once; `_` may ignore
   only `Copy` data.
+- **Scoped references:** safe references are second-class: they flow down into
+  calls, callbacks, and borrow blocks, but safe APIs do not return `&T` /
+  `&mut T`. Accessors use scoped callbacks, owned views, or value returns
+  instead.
 - **No garbage collector:** resource lifetimes are explicit and checked.
 - **Capability headers:** side effects and authority appear in function
   signatures, such as `with(Console)`, `with(File)`, and `with(Alloc)`.
@@ -110,6 +114,9 @@ Concrete's design bias is deliberately conservative:
 
 - no GC as the default runtime story;
 - linear ownership: non-`Copy` values are used exactly once;
+- Hylo/Val-style second-class references: mutation is allowed, but safe
+  references are scoped access paths, not returned/stored lifetime-bearing
+  values;
 - compile-time borrowing for memory discipline;
 - explicit capabilities in function headers for side effects;
 - fixed arrays and explicit control flow as the easy path;

@@ -13,6 +13,8 @@ make Concrete less clear.
 The synthesis Concrete is aiming for is roughly:
 
 - Zig/Austral-style small explicit systems programming
+- Hylo/Val-style mutable value semantics: mutation through scoped access,
+  without returned/stored safe references
 - SPARK/Dafny/Why3-style assurance workflow and proof discipline
 - Lean 4 as implementation language and proof environment
 - explicit capabilities, predictable-execution boundaries, and artifact-first auditability as the distinctive Concrete layer
@@ -108,6 +110,32 @@ Concrete does not take:
 
 - "manual control first, proof/evidence later" as the whole philosophy
 - async/evented I/O as an implemented feature today
+
+### Hylo / Val
+
+**Status:** Adapted
+
+Concrete takes:
+
+- mutable value semantics as a design reference: mutation is allowed, but safe
+  references are scoped access paths, not ordinary returned or stored values
+- the "references flow down, not up" discipline for local reasoning
+- accessor APIs shaped as scoped callbacks, projections, owned views, or value
+  returns instead of lifetime-bearing `&T` returns
+- the idea that avoiding first-class safe references can avoid a Rust-style
+  lifetime surface while still permitting efficient mutation
+
+Concrete differs by combining this with:
+
+- linear ownership for non-`Copy` resources
+- explicit capability headers for authority and effects
+- Lean-backed evidence artifacts and pipeline gates
+- trusted/raw-pointer escape hatches for low-level boundaries, kept outside the
+  safe reference model
+
+See [VALUE_MODEL.md](VALUE_MODEL.md) for Concrete's rule and
+[../research/compiler/pipeline-lessons-2026-07.md](../research/compiler/pipeline-lessons-2026-07.md)
+for the research notes.
 
 ### Austral
 

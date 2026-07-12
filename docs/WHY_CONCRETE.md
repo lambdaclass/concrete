@@ -26,6 +26,8 @@ The baseline assumptions are deliberately ordinary:
 - fixed arrays and bounded loops where possible;
 - wrapping integer operations when requested;
 - explicit heap allocation;
+- scoped, second-class safe references instead of returned/stored
+  lifetime-bearing reference APIs;
 - explicit FFI and unsafe boundaries;
 - explicit capabilities for authority such as `Console`, `File`, and `Alloc`.
 
