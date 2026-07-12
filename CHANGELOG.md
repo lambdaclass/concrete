@@ -10,6 +10,34 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6C #2 — complexity guard caught (and fixed) an SSAVerify dominator cubic (2026-07-12)
+
+The anti-superlinear complexity guard (`scripts/tests/check_compiler_complexity.sh`)
+found a real pre-existing bug on its first run: compiling wide `match` chains was
+super-linear (8× arms → ~38× time; 800 arms = 17.5s). Isolation (`--emit-core`
+linear, `--emit-ssa-unverified` linear, `--emit-ssa` explodes) pinned it to
+**SSAVerify**, re-attributing the **bug-027 family from EmitSSA to SSAVerify's
+dominator/predecessor computation**. Root cause: `computeDominators` used *Jacobi*
+iterative dataflow (each pass reads only the prior pass), so dominator info
+advanced one block per pass → ~N passes over a long block chain, each O(N) over
+assoc-list/list-set structures = O(N³–N⁴); and SSAVerify runs twice per compile.
+
+Fix: switch to **Gauss-Seidel** convergence (read predecessors' dom sets already
+updated this pass). Dominators are a monotone framework, so this reaches the
+identical least fixpoint (same dom sets, same verdicts) but converges in ~2 passes
+for forward/RPO block order — 800 arms 17.5s → 1.3s (13×). Shipped with a
+**behavior-preservation gate** (`check_ssa_verify_agreement.sh`): a trust pass must
+keep its verdicts, so valid complex CFGs (deep if/else chains, wide match, nested
+loops, diamonds, value while-expr) must still accept and stay codegen-correct
+(interp==compiled). SSA suite 806/0, examples 130/0, invalid-SSA mutation still
+caught. Both gates wired into CI + Makefile.
+
+Disclosed follow-up (not loosened): SSAVerify dominance is still ~O(N²) in block
+count at very large N (dom *sets* are inherently O(N²) for a chain); the
+idom/Cooper-Harvey-Kennedy + dense-ID-array near-linear rewrite is tracked, with
+the behavior gate as its safety net. The complexity guard tests the practical
+regime where the cubic manifested.
+
 ### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
 
 `concrete <file> --emit-trace-json` emits a stable-schema JSON trace of per-stage
