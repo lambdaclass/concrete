@@ -57,6 +57,10 @@ class Gen:
         self.ctr = 0  # for unique loop-counter names (no bare-block wrapper)
         self.loops = True  # generate while-loops (off available for debugging; the
                            # H7 loop-SSA bug it once exposed is now fixed)
+        self.defers = True  # generate `defer print_int(id)` — the printed sequence
+                            # IS the observed defer execution order, so a LIFO /
+                            # per-iteration / scope-unwinding bug diverges on stdout
+        self.deferid = 0    # unique, monotonic id per defer (distinguishable prints)
 
     def lit(self, ty="i32"):
         return str(self.rng.randint(0, min(9, BOUND[ty] - 1)))
@@ -138,9 +142,19 @@ class Gen:
 
     def stmt(self, d):
         r = self.rng
-        k = r.randint(0, 6)
+        k = r.randint(0, 7)
         if k == 4 and not self.loops:
             k = 3  # loops disabled → fall back to a &mut mutation
+        if k == 7 and not self.defers:
+            k = 3  # defers disabled → fall back to a &mut mutation
+        if k == 7:
+            # `defer print_int(id)` — runs at THIS block's exit, LIFO. Placed in
+            # the function body, loop bodies, and branch bodies (stmt recurses),
+            # so per-iteration and per-branch scope unwinding is exercised; the
+            # unique monotonic id makes the printed order fully observable, so any
+            # ordering/count/scope divergence shows up as a stdout mismatch.
+            self.deferid += 1
+            return f"defer print_int({self.deferid});"
         if k == 0:
             v = r.choice(self.ivars)
             return f"{v} = {self.valueRHS(d, self.varty[v])};"
@@ -159,8 +173,14 @@ class Gen:
         if k == 4:  # bounded while loop (unique counter, no bare-block wrapper)
             self.ctr += 1
             kv = f"k{self.ctr}"
-            return (f"let mut {kv}: i32 = 0; while {kv} < 3 {{ "
-                    f"addv(&mut {self.placeMutI32()}, {self.lit()}); {kv} = {kv} + 1; }}")
+            inner = f"addv(&mut {self.placeMutI32()}, {self.lit()}); {kv} = {kv} + 1;"
+            # A per-iteration defer (runs at each loop-body exit) stresses defer +
+            # loop-SSA interaction — the deferred id prints once per iteration on
+            # both interp and compiled.
+            if self.defers and r.random() < 0.5:
+                self.deferid += 1
+                inner = f"defer print_int({self.deferid}); " + inner
+            return f"let mut {kv}: i32 = 0; while {kv} < 3 {{ {inner} }}"
         return (f"if {self.bexpr(d)} {{ {self.stmt(max(0,d-1))} }} "
                 f"else {{ {self.stmt(max(0,d-1))} }}")
 
@@ -184,7 +204,7 @@ class Gen:
                 "    struct Copy P { x: i32, y: i32 }\n"
                 "    enum Copy E { A { v: i32 }, B { w: i32 }, C {} }\n"
                 "    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }\n"
-                "    fn main() -> Int {\n"
+                "    fn main() with(Console) -> Int {\n"
                 f"        {inner}\n"
                 "    }\n}\n")
 
