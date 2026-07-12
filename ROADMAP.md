@@ -1781,17 +1781,23 @@ or lost); put the heavier trace/replay/scaling machinery here.
     + SSAVerify memberships (→ HashSet; large-array `--emit-ssa` 2757ms→647ms),
     `Lower.emit` block-building (→ O(1) accumulate), `Mono.lookupFn` call
     resolution (→ HashMap). bug-027 re-attributed: it is NOT EmitSSA — the cost
-    was cleanup/verify/emit-block building, now fixed. STILL OPEN, tracked
-    (each a same-shape map conversion; the guard reds if any regresses):
-      - **Frontend `check`/`resolve` call resolution is O(N²)** on many
-        mutually-calling functions (`env.fnNames.lookup` assoc-list scan per call;
-        `--emit-core` alone O(N²), ~9s at 4000 fns) — the largest remaining.
+    was cleanup/verify/emit-block building, now fixed. The FRONTEND O(N²) (many
+    mutually-calling functions) was also chased down and fixed — and it was the
+    **lexer**, not check/resolve (`Lexer.tokenize` built its token list with
+    `acc ++ [tok]` = O(tokens²); every path lexes first, which is why later-stage
+    fixes did not move it). Reverse-accumulate: 4000 functions `--emit-core`
+    9698ms → 241ms (40×); arrays now linear. Parser decl accumulation + Resolve
+    global-lookup (Scope.symbolMap) fixed alongside. STILL OPEN, tracked (the
+    guard reds if any regresses):
+      - **verify/cleanup O(N²)/cubic on reassignment chains** (many `x = x + k` →
+        many SSA versions in one block), unmasked by the lexer fix (statements
+        `--emit-ssa` ~19s at 4000) — the largest remaining; likely SSACleanup
+        const-fold/rewrite folds + fixpoint iteration.
       - SSAVerify dominance still ~O(N²) in block count at very large N (dom sets
         are O(N²) for a chain) → the idom/Cooper-Harvey-Kennedy near-linear rewrite,
         guarded by `check_ssa_verify_agreement.sh`.
-      - A smaller within-function O(N²) on many-statement bodies (needs profiling).
     Guard-threshold tightening + large-N coverage is gated on these fixes (do not
-    loosen; extend the guard's regime once the frontend/idom O(N²) are closed).
+    loosen; extend the guard's regime once they are closed).
 
 3. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,

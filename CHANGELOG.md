@@ -55,19 +55,26 @@ Bug-027 re-attributed and refined: it was filed as "EmitSSA O(n²)"; the isolati
 shows EmitSSA/emit is negligible — the array cost was cleanup+verify+emit-block
 building, now fixed above.
 
-Still open, tracked (each a separate deliberate fix; the guard will red if any
-regresses past its regime):
-- **Frontend `check`/`resolve` call resolution is O(N²)** on programs with many
-  mutually-calling functions — the largest remaining (N functions × N call sites,
-  `env.fnNames.lookup` is an assoc-list linear scan; `--emit-core` alone is O(N²):
-  4000 functions ≈ 9s). Fix = the same map conversion, in Check/Resolve. NEWLY
-  FOUND by the guard; not yet fixed.
+Then the frontend O(N²) itself (many mutually-calling functions, `--emit-core`
+alone ~9s at 4000 fns) was chased down — and it was **NOT check/resolve call
+resolution** (an earlier hypothesis, since disproven): coarse stage-isolation was
+misleading because the dominant cost is BEFORE all later stages, in the **lexer**.
+`Lexer.tokenize` built its token list with `acc ++ [tok]` per token = O(tokens²).
+Fix: reverse-accumulate + reverse once (token order preserved). **4000 functions
+`--emit-core` 9698ms → 241ms (40×); large arrays now linear.** Two same-shape
+masked hot spots fixed alongside: `Parser.parseModuleBody` decl accumulation
+(`fns ++ [x]` → reverse-accumulate) and Resolve global-symbol lookup
+(`globalScope.symbols` scan per reference → build-once `Scope.symbolMap` HashMap).
+
+Still open, tracked (the guard will red if any regresses past its regime):
+- A **verify/cleanup O(N²)/cubic on reassignment chains** (many `x = x + k` → many
+  SSA versions of one register in one block) — now UNMASKED by the lexer fix
+  (statements `--emit-ssa` ~19s at 4000). Distinct from the array many-instruction
+  cleanup O(N²) already fixed; likely the SSACleanup const-fold/rewrite folds
+  (`acc ++ [..]`) plus fixpoint iteration. Newly the largest remaining.
 - **SSAVerify dominance** remains ~O(N²) in block count at very large N (dom *sets*
   are inherently O(N²) for a chain); the idom/Cooper-Harvey-Kennedy + dense-ID-array
   near-linear rewrite is the tracked follow-up, behavior gate as safety net.
-- A smaller **within-function** O(N²) on many-statement bodies (not yet localized;
-  needs profiling). The complexity guard tests the ≤200 regime; the large-N tails
-  above are separate follow-ups.
 
 ### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
 
