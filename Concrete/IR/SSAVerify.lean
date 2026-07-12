@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Concrete.IR.SSA
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.Shared
@@ -253,12 +254,14 @@ private def strictDomDefs (ctx : VerifyCtx) (blockLabel : String) : List String 
 /-- Check for duplicate register definitions in a block. -/
 private def checkDuplicateDefs (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   let defs := blockDefs b
+  -- `seen` is a HashSet (O(1) membership): the list `.contains` was O(n) per def,
+  -- O(n^2) for a block of n defs (large array literal → n gep defs in one block).
   defs.foldl (fun (ctx, seen) d =>
     if seen.contains d then
       (addSSAError ctx (.duplicateRegDef b.label d), seen)
     else
-      (ctx, d :: seen)
-  ) (ctx, ([] : List String)) |>.1
+      (ctx, seen.insert d)
+  ) (ctx, (∅ : Std.HashSet String)) |>.1
 
 /-- Check that all used registers are defined before use.
     Non-phi instructions are checked in program order within the block.
@@ -288,12 +291,15 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
     ) ctx
     -- Add this instruction's def to running set
     let running := match instDst inst with
-      | some dst => dst :: running
+      | some dst => running.insert dst
       | none => running
     (ctx, running)
-  ) (ctx, ([] : List String))
-  -- Check terminator uses: all block instructions have executed
-  let allBlockDefs := phiDefs ++ runningDefs ++ strictDomRegs
+  ) (ctx, (∅ : Std.HashSet String))
+  -- Check terminator uses: all block instructions have executed. `running` is a
+  -- HashSet (O(1) membership) — the list `.contains` here was O(n) per use, i.e.
+  -- O(n^2) for a block of n instructions (a large array literal: n stores in one
+  -- block). Semantics are identical; only membership got faster.
+  let allBlockDefs := phiDefs ++ runningDefs.toList ++ strictDomRegs
   let ctx := (termUses b.term).foldl (fun ctx u =>
     if ctx.paramNames.contains u then ctx
     else if u.startsWith "@fnref." then ctx

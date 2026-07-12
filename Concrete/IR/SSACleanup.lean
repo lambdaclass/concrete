@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Concrete.IR.SSA
 import Concrete.Semantics.IntArith
 
@@ -261,12 +262,17 @@ private def termUses : STerm → List String
   | .condBr cond _ _ => svalUses cond
   | .unreachable => []
 
-/-- Collect all used registers across all blocks. -/
-private def collectAllUses (blocks : List SBlock) : List String :=
+/-- Collect all used registers across all blocks, as a HashSet. The old
+    `List` version built the set with `acc ++ instUses i` per instruction (O(n^2)
+    for n instructions) and was then membership-checked (`allUses.contains dst`)
+    per instruction (another O(n^2)) — the dead-code-elimination half of the
+    many-instructions-per-block O(n^2) (large array literals). HashSet build is
+    O(total uses) and membership is O(1); semantics (the set of used registers)
+    are identical. -/
+private def collectAllUses (blocks : List SBlock) : Std.HashSet String :=
   blocks.foldl (fun acc b =>
-    let instU := b.insts.foldl (fun acc i => acc ++ instUses i) []
-    let termU := termUses b.term
-    acc ++ instU ++ termU) []
+    let acc := b.insts.foldl (fun acc i => (instUses i).foldl (·.insert ·) acc) acc
+    (termUses b.term).foldl (·.insert ·) acc) (∅ : Std.HashSet String)
 
 /-- A checked binop over two integer constants is provably non-trapping exactly
     when the folder can fold it: result in range; divisor nonzero for div/mod;
