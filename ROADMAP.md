@@ -2003,6 +2003,30 @@ batteries-included breadth. The ranked build order is:
    - Proposed package/config modules: `std.semver`, `std.config`.
    - Proposed CLI/user-output modules: `std.cli`, `std.log`, `std.progress`.
    - Proposed security/text-policy modules: `std.ct`, `std.unicode`.
+2a. Freeze the public stdlib surface as a five-fact manifest and gate it — the
+    builtin/intrinsic-registry discipline (Phase 6B item 16) applied to the
+    stdlib surface. `STDLIB_DESIGN_PRINCIPLES.md` already states these facts as
+    prose and `STDLIB_SURFACE_FREEZE.md` tabulates `Item | Kind | Capability`,
+    but the facts are partial (no consume/proof columns), prose-backed, and
+    unenforced. Make every public item carry a uniform row whose facts are
+    DERIVED from the compiler's own facts, not hand-written strings: allocates
+    (`no` / `with(Alloc)` — absence is provably non-allocating), consumes
+    (`borrows` / `mut` / `consumes` / `constructs`, from receiver mode + return
+    ownership), fails (`infallible` / `Option` / `Result` + error enum, from the
+    return type), capability (`none` or the concrete cap set), and proof-class
+    (`pure-core` / `deterministic` / `hosted-effect` / `trusted-boundary`, from
+    layer + effect facts). Pure-core items (`option`, `result`, `bytes`,
+    `numeric`) also carry a mathematical model and state contracts against the
+    model, not the representation (the SPARK formal-container lesson); the
+    `trusted` / `Unsafe` seam is where proof-class degrades to `trusted-boundary`
+    behind a contracted spec.
+
+    Done when a gate (extending `STDLIB_SURFACE_FREEZE.md`) proves every public
+    item has a complete row, no fact is blank (absence is an explicit
+    `no` / `none` / `infallible`), and each row AGREES with the item's signature
+    — a row claiming `allocates: no` on a `with(Alloc)` signature fails, the same
+    "stale hand-written string disagrees with the compiler fact" negative as
+    item 17. Each `_unchecked` variant names a proof obligation, not UB.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
