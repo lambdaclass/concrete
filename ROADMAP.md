@@ -1456,20 +1456,20 @@ assumptions scattered across fuzzers and reports.
    facts, diagnostic/report payload, and evidence class.
 
    Consumers: the pure non-`Unit` discard rule in `CapabilityJudgment` (only
-   total pure values are accidental lost computations), the class-6
-   second-class-reference boundary verifier (borrow escape checks need to know
-   which paths complete and which diverge/trap), report/audit explanations, and
-   proof eligibility. A program should not be called "pure discardable",
-   "safe reference-return impossible", or "predictable/provable" by
-   re-deriving totality at each call site.
+   total pure values are accidental lost computations), report/audit
+   explanations, and proof eligibility. A program should not be called
+   "pure discardable" or "predictable/provable" by re-deriving totality at each
+   call site. The class-6 second-class-reference boundary is now a separate
+   structural verifier under the safe-no-returned-refs policy; it needs totality
+   only if a future `from(param)` returned-reference escape valve is deliberately
+   admitted.
 
    Gate with total and non-total rows: literal arithmetic that cannot trap,
    checked arithmetic that can trap, narrowing casts, bounds/index operations,
    match/if branches with one trapping arm, loops with known divergence, function
-   calls with runtime obligations, and a class-6 borrow-verifier fixture whose
-   result changes if a diverging/trapping path is incorrectly treated as normal
-   completion. Red-team by forcing a trapping expression to total and proving
-   pure-discard or borrow-boundary gates fail.
+   calls with runtime obligations, and one future-proof row for any admitted
+   returned-reference escape valve. Red-team by forcing a trapping expression to
+   total and proving pure-discard or proof-eligibility gates fail.
 
 8. Add a pipeline determinism gate.
    Content-addressed artifacts, proof replay, package evidence, deterministic

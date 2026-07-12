@@ -56,13 +56,18 @@ width residue; it reaches Lower and lowers fine.)
 
 Class 6 is the one residue class caught only in Check:
 
-- **Class 6 — reference-in-return verifier.** NOT a blanket "no `.ref`/`.refMut`
-  return type": accessors legitimately borrow from `&self` and return `&T`
-  (`pub fn get(&self, at) -> &T`). What Check actually rejects is returning a ref
-  to a *local* (`fn bad(x) -> &i32 { return &x }`) — a lifetime/borrow property,
-  not a shape property. A post-mono re-assertion would therefore need the borrow
-  facts, not just the return type; it is not a simple structural walk. (This is
-  the accessor case the ownership model flags as "accessor migration deferred".)
+- **Class 6 — safe returned-reference verifier.** Long-term policy is now the
+  simple second-class-reference rule from `docs/VALUE_MODEL.md`: a safe callable
+  may not return `&T` / `&mut T`, directly or nested in an aggregate/alias/generic
+  instantiation. Former `&self -> &T` accessor shapes migrate to scoped access
+  (`with_value`, `with_value_mut` / `modify`), value returns for `Copy` data,
+  owned views, or explicit trusted/raw-pointer boundaries. Therefore the
+  post-mono re-assertion should be structural over the fully substituted return
+  type plus the function trust/safety class: safe Core must not expose a
+  reference-return type. No lifetime/provenance verifier is required unless the
+  deferred `from(param)` escape valve is deliberately admitted later; if that
+  happens, it needs its own evidence-gated provenance design and must not weaken
+  this default rule.
 - **Class 4 capability erasure.** Confirm whether `CapSet.var` can legitimately
   survive to `Lower` (capabilities are largely erased at codegen). If it cannot,
   add `verifyNoCapVars` mirroring `verifyNoTypeVars`; if it can, document that

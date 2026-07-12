@@ -35,6 +35,13 @@ function/method calls, into callback parameters, and into borrow blocks — but 
 **safe-callable function or function *type* may not *return* a reference**,
 directly or nested inside any aggregate, alias, or generic instantiation.
 
+This is intentionally the Hylo/Val-style mutable-value-semantics choice:
+mutation is allowed, but references are second-class, non-storable,
+non-returned access paths rather than ordinary values with lifetimes. Concrete
+uses that idea to avoid importing a Rust-like lifetime system: safe APIs expose
+scoped access, owned views, value returns, or explicit trusted/raw-pointer
+boundaries, not escaping safe references.
+
 Concretely, the following are rejected:
 
 - `fn id(x: &T) -> &T` and `fn bad() -> &T { return &local; }` — bare reference
