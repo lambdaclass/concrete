@@ -10,6 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Interpreter oracle grows `defer` — 36 fixtures differential-testable (2026-07-12)
+
+`--interp` previously refused `defer` (`interp: defer not yet supported`), so
+~36 defer fixtures were oracle-blind (interp couldn't cross-check the compiled
+runtime). The interpreter now runs deferred bodies at block exit in LIFO order.
+The implementation reuses Flow propagation as scope unwinding: `evalStmtsD` tracks
+the deferrals collected in a block and runs them (newest-first) on ANY exit —
+fall-through, `return`, `break`, `continue` — before the flow propagates. Because
+`break`/`continue` are caught by the enclosing loop (`evalWhile`) and `return`
+propagates through to the function body, this composes to the correct semantics
+for free: `return` runs every enclosing scope's defers, `break`/`continue` run
+only those up to the loop (mirroring Lower's `emitAllDeferredCalls` vs
+`emitDeferredUntilLoop`). Verified: all 36 defer fixtures now agree interp ==
+compiled with zero divergences; four cases (LIFO, on-return, per-iteration,
+break-vs-function-scope) are pinned in `scripts/tests/check_differential_positions.sh`.
+(Remaining interp gaps in defer-using fixtures are unrelated: heap `alloc`,
+`vec_pop`.)
+
 ### Structured control-flow builder, slice 1 — `alloca void` hole closed (2026-07-12)
 
 First slice of the Lower/SSA structured control-flow builder (ROADMAP #5),

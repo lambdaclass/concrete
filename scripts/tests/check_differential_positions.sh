@@ -143,6 +143,26 @@ echo "=== function pointers: interp dispatches through the pointer ==="
 emit fnp 'mod m { fn add_one(x: Int) -> Int { return x + 1; } fn apply(f: fn(Int) -> Int, x: Int) -> Int { return f(x); } fn main() -> Int { return apply(add_one, 41); } }'
 agree_or_trap "call through fn-pointer param (=> 42)" "$TMPDIR/fnp.con"
 
+echo "=== defer: interp runs deferred bodies LIFO on every exit path (interp == compiled) ==="
+
+# The interpreter runs `defer` bodies at block exit in LIFO order, driven by Flow
+# propagation across nested blocks (return unwinds all enclosing scopes; break/
+# continue only up to the loop). Before this, `--interp` refused defer entirely,
+# so ~36 defer fixtures were oracle-blind. Each row pins the observable order
+# against the compiled runtime; a regression (dropped defer, wrong order, or a
+# scope that stops running its defers) re-opens the divergence here.
+emit d1 'mod m { fn main() with(Console) -> Int { defer print_int(1); defer print_int(2); print_int(3); return 0; } }'
+agree_or_trap "defer LIFO at block end (=> 3210)" "$TMPDIR/d1.con"
+
+emit d2 'mod m { fn main() with(Console) -> Int { defer print_int(7); if true { return 5; } print_int(9); return 0; } }'
+agree_or_trap "defer runs on early return (=> 75)" "$TMPDIR/d2.con"
+
+emit d3 'mod m { fn main() with(Console) -> Int { let mut i: Int = 0; while i < 3 { defer print_int(8); i = i + 1; } return 0; } }'
+agree_or_trap "defer in loop body runs each iteration (=> 8880)" "$TMPDIR/d3.con"
+
+emit d4 'mod m { fn main() with(Console) -> Int { defer print_int(1); let mut i: Int = 0; while i < 9 { defer print_int(2); i = i + 1; if i == 2 { break; } } return 0; } }'
+agree_or_trap "break runs loop-body defers, function defer waits for return (=> 2210)" "$TMPDIR/d4.con"
+
 echo "=== clean sanity (values fit; not overflow) ==="
 
 emit c1  'mod m { fn main() -> Int { let c: Bool = true; let x: i32 = if c { 40 + 2 } else { 0 }; return x as Int; } }'

@@ -19,7 +19,7 @@ open Concrete
     PENDING rather than silently mismatching.
 
     Limitations:
-    - No floats, no function pointers, no alloc expressions, no defer
+    - No floats, no alloc expressions (heap `alloc`/`vec_pop`)
     - Fixed-width arithmetic is CHECKED (traps as the compiled binary does);
       casts wrap into the target range (silent-truncation policy)
 -/
@@ -947,7 +947,9 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
       return (env, .brk (some v) label)
     | none => return (env, .brk none label)
   | .continue_ label => return (env, .cont label)
-  | .defer _ => .error "interp: defer not yet supported"
+  -- `defer` is collected + run by `evalStmtsD` at block exit (LIFO); it never
+  -- reaches here via a block. No-op if somehow evaluated standalone.
+  | .defer _ => return (env, .val .unit)
   | .borrowIn var ref _region isMut _refTy body => do
     -- `borrow var as ref in 'region { body }` — bind `ref` to a path that
     -- captures the current frame so callee shadows don't break it. Drop
@@ -963,23 +965,52 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     | .cont l => return (restored, .cont l)
     | .val _ => return (restored, .val .unit)
 
-partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
-  match stmts with
-  | [] => .ok (env, .val .unit)
+/-- Run deferred bodies for effect in the given order (kept newest-first = LIFO),
+    threading env. Each body is a `CExpr` evaluated for its side effects; the value
+    is discarded. -/
+partial def runDeferred (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
+    : List CExpr → Except String Env
+  | [] => .ok env
+  | body :: rest => do
+    let (env', _) ← evalExprVal fns enums env body
+    runDeferred fns enums env' rest
+
+/-- Evaluate a block, tracking `defer`red bodies. On ANY exit — fall-through,
+    `return`, `break`, `continue` — the deferrals collected so far run LIFO before
+    the flow propagates. Since `break`/`continue` are caught by the enclosing loop
+    (`evalWhile`) and `return` propagates through to the function body, Flow
+    propagation across nested `evalStmts` IS the scope unwinding: `return` runs
+    every enclosing scope's defers, `break`/`continue` run only those up to the
+    loop. This mirrors Lower's `emitAllDeferredCalls` vs `emitDeferredUntilLoop`.
+    `deferred` is newest-first (LIFO). -/
+partial def evalStmtsD (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
+    (deferred : List CExpr) : List CStmt → Except String (Env × Flow)
+  | [] => do
+    let env ← runDeferred fns enums env deferred
+    return (env, .val .unit)
   | s :: rest => do
-    let (env', flow) ← evalStmt fns enums env s
-    match flow with
-    | .ret v => return (env', .ret v)
-    | .brk v l => return (env', .brk v l)
-    | .cont l => return (env', .cont l)
-    | .val v =>
-      -- Propagate the LAST statement's value as the block's value (so a
-      -- value-bearing `if`/`match`/block yields its trailing expression);
-      -- intervening statements still discard their `.unit`. Pairs with the
-      -- `isValue` handling in `evalStmt .expr`.
-      match rest with
-      | [] => return (env', .val v)
-      | _  => evalStmts fns enums env' rest
+    match s with
+    | .defer body => evalStmtsD fns enums env (body :: deferred) rest
+    | _ =>
+      let (env', flow) ← evalStmt fns enums env s
+      match flow with
+      | .val v =>
+        -- Propagate the LAST statement's value as the block's value (so a
+        -- value-bearing `if`/`match`/block yields its trailing expression);
+        -- intervening statements still discard their `.unit`. Pairs with the
+        -- `isValue` handling in `evalStmt .expr`.
+        match rest with
+        | [] => do
+          let env'' ← runDeferred fns enums env' deferred
+          return (env'', .val v)
+        | _  => evalStmtsD fns enums env' deferred rest
+      | _ => do
+        -- return / break / continue: run this scope's defers, then propagate.
+        let env'' ← runDeferred fns enums env' deferred
+        return (env'', flow)
+
+partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
+  evalStmtsD fns enums env [] stmts
 
 partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : Except String (Env × Flow) := do
   if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
