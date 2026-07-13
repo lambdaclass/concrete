@@ -9,12 +9,12 @@
 
 -- not eligible ------------------------------------------- examples/evidence_classes/trusted_boundary/src/main.con:14
 
-  `main.main` cannot be proved: fails predictable profile (has capabilities: Alloc, Time, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O).
+  `main.main` cannot be proved: fails predictable profile (has capabilities: Alloc, Console, Env, File, Network, Process, Random, Time, is entry point (main), allocation, blocking I/O).
 
  14 | pub fn main() with(Std) -> Int { return 0; }
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  reasons: has capabilities: Alloc, Time, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O
+  reasons: has capabilities: Alloc, Console, Env, File, Network, Process, Random, Time, is entry point (main), allocation, blocking I/O
 
   hint: Address these constraints to make this function eligible for proof.
 

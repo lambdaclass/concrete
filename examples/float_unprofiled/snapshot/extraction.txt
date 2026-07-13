@@ -14,7 +14,7 @@
 
   main.main()
     status: excluded
-    reasons: has capabilities: Alloc, Time, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O
+    reasons: has capabilities: Alloc, Console, Env, File, Network, Process, Random, Time, is entry point (main), allocation, blocking I/O
     fingerprint: [(ret (int 0))]
     loc: examples/float_unprofiled/src/main.con:22
 
