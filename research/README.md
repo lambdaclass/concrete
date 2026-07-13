@@ -90,6 +90,7 @@ If you want the highest-leverage current research first:
 - [language/typestate.md](language/typestate.md) — typestate direction and limits (`P1`, `Open`)
 - [language/union.md](language/union.md) — whether unions fit Concrete’s design (`P2`, `Open`)
 - [language/unsafe-structure.md](language/unsafe-structure.md) — making `Unsafe` more inspectable without a heavier language (`P1`, `Open`, partially adopted)
+- [language/ALIGNMENT_FACTS.md](language/ALIGNMENT_FACTS.md) — alignment-facts design analysis; not implemented, Phase 15 (relocated from `docs/` 2026-07-12) (`P1`, `Open`)
 
 ## Stdlib And Runtime
 
@@ -133,6 +134,7 @@ If you want the highest-leverage current research first:
 - [compiler/semantic-diff-and-trust-drift.md](compiler/semantic-diff-and-trust-drift.md) — semantic/trust-drift diffing over compiler facts (`P0`, `Open`)
 - [compiler/semantic-diff.md](compiler/semantic-diff.md) — broader semantic diff/query ideas (`P2`, `Research`)
 - [compiler/vec-inline-investigation.md](compiler/vec-inline-investigation.md) — VM/codegen inline-cliff investigation (`P1`, `Adopted`)
+- [compiler/COMPILER_PIPELINE_RESEARCH.md](compiler/COMPILER_PIPELINE_RESEARCH.md) — notes from reading the Rust/Swift/Go/Zig source trees (relocated from `docs/` 2026-07-12) (`P1`, `Research`)
 
 ## Proof And Evidence
 
@@ -152,6 +154,7 @@ If you want the highest-leverage current research first:
 - [proof-evidence/cryptographic-source-commitments.md](proof-evidence/cryptographic-source-commitments.md) — cryptographic source/bundle provenance (`P1`, `Open`)
 - [proof-evidence/proof-carrying-supply-chain.md](proof-evidence/proof-carrying-supply-chain.md) — proof/evidence-aware supply-chain direction (`P2`, `Research`)
 - [proof-evidence/self-describing-binaries.md](proof-evidence/self-describing-binaries.md) — binary-to-proof/evidence traceability direction (`P2`, `Research`)
+- [proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md) — sized/indexed ProofCore evaluator investigation; ProofCore v2 research (relocated from `docs/` 2026-07-12) (`P2`, `Research`)
 
 ## Packages And Tooling
 

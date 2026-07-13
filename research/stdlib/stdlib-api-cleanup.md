@@ -2,6 +2,11 @@
 
 **Status:** Open research direction
 
+> The settled API-consistency decisions this note motivated are tracked in
+> [../../docs/stdlib/STDLIB_API_REVIEW.md](../../docs/stdlib/STDLIB_API_REVIEW.md)
+> and flagged inline in `docs/stdlib/STDLIB_SURFACE_FREEZE.md`. This note keeps
+> the still-open cleanup direction.
+
 This note covers a specific next-phase problem in Concrete's standard library:
 
 - the stdlib now has a real low-level foundation

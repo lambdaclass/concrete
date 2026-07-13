@@ -4,6 +4,11 @@
 **Affects:** Developer tooling, code review, audit workflows, change management  
 **Priority:** P1 (High value, low implementation cost)
 
+> **Canonical direction:** the active P0 line is
+> [semantic-diff-and-trust-drift.md](semantic-diff-and-trust-drift.md). This note
+> is the broader CLI / policy-config / release-analysis design surface; where the
+> two overlap, defer to trust-drift.
+
 ## Summary
 
 A `concrete diff` command that understands the semantics of Concrete code, not just its text. This enables meaningful change review by revealing how modifications affect capabilities, trust boundaries, memory safety, and API contracts.

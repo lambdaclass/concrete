@@ -4243,7 +4243,7 @@ replayable; and every boundary after that slice remains explicitly trusted.
 6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
    calling conventions.
 6a. Design and, if pulled by a workload, implement first-class alignment facts.
-   Start from `docs/ALIGNMENT_FACTS.md`: compare Zig, Rust, Odin, C, C++, and
+   Start from `research/language/ALIGNMENT_FACTS.md`: compare Zig, Rust, Odin, C, C++, and
    SPARK/Ada; distinguish type/layout alignment from object/place alignment and
    pointer/reference/slice alignment facts; decide whether Concrete uses
    declaration attributes, fact/contract syntax, type-like pointer qualifiers, or
@@ -5135,7 +5135,7 @@ forcing example, explicitly deferred, or rejected.
     fuel-indexed evaluator remains repeated proof debt after HMAC and at least
     one other substantial loop/composition proof. This is ProofCore v2
     research, not a migration commitment; see
-    [docs/SIZED_EVALUATOR_INVESTIGATION.md](docs/SIZED_EVALUATOR_INVESTIGATION.md).
+    [research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md).
 12. Research persistent equality/rewrite state after backend contracts,
     semantic diff, and proof/evidence pipeline are stronger.
 13. Do not adopt row effects for v1. The default design stays object-capability

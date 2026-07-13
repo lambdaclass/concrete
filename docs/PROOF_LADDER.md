@@ -36,7 +36,8 @@ layer, so the next proof is "large but systematic," not speculative.
   over `eval` and all six mutually recursive helpers via `eval.induct`. Once it
   exists, loop proofs evaluate everything at a single large fuel and drop all
   per-iteration fuel bookkeeping. (We deliberately did **not** refactor `eval`
-  to sized types to avoid this; see `SIZED_EVALUATOR_INVESTIGATION.md`. The
+  to sized types to avoid this; see
+  `../research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md`. The
   additive lemma was the lower-risk choice and it neutralized the recurring
   cost.)
 - **`evalAssigns_fuel_le`** — loop-body assignments are fuel-monotone (a short
@@ -193,6 +194,6 @@ ghost values erase; the compiled binary is unchanged.
   ProvableV1 extensions (R-01…R-28) and Phase-12 obligations.
 - [PROOF_STORY_MATRIX.md](PROOF_STORY_MATRIX.md) — per-construct proved/trusted
   status.
-- [SIZED_EVALUATOR_INVESTIGATION.md](SIZED_EVALUATOR_INVESTIGATION.md) — why the
+- [../research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](../research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md) — why the
   evaluator is not refactored to sized types.
 - [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md) — the trust layers.
