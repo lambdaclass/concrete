@@ -170,4 +170,14 @@ def parse (s : String) : Option Json.Val :=
 
 end JsonParser
 
+open Json in
+/-- Extract a string field from a JSON object. Shared by the facts/query/diff layers. -/
+def jsonGetStr (v : Val) (key : String) : Option String :=
+  match v with
+  | .obj kvs =>
+    match kvs.find? (fun (k, _) => k == key) with
+    | some (_, .str s) => some s
+    | _ => none
+  | _ => none
+
 end Concrete.Report

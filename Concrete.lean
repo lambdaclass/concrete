@@ -25,6 +25,7 @@ import Concrete.Backend.EmitSSA
 import Concrete.Backend.LLVM
 import Concrete.Backend.EmitLLVM
 import Concrete.Report.Report
+import Concrete.Report.Diff
 import Concrete.Pipeline.Pipeline
 import Concrete.Proof.ProofCore
 import Concrete.Proof.Proof
