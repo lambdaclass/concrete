@@ -418,6 +418,9 @@ def telemetryJson (compiler : String) (core : ValidatedCore)
 def traceJson (compiler input : String) (okStages : List String)
     (fail : Option (String × String)) (counts : String) : String :=
   let esc := fun (t : String) => t.replace "\\" "\\\\" |>.replace "\"" "\\\""
+  -- Emit only the file's basename, never the absolute path: the trace must not
+  -- leak private/host directory paths (guarded by check_trace_pipeline.sh).
+  let baseName := (input.splitOn "/").getLastD input
   let lb := "{"; let rb := "}"
   let okJsons := okStages.map (fun s =>
     lb ++ "\"stage\":\"" ++ s ++ "\",\"status\":\"ok\"" ++ rb)
@@ -429,7 +432,7 @@ def traceJson (compiler input : String) (okStages : List String)
   let failStage := match fail with | some (s, _) => "\"" ++ s ++ "\"" | none => "null"
   lb ++ "\"schema\":\"concrete.pipeline.trace.v1\","
      ++ "\"compiler\":\"" ++ esc compiler ++ "\","
-     ++ "\"input\":\"" ++ esc input ++ "\","
+     ++ "\"input\":\"" ++ esc baseName ++ "\","
      ++ "\"outcome\":\"" ++ outcome ++ "\","
      ++ "\"firstFailingStage\":" ++ failStage ++ ","
      ++ "\"stages\":" ++ stageArr ++ ","

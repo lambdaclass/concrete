@@ -10,6 +10,32 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Example proofs moved out of the compiler library (2026-07-12)
+
+The 8 flagship/example correctness proofs (`HmacSha256`, `CryptoVerify`,
+`ElfHeader`, `FixedCapacity`, `LoopInvariant`, `ParseValidate`, `ConstantTimeTag`,
+`ProofPatterns`) were imported directly by the compiler aggregator
+(`Concrete.lean`), so they counted as compiler implementation — the 2610-LOC HMAC
+proof was the second-largest file under `Concrete/`, inflating the compiler's size,
+module graph, and trusted surface.
+
+They are now a separate **`Examples` Lake library** (`srcDir = proofs/`, root
+`proofs/Examples.lean`, modules + namespaces `Examples.<Ex>.Proofs`). The compiler
+no longer imports example proof code; `Concrete.Proof` still references their
+theorems by name/fingerprint (a string boundary, not a code dependency). The lib
+stays in `defaultTargets`, so `lake build` still kernel-checks every proof. The one
+place that legitimately imports the example proofs is the proof-check target:
+`concrete --report check-proofs` and `concrete prove --check` generate a Lean file
+that does `import Concrete` + `import Examples` and `#check`s each linked theorem.
+
+`srcDir = proofs/` was chosen deliberately: a top-level `Examples/` dir would
+case-collide with the existing `.con` `examples/` tree and break on case-sensitive
+Linux CI. Boundary discipline is enforced by `check_proof_namespace.sh` (example
+theorems live only under `Examples.*`; `Concrete.Proof` keeps only allowlisted
+infrastructure). Follow-up recorded in ROADMAP: the proofs left, but their spec
+PExprs / registration tables still live in `Proof.lean` (extract when the
+proof-registry boundary is clearer).
+
 ### Phase 6C #2 — complexity guard exposed a family of pipeline O(N²) bugs (2026-07-12)
 
 The anti-superlinear complexity guard (`scripts/tests/check_compiler_complexity.sh`)

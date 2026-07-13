@@ -1873,37 +1873,33 @@ Recorded for a QUIESCENT execution window (these are module-boundary / structure
 moves that touch `lakefile.toml`, module paths, and imports — do them when the
 tree is not under heavy concurrent editing; they are hygiene, not bug-pulled).
 
+The example-proof move is DONE (see CHANGELOG): the 8 flagship proofs are now a
+separate `Examples` Lake library (`srcDir proofs/`, namespaces `Examples.<Ex>.Proofs`),
+no longer imported by the compiler aggregator. Remaining structural moves:
+
 Structural moves (boundary honesty — do in a clean tree, in this order):
-1. **Move `Concrete/Examples/**/Proofs.lean` out of the compiler tree** into a
-   separate `ConcreteExamples` Lake library (or top-level `Examples/`). These are
-   example/flagship proof artifacts, NOT compiler implementation — the 2610-LOC
-   `HmacSha256/Proofs.lean` is the second-largest file under `Concrete/` and
-   inflates the compiler's apparent size, module graph, and trusted surface. The
-   compiler should reference proof names as strings/artifacts and NOT import
-   example proof code in the core build; only a proof-check target imports them.
-   Makes size reporting honest (compiler core vs proof examples vs stdlib vs
-   tests) and removes accidental coupling. (User-facing `.con` examples stay under
-   `examples/` — that's already right; only the Lean proof modules are misplaced.)
-2. **Split `Concrete/Report/Report.lean`** (~5k LOC, the biggest real compiler
+1. **Split `Concrete/Report/Report.lean`** (~5k LOC, the biggest real compiler
    file) by report family (`Report/Caps.lean`, `Report/ProofStatus.lean`,
    `Report/Contracts.lean`, `Report/Layout.lean`, `Report/Interface.lean`), keeping
    `Report.lean` as orchestration.
-3. **Split `Main.lean`** (~2.1k LOC) — CLI parsing/dispatch vs command bodies →
+2. **Split `Main.lean`** (~2.1k LOC) — CLI parsing/dispatch vs command bodies →
    `Concrete/Cli/{Compile,Reports,Prove,Test}.lean`.
-4. **Move `Concrete/Pipeline/PipelineTest.lean`** to a test-support library
+3. **Move `Concrete/Pipeline/PipelineTest.lean`** to a test-support library
    (alongside a Lake test-target cleanup).
 
 Do only when pulled (design work / not yet):
-5. Extract the example proof-registry/catalog data out of `Concrete/Proof/Proof.lean`
+4. Extract the example proof-registry/catalog data out of `Concrete/Proof/Proof.lean`
    — only once the proof-registry boundary is clearer (it currently mixes real
-   proof infrastructure with flagship registration).
-6. Schema/data-first report generation, if report code keeps growing.
-7. Per-pass **timing** in `--trace-pipeline` / telemetry — the 2026-07 perf sweep
+   proof infrastructure with flagship registration). This is the natural sequel to
+   the example-proof move: the proofs left, but their spec PExprs / registration
+   tables still live in `Proof.lean`.
+5. Schema/data-first report generation, if report code keeps growing.
+6. Per-pass **timing** in `--trace-pipeline` / telemetry — the 2026-07 perf sweep
    could not localize an O(n²) by coarse `--emit-X` isolation (guessed wrong ~4×
    before finding the lexer); per-pass timing would make future perf debugging
    not-guess. (6C#1 kept timing out of v1 as a non-perf-claim; a debug-only
    per-pass timing field is the pull.)
-8. Ratchet the `check_no_quadratic_append.sh` baselines DOWN as hot-path appends
+7. Ratchet the `check_no_quadratic_append.sh` baselines DOWN as hot-path appends
    are converted; consider extending the ratchet to assoc-list `.find?`/`.lookup`
    in hot paths (the noisier other half of the O(n²) family).
 
