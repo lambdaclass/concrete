@@ -22,9 +22,9 @@
 -/
 import Std.Tactic.BVDecide
 import Concrete.Proof.Proof
-import Concrete.Examples.HmacSha256.Proofs
-import Concrete.Examples.LoopInvariant.Proofs
-import Concrete.Examples.ParseValidate.Proofs
+import Examples.HmacSha256.Proofs
+import Examples.LoopInvariant.Proofs
+import Examples.ParseValidate.Proofs
 
 set_option linter.unusedSimpArgs false
 set_option maxHeartbeats 1000000

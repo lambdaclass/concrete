@@ -37,7 +37,7 @@ BOUNDARY="$FIX/boundary.lean"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 # The Concrete oleans the fixtures import must be built.
-if [ ! -f .lake/build/lib/lean/Concrete/Examples/HmacSha256/Proofs.olean ]; then
+if [ ! -f .lake/build/lib/lean/Examples/HmacSha256/Proofs.olean ]; then
   echo "error: build first (Concrete proof oleans missing — run 'lake build')" >&2
   exit 2
 fi

@@ -31,14 +31,10 @@ import Concrete.Proof.Proof
 import Concrete.ProofKit
 import Concrete.Proof.ProofSoundness
 import Concrete.Proof.Sha256Spec
-import Concrete.Examples.HmacSha256.Proofs
-import Concrete.Examples.LoopInvariant.Proofs
-import Concrete.Examples.ParseValidate.Proofs
-import Concrete.Examples.CryptoVerify.Proofs
-import Concrete.Examples.FixedCapacity.Proofs
-import Concrete.Examples.ConstantTimeTag.Proofs
-import Concrete.Examples.ElfHeader.Proofs
-import Concrete.Examples.ProofPatterns.Proofs
+-- Example/flagship proof modules moved OUT of the compiler lib into the separate
+-- `Examples` Lake library (root `Examples.lean`, namespace `Examples.<Ex>.Proofs`).
+-- The compiler references their theorems by name/fingerprint (Concrete.Proof), it
+-- does NOT import example proof code; only the `Examples` lib build kernel-checks them.
 import Concrete.Frontend.Format
 import Concrete.Check.Verify
 import Concrete.Report.DebugBundle

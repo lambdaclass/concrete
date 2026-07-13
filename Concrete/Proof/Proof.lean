@@ -1183,7 +1183,7 @@ def evalCheckNonce (nonce maxNonce : Int) : Option PVal :=
 -- NOTE: the crypto_verify proof theorems (compute_tag_correct, verify_tag_correct,
 -- verify_tag_rejects, check_nonce_accepts_valid/_rejects_nonpositive/_rejects_over_max,
 -- verify_message_composed_correct, check_nonce_correct) were moved OUT of this
--- namespace into `Concrete.Examples.CryptoVerify.Proofs`
+-- namespace into `Examples.CryptoVerify.Proofs`
 -- (namespace `Examples.CryptoVerify.Proofs`). Their spec PExprs + cryptoFns/*Fn stay here.
 
 -- ============================================================
@@ -1284,7 +1284,7 @@ def elfFns : FnTable
 
 -- NOTE: the elf_header proof theorems (check_magic_correct, check_class_correct,
 -- check_data_correct, check_version_correct, validate_header_correct) were moved OUT
--- into `Concrete.Examples.ElfHeader.Proofs`. The elfFns table + spec PExprs stay here.
+-- into `Examples.ElfHeader.Proofs`. The elfFns table + spec PExprs stay here.
 
 -- ============================================================
 -- parse_validate (pull-through pilot — first attached theorem)
@@ -1489,7 +1489,7 @@ def parseValidateFns : FnTable
 -- NOTE: the `parse_validate` proof theorems (validate_version_correct,
 -- validate_header_fields_success, parse_header_too_short, and the four
 -- parse_header failure-path theorems) were moved OUT of this namespace into
--- `Concrete.Examples.ParseValidate.Proofs` (namespace `Examples.ParseValidate.Proofs`).
+-- `Examples.ParseValidate.Proofs` (namespace `Examples.ParseValidate.Proofs`).
 -- Their registered spec PExprs + eval scaffolding (parseValidateFns, *Fn, *Expr) stay here.
 
 -- ============================================================
@@ -1697,7 +1697,7 @@ theorem while_step_exit
 
 -- NOTE: the fixed_capacity ring-buffer proof theorems (ring_contains_empty_correct,
 -- ring_push_then_contains_correct, ring_push_zero_correct, compute_tag_zero_correct,
--- ring_new_correct) were moved OUT into `Concrete.Examples.FixedCapacity.Proofs`
+-- ring_new_correct) were moved OUT into `Examples.FixedCapacity.Proofs`
 -- (namespace `Examples.FixedCapacity.Proofs`). The generic while_step lemmas above,
 -- the fixedCapacityFns table, and the spec PExprs stay here.
 
@@ -1795,7 +1795,7 @@ def ctTagFns : FnTable
   | _            => none
 
 -- NOTE: the constant_time_tag proof theorems + bit-helper lemmas were moved OUT
--- into `Concrete.Examples.ConstantTimeTag.Proofs`. The ctCompareExpr spec + ctTagFns stay here.
+-- into `Examples.ConstantTimeTag.Proofs`. The ctCompareExpr spec + ctTagFns stay here.
 
 -- ============================================================
 -- hmac_sha256 (fifth flagship) — first attached theorem
@@ -1813,7 +1813,7 @@ def sha256_initExpr : PExpr :=
     , .lit (.int 528734635),  .lit (.int 1541459225) ]
 
 -- NOTE: the hmac_sha256 theorems sha256_init_correct and ch_selects_high were
--- moved OUT into `Concrete.Examples.HmacSha256.Proofs`. chExpr (a registered
+-- moved OUT into `Examples.HmacSha256.Proofs`. chExpr (a registered
 -- spec, below) and the other hmac spec PExprs stay here.
 
 /-- Extracted spec for `hmac_sha256.ch`: the SHA-256 `Ch` choice

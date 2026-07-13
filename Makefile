@@ -138,7 +138,7 @@ test-showcase: build ## Showcase gate (graduated flagships stay graduated)
 test-registry-retirement: ## Registry-retirement gate (no JSON example registries)
 	bash ./scripts/tests/check_no_example_registries.sh
 
-test-proof-namespace: ## Proof-namespace guard (Concrete.Examples.* only)
+test-proof-namespace: ## Proof-namespace guard (Examples.* only)
 	bash ./scripts/tests/check_proof_namespace.sh
 
 test-proof-patterns: build ## Proof-patterns corpus gate

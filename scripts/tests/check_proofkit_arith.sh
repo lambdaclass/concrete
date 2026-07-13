@@ -27,14 +27,14 @@ want_def sdiv_ofNat_eq_natDiv
 
 echo "=== the library is actually USED by the proof corpus ==="
 # HMAC's padding block-count bridge must be a corollary of the general lemma.
-if grep -q "sdiv_ofNat_eq_natDiv" Concrete/Examples/HmacSha256/Proofs.lean; then
+if grep -q "sdiv_ofNat_eq_natDiv" proofs/Examples/HmacSha256/Proofs.lean; then
   echo "  ok   HmacSha256 uses sdiv_ofNat_eq_natDiv (signed-division bridge)"; PASS=$((PASS+1));
 else
   echo "  FAIL HmacSha256 does not use the centralized sdiv bridge"; FAIL=$((FAIL+1)); fi
 
 echo "=== the centralized lemmas are NOT re-defined inside examples (no one-offs) ==="
 for name in ofNat64_eq_setWidth32 ofNat32_msb_false and255_lo sdiv_ofNat_eq_natDiv; do
-  hits="$(grep -rEl "theorem $name\b" Concrete/Examples/ 2>/dev/null || true)"
+  hits="$(grep -rEl "theorem $name\b" proofs/Examples/ 2>/dev/null || true)"
   if [ -z "$hits" ]; then echo "  ok   no example redefines $name"; PASS=$((PASS+1));
   else echo "  FAIL $name re-defined in: $hits"; FAIL=$((FAIL+1)); fi
 done

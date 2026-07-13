@@ -2,13 +2,13 @@
 # Namespace guard for the proof-theorem migration.
 #
 # Example proof THEOREMS live in their per-example module
-# `Concrete.Examples.<Ex>.Proofs` (namespace `Examples.<Ex>.Proofs`).
+# `Examples.<Ex>.Proofs` (namespace `Examples.<Ex>.Proofs`).
 # `Concrete.Proof` keeps proof INFRASTRUCTURE (the PExpr/eval model, the loop/
 # array "ladder" lemmas, ProofKit) plus the registered spec PExprs / eval
 # scaffolding / `specs` + `provedFunctions` tables (those are `def`s, not
 # theorems). This gate keeps the migration "done" by failing when:
 #
-#   1. a file under Concrete/Examples/ re-enters `namespace Concrete.Proof`;
+#   1. a file under proofs/Examples/ re-enters `namespace Concrete.Proof`;
 #   2. Concrete/Proof/Proof.lean declares a theorem/lemma not on the allowlist
 #      (scripts/tests/proof_namespace_allowlist.txt) — i.e. a new example proof
 #      snuck into the compiler namespace;
@@ -26,9 +26,9 @@ ALLOW="scripts/tests/proof_namespace_allowlist.txt"
 FAIL=0
 
 # 1. No example module may declare the compiler proof namespace.
-if grep -rln '^namespace Concrete\.Proof\b' Concrete/Examples/ 2>/dev/null | grep -q .; then
-  echo "FAIL: a file under Concrete/Examples/ declares 'namespace Concrete.Proof':"
-  grep -rln '^namespace Concrete\.Proof\b' Concrete/Examples/ | sed 's/^/    /'
+if grep -rln '^namespace Concrete\.Proof\b' proofs/Examples/ 2>/dev/null | grep -q .; then
+  echo "FAIL: a file under proofs/Examples/ declares 'namespace Concrete.Proof':"
+  grep -rln '^namespace Concrete\.Proof\b' proofs/Examples/ | sed 's/^/    /'
   echo "  → example proofs must use 'namespace Examples.<Ex>.Proofs'."
   FAIL=1
 fi
@@ -40,7 +40,7 @@ newones="$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$allow"))"
 if [ -n "$newones" ]; then
   echo "FAIL: theorem/lemma(s) in $PROOF not on the allowlist:"
   printf '%s\n' "$newones" | sed 's/^/    /'
-  echo "  → if example-correctness, define under Concrete.Examples.<Ex>.Proofs;"
+  echo "  → if example-correctness, define under Examples.<Ex>.Proofs;"
   echo "  → if genuine infrastructure, add the name to $ALLOW."
   FAIL=1
 fi
@@ -65,7 +65,7 @@ for n in "${MIGRATED[@]}"; do
 done
 
 if [ "$FAIL" -eq 0 ]; then
-  echo "PROOF-NAMESPACE: PASS — Concrete.Proof holds only allowlisted (infrastructure/grandfathered) theorems; example proofs stay under Concrete.Examples.*"
+  echo "PROOF-NAMESPACE: PASS — Concrete.Proof holds only allowlisted (infrastructure/grandfathered) theorems; example proofs stay under Examples.*"
   exit 0
 else
   exit 1

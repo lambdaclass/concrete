@@ -2574,7 +2574,7 @@ theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat
 
 -- NOTE: the `loop_invariant.count_up` invariant-preservation proof
 -- (`count_upBody` / `count_up_loop_preserves`) was moved OUT of this namespace
--- into the per-example module `Concrete.Examples.LoopInvariant.Proofs`
+-- into the per-example module `Examples.LoopInvariant.Proofs`
 -- (namespace `Examples.LoopInvariant.Proofs`). The generic loop-induction
 -- machinery it builds on (`eval_while_count`, `evalAssigns`) stays here.
 

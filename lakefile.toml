@@ -1,12 +1,20 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete"]
+defaultTargets = ["concrete", "Examples"]
 
 [leanOptions]
 warningAsError = true
 
 [[lean_lib]]
 name = "Concrete"
+
+# Flagship / example CORRECTNESS proofs (srcDir proofs/, root proofs/Examples.lean,
+# modules + namespaces `Examples.<Ex>.Proofs`). Separated from the compiler lib so
+# `Concrete` reflects implementation only; kept in defaultTargets so `lake build`
+# still kernel-checks them. srcDir avoids a case-collision with the .con `examples/`.
+[[lean_lib]]
+name = "Examples"
+srcDir = "proofs"
 
 [[lean_exe]]
 name = "concrete"
