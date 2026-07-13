@@ -453,6 +453,9 @@ jobs:
       - name: "Incremental shadow (Phase 6C #7 — reuse/invalidate prediction + no-false-reuse over an edit corpus)"
         run: bash scripts/tests/check_incremental_shadow.sh
 
+      - name: "Phase 6C observability capstone (#8 — telemetry, complexity, trace, reduction, mutation sample, hashes, shadow)"
+        run: bash scripts/tests/check_phase6c_observability.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 

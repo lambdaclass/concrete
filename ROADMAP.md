@@ -1773,36 +1773,12 @@ or lost); put the heavier trace/replay/scaling machinery here.
     deliberately reintroduced quadratic renderer/collector, an intentionally
     excessive memory-growth variant, and the bug 027 family.
 
-    STATUS (landed `scripts/tests/check_compiler_complexity.sh`): the guard is
-    live and, on its first run, exposed a **family of pre-existing O(N²) hot
-    spots** — all the same shape (assoc-list / list-set where a map/set was
-    needed). FIXED + behavior-gated (see CHANGELOG): SSAVerify dominators
-    (Jacobi→Gauss-Seidel; wide-match cubic 17.5s→1.3s), SSACleanup `collectAllUses`
-    + SSAVerify memberships (→ HashSet; large-array `--emit-ssa` 2757ms→647ms),
-    `Lower.emit` block-building (→ O(1) accumulate), `Mono.lookupFn` call
-    resolution (→ HashMap). bug-027 re-attributed: it is NOT EmitSSA — the cost
-    was cleanup/verify/emit-block building, now fixed. The FRONTEND O(N²) (many
-    mutually-calling functions) was also chased down and fixed — and it was the
-    **lexer**, not check/resolve (`Lexer.tokenize` built its token list with
-    `acc ++ [tok]` = O(tokens²); every path lexes first, which is why later-stage
-    fixes did not move it). Reverse-accumulate: 4000 functions `--emit-core`
-    9698ms → 241ms (40×); arrays now linear. Parser decl accumulation + Resolve
-    global-lookup (Scope.symbolMap) fixed alongside. Reassignment chains (many
-    `x = x + k` → many SSA versions of one register in one block; realistic in
-    accumulation loops / unrolled arithmetic / state machines) were O(N²)/cubic in
-    SSACleanup → fixed (applyReplacements map, foldConstants de-quadratified, +
-    forward constant propagation so a chain folds in ONE pass): statements
-    `--emit-ssa` 19391ms → 125ms (155×), near-linear.
-
-    **O(N²) family CLOSED** on the principle *fix residuals that hit realistic
-    code; track the synthetic-only ones* (see CHANGELOG). The guard's job is
-    detection, not an obligation to fix every synthetic curve. One residual is
-    tracked, NOT chased: SSAVerify dominance stays ~O(N²) in block count at very
-    large N (dom sets are O(N²) for a long block chain — needs hundreds of blocks,
-    e.g. an 800-arm match, not real code); the idom/Cooper-Harvey-Kennedy
-    near-linear rewrite is the follow-up if a realistic workload ever demands it,
-    guarded by `check_ssa_verify_agreement.sh`. Do not loosen the guard; extend its
-    regime only alongside that rewrite.
+    DONE (`scripts/tests/check_compiler_complexity.sh`; O(N²) family closed — see
+    CHANGELOG). One tracked, NOT-chased residual: SSAVerify dominance stays ~O(N²)
+    in block count at very large N (needs hundreds of blocks, e.g. an 800-arm match,
+    not real code); the idom/Cooper-Harvey-Kennedy near-linear rewrite is the
+    follow-up if a realistic workload ever demands it, guarded by
+    `check_ssa_verify_agreement.sh`. Do not loosen the guard.
 
 3. Add `concrete trace-pipeline --json`.
     Dump per-stage summaries: modules, functions, diagnostics, capabilities,
@@ -1867,11 +1843,31 @@ or lost); put the heavier trace/replay/scaling machinery here.
    Phase 8 #19 later reruns/extends this already-landed gate on the real workload
    and publishes the handoff manifest; Phase 6C does not depend on future work.
 
-STATUS: Phase 6C is complete (#1–#8 landed and gated; see CHANGELOG). Gates:
-`check_pipeline_telemetry` (#1), `check_compiler_complexity` (#2), `check_trace_pipeline`
-(#3), `check_counterexample_reduction` (#4), `check_gate_mutation_coverage` (#5, nightly),
-`check_pass_hashes` (#6), `check_incremental_shadow` (#7), `check_phase6c_observability`
-(#8 capstone). Phase 8 #19 later reruns/extends the shadow + census on the real workload.
+STATUS (2026-07-13): all eight items have working, gated tooling, but three are V1
+(see CHANGELOG for what shipped). Honest ledger:
+
+- DONE to spec — remove from active scope: #2 anti-superlinear complexity guard
+  (`check_compiler_complexity`, O(n²) family closed), #3 `--trace-pipeline`
+  (`check_trace_pipeline`), #5 gate mutation-testing (`check_gate_mutation_coverage`,
+  10/10 families killed, nightly).
+- LANDED (mechanism proven) with a minor caveat: #4 counterexample reduction
+  (`check_counterexample_reduction`; 2 of 4 classes reduce a live failure, the other
+  two are detector/representative until a real bug of that kind exists), #8 capstone
+  (`check_phase6c_observability`; runs the suite + census, does not yet publish the
+  formal handoff manifest — Phase 8 #19 reruns/extends on the real workload).
+
+REMAINING 6C hardening (V1 -> full spec; pull when a workload needs the field/coverage):
+- #1 telemetry (`check_pipeline_telemetry`): today emits structural counts only. Add
+  per-pass timing, peak memory/RSS, alloc/output-buffer size, AST node counts,
+  mono-instantiation / obligation / runtime-trap counts, report size (gate schema +
+  no-private-paths + graceful missing-memory only; perf claims stay Phase 17).
+- #6 pass-output hashes (`check_pass_hashes`): today hashes core/ssa/fingerprints/
+  obligations. Add AST, post-mono Core, CoreCheck facts, traps, report facts.
+- #7 incremental shadow (`check_incremental_shadow`): today a conservative
+  function-granularity reuse-key + core output + false-hit detection. Add the full
+  typed-query manifest fields (kind/owner/cacheability-reason/validation-record-id) and
+  the wider edit corpus (public-type, capability/contract/spec, generic instantiation,
+  target/profile/policy, file add/delete/rename, dependency-interface).
 
 ### Structure & follow-ups surfaced by the 2026-07 pipeline sweep
 

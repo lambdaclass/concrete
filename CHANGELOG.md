@@ -10,11 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Phase 6C observability closed — pipeline is inspectable, replayable, mutation-checked (2026-07-13)
+### Phase 6C observability — full gate surface landed (V1); #1/#6/#7 have tracked follow-ups (2026-07-13)
 
-Phase 6C (#1–#8) is complete: the unified pipeline now has a full observability
-surface, all gated. #1 telemetry, #2 the anti-superlinear complexity guard, and #3
-`--trace-pipeline` landed earlier; this milestone adds #4–#8:
+All eight Phase 6C items now have working, gated tooling, but three are deliberate
+V1s that do not yet meet the full field/coverage spec (tracked as remaining 6C
+hardening in ROADMAP): **#1** telemetry emits structural counts only (per-pass
+timing, peak memory/RSS, alloc/output size, AST node counts, mono-instantiation /
+obligation / runtime-trap counts, report size still to add); **#6** hashes 4 stages
+(core, ssa, fingerprints, obligations — AST/post-mono-Core/CoreCheck-facts/traps/
+report-facts still to add); **#7** is a conservative function-granularity shadow
+(the full typed-query manifest fields and the wider edit corpus remain). **#4** and
+**#8** landed their mechanisms (2 of #4's 4 classes reduce a live failure, the other
+two are detector/representative; #8 runs the suite + census but does not yet publish
+the formal handoff manifest). **#2** complexity guard, **#3** `--trace-pipeline`, and
+**#5** mutation-testing are fully to spec.
+
+#2 (complexity guard), #3 (trace) landed earlier; this milestone adds #4–#8:
 
 - **#4 counterexample-first debugging** (`check_counterexample_reduction.sh`): any
   pipeline failure reduces to a minimized `.con` fixture + replay command, saveable
