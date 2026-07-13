@@ -324,6 +324,12 @@ test-trace-pipeline: build ## Phase 6C #3: `concrete <file> --trace-pipeline` pe
 test-counterexample-reduction: build ## Phase 6C #4: pipeline failures reduce to a minimized `.con` fixture + replay command (error/trap/oracle/report predicate paths); reduced fixture still reproduces
 	$(NIX_DEVELOP) bash ./scripts/tests/check_counterexample_reduction.sh
 
+test-pass-hashes: build ## Phase 6C #6: per-stage pass-output hash manifest + replay commands; determinism + comment-invariance (core/fingerprints) vs position-bearing (ssa/obligations) + structural sensitivity
+	$(NIX_DEVELOP) bash ./scripts/tests/check_pass_hashes.sh
+
+test-gate-mutation-coverage: build ## Phase 6C #5 (HEAVY/nightly — rebuilds per mutation): disable one rule per family, prove its specific gate goes red; FAMILY=<n> for one
+	$(NIX_DEVELOP) bash ./scripts/tests/check_gate_mutation_coverage.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

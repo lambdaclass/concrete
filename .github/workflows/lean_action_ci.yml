@@ -447,6 +447,9 @@ jobs:
       - name: "Counterexample reduction (Phase 6C #4 — failures reduce to a minimized fixture + replay)"
         run: bash scripts/tests/check_counterexample_reduction.sh
 
+      - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
+        run: bash scripts/tests/check_pass_hashes.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
