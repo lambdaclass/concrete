@@ -378,30 +378,164 @@ def countSSA (ms : List SModule) : Nat × Nat × Nat × Nat :=
       a + fn.blocks.foldl (fun b blk => b + blk.insts.length) 0) 0
     (mods + 1, fns + sm.functions.length, blks + fBlks, insts + fInsts)) (0, 0, 0, 0)
 
-/-- Phase 6C #1: build the pipeline telemetry trace as a stable-schema JSON string.
-    Records per-stage structural counts (Core / post-mono / SSA) plus the opaque
-    compiler identity and the accepted-program diagnostic count. This is NOT a
-    performance claim: per-pass timing and RSS are deliberately omitted from v1
-    (platform-specific, and benchmarking is Phase 17) — the schema is what the
-    gate pins. Built by concatenation (not `s!` with literal braces) to keep the
-    JSON unambiguous. -/
-def telemetryJson (compiler : String) (core : ValidatedCore)
-    (mono : MonomorphizedProgram) (ssa : SSAProgram) (diagnostics : Nat) : String :=
+-- Phase 6C #1 (hardening): count AST expr+stmt nodes reachable from all function
+-- bodies (functions + impl/trait methods, recursing submodules). Approximate size
+-- signal for telemetry — not a semantic fact.
+mutual
+partial def astExprNodes : Expr → Nat
+  | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. | .ident .. | .fnRef .. => 1
+  | .binOp _ _ l r => 1 + astExprNodes l + astExprNodes r
+  | .unaryOp _ _ x => 1 + astExprNodes x
+  | .call _ _ _ args => 1 + (args.map astExprNodes).foldl (·+·) 0
+  | .paren _ x => 1 + astExprNodes x
+  | .structLit _ _ _ fields base => 1 + (fields.map (fun f => astExprNodes f.2)).foldl (·+·) 0 + (base.map astExprNodes).getD 0
+  | .fieldAccess _ o _ => 1 + astExprNodes o
+  | .enumLit _ _ _ _ fields => 1 + (fields.map (fun f => astExprNodes f.2)).foldl (·+·) 0
+  | .match_ _ s arms => 1 + astExprNodes s + (arms.map astArmNodes).foldl (·+·) 0
+  | .borrow _ x => 1 + astExprNodes x
+  | .borrowMut _ x => 1 + astExprNodes x
+  | .deref _ x => 1 + astExprNodes x
+  | .try_ _ x => 1 + astExprNodes x
+  | .arrayLit _ elems => 1 + (elems.map astExprNodes).foldl (·+·) 0
+  | .arrayIndex _ a i => 1 + astExprNodes a + astExprNodes i
+  | .cast _ x _ => 1 + astExprNodes x
+  | .methodCall _ o _ _ args => 1 + astExprNodes o + (args.map astExprNodes).foldl (·+·) 0
+  | .staticMethodCall _ _ _ _ args => 1 + (args.map astExprNodes).foldl (·+·) 0
+  | .arrowAccess _ o _ => 1 + astExprNodes o
+  | .allocCall _ x a => 1 + astExprNodes x + astExprNodes a
+  | .whileExpr _ c body elseBody => 1 + astExprNodes c + (body.map astStmtNodes).foldl (·+·) 0 + (elseBody.map astStmtNodes).foldl (·+·) 0
+  | .ifExpr _ c t el => 1 + astExprNodes c + (t.map astStmtNodes).foldl (·+·) 0 + (el.map astStmtNodes).foldl (·+·) 0
+partial def astArmNodes : MatchArm → Nat
+  | .mk _ _ _ _ g body => 1 + (g.map astExprNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
+  | .litArm _ v g body => 1 + astExprNodes v + (g.map astExprNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
+  | .varArm _ _ g body => 1 + (g.map astExprNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
+  | .rangeArm _ lo hi _ g body => 1 + astExprNodes lo + astExprNodes hi + (g.map astExprNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
+partial def astStmtNodes : Stmt → Nat
+  | .letDecl _ _ _ _ v _ => 1 + astExprNodes v
+  | .assign _ _ v => 1 + astExprNodes v
+  | .return_ _ v => 1 + (v.map astExprNodes).getD 0
+  | .expr _ x _ => 1 + astExprNodes x
+  | .ifElse _ c t el => 1 + astExprNodes c + (t.map astStmtNodes).foldl (·+·) 0 + ((el.getD []).map astStmtNodes).foldl (·+·) 0
+  | .while_ _ c body _ => 1 + astExprNodes c + (body.map astStmtNodes).foldl (·+·) 0
+  | .forLoop _ init c step body _ => 1 + (init.map astStmtNodes).getD 0 + astExprNodes c + (step.map astStmtNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
+  | .fieldAssign _ o _ v => 1 + astExprNodes o + astExprNodes v
+  | .derefAssign _ t v => 1 + astExprNodes t + astExprNodes v
+  | .arrayIndexAssign _ a i v => 1 + astExprNodes a + astExprNodes i + astExprNodes v
+  | .break_ _ v _ => 1 + (v.map astExprNodes).getD 0
+  | .continue_ .. => 1
+  | .defer _ b => 1 + astExprNodes b
+  | .assert_ _ c => 1 + astExprNodes c
+  | .assume_ _ c => 1 + astExprNodes c
+  | .borrowIn _ _ _ _ _ body => 1 + (body.map astStmtNodes).foldl (·+·) 0
+  | .arrowAssign _ o _ v => 1 + astExprNodes o + astExprNodes v
+  | .letDestructure _ _ _ _ v eb => 1 + astExprNodes v + ((eb.getD []).map astStmtNodes).foldl (·+·) 0
+  | .letStructDestructure _ _ _ v => 1 + astExprNodes v
+end
+
+partial def astModuleNodes (ms : List Module) : Nat :=
+  ms.foldl (fun acc m =>
+    let bodies := m.functions.map (·.body)
+      ++ m.implBlocks.flatMap (fun ib => ib.methods.map (·.body))
+      ++ m.traitImpls.flatMap (fun ti => ti.methods.map (·.body))
+    let n := (bodies.map (fun b => (b.map astStmtNodes).foldl (·+·) 0)).foldl (·+·) 0
+    acc + n + astModuleNodes m.submodules) 0
+
+/-- Phase 6C #1 (hardening): count Core nodes AND trap sites in one pass. Trap sites
+    = the operations that lower to a runtime abort: checked arithmetic
+    (`add/sub/mul/div/mod`, but NOT wrapping/saturating) plus array-index reads and
+    writes (bounds checks). Returns `(nodes, trapSites)`. -/
+def binOpTraps : BinOp → Nat
+  | .add | .sub | .mul | .div | .mod => 1
+  | _ => 0
+
+/-- Sum a list of `(nodes, traps)` pairs componentwise. -/
+def sumNT (xs : List (Nat × Nat)) : Nat × Nat :=
+  xs.foldl (fun (a b : Nat × Nat) => (a.1 + b.1, a.2 + b.2)) (0, 0)
+/-- `(0,0)` for an absent optional child. -/
+def optNT (o : Option (Nat × Nat)) : Nat × Nat := o.getD (0, 0)
+
+mutual
+partial def cExprNT : CExpr → Nat × Nat
+  | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. | .ident .. | .fnRef .. => (1, 0)
+  | .binOp op l r _ => let (nl,tl) := cExprNT l; let (nr,tr) := cExprNT r; (1+nl+nr, binOpTraps op + tl + tr)
+  | .unaryOp _ x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .call _ _ args _ => let (n,t) := sumNT (args.map cExprNT); (1+n, t)
+  | .structLit _ _ fields _ => let (n,t) := sumNT (fields.map (fun f => cExprNT f.2)); (1+n, t)
+  | .fieldAccess o _ _ => let (n,t) := cExprNT o; (1+n, t)
+  | .enumLit _ _ _ fields _ => let (n,t) := sumNT (fields.map (fun f => cExprNT f.2)); (1+n, t)
+  | .match_ s arms _ => let (ns,ts) := cExprNT s; let (na,ta) := sumNT (arms.map cArmNT); (1+ns+na, ts+ta)
+  | .borrow x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .borrowMut x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .deref x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .arrayLit elems _ => let (n,t) := sumNT (elems.map cExprNT); (1+n, t)
+  | .arrayIndex a i _ => let (na,ta) := cExprNT a; let (ni,ti) := cExprNT i; (1+na+ni, 1+ta+ti)
+  | .cast x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .try_ x _ => let (n,t) := cExprNT x; (1+n, t)
+  | .allocCall x a _ => let (nx,tx) := cExprNT x; let (na,ta) := cExprNT a; (1+nx+na, tx+ta)
+  | .whileExpr c body elseBody _ => let (nc,tc):=cExprNT c; let (nb,tb):=sumNT (body.map cStmtNT); let (ne,te):=sumNT (elseBody.map cStmtNT); (1+nc+nb+ne, tc+tb+te)
+  | .ifExpr c t_ el _ => let (nc,tc):=cExprNT c; let (nt,tt):=sumNT (t_.map cStmtNT); let (ne,te):=sumNT (el.map cStmtNT); (1+nc+nt+ne, tc+tt+te)
+partial def cArmNT : CMatchArm → Nat × Nat
+  | .enumArm _ _ _ g body => let (ng,tg):=optNT (g.map cExprNT); let (nb,tb):=sumNT (body.map cStmtNT); (1+ng+nb, tg+tb)
+  | .litArm v g body => let (nv,tv):=cExprNT v; let (ng,tg):=optNT (g.map cExprNT); let (nb,tb):=sumNT (body.map cStmtNT); (1+nv+ng+nb, tv+tg+tb)
+  | .varArm _ _ g body => let (ng,tg):=optNT (g.map cExprNT); let (nb,tb):=sumNT (body.map cStmtNT); (1+ng+nb, tg+tb)
+  | .rangeArm lo hi _ g body => let (nl,tl):=cExprNT lo; let (nh,th):=cExprNT hi; let (ng,tg):=optNT (g.map cExprNT); let (nb,tb):=sumNT (body.map cStmtNT); (1+nl+nh+ng+nb, tl+th+tg+tb)
+partial def cStmtNT : CStmt → Nat × Nat
+  | .letDecl _ _ _ v => let (n,t):=cExprNT v; (1+n, t)
+  | .assign _ v => let (n,t):=cExprNT v; (1+n, t)
+  | .return_ v _ => let (n,t):=optNT (v.map cExprNT); (1+n, t)
+  | .expr e _ => let (n,t):=cExprNT e; (1+n, t)
+  | .ifElse c t_ el => let (nc,tc):=cExprNT c; let (nt,tt):=sumNT (t_.map cStmtNT); let (ne,te):=sumNT ((el.getD []).map cStmtNT); (1+nc+nt+ne, tc+tt+te)
+  | .while_ c body _ step => let (nc,tc):=cExprNT c; let (nb,tb):=sumNT (body.map cStmtNT); let (ns,ts):=sumNT (step.map cStmtNT); (1+nc+nb+ns, tc+tb+ts)
+  | .fieldAssign o _ v => let (no,to):=cExprNT o; let (nv,tv):=cExprNT v; (1+no+nv, to+tv)
+  | .derefAssign t_ v => let (nt,tt):=cExprNT t_; let (nv,tv):=cExprNT v; (1+nt+nv, tt+tv)
+  | .arrayIndexAssign a i v => let (na,ta):=cExprNT a; let (ni,ti):=cExprNT i; let (nv,tv):=cExprNT v; (1+na+ni+nv, 1+ta+ti+tv)
+  | .break_ v _ => let (n,t):=optNT (v.map cExprNT); (1+n, t)
+  | .continue_ _ => (1, 0)
+  | .defer b => let (n,t):=cExprNT b; (1+n, t)
+  | .borrowIn _ _ _ _ _ body => let (n,t):=sumNT (body.map cStmtNT); (1+n, t)
+end
+
+/-- `(nodes, trapSites)` across a Core module forest (recursing submodules). -/
+partial def coreNodesTraps (ms : List CModule) : Nat × Nat :=
+  ms.foldl (fun (acc : Nat × Nat) cm =>
+    let bodyNT := cm.functions.foldl (fun (a : Nat×Nat) fn =>
+      (fn.body.map cStmtNT).foldl (fun (x y : Nat×Nat) => (x.1+y.1, x.2+y.2)) a) (0,0)
+    let (sn, st) := coreNodesTraps cm.submodules
+    (acc.1 + bodyNT.1 + sn, acc.2 + bodyNT.2 + st)) (0, 0)
+
+/-- Phase 6C #1 (v2): build the pipeline telemetry trace as a stable-schema JSON
+    string. Records per-stage structural counts (AST nodes, Core modules/functions/
+    enums/structs/nodes, post-mono, SSA blocks/instructions), trap-site count,
+    per-stage `timing_ms`, and a platform-graceful `rss_kb` (null when unavailable),
+    plus the opaque compiler identity and diagnostic count. This is NOT a performance
+    claim — the gate pins schema stability + monotonic sanity, never timing values
+    (Phase 17 owns benchmarks). Built by concatenation to keep the JSON unambiguous. -/
+def telemetryJson (compiler : String) (astNodes : Nat) (core : ValidatedCore)
+    (mono : MonomorphizedProgram) (ssa : SSAProgram) (diagnostics : Nat)
+    (timingMs : List (String × Nat) := []) (rssKb : Option Nat := none) : String :=
   let (cMods, cFns, cEnums, cStructs) := countCore core.coreModules
+  let (cNodes, cTraps) := coreNodesTraps core.coreModules
   let (mMods, mFns, _, _) := countCore mono.coreModules
   let (sMods, sFns, sBlks, sInsts) := countSSA ssa.ssaModules
   let esc := fun (t : String) => t.replace "\\" "\\\\" |>.replace "\"" "\\\""
   let lb := "{"; let rb := "}"
-  lb ++ "\"schema\":\"concrete.pipeline.telemetry.v1\","
+  let timingJson := lb ++ String.intercalate ","
+    (timingMs.map (fun (s, ms) => "\"" ++ esc s ++ "\":" ++ toString ms)) ++ rb
+  let rssJson := match rssKb with | some kb => toString kb | none => "null"
+  lb ++ "\"schema\":\"concrete.pipeline.telemetry.v2\","
      ++ "\"compiler\":\"" ++ esc compiler ++ "\","
      ++ "\"stages\":" ++ lb
+       ++ "\"ast\":" ++ lb ++ s!"\"nodes\":{astNodes}" ++ rb ++ ","
        ++ "\"core\":" ++ lb
-         ++ s!"\"modules\":{cMods},\"functions\":{cFns},\"enums\":{cEnums},\"structs\":{cStructs}" ++ rb ++ ","
+         ++ s!"\"modules\":{cMods},\"functions\":{cFns},\"enums\":{cEnums},\"structs\":{cStructs},\"nodes\":{cNodes}" ++ rb ++ ","
        ++ "\"mono\":" ++ lb
          ++ s!"\"modules\":{mMods},\"functions\":{mFns}" ++ rb ++ ","
        ++ "\"ssa\":" ++ lb
          ++ s!"\"modules\":{sMods},\"functions\":{sFns},\"blocks\":{sBlks},\"instructions\":{sInsts}" ++ rb
      ++ rb ++ ","
+     ++ "\"trap_sites\":" ++ toString cTraps ++ ","
+     ++ "\"timing_ms\":" ++ timingJson ++ ","
+     ++ "\"rss_kb\":" ++ rssJson ++ ","
      ++ "\"diagnostics\":" ++ toString diagnostics
      ++ rb
 

@@ -1857,10 +1857,11 @@ STATUS (2026-07-13): all eight items have working, gated tooling, but three are 
   formal handoff manifest — Phase 8 #19 reruns/extends on the real workload).
 
 REMAINING 6C hardening (V1 -> full spec; pull when a workload needs the field/coverage):
-- #1 telemetry (`check_pipeline_telemetry`): today emits structural counts only. Add
-  per-pass timing, peak memory/RSS, alloc/output-buffer size, AST node counts,
-  mono-instantiation / obligation / runtime-trap counts, report size (gate schema +
-  no-private-paths + graceful missing-memory only; perf claims stay Phase 17).
+- #1 telemetry (`check_pipeline_telemetry`): HARDENED to schema v2 — now emits
+  per-stage `timing_ms`, AST + Core node counts, `trap_sites`, and a platform-graceful
+  `rss_kb` (null off Linux), gated on schema + monotonic sanity (no timing magnitudes;
+  perf claims stay Phase 17). Small remainder: obligation count, report size, alloc/
+  output-buffer size, mono-instantiation count, and peak (vs current) RSS.
 - #6 pass-output hashes (`check_pass_hashes`): today hashes core/ssa/fingerprints/
   obligations. Add AST, post-mono Core, CoreCheck facts, traps, report facts.
 - #7 incremental shadow (`check_incremental_shadow`): today a conservative

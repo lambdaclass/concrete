@@ -134,28 +134,68 @@ def validateLLVMIR (llPath : String) : IO Bool := do
   return true
 
 
-/-- Phase 6C #1: emit the pipeline telemetry trace (stable-schema JSON) for an
-    accepted program. Runs the real pipeline (frontend → mono → lower) and prints
-    per-stage structural counts; backs `concrete <file> --emit-trace-json`. -/
+/-- Best-effort resident-set size in KB. Reads `/proc/self/statm` (Linux); returns
+    `none` on any platform without it (e.g. macOS) — the telemetry field is
+    platform-graceful, never a hard dependency. -/
+def readRssKb : IO (Option Nat) := do
+  try
+    let contents ← IO.FS.readFile "/proc/self/statm"
+    match contents.splitOn " " with
+    | _ :: resident :: _ => match resident.toNat? with
+      | some pages => pure (some (pages * 4096 / 1024))
+      | none => pure none
+    | _ => pure none
+  catch _ => pure none
+
 def traceTelemetry (inputPath : String) : IO UInt32 := do
   let source ← readFile inputPath
   let git ← compilerIdentity
-  match ← Pipeline.runFrontend inputPath source resolveAllModules with
-  | .error ds =>
-    IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
-    return 1
-  | .ok (_, _, validCore, srcMap) =>
+  let rss ← readRssKb
+  let srcMap := [(inputPath, source)]
+  -- Run the pipeline stage by stage so we can time each pass. Timing is a debug
+  -- aid, not a perf claim; the gate pins schema + monotonic sanity, not magnitudes.
+  let baseDir := let parts := inputPath.splitOn "/"
+    match parts.reverse with | _ :: rest => "/".intercalate rest.reverse | [] => "."
+  -- Run the pipeline stage by stage so each pass can be timed. Timing is a debug
+  -- aid, not a perf claim; the gate pins schema + monotonic sanity, not magnitudes.
+  let mut timing : List (String × Nat) := []
+  let mut t ← IO.monoMsNow
+  match Pipeline.parse source with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok parsed =>
+  let astNodes := Pipeline.astModuleNodes parsed.modules
+  timing := timing ++ [("parse", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  match ← Pipeline.resolveFiles baseDir parsed inputPath resolveAllModules with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok (resolved, _) =>
+  let summary := Pipeline.buildSummary resolved
+  timing := timing ++ [("resolve-files", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  match Pipeline.resolve resolved summary with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok rp =>
+  let resolvedProg := Pipeline.desugar rp
+  timing := timing ++ [("resolve", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  match Pipeline.check resolvedProg summary with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok () =>
+  timing := timing ++ [("check", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  match Pipeline.elaborate resolvedProg summary with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok elabProg =>
+  timing := timing ++ [("elaborate", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  match Pipeline.coreCheck elabProg with
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
+  | .ok validCore =>
+  timing := timing ++ [("coreCheck", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
   match Pipeline.monomorphize validCore with
-  | .error ds =>
-    IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
-    return 1
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok mono =>
+  timing := timing ++ [("monomorphize", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
   match Pipeline.lower mono with
-  | .error ds =>
-    IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
-    return 1
+  | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok ssa =>
-  IO.println (Pipeline.telemetryJson git validCore mono ssa 0)
+  timing := timing ++ [("lower", (← IO.monoMsNow) - t)]
+  IO.println (Pipeline.telemetryJson git astNodes validCore mono ssa 0 timing rss)
   return 0
 
 /-- Phase 6C #3: per-stage pipeline trace as JSON. Runs the pipeline stage by
@@ -204,7 +244,7 @@ def tracePipeline (inputPath : String) : IO UInt32 := do
   | .error ds => emit ok (some ("lower", firstCode ds)) "null"; return 0
   | .ok ssa =>
   let ok := "lower" :: ok
-  emit ok none (Pipeline.telemetryJson git validCore mono ssa 0)
+  emit ok none (Pipeline.telemetryJson git (Pipeline.astModuleNodes parsed.modules) validCore mono ssa 0)
   return 0
 
 /-- Compile via SSA pipeline: Parse → Resolve → Check → Elab → CoreCanonicalize → CoreCheck → Mono → Lower → SSAVerify → SSACleanup → EmitSSA → clang -/
