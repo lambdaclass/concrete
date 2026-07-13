@@ -1867,6 +1867,12 @@ or lost); put the heavier trace/replay/scaling machinery here.
    Phase 8 #19 later reruns/extends this already-landed gate on the real workload
    and publishes the handoff manifest; Phase 6C does not depend on future work.
 
+STATUS: Phase 6C is complete (#1–#8 landed and gated; see CHANGELOG). Gates:
+`check_pipeline_telemetry` (#1), `check_compiler_complexity` (#2), `check_trace_pipeline`
+(#3), `check_counterexample_reduction` (#4), `check_gate_mutation_coverage` (#5, nightly),
+`check_pass_hashes` (#6), `check_incremental_shadow` (#7), `check_phase6c_observability`
+(#8 capstone). Phase 8 #19 later reruns/extends the shadow + census on the real workload.
+
 ### Structure & follow-ups surfaced by the 2026-07 pipeline sweep
 
 Recorded for a QUIESCENT execution window (these are module-boundary / structure

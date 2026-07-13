@@ -330,6 +330,12 @@ test-pass-hashes: build ## Phase 6C #6: per-stage pass-output hash manifest + re
 test-gate-mutation-coverage: build ## Phase 6C #5 (HEAVY/nightly — rebuilds per mutation): disable one rule per family, prove its specific gate goes red; FAMILY=<n> for one
 	$(NIX_DEVELOP) bash ./scripts/tests/check_gate_mutation_coverage.sh
 
+test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow — per-query reuse/invalidate prediction over an edit corpus; a false reuse (missing dependency edge) is a hard failure
+	$(NIX_DEVELOP) bash ./scripts/tests/check_incremental_shadow.sh
+
+test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

@@ -10,6 +10,34 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6C observability closed — pipeline is inspectable, replayable, mutation-checked (2026-07-13)
+
+Phase 6C (#1–#8) is complete: the unified pipeline now has a full observability
+surface, all gated. #1 telemetry, #2 the anti-superlinear complexity guard, and #3
+`--trace-pipeline` landed earlier; this milestone adds #4–#8:
+
+- **#4 counterexample-first debugging** (`check_counterexample_reduction.sh`): any
+  pipeline failure reduces to a minimized `.con` fixture + replay command, saveable
+  as a regression. Reuses the existing reducer; covers the error→diagnostic, trap-
+  preservation (new `scripts/reduce/expect-trap.sh`), report-finding, and oracle-
+  mismatch (detector + reducer-refusal) paths.
+- **#5 gate mutation-testing** (`check_gate_mutation_coverage.sh`): proves the gates
+  are load-bearing — one source mutation per rule family, each caught by its SPECIFIC
+  gate. Full sweep 10/10 KILLED (corecheck-boundary, copy-judgment, checked-arith,
+  capability-judgment, constructor-coverage, source-maps, mono-name-collision,
+  diagnostics-quality, scoped-collector, vc-schema). Heavy (rebuild per mutation) →
+  nightly `make test-gate-mutation-coverage`.
+- **#6 pass-output replay hashes** (`check_pass_hashes.sh`): per-stage summary hash
+  manifest + replay commands over the deterministic renderings; determinism +
+  comment/span invariance for position-free stages (core, fingerprints) vs the
+  documented position-bearing shift for ssa/obligations + structural sensitivity.
+- **#7 cache-free incremental shadow** (`check_incremental_shadow.sh`): per-query
+  reuse-key (input + dependency digests) + output digest over an edit corpus, always
+  recomputing; a FALSE REUSE (predicted-reuse whose output changed = a missing
+  dependency edge) is a hard failure — demonstrated by injecting a dropped edge.
+- **#8 capstone** (`check_phase6c_observability.sh`): runs the suite (7/7) and
+  publishes a component census; no caching enabled, no new semantic truth source.
+
 ### Example proofs moved out of the compiler library (2026-07-12)
 
 The 8 flagship/example correctness proofs (`HmacSha256`, `CryptoVerify`,

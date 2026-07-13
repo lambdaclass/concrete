@@ -450,6 +450,9 @@ jobs:
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 
+      - name: "Incremental shadow (Phase 6C #7 — reuse/invalidate prediction + no-false-reuse over an edit corpus)"
+        run: bash scripts/tests/check_incremental_shadow.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
