@@ -1984,6 +1984,77 @@ non-`Copy` values remain owned by linearity/`destroy`.
    agreement.
 
 
+## Phase 6E / 6.e: CLI Coherence And Daily Command Surface
+
+Goal: make the command-line interface obvious before Phase 7 turns Concrete into
+a tool people use for real stdlib and workload development. This phase is not a
+flag-renaming spree. It makes help reliable, groups the existing surfaces, and
+adds clear subcommand aliases while keeping compatibility with the current
+flags/gates.
+
+Done when: `concrete --help`, `concrete help`, and `concrete help <command>`
+work without project context; every public subcommand has a help page; the daily
+commands, report/evidence commands, and debug/internal commands are visibly
+separated; legacy flags still work; and the CLI contract is locked by a gate.
+
+Non-goals: do not remove existing `--report ...`, `--emit-*`, `prove`, `test`,
+`fmt`, or reducer flags in this phase; do not redesign proof/evidence output
+schemas here; do not split `Main.lean` purely for line count unless a command
+change pulls the split.
+
+Context: today `concrete prove --help` has a real discovery surface, but
+`concrete --help` is treated like a filename and `concrete test --help` can fail
+before printing help if run outside a project. That is backwards: help must be
+the most reliable command in the tool.
+
+1. Add top-level help and command discovery.
+   `concrete --help`, `concrete help`, and `concrete help <command>` must work
+   from any directory without parsing a project or input file. The top-level
+   help should group commands by use:
+   - daily: `build`, `run`, `test`, `fmt`
+   - reports/evidence: `report`, `prove`, `why`
+   - debugging: `trace`, `reduce`, `debug-bundle`
+   - internal/compatibility: `--emit-core`, `--emit-ssa`, `--emit-llvm`,
+     existing `--report ...` flags
+
+2. Make every subcommand help context-free.
+   `concrete test --help`, `concrete fmt --help`, `concrete prove --help`,
+   `concrete reduce --help`, and trace/debug help must print usage before any
+   project/file validation. Add a gate that runs each help command from a temp
+   directory with no `Concrete.toml`.
+
+3. Add clear daily aliases without removing old forms.
+   Provide the boring command surface users expect:
+   - `concrete build <file-or-project>` for compilation
+   - `concrete run <file-or-project>` for compile-and-run where supported
+   - `concrete report <kind> <file>` as an alias for existing `--report <kind>`
+   - `concrete trace <file> --json` as the user-facing spelling for Phase 6C
+     trace output, while keeping any existing `trace-pipeline` or telemetry
+     flags as compatibility surfaces
+
+4. Keep compatibility explicit.
+   Existing scripts and gates use `concrete <file> --report ...`,
+   `concrete <file> --emit-*`, `concrete prove ...`, `concrete test`, and
+   `concrete fmt`. These must continue to work. If a legacy spelling is
+   deprecated later, it must first emit a stable warning and have a migration
+   gate; this phase should not break users or tests.
+
+5. Document the command taxonomy.
+   Update README, the guide, and reference docs so a new user sees the daily
+   path first and the evidence/debug surfaces second. The docs should answer:
+   "How do I build/run/test?", "How do I ask what authority this code has?",
+   "How do I inspect pipeline artifacts?", and "How do I reproduce or reduce a
+   failure?"
+
+6. Add the Phase 6E validation artifact.
+   `scripts/tests/check_cli_coherence.sh` should assert help works without
+   context, command aliases match legacy outputs where intended, legacy flags
+   remain accepted, invalid invocations produce structured usage rather than
+   uncaught exceptions, and docs mention every public command group. This gate is
+   the exit criterion before Phase 7 starts relying on the CLI for stdlib
+   workflows.
+
+
 ## Phase 7: Standard Library And Core APIs
 
 Goal: build the small standard library people need before real workloads,
@@ -2005,12 +2076,18 @@ batteries-included breadth. The ranked build order is:
 5. `String`/`Text`/`Bytes` coherence.
 6. Collections phase 2 on the callable-values surface.
 7. `std.test` tests-as-docs and doc-snippet gates.
-8. CLI/env/process helpers for real tools.
+8. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 9. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
 10. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
 11. Broad compression/crypto/networking/threading only after workload demand.
+
+Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
+help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
+the **stdlib** side: APIs that Concrete programs use to parse their own command
+lines (`std.cli`), read process arguments (`std.args`), and build real tools.
+Do not duplicate compiler-command cleanup here.
 
 1. Define the stdlib gap matrix against Gleam, Zig, Rust, Go, Odin, Ada/SPARK,
    Lean, and Roc before expanding APIs. Concrete should not copy any one
@@ -2264,7 +2341,10 @@ batteries-included breadth. The ranked build order is:
     stdlib/package-boundary helpers, not general metaprogramming.
 23. Add command-line parser helpers in proposed `std.cli`: flags, positional
     arguments, usage text, typed parse errors, no ambient environment access
-    except through `std.args`, and examples that keep authority visible.
+    except through `std.args`, and examples that keep authority visible. This is
+    for user programs. The `concrete` compiler's own command taxonomy and help
+    behavior are Phase 6E, and `std.cli` should learn from that surface without
+    coupling to compiler internals.
 24. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
     writers, formatting
     integration, capability requirements, and policy for release builds. Keep
@@ -3167,7 +3247,8 @@ too expensive.
 
     Agent discoverability is part of the feature, not documentation garnish.
     The installed binary must expose a machine-readable feature/command catalog
-    (for example `concrete agent features --json` or `concrete help --json`)
+    (for example `concrete agent features --json` or `concrete help --json`,
+    extending the Phase 6E command catalog rather than inventing a second one)
     that tells LLM tools which proof commands exist, what artifacts they emit,
     what evidence classes mean, which replay command validates a result, and
     which actions are forbidden without policy approval. The same facts should
@@ -5074,8 +5155,9 @@ or cache remains forbidden.
     high-integrity policy requires stronger evidence.
 13a. Add installed-binary feature discovery for agents and editor tooling.
 
-     Deliverable: `concrete help --json` and/or
-     `concrete agent features --json`. The catalog must describe supported
+     Deliverable: extend the Phase 6E `concrete help --json` / command catalog
+     with `concrete agent features --json` only if agent-specific fields need a
+     separate view. The catalog must describe supported
      commands, accepted inputs, emitted artifacts, schema versions, evidence
      classes, replay commands, policy gates, forbidden actions, and examples of
      valid next steps.
