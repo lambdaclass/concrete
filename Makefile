@@ -321,6 +321,9 @@ test-no-quadratic-append: ## Ratchet: no new `xs ++ [x]` (O(n²) per-element app
 test-trace-pipeline: build ## Phase 6C #3: `concrete <file> --trace-pipeline` per-stage JSON trace names the first failing phase (parse/resolve/check/…) for rejected programs; all-ok for accepted
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trace_pipeline.sh
 
+test-counterexample-reduction: build ## Phase 6C #4: pipeline failures reduce to a minimized `.con` fixture + replay command (error/trap/oracle/report predicate paths); reduced fixture still reproduces
+	$(NIX_DEVELOP) bash ./scripts/tests/check_counterexample_reduction.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 

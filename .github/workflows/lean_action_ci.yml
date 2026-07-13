@@ -444,6 +444,9 @@ jobs:
       - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
         run: bash scripts/tests/check_trace_pipeline.sh
 
+      - name: "Counterexample reduction (Phase 6C #4 — failures reduce to a minimized fixture + replay)"
+        run: bash scripts/tests/check_counterexample_reduction.sh
+
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
 
