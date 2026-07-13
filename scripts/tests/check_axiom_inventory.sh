@@ -34,7 +34,11 @@ grep -rho 'proof_by([A-Za-z0-9_.]*)' --include='*.con' examples/ tests/ std/ 2>/
 [ -s "$TMP/names.txt" ] || { echo "error: no proof_by theorem names found" >&2; exit 2; }
 
 {
+  # `import Examples` too: the flagship example proofs live in the separate
+  # `Examples` Lake library (proofs/), not the compiler umbrella — same rule as
+  # the check-proofs / prove --check codegen in Main.lean.
   echo "import Concrete"
+  echo "import Examples"
   while read -r n; do echo "#print axioms $n"; done < "$TMP/names.txt"
 } > "$TMP/AxiomCheck.lean"
 
