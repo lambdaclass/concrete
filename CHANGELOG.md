@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6E — CLI coherence: help never throws, daily aliases, coherence gate (2026-07-14)
+
+Before 6E, `concrete --help` was an UNCAUGHT EXCEPTION (parsed as a filename),
+`concrete help` errored, and `concrete test --help` demanded a project before
+printing anything. Now: help is handled first in main — `--help`/`-h`/`help`/
+`<cmd> --help` print a grouped, context-free page (DAILY build/run/test/fmt;
+REPORTS & EVIDENCE; DEBUGGING trace/reduce/debug-bundle; INTERNALS/COMPAT) from
+any directory. Daily aliases `concrete report <kind> <file>` and `concrete trace
+<file> [--json]` are an args REWRITE to the legacy spellings, so they are
+byte-identical by construction; every legacy flag keeps working.
+`check_cli_coherence.sh` (28/0, CI + make test-cli-coherence) is the Phase 7
+exit criterion: context-free help, alias identity, legacy compat, structured
+errors, taxonomy completeness. README leads with the daily workflow.
+
+
 ### Phase 6D item 3 — postfix `p->field` removed; `.` auto-derefs one layer (2026-07-14)
 
 Three slices, each full-battery green. **A** (`64b75835`): `.field` read/write on

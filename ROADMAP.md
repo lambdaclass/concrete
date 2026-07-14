@@ -2052,12 +2052,16 @@ the most reliable command in the tool.
    failure?"
 
 6. Add the Phase 6E validation artifact.
-   `scripts/tests/check_cli_coherence.sh` should assert help works without
-   context, command aliases match legacy outputs where intended, legacy flags
-   remain accepted, invalid invocations produce structured usage rather than
-   uncaught exceptions, and docs mention every public command group. This gate is
-   the exit criterion before Phase 7 starts relying on the CLI for stdlib
-   workflows.
+   DONE (see CHANGELOG): `scripts/tests/check_cli_coherence.sh` (28/0, in CI +
+   `make test-cli-coherence`) locks context-free help (8 invocations, no project,
+   never throws), alias==legacy byte identity (diff), legacy-flag compatibility,
+   structured errors for invalid invocations, and the help-page taxonomy. Items
+   #1-#5 landed alongside: grouped `concrete --help`/`help`/`<cmd> --help`
+   handled before any file/project parsing; `report <kind> <file>` and
+   `trace <file> [--json]` as args-rewrite aliases (byte-identical by
+   construction); README leads with the daily workflow. Remaining niceties (a
+   per-command `help <command>` page beyond the grouped page, `concrete help
+   --json` command catalog) are pull-gated by Phase 7 agent needs.
 
 
 ## Phase 7: Standard Library And Core APIs
