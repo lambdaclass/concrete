@@ -2301,12 +2301,16 @@ Do not duplicate compiler-command cleanup here.
      item should move ahead of allocator-heavy collection stabilization if the
      validation project needs arenas, test allocators, reload-safe allocation,
      or freestanding pools.
-9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
-   after the collection shape is known: `Iter<T>`-style adapters,
-   `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, REVERSE
-   traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a
-   manual index-decrement loop; extend `docs/ITERATION_PROTOCOL.md` when these
-   land), byte/text builders, and tree/buffer builders inspired by Gleam's
+9. Build internal-iteration and builder APIs in proposed `std.iter` and
+   `std.builder` after the collection shape is known. This is NOT Rust's
+   external-iterator / adapter-tower model: `research/stdlib/iterators.md`
+   resolved the v1 design as per-container internal traversal (`for_each`,
+   `fold`, context-threaded callbacks, and optional early-exit via an explicit
+   `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and
+   no cursor/lifetime model. Add known-length reporting and reverse traversal
+   (`rev_fold`/`rev_for_each` — today every backwards walk is a manual
+   index-decrement loop; extend `docs/ITERATION_PROTOCOL.md` when these land),
+   plus byte/text builders and tree/buffer builders inspired by Gleam's
    `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
 10. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
