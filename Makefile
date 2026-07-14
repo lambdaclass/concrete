@@ -336,6 +336,9 @@ test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow —
 test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
 
+test-stdlib-manifest: build ## P7 2a: five-fact manifest (allocates/ownership/fails/capability/proof-class) complete + signature-agreeing; 2b free-fn duplicate check
+	$(NIX_DEVELOP) bash ./scripts/tests/check_stdlib_manifest.sh
+
 test-doc-snippets: build ## 13r: every ```con/```concrete doc block compiles (--emit-core), rejects as declared (reject:E0xxx), or is marked pseudocode
 	$(NIX_DEVELOP) bash ./scripts/tests/check_doc_snippets.sh
 

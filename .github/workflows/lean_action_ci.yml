@@ -459,6 +459,9 @@ jobs:
       - name: "Doc snippets compile (13r — con/concrete fences compile, reject as declared, or marked pseudocode)"
         run: bash scripts/tests/check_doc_snippets.sh
 
+      - name: "Stdlib five-fact manifest (P7 2a — complete, no blanks, signature-agreeing; 2b method-canonical)"
+        run: bash scripts/tests/check_stdlib_manifest.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 
