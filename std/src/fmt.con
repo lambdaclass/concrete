@@ -1,6 +1,82 @@
 mod fmt {
     import std.alloc.{grow,dealloc};
     import std.string.{int_to_digit};
+    import std.io.{Writer, IoError};
+
+    // ================================================================
+    // Writer-based rendering (Phase 7 item 14b) — the PRIMARY path.
+    //
+    // Built-ins render into a small stack buffer and hand the bytes to the
+    // one Writer contract (14a): no allocation, no capability (authority was
+    // at Writer acquisition). The String-producing helpers below
+    // (format_int/format_uint) are the SECONDARY wrappers and carry
+    // with(Alloc). User types opt in by convention, not trait object:
+    //   pub fn write_to(&self, w: &Writer) -> Result<u64, IoError>
+    // called only where the type is statically known.
+    // ================================================================
+
+    /// Render a signed integer. No Alloc: 20-byte stack buffer.
+    /// (if/else K-shape, not early-return — see docs/bugs/029.)
+    pub trusted fn write_int(w: &Writer, value: i64) -> Result<u64, IoError> {
+        let mut buf: [u8; 20] = [0; 20];
+        let mut i: i64 = 20;
+        if value == 0 {
+            i = 19;
+            buf[19] = 48;
+        } else {
+            let neg: bool = value < 0;
+            let mut v: i64 = value;
+            while v != 0 {
+                let d: i64 = v % 10;
+                let mag: i64 = if d < 0 { 0 - d } else { d };
+                i = i - 1;
+                buf[i] = (48 + mag) as u8;
+                v = v / 10;
+            }
+            if neg {
+                i = i - 1;
+                buf[i] = 45; // '-'
+            }
+        }
+        return w.write_raw((&buf as *const u8 as u64 + i as u64) as *const u8, (20 - i) as u64);
+    }
+
+    /// Render an unsigned integer. No Alloc. (K-shape; docs/bugs/029.)
+    pub trusted fn write_uint(w: &Writer, value: u64) -> Result<u64, IoError> {
+        let mut buf: [u8; 20] = [0; 20];
+        let mut i: u64 = 20;
+        if value == 0 {
+            i = 19;
+            buf[19] = 48;
+        } else {
+            let mut v: u64 = value;
+            while v != 0 {
+                i = i - 1;
+                buf[i] = (48 + (v % 10)) as u8;
+                v = v / 10;
+            }
+        }
+        return w.write_raw((&buf as *const u8 as u64 + i) as *const u8, 20 - i);
+    }
+
+    /// Render `true` / `false`. No Alloc. (K-shape; docs/bugs/029.)
+    pub trusted fn write_bool(w: &Writer, value: bool) -> Result<u64, IoError> {
+        let mut buf: [u8; 5] = [0; 5];
+        let mut n: u64 = 5;
+        if value {
+            buf[0] = 116; buf[1] = 114; buf[2] = 117; buf[3] = 101; // true
+            n = 4;
+        } else {
+            buf[0] = 102; buf[1] = 97; buf[2] = 108; buf[3] = 115; buf[4] = 101; // false
+        }
+        return w.write_raw(&buf as *const u8, n);
+    }
+
+    /// Render a single ASCII char (one byte). No Alloc.
+    pub trusted fn write_char(w: &Writer, value: char) -> Result<u64, IoError> {
+        let b: u8 = value as u8;
+        return w.write_raw(&b as *const u8, 1);
+    }
 
     pub trusted fn format_int(value: i64) with(Alloc) -> String {
         if value == 0 {
@@ -249,6 +325,76 @@ mod fmt {
     }
 
     import std.test.{assert_eq, assert_true};
+    import std.io.{fixed_writer, FixedSinkState};
+    import std.bytes.{Bytes, BytesRaw};
+
+    // 14b exemplar: a user type opting into the write_to convention — statically
+    // dispatched, renders through the same Writer path as the built-ins.
+    struct Copy Point { x: i64, y: i64 }
+    impl Point {
+        pub fn write_to(&self, w: &Writer) -> Result<u64, IoError> {
+            let a: Result<u64, IoError> = write_char(w, '(');
+            let b: Result<u64, IoError> = write_int(w, self.x);
+            let c: Result<u64, IoError> = write_char(w, ',');
+            let d: Result<u64, IoError> = write_int(w, self.y);
+            let e: Result<u64, IoError> = write_char(w, ')');
+            let na: u64 = a.unwrap_or(0); let nb: u64 = b.unwrap_or(0);
+            let nc: u64 = c.unwrap_or(0); let nd: u64 = d.unwrap_or(0);
+            let ne: u64 = e.unwrap_or(0);
+            return Result::<u64, IoError>::Ok { value: na + nb + nc + nd + ne };
+        }
+    }
+
+    trusted fn sink_byte(raw: &BytesRaw, at: u64) -> u8 {
+        return *((raw.ptr as u64 + at) as *const u8);
+    }
+
+    #[test]
+    fn test_fmt_write_int_via_writer() with(Unsafe, Alloc) -> i32 {
+        let region: Bytes = Bytes::with_capacity(32);
+        let raw: BytesRaw = region.raw_view();
+        let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 32, len: 0 };
+        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let r1: Result<u64, IoError> = write_int(&w, -42);
+        let n1: u64 = r1.unwrap_or(0);
+        let r0: Result<u64, IoError> = write_int(&w, 0);
+        let n0: u64 = r0.unwrap_or(0);
+        let rc: Result<u64, IoError> = w.close();
+        let closed: bool = rc.is_ok();
+        let b0: u8 = sink_byte(&raw, 0); let b1: u8 = sink_byte(&raw, 1);
+        let b2: u8 = sink_byte(&raw, 2); let b3: u8 = sink_byte(&raw, 3);
+        region.drop();
+        if n1 != 3 { return 1; }          // "-42"
+        if n0 != 1 { return 1; }          // "0"
+        if !closed { return 1; }
+        if b0 != 45 { return 1; }         // '-'
+        if b1 != 52 { return 1; }         // '4'
+        if b2 != 50 { return 1; }         // '2'
+        if b3 != 48 { return 1; }         // '0'
+        if st.len != 4 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_fmt_write_to_user_struct() with(Unsafe, Alloc) -> i32 {
+        let region: Bytes = Bytes::with_capacity(32);
+        let raw: BytesRaw = region.raw_view();
+        let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 32, len: 0 };
+        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let p: Point = Point { x: 3, y: -7 };
+        let r: Result<u64, IoError> = p.write_to(&w);
+        let n: u64 = r.unwrap_or(0);
+        let rc: Result<u64, IoError> = w.close();
+        let closed: bool = rc.is_ok();
+        let b0: u8 = sink_byte(&raw, 0);   // '('
+        let b5: u8 = sink_byte(&raw, 5);   // '7'? "(3,-7)" -> ( 3 , - 7 )
+        region.drop();
+        if !closed { return 1; }
+        if n != 6 { return 1; }
+        if b0 != 40 { return 1; }
+        if b5 != 41 { return 1; }          // wait: index 5 is ')'
+        return 0;
+    }
 
     #[test]
     fn test_format_int_positive() with(Alloc) -> i32 {

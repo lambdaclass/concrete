@@ -55,6 +55,7 @@ declare -A SKIP_BUGS=(
   [026]="huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)"
   [027]="EmitSSA O(n^2) rendering -- OPEN perf item; no .con regression (codegen perf, not correctness)"
   [028]="reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)"
+  [029]="OPEN divergent-if + while + array addr-of miscompile -- repro inline in the bug file; regression fixture lands with the fix (std.fmt uses the K-shape workaround)"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

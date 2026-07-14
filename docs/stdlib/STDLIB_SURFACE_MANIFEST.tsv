@@ -57,6 +57,10 @@ deque	get	no	borrows	option	none	deterministic
 env	get	yes	constructs	option	Alloc,Unsafe	trusted-boundary
 env	set	no	constructs	infallible	Unsafe	trusted-boundary
 env	unset	no	constructs	infallible	Unsafe	trusted-boundary
+fmt	write_to	no	borrows	result	none	deterministic
+fmt	write_uint	no	constructs	result	none	trusted-boundary
+fmt	write_bool	no	constructs	result	none	trusted-boundary
+fmt	write_char	no	constructs	result	none	trusted-boundary
 fmt	format_int	yes	constructs	infallible	Alloc	trusted-boundary
 fmt	format_uint	yes	constructs	infallible	Alloc	trusted-boundary
 fmt	format_hex	yes	constructs	infallible	Alloc	trusted-boundary
@@ -65,6 +69,7 @@ fmt	format_oct	yes	constructs	infallible	Alloc	trusted-boundary
 fmt	format_bool	yes	constructs	infallible	Alloc	trusted-boundary
 fmt	pad_left	yes	constructs	infallible	Alloc	hosted-effect
 fmt	pad_right	yes	constructs	infallible	Alloc	hosted-effect
+fmt	write_to	no	borrows	result	none	deterministic
 fs	open	yes	constructs	result	Alloc,Unsafe	hosted-effect
 fs	create	yes	constructs	result	Alloc,Unsafe	hosted-effect
 fs	write_bytes	no	borrows	infallible	Unsafe	hosted-effect
