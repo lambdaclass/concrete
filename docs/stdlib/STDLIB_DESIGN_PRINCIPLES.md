@@ -143,7 +143,10 @@ The stdlib has exactly three representations for sequential data, and their boun
 - Bytes-to-String conversion is explicit and may fail (invalid UTF-8).
 - String-to-Bytes conversion is explicit and always succeeds (UTF-8 is valid bytes).
 - There is no implicit conversion between any of these types.
-- Parser/protocol code works with `Bytes` or `[u8; N]`. Display/formatting code works with `String`. The boundary between them is always a function call, never a cast.
+- Parser/protocol code works with `Bytes` or `[u8; N]`. Human-readable text is
+  `String`/`Text`, but formatting emits through the Phase 7 `Writer` contract
+  or an explicit string builder. The boundary between bytes and text is always
+  a function call, never a cast.
 
 **What Go does well**: Go's `[]byte` and `string` are distinct types with explicit conversion. The boundary is one function call: `string(b)` or `[]byte(s)`.
 

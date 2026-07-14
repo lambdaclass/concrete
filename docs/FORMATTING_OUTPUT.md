@@ -1,13 +1,18 @@
 # Formatting and Text-Output Ergonomics
 
-Status: stable reference (Phase 3 item 62 closed)
+Status: historical stable reference plus Phase 7 update (Phase 3 item 62 closed;
+Phase 7 items 14a/14b supersede the sink/rendering direction)
 
 This document defines the direction for formatting and text output in Concrete before the stdlib freeze. It exists to settle the question posed by ROADMAP item 62:
 
 > string-heavy programs such as `policy_engine`, `grep`, and parser error reporters should have explicit, buffer-oriented formatting paths that feel idiomatic enough without depending on interpolation magic, hidden allocation, or ad hoc builtin-shaped helpers.
 
 For encoding rules, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
-For stdlib direction, see [STDLIB.md](stdlib/STDLIB.md).
+For stdlib direction, see [STDLIB.md](stdlib/STDLIB.md). For the current
+roadmap contract, see Phase 7 items 14a/14b in [ROADMAP.md](../ROADMAP.md):
+formatting targets a `Writer`, and user-defined rendering is an explicit
+static `write_to` / `format_into` convention, not a trait-object `Display`
+surface.
 
 ---
 
@@ -21,10 +26,14 @@ For stdlib direction, see [STDLIB.md](stdlib/STDLIB.md).
 - Text output API shape is separate from string-construction API shape — even if the two share primitives underneath.
 
 **Non-goals (deliberately deferred).**
-- Trait-based formatting (`Display`/`Debug` equivalents). Deferred until medium-workload evidence forces it. See section 6.
+- Trait-object or universal formatting (`Display`/`Debug` equivalents).
+  Concrete does not auto-render arbitrary structs. See section 6 for the Phase
+  7 replacement: a static `write_to` / `format_into` convention over `Writer`.
 - Format strings / positional arguments / `{}`-style placeholders.
 - Locale, collation, or Unicode-aware width/padding.
-- Runtime-pluggable writers (`io.Writer`-style traits). A future addition; not required before freeze.
+- Runtime-pluggable writers or trait-object sink dispatch. Phase 7 uses a
+  concrete `std.io.Writer` contract as the primary sink, but calls remain
+  statically known and capability-visible.
 - Floating-point formatting sophistication (rounding modes, precision control beyond what `float_to_string` already provides).
 
 ---
@@ -38,7 +47,12 @@ Already shipped. Desugars at elaboration into typed `print_string` / `print_int`
 
 Accepted argument types: `String`, `&String`, `&mut String`, `Int`/`Uint`/`i8..i32`/`u8..u32`, `bool`, `char`.
 
-Unsupported types currently emit the placeholder `"<unprintable>"`. This is a temporary fallback, not a contract. Future extensions (floats, user types via a small trait) will replace the placeholder, not carry it forward.
+Unsupported types currently emit the placeholder `"<unprintable>"`. This is a
+temporary fallback, not a contract. Phase 7 removes the ambiguity by routing
+formatting through the `Writer` contract: built-ins render directly, and a
+user-defined type renders only if its statically-known type exposes the explicit
+`write_to(&self, w: &mut Writer) -> Result<usize, IoError>` (or `format_into`)
+convention. There is no runtime type dispatch and no universal auto-rendering.
 
 ### 2.2 `append(&mut buf, args...)` — buffer append
 Shipped (2026-04-20). Variadic buffer append. First argument must be a `&mut String`. Subsequent arguments dispatch by type into the existing typed append builtins (`string_append`, `string_append_int`, `string_append_bool`, `string_push_char`). Requires `with(Alloc)`. Reference test: `tests/programs/variadic_append.con`.
@@ -64,7 +78,7 @@ A format-string-based API (`format!("hello {}", name)`) is superficially more er
 
 1. **Hidden allocation.** `format!` allocates a backing buffer whose size depends on runtime values. Concrete requires every allocation to be visible at the call site; a variadic typed-dispatch builtin preserves this by making the buffer argument explicit.
 2. **Parser complexity.** A format-string mini-grammar inside string literals requires either a macro system or a parser extension. Concrete's syntax freeze commits to LL(1) and rejects macros.
-3. **Trait-coupling.** Format strings typically drive a `Display`/`Debug` trait dispatch. Introducing those traits before the stable subset is frozen would couple formatting to the trait system's final shape and risk drift.
+3. **Trait-coupling.** Format strings typically drive a `Display`/`Debug` trait dispatch. Concrete's Phase 7 direction avoids that coupling: the sink is `Writer`, and user-defined rendering is an explicit static method convention, not a trait-object display surface.
 4. **Drift of conventions.** `{}`/`{:?}`/`{:x}` specifiers proliferate, and each one implies a stdlib-wide convention. Deferring lets the convention emerge from evidence (item 67) rather than be imposed up front.
 
 ---
@@ -93,19 +107,53 @@ Rationale: reporters can be composed, buffers can be reused across many errors, 
 
 ---
 
-## 6. Reconsideration Triggers
+## 6. Phase 7 Writer/Rendering Contract
 
-The design in section 2 is the frozen first-release target. It is reconsidered only if post-freeze workload evidence produces any of the following findings:
+Phase 3 shipped the variadic `print`/`println`/`append` surface. Phase 7's
+stdlib-facing contract refines the underlying direction:
 
-- **Dispatch explosion.** A real workload requires appending many user-defined types, and the `append` variadic cannot dispatch them without a trait.
+- `std.io.Writer` is the primary sink for formatting, diagnostics, logs,
+  `std.test` output, file/console output, and progress output.
+- Built-in scalar/text values render through the shared `Writer` path.
+- User-defined values are not auto-rendered. A type may opt in by exposing a
+  statically-known method such as:
+
+```concrete pseudocode
+fn write_to(&self, w: &mut Writer) -> Result<usize, IoError>
+```
+
+  or the equivalent `format_into` spelling chosen by the stdlib.
+- `std.fmt` may dispatch to that convention only when the concrete type is
+  statically known. No trait-object `Display`, no runtime formatter registry,
+  and no reflection-based fallback.
+- String-producing helpers (`to_string`-style) are secondary wrappers over the
+  `Writer` path and carry `with(Alloc)`. Fixed-buffer or caller-provided
+  writers must be usable without `Alloc`.
+- The evidence/report surface names the capability and allocation behavior of a
+  formatting call, especially when the writer targets console, file, or network
+  authority.
+
+The Phase 7 gate should prove one built-in and one user struct render through
+the same `Writer` path, a fixed-buffer writer does not require `Alloc`, and a
+string-producing wrapper does.
+
+## 7. Reconsideration Triggers
+
+The Phase 3 surface in section 2 and the Phase 7 contract in section 6 are
+reconsidered only if workload evidence produces any of the following findings:
+
+- **Dispatch explosion.** A real workload requires appending many user-defined types, and the static `write_to` convention becomes too repetitive without a more general mechanism.
 - **Width/padding pressure.** Aligned tabular output is unavoidable in a workload (e.g., `ls`-style columns) and cannot be built from primitives without excessive verbosity.
 - **Float precision.** A workload needs fine-grained float formatting (e.g., scientific notation, fixed precision) that `float_to_string` cannot deliver.
 
-Any such finding is recorded in [STDLIB.md](stdlib/STDLIB.md) gap ledger and triggers a scoped design revision. The `print`/`println`/`append` triad is the frozen surface and all three are shipped as of 2026-04-20.
+Any such finding is recorded in [STDLIB.md](stdlib/STDLIB.md) gap ledger and
+triggers a scoped design revision. The `print`/`println`/`append` triad is the
+shipped Phase 3 surface; Phase 7's `Writer` path is the stdlib contract that new
+formatting work should target.
 
 ---
 
-## 7. Summary Table
+## 8. Summary Table
 
 | Intent | Call site | Capability | Allocates |
 |---|---|---|---|
