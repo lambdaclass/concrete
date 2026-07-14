@@ -462,6 +462,9 @@ jobs:
       - name: "Stdlib five-fact manifest (P7 2a — complete, no blanks, signature-agreeing; 2b method-canonical)"
         run: bash scripts/tests/check_stdlib_manifest.sh
 
+      - name: "IO Writer spine (P7 14a — fn-ptr handle; acquisition authority; no-Alloc fixed sink; one shape)"
+        run: bash scripts/tests/check_io_writer.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

@@ -40,6 +40,7 @@ bytes	clear	no	mut	infallible	none	pure-core
 bytes	eq	no	borrows	infallible	none	pure-core
 bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect
 bytes	to_string	no	consumes	infallible	none	pure-core
+bytes	raw_view	no	borrows	infallible	none	pure-core
 bytes	into_raw_parts	no	consumes	infallible	none	pure-core
 bytes	drop	yes	consumes	infallible	Alloc	hosted-effect
 deque	new	no	constructs	infallible	none	deterministic
@@ -104,6 +105,14 @@ io	write	no	borrows	infallible	Unsafe	hosted-effect
 io	read_byte	no	borrows	infallible	Unsafe	hosted-effect
 io	flush	no	borrows	infallible	Unsafe	hosted-effect
 io	close	no	consumes	infallible	Unsafe	hosted-effect
+io	write_raw	no	borrows	result	none	deterministic
+io	write	no	borrows	result	none	deterministic
+io	write_str	no	borrows	result	none	deterministic
+io	flush	no	borrows	result	none	deterministic
+io	close	no	consumes	result	none	deterministic
+io	writer_from_file	no	constructs	infallible	File	trusted-boundary
+io	console_writer	no	constructs	infallible	Console	trusted-boundary
+io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary
 io	print	no	constructs	infallible	Console	trusted-boundary
 io	println	no	constructs	infallible	Console	trusted-boundary
 io	eprint	no	constructs	infallible	Console	trusted-boundary

@@ -132,6 +132,13 @@ mod bytes {
         /// over `bytes.ptr` and dropping `bytes` would either double-free (if you
         /// also `free` the pointer) or leak (the H9 linearity check now rejects the
         /// silent forget). The returned struct is `Copy` (it owns nothing itself).
+        /// Borrowing raw view (Copy, owns nothing): the buffer stays owned by
+        /// this `Bytes`; the view must not outlive it. For handing the bytes
+        /// to sinks (`std.io.Writer.write`) without consuming the buffer.
+        pub fn raw_view(&self) -> BytesRaw {
+            return BytesRaw { ptr: self.ptr, len: self.len, cap: self.cap };
+        }
+
         pub fn into_raw_parts(self) -> BytesRaw {
             let Bytes { ptr, len, cap } = self;
             return BytesRaw { ptr: ptr, len: len, cap: cap };

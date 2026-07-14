@@ -336,6 +336,9 @@ test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow —
 test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
 
+test-io-writer: build ## P7 14a: Writer discipline — fixed sink no-Alloc, File/Console/Unsafe at acquisition, cap-free methods, one handle shape, no dyn/enum sinks
+	$(NIX_DEVELOP) bash ./scripts/tests/check_io_writer.sh
+
 test-stdlib-manifest: build ## P7 2a: five-fact manifest (allocates/ownership/fails/capability/proof-class) complete + signature-agreeing; 2b free-fn duplicate check
 	$(NIX_DEVELOP) bash ./scripts/tests/check_stdlib_manifest.sh
 
