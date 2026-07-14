@@ -346,6 +346,7 @@ mod fmt {
 
     import std.test.{assert_eq, assert_true};
     import std.io.{fixed_writer, FixedSinkState};
+    import std.test.{expect_sink};
     import std.bytes.{Bytes, BytesRaw};
 
     // 14b exemplar: a user type opting into the write_to convention — statically
@@ -367,6 +368,28 @@ mod fmt {
 
     trusted fn sink_byte(raw: &BytesRaw, at: u64) -> u8 {
         return *((raw.ptr as u64 + at) as *const u8);
+    }
+
+    #[test]
+    fn test_oracle_render_int() with(Unsafe, Alloc, Console) -> i32 {
+        // The oracle pattern (P7 step 5): render through the ONE Writer
+        // contract, capture the sink, compare bytes to the documented output.
+        let region: Bytes = Bytes::with_capacity(16);
+        let raw: BytesRaw = region.raw_view();
+        let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 16, len: 0 };
+        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let r: Result<u64, IoError> = write_int(&w, -1234567890);
+        let n: u64 = r.unwrap_or(0);
+        let rc: Result<u64, IoError> = w.close();
+        let closed: bool = rc.is_ok();
+        let want: String = "-1234567890";
+        let okk: bool = expect_sink(raw.ptr as *const u8, st.len, &want, "write_int(-1234567890)");
+        want.drop();
+        region.drop();
+        if !closed { return 1; }
+        if n != 11 { return 1; }
+        if !okk { return 1; }
+        return 0;
     }
 
     #[test]

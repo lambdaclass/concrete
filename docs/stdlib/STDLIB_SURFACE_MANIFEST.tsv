@@ -333,6 +333,8 @@ test	assert_gt	no	constructs	infallible	Console	hosted-effect
 test	assert_lt	no	constructs	infallible	Console	hosted-effect
 test	assert_ge	no	constructs	infallible	Console	hosted-effect
 test	assert_le	no	constructs	infallible	Console	hosted-effect
+test	sink_matches	no	constructs	infallible	none	trusted-boundary
+test	expect_sink	no	constructs	infallible	Console	hosted-effect
 test	str_eq	no	constructs	infallible	none	deterministic
 test	assert_str_eq	no	constructs	infallible	Console	hosted-effect
 text	try_new	yes	constructs	option	Alloc	hosted-effect

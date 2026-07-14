@@ -124,6 +124,44 @@ mod test {
         return true;
     }
 
+    // ================================================================
+    // Oracle surface (P7 step 5): tests capture a SINK and compare bytes —
+    // the same Writer contract everything renders through, so "test output"
+    // and "documented output" are one mechanism (executable-docs direction;
+    // cf. check_doc_snippets). Pattern:
+    //     let mut st = ...; let w = fixed_writer(&mut st);
+    //     <render through w>;
+    //     expect_sink(&raw, &st, &"expected") — bytes must match exactly.
+    // ================================================================
+
+    /// Compare captured sink bytes to an expected string, byte-exact.
+    pub trusted fn sink_matches(buf: *const u8, len: u64, expected: &String) -> bool {
+        if len != expected.len { return false; }
+        let mut i: u64 = 0;
+        while i < len {
+            let got: u8 = *((buf as u64 + i) as *const u8);
+            let want: u8 = *((expected.ptr as u64 + i) as *const u8);
+            if got != want { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /// Oracle assertion: captured sink == expected (prints a diff summary on
+    /// mismatch). The core expect-helper for render-and-compare tests.
+    pub fn expect_sink(buf: *const u8, len: u64, expected: &String, message: String) with(Console) -> bool {
+        if sink_matches(buf, len, expected) {
+            message.drop();
+            return true;
+        }
+        let mut m: String = "EXPECT-SINK MISMATCH: ";
+        m.append(&message);
+        println(&m);
+        m.drop();
+        message.drop();
+        return false;
+    }
+
     pub fn str_eq(a: &String, b: &String) -> bool {
         if a.len != b.len {
             return false;
