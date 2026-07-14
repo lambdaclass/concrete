@@ -336,6 +336,9 @@ test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow —
 test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
 
+test-phase6d: build ## Phase 6D #6 capstone: LL(1) + removed-form negatives (fn-bang, value while, postfix ->) + migrated-form behavior + 6B ownership/agreement gates + capability-visible unsafe
+	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6d_surface_simplification.sh
+
 test-trailing-value-blocks: build ## Trailing-value gate: if/match as value-block trailing values (interp==compiled); all-statement forms stay statements
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trailing_value_blocks.sh
 
