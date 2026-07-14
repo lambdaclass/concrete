@@ -610,7 +610,7 @@ refactors make the current checker decisions auditable.
    design-review fixture, not implementation: examples must show that the
    allocator value is explicit, linear/borrow-safe, and never a hidden global.
 
-13t. [OPEN — do alongside Phase 7 error-convention work; doc not yet written] **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
+13t. [PARTIAL — doc + fixture landed 2026-07-14; report/assertion gate still missing] **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
    normative split so stdlib `Result` usage stays consistent and does not drift
    into Zig-style everything-bubbles noise: `Result` for DOMAIN / user /
    environment failures (parse error, file-not-found, connection refused);
@@ -621,10 +621,15 @@ refactors make the current checker decisions auditable.
    behavior, but writing it down is what prevents API-by-API drift.
 
    Deliverable: `docs/ERROR_CONVENTIONS.md` plus stdlib examples for parse
-   failure, file-not-found, OOM/trap, bounds/trap, and ignored `Result`. Done
-   when at least one audit/report fixture shows a public API classified as
-   recoverable, one as fatal/trapping, and one as policy-gated. Feeds the Phase
-   7 std ergonomics work and the #35 error surfaces.
+   failure, file-not-found, OOM/trap, bounds/trap, and ignored `Result`.
+   `docs/ERROR_CONVENTIONS.md` and `examples/error_conventions/src/main.con`
+   now demonstrate the three buckets. Remaining work: add the dedicated gate
+   that asserts the fixture's compile result, caps report, obligations report,
+   telemetry `trap_sites`, and ignored-`Result` negative so the convention is
+   report-visible and cannot drift. Done when at least one audit/report fixture
+   shows a public API classified as recoverable, one as fatal/trapping, and one
+   as policy-gated. Feeds the Phase 7 std ergonomics work and the #35 error
+   surfaces.
 
 13u. **Trap / debug runtime UX — shaped by #35 (2026-07-07).** Runtime traps
    (bounds, overflow, div-by-zero, OOM, checked-cast) currently abort without a
