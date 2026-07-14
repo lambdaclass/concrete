@@ -318,9 +318,11 @@ postfix_expr = primary_expr { postfix_op } ;
 (* After '.': IDENT or INT have distinct first tokens.              *)
 (* After '. IDENT': peek for '::' (turbofish), '(' (call),         *)
 (* or neither (field access).                                       *)
+(* 6D#3: postfix '->' IDENT (member access) was REMOVED — '.' auto-derefs   *)
+(* one permitted layer (references and heap shells). '->' remains only in    *)
+(* fn return types.                                                          *)
 postfix_op = '.' postfix_dot
            | '[' expr ']'
-           | '->' IDENT
            | '?'
            ;
 

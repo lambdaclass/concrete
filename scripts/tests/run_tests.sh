@@ -1409,7 +1409,7 @@ run_ok  "$TESTDIR/match_expr.con" 0
 run_ok  "$TESTDIR/match_expr_linear.con" 0
 run_ok  "$TESTDIR/match_expr_return_arm.con" 0
 run_err "$TESTDIR/error_match_arm_type_mismatch.con" "match arm type"
-run_err "$TESTDIR/error_arrow_not_heap.con" "arrow access"
+run_err "$TESTDIR/error_arrow_not_heap.con" "postfix \`->\` was removed"
 # repr(C) / FFI safety errors
 run_err "$TESTDIR/error_repr_c_generic.con" "cannot have type parameters"
 run_err "$TESTDIR/error_repr_c_string_field.con" "non-FFI-safe field"

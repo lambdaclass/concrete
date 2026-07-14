@@ -738,10 +738,9 @@ partial def parsePostfixNoAs (e : Expr) : ParseM Expr := do
       let index ← parseExpr
       expect .rbracket
       result := .arrayIndex result.getSpan result index
-    else  -- .arrow
-      advance
-      let fieldName ← expectIdent
-      result := .arrowAccess result.getSpan result fieldName
+    else  -- .arrow (6D#3: removed member token)
+      throwParse "postfix `->` was removed — field access auto-derefs: use `.` (p.field)"
+        (hint := some "6D#3: `.` on Heap<T>/&T derefs one layer; `->` exists only in fn return types")
     tk ← peek
   return result
 
@@ -785,10 +784,9 @@ partial def parsePostfix (e : Expr) : ParseM Expr := do
       expect .rbracket
       result := .arrayIndex result.getSpan result index
     else if tk == .arrow then
-      -- Arrow access: expr->field
-      advance
-      let fieldName ← expectIdent
-      result := .arrowAccess result.getSpan result fieldName
+      -- 6D#3: removed member token
+      throwParse "postfix `->` was removed — field access auto-derefs: use `.` (p.field)"
+        (hint := some "6D#3: `.` on Heap<T>/&T derefs one layer; `->` exists only in fn return types")
     else  -- .as_
       advance
       let targetTy ← parseType

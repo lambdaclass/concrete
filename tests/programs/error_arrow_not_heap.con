@@ -1,4 +1,6 @@
-// Tests that Check rejects arrow access on non-heap type
+// 6D#3: postfix `->` is REMOVED grammar — field access is `.` (auto-derefs
+// heap shells and references one layer). The parser rejects `->` in member
+// position with a migration hint.
 struct Copy Point { x: Int, y: Int }
 
 fn main() -> Int {
