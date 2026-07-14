@@ -28,11 +28,14 @@ leaked (acknowledged at `vec.con:106`). LATENT today: every shipped user of
 these containers stores Copy elements, and the H12-checked front end still
 enforces linearity on the values BEFORE they enter the container.
 
-Decision (review 2026-07-14): do NOT rush hidden automatic Drop. The long-term
-design is an EXPLICIT destruction story — `drop_with(f: fn(T))`,
-`clear_with(f)`, `remove_with(f) -> T`-style consume paths, with destruction
-visible in ownership/evidence reports — designed deliberately alongside the
-allocator-as-value and callable-values surfaces it depends on.
+Decision (review 2026-07-14, refined): defer until a non-Copy-collection
+workload pulls it, then fix via AUTOMATIC drop-through (the vec.con:106
+drop-as-trait direction) — destruction stays visible in ownership/evidence
+reports, but the caller does not carry the destructor at every site. A
+`drop_with(f)`-style family is acceptable ONLY as an explicitly-labeled
+temporary bridge if a workload needs non-Copy collections before drop-as-trait
+is ready (a permanent free-function destructor family is the 2b legacy-shape
+anti-pattern).
 
 Gate: `check_collections_copy_only.sh` pins the status quo — the fixture
 demonstrating the leak stays a documented reject/accept pair, and std's

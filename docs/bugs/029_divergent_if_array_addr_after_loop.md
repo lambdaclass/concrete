@@ -53,11 +53,10 @@ Replace the early-return `if` with an `if/else` that assigns and falls
 through; the same loop + array address-of then compiles and runs correctly.
 `std.fmt.write_int`/`write_uint` use this shape.
 
-## Secondary finding
+## Secondary finding — SPLIT OUT to bug 030
 
 The front-end accepted `buf[i] = …` on a NON-`mut` array binding inside a
-`trusted fn` during the same probing (probe D) — mutability enforcement gap,
-tracked here until split out.
+`trusted fn` (probe D) — now tracked as `docs/bugs/030_nonmut_array_write.md`.
 
 ## Root cause (located, 2026-07-14)
 

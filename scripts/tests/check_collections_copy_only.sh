@@ -7,7 +7,8 @@
 # consuming it — the linear checker cannot see through the container); (b) std
 # does not quietly grow a hidden per-element Drop path while the hole is open
 # (the fix must arrive as the visible *_with API family, flipping this gate
-# DELIBERATELY).
+# DELIBERATELY — via drop-as-trait automatic drop-through, or a LABELED
+# temporary *_with bridge; see the H18 entry).
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
