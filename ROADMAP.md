@@ -2246,6 +2246,27 @@ Do not duplicate compiler-command cleanup here.
     `Writer` contract (a gate rejects a second, parallel sink interface) and a
     fixed-buffer `Writer` works with no `Alloc`. This is the Go `io.Writer` /
     Hare `io::handle` lesson: one interface, not three.
+14b. Define the value-rendering / `Display`-equivalent contract over `Writer`.
+    This decides how user-defined values become bytes/text through the item-14a
+    `Writer` surface — not "pretty printing" but the single answer `std.fmt`,
+    `print`, diagnostics, logs, `std.test` output, and API examples all use, so
+    they do not each invent their own. Design:
+    - No automatic universal rendering for every struct, and no
+      trait-object-style `Display`.
+    - A simple convention: a type may expose
+      `write_to(&self, w: &mut Writer) -> Result<usize, IoError>` (or
+      `format_into`). `std.fmt` renders built-ins and calls the convention only
+      where the type is statically known — no runtime type dispatch.
+    - No hidden allocation: rendering targets a `Writer`; string-producing
+      helpers (`to_string`-style) are secondary wrappers over the Writer-based
+      path and carry `with(Alloc)`.
+    - The evidence/report surface shows the capability and allocation behavior of
+      a format call, especially when it writes to console/file/network.
+
+    Done when one built-in and one user struct both render through the same
+    `write_to`/`Writer` path, `std.fmt` dispatches to the convention only for
+    statically-known types, and a gate proves a string-producing formatter
+    carries `with(Alloc)` while a fixed-`Writer` formatter does not.
 15. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
     integer/text formatting, simple
     scanners, structured parse results, error-set reports, and oracle-friendly
