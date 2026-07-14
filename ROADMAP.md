@@ -2080,7 +2080,13 @@ Do not duplicate compiler-command cleanup here.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
-   for fallible returns. ✅ CONDITIONAL COPY landed 2026-07-05: `Option<T>` /
+   for fallible returns.
+   DONE: helpers shipped through P7#1 (is_*/unwrap_or/ok/err/ok_or + Tier-2
+   map/map_err/Option::map + and_then fallible chaining for both types, all
+   tested — stdlib 277/0); ignored-result behavior is E0286/E0294 per
+   docs/ERROR_CONVENTIONS.md; audit facts = the item-2a manifest `fails` column
+   (infallible/option/result derived per signature); test helpers live in
+   std.test. ✅ CONDITIONAL COPY landed 2026-07-05: `Option<T>` /
    `Result<T, E>` / Copy-marked generic structs are Copy iff every substituted
    field/payload is Copy (`isCopyType` evaluates instantiations; Mono demotes
    non-qualifying specializations to linear instead of erroring; `if let` /

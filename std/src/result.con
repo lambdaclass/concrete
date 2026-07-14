@@ -55,6 +55,15 @@ mod result {
             }
         }
 
+        // Fallible chaining: feed the success payload to a fallible step; an
+        // Err short-circuits. The explicit spelling of what `?` does elsewhere.
+        pub fn and_then<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E> {
+            match self {
+                Result::Ok { value } => { return f(value); },
+                Result::Err { error } => { return Result::<U, E>::Err { error: error }; },
+            }
+        }
+
         pub fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
             match self {
                 Result::Ok { value } => { return Result::<T, F>::Ok { value: value }; },
@@ -67,6 +76,28 @@ mod result {
 
     fn tst_double(x: i32) -> i32 { return x * 2; }
     fn tst_neg(e: i32) -> i32 { return 0 - e; }
+
+    fn tst_half(x: i32) -> Result<i32, i32> {
+        if x % 2 == 0 { return Result::<i32, i32>::Ok { value: x / 2 }; }
+        return Result::<i32, i32>::Err { error: x };
+    }
+
+    #[test]
+    fn test_result_and_then() -> i32 {
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 84 };
+        let h: Result<i32, i32> = r.and_then::<i32>(tst_half);
+        let got: i32 = h.unwrap_or(0);
+        if !assert_eq(got, 42, "and_then chains ok -> ok") { return 1; }
+        let odd: Result<i32, i32> = Result::<i32, i32>::Ok { value: 3 };
+        let bad: Result<i32, i32> = odd.and_then::<i32>(tst_half);
+        if !assert_true(bad.is_err(), "and_then surfaces the step error") { ignore_res::<i32, i32>(bad); return 1; }
+        ignore_res::<i32, i32>(bad);
+        let e: Result<i32, i32> = Result::<i32, i32>::Err { error: 9 };
+        let e2: Result<i32, i32> = e.and_then::<i32>(tst_half);
+        if !assert_true(e2.is_err(), "and_then short-circuits Err") { ignore_res::<i32, i32>(e2); return 1; }
+        ignore_res::<i32, i32>(e2);
+        return 0;
+    }
 
     #[test]
     fn test_result_map() -> i32 {

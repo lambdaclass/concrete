@@ -39,6 +39,14 @@ mod option {
             }
         }
 
+        // Fallible chaining: Some feeds the next step; None short-circuits.
+        pub fn and_then<U>(self, f: fn(T) -> Option<U>) -> Option<U> {
+            match self {
+                Option::Some { value } => { return f(value); },
+                Option::None => { return Option::<U>::None; },
+            }
+        }
+
         pub fn unwrap_or(self, default: T) -> T {
             match self {
                 Option::Some { value } => { return value; },
@@ -50,6 +58,24 @@ mod option {
     import std.test.{assert_true, assert_eq, ignore_opt};
 
     fn tst_inc(x: i32) -> i32 { return x + 1; }
+
+    fn tst_nonzero(x: i32) -> Option<i32> {
+        if x == 0 { return Option::<i32>::None; }
+        return Option::<i32>::Some { value: x };
+    }
+
+    #[test]
+    fn test_option_and_then() -> i32 {
+        let o: Option<i32> = Option::<i32>::Some { value: 42 };
+        let m: Option<i32> = o.and_then::<i32>(tst_nonzero);
+        let got: i32 = m.unwrap_or(0);
+        if !assert_eq(got, 42, "and_then chains Some") { return 1; }
+        let z: Option<i32> = Option::<i32>::Some { value: 0 };
+        let n: Option<i32> = z.and_then::<i32>(tst_nonzero);
+        if !assert_true(n.is_none(), "and_then surfaces step None") { ignore_opt::<i32>(n); return 1; }
+        ignore_opt::<i32>(n);
+        return 0;
+    }
 
     #[test]
     fn test_option_map() -> i32 {

@@ -188,6 +188,7 @@ option	is_some	no	borrows	infallible	none	pure-core
 option	is_none	no	borrows	infallible	none	pure-core
 option	ok_or	no	consumes	result	none	pure-core
 option	map	no	consumes	infallible	none	pure-core
+option	and_then	no	consumes	option	none	pure-core
 option	unwrap_or	no	consumes	infallible	none	pure-core
 ordered_map	new	no	constructs	infallible	none	deterministic
 ordered_map	with_value	no	borrows	infallible	C	hosted-effect
@@ -255,6 +256,7 @@ result	unwrap_or	no	consumes	infallible	none	pure-core
 result	ok	no	consumes	option	none	pure-core
 result	err	no	consumes	option	none	pure-core
 result	map	no	consumes	infallible	none	pure-core
+result	and_then	no	consumes	result	none	pure-core
 result	map_err	no	consumes	infallible	none	pure-core
 set	new	no	constructs	infallible	none	deterministic
 set	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect
