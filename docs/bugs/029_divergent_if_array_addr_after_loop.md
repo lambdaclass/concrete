@@ -1,6 +1,14 @@
 # Bug 029: early-return `if` + `while` + post-loop array address-of miscompiles
 
-**Status:** Open (workaround in std.fmt; K-shape below)
+**Status:** Fixed (2026-07-14) — both sites; trust battery green
+**Fixed in:** Lower.lean if-merge (`if.load.`) + loop-exit un-promotion (`unpro.`,
+for & while variants): `.array` types rebind their merge/promotion ALLOCA ADDRESS
+(the arrayLit convention) instead of a by-value load. EmitSSA's store path already
+memcpys address-form aggregates, so the stores were correct all along.
+**Regression tests:** `tests/programs/regress_029_if_merge_array_addr.con` (42) +
+`regress_029_loop_exit_array_addr.con` (7) — one per site.
+**Battery:** ssa-verify-agreement 5/0, differential fuzz 450/0 (depths 3+4),
+golden 54/0, fast 1637/0, examples 131/0, oracle 70/0.
 **Discovered:** 2026-07-14
 **Discovered in:** Phase 7 14b — `std.fmt.write_int` stack-buffer rendering
 **Minimal repro:** below (front-end accepts; `llvm-as` rejects the emitted IR)

@@ -1,0 +1,16 @@
+// Bug 029 site 1 (if-merge): an early-return `if` before a loop that WRITES an
+// array must not rebind the array to a by-value if.load — post-merge address-of
+// and indexing must see the merged array's ADDRESS. Expected: 42 (digits of 42
+// written into buf[2],buf[3] and read back).
+mod m {
+    trusted fn peek(p: *const u8, i: u64) -> u8 { return *((p as u64 + i) as *const u8); }
+    trusted fn f(value: i64) -> u64 {
+        let mut buf: [u8; 4] = [0; 4];
+        if value == 0 { return 0; }
+        let mut v: i64 = value;
+        let mut i: i64 = 4;
+        while v != 0 { i = i - 1; buf[i] = (48 + (v % 10)) as u8; v = v / 10; }
+        return ((peek(&buf as *const u8, 2) - 48) * 10 + (peek(&buf as *const u8, 3) - 48)) as u64;
+    }
+    fn main() -> Int { return f(42) as Int; }
+}

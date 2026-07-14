@@ -1713,9 +1713,19 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
               -- Simpler approach: insert store-before-branch in each block.
               for (v, fromLabel) in incoming do
                 insertStoreBeforeTerm fromLabel v (.reg allocaReg ty)
-              let loadReg ← freshReg "if.load."
-              emit (.load loadReg (.reg allocaReg ty) ty)
-              setVar name (.reg loadReg ty)
+              match ty with
+              | .array _ _ =>
+                -- Bug 029: arrays live at ADDRESSES everywhere (arrayLit returns
+                -- its alloca; addrOfLocal assumes it; EmitSSA stores memcpy
+                -- address-form aggregates). A by-value `if.load.` rebind broke
+                -- that convention — post-merge `&arr` then used a [N x T] VALUE
+                -- where its address should flow (llvm-as reject). Bind the merge
+                -- alloca's ADDRESS instead; the memcpy stores above filled it.
+                setVar name (.reg allocaReg ty)
+              | _ =>
+                let loadReg ← freshReg "if.load."
+                emit (.load loadReg (.reg allocaReg ty) ty)
+                setVar name (.reg loadReg ty)
             else if ty != .unit then
               let phiReg ← freshReg "if.phi."
               emit (.phi phiReg incoming ty)
@@ -1880,10 +1890,17 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       for name in newlyPromotedNames do
         match ← isPromoted name with
         | some (allocaReg, ty) =>
-          let loadDst ← freshReg "unpro."
-          emit (.load loadDst (.reg allocaReg ty) ty)
-          removePromotedAllocas [name]
-          setVar name (.reg loadDst ty)
+          match ty with
+          | .array _ _ =>
+            -- Bug 029 (site 2): arrays keep ADDRESS identity — rebind the
+            -- alloca, never a by-value load (see the if-merge fix).
+            removePromotedAllocas [name]
+            setVar name (.reg allocaReg ty)
+          | _ =>
+            let loadDst ← freshReg "unpro."
+            emit (.load loadDst (.reg allocaReg ty) ty)
+            removePromotedAllocas [name]
+            setVar name (.reg loadDst ty)
         | none => pure ()
     else do
     -- Pop loop to get break/continue edges
@@ -1935,11 +1952,17 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     for name in newlyPromotedNames do
       match ← isPromoted name with
       | some (allocaReg, ty) =>
-        let loadDst ← freshReg "unpro."
-        emit (.load loadDst (.reg allocaReg ty) ty)
-        -- Temporarily remove from promoted so setVar writes to var map
-        removePromotedAllocas [name]
-        setVar name (.reg loadDst ty)
+        match ty with
+        | .array _ _ =>
+          -- Bug 029 (site 2): arrays keep ADDRESS identity — rebind the alloca.
+          removePromotedAllocas [name]
+          setVar name (.reg allocaReg ty)
+        | _ =>
+          let loadDst ← freshReg "unpro."
+          emit (.load loadDst (.reg allocaReg ty) ty)
+          -- Temporarily remove from promoted so setVar writes to var map
+          removePromotedAllocas [name]
+          setVar name (.reg loadDst ty)
       | none => pure ()
 
   | .fieldAssign obj field value =>

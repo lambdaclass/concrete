@@ -6650,6 +6650,8 @@ run_ok "$TESTDIR/regress_unit_payload_enum.con"       7
 run_ok "$TESTDIR/regress_if_expr_match_arm.con"      42
 run_ok "$TESTDIR/regress_if_expr_divergent_branch.con"  8
 run_ok "$TESTDIR/regress_if_expr_unit_slot.con"       5
+run_ok "$TESTDIR/regress_029_if_merge_array_addr.con"  42
+run_ok "$TESTDIR/regress_029_loop_exit_array_addr.con" 7
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42
 run_ok "$TESTDIR/regress_stmt_match_arm_unit.con"      42

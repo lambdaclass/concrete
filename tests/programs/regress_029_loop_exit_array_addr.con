@@ -1,0 +1,14 @@
+// Bug 029 site 2 (loop-exit un-promotion): an UNMODIFIED array promoted around
+// a while loop must be rebound to its alloca ADDRESS at loop exit, not a
+// by-value unpro. load — the post-loop `&buf` needs the address. Expected: 7.
+mod m {
+    trusted fn take(p: *const u8, n: u64) -> u64 { return *p as u64; }
+    trusted fn f(value: i64) -> u64 {
+        let buf: [u8; 4] = [7; 4];
+        if value == 0 { let z: u8 = 48; return take(&z as *const u8, 1); }
+        let mut v: i64 = value;
+        while v != 0 { v = v / 10; }
+        return take(&buf as *const u8, 4);
+    }
+    fn main() -> Int { return f(42) as Int; }
+}
