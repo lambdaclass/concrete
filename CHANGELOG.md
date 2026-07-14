@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Roadmap refactor — active roadmap starts at Phase 7 (2026-07-14)
+
+Collapsed the old pre-Phase-7 roadmap bulk into a compact active index. Detailed
+Phase 1-6 task bodies remain historical record in this changelog and linked audit
+docs; `ROADMAP.md` now keeps only active future work, cross-cutting constraints,
+and pull-gated tails that still affect later phases.
+
+Kept visible in the roadmap because they still matter: 6C V1 telemetry/hash/shadow
+hardening when pulled by workloads; ProofCore partial-def reduction in Phase 14;
+CompilerDB/interned fact store in Phase 8.5; consume-then-break linear restoration
+if a workload needs it; build-output convention; and future usability/tooling
+surfaces such as qualified names, FFI, target-profile roots, lint/vet, doc, bench,
+trace/debug, eval/inspect, and LSP. Fully done Phase 6B/6C/6D/6E details stay here
+in CHANGELOG instead of cluttering the active roadmap.
+
 ### Pre-Phase-7 trio — error conventions, allocator decision, doc-snippet gate (2026-07-14)
 
 13t: `docs/ERROR_CONVENTIONS.md` (normative recoverable/fatal/policy-gated split
