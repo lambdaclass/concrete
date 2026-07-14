@@ -95,7 +95,9 @@ class Chain:
             self.consumed.append(old)
             self.live = new
         else:            # break-with-value (H14): moved out as the loop result
-            self.move_to(lambda o: f"while true {{ break {o}; }} else {{ mk(0) }}")
+            # value `while … else` was removed (6D#2); a value-if preserves the
+            # "consume via control-flow value expression" coverage.
+            self.move_to(lambda o: f"if true {{ {o} }} else {{ {o} }}")
         if self.rng.random() < 0.3:  # Copy noise
             k = self.fresh()
             self.lines.append(f"    let {k}: Int = {self.rng.randrange(100)};")
