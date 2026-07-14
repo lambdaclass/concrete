@@ -771,16 +771,24 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
     let objTy ← checkExpr obj none .place
-    -- Prevent direct field access on Heap<T> — must use ->
-    match objTy with
-    | .heap _ => throwCheck (.heapAccessRequired field (tyToString objTy)) (some e.getSpan)
-    | .heapArray _ => throwCheck (.heapAccessRequired field (tyToString objTy)) (some e.getSpan)
-    | _ => pure ()
-    -- Auto-deref through references
+    -- 6D#3: field access auto-derefs ONE permitted layer — & / &mut, and the
+    -- heap shells Heap<T> / HeapArray<T> / &Heap<T> / &mut Heap<T> (the old
+    -- `->` semantics folded into `.`; heap interiors are not linearity-tracked,
+    -- same as the blessed `->` destructure).
     let innerTy := match objTy with
+      | .heap t => t
+      | .heapArray t => t
+      | .ref (.heap t) => t
+      | .refMut (.heap t) => t
       | .ref t => t
       | .refMut t => t
       | t => t
+    -- Heap-shell access keeps the blessed `->` semantics: heap interiors are
+    -- not linearity-tracked, so `h.next` + `free(h)` (the heap-node
+    -- destructure) stays legal — H11 below is skipped for it.
+    let isHeapShell := match objTy with
+      | .heap _ | .heapArray _ | .ref (.heap _) | .refMut (.heap _) => true
+      | _ => false
     -- Extract struct name and type args for generic type substitution
     let (structName, typeArgs) := match innerTy with
       | .named n => (n, ([] : List Ty))
@@ -818,7 +826,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
           -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
           -- and destructuring the whole owner.
-          if mode != .place && !(← isCopyType fieldTy) then
+          if mode != .place && !isHeapShell && !(← isCopyType fieldTy) then
             throwCheck (.nonCopyProjection (tyToString fieldTy) s!"field '{field}' of '{structName}'") (some e.getSpan)
           return fieldTy
         | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
@@ -1618,8 +1626,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
     | _ => pure ()
     let objTy ← checkExpr obj none .place
-    -- Auto-deref through references
+    -- Auto-deref one layer: references, and (6D#3) the heap shells — the old
+    -- `->` assignment semantics folded into `.`.
     let innerTy := match objTy with
+      | .heap t => t
+      | .heapArray t => t
+      | .ref (.heap t) => t
+      | .refMut (.heap t) => t
       | .ref t => t
       | .refMut t => t
       | t => t

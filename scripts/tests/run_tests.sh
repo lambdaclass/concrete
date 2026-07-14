@@ -1294,7 +1294,7 @@ run_err "$TESTDIR/error_destroy_no_impl.con"     "does not implement Destroy"
 run_err "$TESTDIR/error_destroy_reserved.con"    "is a reserved identifier"
 # Phase 5: Allocator errors
 run_err "$TESTDIR/error_alloc_no_cap.con"       "but caller has"
-run_err "$TESTDIR/error_heap_direct_access.con"  "use '->' for heap access"
+run_ok "$TESTDIR/heap_dot_access.con" 1
 run_err "$TESTDIR/error_heap_leak.con"           "was never consumed"
 run_err "$TESTDIR/error_alloc_reserved.con"      "is a reserved identifier"
 # Phase 6: Borrow region errors

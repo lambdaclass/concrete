@@ -449,6 +449,12 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
 
   | .fieldAccess _ obj field =>
     let cObj ← elabExpr obj
+    -- 6D#3: `.field` on a heap shell derefs first (p.f ≡ (*p).f — the old
+    -- `->` desugar folded into `.`), so downstream sees the plain struct.
+    let cObj := match cObj.ty with
+      | .heap t | .heapArray t => CExpr.deref cObj t
+      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref cObj t
+      | _ => cObj
     let objTy := cObj.ty
     let innerTy := match objTy with
       | .ref t => t | .refMut t => t | t => t
@@ -1208,6 +1214,12 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
 
   | .fieldAssign _ obj field value =>
     let cObj ← elabExpr obj
+    -- 6D#3: `.field =` on a heap shell derefs first (p.f = v ≡ (*p).f = v —
+    -- the old `->` desugar folded into `.`).
+    let cObj := match cObj.ty with
+      | .heap t | .heapArray t => CExpr.deref cObj t
+      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref cObj t
+      | _ => cObj
     -- Pass the field's declared type as the value hint so integer literals
     -- pick the right width. Without this, `c.n = 100` where `n: i32` would
     -- elaborate `100` as `Int` (i64) and codegen would emit `store i64 100`

@@ -1,4 +1,6 @@
-// Error: using . instead of -> on Heap<T>
+// 6D#3: `.field` on Heap<T> auto-derefs one layer (the old `->` semantics
+// folded into `.`). This was the E0255 negative ("use '->'"); it is now the
+// positive. Expected: 1
 struct Point { x: Int, y: Int }
 
 fn main() with(Std) -> Int {
