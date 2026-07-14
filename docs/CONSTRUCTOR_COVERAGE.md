@@ -29,7 +29,7 @@ passes:
 |---|---|---|
 | `methodCall` | `call` (resolved receiver + args) | Resolve/Elab |
 | `staticMethodCall` | `call` | Resolve/Elab |
-| `arrowAccess` (`p->f`) | `deref` + `fieldAccess` | Elab |
+| (removed 6D#3) `p->f` — now `p.f` on heap shells | `deref` + `fieldAccess` | Elab |
 | `paren` | inner expression | Elab |
 
 This is why the two matrices below are checked against different constructor

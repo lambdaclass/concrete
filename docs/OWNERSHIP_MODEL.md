@@ -110,7 +110,7 @@ duplicating one would let it be freed twice. Concretely:
   (`&w.f`, `&mut arr[i]`), read Copy leaves (`w.f.fd`), or destructure the whole
   owner. Projection bases, borrow targets, assignment targets, and auto-borrowed
   receivers are checked *as places*, so `w.f.g`, `arr[i] = v`, and `&self` method
-  calls stay legal. `p->f` heap reads are excluded: `h->next` + `free(h)` is the
+  calls stay legal. Heap-shell reads are excluded: `h.next` + `free(h)` (pre-6D#3: `h->next`) is the
   blessed heap-node destructure (`free` only frees the shell; `Heap<T>` interiors
   are not linearity-tracked).
 - **Struct destructure** `let Wrap { f } = w;` moves the source `w` out and each named

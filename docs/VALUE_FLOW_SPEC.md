@@ -48,7 +48,7 @@ params are borrows (exempt); `&T` params are Copy. See
 | `methodCall` | receiver is a PLACE, auto-borrowed for `&self`/`&mut self`; by-value `self` **moves** an ident receiver and **rejects** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
 | `staticMethodCall` | ident arguments **move**; result owned | conservation |
 | `fnRef` | creates a Copy fn-pointer value | — |
-| `arrowAccess` | heap-interior read — EXCLUDED from the H11 rule by design: `h->next` + `free(h)` is the heap-shell destructure idiom; `Heap<T>` interiors are not linearity-tracked (trusted boundary, disclosed in KNOWN_HOLES H11) | disclosed exclusion |
+| heap-shell `.fieldAccess` (was `arrowAccess`/`->` pre-6D#3) | heap-interior read — EXCLUDED from the H11 rule by design: `h->next` + `free(h)` is the heap-shell destructure idiom; `Heap<T>` interiors are not linearity-tracked (trusted boundary, disclosed in KNOWN_HOLES H11) | disclosed exclusion |
 | `allocCall` | inner call/allocator evaluated; creates an owned `Heap<T>` | discard |
 | `whileExpr` | loop as expression; `break value;` **moves** the value out as the loop result (H14) | conservation (H14 rows) |
 | `ifExpr` | branch values **move**; branches must agree on consumption | conservation |

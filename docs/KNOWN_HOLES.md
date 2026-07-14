@@ -105,7 +105,7 @@ assignment targets, and auto-borrowed method receivers *as places* — so `w.f.g
 (outermost read decides), `w.f.method()` on `&self`/`&mut self`, `arr[i] = v`,
 and `&w.f` all stay legal. A by-value `self` method on a projection
 (`w.f.destroy()`) is rejected; newtype `.0` unwrap on an ident stays a
-whole-owner move. Explicitly **excluded**: `p->f` heap-field reads — `h->next` +
+whole-owner move. Explicitly **excluded**: heap-shell field reads (`h.next`; spelled `h->next` pre-6D#3) — that +
 `free(h)` is the blessed heap-node destructure (free() only frees the shell) and
 `Heap<T>` interiors are not linearity-tracked (that is a separate, disclosed
 design point, not a silent hole). Fallout was 2 std sites (`HashSet.drop`,

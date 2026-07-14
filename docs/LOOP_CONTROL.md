@@ -5,7 +5,7 @@ Status: IMPLEMENTED — ROADMAP Phase 6 #4. Gated by
 Date: 2026-06-21
 
 This documents the loop-control surface Concrete already has: `break`,
-`continue`, labeled loops, and while-as-expression. It is a behavior reference,
+`continue`, labeled loops, and loop results. It is a behavior reference,
 not a proposal — every rule below is locked by the gate.
 
 ## Loop forms
@@ -28,7 +28,14 @@ There is no bare `loop { … }` form; use `while true { … }`.
   `break 'outer;` / `continue 'outer;` target that loop, exiting/continuing all
   inner loops in between. Labels are the only way to act on an outer loop.
 
-## while-as-expression
+## while-as-expression — REMOVED (Phase 6D item 2)
+
+Value `while … else` was removed: `while` is statement-only. The loop-result
+migration is a pre-declared mutable variable assigned before `break;`
+(`tests/programs/loop_break_result_*.con`). The section below documents the
+PRE-6D behavior for historical reference.
+
+## while-as-expression (historical, pre-6D)
 
 A `while` used in value position produces a value:
 

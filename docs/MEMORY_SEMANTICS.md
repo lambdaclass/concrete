@@ -273,7 +273,7 @@ let p: Heap<Point> = alloc(Point { x: 1.0, y: 2.0 }) with(Alloc);
 
 ### Reading through a heap pointer
 
-- `p->field` reads a field without consuming the pointer.
+- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3).
 - `*p` (full dereference) **consumes** the `Heap<T>` — it loads the value from the heap and frees the memory. After `*p`, the heap pointer is in `consumed` state.
 
 ### Freeing
