@@ -2163,6 +2163,23 @@ Do not duplicate compiler-command cleanup here.
     — a row claiming `allocates: no` on a `with(Alloc)` signature fails, the same
     "stale hand-written string disagrees with the compiler fact" negative as
     item 17. Each `_unchecked` variant names a proof obligation, not UB.
+2b. Make method style the canonical public API shape; the free-function legacy is
+    migrated, not extended. The stdlib grew both a method API (`v.get(i)`,
+    `v.len()`, `v.push(x)`) and a free-function legacy (`vec_get`, `vec_len`,
+    `string_push_char(...)`). Post-landing evidence
+    (`research/stdlib/iterators.md`, `docs/stdlib/STDLIB_API_REVIEW.md`) shows the
+    biggest ergonomic win is migrating the free-function surface to methods, and
+    the mixed surface is a live source of naming sprawl. Rule: a method on the
+    receiver type is the canonical shape; a free-function form lands only where
+    there is no receiver (module-level constructors, cross-type helpers). Legacy
+    free-function names are migration targets, not a parallel API to extend.
+
+    Done when `STDLIB_DESIGN_PRINCIPLES.md` records method-canonical as the naming
+    rule and the item-2a manifest gate flags a new public free-function that
+    duplicates a method on its first argument's type (with an allowlist for genuine
+    no-receiver helpers). Migrating the existing legacy names tracks with the
+    single-file→project conversion that currently blocks it (per `iterators.md`),
+    not as a v1 release blocker.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
