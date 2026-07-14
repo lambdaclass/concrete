@@ -415,11 +415,15 @@ Do not duplicate compiler-command cleanup here.
    `insert`, `remove`, `retain`, `sort`, `search` for vectors and slices;
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
-   obligations it creates. Traversal order must be deterministic: `for_each` /
-   `fold` over `std.map`/`std.set` visit in a defined, reproducible order (e.g.
-   insertion or key order, not raw hash-bucket order), and hash seeding must not
-   vary run-to-run — the oracle/differential story needs a fold over a collection
-   to be reproducible.
+   obligations it creates. Traversal must be **deterministic but not ordered**:
+   `for_each`/`fold` over `std.map`/`std.set` need a fixed hasher and no per-run
+   random seed (so the oracle/differential story is stable given the same
+   operations), but the visitation order is deliberately **not** a defined key
+   order — `HashMap`/`HashSet` are permanently unordered (a map is unordered in
+   the proof model, so this costs the evidence story nothing). A defined key
+   order is `OrderedMap`/`OrderedSet`'s job — which additionally must grow
+   `for_each`/`fold` (today only `vec`/`map`/`set` have them). Do not add
+   insertion-order tracking to the hash collections.
    - 8a. Keep `Clone` and indexed move/swap as **workload-gated value-model
      research**, separate from H1 and not assumed inevitable. If admitted,
      `Clone` is explicit semantic duplication (capability-visible, usually
