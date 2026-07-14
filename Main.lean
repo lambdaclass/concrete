@@ -1769,6 +1769,15 @@ def main (args : List String) : IO UInt32 := do
      || args.contains "--help" then
     IO.println helpText
     return 0
+  -- Phase 6E #3: daily command aliases. Normalized to the legacy flag spelling
+  -- UP FRONT, so an alias is byte-identical to the flag form by construction
+  -- (`concrete report caps f.con` == `concrete f.con --report caps`;
+  -- `concrete trace f.con [--json]` == `concrete f.con --trace-pipeline`).
+  -- Legacy spellings keep working untouched (6E #4 compatibility).
+  let args := match args with
+    | "report" :: kind :: file :: rest => file :: "--report" :: kind :: rest
+    | "trace" :: file :: rest => file :: "--trace-pipeline" :: rest.filter (· != "--json")
+    | a => a
   -- `concrete --report compiler-ledger [--json]` — the project-scoped non-proof
   -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
   -- its CompilerLedger (toolchain id filled here, lazily).
