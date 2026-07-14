@@ -26,7 +26,62 @@ cn.clean
      status:  proved_by_kernel_decision (omega)
 
 
+=== Runtime-safety obligations (array bounds) ===
+
+fmt.write_int
+  buf[19]  (array size 20)
+    status: checked: in bounds (constant index)
+  buf[i]  (array size 20)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+  buf[i]  (array size 20)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+
+fmt.write_uint
+  buf[19]  (array size 20)
+    status: checked: in bounds (constant index)
+  buf[i]  (array size 20)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+
+fmt.write_bool
+  buf[0]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[1]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[2]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[3]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[0]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[1]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[2]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[3]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[4]  (array size 5)
+    status: checked: in bounds (constant index)
+
+
 === Runtime-safety obligations (division: non-zero divisor) ===
+
+result.tst_half
+  % divisor 2
+    status: checked: divisor is a nonzero constant
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+
+fmt.write_int
+  % divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+fmt.write_uint
+  % divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
 
 fmt.format_int
   / divisor 10
@@ -37,6 +92,14 @@ fmt.format_int
 fmt.format_uint
   / divisor 10
     status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+parse.parse_uint
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+parse.parse_int
   / divisor 10
     status: checked: divisor is a nonzero constant
 
@@ -52,5 +115,5 @@ sha256.hash_raw
 
 rand.random_range
   / divisor range
-    status: unproven — require the divisor nonzero (#[requires]), or insert a runtime check
+    status: proved_by_kernel_decision (omega) — divisor nonzero, no runtime check needed
 
