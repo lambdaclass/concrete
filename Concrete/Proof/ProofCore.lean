@@ -48,8 +48,6 @@ partial def collectCallsExpr (e : CExpr) : List String :=
   | .arrayIndex arr idx _ => collectCallsExpr arr ++ collectCallsExpr idx
   | .cast inner _ | .try_ inner _ => collectCallsExpr inner
   | .allocCall inner alloc _ => collectCallsExpr inner ++ collectCallsExpr alloc
-  | .whileExpr cond body elseBody _ =>
-    collectCallsExpr cond ++ collectCallsStmts body ++ collectCallsStmts elseBody
   | .ifExpr cond th el _ =>
     collectCallsExpr cond ++ collectCallsStmts th ++ collectCallsStmts el
   | _ => []
@@ -104,8 +102,6 @@ partial def collectDefersExpr (e : CExpr) : List String :=
   | .arrayIndex arr idx _ => collectDefersExpr arr ++ collectDefersExpr idx
   | .cast inner _ | .try_ inner _ => collectDefersExpr inner
   | .allocCall inner alloc _ => collectDefersExpr inner ++ collectDefersExpr alloc
-  | .whileExpr cond body elseBody _ =>
-    collectDefersExpr cond ++ collectDefersStmts body ++ collectDefersStmts elseBody
   | _ => []
 
 partial def collectDefersArm (arm : CMatchArm) : List String :=
@@ -166,8 +162,6 @@ partial def hasRawPtrOpsExpr (e : CExpr) : Bool :=
   | .arrayIndex arr idx _ => hasRawPtrOpsExpr arr || hasRawPtrOpsExpr idx
   | .cast inner _ | .try_ inner _ => hasRawPtrOpsExpr inner
   | .allocCall inner alloc _ => hasRawPtrOpsExpr inner || hasRawPtrOpsExpr alloc
-  | .whileExpr cond body elseBody _ =>
-    hasRawPtrOpsExpr cond || hasRawPtrOpsStmts body || hasRawPtrOpsStmts elseBody
   | _ => false
 
 partial def hasRawPtrOpsArm (arm : CMatchArm) : Bool :=
@@ -419,9 +413,6 @@ inductive LoopBound where
 mutual
 partial def collectLoopBoundsExpr (e : CExpr) : List LoopBound :=
   match e with
-  | .whileExpr cond body elseBody _ =>
-    let thisBound := if isBoundedCond cond then .bounded else .unbounded
-    [thisBound] ++ collectLoopBoundsStmts body ++ collectLoopBoundsStmts elseBody
   | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectLoopBoundsExpr a) []
   | .binOp _ l r _ => collectLoopBoundsExpr l ++ collectLoopBoundsExpr r
   | .unaryOp _ e _ => collectLoopBoundsExpr e
@@ -512,7 +503,6 @@ private partial def fingerprintExpr : CExpr → String
   | .fnRef name _ => s!"(fnref {name})"
   | .try_ inner _ => s!"(try {fingerprintExpr inner})"
   | .allocCall inner alloc _ => s!"(alloc {fingerprintExpr inner} {fingerprintExpr alloc})"
-  | .whileExpr cond body els _ => s!"(while {fingerprintExpr cond} {fingerprintStmts body} {fingerprintStmts els})"
   | .ifExpr cond th el _ => s!"(if {fingerprintExpr cond} {fingerprintStmts th} {fingerprintStmts el})"
 where
   fingerprintExprs (es : List CExpr) : String :=
@@ -1206,7 +1196,6 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .fnRef .. => ["function reference"]
   | .try_ .. => ["try expression"]
   | .allocCall .. => ["alloc call"]
-  | .whileExpr .. => ["while expression"]
   | .unaryOp .. => ["unary operator"]
   | .binOp op lhs rhs ty =>
     -- A float-typed result means float arithmetic — unprovable (no float

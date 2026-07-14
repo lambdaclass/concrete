@@ -43,7 +43,6 @@ inductive CExpr where
   | fnRef (name : String) (ty : Ty)
   | try_ (inner : CExpr) (ty : Ty)
   | allocCall (inner : CExpr) (allocExpr : CExpr) (ty : Ty)
-  | whileExpr (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (ty : Ty)
   | ifExpr (cond : CExpr) (then_ : List CStmt) (else_ : List CStmt) (ty : Ty)
 
 -- `guard` is an optional condition tested after the pattern matches; false falls
@@ -185,7 +184,6 @@ def CExpr.ty : CExpr → Ty
   | .fnRef _ t => t
   | .try_ _ t => t
   | .allocCall _ _ t => t
-  | .whileExpr _ _ _ t => t
   | .ifExpr _ _ _ t => t
 
 -- ============================================================
@@ -275,10 +273,6 @@ partial def ppCExpr (e : CExpr) : String :=
   | .fnRef n _ => n
   | .try_ inner _ => s!"{ppCExpr inner}?"
   | .allocCall inner alloc _ => s!"{ppCExpr inner} with(Alloc = {ppCExpr alloc})"
-  | .whileExpr cond body elseBody _ =>
-    let bodyStr := body.map (ppCStmt 2)
-    let elseStr := if elseBody.isEmpty then "" else s!" else \{\n{"\n".intercalate (elseBody.map (ppCStmt 2))}\n  }"
-    s!"while {ppCExpr cond} \{\n{"\n".intercalate bodyStr}\n  }{elseStr}"
   | .ifExpr cond then_ else_ _ =>
     let thenStr := then_.map (ppCStmt 2)
     let elseStr := else_.map (ppCStmt 2)

@@ -1946,12 +1946,15 @@ non-`Copy` values remain owned by linearity/`destroy`.
    intentionally.
 
 2. Remove value `while ... else`; keep `while` statement-only.
-   Expression-valued `while ... else` is the oddest position-sensitive control
-   form and has historically touched parser, type, lowering, and interpreter
-   behavior. Migrate the small fixture surface to explicit state or a clearer
-   later value-block design. Acceptance gate: no `whileExpr` constructor or
-   parser branch remains unless intentionally retained for compatibility, and
-   prior loop/break/continue/interp-vs-compiled gates stay green.
+   DONE (see CHANGELOG): the parser rejects `while` in expression position with a
+   migration hint; `Expr.whileExpr`/`CExpr.whileExpr` are deleted pipeline-wide
+   (~39 sites, 18 files); fixtures migrated to statement form with identical
+   behavior + removed-syntax negatives; loop/break/interp-vs-compiled/golden
+   gates green. FOLLOW-UP recorded: with break-VALUES gone, the H14 break-value
+   consume exemption has no surface form — consume-then-break on an outer linear
+   is E0207 today (pinned in check_linear_conservation); a sound consume-then-break
+   exemption (one-shot argument, mirroring inFnExitingBranch) is the natural
+   restoration if a workload needs a linear to leave a loop on the break path.
 
 3. Remove postfix member `p->field`; keep function return arrows.
    Function types and declarations still use `-> T`. Only member access through

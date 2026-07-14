@@ -403,7 +403,6 @@ partial def astExprNodes : Expr → Nat
   | .staticMethodCall _ _ _ _ args => 1 + (args.map astExprNodes).foldl (·+·) 0
   | .arrowAccess _ o _ => 1 + astExprNodes o
   | .allocCall _ x a => 1 + astExprNodes x + astExprNodes a
-  | .whileExpr _ c body elseBody => 1 + astExprNodes c + (body.map astStmtNodes).foldl (·+·) 0 + (elseBody.map astStmtNodes).foldl (·+·) 0
   | .ifExpr _ c t el => 1 + astExprNodes c + (t.map astStmtNodes).foldl (·+·) 0 + (el.map astStmtNodes).foldl (·+·) 0
 partial def astArmNodes : MatchArm → Nat
   | .mk _ _ _ _ g body => 1 + (g.map astExprNodes).getD 0 + (body.map astStmtNodes).foldl (·+·) 0
@@ -472,7 +471,6 @@ partial def cExprNT : CExpr → Nat × Nat
   | .cast x _ => let (n,t) := cExprNT x; (1+n, t)
   | .try_ x _ => let (n,t) := cExprNT x; (1+n, t)
   | .allocCall x a _ => let (nx,tx) := cExprNT x; let (na,ta) := cExprNT a; (1+nx+na, tx+ta)
-  | .whileExpr c body elseBody _ => let (nc,tc):=cExprNT c; let (nb,tb):=sumNT (body.map cStmtNT); let (ne,te):=sumNT (elseBody.map cStmtNT); (1+nc+nb+ne, tc+tb+te)
   | .ifExpr c t_ el _ => let (nc,tc):=cExprNT c; let (nt,tt):=sumNT (t_.map cStmtNT); let (ne,te):=sumNT (el.map cStmtNT); (1+nc+nt+ne, tc+tt+te)
 partial def cArmNT : CMatchArm → Nat × Nat
   | .enumArm _ _ _ g body => let (ng,tg):=optNT (g.map cExprNT); let (nb,tb):=sumNT (body.map cStmtNT); (1+ng+nb, tg+tb)

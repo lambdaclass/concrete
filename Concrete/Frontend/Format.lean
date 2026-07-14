@@ -180,12 +180,6 @@ partial def fmtExprAt (ind : Nat) : Expr → String
   | .fnRef _ name => name
   | .arrowAccess _ obj field => s!"{fmtExprAt ind obj}->{field}"
   | .allocCall _ inner allocExpr => s!"{fmtExprAt ind inner} with(Alloc = {fmtExprAt ind allocExpr})"
-  | .whileExpr _ cond body elseBody =>
-    let pfx := indent ind
-    let bodyStr := body.map (fmtStmt (ind + 1))
-    let elseStr := if elseBody.isEmpty then ""
-      else s!" else \{\n{"\n".intercalate (elseBody.map (fmtStmt (ind + 1)))}\n{pfx}}"
-    s!"while {fmtExprAt ind cond} \{\n{"\n".intercalate bodyStr}\n{pfx}}{elseStr}"
   | .ifExpr _ cond then_ else_ =>
     let pfx := indent ind
     let thenStr := then_.map (fmtStmt (ind + 1))
@@ -244,7 +238,7 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
     -- would turn it into a discarded statement (Unit) on reformat (#42). Otherwise,
     -- match/while/if expressions used as statements also omit the `;`.
     let needsSemi := !isValue && (match e with
-      | .match_ .. | .whileExpr .. | .ifExpr .. => false
+      | .match_ .. | .ifExpr .. => false
       | _ => true)
     let semi := if needsSemi then ";" else ""
     s!"{pfx}{fmtExprAt ind e}{semi}"

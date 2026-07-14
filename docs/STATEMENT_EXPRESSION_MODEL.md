@@ -25,6 +25,15 @@ Date: 2026-06-20
 > existing programs' SSA is unchanged). Locked by
 > `scripts/tests/check_trailing_value_blocks.sh`. The braced-block and
 > implicit-return follow-ups above remain out.
+>
+> **Update (Phase 6D item 2)**: value `while … else` is REMOVED — `while` is
+> statement-only, and the `Expr.whileExpr`/`CExpr.whileExpr` constructors are
+> gone pipeline-wide. The historical references to a value-bearing while-else
+> in this document describe the pre-6D state. The migration is a pre-declared
+> mutable result assigned in the body before `break;`
+> (tests/programs/error_while_expr_removed.con pins the parse error + hint;
+> loop_break_result_*.con are the migrated exemplars). `if`-expressions and
+> value `match` are unchanged.
 
 ## Problem
 

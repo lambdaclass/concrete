@@ -596,16 +596,6 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addCCError (.missingCapability "alloc" "Alloc" "")
     ccCheckExpr inner
     ccCheckExpr allocExpr
-  | .whileExpr cond body elseBody _ =>
-    ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
-      addCCError (.whileCondNotBool (toString (repr cond.ty)))
-    let env ← getEnv
-    setEnv { env with inLoop := true }
-    for s in body do ccCheckStmt s
-    for s in elseBody do ccCheckStmt s
-    let env' ← getEnv
-    setEnv { env' with inLoop := env.inLoop }
   | .ifExpr cond then_ else_ _ =>
     ccCheckExpr cond
     if cond.ty != .bool && !isInteger cond.ty then

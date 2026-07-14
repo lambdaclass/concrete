@@ -42,7 +42,7 @@ partial def collectIndexUsesE : Expr → List (String × Expr)
   | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectIndexUsesE fe) ++ (base.map collectIndexUsesE).getD []
   | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectIndexUsesE fe)
   | .allocCall _ x a => collectIndexUsesE x ++ collectIndexUsesE a
-  | .ifExpr _ c t el | .whileExpr _ c t el =>
+  | .ifExpr _ c t el =>
       collectIndexUsesE c ++ t.flatMap collectIndexUsesS ++ el.flatMap collectIndexUsesS
   | .match_ _ s _ => collectIndexUsesE s
   | _ => []
@@ -417,7 +417,7 @@ partial def collectDivisorsE : Expr → List (Bool × Expr)
   | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectDivisorsE fe) ++ (base.map collectDivisorsE).getD []
   | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectDivisorsE fe)
   | .allocCall _ x a => collectDivisorsE x ++ collectDivisorsE a
-  | .ifExpr _ c t el | .whileExpr _ c t el =>
+  | .ifExpr _ c t el =>
       collectDivisorsE c ++ t.flatMap collectDivisorsS ++ el.flatMap collectDivisorsS
   | .match_ _ s _ => collectDivisorsE s
   | _ => []
@@ -561,7 +561,7 @@ partial def collectArithE : Expr → List Expr
   | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectArithE fe) ++ (base.map collectArithE).getD []
   | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectArithE fe)
   | .allocCall _ x a => collectArithE x ++ collectArithE a
-  | .ifExpr _ c t el | .whileExpr _ c t el =>
+  | .ifExpr _ c t el =>
       collectArithE c ++ t.flatMap collectArithS ++ el.flatMap collectArithS
   | .match_ _ s _ => collectArithE s
   | _ => []

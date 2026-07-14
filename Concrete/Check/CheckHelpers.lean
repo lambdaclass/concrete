@@ -453,7 +453,6 @@ partial def stmtDiverges : Stmt → Bool
 partial def exprDiverges : Expr → Bool
   | .paren _ inner => exprDiverges inner
   | .call _ fnName _ _ => resolveIntrinsic fnName == some .abort
-  | .whileExpr _ cond _ _ => isLitTrueExpr cond
   | .match_ _ _ arms => !arms.isEmpty && arms.all armDiverges
   | _ => false
 partial def armDiverges : MatchArm → Bool
@@ -483,7 +482,6 @@ partial def stmtNonTerminating : Stmt → Bool
 partial def exprNonTerminating : Expr → Bool
   | .paren _ inner => exprNonTerminating inner
   | .call _ fnName _ _ => resolveIntrinsic fnName == some .abort
-  | .whileExpr _ cond _ _ => isLitTrueExpr cond
   | .match_ _ _ arms => !arms.isEmpty && arms.all armNonTerminating
   | _ => false
 partial def armNonTerminating : MatchArm → Bool

@@ -134,7 +134,7 @@ mutual
     | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectCallsE fe) ++ (base.map collectCallsE).getD []
     | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectCallsE fe)
     | .allocCall _ x a => collectCallsE x ++ collectCallsE a
-    | .ifExpr _ c t el | .whileExpr _ c t el =>
+    | .ifExpr _ c t el =>
         collectCallsE c ++ t.flatMap collectCallsS ++ el.flatMap collectCallsS
     | .match_ _ s _ => collectCallsE s
     | _ => []
@@ -287,7 +287,7 @@ mutual
     | .arrayLit _ es => es.flatMap localNamesE
     | .arrayIndex _ a i => localNamesE a ++ localNamesE i
     | .allocCall _ e a => localNamesE e ++ localNamesE a
-    | .whileExpr _ c b el | .ifExpr _ c b el => localNamesE c ++ localNamesB b ++ localNamesB el
+    | .ifExpr _ c b el => localNamesE c ++ localNamesB b ++ localNamesB el
     | _ => []
 
   partial def localNamesArm : MatchArm → List String
@@ -325,7 +325,7 @@ mutual
     | .arrayLit _ es => es.flatMap (validateContractExpr allowedVars callables)
     | .arrayIndex _ a i => validateContractExpr allowedVars callables a ++ validateContractExpr allowedVars callables i
     | .allocCall _ e a => validateContractExpr allowedVars callables e ++ validateContractExpr allowedVars callables a
-    | .whileExpr _ c b el | .ifExpr _ c b el =>
+    | .ifExpr _ c b el =>
       validateContractExpr allowedVars callables c ++ b.flatMap (validateContractStmt allowedVars callables) ++ el.flatMap (validateContractStmt allowedVars callables)
     | _ => []
 

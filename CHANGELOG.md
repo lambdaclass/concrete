@@ -10,6 +10,29 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6D item 2 — value `while … else` removed; `while` is statement-only (2026-07-13)
+
+The oddest position-sensitive control form is gone. The parser rejects `while` in
+expression position with a structured migration hint (declare a mutable result,
+assign in the body, `break;`), and the `Expr.whileExpr` / `CExpr.whileExpr`
+constructors are deleted pipeline-wide (~39 handling sites across 18 files —
+parser, formatter, resolve, check, elab, canonicalize, corecheck, mono, lower,
+interp, proof-core, reports, telemetry counters). EBNF + LL(1) checkers stay
+green; `docs/STATEMENT_EXPRESSION_MODEL.md` updated.
+
+Fixture surface migrated to statement-form equivalents with identical behavior
+(`loop_break_result_*`, `loop_result_*`; oracle vector repointed) plus
+removed-syntax negatives pinning the parse error + hint. Design consequence,
+recorded in ROADMAP: break-VALUES went with the form, so the H14 break-value
+consume exemption has no surface expression — consume-then-break on an outer
+linear is E0207 today (pinned by the linear-conservation gate); a sound
+consume-then-break exemption is the natural follow-up if a workload pulls it.
+
+Verified: fast suite 1634/0, examples 130/0, oracle 70/0, golden 54/0,
+differential fuzz 60/0, loop-control/linear-conservation/ownership/
+pipeline-contract/ssa-verify/trailing-value gates green.
+
+
 ### Phase 6C observability — full gate surface landed (V1); #1/#6/#7 have tracked follow-ups (2026-07-13)
 
 All eight Phase 6C items now have working, gated tooling, but three are deliberate

@@ -158,8 +158,6 @@ partial def arithSitesE : CExpr → List ArithSite
   | .arrayIndex arr idx _ => arithSitesE arr ++ arithSitesE idx
   | .try_ inner _ => arithSitesE inner
   | .allocCall inner allocExpr _ => arithSitesE inner ++ arithSitesE allocExpr
-  | .whileExpr cond body elseBody _ =>
-      arithSitesE cond ++ (body.map arithSitesS).flatten ++ (elseBody.map arithSitesS).flatten
   | .ifExpr cond then_ else_ _ =>
       arithSitesE cond ++ (then_.map arithSitesS).flatten ++ (else_.map arithSitesS).flatten
   | _ => []

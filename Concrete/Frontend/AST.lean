@@ -180,7 +180,6 @@ inductive Expr where
   | fnRef (span : Span) (name : String)                      -- function reference: double (as a value of fn pointer type)
   | arrowAccess (span : Span) (obj : Expr) (field : String)   -- p->x
   | allocCall (span : Span) (inner : Expr) (allocExpr : Expr)  -- call() with(Alloc = expr)
-  | whileExpr (span : Span) (cond : Expr) (body : List Stmt) (elseBody : List Stmt)  -- while cond { body } else { elseBody }
   | ifExpr (span : Span) (cond : Expr) (then_ : List Stmt) (else_ : List Stmt)    -- if cond { expr } else { expr }
 
 -- `guard` is an optional `if <cond>` tested after the pattern matches (and its
@@ -238,7 +237,7 @@ def Expr.getSpan : Expr → Span
   | .match_ sp _ _ | .borrow sp _ | .borrowMut sp _ | .deref sp _ | .try_ sp _ => sp
   | .arrayLit sp _ | .arrayIndex sp _ _ | .cast sp _ _ => sp
   | .methodCall sp _ _ _ _ | .staticMethodCall sp _ _ _ _ => sp
-  | .allocCall sp _ _ | .whileExpr sp _ _ _ | .ifExpr sp _ _ _ => sp
+  | .allocCall sp _ _ | .ifExpr sp _ _ _ => sp
 
 def Stmt.getSpan : Stmt → Span
   | .letDecl sp _ _ _ _ _ | .assign sp _ _ | .return_ sp _ | .expr sp _ _ => sp
@@ -572,10 +571,6 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
   | .arrowAccess _ obj _ => collectFreeVarsExpr obj bound
   | .allocCall _ inner allocExpr =>
     collectFreeVarsExpr inner bound ++ collectFreeVarsExpr allocExpr bound
-  | .whileExpr _ cond body elseBody =>
-    collectFreeVarsExpr cond bound ++
-    collectFreeVarsStmts body bound ++
-    collectFreeVarsStmts elseBody bound
   | .ifExpr _ cond then_ else_ =>
     collectFreeVarsExpr cond bound ++
     collectFreeVarsStmts then_ bound ++

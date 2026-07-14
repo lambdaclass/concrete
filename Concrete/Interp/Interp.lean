@@ -715,8 +715,6 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
             return (env, .ret (.enum_ enumName variant fields))
     | _ => .error "interp: try: inner expression did not evaluate to an enum"
   | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
-  | .whileExpr cond body elseBody _ =>
-    evalWhileExpr fns enums env.length env cond body elseBody 10000000
 
 partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
   let (env, f) ← evalExpr fns enums env e

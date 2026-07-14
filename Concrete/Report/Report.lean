@@ -1466,8 +1466,6 @@ private partial def proveExprFeatures : CExpr → List String
   | .borrow e _ | .borrowMut e _ | .deref e _ | .try_ e _ => proveExprFeatures e
   | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (fun (_, e) => proveExprFeatures e)
   | .match_ s arms _ => proveExprFeatures s ++ arms.flatMap proveArmFeatures
-  | .whileExpr c b eb _ =>
-    "loop" :: (proveExprFeatures c ++ b.flatMap proveStmtFeatures ++ eb.flatMap proveStmtFeatures)
   | .ifExpr c t e _ =>
     proveExprFeatures c ++ t.flatMap proveStmtFeatures ++ e.flatMap proveStmtFeatures
   | .allocCall a b _ => proveExprFeatures a ++ proveExprFeatures b

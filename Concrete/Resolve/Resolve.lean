@@ -279,10 +279,6 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .arrowAccess _ obj _ => resolveExpr ctx obj
   | .allocCall _ inner allocExpr =>
     resolveExpr (resolveExpr ctx inner) allocExpr
-  | .whileExpr _ cond body elseBody =>
-    let ctx := resolveExpr ctx cond
-    let ctx := resolveStmts ctx body
-    resolveStmts ctx elseBody
   | .ifExpr _ cond then_ else_ =>
     let ctx := resolveExpr ctx cond
     let ctx := resolveStmts ctx then_

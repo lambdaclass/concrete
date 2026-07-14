@@ -236,41 +236,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     let _allocTy ← checkExpr allocExpr
     -- Check the inner call expression
     checkExpr inner hint
-  | .whileExpr _ cond body elseBody =>
-    -- while-as-expression: while cond { body } else { elseBody }
-    let _condTy ← checkExpr cond
-    -- Save and set up loop context
-    let env ← getEnv
-    let savedLoopDepth := env.loopDepth
-    let savedBreakTy := env.loopBreakTy
-    setEnv { env with loopDepth := env.loopDepth + 1, loopBreakTy := none, inFnExitingBranch := false }
-    -- Check body
-    checkStmts body env.currentRetTy
-    -- Get break type if any
-    let envAfterBody ← getEnv
-    let breakTy := envAfterBody.loopBreakTy
-    -- Restore loop depth and break ty
-    setEnv { envAfterBody with loopDepth := savedLoopDepth, loopBreakTy := savedBreakTy }
-    -- Check else body: all stmts except the last, then check last for its type
-    let elseInit := elseBody.dropLast
-    checkStmts elseInit env.currentRetTy
-    let elseTy ← match elseBody.getLast? with
-      | some (.expr _ e true) => checkExpr e hint
-      | some (.return_ _ v) =>
-        match v with
-        | some rv => let _ ← checkExpr rv; pure Ty.never
-        | none => pure Ty.never
-      | some other =>
-        checkStmt other env.currentRetTy
-        pure Ty.unit
-      | none => pure Ty.unit
-    -- The result type: if break had a value, verify it matches else type
-    match breakTy with
-    | some bTy =>
-      if bTy != elseTy && elseTy != .never && bTy != .never then
-        throwCheck (.whileBreakTypeMismatch (tyToString bTy) (tyToString elseTy)) (some e.getSpan)
-      return elseTy
-    | none => return elseTy
   | .ifExpr _ cond then_ else_ =>
     -- if-as-expression: if cond { then_ } else { else_ }
     let condTy ← checkExpr cond

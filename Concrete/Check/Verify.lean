@@ -111,10 +111,6 @@ partial def collectExprViolations (fnName : String) (pred : Ty → Bool) (label 
     | .match_ scrutinee arms _ =>
       collectExprViolations fnName pred label scrutinee ++
       arms.foldl (fun acc arm => acc ++ collectArmViolations fnName pred label arm) []
-    | .whileExpr cond body elseBody _ =>
-      collectExprViolations fnName pred label cond ++
-      body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++
-      elseBody.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
     | .ifExpr cond then_ else_ _ =>
       collectExprViolations fnName pred label cond ++
       then_.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++

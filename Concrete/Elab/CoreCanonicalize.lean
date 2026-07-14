@@ -95,8 +95,6 @@ partial def canonExpr (structs : List CStructDef) : CExpr → CExpr
   | .try_ inner ty => .try_ (canonExpr structs inner) (canonTy ty)
   | .allocCall inner alloc ty =>
     .allocCall (canonExpr structs inner) (canonExpr structs alloc) (canonTy ty)
-  | .whileExpr cond body elseBody ty =>
-    .whileExpr (canonExpr structs cond) (canonStmts structs body) (canonStmts structs elseBody) (canonTy ty)
   | .ifExpr cond then_ else_ ty =>
     .ifExpr (canonExpr structs cond) (canonStmts structs then_) (canonStmts structs else_) (canonTy ty)
 

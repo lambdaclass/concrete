@@ -399,13 +399,6 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     let cAlloc ← elabExpr allocExpr
     return .allocCall cInner cAlloc cInner.ty
 
-  | .whileExpr _ cond body elseBody =>
-    let cCond ← elabExpr cond
-    let cBody ← elabStmts body
-    let cElse ← elabStmts elseBody
-    -- Result type comes from else body (last expression)
-    let resultTy := match hint with | some t => t | none => .unit
-    return .whileExpr cCond cBody cElse resultTy
 
   | .ifExpr _ cond then_ else_ =>
     let cCond ← elabExpr cond
@@ -1481,9 +1474,6 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
   | .try_ inner ty => .try_ (renameFnExpr rmap inner) ty
   | .allocCall inner alloc ty =>
     .allocCall (renameFnExpr rmap inner) (renameFnExpr rmap alloc) ty
-  | .whileExpr cond body elseBody ty =>
-    .whileExpr (renameFnExpr rmap cond)
-      (renameFnStmts rmap body) (renameFnStmts rmap elseBody) ty
   | .ifExpr cond then_ else_ ty =>
     .ifExpr (renameFnExpr rmap cond)
       (renameFnStmts rmap then_) (renameFnStmts rmap else_) ty
