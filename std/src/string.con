@@ -20,7 +20,7 @@ mod string {
             return value;
         }
 
-        pub fn from_raw(ptr: *mut u8, len: u64, cap: u64) -> String {
+        pub fn from_raw_unchecked(ptr: *mut u8, len: u64, cap: u64) -> String {
             let value: String = String {
                 ptr: ptr,
                 len: len,
@@ -115,7 +115,7 @@ mod string {
         pub fn clone(&self) with(Alloc) -> String {
             let new_ptr: *mut u8 = grow::<u8>(0 as *mut u8, self.len);
             memcpy(new_ptr, self.ptr as *const u8, self.len);
-            return String::from_raw(new_ptr, self.len, self.len);
+            return String::from_raw_unchecked(new_ptr, self.len, self.len);
         }
 
         /// TODO: drop should be a trait, and isn't really called yet automatically.

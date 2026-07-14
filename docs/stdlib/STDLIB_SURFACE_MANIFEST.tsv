@@ -305,7 +305,7 @@ slice	set	no	mut	infallible	none	pure-core
 slice	get_unchecked	no	borrows	infallible	none	pure-core
 slice	get	no	borrows	option	none	pure-core
 string	new	no	constructs	infallible	none	deterministic
-string	from_raw	no	constructs	infallible	none	deterministic
+string	from_raw_unchecked	no	constructs	infallible	none	deterministic
 string	len	no	borrows	infallible	none	deterministic
 string	cap	no	borrows	infallible	none	deterministic
 string	is_empty	no	borrows	infallible	none	deterministic
@@ -349,7 +349,7 @@ text	len	no	borrows	infallible	none	deterministic
 text	is_empty	no	borrows	infallible	none	deterministic
 text	get_unchecked	no	borrows	infallible	none	deterministic
 text	eq	no	borrows	infallible	none	deterministic
-text	from_raw	no	constructs	infallible	none	deterministic
+text	from_raw_unchecked	no	constructs	infallible	none	deterministic
 text	try_from_raw	no	constructs	option	none	deterministic
 text	validate_utf8	no	constructs	infallible	none	trusted-boundary
 time	from_secs	no	constructs	infallible	none	deterministic

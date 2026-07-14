@@ -41,6 +41,18 @@ grep -q "validate_utf8(raw, n)" std/src/args.con \
 grep -q "try_from_raw\|validate_utf8" std/src/text.con \
   && ok "Text keeps a validated entry path" || no "Text validation path missing"
 
+echo "=== unicode policy (P7 5-6, docs/stdlib/UNICODE_POLICY.md) ==="
+# unvalidated constructors of validated types must carry the _unchecked name
+bad=$(grep -nE "pub fn from_raw\(" std/src/text.con std/src/string.con | head -2)
+[ -z "$bad" ] && ok "no unvalidated from_raw on Text/String (only _unchecked names)"   || no "unvalidated validated-type constructor: $bad"
+# ASCII helpers never transform bytes > 127
+grep -qE "is_upper\(ch\)" std/src/ascii.con && grep -qE "is_lower\(ch\)" std/src/ascii.con   && ok "ascii to_lower/to_upper transform only A-Z/a-z (guarded by is_upper/is_lower)"   || no "ascii case helpers lost their ASCII-only guards"
+# no normalization / case-folding / width APIs may appear
+drift=$(grep -rlnE "pub fn (nfc|nfd|nfkc|nfkd|normalize|casefold|case_fold|grapheme|display_width|wcwidth)" std/src/*.con | head -2)
+[ -z "$drift" ] && ok "no normalization/case-folding/display-width APIs (v1 non-goals)"   || no "v1 non-goal API appeared: $drift"
+# the policy doc exists and pins the args long-term note
+grep -q "get_bytes" docs/stdlib/UNICODE_POLICY.md   && ok "policy doc present incl. args.get_bytes long-term note" || no "UNICODE_POLICY.md missing/incomplete"
+
 echo
 echo "BYTES-TEXT-BOUNDARY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

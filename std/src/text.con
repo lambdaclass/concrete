@@ -80,7 +80,7 @@ mod text {
         /// Build a Text view over a raw [ptr, ptr+len) region WITHOUT validation.
         /// Trusted: the caller asserts the region is valid, live UTF-8 for `len`
         /// bytes. Prefer try_from_raw at untrusted boundaries.
-        pub fn from_raw(ptr: *const u8, len: u64) -> Text {
+        pub fn from_raw_unchecked(ptr: *const u8, len: u64) -> Text {
             return Text { ptr: ptr, len: len };
         }
 

@@ -407,7 +407,14 @@ Do not duplicate compiler-command cleanup here.
 4. Build raw-data APIs in `std.bytes` and `std.slice`: `Bytes`, byte slices,
    fixed buffers, parser cursors,
    byte-preserving formatting, and no implicit UTF-8 or lossy conversions.
-5. Build validated text APIs in `std.text`, `std.string`, and `std.ascii`:
+5. (v1 policy DONE: `docs/stdlib/UNICODE_POLICY.md` — String/Text valid UTF-8
+   only, checked or `_unchecked`-named crossings, ASCII helpers explicitly
+   ASCII-only, NO normalization/case-folding/display-width in v1, scalar
+   iteration deferred; gate = the unicode section of
+   `check_bytes_text_boundary.sh`. RECORDED FOLLOW-UP: `std.args.get_bytes` —
+   a raw OS-argument accessor returning `Bytes` for non-UTF-8 argv; `get`
+   returning "" for invalid argv is v1-safe but lossy.)
+   Build validated text APIs in `std.text`, `std.string`, and `std.ascii`:
    `Text`, `String`, UTF-8 validation, slicing/indexing rules, formatting,
    parse helpers, diagnostics, and explicit conversion from/to raw bytes.
    Decide the `std.bytes.Bytes` / `std.text.Text` / `std.string.String` split
