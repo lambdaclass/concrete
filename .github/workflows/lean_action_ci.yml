@@ -471,6 +471,9 @@ jobs:
       - name: "std.test oracle layer (P7 step 5 — silent/cap-free expects, Console-visible asserts, stable messages, no xUnit)"
         run: bash scripts/tests/check_std_test.sh
 
+      - name: "Bytes/Text boundary (P7 #4 — raw bytes vs validated UTF-8; checked or named-unchecked crossings only)"
+        run: bash scripts/tests/check_bytes_text_boundary.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

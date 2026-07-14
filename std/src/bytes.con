@@ -148,6 +148,37 @@ mod bytes {
         /// over `bytes.ptr` and dropping `bytes` would either double-free (if you
         /// also `free` the pointer) or leak (the H9 linearity check now rejects the
         /// silent forget). The returned struct is `Copy` (it owns nothing itself).
+        /// Bounds-checked sub-view: a Copy view of bytes [start, start+len).
+        /// Out-of-range -> None (domain outcome). The view borrows this
+        /// buffer's memory — it must not outlive it.
+        pub fn view(&self, start: u64, vlen: u64) -> Option<BytesRaw> {
+            if start + vlen > self.len {
+                return Option::<BytesRaw>::None;
+            }
+            return Option::<BytesRaw>::Some { value: BytesRaw {
+                ptr: ((self.ptr as u64) + start) as *mut u8,
+                len: vlen,
+                cap: vlen,
+            } };
+        }
+
+        /// Lexicographic byte compare: -1 / 0 / 1. Pure, byte-preserving —
+        /// NO text semantics (collation belongs to validated Text, never here).
+        pub fn cmp(&self, other: &Bytes) -> i32 {
+            let n: u64 = if self.len < other.len { self.len } else { other.len };
+            let mut i: u64 = 0;
+            while i < n {
+                let a: u8 = self.get_unchecked(i);
+                let b: u8 = other.get_unchecked(i);
+                if a < b { return -1; }
+                if a > b { return 1; }
+                i = i + 1;
+            }
+            if self.len < other.len { return -1; }
+            if self.len > other.len { return 1; }
+            return 0;
+        }
+
         /// Borrowing raw view (Copy, owns nothing): the buffer stays owned by
         /// this `Bytes`; the view must not outlive it. For handing the bytes
         /// to sinks (`std.io.Writer.write`) without consuming the buffer.
@@ -166,7 +197,49 @@ mod bytes {
         }
     }
 
-    import std.test.{assert_eq};
+    import std.test.{assert_eq, expect_some, expect_none};
+
+    #[test]
+    fn test_bytes_view_and_cmp() with(Alloc) -> i32 {
+        let mut a: Bytes = Bytes::with_capacity(4);
+        a.push(1); a.push(2); a.push(3); a.push(4);
+        // in-range view
+        let v: Option<BytesRaw> = a.view(1, 2);
+        if !expect_some::<BytesRaw>(&v) { a.drop(); return 1; }
+        // out-of-range view -> None (domain outcome, not a trap)
+        let bad: Option<BytesRaw> = a.view(3, 2);
+        if !expect_none::<BytesRaw>(&bad) { a.drop(); return 1; }
+        // cmp: prefix < longer; equal == 0; byte order decides
+        let mut b: Bytes = Bytes::with_capacity(4);
+        b.push(1); b.push(2); b.push(3);
+        if a.cmp(&b) != 1 { a.drop(); b.drop(); return 1; }
+        if b.cmp(&a) != -1 { a.drop(); b.drop(); return 1; }
+        if a.cmp(&a) != 0 { a.drop(); b.drop(); return 1; }
+        a.drop(); b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bytes_utf8_boundary() with(Alloc) -> i32 {
+        // invalid UTF-8 must NOT become String except through the checked path
+        let mut bad: Bytes = Bytes::with_capacity(2);
+        bad.push(0xFF); bad.push(0xFE);
+        let s: Option<String> = bad.to_string();
+        let was_none: bool = s.is_none();
+        match s {
+            Option::Some { value } => { value.drop(); },
+            Option::None => { },
+        }
+        if !was_none { return 1; }
+        // valid UTF-8 passes the checked conversion
+        let mut good: Bytes = Bytes::with_capacity(2);
+        good.push(104); good.push(105);   // "hi"
+        let s2: Option<String> = good.to_string();
+        match s2 {
+            Option::Some { value } => { value.drop(); return 0; },
+            Option::None => { return 1; },
+        }
+    }
 
     #[test]
     fn test_bytes_push_get() with(Alloc) -> i32 {

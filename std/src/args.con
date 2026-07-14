@@ -1,6 +1,7 @@
 mod args {
     import std.alloc.{grow};
     import std.libc.{strlen,memcpy};
+    import std.text.{validate_utf8};
 
     trusted extern fn __concrete_get_argc() -> i32;
     trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
@@ -12,7 +13,10 @@ mod args {
     }
 
     /// Returns the command-line argument at the given index as a String.
-    /// Index 0 is the program name. Returns "" if the index is out of range.
+    /// Index 0 is the program name. Returns "" if the index is out of range
+    /// OR the argument is not valid UTF-8 (argv is OS bytes — the Bytes/Text
+    /// boundary demands validation before it becomes a String; a raw-bytes
+    /// accessor can come later if a workload needs non-UTF-8 argv).
     pub trusted fn get(idx: Int) with(Env, Alloc) -> String {
         let i: i32 = idx as i32;
         let raw: *const u8 = __concrete_get_argv(i);
@@ -20,6 +24,9 @@ mod args {
             return "";
         }
         let n: u64 = strlen(raw);
+        if !validate_utf8(raw, n) {
+            return "";
+        }
         let buf: *mut u8 = grow::<u8>(0 as *mut u8, n + 1);
         memcpy(buf, raw, n);
         let end: *mut u8 = buf + n;

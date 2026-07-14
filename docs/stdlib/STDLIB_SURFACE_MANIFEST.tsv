@@ -41,6 +41,8 @@ bytes	eq	no	borrows	infallible	none	pure-core
 bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect
 bytes	to_string	yes	consumes	option	Alloc	hosted-effect
 bytes	to_string_unchecked	no	consumes	infallible	none	pure-core
+bytes	view	no	borrows	option	none	pure-core
+bytes	cmp	no	borrows	infallible	none	pure-core
 bytes	raw_view	no	borrows	infallible	none	pure-core
 bytes	into_raw_parts	no	consumes	infallible	none	pure-core
 bytes	drop	yes	consumes	infallible	Alloc	hosted-effect
