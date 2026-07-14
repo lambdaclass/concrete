@@ -43,9 +43,57 @@ mod result {
                 Result::Err { error } => { return Option::<E>::Some { value: error }; },
             }
         }
+
+        // Tier 2 (ERROR_HANDLING_DESIGN Part 2): fn-pointer-in-generic verified
+        // working, so map/map_err ship. The fn value transforms the SUCCESS
+        // payload only; the error passes through untouched (and vice versa) —
+        // per docs/ERROR_CONVENTIONS.md these never change a failure's bucket.
+        pub fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
+            match self {
+                Result::Ok { value } => { return Result::<U, E>::Ok { value: f(value) }; },
+                Result::Err { error } => { return Result::<U, E>::Err { error: error }; },
+            }
+        }
+
+        pub fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
+            match self {
+                Result::Ok { value } => { return Result::<T, F>::Ok { value: value }; },
+                Result::Err { error } => { return Result::<T, F>::Err { error: f(error) }; },
+            }
+        }
     }
 
     import std.test.{assert_true, assert_eq, ignore_res};
+
+    fn tst_double(x: i32) -> i32 { return x * 2; }
+    fn tst_neg(e: i32) -> i32 { return 0 - e; }
+
+    #[test]
+    fn test_result_map() -> i32 {
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 21 };
+        let d: Result<i32, i32> = r.map::<i32>(tst_double);
+        let got: i32 = d.unwrap_or(0);
+        if !assert_eq(got, 42, "map doubles ok payload") { return 1; }
+        let e: Result<i32, i32> = Result::<i32, i32>::Err { error: 7 };
+        let e2: Result<i32, i32> = e.map::<i32>(tst_double);
+        if !assert_true(e2.is_err(), "map passes err through") { ignore_res::<i32, i32>(e2); return 1; }
+        ignore_res::<i32, i32>(e2);
+        return 0;
+    }
+
+    #[test]
+    fn test_result_map_err() -> i32 {
+        let e: Result<i32, i32> = Result::<i32, i32>::Err { error: 7 };
+        let e2: Result<i32, i32> = e.map_err::<i32>(tst_neg);
+        let got: i32 = match e2 { Result::Ok { value } => value, Result::Err { error } => error, };
+        let want: i32 = 0 - 7;
+        if !assert_eq(got, want, "map_err transforms error") { return 1; }
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 5 };
+        let r2: Result<i32, i32> = r.map_err::<i32>(tst_neg);
+        if !assert_true(r2.is_ok(), "map_err passes ok through") { ignore_res::<i32, i32>(r2); return 1; }
+        ignore_res::<i32, i32>(r2);
+        return 0;
+    }
 
     #[test]
     fn test_result_ok() -> i32 {

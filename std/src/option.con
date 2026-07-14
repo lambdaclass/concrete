@@ -31,6 +31,14 @@ mod option {
     // Non-Copy users write the explicit match; consuming variants are Phase 7
     // #3 work.
     impl<T: Copy> Option<T> {
+        // Tier 2: transform the payload; None passes through.
+        pub fn map<U>(self, f: fn(T) -> U) -> Option<U> {
+            match self {
+                Option::Some { value } => { return Option::<U>::Some { value: f(value) }; },
+                Option::None => { return Option::<U>::None; },
+            }
+        }
+
         pub fn unwrap_or(self, default: T) -> T {
             match self {
                 Option::Some { value } => { return value; },
@@ -40,6 +48,21 @@ mod option {
     }
 
     import std.test.{assert_true, assert_eq, ignore_opt};
+
+    fn tst_inc(x: i32) -> i32 { return x + 1; }
+
+    #[test]
+    fn test_option_map() -> i32 {
+        let o: Option<i32> = Option::<i32>::Some { value: 41 };
+        let m: Option<i32> = o.map::<i32>(tst_inc);
+        let got: i32 = m.unwrap_or(0);
+        if !assert_eq(got, 42, "map transforms Some") { return 1; }
+        let n: Option<i32> = Option::<i32>::None;
+        let n2: Option<i32> = n.map::<i32>(tst_inc);
+        if !assert_true(n2.is_none(), "map passes None through") { ignore_opt::<i32>(n2); return 1; }
+        ignore_opt::<i32>(n2);
+        return 0;
+    }
 
     #[test]
     fn test_option_some() -> i32 {
