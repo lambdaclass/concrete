@@ -589,7 +589,7 @@ refactors make the current checker decisions auditable.
    and one explicitly-pseudocode example. Slice-friendly: start with docs/ that
    already contain runnable snippets. HIGHEST-PRIORITY of these four.
 
-13s. [OPEN — REQUIRED BEFORE PHASE 7; research note not yet written] **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
+13s. [DONE 2026-07-14 — research/stdlib/allocator-as-value.md: GO two-tier (authority=with(Alloc), identity=explicit &mut allocator value, monomorphic A: Alloc); Phase 7 pins the Alloc bound before the first *_in API] **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
    (2026-07-07).** `with(Alloc)` is the AUTHORITY ("may allocate"); it does not
    say WHICH allocator owns the memory. Arenas, tests, embedded, hot-reload,
    plugins, and the #35 validation project all want allocator IDENTITY, not
