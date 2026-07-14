@@ -178,7 +178,6 @@ inductive Expr where
   | methodCall (span : Span) (obj : Expr) (method : String) (typeArgs : List Ty) (args : List Expr)
   | staticMethodCall (span : Span) (typeName method : String) (typeArgs : List Ty) (args : List Expr)
   | fnRef (span : Span) (name : String)                      -- function reference: double (as a value of fn pointer type)
-  | arrowAccess (span : Span) (obj : Expr) (field : String)   -- p->x
   | allocCall (span : Span) (inner : Expr) (allocExpr : Expr)  -- call() with(Alloc = expr)
   | ifExpr (span : Span) (cond : Expr) (then_ : List Stmt) (else_ : List Stmt)    -- if cond { expr } else { expr }
 
@@ -221,7 +220,6 @@ inductive Stmt where
   | assert_ (span : Span) (cond : Expr)
   | assume_ (span : Span) (cond : Expr)
   | borrowIn (span : Span) (var : String) (ref : String) (region : String) (isMut : Bool) (body : List Stmt)
-  | arrowAssign (span : Span) (obj : Expr) (field : String) (value : Expr)  -- p->x = val
   -- let...else and irrefutable destructuring let (desugared to match before Elab)
   | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List String) (value : Expr) (elseBody : Option (List Stmt))
   -- struct destructuring let (desugared to field-access lets before Elab)
@@ -233,7 +231,7 @@ def Expr.getSpan : Expr → Span
   | .ident sp _ | .fnRef sp _ => sp
   | .binOp sp _ _ _ | .unaryOp sp _ _ | .paren sp _ => sp
   | .call sp _ _ _ | .structLit sp _ _ _ _ | .enumLit sp _ _ _ _ => sp
-  | .fieldAccess sp _ _ | .arrowAccess sp _ _ => sp
+  | .fieldAccess sp _ _ => sp
   | .match_ sp _ _ | .borrow sp _ | .borrowMut sp _ | .deref sp _ | .try_ sp _ => sp
   | .arrayLit sp _ | .arrayIndex sp _ _ | .cast sp _ _ => sp
   | .methodCall sp _ _ _ _ | .staticMethodCall sp _ _ _ _ => sp
@@ -244,7 +242,7 @@ def Stmt.getSpan : Stmt → Span
   | .ifElse sp _ _ _ | .while_ sp _ _ _ | .forLoop sp _ _ _ _ _ => sp
   | .fieldAssign sp _ _ _ | .derefAssign sp _ _ | .arrayIndexAssign sp _ _ _ => sp
   | .break_ sp _ _ | .continue_ sp _ | .defer sp _ => sp
-  | .borrowIn sp _ _ _ _ _ | .arrowAssign sp _ _ _ => sp
+  | .borrowIn sp _ _ _ _ _ => sp
   | .letDestructure sp _ _ _ _ _ | .letStructDestructure sp _ _ _ => sp
   | .assert_ sp _ | .assume_ sp _ => sp
 
@@ -568,7 +566,6 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
   | .staticMethodCall _ _ _ _ args =>
     args.flatMap (fun a => collectFreeVarsExpr a bound)
   | .fnRef _ _ => []
-  | .arrowAccess _ obj _ => collectFreeVarsExpr obj bound
   | .allocCall _ inner allocExpr =>
     collectFreeVarsExpr inner bound ++ collectFreeVarsExpr allocExpr bound
   | .ifExpr _ cond then_ else_ =>
@@ -619,8 +616,6 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
       | .defer _ body => (collectFreeVarsExpr body bound, bound)
       | .borrowIn _ var _ref _region _isMut body =>
         (collectFreeVarsExpr (.ident default var) bound ++ collectFreeVarsStmts body bound, bound)
-      | .arrowAssign _ obj _ value =>
-        (collectFreeVarsExpr obj bound ++ collectFreeVarsExpr value bound, bound)
       | .letDestructure _ _ _ bindings value elseBody =>
         let valueFree := collectFreeVarsExpr value bound
         let elseFree := match elseBody with

@@ -178,7 +178,6 @@ partial def fmtExprAt (ind : Nat) : Expr → String
     let targsStr := if typeArgs.isEmpty then "" else s!"::<{", ".intercalate (typeArgs.map fmtTy)}>"
     s!"{typeName}{targsStr}::{method}({", ".intercalate (args.map (fmtExprAt ind))})"
   | .fnRef _ name => name
-  | .arrowAccess _ obj field => s!"{fmtExprAt ind obj}->{field}"
   | .allocCall _ inner allocExpr => s!"{fmtExprAt ind inner} with(Alloc = {fmtExprAt ind allocExpr})"
   | .ifExpr _ cond then_ else_ =>
     let pfx := indent ind
@@ -284,7 +283,6 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
   | .borrowIn _ var ref region isMut body =>
     let mutStr := if isMut then "mut " else ""
     s!"{pfx}borrow {mutStr}{var} as {ref} in {region} \{\n{"\n".intercalate (body.map (fmtStmt (ind + 1)))}\n{pfx}}"
-  | .arrowAssign _ obj field value => s!"{pfx}{fmtExprAt ind obj}->{field} = {fmtExprAt ind value};"
   | .letDestructure _ enumName variant bindings value elseBody =>
     let bs := ", ".intercalate bindings
     let elseStr := match elseBody with

@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6D item 3 — postfix `p->field` removed; `.` auto-derefs one layer (2026-07-14)
+
+Three slices, each full-battery green. **A** (`64b75835`): `.field` read/write on
+Heap<T>/HeapArray<T>/&Heap<T>/&mut Heap<T> auto-derefs with exactly the old `->`
+semantics — including skipping the H11 non-Copy projection rule for heap-shell
+access, so the blessed `h.next` + `free(h)` heap-node destructure carries over;
+proven by an arrow-vs-dot parity sweep over the real heap corpus (positives AND
+negatives). **B** (`cdd7709a`): 24 fixtures migrated mechanically. **C**
+(`a56d6882` + constructor removal): the member token is rejected with a migration
+hint, `Expr.arrowAccess`/`Stmt.arrowAssign` and the arrow*/E0255 diagnostics are
+deleted (~30 sites; Lower/Interp/Mono never saw arrows — Elab desugared them),
+EBNF postfix_op drops the arrow (LL(1) green). Function return `-> T` is
+unchanged. Unsafe/raw access remains visible through capabilities (raw deref
+still requires Unsafe, E0521) and trust reports — not a second member token.
+
+
 ### Phase 6D item 2 — value `while … else` removed; `while` is statement-only (2026-07-13)
 
 The oddest position-sensitive control form is gone. The parser rejects `while` in

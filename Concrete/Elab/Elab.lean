@@ -53,7 +53,6 @@ inductive ElabError where
   | ghostInRuntime (name : String)
   -- Struct/field
   | unknownStructType (name : String)
-  | arrowAccessUnknownStruct (name : String)
   | structHasNoField (structName : String) (fieldName : String)
   | fieldAccessNonStruct
   -- Enum/variant
@@ -80,7 +79,6 @@ def ElabError.message : ElabError → String
   | .borrowUndeclaredVariable name => s!"borrow: undeclared variable '{name}'"
   | .ghostInRuntime name => s!"ghost value '{name}' cannot be used in runtime code"
   | .unknownStructType name => s!"unknown struct type '{name}'"
-  | .arrowAccessUnknownStruct name => s!"arrow access on unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .fieldAccessNonStruct => "field access on non-struct type"
   | .unknownEnumType name => s!"unknown enum type '{name}'"
@@ -110,7 +108,6 @@ def ElabError.code : ElabError → String
   | .borrowUndeclaredVariable _ => "E0405"
   | .ghostInRuntime _ => "E0420"
   | .unknownStructType _ => "E0406"
-  | .arrowAccessUnknownStruct _ => "E0407"
   | .structHasNoField _ _ => "E0408"
   | .fieldAccessNonStruct => "E0409"
   | .unknownEnumType _ => "E0410"
@@ -370,29 +367,6 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
       | _ => cOp.ty
     return .unaryOp op cOp resultTy
 
-  | .arrowAccess _ obj field =>
-    -- Desugar: p->field → (*p).field
-    let cObj ← elabExpr obj
-    let objTy := cObj.ty
-    let innerTy := match objTy with
-      | .heap t => t | .heapArray t => t
-      | .ref (.heap t) => t | .refMut (.heap t) => t
-      | _ => .placeholder
-    let derefTy := innerTy
-    let cDeref := CExpr.deref cObj derefTy
-    let structName := match innerTy with
-      | .named n => n | .generic n _ => n | _ => ""
-    match ← lookupStruct structName with
-    | some sd =>
-      let typeArgs := match innerTy with | .generic _ args => args | _ => []
-      let mapping := sd.typeParams.zip typeArgs
-      match sd.fields.find? fun f => f.name == field with
-      | some f =>
-        let fieldTy := substTy mapping f.ty
-        let fieldTy ← resolveTypeE fieldTy
-        return .fieldAccess cDeref field fieldTy
-      | none => throwElab (.structHasNoField structName field) (some e.getSpan)
-    | none => throwElab (.arrowAccessUnknownStruct structName) (some e.getSpan)
 
   | .allocCall _ inner allocExpr =>
     let cInner ← elabExpr inner hint
@@ -1282,36 +1256,6 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
     let cBody ← elabStmts body
     return [.borrowIn var ref region isMut refTy cBody]
 
-  | .arrowAssign _ obj field value =>
-    -- Desugar: p->field = val → (*p).field = val
-    let cObj ← elabExpr obj
-    let objTy := cObj.ty
-    let innerTy := match objTy with
-      | .heap t => t | .heapArray t => t
-      | .ref (.heap t) => t | .refMut (.heap t) => t
-      | _ => .placeholder
-    let cDeref := CExpr.deref cObj innerTy
-    -- Pass the field's declared type as the value hint so integer literals
-    -- pick the right width (mirrors the direct .fieldAssign path above).
-    -- Without this, `p->n = 100` with `n: i32` elaborates `100` as Int (i64)
-    -- and codegen emits `store i64 100` to a 4-byte field, clobbering the
-    -- adjacent field at -O2.
-    let (sName, tArgs) := match innerTy with
-      | .named n => (n, ([] : List Ty))
-      | .generic n a => (n, a)
-      | _ => ("", [])
-    let env ← getEnv
-    let fieldTy : Option Ty :=
-      match env.structs.find? fun s => s.name == sName with
-      | some sd =>
-        match sd.fields.find? fun f => f.name == field with
-        | some f =>
-          let mapping := sd.typeParams.zip tArgs
-          some (substTy mapping f.ty)
-        | none => none
-      | none => none
-    let cVal ← elabExpr value fieldTy
-    return [.fieldAssign cDeref field cVal]
 
   -- These are desugared by desugarStmts before elabStmt is called.
   -- Catch-all for exhaustiveness — should never fire.

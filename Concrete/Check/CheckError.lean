@@ -146,11 +146,6 @@ inductive CheckError where
   | missingFieldInLiteral (fieldName : String) (containerDesc : String)
   | unknownFieldInLiteral (fieldName : String) (containerDesc : String)
   | fieldAccessNonStruct
-  | heapAccessRequired (field : String) (ty : String)
-  | arrowAccessNotHeap (ty : String)
-  | arrowAccessNonStruct
-  | arrowAssignNotHeap (ty : String)
-  | arrowAssignNonStruct
   | unknownVariant (variant : String) (enumName : String)
   | unknownEnumType (name : String)
   | wrongArgCount (calleeDesc : String) (expected : Nat) (actual : Nat)
@@ -286,11 +281,6 @@ def CheckError.message : CheckError → String
   | .missingFieldInLiteral fieldName containerDesc => s!"missing field '{fieldName}' in {containerDesc}"
   | .unknownFieldInLiteral fieldName containerDesc => s!"unknown field '{fieldName}' in {containerDesc}"
   | .fieldAccessNonStruct => "field access on non-struct type"
-  | .heapAccessRequired field ty => s!"cannot access field '{field}' on {ty} with '.'; use '->' for heap access"
-  | .arrowAccessNotHeap ty => s!"arrow access '->' requires Heap<T> or HeapArray<T> type, got {ty}"
-  | .arrowAccessNonStruct => "arrow access '->' on non-struct inner type"
-  | .arrowAssignNotHeap ty => s!"arrow assign '->' requires Heap<T> type, got {ty}"
-  | .arrowAssignNonStruct => "arrow assign on non-struct inner type"
   | .unknownVariant variant enumName => s!"unknown variant '{variant}' in enum '{enumName}'"
   | .unknownEnumType name => s!"unknown enum type '{name}'"
   | .wrongArgCount calleeDesc expected actual => s!"{calleeDesc} expects {expected} arguments, got {actual}"
@@ -341,7 +331,6 @@ def CheckError.hint : CheckError → Option String
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
   | .cannotConsumeLinearInLoop _ => some "move the declaration inside the loop or clone before the loop"
-  | .arrowAccessNotHeap _ => some "use '.' for direct field access"
   | .destroyRequiresNamed _ => some "only struct and enum types can be destroyed"
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
@@ -427,11 +416,6 @@ def CheckError.code : CheckError → String
   | .missingFieldInLiteral _ _ => "E0252"
   | .unknownFieldInLiteral _ _ => "E0253"
   | .fieldAccessNonStruct => "E0254"
-  | .heapAccessRequired _ _ => "E0255"
-  | .arrowAccessNotHeap _ => "E0256"
-  | .arrowAccessNonStruct => "E0257"
-  | .arrowAssignNotHeap _ => "E0258"
-  | .arrowAssignNonStruct => "E0259"
   | .unknownVariant _ _ => "E0260"
   | .unknownEnumType _ => "E0261"
   | .wrongArgCount _ _ _ => "E0262"

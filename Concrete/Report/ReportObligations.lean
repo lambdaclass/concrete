@@ -34,7 +34,7 @@ partial def collectIndexUsesE : Expr → List (String × Expr)
   | .arrayIndex _ a idx => collectIndexUsesE a ++ collectIndexUsesE idx
   | .binOp _ _ l r => collectIndexUsesE l ++ collectIndexUsesE r
   | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
-  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectIndexUsesE x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ => collectIndexUsesE x
   | .arrayLit _ es => es.flatMap collectIndexUsesE
   | .call _ _ _ args => args.flatMap collectIndexUsesE
   | .methodCall _ o _ _ args => collectIndexUsesE o ++ args.flatMap collectIndexUsesE
@@ -54,7 +54,7 @@ partial def collectIndexUsesS : Stmt → List (String × Expr)
   | .forLoop _ init c step b _ =>
       (init.map collectIndexUsesS).getD [] ++ collectIndexUsesE c
         ++ (step.map collectIndexUsesS).getD [] ++ b.flatMap collectIndexUsesS
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectIndexUsesE o ++ collectIndexUsesE v
+  | .fieldAssign _ o _ v | .derefAssign _ o v => collectIndexUsesE o ++ collectIndexUsesE v
   | .arrayIndexAssign _ (.ident _ arr) idx v => (arr, idx) :: (collectIndexUsesE idx ++ collectIndexUsesE v)
   | .arrayIndexAssign _ a i v => collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v
   | _ => []
@@ -159,7 +159,7 @@ def boundsLeaf (scope : List Expr) : Stmt → List (String × Expr × List Expr)
   | .ifElse _ c _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
   | .while_ _ c _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
   | .forLoop _ _ c _ _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+  | .fieldAssign _ o _ v | .derefAssign _ o v =>
       (collectIndexUsesE o ++ collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .arrayIndexAssign _ (.ident _ arr) idx v =>
       (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map fun (a, i) => (a, i, scope)
@@ -188,7 +188,7 @@ def callLeaf (scope : List Expr) : Stmt → List (String × List Expr × List Ex
   | .ifElse _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
   | .while_ _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
   | .forLoop _ _ c _ _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+  | .fieldAssign _ o _ v | .derefAssign _ o v =>
       (collectCallsE o ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
   | .arrayIndexAssign _ a i v =>
       (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
@@ -408,7 +408,7 @@ partial def collectDivisorsE : Expr → List (Bool × Expr)
   | .binOp _ .mod l r => (true, r) :: (collectDivisorsE l ++ collectDivisorsE r)
   | .binOp _ _ l r => collectDivisorsE l ++ collectDivisorsE r
   | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
-  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectDivisorsE x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ => collectDivisorsE x
   | .arrayLit _ es => es.flatMap collectDivisorsE
   | .arrayIndex _ a i => collectDivisorsE a ++ collectDivisorsE i
   | .call _ _ _ args => args.flatMap collectDivisorsE
@@ -429,7 +429,7 @@ partial def collectDivisorsS : Stmt → List (Bool × Expr)
   | .forLoop _ init c step b _ =>
       (init.map collectDivisorsS).getD [] ++ collectDivisorsE c
         ++ (step.map collectDivisorsS).getD [] ++ b.flatMap collectDivisorsS
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectDivisorsE o ++ collectDivisorsE v
+  | .fieldAssign _ o _ v | .derefAssign _ o v => collectDivisorsE o ++ collectDivisorsE v
   | .arrayIndexAssign _ a i v => collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v
   | _ => []
 end
@@ -445,7 +445,7 @@ def divLeaf (scope : List Expr) : Stmt → List (Bool × Expr × List Expr)
   | .ifElse _ c _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
   | .while_ _ c _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
   | .forLoop _ _ c _ _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+  | .fieldAssign _ o _ v | .derefAssign _ o v =>
       (collectDivisorsE o ++ collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | .arrayIndexAssign _ a i v =>
       (collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v).map fun (m, e) => (m, e, scope)
@@ -552,7 +552,7 @@ partial def collectArithE : Expr → List Expr
     let here := match op with | .add | .sub | .mul => [e] | _ => []
     here ++ collectArithE l ++ collectArithE r
   | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
-  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectArithE x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ => collectArithE x
   | .arrayLit _ es => es.flatMap collectArithE
   | .arrayIndex _ a i => collectArithE a ++ collectArithE i
   | .call _ _ _ args => args.flatMap collectArithE
@@ -573,7 +573,7 @@ partial def collectArithS : Stmt → List Expr
   | .forLoop _ init c step b _ =>
       (init.map collectArithS).getD [] ++ collectArithE c
         ++ (step.map collectArithS).getD [] ++ b.flatMap collectArithS
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectArithE o ++ collectArithE v
+  | .fieldAssign _ o _ v | .derefAssign _ o v => collectArithE o ++ collectArithE v
   | .arrayIndexAssign _ a i v => collectArithE a ++ collectArithE i ++ collectArithE v
   | _ => []
 end
@@ -588,7 +588,7 @@ def arithLeaf (scope : List Expr) : Stmt → List (Expr × List Expr)
   | .ifElse _ c _ _ => (collectArithE c).map fun e => (e, scope)
   | .while_ _ c _ _ => (collectArithE c).map fun e => (e, scope)
   | .forLoop _ _ c _ _ _ => (collectArithE c).map fun e => (e, scope)
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+  | .fieldAssign _ o _ v | .derefAssign _ o v =>
       (collectArithE o ++ collectArithE v).map fun e => (e, scope)
   | .arrayIndexAssign _ a i v =>
       (collectArithE a ++ collectArithE i ++ collectArithE v).map fun e => (e, scope)

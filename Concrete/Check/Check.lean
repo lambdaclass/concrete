@@ -204,33 +204,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | .bitnot =>
       let ty ← checkExpr operand hint
       return ty  -- CoreCheck validates bitwise not types
-  | .arrowAccess _ obj field =>
-    let objTy ← checkExpr obj none .place
-    -- obj must be Heap<T> or HeapArray<T>
-    let innerTy := match objTy with
-      | .heap t => t
-      | .heapArray t => t
-      | .ref (.heap t) => t
-      | .refMut (.heap t) => t
-      | _ => .placeholder
-    if innerTy == .placeholder then
-      throwCheck (.arrowAccessNotHeap (tyToString objTy)) (some e.getSpan)
-    -- Look up field on the inner type
-    let structName := match innerTy with
-      | .named n => n
-      | .generic n _ => n
-      | _ => ""
-    if structName == "" then throwCheck .arrowAccessNonStruct (some e.getSpan)
-    match ← lookupStruct structName with
-    | some sd =>
-      match sd.fields.find? fun f => f.name == field with
-      | some f =>
-        -- NOT under the H11 projection rule: `h->next` + `free(h)` is the
-        -- blessed heap-node destructure (free() only frees the shell), and
-        -- Heap<T> interiors are not linearity-tracked.
-        resolveType f.ty
-      | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
-    | none => throwCheck (.unknownStructType structName) (some e.getSpan)
   | .allocCall _ inner allocExpr =>
     -- Check the allocator expression is valid
     let _allocTy ← checkExpr allocExpr
@@ -1777,24 +1750,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         else (n, vi)).filter fun (n, _) => n != ref
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
-  | .arrowAssign _ obj field value =>
-    let objTy ← checkExpr obj none .place
-    let innerTy := match objTy with
-      | .heap t => t
-      | .heapArray t => t
-      | .ref (.heap t) | .refMut (.heap t) => t
-      | _ => .placeholder
-    if innerTy == .placeholder then
-      throwCheck (.arrowAssignNotHeap (tyToString objTy)) (some stmt.getSpan)
-    let structName := match innerTy with
-      | .named n => n
-      | _ => ""
-    if structName == "" then throwCheck .arrowAssignNonStruct (some stmt.getSpan)
-    match ← lookupStructField structName field with
-    | some fieldTy =>
-      let valTy ← checkExpr value (some fieldTy)
-      expectTy fieldTy valTy s!"arrow field assignment '{structName}->{field}'" (some stmt.getSpan)
-    | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
   | .break_ _ value lbl =>
     let env ← getEnv
     if env.loopDepth == 0 then

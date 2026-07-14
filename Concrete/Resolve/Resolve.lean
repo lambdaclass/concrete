@@ -276,7 +276,6 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .fnRef sp name =>
     if lookupName ctx name || isKnownBuiltinFn name then ctx
     else addError ctx (.unknownFunctionRef name) (some sp)
-  | .arrowAccess _ obj _ => resolveExpr ctx obj
   | .allocCall _ inner allocExpr =>
     resolveExpr (resolveExpr ctx inner) allocExpr
   | .ifExpr _ cond then_ else_ =>
@@ -347,8 +346,6 @@ partial def resolveStmt (ctx : ResolveCtx) (stmt : Stmt) : ResolveCtx :=
     let ctx := addLocal ctx var (.var none false)
     let ctx := addLocal ctx ref (.var none false)
     resolveStmts ctx body
-  | .arrowAssign _ obj _ value =>
-    resolveExpr (resolveExpr ctx obj) value
   | .letDestructure _ _ _ bindings value elseBody =>
     let ctx := resolveExpr ctx value
     let ctx := match elseBody with

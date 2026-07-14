@@ -401,7 +401,6 @@ partial def astExprNodes : Expr → Nat
   | .cast _ x _ => 1 + astExprNodes x
   | .methodCall _ o _ _ args => 1 + astExprNodes o + (args.map astExprNodes).foldl (·+·) 0
   | .staticMethodCall _ _ _ _ args => 1 + (args.map astExprNodes).foldl (·+·) 0
-  | .arrowAccess _ o _ => 1 + astExprNodes o
   | .allocCall _ x a => 1 + astExprNodes x + astExprNodes a
   | .ifExpr _ c t el => 1 + astExprNodes c + (t.map astStmtNodes).foldl (·+·) 0 + (el.map astStmtNodes).foldl (·+·) 0
 partial def astArmNodes : MatchArm → Nat
@@ -426,7 +425,6 @@ partial def astStmtNodes : Stmt → Nat
   | .assert_ _ c => 1 + astExprNodes c
   | .assume_ _ c => 1 + astExprNodes c
   | .borrowIn _ _ _ _ _ body => 1 + (body.map astStmtNodes).foldl (·+·) 0
-  | .arrowAssign _ o _ v => 1 + astExprNodes o + astExprNodes v
   | .letDestructure _ _ _ _ v eb => 1 + astExprNodes v + ((eb.getD []).map astStmtNodes).foldl (·+·) 0
   | .letStructDestructure _ _ _ v => 1 + astExprNodes v
 end

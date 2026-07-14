@@ -1957,14 +1957,13 @@ non-`Copy` values remain owned by linearity/`destroy`.
    restoration if a workload needs a linear to leave a loop on the break path.
 
 3. Remove postfix member `p->field`; keep function return arrows.
-   Function types and declarations still use `-> T`. Only member access through
-   heap/raw/ref values should migrate from `p->field` to `p.field`. Field access
-   should auto-deref one permitted layer consistently with indexed access, and
-   unsafe/raw access must remain visible through types, capabilities, and trust
-   reports rather than a second member-access token. Acceptance gate: heap/raw
-   field reads and writes previously covered by `->` pass through `.`, while an
-   invalid field-through-non-accessible type still fails with a structured
-   diagnostic.
+   DONE in three slices (see CHANGELOG): A — `.field` read/write auto-derefs heap
+   shells with exact `->` parity incl. the blessed H11 heap-node destructure;
+   B — corpus migrated mechanically; C — parser token + arrowAccess/arrowAssign
+   constructors + arrow*/E0255 diagnostics removed, EBNF updated (LL(1) green),
+   error_arrow_not_heap.con pins the removed syntax + hint. Function return `->`
+   unchanged. Unsafe/raw access stays visible via capabilities (raw deref still
+   E0521 without Unsafe) and trust reports, not a member token.
 
 4. Keep C-style `for` for now, and record `for-in` as a later iteration feature,
    not Phase 6D cleanup.

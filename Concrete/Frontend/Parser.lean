@@ -912,7 +912,6 @@ partial def parseExprBlock : ParseM (List Stmt) := do
         | .fieldAccess _ obj field => stmts := stmts ++ [Stmt.fieldAssign sp obj field rhs]
         | .deref _ target => stmts := stmts ++ [Stmt.derefAssign sp target rhs]
         | .arrayIndex _ arr idx => stmts := stmts ++ [Stmt.arrayIndexAssign sp arr idx rhs]
-        | .arrowAccess _ obj field => stmts := stmts ++ [Stmt.arrowAssign sp obj field rhs]
         | _ => throwParse "invalid assignment target"
       else
         -- Normal expression statement, need semicolon
@@ -1480,11 +1479,6 @@ partial def parseExprOrAssign : ParseM Stmt := do
       let value ← parseExpr
       expect .semicolon
       return .arrayIndexAssign e.getSpan arr index value
-    | .arrowAccess _ obj field =>
-      advance
-      let value ← parseExpr
-      expect .semicolon
-      return .arrowAssign e.getSpan obj field value
     | _ =>
       let sp ← peekSpan
       throwParse "invalid assignment target" (span := some sp)
