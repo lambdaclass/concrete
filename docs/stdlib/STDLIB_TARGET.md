@@ -38,7 +38,7 @@ Generic `Option<T>` with `Some` and `None`.
 **Must-have APIs**:
 - `is_some`, `is_none` — query
 - `unwrap_or(default: T) -> T` — safe extraction with fallback
-- `map<U>(fn(&T) -> U) -> Option<U>` — transform if present (deferred until closures/fn-ptr ergonomics settle; library-only workaround acceptable)
+- `map<U>(fn(T) -> U) -> Option<U>` — transform if present. SHIPPED (P7#1, consuming form: the payload moves through the fn value; fn-pointer-in-generic verified)
 
 **Exists today**: `Option<T>`, `is_some`, `is_none`. Missing: `unwrap_or`, `map`.
 
@@ -51,7 +51,7 @@ Generic `Result<T, E>` with `Ok` and `Err`.
 **Must-have APIs**:
 - `is_ok`, `is_err` — query
 - `unwrap_or(default: T) -> T` — safe extraction
-- `map_err<F>(fn(&E) -> F) -> Result<T, F>` — error conversion (deferred until closures settle; manual match is the workaround)
+- `map_err<F>(fn(E) -> F) -> Result<T, F>` — error conversion. SHIPPED (P7#1, consuming form; Result::map<U> shipped alongside)
 - `with_context` / error-conversion helpers — library-first, no syntax sugar required
 
 **Exists today**: `Result<T, E>`, `is_ok`, `is_err`. Missing: `unwrap_or`, `map_err`, conversion helpers.

@@ -1985,7 +1985,11 @@ lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
 1. Define the stdlib gap matrix against Gleam, Zig, Rust, Go, Odin, Ada/SPARK,
-   Lean, and Roc before expanding APIs. Concrete should not copy any one
+   Lean, and Roc before expanding APIs.
+   DONE by the research corpus: `research/stdlib/stdlib-comparative-inventory.md`
+   is the matrix (all eight languages, per-row core-now / hosted-later / deferred
+   classification with provenance); `docs/stdlib/STDLIB_TARGET.md` records the
+   per-layer module inventory. Concrete should not copy any one
    surface. It should make a Gleam/Roc-sized core pleasant, keep Zig-style
    allocation/authority explicit, preserve Rust-style core/alloc/hosted
    layering where useful, copy Ada/SPARK's evidence-class discipline, use Lean
@@ -2004,7 +2008,10 @@ Do not duplicate compiler-command cleanup here.
    Ada's predefined strings, containers, IO, numerics, and command-line
    units; SPARK's formal/functional containers, big numbers, IO restrictions,
    and lemma libraries; and Lean's proof/library organization.
-2. Define stdlib module layout and naming: core/prelude, bytes/text/path,
+2. (layout DONE: `docs/stdlib/HOSTED_STDLIB_SPLIT.md` records the four layers
+   — core / alloc / hosted / FFI — and `STDLIB_TARGET.md` the per-layer modules;
+   naming rule = method-canonical, item 2b, gate-enforced.)
+   Define stdlib module layout and naming: core/prelude, bytes/text/path,
    collections, numeric helpers, formatting/parsing, console/file/network/
    process/time, test/oracle helpers, and target-profile-specific modules.
    Start from this explicit module checklist so none of the Concrete names or
