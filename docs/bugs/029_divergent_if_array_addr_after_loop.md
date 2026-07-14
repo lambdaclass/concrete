@@ -51,11 +51,31 @@ The front-end accepted `buf[i] = …` on a NON-`mut` array binding inside a
 `trusted fn` during the same probing (probe D) — mutability enforcement gap,
 tracked here until split out.
 
-## Fix sketch
+## Root cause (located, 2026-07-14)
 
-Lower/EmitSSA: in the divergent-branch merge path, array locals must keep
-their SLOT (address) identity — the merge should not introduce a by-value
-reload of an aggregate that is later used via address-of. Likely the same
-freshResultSlot/slot-identity machinery as the H7-era fixes; add the repro to
-`tests/codegen/` as the regression once fixed and map it in
-`audit_bug_corpus`.
+Two clashing conventions:
+- Arrays are bound to their ALLOCA POINTER everywhere: `Lower.lean:1198`
+  (`arrayLit` — "Return alloca pointer directly (don't load) so mutations
+  work") and `addrOfLocal` (`:476`) assumes it ("arrays are already
+  stack-allocated" → returns none, borrow uses the binding as the address).
+- The if-merge aggregate path (`Lower.lean:1702-1718`) VIOLATES it: it creates
+  an `if.merge.` alloca, `insertStoreBeforeTerm` of each incoming value, then
+  a `if.load.` BY-VALUE load and `setVar name (.reg loadReg ty)` — the array
+  var is now a `[N x T]` VALUE register. The later `&buf` uses that value
+  where its address should flow → llvm-as `[20 x i8] but expected 'ptr'`.
+
+Additionally the store-back half is wrong for arrays even before the load:
+each incoming `v` for an array is itself an ADDRESS (branch alloca pointer),
+so `store v -> if.merge alloca of [N x T]` stores a pointer into an array
+slot. The merge path was designed for by-value aggregates (structs) and is
+type-confused for pointer-bound arrays end to end.
+
+## Fix direction (needs a dedicated arc — EmitSSA type model involved)
+
+For `.array` types the merge must keep POINTER identity: either (a) phi over
+the incoming ALLOCA POINTERS (requires the phi/SVal to be rendered `ptr`, not
+`[N x T]`, in EmitSSA — check how `.reg r ty`-as-address renders in phi
+position), or (b) memcpy both branch values into one stable pre-if alloca and
+never rebind. Validate with check_ssa_verify_agreement + differential fuzz +
+the probes in this file (G/H/I/K + D non-mut-write). Do NOT ship a partial
+fix without those batteries: this is the through-ref/wrong-type-slot family.
