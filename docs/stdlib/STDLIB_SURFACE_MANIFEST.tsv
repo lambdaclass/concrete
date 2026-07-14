@@ -117,6 +117,7 @@ io	flush	no	borrows	result	none	deterministic
 io	close	no	consumes	result	none	deterministic
 io	writer_from_file	no	constructs	infallible	File	trusted-boundary
 io	console_writer	no	constructs	infallible	Console	trusted-boundary
+io	console_error_writer	no	constructs	infallible	Console	trusted-boundary
 io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary
 io	print	no	constructs	infallible	Console	trusted-boundary
 io	println	no	constructs	infallible	Console	trusted-boundary
@@ -364,10 +365,3 @@ vec	for_each_with	no	borrows	infallible	C	hosted-effect
 vec	set	no	mut	infallible	none	deterministic
 vec	get_unchecked	no	borrows	infallible	none	deterministic
 vec	get	no	borrows	option	none	deterministic
-writer	stdout	no	constructs	infallible	none	deterministic
-writer	stderr	no	constructs	infallible	none	deterministic
-writer	str	no	borrows	infallible	Console	hosted-effect
-writer	char	no	borrows	infallible	Console	hosted-effect
-writer	newline	no	borrows	infallible	Console	hosted-effect
-writer	int	no	borrows	infallible	Console	hosted-effect
-writer	bool	no	borrows	infallible	Console	hosted-effect

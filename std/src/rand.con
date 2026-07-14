@@ -11,6 +11,10 @@ mod rand {
 
     pub fn random_range(lo: i32, hi: i32) with(Unsafe, Random) -> i32 {
         let range: i32 = hi - lo;
+        // hi == lo: the range is a single value — return it (was div-by-zero).
+        if range == 0 {
+            return lo;
+        }
         let r: i32 = libc_rand();
         // Use modulo to bound, then shift by lo
         // Need to handle negative modulo: take abs-like approach
@@ -22,6 +26,14 @@ mod rand {
     }
 
     import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_random_range_single_value() with(Unsafe, Random) -> i32 {
+        // hi == lo was division-by-zero (audit 2026-07-14); now returns lo.
+        let v: i32 = random_range(5, 5);
+        if v != 5 { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_seed_determinism() with(Unsafe, Random) -> i32 {

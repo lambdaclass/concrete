@@ -16,7 +16,13 @@ mod parse {
             if c > '9' {
                 return Option::<u64>::None;
             }
-            result = result * 10 + digit_to_int::<u64>(c);
+            let d: u64 = digit_to_int::<u64>(c);
+            // Overflow guard: result*10 + d must fit u64 (checked `*`/`+` would
+            // TRAP — parse failure is a DOMAIN outcome, bucket 1 -> None).
+            if result > (18446744073709551615 - d) / 10 {
+                return Option::<u64>::None;
+            }
+            result = result * 10 + d;
             i = i + 1;
         }
         return Option::<u64>::Some { value: result };
@@ -48,7 +54,14 @@ mod parse {
             if c > '9' {
                 return Option::<i64>::None;
             }
-            result = result * 10 + digit_to_int::<i64>(c);
+            let d: i64 = digit_to_int::<i64>(c);
+            // Overflow guard (see parse_uint). i64::MIN itself ("-9223372036854775808")
+            // is rejected too: the magnitude cannot accumulate in a positive i64 —
+            // documented edge, checked `-` would trap on negate otherwise.
+            if result > (9223372036854775807 - d) / 10 {
+                return Option::<i64>::None;
+            }
+            result = result * 10 + d;
             i = i + 1;
         }
 
@@ -309,6 +322,25 @@ mod parse {
     // Tests
 
     import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_parse_overflow_is_none() -> i32 {
+        // 21 digits: > u64::MAX — must be None, not silent wrap (audit 2026-07-14).
+        let big: String = "999999999999999999999";
+        let r: Option<u64> = parse_uint(&big);
+        big.drop();
+        if !(r.is_none()) { return 1; }
+        let big2: String = "9223372036854775808"; // i64::MAX + 1
+        let r2: Option<i64> = parse_int(&big2);
+        big2.drop();
+        if !(r2.is_none()) { return 1; }
+        let ok: String = "9223372036854775807"; // i64::MAX parses
+        let r3: Option<i64> = parse_int(&ok);
+        ok.drop();
+        let v: i64 = r3.unwrap_or(0);
+        if v != 9223372036854775807 { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_parse_int_positive() -> i32 {

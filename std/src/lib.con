@@ -8,7 +8,6 @@ mod std {
     mod alloc;
     mod string;
     mod io;
-    mod writer;
     mod test;
     mod vec;
     mod bytes;
