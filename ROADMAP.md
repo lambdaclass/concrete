@@ -1960,6 +1960,45 @@ for errors, bytes/text/path, collections, formatting/parsing, I/O capabilities,
 tests, and oracle helpers, with every public stdlib item carrying an evidence
 class and authority/allocation story.
 
+**Excellence exit contract.** Phase 7 is judged on *honesty, not breadth* — the
+one stdlib where every public API's authority, allocation, failure, ownership,
+and evidence are visible and gated, over a proven pure core. Breadth is copied
+only after that holds. Four properties gate the phase, each backed by a check,
+not prose:
+
+1. **Capability-complete.** Every hosted operation carries its exact domain
+   capability — `fs`→`File`, `env`→`Env`, `time`→`Time`, `process`→`Process`,
+   `net`→`Network`, `console`/`io`→`Console`. `trusted` internals may use
+   `Unsafe`, but the public wrapper must re-expose the real cap (a `trusted`
+   extern requires *no* capability, so authority collapses into `Unsafe` unless
+   re-added by hand). The item-2a manifest gate fails if a hosted op is behind
+   `Unsafe` alone.
+2. **One IO spine.** All output targets a single `io.Writer` (fn-pointer handle,
+   authority at acquisition, no `dyn`), and there is one `File` type: `fmt`,
+   files, console, `std.test` output, logs/progress, and future sockets are all
+   `Writer` producers/consumers. No second sink, no duplicate `Writer`/`File`.
+3. **Linearity-real.** Collections destroy live non-`Copy` elements on
+   `drop`/`clear`/`remove`/overwrite (not merely reclaim the buffer); no hidden
+   `Clone`, no implicit move-out from indexed containers; deterministic map/set
+   traversal. Until non-`Copy` element drop is wired, the limitation is recorded,
+   not silent.
+4. **Self-enforcing + proven.** The five-fact manifest (allocate / consume /
+   fail / capability / proof-class), derived from compiler facts and gated
+   (item 2a); the strict error rule (`Option` for absence, `Result` for
+   recoverable domain/environment failure, trap/abort for invariants / OOM /
+   bounds / arithmetic, explicit cross-module wrapping, no hidden `?` conversion
+   web); and the pure core (`option`/`result`/`bytes`/`numeric`) carrying Lean
+   models written against the model, not the representation.
+
+These enforce a three-layer shape: a **pure core** (no capabilities, no
+allocation unless explicit), an **alloc layer** (`with(Alloc)`, later explicit
+allocator values), and a **hosted authority layer** (every API names its domain
+cap). Iteration is internal only (`for_each`/`fold`/`_ctx`, optional
+`Continue | Break`, no iterator trait or lazy adapter tower). Hold breadth —
+broad crypto/compression/networking/threading and framework-style APIs — until
+the four properties hold and a workload pulls it; the pure core is the priority,
+not the periphery.
+
 Phase 7 priority order is deliberately narrower than the comparison languages:
 make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. The ranked build order is:
