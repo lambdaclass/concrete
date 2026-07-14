@@ -1,16 +1,17 @@
-// Test: break with computed accumulated value (while-as-expression)
+// Test: break after accumulating a computed value (statement-form loop result;
+// migrated from the removed value `while … else`, Phase 6D item 2).
 // Expected: 10
 fn main() -> Int {
     let mut sum: Int = 0;
     let mut i: Int = 0;
-    let result: Int = while i < 100 {
+    let mut result: Int = 0;
+    while i < 100 {
         sum = sum + i;
         i = i + 1;
         if sum >= 10 {
-            break sum;
+            result = sum;
+            break;
         }
-    } else {
-        0
-    };
+    }
     return result;
 }

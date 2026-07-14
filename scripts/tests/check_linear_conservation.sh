@@ -109,10 +109,14 @@ reject "a = b; reuse b"            E0205 'fn main() -> Int { let mut a: File = m
 reject "a = b; a and b both live"  E0205 'fn main() -> Int { let mut a: File = mk(); sink(a); let b: File = mk(); a = b; return sink(a) + sink(b); }'
 accept "a = b rebind, then consume a" 'fn main() -> Int { let mut a: File = mk(); sink(a); let b: File = mk(); a = b; return sink(a); }'
 
-echo "=== H14: break f; consumes the break-value (was a silent duplication) ==="
-reject "break f; reuse f"          E0205 'fn main() -> Int { let f: File = mk(); let g: File = while true { break f; } else { mk() }; return sink(g) + sink(f); }'
-accept "break f; consume loop result" 'fn main() -> Int { let f: File = mk(); let g: File = while true { break f; } else { mk() }; return sink(g); }'
-accept "break of loop-local linear"   'fn main() -> Int { let g: File = while true { let l: File = mk(); break l; } else { mk() }; return sink(g); }'
+echo "=== H14 (stmt form; value while + break-value removed in 6D#2): loop-exit paths conserve linears ==="
+# NOTE: with break-VALUES removed, the old break-value consume exemption has no
+# surface form. consume-then-break is E0207 today; a sound consume-then-break
+# exemption (one-shot argument, mirroring inFnExitingBranch) is a recorded
+# follow-up — if it lands, the first row flips to accept, a deliberate change.
+reject "consume outer linear in loop (break path, no exemption)" E0207 'fn main() -> Int { let f: File = mk(); let mut n: Int = 0; while true { n = sink(f); break; } return n; }'
+accept "consume on fn-exit path in loop; fall-through consumes after" 'fn main() -> Int { let f: File = mk(); let mut i: Int = 0; while i < 1 { i = i + 1; if i == 5 { return sink(f); } } return sink(f); }'
+accept "loop-local linear consumed in loop" 'fn main() -> Int { let mut n: Int = 0; while true { let l: File = mk(); n = sink(l); break; } return n; }'
 
 echo "=== H15: overwriting a non-Copy element/pointee is rejected (would leak) ==="
 reject "arr[i] = v over non-Copy element" E0291 'fn main() -> Int { let mut x: [File; 2] = [mk(), mk()]; x[0] = mk(); return 0; }'

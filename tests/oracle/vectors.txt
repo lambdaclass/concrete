@@ -45,7 +45,7 @@ tests/programs/array_assign.con
 #     evalStmts/evalStmt/while-expr fixes. ---
 tests/programs/if_expr_value.con
 tests/programs/match_expr_value.con
-tests/programs/while_expr_value.con
+tests/programs/loop_break_result_oracle.con
 tests/programs/loop_after_branch_loop.con
 tests/programs/nested_match_value.con
 tests/programs/else_if_chain.con

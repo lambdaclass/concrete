@@ -66,11 +66,12 @@ emit diamond 'mod m { fn main() -> Int { let c: Bool = true; let d: Bool = false
   return y; } }'
 accepts_val "diamond into value-if (phi dominance)" diamond "42"
 
-# Value-bearing while-expr with break-value (loop result slot + header phis).
-emit whileval 'mod m { fn main() -> Int { let mut i: Int = 0;
-  let r: Int = while i < 100 { i = i + 1; if i == 9 { break i * 5; } } else { -1 };
+# Loop result via break (statement form; value while-expr removed in 6D#2) —
+# still exercises the loop-header phis + the result slot.
+emit whileval 'mod m { fn main() -> Int { let mut i: Int = 0; let mut r: Int = -1;
+  while i < 100 { i = i + 1; if i == 9 { r = i * 5; break; } }
   return r; } }'
-accepts_val "value while-expr break value" whileval "45"
+accepts_val "loop result via break (header phis)" whileval "45"
 
 echo
 echo "check_ssa_verify_agreement: PASS=$PASS FAIL=$FAIL"

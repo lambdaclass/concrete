@@ -410,18 +410,13 @@ partial def parsePrimary : ParseM Expr := do
   | .true_ => let sp ← peekSpan; advance; return .boolLit sp true
   | .false_ => let sp ← peekSpan; advance; return .boolLit sp false
   | .while_ =>
-    -- while-as-expression: while cond { body } else { elseBody }
+    -- Phase 6D #2: value `while … else` was REMOVED — `while` is statement-only.
+    -- (It was the oddest position-sensitive control form; see
+    -- docs/STATEMENT_EXPRESSION_MODEL.md and tests/programs/error_while_expr_removed.con.)
     let sp ← peekSpan
-    advance
-    let cond ← parseExpr
-    let body ← parseBlock
-    expect .else_
-    -- The else branch is value-bearing (it provides the while-expression's value
-    -- when the loop never breaks), so it parses as a value block: a trailing
-    -- expression with no `;` is the value (#42). The body's value comes from
-    -- `break v`, so it stays statement-only.
-    let elseBody ← parseExprBlock
-    return .whileExpr sp cond body elseBody
+    throwParse "while is a statement, not an expression (value `while … else` was removed)"
+      (span := some sp)
+      (hint := some "declare a mutable result before the loop, assign it in the body, then `break;` — e.g. `let mut r: T = default; while c { … r = v; break; }`")
   | .if_ =>
     -- if-as-expression: if cond { then } else { else }
     let sp ← peekSpan

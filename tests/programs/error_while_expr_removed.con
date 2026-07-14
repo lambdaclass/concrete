@@ -1,0 +1,11 @@
+// Phase 6D item 2: value `while … else` is REMOVED grammar — `while` is
+// statement-only. The parser rejects `while` in expression position with a
+// migration hint (declare a mutable result, assign in the body, `break;`).
+fn main() -> Int {
+    let x: Int = while true {
+        break;
+    } else {
+        42
+    };
+    return x;
+}

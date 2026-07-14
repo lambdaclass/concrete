@@ -1,0 +1,15 @@
+// Loop control: the loop runs to completion (no break), so the result variable
+// keeps its assigned value at non-i64 width (statement form; migrated from the
+// removed value `while … else`, Phase 6D item 2). Width regression: the value
+// must stay i32, not widen to i64. Expected: 42
+mod m {
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        let mut v: i32 = 0;
+        while i < 3 {
+            i = i + 1;
+        }
+        v = 42;
+        return v as Int;
+    }
+}

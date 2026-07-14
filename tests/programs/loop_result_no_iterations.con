@@ -1,0 +1,11 @@
+// Migration of the removed value `while … else` (Phase 6D item 2): the old
+// `else` value is now just the result variable's initial value when the loop
+// body never runs. Replaces while_expr_no_break.con. Expected: 99
+fn main() -> Int {
+    let mut x: Int = 99;
+    while false {
+        x = 1;
+        break;
+    }
+    return x;
+}

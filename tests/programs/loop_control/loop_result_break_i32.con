@@ -1,0 +1,15 @@
+// Loop control: a loop result at non-i64 width set before `break` (statement
+// form; migrated from the removed value `while … else`, Phase 6D item 2).
+// Regression for the width bug where the loop result was stored as i64 into an
+// i32 slot (load i32 -> 0). Expected: 7
+mod m {
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        let mut v: i32 = 0;
+        while i < 10 {
+            if i == 3 { v = 7; break; }
+            i = i + 1;
+        }
+        return v as Int;
+    }
+}

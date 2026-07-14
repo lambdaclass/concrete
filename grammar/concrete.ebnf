@@ -336,15 +336,18 @@ dot_ident_tail = '::' type_args call_args
 (* as rules: in expression (value) position the parser also accepts *)
 (*                                                                  *)
 (*   'if' expr block 'else' ( block | if-expression )               *)
-(*   'while' expr block 'else' block                                *)
 (*   'match' expr '{' { match_arm } '}'                             *)
 (*                                                                  *)
-(* (if requires 'else'; the while 'else' block provides the value   *)
-(* when the loop never breaks; match arms provide the value.) In    *)
+(* (if requires 'else'; match arms provide the value.) In           *)
 (* STATEMENT position the same keywords parse as statements (see    *)
 (* stmt). The dispatch is by position, which the position-blind     *)
 (* FIRST/FIRST checker cannot express, so these alternatives are    *)
 (* deliberately left out of primary_expr.                           *)
+(*                                                                  *)
+(* Phase 6D item 2: value 'while' expr block 'else' block was       *)
+(* REMOVED — 'while' is statement-only. The parser rejects 'while'  *)
+(* in expression position with a migration hint (declare a mutable  *)
+(* result before the loop, assign in the body, then 'break;').      *)
 primary_expr = INT
              | FLOAT
              | STRING

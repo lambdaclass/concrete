@@ -1011,9 +1011,9 @@ run_ok "$TESTDIR/complex_generic_container.con" 42
 run_ok "$TESTDIR/complex_loop_accumulate.con" 50
 
 # Phase 4: while-as-expression
-run_ok "$TESTDIR/while_expr_basic.con" 5
-run_ok "$TESTDIR/while_expr_no_break.con" 99
-run_ok "$TESTDIR/while_expr_nested.con" 6
+run_ok "$TESTDIR/loop_break_result_basic.con" 5
+run_ok "$TESTDIR/loop_result_no_iterations.con" 99
+run_ok "$TESTDIR/loop_break_result_nested.con" 6
 run_ok "$TESTDIR/break_accumulate.con" 10
 run_ok "$TESTDIR/while_nested_break.con" 6
 
@@ -1307,7 +1307,7 @@ run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
 run_err "$TESTDIR/error_escape_return.con"     "may not return a reference"
 run_err "$TESTDIR/error_escape_field.con"      "cannot escape its borrow block"
 # While-as-expression errors
-run_err "$TESTDIR/error_while_expr_type.con"   "does not match else type"
+run_err "$TESTDIR/error_while_expr_removed.con"   "while is a statement, not an expression"
 # Additional break/continue errors
 run_err "$TESTDIR/error_break_linear_skip.con" "break would skip unconsumed linear variable"
 # Additional borrow errors
@@ -6519,7 +6519,7 @@ run_ok_O2 "$TESTDIR/string_to_int_roundtrip.con" 42
 
 # Break/continue/defer
 run_ok_O2 "$TESTDIR/labeled_break.con" 42
-run_ok_O2 "$TESTDIR/while_expr_basic.con" 5
+run_ok_O2 "$TESTDIR/loop_break_result_basic.con" 5
 run_ok_O2 "$TESTDIR/defer_basic.con" 10
 run_ok_O2 "$TESTDIR/defer_lifo.con" 42
 run_ok_O2 "$TESTDIR/defer_early_return.con" 10
@@ -6650,7 +6650,6 @@ run_ok "$TESTDIR/regress_unit_payload_enum.con"       7
 run_ok "$TESTDIR/regress_if_expr_match_arm.con"      42
 run_ok "$TESTDIR/regress_if_expr_divergent_branch.con"  8
 run_ok "$TESTDIR/regress_if_expr_unit_slot.con"       5
-run_ok "$TESTDIR/regress_while_expr_unit_slot.con"    6
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42
 run_ok "$TESTDIR/regress_stmt_match_arm_unit.con"      42

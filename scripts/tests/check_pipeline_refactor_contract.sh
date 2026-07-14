@@ -73,8 +73,8 @@ agree "CopyJudgment: Copy struct duplicated" copydup "9"
 emit vif 'mod m { fn main() -> Int { let c: Bool = true; let x: Int = if c { 40 + 2 } else { 0 }; return x; } }'
 agree "control-flow builder: value-bearing if-expr" vif "42"
 
-emit vwhile 'mod m { fn main() -> Int { let mut i: Int = 0; let x: Int = while i < 10 { i = i + 1; if i == 4 { break 42; } } else { 7 }; return x; } }'
-agree "control-flow builder: value-bearing while-expr" vwhile "42"
+emit vwhile 'mod m { fn main() -> Int { let mut i: Int = 0; let mut x: Int = 7; while i < 10 { i = i + 1; if i == 4 { x = 42; break; } } return x; } }'
+agree "control-flow builder: loop result via break (stmt form; value while removed 6D#2)" vwhile "42"
 
 emit unitif 'mod m { fn main() -> Int { let mut acc: Int = 0; let u = if acc == 0 { acc = 5; } else { acc = 9; }; return acc; } }'
 agree "control-flow builder: unit if-expr (no alloca void)" unitif "5"

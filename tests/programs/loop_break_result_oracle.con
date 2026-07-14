@@ -1,0 +1,24 @@
+// Oracle regression (interp == compiled), migrated from the removed value
+// `while … else` form (while_expr_value.con, Phase 6D item 2): the loop result
+// is a pre-declared variable — set before `break` on the break path, keeping
+// its pre-loop value on the ran-to-completion path. Expected: 63
+// (break path 60 + completion-path probe 3).
+mod m {
+    fn loop_break() -> i32 {
+        let mut i: i32 = 0;
+        let mut r: i32 = -1;
+        while true {
+            if i > 5 { r = i * 10; break; }
+            i = i + 1;
+        }
+        return r;
+    }
+    fn loop_completes() -> i32 {
+        let mut i: i32 = 0;
+        while i < 3 { i = i + 1; }
+        return i;
+    }
+    fn main() -> Int {
+        return (loop_break() + loop_completes()) as Int;
+    }
+}

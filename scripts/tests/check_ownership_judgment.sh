@@ -66,8 +66,8 @@ agree "borrow does not consume: &s then drop (=> 5)" bw "5"
 emit ow 'mod m { fn main() -> Int { let mut s: String = "aa"; drop_string(s); s = "bbbb"; let n: Int = string_length(&s); drop_string(s); return n; } }'
 agree "assignment overwrite: mut String reassigned (=> 4)" ow "4"
 
-emit bv 'mod m { fn main() -> Int { let mut i: i32 = 0; let s: String = while true { break "hey"; } else { "" }; let n: Int = string_length(&s); drop_string(s); return n; } }'
-agree "break value: while yields a String, consumed after (=> 3)" bv "3"
+emit bv 'mod m { fn main() -> Int { let mut n: Int = 0; while true { let s: String = "hey"; n = string_length(&s); drop_string(s); break; } return n; } }'
+agree "loop-local String consumed inside the loop (=> 3)" bv "3"
 
 echo "=== REJECT: Check enforces linearity on both paths ==="
 

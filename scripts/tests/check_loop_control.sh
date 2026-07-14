@@ -59,8 +59,8 @@ run_expect labeled_break 1
 run_expect for_break_continue 8
 
 echo "=== 2. while-as-expression value (non-i64 width regression) ==="
-run_expect while_expr_break_value_i32 7
-run_expect while_expr_else_value_i32 42
+run_expect loop_result_break_i32 7
+run_expect loop_result_completes_i32 42
 
 echo "=== 3. linear cleanup across break/continue ==="
 run_expect break_after_consume_linear 0
@@ -68,7 +68,7 @@ reject_with neg_break_leaks_linear E0210
 reject_with neg_continue_leaks_linear E0211
 
 echo "=== 4. while-expression break/else type agreement ==="
-reject_with neg_while_expr_type_mismatch E0222
+reject_with neg_while_expr_removed E0001
 
 echo ""
 echo "LOOP-CONTROL: PASS=$PASS  FAIL=$FAIL"

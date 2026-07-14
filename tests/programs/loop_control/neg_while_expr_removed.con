@@ -1,0 +1,12 @@
+// Loop control (negative): value `while … else` is removed grammar (Phase 6D
+// item 2) — `while` in expression position is a parse error. Expect: E0001
+mod m {
+    fn main() -> Int {
+        let x: Int = while true {
+            break;
+        } else {
+            42
+        };
+        return x;
+    }
+}
