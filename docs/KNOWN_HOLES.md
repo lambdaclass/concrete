@@ -19,7 +19,32 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**None.** Every previously tracked hole is closed and gated (see below).
+### H18. Collections do not destroy non-Copy elements on drop/clear/remove/overwrite
+
+`Vec/HashMap/OrderedMap/Deque/BinaryHeap` (`+ slice.set_unchecked`) reclaim
+their buffers on `drop`/`clear`/`remove`/overwrite but never run any
+destruction for LIVE non-Copy elements — an owning element is silently
+leaked (acknowledged at `vec.con:106`). LATENT today: every shipped user of
+these containers stores Copy elements, and the H12-checked front end still
+enforces linearity on the values BEFORE they enter the container.
+
+Decision (review 2026-07-14): do NOT rush hidden automatic Drop. The long-term
+design is an EXPLICIT destruction story — `drop_with(f: fn(T))`,
+`clear_with(f)`, `remove_with(f) -> T`-style consume paths, with destruction
+visible in ownership/evidence reports — designed deliberately alongside the
+allocator-as-value and callable-values surfaces it depends on.
+
+Gate: `check_collections_copy_only.sh` pins the status quo — the fixture
+demonstrating the leak stays a documented reject/accept pair, and std's
+containers must not grow a hidden-Drop path while this hole is open.
+
+### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
+
+`for_each`/`fold` walk raw slot order: reproducible within a build, NOT a
+public ordering contract (and never will be — insertion-order tracking is a
+deliberate NON-goal; lower memory, no accidental semantic promise).
+Order-sensitive code uses `OrderedMap`/`OrderedSet` (traversal APIs to land
+with collections phase 2). Deterministic internals remain fine for replay.
 
 ## Recently closed
 
