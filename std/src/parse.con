@@ -321,7 +321,21 @@ mod parse {
 
     // Tests
 
-    import std.test.{assert_eq, assert_true};
+    import std.test.{assert_eq, assert_true, expect_none, expect_some};
+
+    #[test]
+    fn test_expected_failure_shape() -> i32 {
+        // The expected-failure helpers: asserting a FAILURE is first-class.
+        let bad: String = "12x";
+        let r: Option<i64> = parse_int(&bad);
+        bad.drop();
+        if !expect_none::<i64>(&r) { return 1; }
+        let good: String = "12";
+        let r2: Option<i64> = parse_int(&good);
+        good.drop();
+        if !expect_some::<i64>(&r2) { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_parse_overflow_is_none() -> i32 {

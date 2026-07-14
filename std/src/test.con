@@ -134,6 +134,23 @@ mod test {
     //     expect_sink(&raw, &st, &"expected") — bytes must match exactly.
     // ================================================================
 
+    // Expected-outcome helpers (the 13t bucket-1 shapes): a test asserting
+    // that an operation FAILED is a first-class expectation, not a negation
+    // dance. Silent, capability-free, no allocation — combine with
+    // assert_true(...) when a message is wanted.
+    pub fn expect_ok<T: Copy, E: Copy>(r: &Result<T, E>) -> bool {
+        return r.is_ok();
+    }
+    pub fn expect_err<T: Copy, E: Copy>(r: &Result<T, E>) -> bool {
+        return r.is_err();
+    }
+    pub fn expect_some<T: Copy>(o: &Option<T>) -> bool {
+        return o.is_some();
+    }
+    pub fn expect_none<T: Copy>(o: &Option<T>) -> bool {
+        return o.is_none();
+    }
+
     /// Compare captured sink bytes to an expected string, byte-exact.
     pub trusted fn sink_matches(buf: *const u8, len: u64, expected: &String) -> bool {
         if len != expected.len { return false; }

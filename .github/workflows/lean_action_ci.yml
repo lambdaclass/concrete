@@ -468,6 +468,9 @@ jobs:
       - name: "Collections Copy-only status quo (H18 — non-Copy element destruction pinned as disclosed hole)"
         run: bash scripts/tests/check_collections_copy_only.sh
 
+      - name: "std.test oracle layer (P7 step 5 — silent/cap-free expects, Console-visible asserts, stable messages, no xUnit)"
+        run: bash scripts/tests/check_std_test.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

@@ -336,6 +336,9 @@ test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow —
 test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
 
+test-std-test: build ## P7 step 5: std.test discipline — expect_* silent/cap-free/alloc-free, assert_* Console-visible with stable messages, oracle sink path, no xUnit surface
+	$(NIX_DEVELOP) bash ./scripts/tests/check_std_test.sh
+
 test-collections-copy-only: build ## H18 gate: Vec<non-Copy>.drop leaks its elements (disclosed); the fix must land as the visible drop_with/clear_with/remove_with family
 	$(NIX_DEVELOP) bash ./scripts/tests/check_collections_copy_only.sh
 
