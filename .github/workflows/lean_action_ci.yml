@@ -450,6 +450,9 @@ jobs:
       - name: "Phase 6D capstone (surface simplified, semantics unweakened)"
         run: bash scripts/tests/check_phase6d_surface_simplification.sh
 
+      - name: "CLI coherence (Phase 6E — context-free help, alias identity, legacy compat)"
+        run: bash scripts/tests/check_cli_coherence.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 
