@@ -114,6 +114,10 @@ stdlib-facing contract refines the underlying direction:
 
 - `std.io.Writer` is the primary sink for formatting, diagnostics, logs,
   `std.test` output, file/console output, and progress output.
+- `Writer` is not a `dyn Writer` trait object or hidden vtable. The v1
+  representation is a concrete handle with explicit function pointers
+  (callable-values / manual-vtable style) or a closed enum of sinks; capability
+  and allocation behavior remain visible in signatures and reports.
 - Built-in scalar/text values render through the shared `Writer` path.
 - User-defined values are not auto-rendered. A type may opt in by exposing a
   statically-known method such as:

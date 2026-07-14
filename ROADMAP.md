@@ -2233,7 +2233,11 @@ Do not duplicate compiler-command cleanup here.
     and streaming scanners build on it. A `Writer` is `write(bytes) ->
     Result<usize, IoError>` plus `flush`/`close`; a `Reader` is
     `read(buf) -> Result<usize, IoError>`; file, console, in-memory `Bytes`
-    buffer, and (later) socket all implement them. `std.fmt` output (item 15), the
+    buffer, and (later) socket all implement them. This is not a `dyn Writer`
+    trait object or hidden vtable: the v1 representation must be either a
+    concrete handle carrying explicit function pointers (the callable-values /
+    manual-vtable pattern) or a closed enum of sinks, with capabilities visible
+    in the handle/function type and reports. `std.fmt` output (item 15), the
     capability-scoped file/console surface (item 26), `std.fs` (item 27), and
     `ProgressWriter` all TARGET `Writer` rather than each rolling its own sink.
     Add a buffered wrapper (`BufReader`/`BufWriter`) over any handle. Parsing stays
