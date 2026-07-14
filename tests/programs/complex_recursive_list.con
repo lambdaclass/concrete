@@ -14,11 +14,11 @@ struct Head {
 }
 
 fn sum_chain(h: Heap<Head>) with(Alloc) -> Int {
-    let v1: Int = h->value;
-    let mid: Heap<Mid> = h->next;
-    let v2: Int = mid->value;
-    let leaf: Heap<Leaf> = mid->next;
-    let v3: Int = leaf->value;
+    let v1: Int = h.value;
+    let mid: Heap<Mid> = h.next;
+    let v2: Int = mid.value;
+    let leaf: Heap<Leaf> = mid.next;
+    let v3: Int = leaf.value;
     free(leaf);
     free(mid);
     free(h);

@@ -6,6 +6,6 @@ struct Pair { a: Int, b: Int }
 fn main() with(Std) -> Int {
     let ptr: Heap<Pair> = alloc(Pair { a: 19, b: 23 });
     defer free(ptr);
-    let v: Int = ptr->a + ptr->b;
+    let v: Int = ptr.a + ptr.b;
     return v;
 }

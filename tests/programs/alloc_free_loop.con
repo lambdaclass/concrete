@@ -7,7 +7,7 @@ fn main() with(Std) -> Int {
     let mut i: Int = 0;
     while i < 10 {
         let p: Heap<Box> = alloc(Box { value: i });
-        sum = sum + p->value;
+        sum = sum + p.value;
         free(p);
         i = i + 1;
     }

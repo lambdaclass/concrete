@@ -11,10 +11,10 @@ struct Manager {
 }
 
 fn total_cost(c: Heap<Company>) with(Alloc) -> Int {
-    let rev: Int = c->revenue;
-    let mgr: Heap<Manager> = c->manager;
-    let sal: Int = mgr->salary;
-    let bon: Int = mgr->bonus;
+    let rev: Int = c.revenue;
+    let mgr: Heap<Manager> = c.manager;
+    let sal: Int = mgr.salary;
+    let bon: Int = mgr.bonus;
     free(mgr);
     free(c);
     return rev - sal - bon;

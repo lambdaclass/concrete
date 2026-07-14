@@ -26,14 +26,14 @@ struct HeapBox { value: Int }
 
 fn alloc1(x: Int) with(Alloc) -> Int {
     let p: Heap<HeapBox> = alloc(HeapBox { value: x });
-    let v: Int = p->value;
+    let v: Int = p.value;
     free(p);
     return v;
 }
 
 fn alloc2(x: Int) with(Alloc) -> Int {
     let p: Heap<HeapBox> = alloc(HeapBox { value: x + 1 });
-    let v: Int = p->value;
+    let v: Int = p.value;
     free(p);
     return v;
 }

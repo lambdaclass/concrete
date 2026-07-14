@@ -12,7 +12,7 @@ struct Copy Box {
 
 fn main() with(Alloc) -> Int {
     let p: Heap<Box> = alloc(Box { code: Code(7777), flag: 1 });
-    let raw: i32 = p->code.0;
+    let raw: i32 = p.code.0;
     free(p);
     return raw as Int;
 }

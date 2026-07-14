@@ -1,4 +1,4 @@
-// Regression: char->Int and bool->Int casts must use zext, not alloca reinterpret.
+// Regression: char.Int and bool.Int casts must use zext, not alloca reinterpret.
 // Bug: isIntegerTy excluded char and bool, so casts fell through to an
 // alloca store/load hack that read garbage (store i8, load i64).
 fn char_to_int(c: char) -> i32 {

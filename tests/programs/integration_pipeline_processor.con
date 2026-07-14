@@ -177,8 +177,8 @@ mod Main {
         // After s1 (scale*2): 10,30,50,16,110,240,70,150,6,84
         // After s2 (clamp 0-50): 10,30,50,16,50,50,50,50,6,50
         // After s3 (full: *1, clamp 0-50): 10,30,50,16,50,50,50,50,6,50 (no change)
-        // Recategorize: 10->Med, 30->Med, 50->High, 16->Med, 50->High, 50->High,
-        //               50->High, 50->High, 6->Low, 50->High
+        // Recategorize: 10.Med, 30.Med, 50.High, 16.Med, 50.High, 50.High,
+        //               50.High, 50.High, 6.Low, 50.High
         let processed: Vec<i32> = run_pipeline(&data, &s1, &s2, &s3);
 
         if vec_len::<i32>(&processed) != 30 { vec_free::<i32>(data); vec_free::<i32>(processed); return 4; }

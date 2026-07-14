@@ -3,8 +3,8 @@ struct Box { value: Int }
 
 fn main() with(Std) -> Int {
     let mut p: Heap<Box> = alloc(Box { value: 10 });
-    p->value = 42;
-    let result: Int = p->value;
+    p.value = 42;
+    let result: Int = p.value;
     free(p);
     return result;
 }

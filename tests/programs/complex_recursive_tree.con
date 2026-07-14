@@ -12,11 +12,11 @@ struct Branch {
 }
 
 fn tree_sum(root: Heap<Branch>) with(Alloc) -> Int {
-    let v: Int = root->value;
-    let l: Heap<Leaf> = root->left;
-    let r: Heap<Leaf> = root->right;
-    let lv: Int = l->value;
-    let rv: Int = r->value;
+    let v: Int = root.value;
+    let l: Heap<Leaf> = root.left;
+    let r: Heap<Leaf> = root.right;
+    let lv: Int = l.value;
+    let rv: Int = r.value;
     free(l);
     free(r);
     free(root);
