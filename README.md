@@ -84,7 +84,24 @@ Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html)
 ```bash
 make build
 make test
+```
 
+The daily workflow (run `concrete --help` from anywhere for the full map):
+
+```bash
+concrete file.con                 # compile
+concrete run file.con             # compile and run
+concrete test                     # run #[test] functions (in a project)
+concrete fmt file.con --check     # format
+
+concrete report caps file.con     # what authority does this code have?
+concrete trace file.con --json    # per-stage pipeline trace (first failing phase)
+concrete reduce file.con --predicate check-error   # minimize a failing program
+```
+
+Evidence and audit surfaces on the shipped examples:
+
+```bash
 .lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
 .lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
 .lake/build/bin/concrete examples/constant_time_tag/src/main.con --report audit
