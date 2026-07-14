@@ -28,20 +28,6 @@ cn.clean
 
 === Runtime-safety obligations (array bounds) ===
 
-fmt.write_int
-  buf[19]  (array size 20)
-    status: checked: in bounds (constant index)
-  buf[i]  (array size 20)
-    status: unproven — bound the index with a #[requires], or insert a runtime check
-  buf[i]  (array size 20)
-    status: unproven — bound the index with a #[requires], or insert a runtime check
-
-fmt.write_uint
-  buf[19]  (array size 20)
-    status: checked: in bounds (constant index)
-  buf[i]  (array size 20)
-    status: unproven — bound the index with a #[requires], or insert a runtime check
-
 fmt.write_bool
   buf[0]  (array size 5)
     status: checked: in bounds (constant index)
@@ -71,13 +57,11 @@ result.tst_half
   / divisor 2
     status: checked: divisor is a nonzero constant
 
-fmt.write_int
+fmt.emit_digits
   % divisor 10
     status: checked: divisor is a nonzero constant
   / divisor 10
     status: checked: divisor is a nonzero constant
-
-fmt.write_uint
   % divisor 10
     status: checked: divisor is a nonzero constant
   / divisor 10

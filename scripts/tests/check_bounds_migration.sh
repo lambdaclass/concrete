@@ -53,12 +53,13 @@ ck "stale index after i=i+1 ⇒ guard dropped ⇒ unproven" "$ADV" \
   "vc('adv.stale_after_incr#bounds0')['status']=='unproven' and hyps('adv.stale_after_incr#bounds0')==''"
 
 echo "=== existing corpus: status distribution exact-stable ==="
-ck "fixed_capacity: 20 bounds, 17 proved / 3 unproven" "examples/fixed_capacity/src/main.con" \
-  "len(B)==20 and dist().get('proved_by_kernel_decision')==17 and dist().get('unproven')==3"
+# counts include linked-std VCs; std additions must stay all-proved (P7 fmt scalar emission)
+ck "fixed_capacity: 29 bounds, 26 proved / 3 unproven" "examples/fixed_capacity/src/main.con" \
+  "len(B)==29 and dist().get('proved_by_kernel_decision')==26 and dist().get('unproven')==3"
 ck "runtime_safety: 3 bounds, 2 proved / 1 unproven" "examples/proof_patterns/runtime_safety/src/main.con" \
   "len(B)==3 and dist().get('proved_by_kernel_decision')==2 and dist().get('unproven')==1"
-ck "parse_validate: 10 bounds, 9 proved / 1 unproven" "examples/parse_validate/src/main.con" \
-  "len(B)==10 and dist().get('proved_by_kernel_decision')==9 and dist().get('unproven')==1"
+ck "parse_validate: 19 bounds, 18 proved / 1 unproven" "examples/parse_validate/src/main.con" \
+  "len(B)==19 and dist().get('proved_by_kernel_decision')==18 and dist().get('unproven')==1"
 
 echo "=== documented enrichment: hmac bounds gained the enclosing guard, status unchanged ==="
 ck "hmac bounds0 status unproven but now carries k_len guard" "examples/hmac_sha256/src/main.con" \

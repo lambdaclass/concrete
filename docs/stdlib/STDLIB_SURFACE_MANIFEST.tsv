@@ -58,6 +58,7 @@ env	get	yes	constructs	option	Alloc,Env,Unsafe	trusted-boundary
 env	set	no	constructs	infallible	Env,Unsafe	trusted-boundary
 env	unset	no	constructs	infallible	Env,Unsafe	trusted-boundary
 fmt	write_to	no	borrows	result	none	deterministic
+fmt	write_int	no	constructs	result	none	trusted-boundary
 fmt	write_uint	no	constructs	result	none	trusted-boundary
 fmt	write_bool	no	constructs	result	none	trusted-boundary
 fmt	write_char	no	constructs	result	none	trusted-boundary

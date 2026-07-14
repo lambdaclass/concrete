@@ -61,8 +61,10 @@ ck "sound_neg: unconstrained n ⇒ n/2 NOT lowered ⇒ no assert VC (never prove
   "not has('adv.sound_neg#aa0')"
 
 echo "=== existing corpus: div VCs exact-stable (the migration changed nothing) ==="
-ck "hmac_sha256: 9 div VCs, 8 proved / 1 unproven" "examples/hmac_sha256/src/main.con" \
-  "len(DZ)==9 and dist().get('proved_by_kernel_decision')==8 and dist().get('unproven')==1"
+# counts include linked-std VCs (P7: fmt/parse constant-divisor additions, all proved;
+# the prior lone unproven std div left with the parse rewrite)
+ck "hmac_sha256: 17 div VCs, all proved" "examples/hmac_sha256/src/main.con" \
+  "len(DZ)==17 and dist().get('proved_by_kernel_decision')==17 and not dist().get('unproven')"
 ck "precondition_callsite: ratio#div0 proved" "examples/contract_negatives/precondition_callsite/src/main.con" \
   "vc('cn.ratio#div0')['status']=='proved_by_kernel_decision'"
 ck "range_block_count: 2 div VCs proved" "examples/smt/teaching/range_block_count.con" \

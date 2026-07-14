@@ -67,6 +67,7 @@ def normalize(text):
     t = text.strip()
     if "n/a" in t or "planned" in t: return None
     if "checked: divisor is a nonzero" in t: return "proved_by_kernel_decision"
+    if "checked: in bounds (constant index)" in t: return "proved_by_kernel_decision"
     for tok in ("proved_by_kernel_decision","proved_by_lean_replay","proved_by_lean",
                 "solver_trusted","counterexample","partial","ineligible",
                 "runtime_checked","enforced"):

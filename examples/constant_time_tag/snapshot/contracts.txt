@@ -37,6 +37,26 @@ constant_time_tag.ct_compare  (loop @ line 52)
 
 === Runtime-safety obligations (array bounds) ===
 
+fmt.write_bool
+  buf[0]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[1]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[2]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[3]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[0]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[1]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[2]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[3]  (array size 5)
+    status: checked: in bounds (constant index)
+  buf[4]  (array size 5)
+    status: checked: in bounds (constant index)
+
 constant_time_tag.ct_compare
   a[i]  (array size 16)
     status: proved_by_kernel_decision (omega) — statically in bounds, no runtime check needed
@@ -45,6 +65,22 @@ constant_time_tag.ct_compare
 
 
 === Runtime-safety obligations (division: non-zero divisor) ===
+
+result.tst_half
+  % divisor 2
+    status: checked: divisor is a nonzero constant
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+
+fmt.emit_digits
+  % divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+  % divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
 
 fmt.format_int
   / divisor 10
@@ -55,6 +91,14 @@ fmt.format_int
 fmt.format_uint
   / divisor 10
     status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+parse.parse_uint
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+parse.parse_int
   / divisor 10
     status: checked: divisor is a nonzero constant
 
@@ -70,5 +114,5 @@ sha256.hash_raw
 
 rand.random_range
   / divisor range
-    status: unproven — require the divisor nonzero (#[requires]), or insert a runtime check
+    status: proved_by_kernel_decision (omega) — divisor nonzero, no runtime check needed
 

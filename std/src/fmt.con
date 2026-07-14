@@ -15,48 +15,68 @@ mod fmt {
     // called only where the type is statically known.
     // ================================================================
 
-    /// Render a signed integer. No Alloc: 20-byte stack buffer.
-    /// (if/else K-shape, not early-return — see docs/bugs/029.)
-    pub trusted fn write_int(w: &Writer, value: i64) -> Result<u64, IoError> {
-        let mut buf: [u8; 20] = [0; 20];
-        let mut i: i64 = 20;
-        if value == 0 {
-            i = 19;
-            buf[19] = 48;
-        } else {
-            let neg: bool = value < 0;
-            let mut v: i64 = value;
-            while v != 0 {
-                let d: i64 = v % 10;
-                let mag: i64 = if d < 0 { 0 - d } else { d };
-                i = i - 1;
-                buf[i] = (48 + mag) as u8;
-                v = v / 10;
-            }
-            if neg {
-                i = i - 1;
-                buf[i] = 45; // '-'
-            }
+    // Digit emission is SCALAR (no stack array): the magnitude is reversed
+    // arithmetically, then digits stream high-to-low one byte per write. This
+    // keeps std free of unproven bounds obligations (the array-index analyzer
+    // only accepts constants / #[requires]-bounded indices) and avoids the
+    // bug-029 array-merge shape entirely. Sinks see <= 20 one-byte writes;
+    // buffered writers can batch later.
+    trusted fn emit_digits(w: &Writer, magnitude: u64) -> Result<u64, IoError> {
+        let mut rev: u64 = 0;
+        let mut n: u64 = 0;
+        let mut v: u64 = magnitude;
+        while v != 0 {
+            rev = rev * 10 + (v % 10);
+            v = v / 10;
+            n = n + 1;
         }
-        return w.write_raw((&buf as *const u8 as u64 + i as u64) as *const u8, (20 - i) as u64);
+        let mut written: u64 = 0;
+        let mut k: u64 = 0;
+        while k < n {
+            let b: u8 = (48 + (rev % 10)) as u8;
+            rev = rev / 10;
+            let r: Result<u64, IoError> = w.write_raw(&b as *const u8, 1);
+            if r.is_err() { return r; }
+            written = written + r.unwrap_or(0);
+            k = k + 1;
+        }
+        return Result::<u64, IoError>::Ok { value: written };
     }
 
-    /// Render an unsigned integer. No Alloc. (K-shape; docs/bugs/029.)
-    pub trusted fn write_uint(w: &Writer, value: u64) -> Result<u64, IoError> {
-        let mut buf: [u8; 20] = [0; 20];
-        let mut i: u64 = 20;
+    /// Render a signed integer through the Writer. No Alloc, no array buffer.
+    pub trusted fn write_int(w: &Writer, value: i64) -> Result<u64, IoError> {
         if value == 0 {
-            i = 19;
-            buf[19] = 48;
-        } else {
-            let mut v: u64 = value;
-            while v != 0 {
-                i = i - 1;
-                buf[i] = (48 + (v % 10)) as u8;
-                v = v / 10;
-            }
+            let z: u8 = 48;
+            return w.write_raw(&z as *const u8, 1);
         }
-        return w.write_raw((&buf as *const u8 as u64 + i) as *const u8, 20 - i);
+        let mut prefix: u64 = 0;
+        let mut mag: u64 = 0;
+        if value < 0 {
+            let m: u8 = 45; // '-'
+            let r: Result<u64, IoError> = w.write_raw(&m as *const u8, 1);
+            if r.is_err() { return r; }
+            prefix = r.unwrap_or(0);
+            // i64::MIN-safe magnitude: -(v/10) etc. avoided — build via u64 math.
+            if value == (0 - 9223372036854775807) - 1 {
+                mag = 9223372036854775808;
+            } else {
+                mag = (0 - value) as u64;
+            }
+        } else {
+            mag = value as u64;
+        }
+        let r2: Result<u64, IoError> = emit_digits(w, mag);
+        if r2.is_err() { return r2; }
+        return Result::<u64, IoError>::Ok { value: prefix + r2.unwrap_or(0) };
+    }
+
+    /// Render an unsigned integer through the Writer. No Alloc, no array buffer.
+    pub trusted fn write_uint(w: &Writer, value: u64) -> Result<u64, IoError> {
+        if value == 0 {
+            let z: u8 = 48;
+            return w.write_raw(&z as *const u8, 1);
+        }
+        return emit_digits(w, value);
     }
 
     /// Render `true` / `false`. No Alloc. (K-shape; docs/bugs/029.)
