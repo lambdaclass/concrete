@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pre-Phase-7 trio — error conventions, allocator decision, doc-snippet gate (2026-07-14)
+
+13t: `docs/ERROR_CONVENTIONS.md` (normative recoverable/fatal/policy-gated split
++ classification checklist) with `examples/error_conventions` fixture. 13s:
+`research/stdlib/allocator-as-value.md` — GO two-tier: `with(Alloc)` stays
+authority, allocator identity is an explicit first-param `&mut` value; tier-1
+defaults unchanged against a named Global, tier-2 `*_in` monomorphic over
+`A: Alloc` (additive, retrofit-safe). 13r: `check_doc_snippets.sh` (CI) — every
+con/concrete doc fence compiles, rejects as declared, or is marked pseudocode;
+triage found 22 compiling, 58 fragments, zero rot; mutation-tested. With Phase
+6E's CLI coherence gate, every roadmap prerequisite for Phase 7 stdlib is met.
+
+
 ### Phase 6E — CLI coherence: help never throws, daily aliases, coherence gate (2026-07-14)
 
 Before 6E, `concrete --help` was an UNCAUGHT EXCEPTION (parsed as a filename),
