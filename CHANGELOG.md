@@ -25,6 +25,17 @@ exit criterion: context-free help, alias identity, legacy compat, structured
 errors, taxonomy completeness. README leads with the daily workflow.
 
 
+### Phase 6D complete — capstone gate; `fn name!` removal recorded (2026-07-14)
+
+Phase 6D closed: item #1 (`fn name!` dead grammar) was removed earlier
+(64050c86; negative fixture `error_fn_bang_removed.con`, E0001); #4/#5 are
+deliberate keep-decisions; the #6 capstone
+`check_phase6d_surface_simplification.sh` (12/0; CI + `make test-phase6d`)
+locks LL(1) + removed-form negatives + migrated-form behavior + 6B
+ownership/agreement gates + capability-visible unsafe. The full item texts
+moved out of ROADMAP (this changelog is the record); the consume-then-break
+E0207 follow-up stays tracked in ROADMAP.
+
 ### Phase 6D item 3 — postfix `p->field` removed; `.` auto-derefs one layer (2026-07-14)
 
 Three slices, each full-battery green. **A** (`64b75835`): `.field` read/write on

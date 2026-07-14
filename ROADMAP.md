@@ -1916,155 +1916,34 @@ Explicitly DO NOT (aesthetic, not pulled — would hurt more than help):
 
 ## Phase 6D / 6.d: Grammar And Surface Simplification
 
-Goal: remove the remaining surface special cases that make Concrete harder to
-read or maintain without weakening the semantic model hardened in Phase 6B.
-This phase is grammar hygiene, not a feature-growth phase: it should reduce
-syntax, preserve LL(1), and keep Concrete unusual only where the language's
-guarantees require it.
+DONE (2026-07-14; details in CHANGELOG). Items #1 `fn name!`, #2 value
+`while…else`, and #3 postfix `p->field` are removed with migration fixtures and
+hints; #4 (C-style `for`) and #5 (if-let/while-let, enum `#`, borrow-in, the
+statement-value model) are deliberate KEEP decisions; #6 capstone
+`check_phase6d_surface_simplification.sh` (CI + `make test-phase6d`) locks:
+LL(1) green, removed-form negatives, migrated-form behavior, 6B
+ownership/agreement gates, capability-visible unsafe.
 
-Done when: the EBNF, parser, formatter, examples, docs, and syntax gates agree
-on the simplified surface; `scripts/check_ll1.py grammar/concrete.ebnf` stays
-green; removed forms have migration fixtures; and no semantic guarantee from
-Phase 6B regresses.
-
-Non-goals: do not redesign `if`/`match` expression semantics here, do not remove
-C-style `for` before a real iteration/range design exists, do not remove
-`borrow ... as ... in ...` unless scoped APIs fully replace it, and do not
-replace enum `#` unless a new form remains LL(1)-clean.
-
-Context: `discard(expr)` is already shipped as E0294, not a Phase 6D task. The
-shipped rule rejects bare pure non-`Unit` `Copy` non-call expression statements;
-calls are excluded because empty capability sets do not prove purity, and
-non-`Copy` values remain owned by linearity/`destroy`.
-
-1. Remove stale `fn name!` grammar if the audit confirms it has no active
-   semantic meaning.
-   DONE (64050c86): audited dead, removed from EBNF/parser; negative fixture
-   `tests/programs/error_fn_bang_removed.con` (E0001) + pinned by the 6D capstone.
-   The current implementation tags entry points by name, and current `.con`
-   sources do not use `fn name!`. If this spelling is truly dead grammar, delete
-   it from the EBNF/parser/formatter and add a negative parse fixture. If the
-   audit finds a live meaning, document that meaning and keep the syntax
-   intentionally.
-
-2. Remove value `while ... else`; keep `while` statement-only.
-   DONE (see CHANGELOG): the parser rejects `while` in expression position with a
-   migration hint; `Expr.whileExpr`/`CExpr.whileExpr` are deleted pipeline-wide
-   (~39 sites, 18 files); fixtures migrated to statement form with identical
-   behavior + removed-syntax negatives; loop/break/interp-vs-compiled/golden
-   gates green. FOLLOW-UP recorded: with break-VALUES gone, the H14 break-value
-   consume exemption has no surface form — consume-then-break on an outer linear
-   is E0207 today (pinned in check_linear_conservation); a sound consume-then-break
-   exemption (one-shot argument, mirroring inFnExitingBranch) is the natural
-   restoration if a workload needs a linear to leave a loop on the break path.
-
-3. Remove postfix member `p->field`; keep function return arrows.
-   DONE in three slices (see CHANGELOG): A — `.field` read/write auto-derefs heap
-   shells with exact `->` parity incl. the blessed H11 heap-node destructure;
-   B — corpus migrated mechanically; C — parser token + arrowAccess/arrowAssign
-   constructors + arrow*/E0255 diagnostics removed, EBNF updated (LL(1) green),
-   error_arrow_not_heap.con pins the removed syntax + hint. Function return `->`
-   unchanged. Unsafe/raw access stays visible via capabilities (raw deref still
-   E0521 without Unsafe) and trust reports, not a member token.
-
-4. Keep C-style `for` for now, and record `for-in` as a later iteration feature,
-   not Phase 6D cleanup.
-   C-style `for(init; cond; step)` is heavily used in current examples and
-   proofs. A future `for i in 0..n` / `for item in items` design would require
-   range expressions, a built-in or library iteration model, and linearity rules
-   for borrow-vs-consume iteration. Do not bundle that feature into this
-   simplification phase.
-
-5. Keep `if-let` / `while-let`, enum `#`, `borrow ... as ... in ...`, and the
-   current `if`/`match` statement-value model.
-   These forms either carry real ergonomics without macros, preserve LL(1), or
-   have extensive borrow/value-flow coverage. Revisit them only in a deliberate
-   later language-design pass with migration evidence, not as opportunistic
-   grammar cleanup.
-
-6. Add the Phase 6D validation artifact.
-   `scripts/tests/check_phase6d_surface_simplification.sh` should run the LL(1)
-   checker, parser/formatter fixtures, removed-syntax negative tests, migrated
-   heap/raw field-access fixtures, loop-control regressions, and the relevant
-   Phase 6B semantic gates. It must prove this phase reduced syntax without
-   weakening ownership, capabilities, diagnostics, or interp-vs-compiled
-   agreement.
-
+Remaining follow-up (half-done, tracked): with break-VALUES removed, the H14
+break-value consume exemption has no surface form — consume-then-break on an
+outer linear is E0207 today (pinned as a reject row in
+`check_linear_conservation.sh`); a sound consume-then-break exemption
+(one-shot argument, mirroring `inFnExitingBranch`) is the natural restoration
+if a workload needs a linear moved out through a loop break path.
 
 ## Phase 6E / 6.e: CLI Coherence And Daily Command Surface
 
-Goal: make the command-line interface obvious before Phase 7 turns Concrete into
-a tool people use for real stdlib and workload development. This phase is not a
-flag-renaming spree. It makes help reliable, groups the existing surfaces, and
-adds clear subcommand aliases while keeping compatibility with the current
-flags/gates.
+DONE (2026-07-14; details in CHANGELOG). Context-free help (`--help`/`-h`/
+`help`/`<cmd> --help` — grouped taxonomy, never throws, works with no project);
+daily aliases `concrete report <kind> <file>` and `concrete trace <file>
+[--json]` as args-rewrites (byte-identical to legacy spellings by construction);
+all legacy flags intact; README leads with the daily workflow;
+`check_cli_coherence.sh` (28/0, CI + `make test-cli-coherence`) is the Phase 7
+exit criterion.
 
-Done when: `concrete --help`, `concrete help`, and `concrete help <command>`
-work without project context; every public subcommand has a help page; the daily
-commands, report/evidence commands, and debug/internal commands are visibly
-separated; legacy flags still work; and the CLI contract is locked by a gate.
-
-Non-goals: do not remove existing `--report ...`, `--emit-*`, `prove`, `test`,
-`fmt`, or reducer flags in this phase; do not redesign proof/evidence output
-schemas here; do not split `Main.lean` purely for line count unless a command
-change pulls the split.
-
-Context: today `concrete prove --help` has a real discovery surface, but
-`concrete --help` is treated like a filename and `concrete test --help` can fail
-before printing help if run outside a project. That is backwards: help must be
-the most reliable command in the tool.
-
-1. Add top-level help and command discovery.
-   `concrete --help`, `concrete help`, and `concrete help <command>` must work
-   from any directory without parsing a project or input file. The top-level
-   help should group commands by use:
-   - daily: `build`, `run`, `test`, `fmt`
-   - reports/evidence: `report`, `prove`, `why`
-   - debugging: `trace`, `reduce`, `debug-bundle`
-   - internal/compatibility: `--emit-core`, `--emit-ssa`, `--emit-llvm`,
-     existing `--report ...` flags
-
-2. Make every subcommand help context-free.
-   `concrete test --help`, `concrete fmt --help`, `concrete prove --help`,
-   `concrete reduce --help`, and trace/debug help must print usage before any
-   project/file validation. Add a gate that runs each help command from a temp
-   directory with no `Concrete.toml`.
-
-3. Add clear daily aliases without removing old forms.
-   Provide the boring command surface users expect:
-   - `concrete build <file-or-project>` for compilation
-   - `concrete run <file-or-project>` for compile-and-run where supported
-   - `concrete report <kind> <file>` as an alias for existing `--report <kind>`
-   - `concrete trace <file> --json` as the user-facing spelling for Phase 6C
-     trace output, while keeping any existing `trace-pipeline` or telemetry
-     flags as compatibility surfaces
-
-4. Keep compatibility explicit.
-   Existing scripts and gates use `concrete <file> --report ...`,
-   `concrete <file> --emit-*`, `concrete prove ...`, `concrete test`, and
-   `concrete fmt`. These must continue to work. If a legacy spelling is
-   deprecated later, it must first emit a stable warning and have a migration
-   gate; this phase should not break users or tests.
-
-5. Document the command taxonomy.
-   Update README, the guide, and reference docs so a new user sees the daily
-   path first and the evidence/debug surfaces second. The docs should answer:
-   "How do I build/run/test?", "How do I ask what authority this code has?",
-   "How do I inspect pipeline artifacts?", and "How do I reproduce or reduce a
-   failure?"
-
-6. Add the Phase 6E validation artifact.
-   DONE (see CHANGELOG): `scripts/tests/check_cli_coherence.sh` (28/0, in CI +
-   `make test-cli-coherence`) locks context-free help (8 invocations, no project,
-   never throws), alias==legacy byte identity (diff), legacy-flag compatibility,
-   structured errors for invalid invocations, and the help-page taxonomy. Items
-   #1-#5 landed alongside: grouped `concrete --help`/`help`/`<cmd> --help`
-   handled before any file/project parsing; `report <kind> <file>` and
-   `trace <file> [--json]` as args-rewrite aliases (byte-identical by
-   construction); README leads with the daily workflow. Remaining niceties (a
-   per-command `help <command>` page beyond the grouped page, `concrete help
-   --json` command catalog) are pull-gated by Phase 7 agent needs.
-
+Remaining follow-ups (pull-gated by Phase 7 agent/tooling needs): a per-command
+`concrete help <command>` page beyond the grouped page + `<cmd> --help`, and a
+machine-readable `concrete help --json` command catalog.
 
 ## Phase 7: Standard Library And Core APIs
 
