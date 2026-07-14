@@ -142,7 +142,7 @@ only model). Let the compiler write the block for you:
 concrete prove src/main.con main.check_nonce --emit-link
 ```
 
-```con
+```con pseudocode
 #[spec(Concrete.Proof.checkNonceExpr)]
 #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
 #[proof_coverage(iff)]

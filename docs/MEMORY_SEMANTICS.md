@@ -115,7 +115,7 @@ All other types are linear. Linear values must be consumed exactly once before s
 
 Concrete uses **scoped borrow blocks** rather than Rust-style lifetime inference. A borrow block creates a named reference bound to a named region:
 
-```concrete
+```concrete pseudocode
 borrow owner as ref in Region {
     // ref is available here; owner is frozen
 }
@@ -186,7 +186,7 @@ Accessing `.0` on a newtype **consumes** the newtype (extracts the inner value).
 
 The checker does not track field-level borrow granularity. When an owner is frozen by a borrow block, the **entire** owner is frozen — individual fields cannot be separately borrowed. This means:
 
-```concrete
+```concrete pseudocode
 // Borrowing point freezes it entirely, even though the fields are disjoint:
 borrow point as ref in R {
     // point is entirely frozen here
@@ -210,7 +210,7 @@ The checker treats an array as a single linear value. There is no mechanism to b
 
 This means:
 
-```concrete
+```concrete pseudocode
 // Cannot borrow arr[0] and arr[1] separately
 borrow(arr, ref, r, false) {
     // entire arr is frozen
@@ -265,7 +265,7 @@ Before executing a break or continue:
 
 ### Allocation
 
-```concrete
+```concrete pseudocode
 let p: Heap<Point> = alloc(Point { x: 1.0, y: 2.0 }) with(Alloc);
 ```
 
@@ -299,7 +299,7 @@ Concrete does **not** have implicit destructors (no RAII drop). Cleanup is expli
 
 ### `defer` semantics
 
-```concrete
+```concrete pseudocode
 defer destroy(resource);
 ```
 
@@ -330,7 +330,7 @@ A type with `impl Destroy for T` provides a `destroy(x)` function that consumes 
 
 Copy variables can be reassigned freely if declared `mut`:
 
-```concrete
+```concrete pseudocode
 let mut x: Int = 1;
 x = 2;  // OK
 ```
@@ -414,7 +414,7 @@ The checker does not track what a callee does with a borrowed reference. If a fu
 
 When a value is borrowed, the entire value is frozen. The checker does not distinguish between borrowing the whole struct and borrowing one field. This prevents all partial-borrow patterns:
 
-```concrete
+```concrete pseudocode
 // Would be useful but is NOT supported:
 struct Pair { a: String, b: String }
 let mut p = Pair { a: owned_a, b: owned_b };

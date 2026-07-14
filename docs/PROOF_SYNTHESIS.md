@@ -105,7 +105,7 @@ O3: postcondition follows from exit facts
 
 The model may propose:
 
-```concrete
+```concrete pseudocode
 #[invariant(i <= 4)]
 #[invariant(sum >= 0)]
 while i < 4 { ... }

@@ -456,6 +456,9 @@ jobs:
       - name: "CLI coherence (Phase 6E — context-free help, alias identity, legacy compat)"
         run: bash scripts/tests/check_cli_coherence.sh
 
+      - name: "Doc snippets compile (13r — con/concrete fences compile, reject as declared, or marked pseudocode)"
+        run: bash scripts/tests/check_doc_snippets.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

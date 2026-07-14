@@ -83,7 +83,7 @@ A format-string-based API (`format!("hello {}", name)`) is superficially more er
 
 Parser/diagnostic error reporters should write into a caller-provided buffer, not return owned strings. Canonical shape:
 
-```concrete
+```concrete pseudocode
 fn format_error(msg: &mut String, err: &ParseError) with(Alloc) {
     append(msg, "error at line ", err.line, ", col ", err.col, ": ", &err.kind_str());
 }

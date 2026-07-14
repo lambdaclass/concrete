@@ -138,7 +138,7 @@ What is still being consolidated is the single public semantics document and the
 
 This means string building can consume borrowed literal text without temporary ownership:
 
-```concrete
+```concrete pseudocode
 // Zero-alloc: no temp created, nothing to drop
 sum.append(&" ok, ");
 print_string(&"hello\n");

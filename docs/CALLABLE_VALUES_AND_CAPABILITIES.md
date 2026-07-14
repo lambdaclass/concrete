@@ -113,7 +113,7 @@ combinator taking the context as its own parameter and forwarding it.
 
 Canonical signatures (combinator side):
 
-```con
+```con pseudocode
 // Shared context: ctx borrowed immutably, callback invoked per element.
 fn for_each_with<T, Ctx, cap C>(
     self: &Vec<T>, ctx: &Ctx, f: fn(&Ctx, &T) with(C) -> Unit
@@ -134,7 +134,7 @@ fn with_owned<Ctx, R, cap C>(
 
 Call site (no capture; context is explicit):
 
-```con
+```con pseudocode
 struct Sum { total: Int }
 fn add(acc: &mut Sum, x: &Int) { acc.total = acc.total + *x; }
 
@@ -229,7 +229,7 @@ These replace the immutable read accessor `get -> Option<&V>` that is the last
 open half of H1. They give the callback borrowed access to a stored element,
 scoped to the call.
 
-```con
+```con pseudocode
 // Shared read of one element, scoped to f. Returns f's result BY VALUE.
 fn with_value<K, V, Ctx, R, cap C>(
     self: &HashMap<K, V>, key: &K, ctx: &Ctx,
@@ -267,7 +267,7 @@ tiers), see `research/language/borrowed-container-access.md`.
 The obvious alternative is to extend Concrete's existing borrow blocks to
 container elements, Austral-style:
 
-```con
+```con pseudocode
 borrow v = m.get(k) in 'R {   // m frozen in 'R (cannot realloc); v cannot escape 'R
     use(v)
 }
@@ -357,7 +357,7 @@ This closes the immutable half of H1. The mutable half is already closed
 
 The combinator carries whatever its callback carries, no more, no less:
 
-```con
+```con pseudocode
 fn map<T, U, cap C>(xs: &Vec<T>, f: fn(&T) with(C) -> U) with(C) -> Vec<U>
 ```
 

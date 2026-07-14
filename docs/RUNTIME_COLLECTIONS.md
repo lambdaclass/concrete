@@ -69,7 +69,7 @@ These are not stdlib types. They are the shapes that interpreters, analyzers, an
 
 ### 3.1 Environment = `Vec<Frame>` of `HashMap<String, Value>`
 
-```concrete
+```concrete pseudocode
 struct Frame { bindings: HashMap<String, Value>; }
 struct Env   { frames: Vec<Frame>; }
 ```
@@ -83,7 +83,7 @@ This is the shape `lox` and `mal` use today. It is not in stdlib because the val
 
 ### 3.2 Intern pool = `Vec<String>` + `HashMap<String, u32>`
 
-```concrete
+```concrete pseudocode
 struct InternPool {
     by_id: Vec<String>;
     by_name: HashMap<String, u32>;
@@ -98,7 +98,7 @@ This is a two-collection idiom, not a dedicated type. A dedicated `InternPool` t
 
 ### 3.3 Work queue / scheduler = `Deque<Task>`
 
-```concrete
+```concrete pseudocode
 fn schedule(q: &mut Deque<Task>, t: Task) { q.push_back(t); }
 fn next(q: &mut Deque<Task>) -> Option<Task> { q.pop_front() }
 ```
@@ -108,7 +108,7 @@ fn next(q: &mut Deque<Task>) -> Option<Task> { q.pop_front() }
 
 ### 3.4 Fact index (analyzer) = `HashMap<Key, Vec<Fact>>`
 
-```concrete
+```concrete pseudocode
 fn add_fact(idx: &mut HashMap<Key, Vec<Fact>>, k: Key, f: Fact) with(Alloc) {
     match idx.get_mut(&k) {
         Option::Some { value } => value.push(f),

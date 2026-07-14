@@ -29,7 +29,7 @@ Reach for the **first** form that fits:
 For counting and walking a fixed or index-addressable range, use the language
 `for` loop. No library, no callback, no allocation, fully predictable:
 
-```concrete
+```concrete pseudocode
 for (let mut i = 0; i < n; i = i + 1) { ... }
 ```
 
@@ -49,7 +49,7 @@ value with no hidden allocation; the caller sees every step.
 For the standard collections (`Vec`, `Map`, `Set`, …), traversal is a method
 that takes an explicit function value whose capability set is polymorphic:
 
-```concrete
+```concrete pseudocode
 pub fn for_each<cap C>(&self, f: fn(&T) with(C)) with(C)
 pub fn fold<A, cap C>(&self, init: A, f: fn(A, &T) with(C) -> A) with(C) -> A
 pub fn map<U, cap C>(&self, f: fn(&T) with(C) -> U) with(C, Alloc) -> Vec<U>
@@ -66,7 +66,7 @@ type and knows whether traversal can allocate.
 Because there are no closures, a callback that needs mutable state takes that
 state as an explicit `&mut Ctx` parameter. Collections provide a `_ctx` variant:
 
-```concrete
+```concrete pseudocode
 pub fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &T) with(C)) with(C)
 ```
 

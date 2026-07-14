@@ -44,7 +44,7 @@ them in design notes, comments, or migration plans as future annotations.
 
 Current shape:
 
-```concrete
+```concrete pseudocode
 #[requires(n > 0)]
 #[ensures(result >= 0)]
 fn f(n: i64) -> i64 { ... }
@@ -60,7 +60,7 @@ contract, the status must remain missing, assumed, trusted, or blocked.
 
 Target shape:
 
-```concrete
+```concrete pseudocode
 #[invariant(i <= len)]
 #[invariant(sum == sum_prefix(xs, i))]
 #[decreases(len - i)]
@@ -84,7 +84,7 @@ Agent guidance:
 
 Target shape:
 
-```concrete
+```concrete pseudocode
 #[reads(input, table)]
 #[writes(out)]
 #[modifies(out)]
@@ -107,7 +107,7 @@ Agent guidance:
 
 Target shape:
 
-```concrete
+```concrete pseudocode
 #[depends(result <- input, key)]
 #[depends(log <- input)]
 fn verify(input: &Bytes, key: &Key) -> bool { ... }
@@ -131,7 +131,7 @@ Agent guidance:
 
 Target shape:
 
-```concrete
+```concrete pseudocode
 ghost let old_len = len(buf);
 spec fn valid_header(view: ByteView) -> bool { ... }
 ```
@@ -151,7 +151,7 @@ Agent guidance:
 
 Target shape:
 
-```concrete
+```concrete pseudocode
 import hmac.compute requires(proved_by_lean, no Unsafe)
 ```
 

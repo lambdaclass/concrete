@@ -565,7 +565,7 @@ refactors make the current checker decisions auditable.
    the checker and linearity gates would catch the exact bug class if it came
    back.
 
-13r. [OPEN — REQUIRED BEFORE PHASE 7; `check_doc_snippets.sh` not yet built] **Doc-snippet compile gate (from the Zig-at-100k-lines lessons,
+13r. [DONE — `check_doc_snippets.sh` in CI + make test-doc-snippets; 22 compile (incl. one reject:E0294 exemplar), 58 marked pseudocode, mutation-tested load-bearing] **Doc-snippet compile gate (from the Zig-at-100k-lines lessons,
    2026-07-07).** Every ```con code block in README/site/docs/*.md must either
    COMPILE (or compile-and-check for reject examples marked as such) or carry
    an explicit `pseudocode`/`illustrative` marker. Zig's real-world pain was

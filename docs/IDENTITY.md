@@ -196,7 +196,7 @@ Concrete's philosophy, see
 
 Capabilities tell you what each function requires. Authority budgets extend this to modules and packages as enforceable constraints:
 
-```con
+```con pseudocode
 #[authority(Alloc)]
 mod Parser {
     // Any function here that transitively reaches Network or File

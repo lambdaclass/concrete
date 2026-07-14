@@ -111,7 +111,7 @@ whole-owner move. Explicitly **excluded**: heap-shell field reads (`h.next`; spe
 design point, not a silent hole). Fallout was 2 std sites (`HashSet.drop`,
 `OrderedSet.drop` — now destructure) and 3 test fixtures.
 
-```concrete
+```concrete pseudocode
 let w: Wrap = mkW();      // Wrap { f: File }
 let g: File = w.f;        // now E0290 — borrow it or destructure the owner
 ```

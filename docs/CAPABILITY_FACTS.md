@@ -34,7 +34,7 @@ The long-term capability axis should mirror `IntArith` and `TypeJudgment`: a
 single compiler-internal decision record, not a new user-facing effect system.
 Concrete's surface stays explicit and practical:
 
-```con
+```con pseudocode
 fn read(path: Path) with(File) -> Result<Bytes, IOError>
 fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U
 ```

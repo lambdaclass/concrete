@@ -34,6 +34,15 @@ Conventions:
   pure non-Unit Copy expression statement is E0294 with the `discard(expr)`
   escape. New stdlib `Result`-returning APIs are must-use by default.
 
+```concrete reject:E0294
+mod m {
+    fn main() -> Int {
+        2 + 3;
+        return 0;
+    }
+}
+```
+
 ### 2. FATAL — trap/abort
 
 For INVARIANT failures: states a correct program never reaches, where limping

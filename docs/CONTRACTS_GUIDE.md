@@ -211,7 +211,7 @@ A function is linked to its hand-written Lean proof/spec by **in-source
 attributes** — erased metadata on the function (JSON `proof-registry.json` was
 the original mechanism and has been removed; source links are the only model):
 
-```con
+```con pseudocode
 #[spec(Concrete.Proof.ctCompareExpr)]
 #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
 #[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]

@@ -76,7 +76,7 @@ This is the default target today. All existing examples compile in hosted mode.
 
 The `examples/fixed_capacity/` message validator is already freestanding in its core. The validation functions, ring buffer, and byte readers use no capabilities, no allocation, no FFI, and no stdlib:
 
-```concrete
+```concrete pseudocode
 fn validate_version(v: i32) -> i32 {
     if v == 1 { return 0; }
     return 2;

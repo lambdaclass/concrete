@@ -141,7 +141,7 @@ The `--report unsafe` and `--report authority` modes make these boundaries visib
 
 Capability aliases reduce signature repetition without hiding authority:
 
-```con
+```con pseudocode
 cap IO = File + Console;
 cap Host = File + Network + Env + Process;
 

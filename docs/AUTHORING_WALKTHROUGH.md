@@ -114,7 +114,7 @@ link it in source. `--emit-link` prints the exact attribute block:
 ```sh
 concrete prove …/main.con constant_time_tag.ct_compare --emit-link
 ```
-```con
+```con pseudocode
 #[spec(Concrete.Proof.ctCompareExpr)]
 #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
 #[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]

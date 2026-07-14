@@ -28,7 +28,7 @@ Building `"[ALLOW] admin read source_code"` requires 7 chained `string_concat` c
 
 **Status:** Fixed. If-else expressions now work:
 
-```con
+```con pseudocode
 let label: String = if v == 1 { "ALLOW" } else { "DENY" };
 ```
 

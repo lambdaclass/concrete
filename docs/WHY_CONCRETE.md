@@ -153,7 +153,7 @@ Handwritten Lean proofs are too expensive to be the normal user interface.
 
 The direction is source-level evidence:
 
-```con
+```con pseudocode
 spec fn ch_spec(x: u32, y: u32, z: u32) -> u32 {
     (x & y) ^ ((~x) & z)
 }
@@ -170,7 +170,7 @@ call-site check, a runtime check, or an explicit assumption.
 
 Loop contracts follow the same principle:
 
-```con
+```con pseudocode
 #[invariant(0 <= i && i <= 8)]
 #[variant(8 - i)]
 while i < 8 {

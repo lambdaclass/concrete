@@ -8,7 +8,7 @@ A statement expression that ends in `;` discards its value. When that value is a
 **fallible result** — `Result<…>` or `Option<…>` — discarding it silently throws
 away a possible failure or absence. Concrete rejects that discard:
 
-```concrete
+```concrete pseudocode
 risky();          // error[check]: (E0286) the result of type 'Result<…>' is
                   //               discarded; a fallible result must be used
 ```
@@ -33,7 +33,7 @@ Concrete is **linear**: a non-Copy value must be used exactly once and can never
 silently disappear. `Result`/`Option` are non-Copy, so the acknowledgement is to
 **account for the value** — handle every variant and ignore only the Copy payloads:
 
-```concrete
+```concrete pseudocode
 match vec_pop::<i32>(&mut stack) {   // pop-and-drop, on purpose
     Option::Some { _ } => {},        // the i32 payload is Copy — `_` may ignore it
     Option::None       => {},
@@ -62,7 +62,7 @@ The must-use rule above keys on *fallibility*; a parallel rule keys on
 non-Unit Copy** value computes something with no effect and throws it away — a
 dead computation:
 
-```concrete
+```concrete pseudocode
 2 + 3;            // error[check]: (E0294) pure value of type 'i64' is computed
 x;                //               and then discarded — a dead computation
 discard(2 + 3);   // ok — `discard(expr)` acknowledges an intentional discard
@@ -84,7 +84,7 @@ non-Copy resource must be consumed or `destroy()`d (**E0295**), never `discard`e
 resource-bearing payload is non-Copy, so `Some { _ }` / `Ok { _ }` over it is
 rejected — you must bind and release it:
 
-```concrete
+```concrete pseudocode
 match open_file() {          // Result<File, …>
     Result::Ok { f }   => { f.destroy(); },   // `_` here would be E0288 — File is non-Copy
     Result::Err { _ }  => {},                  // the error payload, if Copy, may be ignored

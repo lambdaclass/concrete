@@ -127,7 +127,7 @@ fn get_byte(a: [u8; 16], i: Int) -> u8 {
 
 Loop contracts:
 
-```concrete
+```concrete pseudocode
 #[invariant(i >= 0)]
 #[invariant(i <= 16)]
 #[invariant(diff == prefix_diff(a, b, i))]
@@ -140,7 +140,7 @@ while i < 16 {
 
 Trusted and assumed boundaries:
 
-```concrete
+```concrete pseudocode
 #[trusted(reason = "audited C implementation")]
 #[assumes("implements RFC 6234 SHA-256 compression")]
 extern fn sha256_compress(state: &mut [u32; 8], block: &[u8; 64]) with(Unsafe);
@@ -162,7 +162,7 @@ SMT, runtime checks, or assumptions discharge or classify those obligations.
 
 ### Lean-checked proof
 
-```concrete
+```concrete pseudocode
 spec fn ch_spec(x: u32, y: u32, z: u32) -> u32 {
     (x & y) ^ ((~x) & z)
 }
@@ -195,7 +195,7 @@ ch
 SMT-like automation, but the result is checked by the Lean kernel, so it does
 not add an external solver to the trusted base.
 
-```concrete
+```concrete pseudocode
 spec fn rotr_spec(x: u32, n: i32) -> u32 {
     (x >> n) | (x << (32 - n))
 }
@@ -231,7 +231,7 @@ The HMAC proof exposed the right kind of example: symbolic padding arithmetic.
 The source is simple, but proving the integer division bound manually requires
 bridge lemmas about `Int`, `Nat`, `BitVec`, and division.
 
-```concrete
+```concrete pseudocode
 #[requires(0 <= len && len <= 375)]
 #[ensures(1 <= result && result <= 6)]
 #[prove_by(smt)]
@@ -257,7 +257,7 @@ The counterexample path is just as important. If the postcondition is too
 strong, the solver should report a source-level witness instead of a solver
 term:
 
-```concrete
+```concrete pseudocode
 #[requires(0 <= len && len <= 375)]
 #[ensures(result <= 5)]
 #[prove_by(smt)]
@@ -289,7 +289,7 @@ trust: kernel_checked
 
 ### Loop invariant with Lean structure and automated leaves
 
-```concrete
+```concrete pseudocode
 spec fn diff_prefix(a: [u8; 16], b: [u8; 16], n: i32) -> u8;
 
 contract SameTag(a: [u8; 16], b: [u8; 16], r: Int) {
@@ -344,7 +344,7 @@ The intended split is that Lean proves the loop structure/refinement, while
 
 Runtime checking is a bridge for unproved claims, not a proof.
 
-```concrete
+```concrete pseudocode
 #[ensures(result == sha256_spec(msg))]
 #[check_runtime]
 fn sha256_hash(msg: [u8; 64]) -> [u8; 32] {
@@ -369,7 +369,7 @@ error: release policy requires proved_by_lean for sha256_hash.O1
 
 ### Assumptions are loud
 
-```concrete
+```concrete pseudocode
 #[assume(machine_level_constant_time)]
 fn ct_compare(a: [u8; 16], b: [u8; 16]) -> Int {
     ...
@@ -391,7 +391,7 @@ assumption lifecycle and release-policy machinery as `assumptions.toml`.
 
 ### HMAC shape
 
-```concrete
+```concrete pseudocode
 spec fn hmac_sha256_spec(
     key: [u8; 64],
     msg: [u8; 64],
@@ -449,7 +449,7 @@ Deferred:
 Dedicated `iff` syntax is not required for v1. The parser can use equality over
 booleans first:
 
-```concrete
+```concrete pseudocode
 #[ensures((result == 1) == bytes_eq(a, b))]
 ```
 

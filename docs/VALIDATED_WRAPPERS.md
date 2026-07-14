@@ -29,7 +29,7 @@ newtype Wrapper<T> = T;
 
 ### 1.2 Construction
 
-```concrete
+```concrete pseudocode
 let id: UserId = UserId(42);
 ```
 
@@ -37,7 +37,7 @@ let id: UserId = UserId(42);
 
 ### 1.3 Inner access
 
-```concrete
+```concrete pseudocode
 let raw: Int = id.0;
 ```
 
@@ -46,7 +46,7 @@ let raw: Int = id.0;
 
 ### 1.4 Non-coercion
 
-```concrete
+```concrete pseudocode
 fn takes_userid(id: UserId) { ... }
 takes_userid(42); // ERROR: Int is not UserId
 ```
@@ -118,7 +118,7 @@ After construction, the wrapper is trusted: holders can call `.0` directly witho
 
 Validated wrappers that need a reason use a module-local error enum:
 
-```concrete
+```concrete pseudocode
 enum PortError { Zero, OutOfRange }
 
 impl Port {
