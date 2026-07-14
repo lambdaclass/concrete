@@ -2117,7 +2117,11 @@ Do not duplicate compiler-command cleanup here.
    `insert`, `remove`, `retain`, `sort`, `search` for vectors and slices;
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
-   obligations it creates.
+   obligations it creates. Traversal order must be deterministic: `for_each` /
+   `fold` over `std.map`/`std.set` visit in a defined, reproducible order (e.g.
+   insertion or key order, not raw hash-bucket order), and hash seeding must not
+   vary run-to-run — the oracle/differential story needs a fold over a collection
+   to be reproducible.
    - 8a. Keep `Clone` and indexed move/swap as **workload-gated value-model
      research**, separate from H1 and not assumed inevitable. If admitted,
      `Clone` is explicit semantic duplication (capability-visible, usually
@@ -2219,6 +2223,24 @@ Do not duplicate compiler-command cleanup here.
     distinction,
     timestamp formatting/parsing if admitted, timeout helpers, and explicit
     hosted authority for reading the clock.
+14a. Define the `std.io` `Reader` / `Writer` interface — the one narrow stream
+    contract every byte source/sink implements, before formatting, IO endpoints,
+    and streaming scanners build on it. A `Writer` is `write(bytes) ->
+    Result<usize, IoError>` plus `flush`/`close`; a `Reader` is
+    `read(buf) -> Result<usize, IoError>`; file, console, in-memory `Bytes`
+    buffer, and (later) socket all implement them. `std.fmt` output (item 15), the
+    capability-scoped file/console surface (item 26), `std.fs` (item 27), and
+    `ProgressWriter` all TARGET `Writer` rather than each rolling its own sink.
+    Add a buffered wrapper (`BufReader`/`BufWriter`) over any handle. Parsing stays
+    over in-memory `Bytes`/`Text` (item 16) for v1; streaming scanners can later
+    layer on `Reader`. Capability-visible (a hosted `Writer` carries its
+    `Console`/`File`/`Network` capability); no hidden allocation — buffered
+    wrappers carry `with(Alloc)` or use fixed buffers.
+
+    Done when `std.fmt`, `std.fs`, and the console surface all write through one
+    `Writer` contract (a gate rejects a second, parallel sink interface) and a
+    fixed-buffer `Writer` works with no `Alloc`. This is the Go `io.Writer` /
+    Hare `io::handle` lesson: one interface, not three.
 15. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
     integer/text formatting, simple
     scanners, structured parse results, error-set reports, and oracle-friendly
@@ -2333,7 +2355,12 @@ Do not duplicate compiler-command cleanup here.
     invariants, and explicitly unrecoverable runtime failures. Audit output
     should identify which public APIs can recover, which can trap, and which
     require a policy gate. Do not add a second Zig-style error-union mechanism;
-    improve the `Result`/`Option` surface instead.
+    improve the `Result`/`Option` surface instead. Define how a module error
+    composes into a caller's error across a boundary (`FsError` -> `ServiceError`)
+    WITHOUT Rust's `From`/`Into` trait web: an explicit conversion function or a
+    small wrapping variant named at the call site, not an implicit trait
+    conversion. State the pattern once so error-heavy code does not each invent
+    its own.
 30a. Define the canonical **consume / destroy / handoff** conventions for
     linear code. The guide must distinguish explicit cleanup (`destroy(x)` or
     the type's consuming `.drop()`/Destroy verb), ownership transfer by
