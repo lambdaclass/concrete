@@ -39,7 +39,8 @@ bytes	is_empty	no	borrows	infallible	none	pure-core
 bytes	clear	no	mut	infallible	none	pure-core
 bytes	eq	no	borrows	infallible	none	pure-core
 bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect
-bytes	to_string	no	consumes	infallible	none	pure-core
+bytes	to_string	yes	consumes	option	Alloc	hosted-effect
+bytes	to_string_unchecked	no	consumes	infallible	none	pure-core
 bytes	raw_view	no	borrows	infallible	none	pure-core
 bytes	into_raw_parts	no	consumes	infallible	none	pure-core
 bytes	drop	yes	consumes	infallible	Alloc	hosted-effect
@@ -104,7 +105,7 @@ heap	peek	no	borrows	option	none	deterministic
 hex	encode_bytes	yes	constructs	infallible	Alloc	hosted-effect
 hex	encode_u32	yes	constructs	infallible	Alloc	hosted-effect
 hex	encode_u32_vec	yes	constructs	infallible	Alloc	hosted-effect
-hex	decode	yes	constructs	infallible	Alloc	hosted-effect
+hex	decode	yes	constructs	option	Alloc	hosted-effect
 io	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect
 io	open	no	constructs	result	File,Unsafe	hosted-effect
 io	write	no	borrows	infallible	File,Unsafe	hosted-effect
@@ -338,6 +339,7 @@ text	get_unchecked	no	borrows	infallible	none	deterministic
 text	eq	no	borrows	infallible	none	deterministic
 text	from_raw	no	constructs	infallible	none	deterministic
 text	try_from_raw	no	constructs	option	none	deterministic
+text	validate_utf8	no	constructs	infallible	none	trusted-boundary
 time	from_secs	no	constructs	infallible	none	deterministic
 time	from_millis	no	constructs	infallible	none	deterministic
 time	from_nanos	no	constructs	infallible	none	deterministic

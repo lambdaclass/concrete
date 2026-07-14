@@ -1,6 +1,7 @@
 mod bytes {
     import std.alloc.{grow,dealloc};
     import std.math.{max};
+    import std.text.{validate_utf8};
 
     pub struct Bytes {
         ptr: *mut u8,
@@ -119,7 +120,22 @@ mod bytes {
         /// Convert Bytes to String by transferring ownership of the buffer.
         /// The Bytes value is consumed; no copy is made.
         /// The caller is responsible for ensuring the bytes are valid text.
-        pub fn to_string(self) -> String {
+        /// Reinterpret as String after UTF-8 VALIDATION. Invalid bytes return
+        /// None and the buffer is dropped (recoverable, bucket 1).
+        pub fn to_string(self) with(Alloc) -> Option<String> {
+            let Bytes { ptr, len, cap } = self;
+            if !validate_utf8(ptr as *const u8, len) {
+                dealloc::<u8>(ptr);
+                return Option::<String>::None;
+            }
+            let s: String = String { ptr: ptr, len: len, cap: cap };
+            return Option::<String>::Some { value: s };
+        }
+
+        /// Unchecked reinterpretation: the caller PROVES the bytes are valid
+        /// UTF-8 (2a: an _unchecked variant names an obligation, not UB —
+        /// downstream text ops assume validity).
+        pub fn to_string_unchecked(self) -> String {
             let Bytes { ptr, len, cap } = self;
             let s: String = String { ptr: ptr, len: len, cap: cap };
             return s;

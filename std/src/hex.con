@@ -58,10 +58,13 @@ mod hex {
 
     /// Decode a hex string into a byte vector.
     /// Returns an empty vector on invalid input (odd length or bad chars).
-    pub fn decode(s: &String) with(Alloc) -> Vec<u8> {
+    /// Decode a hex string. Odd length or a non-hex character is a DOMAIN
+    /// failure -> None (was: ambiguous empty Vec — audit 2026-07-14).
+    pub fn decode(s: &String) with(Alloc) -> Option<Vec<u8>> {
         let result: Vec<u8> = Vec::<u8>::new();
         if s.len % 2 != 0 {
-            return result;
+            result.drop();
+            return Option::<Vec<u8>>::None;
         }
         let mut i: u64 = 0;
         while i < s.len {
@@ -69,13 +72,12 @@ mod hex {
             let lo: u8 = char_to_nibble(s.get_unchecked(i + 1));
             if hi == 255 || lo == 255 {
                 result.drop();
-                let empty: Vec<u8> = Vec::<u8>::new();
-                return empty;
+                return Option::<Vec<u8>>::None;
             }
             result.push((hi << 4) | lo);
             i = i + 2;
         }
-        return result;
+        return Option::<Vec<u8>>::Some { value: result };
     }
 
     import std.test.{assert_eq, assert_true};
@@ -110,7 +112,10 @@ mod hex {
     #[test]
     fn test_decode_valid() with(Alloc) -> i32 {
         let input: String = "48656c6c6f";
-        let bytes: Vec<u8> = decode(&input);
+        let maybe: Option<Vec<u8>> = decode(&input);
+        let ok: bool = maybe.is_some();
+        if !ok { input.drop(); ignore_optvec(maybe); return 1; }
+        let bytes: Vec<u8> = match maybe { Option::Some { value } => value, Option::None => Vec::<u8>::new(), };
         if !assert_eq::<u64>(bytes.len, 5, "decode should produce 5 bytes") {
             input.drop();
             bytes.drop();
@@ -135,14 +140,18 @@ mod hex {
     #[test]
     fn test_decode_odd_length() with(Alloc) -> i32 {
         let input: String = "abc";
-        let bytes: Vec<u8> = decode(&input);
-        if !assert_eq::<u64>(bytes.len, 0, "odd-length hex should return empty") {
-            input.drop();
-            bytes.drop();
-            return 1;
-        }
+        let maybe: Option<Vec<u8>> = decode(&input);
+        let bad: bool = maybe.is_none();
         input.drop();
-        bytes.drop();
+        ignore_optvec(maybe);
+        if !bad { return 1; }
         return 0;
+    }
+
+    fn ignore_optvec(o: Option<Vec<u8>>) with(Alloc) {
+        match o {
+            Option::Some { value } => { value.drop(); },
+            Option::None => { },
+        }
     }
 }

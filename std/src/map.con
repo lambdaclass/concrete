@@ -20,7 +20,7 @@ mod map {
     }
 
     trusted impl<K, V> HashMap<K, V> {
-        pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) -> HashMap<K, V> {
+        pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc) -> HashMap<K, V> {
             let cap: u64 = 16;
             let keys: *mut K = grow::<K>(0 as *mut K, cap);
             let values: *mut V = grow::<V>(0 as *mut V, cap);

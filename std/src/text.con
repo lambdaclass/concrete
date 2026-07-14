@@ -110,7 +110,7 @@ mod text {
     /// True iff [ptr, ptr+len) is well-formed UTF-8. Rejects overlong encodings,
     /// surrogates (U+D800..U+DFFF), and code points above U+10FFFF via the
     /// per-leading-byte continuation ranges.
-    trusted fn validate_utf8(ptr: *const u8, len: u64) -> bool {
+    pub trusted fn validate_utf8(ptr: *const u8, len: u64) -> bool {
         let mut i: u64 = 0;
         while i < len {
             let b0: u8 = byte_at(ptr, i);
