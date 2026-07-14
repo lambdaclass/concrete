@@ -28,9 +28,14 @@ grep -qE "caller PROVES|valid UTF-8" std/src/bytes.con \
 #    modules (string.con owns String; bytes.con owns the two crossings above;
 #    args.con validates argv before construction (gate-verified below);
 #    text.con owns validated Text).
-leaks=$(grep -rn "String { ptr" std/src/*.con | grep -vE "std/src/(string|bytes|args)\.con" | head -3)
+leaks=$(grep -rn "String { ptr" std/src/*.con | grep -vE "std/src/(string|bytes|args|path)\.con" | head -3)
 [ -z "$leaks" ] && ok "no stray raw String construction outside string/bytes" \
   || no "stray String{ptr} construction: $leaks"
+
+# 3b-pre. path validates before its String construction
+grep -B16 "String { ptr: buf" std/src/path.con | grep -q "validate_utf8" \
+  && ok "path.to_string validates before String construction" \
+  || no "path builds String without validation"
 
 # 3b. args validates argv before it becomes a String
 grep -q "validate_utf8(raw, n)" std/src/args.con \
@@ -52,6 +57,23 @@ drift=$(grep -rlnE "pub fn (nfc|nfd|nfkc|nfkd|normalize|casefold|case_fold|graph
 [ -z "$drift" ] && ok "no normalization/case-folding/display-width APIs (v1 non-goals)"   || no "v1 non-goal API appeared: $drift"
 # the policy doc exists and pins the args long-term note
 grep -q "get_bytes" docs/stdlib/UNICODE_POLICY.md   && ok "policy doc present incl. args.get_bytes long-term note" || no "UNICODE_POLICY.md missing/incomplete"
+
+echo "=== path (P7 #7): OS bytes, pure value manipulation, display is separate ==="
+# path APIs never carry File — filesystem authority belongs to std.fs
+fleak=$(awk -F'\t' '$1=="path" && $6 ~ /File/ {print $2}' "$M" | head -3)
+[ -z "$fleak" ] && ok "std.path carries no File (pure path-value manipulation)" \
+  || no "path API with File authority (belongs in std.fs): $fleak"
+# display is checked: to_string -> Option
+grep -P "^path\tto_string\t" "$M" | awk -F'\t' '$5=="option"' | grep -q . \
+  && ok "Path::to_string is CHECKED (Option — display separate from raw bytes)" \
+  || no "path to_string not Option"
+# raw accessor exists (the honest non-UTF-8 route)
+grep -P "^path\tbytes_view\t" "$M" | grep -q . \
+  && ok "raw bytes_view accessor present" || no "bytes_view missing"
+# no normalization / canonicalization / symlink promises in the value layer
+pd=$(grep -rlnE "pub fn (normalize|canonicalize|resolve|realpath|readlink|symlink)" std/src/path.con | head -1)
+[ -z "$pd" ] && ok "no normalization/symlink/TOCTOU promises in std.path" \
+  || no "filesystem-semantics API in the pure path layer: $pd"
 
 echo
 echo "BYTES-TEXT-BOUNDARY: PASS=$PASS FAIL=$FAIL"

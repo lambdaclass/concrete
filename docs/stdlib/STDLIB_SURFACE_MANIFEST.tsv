@@ -255,6 +255,9 @@ parse	expect_char	no	mut	infallible	none	deterministic
 path	new	no	constructs	infallible	none	deterministic
 path	from_string	yes	constructs	infallible	Alloc	hosted-effect
 path	push	yes	mut	infallible	Alloc	hosted-effect
+path	from_bytes	yes	constructs	infallible	Alloc	hosted-effect
+path	to_string	yes	borrows	option	Alloc	hosted-effect
+path	bytes_view	no	borrows	infallible	none	deterministic
 path	as_path	no	borrows	infallible	none	deterministic
 path	drop	yes	consumes	infallible	Alloc	hosted-effect
 path	path_join	yes	constructs	infallible	Alloc	trusted-boundary

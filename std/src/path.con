@@ -1,6 +1,8 @@
 mod path {
     import std.alloc.{grow,dealloc};
     import std.math.{max};
+    import std.bytes.{Bytes, BytesRaw};
+    import std.text.{validate_utf8};
 
     pub struct Path {
         ptr: *const u8,
@@ -75,6 +77,48 @@ mod path {
             }
         }
 
+        /// Build from raw OS bytes (paths are NOT necessarily UTF-8 —
+        /// docs/stdlib/UNICODE_POLICY.md; the byte content is taken as-is,
+        /// no validation and no normalization).
+        pub fn from_bytes(b: &Bytes) with(Alloc) -> PathBuf {
+            let raw: BytesRaw = b.raw_view();
+            let cap: u64 = max::<u64>(raw.len, 4) * 2;
+            let p: PathBuf = PathBuf {
+                ptr: grow::<u8>(0 as *mut u8, cap),
+                len: raw.len,
+                cap: cap,
+            };
+            let mut i: u64 = 0;
+            while i < raw.len {
+                *((p.ptr as u64 + i) as *mut u8) = *((raw.ptr as u64 + i) as *const u8);
+                i = i + 1;
+            }
+            return p;
+        }
+
+        /// Human-readable display is SEPARATE from the raw representation:
+        /// a path renders as String only if its bytes are valid UTF-8 —
+        /// otherwise None (the raw bytes stay available via bytes_view).
+        pub fn to_string(&self) with(Alloc) -> Option<String> {
+            if !validate_utf8(self.ptr as *const u8, self.len) {
+                return Option::<String>::None;
+            }
+            let buf: *mut u8 = grow::<u8>(0 as *mut u8, max::<u64>(self.len, 1));
+            let mut i: u64 = 0;
+            while i < self.len {
+                *((buf as u64 + i) as *mut u8) = *((self.ptr as u64 + i) as *const u8);
+                i = i + 1;
+            }
+            let s: String = String { ptr: buf, len: self.len, cap: max::<u64>(self.len, 1) };
+            return Option::<String>::Some { value: s };
+        }
+
+        /// Raw byte view of the path (Copy, owns nothing; must not outlive
+        /// this PathBuf). The honest accessor for non-UTF-8 paths.
+        pub fn bytes_view(&self) -> BytesRaw {
+            return BytesRaw { ptr: self.ptr, len: self.len, cap: self.cap };
+        }
+
         pub fn as_path(&self) -> Path {
             let p: Path = Path {
                 ptr: self.ptr as *const u8,
@@ -124,6 +168,36 @@ mod path {
     }
 
     import std.test.{assert_eq};
+
+    #[test]
+    fn test_path_bytes_roundtrip() with(Alloc) -> i32 {
+        // non-UTF-8 path bytes: representable, NOT displayable
+        let mut raw: Bytes = Bytes::with_capacity(3);
+        raw.push(47); raw.push(0xFF); raw.push(0xFE);   // "/\xFF\xFE"
+        let p: PathBuf = PathBuf::from_bytes(&raw);
+        raw.drop();
+        let disp: Option<String> = p.to_string();
+        let was_none: bool = disp.is_none();
+        match disp { Option::Some { value } => { value.drop(); }, Option::None => { }, }
+        if !was_none { p.drop(); return 1; }
+        let v: BytesRaw = p.bytes_view();
+        if v.len != 3 { p.drop(); return 1; }
+        p.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_path_utf8_displays() with(Alloc) -> i32 {
+        let s: String = "/tmp/x";
+        let p: PathBuf = PathBuf::from_string(&s);
+        s.drop();
+        let disp: Option<String> = p.to_string();
+        let ok: bool = disp.is_some();
+        match disp { Option::Some { value } => { value.drop(); }, Option::None => {}, }
+        p.drop();
+        if !ok { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_pathbuf_push() with(Unsafe, Alloc) -> i32 {
