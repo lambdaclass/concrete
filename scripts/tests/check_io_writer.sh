@@ -43,6 +43,15 @@ grep -qE 'enum +Writer|dyn +Writer' std/src/*.con && no "closed sink enum / dyn 
 n=$(grep -l "write_fn" std/src/*.con | wc -l | tr -d ' ')
 [ "$n" -eq 1 ] && ok "the fn-pointer sink shape lives only in std.io" || no "parallel sink interfaces in $n files"
 
+echo "=== Reader (symmetric contract) ==="
+grep -P "^io\tfixed_reader\t" "$M" | awk -F'\t' '$3=="no" && $6 ~ /Unsafe/' | grep -q . \
+  && ok "fixed_reader: no Alloc, Unsafe at acquisition" || no "fixed_reader facts wrong"
+grep -P "^io\treader_from_file\t" "$M" | awk -F'\t' '$6 ~ /File/' | grep -q . \
+  && ok "reader_from_file requires File" || no "reader_from_file missing File"
+r=$(grep -P "^io\tread\t" "$M"); echo "$r" | awk -F'\t' '$5=="result" && $6=="none"' | grep -q . \
+  && ok "Reader.read: recoverable Result, capability-free" || no "Reader.read facts wrong ($r)"
+[ "$(grep -c 'struct Reader' std/src/io.con)" -eq 1 ] && ok "exactly one Reader handle" || no "multiple Readers"
+
 echo
 echo "IO-WRITER: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

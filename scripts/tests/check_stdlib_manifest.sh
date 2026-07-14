@@ -56,8 +56,8 @@ for mod in "${!DOMAIN[@]}"; do
   [ -z "$leak" ] && ok "std.$mod hosted items all carry $want"     || no "std.$mod hosted items MISSING $want (Unsafe is not domain authority): $leak"
 done
 # io: TextFile + writer_from_file must carry File; Writer methods stay cap-free.
-ioleak=$(awk -F'	' '$1=="io" && $6 ~ /Unsafe/ && $6 !~ /File/ {print $2" ("$6")"}' "$TMP/derived.tsv" | grep -vE "^fixed_writer" | head -5)
-[ -z "$ioleak" ] && ok "std.io Unsafe items carry File where they touch files (fixed_writer exempt: raw memory, not fs)"   || no "std.io items with Unsafe but no File: $ioleak"
+ioleak=$(awk -F'	' '$1=="io" && $6 ~ /Unsafe/ && $6 !~ /File/ {print $2" ("$6")"}' "$TMP/derived.tsv" | grep -vE "^fixed_(writer|reader)" | head -5)
+[ -z "$ioleak" ] && ok "std.io Unsafe items carry File where they touch files (fixed_writer/fixed_reader exempt: raw memory, not fs)"   || no "std.io items with Unsafe but no File: $ioleak"
 
 echo
 echo "STDLIB-MANIFEST: PASS=$PASS FAIL=$FAIL"

@@ -121,6 +121,10 @@ io	writer_from_file	no	constructs	infallible	File	trusted-boundary
 io	console_writer	no	constructs	infallible	Console	trusted-boundary
 io	console_error_writer	no	constructs	infallible	Console	trusted-boundary
 io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary
+io	read	no	borrows	result	none	deterministic
+io	close	no	consumes	result	none	deterministic
+io	reader_from_file	no	constructs	infallible	File	trusted-boundary
+io	fixed_reader	no	constructs	infallible	Unsafe	trusted-boundary
 io	print	no	constructs	infallible	Console	trusted-boundary
 io	println	no	constructs	infallible	Console	trusted-boundary
 io	eprint	no	constructs	infallible	Console	trusted-boundary

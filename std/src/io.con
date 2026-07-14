@@ -177,6 +177,73 @@ mod io {
         return Writer { ctx: state as *mut u8, write_fn: fixed_write, flush_fn: console_noop, close_fn: console_noop };
     }
 
+    // ================================================================
+    // Reader — the one narrow byte-source contract (P7 14a, symmetric to
+    // Writer). read fills a CALLER-PROVIDED buffer (no hidden allocation);
+    // Ok(0) means EOF (byte-stream convention); errors are recoverable
+    // Results (13t bucket 1); invalid buffers/bounds remain traps.
+    // Authority at ACQUISITION, methods capability-free, linear close.
+    // ================================================================
+    pub struct Reader {
+        ctx: *mut u8,
+        read_fn: fn(*mut u8, *mut u8, u64) -> Result<u64, IoError>,
+        close_fn: fn(*mut u8) -> Result<u64, IoError>,
+    }
+
+    trusted impl Reader {
+        /// Read up to `len` bytes into caller-owned `buf`. Ok(0) = EOF.
+        pub fn read(&self, buf: *mut u8, len: u64) -> Result<u64, IoError> {
+            let f: fn(*mut u8, *mut u8, u64) -> Result<u64, IoError> = self.read_fn;
+            return f(self.ctx, buf, len);
+        }
+
+        /// Consume the handle; releases the source.
+        pub fn close(self) -> Result<u64, IoError> {
+            let Reader { ctx, read_fn, close_fn } = self;
+            let f: fn(*mut u8) -> Result<u64, IoError> = close_fn;
+            return f(ctx);
+        }
+    }
+
+    // ---- file source (authority: File at acquisition) ----
+    trusted fn file_read(ctx: *mut u8, buf: *mut u8, len: u64) -> Result<u64, IoError> {
+        if len == 0 { return Result::<u64, IoError>::Ok { value: 0 }; }
+        let n: u64 = fread(buf, 1, len, ctx as *const u8);
+        return Result::<u64, IoError>::Ok { value: n };
+    }
+    /// Consume an open `TextFile` into a `Reader`. Authority: `File`.
+    pub trusted fn reader_from_file(f: TextFile) with(File) -> Reader {
+        let TextFile { ptr } = f;
+        return Reader { ctx: ptr as *mut u8, read_fn: file_read, close_fn: file_close };
+    }
+
+    // ---- fixed-buffer source (NO Alloc: caller owns the region) ----
+    pub struct Copy FixedSrcState {
+        buf: *const u8,
+        len: u64,
+        pos: u64,
+    }
+    trusted fn fixed_read(ctx: *mut u8, buf: *mut u8, len: u64) -> Result<u64, IoError> {
+        let st: *mut FixedSrcState = ctx as *mut FixedSrcState;
+        let pos: u64 = (*st).pos;
+        let avail: u64 = (*st).len - pos;
+        if avail == 0 { return Result::<u64, IoError>::Ok { value: 0 }; }  // EOF
+        let n: u64 = if len < avail { len } else { avail };
+        let base: *const u8 = (*st).buf;
+        let mut i: u64 = 0;
+        while i < n {
+            *((buf as u64 + i) as *mut u8) = *((base as u64 + pos + i) as *const u8);
+            i = i + 1;
+        }
+        (*st).pos = pos + n;
+        return Result::<u64, IoError>::Ok { value: n };
+    }
+    /// A `Reader` over a caller-owned region — reads without `Alloc`.
+    /// Authority: `Unsafe` at acquisition (raw caller memory), never at read.
+    pub trusted fn fixed_reader(state: *mut FixedSrcState) with(Unsafe) -> Reader {
+        return Reader { ctx: state as *mut u8, read_fn: fixed_read, close_fn: console_noop };
+    }
+
     /// Write a string to stdout without a trailing newline.
     pub trusted fn print(value: &String) with(Console) {
         if value.len > 0 {
@@ -248,6 +315,35 @@ mod io {
         if !full { return 1; }
         if !closed_ok { return 1; }
         if st.len != 5 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_reader_fixed_source() with(Unsafe, Alloc) -> i32 {
+        // source region: "hi!" (3 bytes) owned via Bytes
+        let mut src: Bytes = Bytes::with_capacity(3);
+        src.push(104); src.push(105); src.push(33);
+        let sraw: BytesRaw = src.raw_view();
+        let mut st: FixedSrcState = FixedSrcState { buf: sraw.ptr as *const u8, len: 3, pos: 0 };
+        let r: Reader = fixed_reader(&mut st as *mut FixedSrcState);
+        // destination region: 8 bytes
+        let dst: Bytes = Bytes::with_capacity(8);
+        let draw: BytesRaw = dst.raw_view();
+        let r1: Result<u64, IoError> = r.read(draw.ptr, 2);       // partial read
+        let n1: u64 = r1.unwrap_or(99);
+        let r2: Result<u64, IoError> = r.read(draw.ptr, 8);       // remainder
+        let n2: u64 = r2.unwrap_or(99);
+        let r3: Result<u64, IoError> = r.read(draw.ptr, 8);       // EOF
+        let n3: u64 = r3.unwrap_or(99);
+        let rc: Result<u64, IoError> = r.close();
+        let closed: bool = rc.is_ok();
+        src.drop();
+        dst.drop();
+        if n1 != 2 { return 1; }
+        if n2 != 1 { return 1; }
+        if n3 != 0 { return 1; }   // Ok(0) = EOF
+        if !closed { return 1; }
+        if st.pos != 3 { return 1; }
         return 0;
     }
 
