@@ -71,6 +71,15 @@ broad.
 
 Names should be guessable. A programmer who has never read the docs should be able to predict what `bytes.get(5)` returns and what `vec.push(x)` does. If a name requires explanation, it is the wrong name.
 
+**Method-canonical rule (Phase 7 item 2b, NORMATIVE).** A method on the receiver
+type is the canonical public API shape (`v.get(i)`, `v.push(x)`). A free
+function lands only where there is no receiver: module-level constructors
+(`new`, `with_capacity`, `from`, `default`, `empty`) and genuine cross-type
+helpers. The legacy free-function surface (`vec_get`, `string_push_char`, …) is
+a migration target, never a parallel API to extend. Enforced by
+`check_stdlib_manifest.sh`: a new public free function duplicating a same-module
+method name fails the gate (constructor allowlist only).
+
 **Naming conventions**:
 
 | Pattern | Meaning | Examples |
