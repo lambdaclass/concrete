@@ -50,6 +50,37 @@ def flagValue (args : List String) (name : String) : Option String :=
   | _ => none
 end Cli
 
+/-- Phase 6E #1: the grouped, context-free help page. Groups commands by use
+    per the roadmap taxonomy; the full flag matrix stays in `usage` below. -/
+def helpText : String := String.intercalate "\n" [
+  "concrete — the Concrete compiler",
+  "",
+  "USAGE: concrete <command> [args]   |   concrete <file.con> [flags]",
+  "",
+  "DAILY:",
+  "  build [file|project]      compile (project mode reads Concrete.toml)",
+  "  run   [file|project]      compile and run",
+  "  test  [--module <name>]   run #[test] functions",
+  "  fmt   <file.con>          format (--check | --write | --stdin)",
+  "",
+  "REPORTS & EVIDENCE:",
+  "  <file> --report <kind>    caps, unsafe, layout, proof-status, obligations, …",
+  "  prove <file> <fn>         prove/check an obligation (prove --help for more)",
+  "  <file> --query <kind>     semantic queries (why-capability, evidence, …)",
+  "",
+  "DEBUGGING:",
+  "  <file> --trace-pipeline   per-stage trace naming the first failing phase",
+  "  <file> --emit-trace-json  per-stage telemetry (counts, timing)",
+  "  reduce <file> --predicate <p>   minimize a failing program",
+  "  debug-bundle <file>       capture a reproducible failure bundle",
+  "",
+  "INTERNALS / COMPAT:",
+  "  <file> --emit-core | --emit-ssa | --emit-llvm | --interp",
+  "  diff, snapshot, audit, check, validate-bundle, --version",
+  "",
+  "Run `concrete` with no arguments for the full flag matrix.",
+  ""]
+
 def usage : String :=
   "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--emit-trace-json] [--trace-pipeline] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit|arithmetic] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
@@ -1731,6 +1762,13 @@ def reportProfile (inputPath : String) (cliProfile : Option String) : IO UInt32 
       return 0
 
 def main (args : List String) : IO UInt32 := do
+  -- Phase 6E #1: help is the most reliable command — it must work from ANY
+  -- directory, before any file/project parsing, and never throw. `concrete
+  -- --help`, `concrete help`, and `concrete <cmd> --help` all reach here first.
+  if args.head? == some "--help" || args.head? == some "help" || args.head? == some "-h"
+     || args.contains "--help" then
+    IO.println helpText
+    return 0
   -- `concrete --report compiler-ledger [--json]` — the project-scoped non-proof
   -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
   -- its CompilerLedger (toolchain id filled here, lazily).
