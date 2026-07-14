@@ -115,6 +115,20 @@ The Phase 7 allocator decision is two-tier: tier-1 defaults remain simple,
 while allocator-specific `*_in` APIs use explicit allocator values when they are
 pulled. Do not add an ambient implicit allocator.
 
+### Scoped References, Not User-Managed Lifetimes
+
+Safe references are second-class scoped access paths, not ordinary returned or
+stored values. They may flow down into calls, callbacks, and borrow blocks, but
+safe APIs should not return `&T` / `&mut T` or hide lifetime relationships in
+data structures. This is the Hylo/Val-style value-semantics choice Concrete
+adopts: users get in-place mutation, while the compiler manages the short-lived
+borrow reasoning locally instead of exposing a Rust-style lifetime language.
+
+API consequence: prefer operation APIs, owned values/views, handles/indices, or
+scoped callbacks such as `with_value` / `with_value_mut`. Returning safe
+references stays deeply deferred and evidence-gated; raw pointers are the
+trusted/Unsafe escape hatch when low-level code must return an address.
+
 ### Compiler Pipeline Spine
 
 Phase 6B established semantic truth and validation records; Phase 6C made the
