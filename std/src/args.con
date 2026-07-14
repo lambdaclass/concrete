@@ -13,7 +13,7 @@ mod args {
 
     /// Returns the command-line argument at the given index as a String.
     /// Index 0 is the program name. Returns "" if the index is out of range.
-    pub trusted fn get(idx: Int) with(Alloc) -> String {
+    pub trusted fn get(idx: Int) with(Env, Alloc) -> String {
         let i: i32 = idx as i32;
         let raw: *const u8 = __concrete_get_argv(i);
         if raw == (0 as *const u8) {

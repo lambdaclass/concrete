@@ -45,6 +45,20 @@ done)
 [ -z "$dups" ] && ok "no free-function duplicates a same-module method (2b method-canonical)" \
   || no "free-fn/method duplicates (extend allowlist only for genuine no-receiver helpers): $dups"
 
+# 4. DOMAIN-CAPABILITY rule (the fs/env/time leak class, audit 2026-07-14):
+# public items in capability-owning modules must carry their domain capability —
+# Unsafe alone is NOT filesystem/env/clock authority. Pure helpers (no caps at
+# all) are exempt; anything HOSTED (any with(...) clause) must include the domain.
+declare -A DOMAIN=( [fs]=File [env]=Env [time]=Time [args]=Env [net]=Network [process]=Process )
+for mod in "${!DOMAIN[@]}"; do
+  want="${DOMAIN[$mod]}"
+  leak=$(awk -F'	' -v m="$mod" -v c="$want" '$1==m && $6!="none" && $6 !~ c {print $2" ("$6")"}' "$TMP/derived.tsv" | head -5)
+  [ -z "$leak" ] && ok "std.$mod hosted items all carry $want"     || no "std.$mod hosted items MISSING $want (Unsafe is not domain authority): $leak"
+done
+# io: TextFile + writer_from_file must carry File; Writer methods stay cap-free.
+ioleak=$(awk -F'	' '$1=="io" && $6 ~ /Unsafe/ && $6 !~ /File/ {print $2" ("$6")"}' "$TMP/derived.tsv" | grep -vE "^fixed_writer" | head -5)
+[ -z "$ioleak" ] && ok "std.io Unsafe items carry File where they touch files (fixed_writer exempt: raw memory, not fs)"   || no "std.io items with Unsafe but no File: $ioleak"
+
 echo
 echo "STDLIB-MANIFEST: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

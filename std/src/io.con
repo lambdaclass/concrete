@@ -12,7 +12,7 @@ mod io {
     }
 
     trusted impl TextFile {
-        pub fn create(path: &String) with(Unsafe, Alloc) -> Result<TextFile, IoError> {
+        pub fn create(path: &String) with(File, Unsafe, Alloc) -> Result<TextFile, IoError> {
             let mode: String = "w";
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             mode.drop();
@@ -23,7 +23,7 @@ mod io {
             return Result::<TextFile, IoError>::Ok { value: handle };
         }
 
-        pub fn open(path: &String, mode: &String) with(Unsafe) -> Result<TextFile, IoError> {
+        pub fn open(path: &String, mode: &String) with(File, Unsafe) -> Result<TextFile, IoError> {
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             if h == (0 as *const u8) {
                 return Result::<TextFile, IoError>::Err { error: IoError::OpenFailed };
@@ -32,11 +32,11 @@ mod io {
             return Result::<TextFile, IoError>::Ok { value: handle };
         }
 
-        pub fn write(&self, data: &String) with(Unsafe) {
+        pub fn write(&self, data: &String) with(File, Unsafe) {
             fwrite(data.ptr as *const u8, 1, data.len, self.ptr);
         }
 
-        pub fn read_byte(&self) with(Unsafe) -> i32 {
+        pub fn read_byte(&self) with(File, Unsafe) -> i32 {
             let buf: u8 = 0;
             let n: u64 = fread(&buf as *mut u8, 1, 1, self.ptr);
             if n == 0 {
@@ -45,11 +45,11 @@ mod io {
             return buf as i32;
         }
 
-        pub fn flush(&self) with(Unsafe) {
+        pub fn flush(&self) with(File, Unsafe) {
             fflush(self.ptr);
         }
 
-        pub fn close(self) with(Unsafe) {
+        pub fn close(self) with(File, Unsafe) {
             let TextFile { ptr } = self;
             fclose(ptr);
         }
@@ -219,7 +219,7 @@ mod io {
     }
 
     #[test]
-    fn test_writer_fixed_sink() with(Unsafe, Alloc) -> i32 {
+    fn test_writer_fixed_sink() with(File, Unsafe, Alloc) -> i32 {
         // region: 8 bytes owned via Bytes; the sink writes into it raw.
         let region: Bytes = Bytes::with_capacity(8);
         let raw: BytesRaw = region.raw_view();
@@ -243,7 +243,7 @@ mod io {
     }
 
     #[test]
-    fn test_io_open_nonexistent() with(Unsafe, Alloc) -> i32 {
+    fn test_io_open_nonexistent() with(File, Unsafe, Alloc) -> i32 {
         let path: String = "/nonexistent/path/no_such_file.txt";
         let mode: String = "r";
         let result: Result<TextFile, IoError> = TextFile::open(&path, &mode);
@@ -261,7 +261,7 @@ mod io {
     }
 
     #[test]
-    fn test_io_create_bad_path() with(Unsafe, Alloc) -> i32 {
+    fn test_io_create_bad_path() with(File, Unsafe, Alloc) -> i32 {
         let path: String = "/nonexistent/dir/file.txt";
         let result: Result<TextFile, IoError> = TextFile::create(&path);
         path.drop();

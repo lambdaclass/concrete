@@ -34,7 +34,7 @@ mod time {
     }
 
     trusted impl Instant {
-        pub fn now() with(Unsafe, Alloc) -> Instant {
+        pub fn now() with(Time, Unsafe, Alloc) -> Instant {
             // Allocate 16 bytes for struct timespec (macOS arm64: i64 + i64)
             let buf: *mut u8 = grow::<u8>(0 as *mut u8, 16);
 
@@ -63,7 +63,7 @@ mod time {
             return inst;
         }
 
-        pub fn elapsed(&self) with(Unsafe, Alloc) -> Duration {
+        pub fn elapsed(&self) with(Time, Unsafe, Alloc) -> Duration {
             let current: Instant = Instant::now();
             let mut sec_diff: i64 = current.secs - self.secs;
             let mut nsec_diff: i64 = current.nanos - self.nanos;
@@ -78,7 +78,7 @@ mod time {
         }
     }
 
-    pub trusted fn sleep(dur: &Duration) with(Unsafe, Alloc) {
+    pub trusted fn sleep(dur: &Duration) with(Time, Unsafe, Alloc) {
         // Allocate 16 bytes for struct timespec
         let req: *mut u8 = grow::<u8>(0 as *mut u8, 16);
 
@@ -95,14 +95,14 @@ mod time {
         dealloc::<u8>(req);
     }
 
-    pub trusted fn unix_timestamp() with(Unsafe) -> i64 {
+    pub trusted fn unix_timestamp() with(Time, Unsafe) -> i64 {
         return libc_time(0 as *mut i64);
     }
 
     import std.test.{assert_true};
 
     #[test]
-    fn test_now_nonzero() with(Unsafe, Alloc) -> i32 {
+    fn test_now_nonzero() with(Time, Unsafe, Alloc) -> i32 {
         let inst: Instant = Instant::now();
         // Monotonic clock should return something > 0
         if inst.secs <= 0 {
@@ -114,7 +114,7 @@ mod time {
     }
 
     #[test]
-    fn test_elapsed_nonnegative() with(Unsafe, Alloc) -> i32 {
+    fn test_elapsed_nonnegative() with(Time, Unsafe, Alloc) -> i32 {
         let start: Instant = Instant::now();
         // Do a small amount of work
         let mut x: i64 = 0;
@@ -136,7 +136,7 @@ mod time {
     }
 
     #[test]
-    fn test_unix_timestamp_reasonable() with(Unsafe, Alloc) -> i32 {
+    fn test_unix_timestamp_reasonable() with(Time, Unsafe, Alloc) -> i32 {
         let ts: i64 = unix_timestamp();
         // Should be after year 2023 (> 1700000000)
         if ts <= 1700000000 {
