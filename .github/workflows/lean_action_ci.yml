@@ -175,6 +175,9 @@ jobs:
           SEED=$(date -u +%Y%m%d)
           python3 scripts/tests/fuzz_linearity.py --n 400 --seed "$SEED"
 
+      - name: Gate mutation coverage (Phase 6C #5 — heavy; rebuilds per mutation)
+        run: bash scripts/tests/check_gate_mutation_coverage.sh
+
       - name: Upload failing case (if any)
         if: failure()
         uses: actions/upload-artifact@v4

@@ -536,7 +536,7 @@ refactors make the current checker decisions auditable.
    fixtures. Each new semantic rule should answer: do Check, Elab, CoreCheck,
    Mono, Lower, SSAVerify, interpreter, and reports agree on the same meaning?
 
-13o. **Add explicit `noreturn` / diverging-function facts.** Today the checker
+13o. [DEFERRED — pull-gated with 13i; design only when a diverging-fn workload needs it] **Add explicit `noreturn` / diverging-function facts.** Today the checker
    knows builtins like `abort()` diverge, but ordinary APIs such as
    `libc_exit` cannot communicate "this never returns" without source-level
    workarounds. Add a small explicit surface (`-> never`, `#[noreturn]`, or an
@@ -565,7 +565,7 @@ refactors make the current checker decisions auditable.
    the checker and linearity gates would catch the exact bug class if it came
    back.
 
-13r. **Doc-snippet compile gate (from the Zig-at-100k-lines lessons,
+13r. [OPEN — REQUIRED BEFORE PHASE 7; `check_doc_snippets.sh` not yet built] **Doc-snippet compile gate (from the Zig-at-100k-lines lessons,
    2026-07-07).** Every ```con code block in README/site/docs/*.md must either
    COMPILE (or compile-and-check for reject examples marked as such) or carry
    an explicit `pseudocode`/`illustrative` marker. Zig's real-world pain was
@@ -589,7 +589,7 @@ refactors make the current checker decisions auditable.
    and one explicitly-pseudocode example. Slice-friendly: start with docs/ that
    already contain runnable snippets. HIGHEST-PRIORITY of these four.
 
-13s. **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
+13s. [OPEN — REQUIRED BEFORE PHASE 7; research note not yet written] **Allocator-as-value research — BEFORE Phase 7 collection APIs harden
    (2026-07-07).** `with(Alloc)` is the AUTHORITY ("may allocate"); it does not
    say WHICH allocator owns the memory. Arenas, tests, embedded, hot-reload,
    plugins, and the #35 validation project all want allocator IDENTITY, not
@@ -610,7 +610,7 @@ refactors make the current checker decisions auditable.
    design-review fixture, not implementation: examples must show that the
    allocator value is explicit, linear/borrow-safe, and never a hidden global.
 
-13t. **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
+13t. [OPEN — do alongside Phase 7 error-convention work; doc not yet written] **Recoverable-vs-fatal error convention doc (2026-07-07).** Write the
    normative split so stdlib `Result` usage stays consistent and does not drift
    into Zig-style everything-bubbles noise: `Result` for DOMAIN / user /
    environment failures (parse error, file-not-found, connection refused);
@@ -641,7 +641,7 @@ refactors make the current checker decisions auditable.
    output. Lowest-urgency of these four; pull it forward only if the validation
    project makes trap opacity painful.
 
-13v. **Build-output convention (repo hygiene, found by #35, 2026-07-07).**
+13v. [OPEN — small; do with the next build-UX touch] **Build-output convention (repo hygiene, found by #35, 2026-07-07).**
    `concrete build` emits an extensionless binary into the project root named
    after the package, which globs cannot cleanly ignore — so `.gitignore`
    hand-enumerates ~42 per-example binary paths and every new project example
@@ -1849,7 +1849,7 @@ STATUS (2026-07-13): all eight items have working, gated tooling, but three are 
 - DONE to spec — remove from active scope: #2 anti-superlinear complexity guard
   (`check_compiler_complexity`, O(n²) family closed), #3 `--trace-pipeline`
   (`check_trace_pipeline`), #5 gate mutation-testing (`check_gate_mutation_coverage`,
-  10/10 families killed, nightly).
+  10/10 families killed; scheduled in the NIGHTLY fuzz cron job + `make test-gate-mutation-coverage`).
 - LANDED (mechanism proven) with a minor caveat: #4 counterexample reduction
   (`check_counterexample_reduction`; 2 of 4 classes reduce a live failure, the other
   two are detector/representative until a real bug of that kind exists), #8 capstone
@@ -1939,6 +1939,8 @@ non-`Copy` values remain owned by linearity/`destroy`.
 
 1. Remove stale `fn name!` grammar if the audit confirms it has no active
    semantic meaning.
+   DONE (64050c86): audited dead, removed from EBNF/parser; negative fixture
+   `tests/programs/error_fn_bang_removed.con` (E0001) + pinned by the 6D capstone.
    The current implementation tags entry points by name, and current `.con`
    sources do not use `fn name!`. If this spelling is truly dead grammar, delete
    it from the EBNF/parser/formatter and add a negative parse fixture. If the
