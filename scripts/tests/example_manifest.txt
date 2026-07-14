@@ -215,3 +215,4 @@ examples/vc_suite/rate_limiter.con skip
 examples/vc_suite/ring_buffer_indices.con skip
 examples/verify/src/main.con project-build
 examples/vm/main.con skip
+examples/error_conventions/src/main.con compile

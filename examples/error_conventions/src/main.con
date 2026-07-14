@@ -1,0 +1,43 @@
+// docs/ERROR_CONVENTIONS.md fixture (13t): one public API per bucket, each
+// classification visible on a report surface.
+mod error_conventions {
+    // RECOVERABLE (bucket 1): domain failure -> Result with a domain error.
+    pub enum Copy ParseErr { NotADigit {} }
+
+    pub fn parse_digit(c: i32) -> Result<i32, ParseErr> {
+        if c >= 48 {
+            if c <= 57 {
+                return Result::<i32, ParseErr>::Ok { value: c - 48 };
+            }
+        }
+        return Result::<i32, ParseErr>::Err { error: ParseErr::NotADigit {} };
+    }
+
+    // FATAL (bucket 2): invariant surface — checked `+` and raw indexing trap;
+    // visible as obligations + telemetry trap_sites, not as a Result.
+    pub fn sum_all(xs: [i32; 4]) -> i32 {
+        let mut s: i32 = 0;
+        let mut i: Int = 0;
+        while i < 4 {
+            s = s + xs[i];
+            i = i + 1;
+        }
+        return s;
+    }
+
+    // POLICY-GATED (bucket 3): the failure class exists only behind the
+    // File capability; --report caps names it, project policy governs it.
+    pub fn read_config() with(File) -> Int {
+        return 0;
+    }
+
+    fn main() -> Int {
+        let r: Result<i32, ParseErr> = parse_digit(53);
+        let v: i32 = match r {
+            Result::Ok { value } => value,
+            Result::Err { error } => 0 - 1,
+        };
+        let arr: [i32; 4] = [1, 2, 3, 4];
+        return (v as Int) + (sum_all(arr) as Int);
+    }
+}
