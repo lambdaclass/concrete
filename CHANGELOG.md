@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H18 closed — owned-resource collections destroy their elements (2026-07-16)
+
+The linear-language-specific stdlib gap (ROADMAP Phase 7 item 1) is closed:
+every shipped container destroys its live non-Copy elements exactly once on
+drop/clear, via compiler drop-glue — no `drop_with`, no stored destructor
+pointers, exactly the pinned design (RUNTIME_COLLECTIONS.md "Drop-glue rules").
+
+- The `Destroy` BOUND means destroyable: Copy passes trivially (calls elided
+  at monomorphization), an explicit `impl Destroy` runs, and a non-Copy type
+  without `Destroy` makes drop/clear uncallable (E0241 → drain-and-close).
+- Conditional trait impls landed (`impl<T: Destroy> Destroy for Vec<T>` — new
+  parser/AST/judgment support), so containers compose recursively at any
+  nesting depth.
+- Overwrite paths are honest: same-key map inserts destroy the displaced key;
+  `Vec.replace(at, v) -> T` returns the displaced element.
+- v1 capability fence (E0584): a `Destroy` impl may require at most `Alloc`,
+  so "glue capabilities are derived and visible" holds by construction.
+- Proven by destruction-count std tests (exactly-once, live-slots-only,
+  pop/remove transfer out) and the 25-check COLLECTIONS-DROP-GLUE gate
+  (flipped deliberately from the old leak-pinning form).
+- Compiler fixes en route: method receivers/cast targets naming type params
+  normalized to typeVars; mono no-op synthesis for elided destroys; interp
+  dynamic `*_destroy` dispatch; decl-level core-check diagnostics now carry
+  their E-codes.
+
 ### Phase 7 workload 1 (base64_cli) + exit-code semantics + three compiler fixes (2026-07-14/15)
 
 The first workload program shipped and immediately paid rent: build first,
