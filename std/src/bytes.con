@@ -216,6 +216,14 @@ mod bytes {
 
     import std.test.{assert_eq, expect_some, expect_none};
 
+    // H18 drop-glue: trait-form destructor for collection elements (see
+    // string.con note).
+    trusted impl Destroy for Bytes {
+        fn destroy(&self) with(Alloc) {
+            dealloc::<u8>(self.ptr);
+        }
+    }
+
     #[test]
     fn test_bytes_view_and_cmp() with(Alloc) -> i32 {
         let mut a: Bytes = Bytes::with_capacity(4);

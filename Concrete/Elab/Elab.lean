@@ -700,8 +700,14 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     let typeArgs ← typeArgs.mapM resolveTypeE
     let cObj ← elabExpr obj
     let objTy := cObj.ty
-    let innerTy := match objTy with
+    let innerTy0 := match objTy with
       | .ref t => t | .refMut t => t | t => t
+    -- Normalize `.named T` where T is a current type param (mirror of the
+    -- Check-side methodCall normalization; see checkTraitBounds precedent).
+    let envN ← getEnv
+    let innerTy := match innerTy0 with
+      | .named n => if envN.currentTypeParams.contains n then .typeVar n else innerTy0
+      | t => t
     let typeName := tyName innerTy
     if typeName == "" then
       -- Type variable with trait bounds

@@ -1211,9 +1211,18 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- `&mut self`. A by-value `self` on a projection receiver is re-checked
     -- below once the signature is known.
     let objTy ← checkExpr obj none .place
-    let innerTy := match objTy with
+    let innerTy0 := match objTy with
       | .ref t => t
       | .refMut t => t
+      | t => t
+    -- Normalize: a receiver whose type NAMES one of the current fn's own type
+    -- params (e.g. the `p as &T` cast target arrives as `.named "T"`) is a
+    -- typeVar receiver — same normalization checkTraitBounds applies to
+    -- turbofish args. Without it the concrete path looks up `T_destroy`
+    -- literally and throws E0264 instead of consulting the trait bounds.
+    let envN ← getEnv
+    let innerTy := match innerTy0 with
+      | .named n => if envN.currentTypeParams.contains n then .typeVar n else innerTy0
       | t => t
     let typeName := tyName innerTy
     if typeName == "" then

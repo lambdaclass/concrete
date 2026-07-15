@@ -603,6 +603,29 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         -- Desugared to the print_* intrinsics by Elab; reaching Core means
         -- a desugar gap, so stay loud instead of guessing a format.
         .error s!"interp: print/IO intrinsic '{fnName}' not yet supported"
+      | _, [arg] =>
+        -- H18 drop-glue: a symbolic `T_destroy(&elem)` (Elab's trait-method
+        -- call on a `Destroy`-bounded type param) reaches the PRE-mono
+        -- interpreter unresolved. Dispatch on the RUNTIME value's type: run
+        -- its `{Type}_destroy` if defined (user destructor side effects must
+        -- match the compiled binary); otherwise a no-op — Copy elements have
+        -- trivial destruction, and memory-only destructors are no-ops in the
+        -- heapless model (mirrors vec_free/drop_string above).
+        if fnName.endsWith "_destroy" then
+          let target ← autoDeref env arg
+          let tyName? : Option String := match target with
+            | .struct_ n _ => some n
+            | .enum_ n _ _ => some n
+            | _ => none
+          match tyName?.bind fun tn => findFn fns (tn ++ "_destroy") with
+          | some fdef =>
+            let outerLen := env.length
+            let callEnv := bindParams env fdef.params [arg]
+            let (postEnv, _flow) ← evalStmts fns enums callEnv fdef.body
+            let restored := postEnv.drop (postEnv.length - outerLen)
+            return (restored, .val .unit)
+          | none => return (env, .val .unit)
+        else .error s!"interp: undefined function '{fnName}'"
       | _, _ => .error s!"interp: undefined function '{fnName}'"
 
   | .structLit name _ fields _ => do

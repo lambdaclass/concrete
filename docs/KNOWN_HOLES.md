@@ -19,7 +19,7 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-### H18. Collections do not destroy non-Copy elements on drop/clear/remove/overwrite
+### H18. Collections do not destroy non-Copy elements on drop/clear/remove/overwrite (NARROWED: Vec closed 2026-07-16)
 
 `Vec/HashMap/OrderedMap/Deque/BinaryHeap` (`+ slice.set_unchecked`) reclaim
 their buffers on `drop`/`clear`/`remove`/overwrite but never run any
@@ -56,9 +56,19 @@ panic-unwind drop-flag machinery. It only needs normal-path destruction for
 `drop`/`clear`/overwrite/replacement/compaction, and explicit ownership transfer
 for `pop`/`remove`/`swap_remove`.
 
-Gate: `check_collections_copy_only.sh` pins the status quo — the fixture
-demonstrating the leak stays a documented reject/accept pair, and std's
-containers must not grow a hidden-Drop path while this hole is open.
+SLICE 1 LANDED (2026-07-16, Vec only): `Vec<T>` `drop`/`clear` now destroy
+live elements via the `Destroy`-bounded glue impl (the `Destroy` BOUND means
+destroyable — Copy passes trivially and mono elides the call; an explicit
+`impl Destroy` runs; non-Copy without Destroy makes drop/clear uncallable,
+E0241 → drain-and-close). `String`/`Bytes` carry trait-form destructors.
+Proven by `vec_test_vec_destroys_elements` (exactly-once, live slots only,
+pop transfers out). Compiler pieces: named-typeparam receiver normalization
+(Check+Elab), mono no-op synthesis for elided Copy destroys, interp dynamic
+`*_destroy` dispatch. REMAINING (slice 2): map/set/deque/heap/ordered_* drop/
+clear/remove/overwrite paths, `replace(i,v)->T`, `slice.set_unchecked`.
+
+Gate: `check_collections_copy_only.sh` (now COLLECTIONS-DROP-GLUE) pins the new behavior: glue accept/reject pairs, the counting test, the no-*_with rule, and the
+traversal policy.
 
 ### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
 

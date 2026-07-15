@@ -377,8 +377,6 @@ vec	set_unchecked	no	mut	infallible	none	deterministic
 vec	len	no	borrows	infallible	none	deterministic
 vec	cap	no	borrows	infallible	none	deterministic
 vec	is_empty	no	borrows	infallible	none	deterministic
-vec	clear	no	mut	infallible	none	deterministic
-vec	drop	yes	consumes	infallible	Alloc	hosted-effect
 vec	fold	no	borrows	infallible	C	hosted-effect
 vec	for_each	no	borrows	infallible	C	hosted-effect
 vec	for_each_ctx	no	borrows	infallible	C	hosted-effect
@@ -386,6 +384,8 @@ vec	map	no	borrows	infallible	C	hosted-effect
 vec	with_at	no	borrows	infallible	C	hosted-effect
 vec	with_at_mut	no	mut	infallible	C	hosted-effect
 vec	for_each_with	no	borrows	infallible	C	hosted-effect
+vec	clear	yes	mut	infallible	Alloc	hosted-effect
+vec	drop	yes	consumes	infallible	Alloc	hosted-effect
 vec	set	no	mut	infallible	none	deterministic
 vec	get_unchecked	no	borrows	infallible	none	deterministic
 vec	get	no	borrows	option	none	deterministic

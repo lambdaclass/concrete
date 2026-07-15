@@ -1,53 +1,94 @@
 #!/usr/bin/env bash
 export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
-# KNOWN_HOLES H18 gate: collections do not destroy non-Copy elements — pinned.
+# H18 drop-glue gate (RUNTIME_COLLECTIONS.md "Drop-glue rules"): Vec destroys
+# its live non-Copy elements on drop/clear — FLIPPED DELIBERATELY 2026-07-16
+# from the old "leak pinned as disclosed" form when slice 1 landed.
 #
-# Pins the DISCLOSED status quo until the explicit-destruction design lands
-# (drop_with/clear_with/remove_with family): (a) the leak is real and
-# demonstrable (a non-Copy element enters a Vec; vec.drop() compiles without
-# consuming it — the linear checker cannot see through the container); (b) std
-# does not quietly grow a hidden per-element Drop path while the hole is open
-# (the fix must arrive as the visible *_with API family, flipping this gate
-# DELIBERATELY — via drop-as-trait automatic drop-through, or a LABELED
-# temporary *_with bridge; see the H18 entry).
+# Pins: (a) Vec<String> (element with Destroy) drops with glue and runs;
+# (b) Vec of a non-Copy type WITHOUT Destroy cannot be dropped (E0241 —
+# fallible-cleanup values are drained and closed explicitly, never dropped);
+# (c) the glue is the Destroy-bounded impl in vec.con, and destruction counts
+# are proven by the std test `vec_test_vec_destroys_elements` (drop/clear
+# destroy live slots exactly once; pop transfers ownership out);
+# (d) the *_with destructor-passing family stays ABSENT — the permanent design
+# is compiler-resolved glue, never caller-supplied destructors.
+# Remaining collections (map/set/deque/heap/ordered_*) are slice 2 — H18 stays
+# OPEN (narrowed) until they destroy elements too.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-C=".lake/build/bin/concrete"
+C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first" >&2; exit 2; }
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
-# (a) the demonstrating fixture: non-Copy element swallowed by Vec.drop
-cat > "$TMP/h18.con" <<'CON'
-mod m {
-    struct Owner { fd: i64 }
-    fn main() with(Alloc) -> Int {
-        let mut v: Vec<Owner> = vec_new::<Owner>();
-        vec_push::<Owner>(&mut v, Owner { fd: 3 });
-        vec_free::<Owner>(v);   // H18: the live Owner inside is LEAKED, not destroyed
+mkproj(){ # name, main-body -> builds project in $TMP/$1
+  mkdir -p "$TMP/$1/src"
+  printf '[package]\nname = "%s"\nversion = "0.1.0"\n' "$1" > "$TMP/$1/Concrete.toml"
+  cat > "$TMP/$1/src/main.con"
+}
+
+# (a) accept + run: owned elements are destroyed by the glue
+mkproj glue <<'CON'
+mod glue {
+    import std.vec.{Vec};
+    fn main() with(Std) -> Int {
+        let mut v: Vec<String> = Vec::<String>::new();
+        let a: String = "alpha";
+        v.push(a);
+        v.clear();
+        let b: String = "beta";
+        v.push(b);
+        v.drop();
         return 0;
     }
 }
 CON
-if "$C" "$TMP/h18.con" -o "$TMP/h18.bin" >/dev/null 2>&1; then
-  ok "H18 demonstrated: Vec<non-Copy>.drop() compiles and leaks the element (disclosed)"
+if (cd "$TMP/glue" && "$C" build >/dev/null 2>&1 && ./glue >/dev/null 2>&1); then
+  ok "Vec<String>.clear/drop compile and run (glue destroys owned elements)"
 else
-  no "H18 fixture no longer compiles — if explicit destruction landed, flip this gate deliberately"
+  no "Vec<String> glue fixture failed to build/run"
 fi
 
-# (b) no hidden per-element Drop sneaks into container drops
-if grep -nE "element.*drop\(\)|value.*\.drop\(\).*loop" std/src/vec.con >/dev/null 2>&1; then
-  no "vec.drop appears to have grown per-element destruction — land it as the *_with family + update H18"
+# (b) reject: non-Copy WITHOUT Destroy cannot be dropped — drain instead
+mkproj drain <<'CON'
+mod drain {
+    import std.vec.{Vec};
+    struct Res { token: i64 }
+    fn consume(r: Res) -> i64 { let Res { token } = r; return token; }
+    fn main() with(Std) -> Int {
+        let mut v: Vec<Res> = Vec::<Res>::new();
+        v.push(Res { token: 1 });
+        v.drop();   // must NOT compile: Res has fallible-cleanup shape (no Destroy)
+        return 0;
+    }
+}
+CON
+if (cd "$TMP/drain" && "$C" build >"$TMP/drain.out" 2>&1); then
+  no "Vec<non-Destroy>.drop() compiled — the drain rule regressed"
 else
-  ok "no hidden per-element Drop in Vec (the fix must be the visible *_with family)"
+  if grep -q "E0241" "$TMP/drain.out" && grep -q "Destroy" "$TMP/drain.out"; then
+    ok "Vec<non-Destroy>.drop() rejected with E0241 naming Destroy (drain rule)"
+  else
+    no "Vec<non-Destroy>.drop() rejected but not with the E0241 Destroy-bound error"
+  fi
 fi
+
+# (c) the glue lives in the Destroy-bounded impl + the counting test exists
+grep -q "impl<T: Destroy> Vec<T>" std/src/vec.con \
+  && ok "vec.con has the Destroy-bounded glue impl" \
+  || no "vec.con lost the Destroy-bounded glue impl"
+grep -q "test_vec_destroys_elements" std/src/vec.con \
+  && ok "destruction-count std test present (exactly-once, live slots only)" \
+  || no "destruction-count std test missing from vec.con"
+
+# (d) permanent design: no caller-supplied destructor family
 grep -q "drop_with\|clear_with\|remove_with" std/src/vec.con \
-  && no "*_with family present — H18 may be closable; update KNOWN_HOLES + this gate" \
-  || ok "*_with destruction family not yet shipped (H18 open as disclosed)"
+  && no "*_with destructor-passing family present — the permanent design is compiler glue" \
+  || ok "no *_with family (glue is compiler-resolved, never caller-supplied)"
 
 echo "=== traversal policy (P7 #8): HashMap unordered; OrderedMap/Set own defined order ==="
 M="docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv"
@@ -62,5 +103,5 @@ grep -qE "insertion[- ]order" std/src/map.con && no "map.con grew insertion-orde
 grep -qiE "visits? in (key|sorted|insertion) order" std/src/map.con && no "map.con promises an order"   || ok "HashMap traversal docs promise no order"
 
 echo
-echo "COLLECTIONS-COPY-ONLY (H18): PASS=$PASS FAIL=$FAIL"
+echo "COLLECTIONS-DROP-GLUE (H18): PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

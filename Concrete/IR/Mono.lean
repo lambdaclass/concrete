@@ -408,7 +408,28 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             }
             enqueueMono name monoFn
             return .call name [] args' (sub ty)
-      | none => return .call fn [] args' ty
+      | none =>
+        -- H18 drop-glue: `T_destroy(&elem)` in a `Destroy`-bounded generic
+        -- body gets rewritten per instantiation to `{Concrete}_destroy`
+        -- (typeArgs are empty — the rewrite is name-only). When no such fn
+        -- exists the instantiation's element is Copy (the `Destroy` BOUND
+        -- accepts Copy trivially and Check enforced it at the call site) —
+        -- destruction is trivial. Synthesize an empty no-op so the call
+        -- links. Never collides: no extern or builtin ends in `_destroy`,
+        -- and a direct user call to a nonexistent `X_destroy` is an E0101
+        -- at Resolve.
+        if fn.endsWith "_destroy" then
+          let noopFn : CFnDef := {
+            name := fn
+            typeParams := []
+            params := args'.zipIdx.map fun (a, i) => (s!"x{i}", a.ty)
+            retTy := .unit
+            body := []
+            isPublic := false
+            isTest := false
+          }
+          enqueueMono fn noopFn
+        return .call fn [] args' ty
     -- Look up the generic function
     let fnDef? ← lookupFn fn
     match fnDef? with

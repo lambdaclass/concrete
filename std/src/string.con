@@ -206,6 +206,16 @@ mod string {
         // TODO: insert, remove
     }
 
+    // H18 drop-glue: the trait-form destructor, so String elements inside
+    // collections are destroyed by the generated glue. Infallible, memory-only
+    // (with(Alloc)) per RUNTIME_COLLECTIONS.md drop-glue rules; `.drop()`
+    // remains the direct disposal verb for owned locals.
+    trusted impl Destroy for String {
+        fn destroy(&self) with(Alloc) {
+            dealloc::<u8>(self.ptr);
+        }
+    }
+
     #[test]
     fn test_str_get_in_bounds() with(Alloc) -> i32 {
         let s: String = "hello";

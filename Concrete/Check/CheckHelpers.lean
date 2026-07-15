@@ -679,6 +679,24 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
           if !(← isCopyType concreteType) then
             let tn := match concreteType with | .named n => n | .generic n _ => n | .typeVar n => n | _ => "<type>"
             throwCheck (.traitBoundNotSatisfied tn "Copy" context)
+        else if traitName == "Destroy" then
+          -- H18 drop-glue: a `Destroy` BOUND means "destroyable" — satisfied by
+          -- Copy (trivial destruction; mono elides the T_destroy call), by an
+          -- explicit `impl Destroy`, or by a type param that itself carries a
+          -- Copy or Destroy bound. A non-Copy type WITHOUT Destroy (fallible
+          -- cleanup: File/Writer/socket) fails — by design, those are drained
+          -- and closed explicitly, never dropped (RUNTIME_COLLECTIONS.md
+          -- drop-glue rules 1-2).
+          if !(← isCopyType concreteType) then
+            match concreteType with
+            | .named tn | .generic tn _ =>
+              if !(env.traitImpls.any fun (t, tr) => t == tn && tr == "Destroy") then
+                throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
+            | .typeVar n =>
+              let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
+              if !(callerBounds.contains "Destroy" || callerBounds.contains "Copy") then
+                throwCheck (.traitBoundNotSatisfied n "Destroy" context)
+            | _ => pure ()
         else
           match concreteType with
           | .named tn | .generic tn _ =>

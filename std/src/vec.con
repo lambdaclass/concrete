@@ -98,16 +98,6 @@ mod vec {
             self.cap = new_cap;
         }
 
-        pub fn clear(&mut self) {
-            self.len = 0;
-        }
-
-        /// TODO: drop should be a trait, and isn't really called yet automatically.
-        pub fn drop(self) with(Alloc) {
-            let Vec { ptr, len, cap } = self;
-            dealloc(ptr);
-        }
-
         /// Fold over all elements, threading an accumulator. Capability-
         /// polymorphic: the fold carries whatever its callback carries (`cap C`),
         /// so a pure fold is pure and an effectful one (e.g. printing) requires
@@ -198,6 +188,36 @@ mod vec {
         // TODO: insert, remove
     }
 
+    // H18 drop-glue (RUNTIME_COLLECTIONS.md "Drop-glue rules"): disposal
+    // destroys every LIVE element, then frees the buffer. The `Destroy` BOUND
+    // means "destroyable" — Copy satisfies it trivially (the T_destroy call
+    // is elided per instantiation at monomorphization), an explicit
+    // `impl Destroy` runs, and a non-Copy type WITHOUT Destroy (fallible
+    // cleanup: Writer/File) makes `drop`/`clear` uncallable — drain with
+    // `pop()` and close each element explicitly instead.
+    trusted impl<T: Destroy> Vec<T> {
+        pub fn clear(&mut self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                (target_ptr as &T).destroy();
+                i = i + 1;
+            }
+            self.len = 0;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                (target_ptr as &T).destroy();
+                i = i + 1;
+            }
+            let Vec { ptr, len, cap } = self;
+            dealloc(ptr);
+        }
+    }
+
     // Value reader for Copy elements (the Copy cell of the value model).
     trusted impl<T: Copy> Vec<T> {
         /// Bounds-checked set. Returns false if index is out of bounds.
@@ -222,6 +242,45 @@ mod vec {
             let target_ptr: *mut T = self.ptr + at;
             return Option::<T>::Some { value: *target_ptr };
         }
+    }
+
+    // --- H18 drop-glue test helpers ---
+    // Observable destructor: counts invocations through a raw cell.
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    trusted fn h18_cell_new() with(Alloc) -> *mut u64 {
+        let p: *mut u64 = grow::<u64>(0 as *mut u64, 1);
+        *p = 0;
+        return p;
+    }
+    trusted fn h18_cell_get(p: *mut u64) -> u64 { return *p; }
+
+    #[test]
+    fn test_vec_destroys_elements() with(Alloc) -> i32 {
+        // H18: drop/clear destroy every LIVE element exactly once; pop
+        // transfers ownership out (not destroyed by the container).
+        let cell: *mut u64 = h18_cell_new();
+        let mut v: Vec<Tracked> = Vec::<Tracked>::new();
+        v.push(Tracked { cell: cell });
+        v.push(Tracked { cell: cell });
+        v.push(Tracked { cell: cell });
+        v.push(Tracked { cell: cell });
+        let popped: Option<Tracked> = v.pop();
+        match popped {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        v.clear();                      // destroys the 3 remaining
+        v.push(Tracked { cell: cell });
+        v.push(Tracked { cell: cell });
+        v.drop();                       // destroys 2
+        let n: u64 = h18_cell_get(cell);
+        if n != 6 { return 1; }
+        return 0;
     }
 
     // --- HOF test helpers ---
