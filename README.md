@@ -11,43 +11,38 @@
 
 </div>
 
-**Concrete is an LL(1), linear, capability-oriented systems programming language
-designed for auditable and formally verifiable code. Non-`Copy` values are used
-exactly once, function headers expose required capabilities, and the
-compiler/tooling preserve a clear path from source code to evidence.**
+**Concrete is a Lean-hosted, verification-oriented systems language whose main
+goal is that you can see and trust exactly what code does: its authority, its
+allocation, its failure modes, its ownership, and its evidence.**
 
-Concrete combines a narrow no-GC systems-language core with an evidence ledger a
-reviewer can actually inspect. It puts systems control, explicit authority,
-runtime-safety obligations, tests, solver results, assumptions, and Lean-checked
-proofs in one toolchain without pretending they are all the same kind of
-evidence.
-
-That is Concrete's thesis: **systems control plus evidence accounting**.
+It is not "Rust but smaller" or "Go but safer." Concrete optimizes for honesty
+and provability over convenience, and accepts real ergonomic costs to get them:
+non-`Copy` values are used exactly once, function headers expose required
+capabilities, cleanup is explicit, and the tooling keeps a clear path from source
+to evidence. The thesis in one line — **systems control plus evidence
+accounting**: a no-GC systems core plus an evidence ledger a reviewer can
+actually inspect, one that never collapses proofs, tests, solver results, runtime
+checks, and assumptions into a single green badge.
 
 ## At a Glance
 
 - **Simple syntax:** the grammar is LL(1) and checked as part of the project.
 - **Linear ownership:** non-`Copy` values are used exactly once; `_` may ignore
-  only `Copy` data.
-- **Scoped references:** safe references are second-class: they flow down into
-  calls, callbacks, and borrow blocks, but safe APIs do not return `&T` /
-  `&mut T`. Accessors use scoped callbacks, owned views, or value returns
-  instead. The compiler manages the short-lived borrow reasoning locally; users
-  do not write lifetime parameters.
+  only `Copy` data; cleanup is explicit (`defer x.drop()`), never an implicit
+  scope-exit drop.
+- **Scoped references:** safe references are second-class — they flow *down* into
+  calls, callbacks, and borrow blocks, but safe APIs never return `&T` / `&mut T`.
+  Accessors use scoped callbacks, owned views, or value returns. No lifetime
+  parameters.
 - **No garbage collector:** resource lifetimes are explicit and checked.
-- **Capability headers:** side effects and authority appear in function
-  signatures, such as `with(Console)`, `with(File)`, and `with(Alloc)`.
+- **Capability headers:** side effects and authority appear in the signature —
+  `with(Console)`, `with(File)`, `with(Alloc)`.
 - **Runtime safety:** array bounds, arithmetic traps, assertions, and
   preconditions become visible obligations or checks.
-- **Formal verification path:** contracts can be connected to Lean proofs,
-  kernel decision procedures, SMT runs, oracle tests, or named assumptions.
-- **No single green badge:** reports keep proof, testing, runtime checking, and
-  trust boundaries separate.
+- **Evidence, not one badge:** proofs, tests, solver results, runtime checks, and
+  trusted boundaries are reported as *distinct* classes.
 
 ## A Small Example
-
-Concrete code looks like systems code, but the authority and obligations are
-part of the language surface:
 
 ```con
 #[requires(0 <= off && off + 1 < len && len <= 512)]
@@ -62,124 +57,44 @@ fn report(result: i32) with(Console) {
 }
 ```
 
-The first function is pure and creates bounds/arithmetic obligations. The
-second function can print because it declares `with(Console)`.
-
-In Concrete, a function can say, and the tools can report:
-
-- what authority it needs, such as `with(Console)`, `with(File)`, `with(Alloc)`;
-- what runtime risks it creates, such as array bounds, division, overflow, or
-  assertion obligations;
-- what was proved by Lean's kernel;
-- what was discharged by kernel decision procedures such as `omega` or
-  `bv_decide`;
-- what was trusted to an external solver such as Z3;
-- what was tested against an independent oracle;
-- what remains assumed, trusted, partial, stale, vacuous, or unproven.
-
-## Try It
-
-Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html)
-(v4.28.0+) and clang.
-
-```bash
-make build
-make test
-```
-
-The daily workflow (run `concrete --help` from anywhere for the full map):
-
-```bash
-concrete file.con                 # compile
-concrete run file.con             # compile and run
-concrete test                     # run #[test] functions (in a project)
-concrete fmt file.con --check     # format
-
-concrete report caps file.con     # what authority does this code have?
-concrete trace file.con --json    # per-stage pipeline trace (first failing phase)
-concrete reduce file.con --predicate check-error   # minimize a failing program
-```
-
-Evidence and audit surfaces on the shipped examples:
-
-```bash
-.lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
-.lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
-.lake/build/bin/concrete examples/constant_time_tag/src/main.con --report audit
-```
-
-## Why Concrete Exists
-
-Systems code often asks reviewers to infer too much from convention.
-
-Concrete tries to make the important facts queryable:
-
-```text
-What can this function touch?
-What can fail at runtime?
-Which postconditions are actually proved?
-Which facts came from Lean?
-Which facts came from SMT?
-Which claims are only tests?
-Which assumptions are trusted?
-Did a proof go stale after the source changed?
-```
-
-The answer should come from the compiler, not from a comment, a wiki page, or a
-human memory of how the code was meant to be reviewed.
-
-Concrete's design bias is deliberately conservative:
-
-- no GC as the default runtime story;
-- linear ownership: non-`Copy` values are used exactly once;
-- explicit disposal: the compiler does **not** silently destroy linear values at
-  scope exit; user code must consume them directly or schedule visible cleanup
-  with `defer x.drop()` / `defer destroy(x)`;
-- aggregate cleanup stays explicit at the owner boundary: when code explicitly
-  drops a collection, generated drop glue may recursively destroy the live
-  elements it owns, but the outer disposal remains visible in source;
-- Hylo/Val-style second-class references: mutation is allowed, but safe
-  references are scoped access paths, not returned/stored lifetime-bearing
-  values. This is how Concrete gets in-place mutation without making users
-  manage a Rust-style lifetime surface;
-- compile-time borrowing for memory discipline;
-- explicit capabilities in function headers for side effects;
-- fixed arrays and explicit control flow as the easy path;
-- source contracts for important claims;
-- source-linked proof evidence with body fingerprints;
-- audit reports that refuse to collapse different evidence classes into one
-  green badge.
+The first function is pure and creates bounds/arithmetic obligations; the second
+can print only because it declares `with(Console)`. From that surface the tools
+answer, per function: what authority it needs, what can fail at runtime, what
+Lean's kernel proved, what a decision procedure discharged, what an external
+solver was trusted for, what an oracle tested, and what remains assumed, trusted,
+stale, or unproven.
 
 ## Why It Coheres
 
-These are not independent features bolted together — they lock into each other,
-and each one is cheaper because of the others:
+Systems code usually asks reviewers to infer authority, failure, and ownership
+from convention. Concrete makes those facts come from the compiler instead of a
+comment — and the pillars are not independent features bolted together. They lock
+into each other, and each is cheaper *because* of the others:
 
 - **Second-class references make ownership provable.** No returned references
   means no aliasing to track, which means no lifetime algebra — a small,
   checkable ownership fragment. The ergonomic cost buys the proof simplicity.
 - **Linear ownership plus abort-not-unwind makes cleanup simple.** Because
   Concrete aborts rather than unwinding, destruction runs only on normal control
-  flow — no drop flags, no partial-initialization tracking, none of the
-  machinery an unwinding language needs to keep destructors panic-safe.
+  flow — no drop flags, no partial-initialization tracking, none of the machinery
+  an unwinding language needs to keep destructors panic-safe.
 - **Capabilities and linearity compose.** When a collection is explicitly
-  disposed, its compiler-generated drop glue is capability-polymorphic: dropping
-  a collection of files carries `with(File)`, derived from the element
-  destructors — because otherwise automatic destruction would perform authority
-  invisibly. Two guarantees made to hold at once.
-- **The interpreter and the judgment modules make the compiler verifiable.**
-  Each semantic decision lives in one pure module (arithmetic, types,
-  capabilities, ownership); an interpreter runs the reference semantics and is
-  differentially tested against compiled output; and stage contracts catch a
-  violation at the first boundary it crosses — so the pipeline stays honest
-  enough to prove against.
+  disposed, its compiler-generated drop glue **inherits its elements' destructor
+  capabilities**, derived at monomorphization — otherwise automatic destruction
+  would perform authority invisibly. Two guarantees made to hold at once.
+- **The interpreter and the judgment modules make the compiler verifiable.** Each
+  semantic decision lives in one pure module (arithmetic, types, capabilities,
+  ownership); an interpreter runs the reference semantics and is differentially
+  tested against compiled output; and stage contracts catch a violation at the
+  first boundary it crosses — so the pipeline stays honest enough to prove
+  against.
 
-The unifying pattern: **every design choice trades convenience for a property
-you can see and check.** That is the language.
+The unifying pattern: **every design choice trades convenience for a property you
+can see and check.** That is the language.
 
 ## Evidence, Not One Badge
 
-Concrete reports evidence classes separately. That distinction is the product.
+Concrete reports evidence classes separately — that distinction is the product:
 
 ```text
 proved_by_lean              Lean kernel checked a linked theorem
@@ -197,178 +112,46 @@ counterexample              source-level witness refutes the claim
 unproven                    obligation exists but was not discharged
 ```
 
-This is why Concrete does not use "formally verified" as a single undifferentiated
-badge. A Concrete report should say what was verified, which theorem, decision
-procedure, test oracle, runtime check, or trusted boundary supports the claim,
-and what remains outside it.
+A report says *what* was verified, *which* theorem / decision procedure / oracle
+/ runtime check / trusted boundary supports it, and what remains outside — never
+one undifferentiated "formally verified."
 
 ## Four Claim Shapes
 
-The examples below are intentionally different. Concrete keeps them different.
+These are intentionally different, and Concrete keeps them different — each is
+labeled with its own evidence class, and none is allowed to borrow another's
+strength.
 
-### Lean Proof Attached To Source
+| Claim shape | Example | Discharged by | Class |
+| --- | --- | --- | --- |
+| Value correctness, proved | `ct_compare` (equal tags → 1, else 0) | Lean kernel checks a linked theorem | `proved_by_lean` |
+| Runtime safety from ordinary code | `read_u16_be` bounds + overflow | Lean-owned decision procedures (`omega`, `bv_decide`) | `proved_by_kernel_decision` |
+| Reference agreement | HMAC/SHA-256 vs RFC/FIPS/Python | an independent oracle — a test, not a proof | `tested_by_oracle` |
+| Nonlinear arithmetic | `scale` overflow | external SMT (Z3): trust named, replayable, counterexample if false | `solver_trusted` |
 
-`ct_compare` has a value-correctness contract: equal tags return `1`, different
-tags return `0`. The proof is linked from the source.
-
-```con
-#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
-#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
-#[proof_coverage(iff)]
-#[ensures((a == b && result == 1) || (a != b && result == 0))]
-fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
-    let mut diff: u8 = 0;
-    for (let mut i: i32 = 0; i < 16; i = i + 1) {
-        diff = diff | (a[i] ^ b[i]);
-    }
-    if diff == 0 { return 1; }
-    return 0;
-}
-```
-
-Report shape:
+The two proof classes read like this in a report — value correctness attached to
+source, and runtime safety discharged in-kernel with no external solver:
 
 ```text
 ct_compare
   ensures equal tags return 1 and different tags return 0
-    status: proved_by_lean
-    coverage: iff
-    theorems:
-      Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
-      Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
-```
+    status: proved_by_lean   coverage: iff
+    theorems: Examples.ConstantTimeTag.Proofs.ct_compare_{same,different}_tag_correct
 
-This proves value correctness in the proof model. It does not pretend to prove
-machine-level timing. The constant-time source shape and CPU/backend timing
-assumptions are reported separately.
-
-### Runtime Safety Discharged In The Kernel
-
-Array bounds and overflow obligations can be generated from ordinary systems
-code and discharged without an external solver.
-
-```con
-#[overflow_checked]
-#[requires(0 <= off && off + 1 < len && len <= 512)]
-fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -> i32 {
-    let hi: i32 = packet[off] as i32;
-    let lo: i32 = packet[off + 1] as i32;
-    return hi * 256 + lo;
-}
-```
-
-Report shape:
-
-```text
 read_u16_be
-  runtime array_bounds packet[off]
-    status: proved_by_kernel_decision
-    engine: omega
-  runtime array_bounds packet[off + 1]
-    status: proved_by_kernel_decision
-    engine: omega
-  runtime overflow hi * 256 + lo
-    status: proved_by_kernel_decision
-    engine: bv_decide
+  runtime array_bounds packet[off]        status: proved_by_kernel_decision  engine: omega
+  runtime array_bounds packet[off + 1]    status: proved_by_kernel_decision  engine: omega
+  runtime overflow    hi * 256 + lo       status: proved_by_kernel_decision  engine: bv_decide
 ```
 
-The same VC machinery handles contracts, call-site preconditions, loop
-invariants, `assert`, overflow, division, modulo, and array-bounds obligations.
-Ordinary linear arithmetic and fixed-width bitvector facts stay in Lean-owned
-decision procedures.
-
-### Oracle Evidence, Not Proof
-
-HMAC/SHA-256 is checked against independent references and vectors.
-
-```sh
-make test-hmac-oracle
-```
-
-Report shape:
-
-```text
-hmac_sha256
-  reference: Python hmac/hashlib
-  vectors:
-    RFC 4231 TC1, RFC 4231 TC2, FIPS 180-4 SHA-256("abc")
-    generated cases across key/message length regimes
-  status: tested_by_oracle
-  proof level: regression evidence, not proof
-```
-
-Oracle tests are useful because they compare the compiled program against an
-independent implementation. They are still tests. Concrete labels them as
-tests.
-
-### External SMT With Named Trust
-
-External SMT is useful for some nonlinear arithmetic. Concrete treats it as a
-separate evidence class.
-
-```con
-#[overflow_checked]
-#[requires(-30000 <= sample && sample <= 30000)]
-#[requires(-30000 <= gain && gain <= 30000)]
-fn scale(sample: i32, gain: i32) -> i32 {
-    return sample * gain;
-}
-```
-
-Report shape:
-
-```text
-scale
-  runtime overflow sample * gain
-    status: solver_trusted
-    solver: z3
-    logic: QF_NIA
-    smtlib_sha: cc35e339...
-    replay: z3 -T:5 vc.smt2
-```
-
-If the claim is false, the solver path reports a source-level counterexample,
-not a proof:
-
-```text
-scale_unbounded
-  runtime overflow sample * gain
-    status: counterexample
-    counterexample: sample = 99161, gain = 98166
-```
-
-External SMT is opt-in, reproducible, policy-gated, and never reported as Lean
-kernel evidence unless a separate Lean replay actually checks it.
-
-## Authority Is Visible
-
-Concrete uses explicit capabilities for side effects.
-
-```con
-fn validate(data: Int, len: Int) -> Int {
-    if len < 10 { return 1; }
-    return data + len;
-}
-
-fn report(result: Int) with(Console) {
-    if result == 0 { println("ok"); } else { println("fail"); }
-}
-```
-
-The pure core and effectful shell are not a style convention. They are visible
-in reports:
-
-```text
-validate       caps: (pure)     loops: no     evidence: enforced
-report         caps: Console    loops: no     evidence: enforced
-```
-
-Concrete should let a reviewer ask "why does this need `File`?" or "which
-callee introduced `Network`?" and get a compiler answer.
+The proved-value contract does **not** claim machine-level timing; the
+constant-time source shape and CPU/backend assumptions are reported separately.
+External SMT is opt-in, reproducible, policy-gated, reports a source-level
+counterexample when a claim is false, and is never counted as Lean evidence
+unless a separate Lean replay checks it. Worked source, report output, and replay
+commands live in the examples below.
 
 ## Contracts, Assert, And Assume
-
-Concrete distinguishes three common moves:
 
 ```con
 #[requires(0 <= i && i < 16)]
@@ -379,107 +162,86 @@ fn get16(a: [u8; 16], i: i32) -> u8 {
 }
 ```
 
-- `#[requires]` is a caller obligation or an entry assumption.
-- `#[ensures]` is a postcondition that needs evidence.
-- `assert(e);` creates an obligation.
-- `assume(e);` is a trapdoor: it taints the function as `assumed`, appears in
-  audit output, and can be rejected by policy.
+- `#[requires]` — a caller obligation / entry assumption.
+- `#[ensures]` — a postcondition that needs evidence.
+- `assert(e);` — creates an obligation.
+- `assume(e);` — a trapdoor: it taints the function as `assumed`, shows up in
+  audit, and can be rejected by policy. An `assume` never manufactures proof
+  evidence.
 
-An `assume` never manufactures proof evidence.
+Authority is visible the same way: a reviewer can ask "why does this need
+`File`?" or "which callee introduced `Network`?" and get a compiler answer rather
+than a convention — capabilities and their sources show up in `--report caps` /
+`--report authority`.
 
-## Proof Authoring
+## Try It
 
-Concrete proofs are source-linked. The old JSON proof registry has been
-removed from examples and user-facing proof flow.
-
-The proof workflow is binary-first:
-
-```bash
-.lake/build/bin/concrete prove examples/constant_time_tag/src/main.con constant_time_tag.ct_compare --json
-.lake/build/bin/concrete prove examples/constant_time_tag/src/main.con constant_time_tag.ct_compare --show-obligation O2 --json
-.lake/build/bin/concrete prove examples/constant_time_tag/src/main.con constant_time_tag.ct_compare --emit-lean
-.lake/build/bin/concrete prove examples/constant_time_tag/src/main.con constant_time_tag.ct_compare --workspace
-.lake/build/bin/concrete prove examples/constant_time_tag/src/main.con constant_time_tag.ct_compare --check --json
-```
-
-The workspace is disposable build output. It contains proof context, per
-obligation JSON, a Lean stub, replay commands, and the source-link attributes
-that attach the finished theorem back to the Concrete function.
-
-## Language Shape
-
-- **LL(1) surface.** The grammar is intentionally simple and mechanically
-  checked for predictable parsing.
-- **No garbage collector.** Ownership and borrowing are checked at compile time.
-- **Linear values.** Non-`Copy` values must be consumed exactly once; `Copy`
-  is the explicit escape for ordinary duplicable data.
-- **Explicit capabilities.** Side effects and authority appear in function
-  signatures.
-- **Fixed arrays and predictable loops.** The easy path is analyzable systems
-  code.
-- **Source contracts.** Important claims can live next to the function and be
-  turned into proof obligations.
-- **Trusted boundaries are named.** FFI, unsafe code, backend assumptions, and
-  machine timing do not disappear into a green check.
-- **Lean 4 substrate.** The compiler is written in Lean, and selected user
-  proofs are checked by Lean's kernel.
-
-## Examples To Read
-
-- [examples/constant_time_tag](examples/constant_time_tag/) shows layered
-  evidence: Lean proves value correctness, source shape reports constant-time
-  discipline, and machine timing remains an assumption.
-- [examples/hmac_sha256](examples/hmac_sha256/) is the deepest proof artifact:
-  SHA-256/HMAC refinement against an independent spec, plus oracle tests against
-  RFC/FIPS/Python references.
-- [examples/evidence_classes](examples/evidence_classes/) is the compact
-  catalog of evidence classes.
-- [examples/contract_negatives](examples/contract_negatives/) shows cases that
-  must not turn green: invalid contracts, unmet preconditions, vacuous claims,
-  fabricated theorem names, duplicate proof links, `assert`, and `assume`.
-- [examples/proof_patterns](examples/proof_patterns/) is the proof-authoring
-  pattern corpus: straight-line refinement, array update, loop copy, fold,
-  composition, ghost state, workspace, and repair-loop examples.
-- [examples/vc_discharge](examples/vc_discharge/) and
-  [examples/vc_suite](examples/vc_suite/) show the VC discharge matrix and
-  end-to-end VC examples: packet windows, fixed-point filters, chunked hash
-  padding, rate limits, and ring-buffer indices.
-- [examples/smt](examples/smt/) shows where external SMT is useful and where
-  Concrete refuses it: kernel-preferred facts, nonlinear overflow, source-level
-  counterexamples, solver provenance, policy gates, replay artifacts, and
-  red-team negatives.
-
-## Reports To Try
+Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html) (v4.28.0+)
+and clang.
 
 ```bash
 make build
+make test
+make clean
+```
 
-.lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
-.lake/build/bin/concrete examples/parse_validate/src/main.con --report proof-status
+The daily workflow (run `concrete --help` from anywhere for the full map):
+
+```bash
+concrete file.con                 # compile
+concrete run file.con             # compile and run
+concrete test                     # run #[test] functions (in a project)
+concrete fmt file.con --check     # format
+
+concrete report caps file.con     # what authority does this code have?
+concrete trace file.con --json    # per-stage pipeline trace (first failing phase)
+concrete reduce file.con --predicate check-error   # minimize a failing program
+```
+
+Explore the evidence surfaces on the shipped examples, and run the replay gates:
+
+```bash
 .lake/build/bin/concrete examples/parse_validate/src/main.con --report audit
 .lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
 .lake/build/bin/concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --smt
+
+make test-phase1-contracts   # contract negatives + snapshots
+make test-phase2-vc          # VC discharge matrix
+make test-prove-cli          # the prove workflow
+make test-evidence-corpus    # every evidence class reports correctly
 ```
 
-Useful report surfaces include `effects`, `contracts`, `vcs`, `audit`,
-`proof-status`, `check-proofs`, `obligation-ledger`, `caps`, `authority`,
-`unsafe`, `layout`, `interface`, `alloc`, `mono`, `eligibility`,
-`stack-depth`, `fingerprints`, `recursion`, `consistency`, and `verify`.
+Report surfaces include `effects`, `contracts`, `vcs`, `audit`, `proof-status`,
+`caps`, `authority`, `unsafe`, `layout`, `alloc`, `eligibility`, `fingerprints`,
+`consistency`, and `verify`. Proofs are source-linked and binary-first
+(`concrete prove <file> <fn> --emit-lean --workspace`); the workspace is
+disposable build output holding proof context, per-obligation JSON, a Lean stub,
+and replay commands. The gates are the point: Concrete's claims are meant to be
+replayed, not trusted from prose.
 
-## Gates To Run
+## Examples To Read
 
-```bash
-make test
-make test-phase1-contracts
-make test-phase2-vc
-make test-prove-cli
-make test-proof-patterns
-make test-evidence-corpus
-make test-release-bundle
-```
-
-These gates are part of the point. Concrete's claims are meant to be replayed,
-not trusted from prose.
+- [examples/constant_time_tag](examples/constant_time_tag/) — layered evidence:
+  Lean proves value correctness, the source shape reports constant-time
+  discipline, and machine timing stays an assumption.
+- [examples/hmac_sha256](examples/hmac_sha256/) — the deepest proof artifact:
+  SHA-256/HMAC refinement against an independent spec, plus oracle tests against
+  RFC/FIPS/Python references.
+- [examples/evidence_classes](examples/evidence_classes/) — the compact catalog
+  of evidence classes.
+- [examples/contract_negatives](examples/contract_negatives/) — cases that must
+  *not* turn green: invalid contracts, unmet preconditions, vacuous claims,
+  fabricated theorem names, duplicate proof links, `assert`, and `assume`.
+- [examples/proof_patterns](examples/proof_patterns/) — the proof-authoring
+  corpus: refinement, array update, loop copy, fold, composition, ghost state,
+  workspace, and repair-loop patterns.
+- [examples/vc_suite](examples/vc_suite/) and
+  [examples/vc_discharge](examples/vc_discharge/) — the VC discharge matrix and
+  end-to-end VCs: packet windows, fixed-point filters, hash padding, rate limits,
+  ring-buffer indices.
+- [examples/smt](examples/smt/) — where external SMT helps and where Concrete
+  refuses it: kernel-preferred facts, nonlinear overflow, counterexamples, solver
+  provenance, policy gates, replay artifacts, red-team negatives.
 
 ## Nearby Systems
 
@@ -503,20 +265,8 @@ hide trust.
 For the longer C/Rust-oriented argument, read
 [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).
 
-## Building
-
-Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html)
-(v4.28.0+) and clang.
-
-```bash
-make build
-make test
-make clean
-```
-
 ## License
 
-Concrete was originally specified and created by Federico Carrone at
-LambdaClass.
+Concrete was originally specified and created by Federico Carrone at LambdaClass.
 
 [Apache 2.0](/LICENSE)
