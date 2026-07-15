@@ -268,9 +268,12 @@ batteries-included breadth. The ranked build order is:
 8. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 9. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-10. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+10. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+    `Bytes`/slice, numeric checked helpers, and checked text/path conversions
+    against their documented contracts.
+11. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-11. Broad compression/crypto/networking/threading only after workload demand.
+12. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -737,6 +740,23 @@ Do not duplicate compiler-command cleanup here.
     specs need it. Each formal module must state its erasure/runtime story, its
     evidence class, the Lean artifact it lowers to, and the refinement relation
     to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
+31b. Add a **shipped pure-core stdlib proof arc**, distinct from the pull-gated
+    formal-container work in 31a. This proves the stdlib code users actually
+    call, not separate mathematical containers. Scope v1 narrowly:
+    `Option`/`Result` helpers (`map`, `and_then`, `map_err`, identity /
+    composition where expressible), numeric checked helpers (success/failure
+    agreement with documented overflow, divide-by-zero, and narrowing
+    behavior), `Bytes`/slice pure helpers (`view`, `cmp`, checked `get`/`set`,
+    raw-data preservation, bounds behavior), and checked text/path conversions
+    (valid UTF-8 boundary, raw bytes preserved, unchecked constructors named
+    `_unchecked`). Non-goals: hosted APIs, allocation behavior, filesystem,
+    network, process, clock, console effects, broad collection proofs, and the
+    `formal_vec`/`formal_map`/`formal_set` model-container layer. Done when a
+    small Lean proof suite is CI-gated, each covered API's manifest/report row
+    distinguishes `proved` from `tested`/`enforced`, and a negative fixture proves
+    the report cannot keep `proved` after a body/spec drift. This is the
+    "proved pure core" part of the Phase 7 excellence contract; do not let it be
+    deferred behind breadth modules such as JSON, CLI, or networking.
 32. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
