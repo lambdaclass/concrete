@@ -46,7 +46,10 @@ check Concrete/IR/Lower.lean             64
 check Concrete/IR/Mono.lean              5
 check Concrete/IR/SSACleanup.lean        1
 check Concrete/IR/SSAVerify.lean         2
-check Concrete/Backend/EmitSSA.lean      29
+# 29->34 (2026-07-15): +5 one-shot `saveArgcArgv ++ [...]` instruction lists in
+# emitMainWrapper's exit-code branches (MAIN_EXIT_MODEL stage 1) — fixed-size
+# wrapper construction, not in any loop.
+check Concrete/Backend/EmitSSA.lean      34
 check Concrete/Resolve/Resolve.lean      8
 check Concrete/Check/Check.lean          4
 check Concrete/Check/CheckHelpers.lean   8
