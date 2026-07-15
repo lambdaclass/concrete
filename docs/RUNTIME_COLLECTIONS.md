@@ -4,7 +4,7 @@ Status: PARTIALLY SUPERSEDED (2026-06-11) — the borrowed-accessor design below
 is being withdrawn. The `map.get(&k) -> Option<&V>` / `map.get_mut(&k) ->
 Option<&mut V>` "lookup" and "mutating lookup" rows (§4) are the **H1 known
 hole**: aggregate-wrapped returned references that compile but are unsound (a
-saved ref can survive a rehash). Per the H1 resolution (ROADMAP Phase 7 #8a,
+saved ref can survive a rehash). Per the H1 resolution (ROADMAP Phase 7,
 [KNOWN_HOLES.md](KNOWN_HOLES.md) H1) they are replaced by value/operation APIs
 (`contains`, value-`get` for Copy, `remove -> Option<V>`, `update(k, fn(V) ->
 V)`), owned `ByteView` for stored zero-copy, and scoped callbacks
@@ -52,6 +52,21 @@ The first-release stdlib commits to the following collection vocabulary for runt
 | `String` | `std.string` | — | linear | UTF-8 text |
 
 These are enough for every interpreter, analyzer, and scheduler we have written so far. They are all linear (ownership-honest), all visible `with(Alloc)`, and none requires a trait system to instantiate — keys carry their hash/eq as function pointers, Zig-style.
+
+**Owned-resource collections.** The intended long-term rule is that collections
+own their live elements. Dropping or clearing a collection destroys every live
+non-`Copy` element exactly once; `pop`, `remove`, and `swap_remove` move an
+element out and transfer ownership to the caller. H18 is the current tracked
+gap: the shipped trusted buffers reclaim storage but do not yet run generic
+element destruction for all non-`Copy` elements. Phase 7 closes this with
+compiler-generated drop glue at monomorphization, not with permanent
+`drop_with(f)` APIs and not with stored destructor function pointers.
+
+**Read access split.** `get(i) -> Option<T>` is a copy-out API and exists only
+when `T: Copy`. For non-`Copy` elements, safe code uses scoped callbacks
+(`with_at`, `with_value`, and their mutation forms where the alias gate permits)
+or explicit move-out (`pop`, `remove`, `swap_remove`). Safe collection APIs do
+not return `&T` / `&mut T`; references stay second-class and scoped.
 
 **Not in the stable surface** (deliberately deferred):
 
@@ -110,8 +125,12 @@ fn next(q: &mut Deque<Task>) -> Option<Task> { q.pop_front() }
 
 ```concrete pseudocode
 fn add_fact(idx: &mut HashMap<Key, Vec<Fact>>, k: Key, f: Fact) with(Alloc) {
-    match idx.get_mut(&k) {
-        Option::Some { value } => value.push(f),
+    match idx.remove(&k) {
+        Option::Some { value } => {
+            let mut v: Vec<Fact> = value;
+            v.push(f);
+            idx.insert(k, v);
+        },
         Option::None => {
             let mut v: Vec<Fact> = Vec::new();
             v.push(f);
@@ -130,13 +149,20 @@ fn add_fact(idx: &mut HashMap<Key, Vec<Fact>>, k: Key, f: Fact) with(Alloc) {
 
 Runtime workloads lean on the following conventions. These are not new; they are pulled together here so interpreters/analyzers can be written consistently.
 
-- **Lookup without mutation:** `map.get(&k) -> Option<&V>`. Returns a borrow; no allocation.
-- **Mutating lookup:** `map.get_mut(&k) -> Option<&mut V>`. Returns a mutable borrow; caller mutates in place.
+- **Copy lookup:** `map.get(&k) -> Option<V>` exists only when `V: Copy`; it
+  copies the value out and leaves the map unchanged.
+- **Scoped lookup without mutation:** `map.with_value(&k, ctx, f) -> Option<R>`.
+  The callback receives `&V`, and the reference cannot escape.
+- **Scoped mutating lookup:** `map.with_value_mut(&k, ctx, f) -> Option<R>` or
+  `map.modify(&k, f)` where the alias gate permits it. The callback receives
+  `&mut V`, and the reference cannot escape.
 - **Insert-or-replace:** `map.insert(k, v)`. Transfers ownership of `v` into the map; prior value (if any) is returned as `Option<V>` for the caller to destroy.
 - **Remove:** `map.remove(&k) -> Option<V>`. Caller owns the returned value and is responsible for destroying it.
 - **Iteration order:** unspecified for `HashMap`/`Set`, deterministic ascending for `OrderedMap`/`OrderedSet`, insertion order for `Vec`/`Deque`.
 
-Mutating a value inside a `HashMap` is the `get_mut` path. There is no "entry API" (à la Rust's `Entry`) in the first release; the two-line match idiom in section 3.4 covers the pressure cases without a new type.
+Mutating a value inside a `HashMap` is the scoped callback path. There is no
+"entry API" (à la Rust's `Entry`) in the first release; the two-line match idiom
+in section 3.4 covers the pressure cases without a new type.
 
 ---
 
@@ -169,9 +195,12 @@ Patterns that fail any of these remain example-shaped. That is not a negative ju
 
 ## 7. Freeze Close-Out Status
 
-The first-release runtime-collection surface is accepted as freeze-ready on the current evidence:
+The current runtime-collection surface is accepted as usable on the current
+evidence, with H18 explicitly tracked as the Phase 7 owned-resource collection
+closure:
 
-- [x] `HashMap::get_mut` and `OrderedMap::get_mut` exist and return `Option<&mut V>`.
+- [x] Safe collection APIs do not return references; reads use Copy `get`, scoped
+      callbacks, or explicit move-out.
 - [x] `insert` on map types returns the displaced value as `Option<V>`.
 - [x] `Deque<T>::push_back` / `pop_front` / `push_front` / `pop_back` exist and are covered by stdlib tests; the scheduler/work-queue shape in section 3.3 remains the canonical usage pattern.
 - [x] Stdlib maps accept explicit `hash` / `eq` function pointers (no trait dependency).

@@ -85,7 +85,7 @@ escape valve if real workloads ever prove the restriction too costly.
 ## The four-cell value model (Copy / Clone / Move / Borrow)
 
 Duplication and ownership transfer fall into four explicit, distinct cells.
-This frames the *possible* design of `Clone` (see ROADMAP Phase 7 #8a) — and
+This frames the *possible* design of `Clone` (see ROADMAP Phase 7 #1a) — and
 the deliberate decision NOT to treat it as foundational language machinery:
 
 | Cell | Meaning | Status | Visibility |
@@ -119,6 +119,14 @@ ownership-transfer counterpart (move-out) is the default for owned values; for c
 containers — `swap(i, new) -> V` transfers ownership out of a slot without
 clone or delete, preserving the linear one-value-per-slot invariant. Like
 `Clone`, build it when a workload needs it, not speculatively.
+
+For collection reads, `get(i) -> Option<T>` is a **copy-out** API and is valid
+only for `T: Copy`; the element remains in the collection and the caller receives
+a duplicate value. For non-`Copy` elements, returning `T` would be a move-out,
+not a read, so safe APIs use scoped callbacks (`with_at` / `with_value`) or
+explicit ownership-transfer operations (`pop`, `remove`, `swap_remove`). This
+is the ergonomic cost of second-class references: owned-resource collections are
+fully supported, but borrowed access cannot escape as a returned `&T` / `&mut T`.
 
 ## Current Guarantee Boundary
 

@@ -28,14 +28,20 @@ leaked (acknowledged at `vec.con:106`). LATENT today: every shipped user of
 these containers stores Copy elements, and the H12-checked front end still
 enforces linearity on the values BEFORE they enter the container.
 
-Decision (review 2026-07-14, refined): defer until a non-Copy-collection
-workload pulls it, then fix via AUTOMATIC drop-through (the vec.con:106
-drop-as-trait direction) — destruction stays visible in ownership/evidence
-reports, but the caller does not carry the destructor at every site. A
-`drop_with(f)`-style family is acceptable ONLY as an explicitly-labeled
-temporary bridge if a workload needs non-Copy collections before drop-as-trait
-is ready (a permanent free-function destructor family is the 2b legacy-shape
-anti-pattern).
+Decision (review 2026-07-14, refined again): Phase 7 now pulls this forward
+before broad stdlib breadth. The permanent fix is **compiler-generated
+drop-glue at monomorphization**: when `Vec<File>` / `HashMap<String, Buffer>` /
+etc. is instantiated, the compiler resolves the element/key/value destruction
+path statically and emits the loops that destroy live slots before storage is
+freed or reused. No trait objects, no stored destructor function pointer in
+each collection value, and no permanent caller-supplied `drop_with(f)` burden.
+`drop_with(f)`-style APIs are acceptable only as an explicitly-labeled temporary
+bridge if a workload needs non-Copy collections before drop-glue is ready.
+
+Because Concrete aborts rather than unwinds, the H18 fix does not need Rust's
+panic-unwind drop-flag machinery. It only needs normal-path destruction for
+`drop`/`clear`/overwrite/replacement/compaction, and explicit ownership transfer
+for `pop`/`remove`/`swap_remove`.
 
 Gate: `check_collections_copy_only.sh` pins the status quo — the fixture
 demonstrating the leak stays a documented reject/accept pair, and std's
