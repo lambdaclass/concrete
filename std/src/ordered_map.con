@@ -146,40 +146,6 @@ mod ordered_map {
             return cmp(key, k as &K) == 0;
         }
 
-        pub fn remove(&mut self, key: &K) -> Option<V> {
-            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
-            if self.len == 0 {
-                return Option::<V>::None;
-            }
-            let idx: u64 = self.find_index(key);
-            if idx >= self.len {
-                return Option::<V>::None;
-            }
-            let k: *mut K = self.keys + idx;
-            if cmp(key, k as &K) != 0 {
-                return Option::<V>::None;
-            }
-
-            let val_ptr: *mut V = self.values + idx;
-            let old: V = *val_ptr;
-
-            // Shift elements left
-            let mut i: u64 = idx;
-            while i + 1 < self.len {
-                let src_k: *mut K = self.keys + (i + 1);
-                let dst_k: *mut K = self.keys + i;
-                *dst_k = *src_k;
-
-                let src_v: *mut V = self.values + (i + 1);
-                let dst_v: *mut V = self.values + i;
-                *dst_v = *src_v;
-
-                i = i + 1;
-            }
-
-            self.len = self.len - 1;
-            return Option::<V>::Some { value: old };
-        }
 
         // min_key/max_key value readers live in the `K: Copy` impl below.
 
@@ -284,8 +250,46 @@ mod ordered_map {
         return acc * 10 + *k;
     }
 
-    // H18: insert destroys the displaced key on same-key overwrite.
+    // H18: insert/remove destroy displaced/removed keys.
     trusted impl<K: Destroy, V> OrderedMap<K, V> {
+        pub fn remove(&mut self, key: &K) -> Option<V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<V>::None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<V>::None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<V>::None;
+            }
+
+            let val_ptr: *mut V = self.values + idx;
+            let old: V = *val_ptr;
+            // Destroy the REMOVED key before the shift overwrites it (H18
+            // keyed-remove rule — the key is owned and not returned).
+            (k as &K).destroy();
+
+            // Shift elements left
+            let mut i: u64 = idx;
+            while i + 1 < self.len {
+                let src_k: *mut K = self.keys + (i + 1);
+                let dst_k: *mut K = self.keys + i;
+                *dst_k = *src_k;
+
+                let src_v: *mut V = self.values + (i + 1);
+                let dst_v: *mut V = self.values + i;
+                *dst_v = *src_v;
+
+                i = i + 1;
+            }
+
+            self.len = self.len - 1;
+            return Option::<V>::Some { value: old };
+        }
+
         /// Insert a key-value pair. Returns the old value if the key already existed.
         pub fn insert(&mut self, key: K, value: V) with(Alloc) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
@@ -377,6 +381,51 @@ mod ordered_map {
                 dealloc::<V>(self.values);
             }
         }
+    }
+
+    struct ODKey { id: i64, cell: *mut u64 }
+    trusted impl Destroy for ODKey {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    fn cmp_odkey(a: &ODKey, b: &ODKey) -> i32 {
+        if a.id < b.id { return 0 - 1; }
+        if a.id > b.id { return 1; }
+        return 0;
+    }
+    trusted fn o_cell_new() with(Alloc) -> *mut u64 {
+        let p: *mut u64 = grow::<u64>(0 as *mut u64, 1);
+        *p = 0;
+        return p;
+    }
+    trusted fn o_cell_get(p: *mut u64) -> u64 { return *p; }
+
+    #[test]
+    fn test_omap_remove_destroys_key() with(Alloc) -> i32 {
+        // H18 keyed-remove: the removed key is destroyed BEFORE the shift;
+        // shifted survivors are destroyed exactly once by the final drop.
+        let cell: *mut u64 = o_cell_new();
+        let mut m: OrderedMap<ODKey, i64> = OrderedMap::<ODKey, i64>::new(cmp_odkey);
+        let o1: Option<i64> = m.insert(ODKey { id: 2, cell: cell }, 20);
+        discard(o1.is_none());
+        let o2: Option<i64> = m.insert(ODKey { id: 1, cell: cell }, 10);
+        discard(o2.is_none());
+        let o3: Option<i64> = m.insert(ODKey { id: 3, cell: cell }, 30);
+        discard(o3.is_none());
+        let probe: ODKey = ODKey { id: 1, cell: cell };
+        let r: Option<i64> = m.remove(&probe);   // removes FIRST slot -> shifts 2,3 left
+        destroy(probe);
+        let after_remove: u64 = o_cell_get(cell);   // probe(1) + removed key(1) = 2
+        m.drop();                                    // survivors id 2,3 = +2 -> 4
+        let after_drop: u64 = o_cell_get(cell);
+        match r {
+            Option::Some { value } => { if value != 10 { return 1; } },
+            Option::None => { return 1; },
+        }
+        if after_remove != 2 { return 1; }
+        if after_drop != 4 { return 1; }
+        return 0;
     }
 
     #[test]

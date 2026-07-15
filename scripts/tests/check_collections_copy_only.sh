@@ -98,6 +98,17 @@ done
 grep -q "test_map_destroys_entries" std/src/map.con \
   && ok "map destruction-count std test present" \
   || no "map destruction-count std test missing"
+# keyed-remove sentinels (H18 review catch): remove returns only V/bool, so
+# the STORED key must be destroyed — proven with Destroy-counter keys per
+# container. This is the class the i64-keyed test missed.
+for spec in "map.con:test_map_remove_destroys_key" "set.con:test_set_remove_destroys_key" \
+            "ordered_map.con:test_omap_remove_destroys_key" "ordered_set.con:test_oset_remove_destroys_key"; do
+  f="${spec%%:*}"; t="${spec#*:}"
+  grep -q "$t" "std/src/$f" && ok "$f: $t (keyed-remove sentinel)" || no "$f missing keyed-remove sentinel $t"
+done
+grep -q "destroy();" <(sed -n '/pub fn remove/,/^        }/p' std/src/map.con) \
+  && ok "map.remove destroys the stored key before tombstoning" \
+  || no "map.remove does not destroy the stored key"
 
 # (b2) reject: HashMap with a non-destroyable VALUE cannot be dropped
 mkproj draincol <<'CON'

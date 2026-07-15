@@ -42,7 +42,14 @@ container has a conditional `impl Destroy` so nesting composes
 fence (E0584) rejects any Destroy impl requiring caps beyond Alloc — rule 3
 holds degenerately by construction. Destruction counts proven by std tests
 (vec: 6 and nested 5; map: 4 across insert-overwrite/remove/drop).
-Gate: COLLECTIONS-DROP-GLUE (25 checks). Residual (deliberate, documented):
+KEYED-REMOVE follow-up (caught by cross-session review 2026-07-16, fixed same
+day): `remove(&key) -> Option<V>`/`bool` returned the value but silently
+discarded the STORED key (tombstoned/shifted over — later drop/clear never
+see it). All four keyed containers now require `K: Destroy` on remove and
+destroy the stored key before tombstoning/shifting; proven by Destroy-counter
+sentinel tests per container (the original map test used i64 keys, which is
+exactly why it missed this — sentinels now use non-Copy keys).
+Gate: COLLECTIONS-DROP-GLUE (30 checks). Residual (deliberate, documented):
 `slice.set_unchecked`/`vec.set_unchecked` remain raw trusted overwrite escapes.
 
 
