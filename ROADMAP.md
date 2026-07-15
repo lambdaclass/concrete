@@ -226,7 +226,7 @@ not prose:
    `net`→`Network`, `console`/`io`→`Console`. `trusted` internals may use
    `Unsafe`, but the public wrapper must re-expose the real cap (a `trusted`
    extern requires *no* capability, so authority collapses into `Unsafe` unless
-   re-added by hand). The item-2a manifest gate fails if a hosted op is behind
+   re-added by hand). The stdlib manifest gate fails if a hosted op is behind
    `Unsafe` alone.
 2. **One IO spine.** All output targets a single `io.Writer` (fn-pointer handle,
    authority at acquisition, no `dyn`), and there is one `File` type: `fmt`,
@@ -239,7 +239,7 @@ not prose:
    not silent.
 4. **Self-enforcing + proven.** The five-fact manifest (allocate / consume /
    fail / capability / proof-class), derived from compiler facts and gated
-   (item 2a); the strict error rule (`Option` for absence, `Result` for
+   (the stdlib manifest gate); the strict error rule (`Option` for absence, `Result` for
    recoverable domain/environment failure, trap/abort for invariants / OOM /
    bounds / arithmetic, explicit cross-module wrapping, no hidden `?` conversion
    web); and the pure core (`option`/`result`/`bytes`/`numeric`) carrying Lean
@@ -256,27 +256,21 @@ not the periphery.
 
 Phase 7 priority order is deliberately narrower than the comparison languages:
 make Concrete's small core pleasant and auditable before copying broad
-batteries-included breadth. The ranked build order is:
+batteries-included breadth. Completed foundation work lives in
+[CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-1. `Option`/`Result` ergonomics and recoverable-vs-fatal conventions.
-2. Allocator-as-value research before allocator-heavy collection APIs harden.
-3. Buffered `Reader`/`Writer` and file/byte-stream IO.
-4. `Path`/filesystem APIs.
-5. `String`/`Text`/`Bytes` coherence.
-6. Collections phase 2 on the callable-values surface.
-7. `std.test` tests-as-docs and doc-snippet gates.
-8. First real stdlib workload: `base64_cli`, before broadening the API surface.
+1. First real stdlib workload: `base64_cli`, before broadening the API surface.
    It must exercise args -> bytes/text -> parse/errors -> `std.base64` ->
    `Writer` output -> oracle tests, and it should pull only the APIs it needs.
-9. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-10. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-11. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+4. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-12. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+5. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-13. Broad compression/crypto/networking/threading only after workload demand.
+6. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -284,157 +278,14 @@ the **stdlib** side: APIs that Concrete programs use to parse their own command
 lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
-1. Define the stdlib gap matrix against Gleam, Zig, Rust, Go, Odin, Ada/SPARK,
-   Lean, and Roc before expanding APIs.
-   DONE by the research corpus: `research/stdlib/stdlib-comparative-inventory.md`
-   is the matrix (all eight languages, per-row core-now / hosted-later / deferred
-   classification with provenance); `docs/stdlib/STDLIB_TARGET.md` records the
-   per-layer module inventory. Concrete should not copy any one
-   surface. It should make a Gleam/Roc-sized core pleasant, keep Zig-style
-   allocation/authority explicit, preserve Rust-style core/alloc/hosted
-   layering where useful, copy Ada/SPARK's evidence-class discipline, use Lean
-   as proof-infrastructure guidance, and treat Go/Odin as breadth references
-   for later, not as v1 size targets. Record which modules are core-now,
-   hosted-now, freestanding-later, package-later, or research-later. The matrix
-   must name the obvious external references so they are not forgotten:
-   Gleam's `List`/`Dict`/`Set`/`String`/`BitArray`/`BytesTree`/`StringTree`/
-   `Uri`/`Dynamic.Decode`; Roc's `Str`/`List`/`Dict`/`Set`/`Iter`/numeric
-   builtins; Zig's `ArrayList`/maps/sets/sort/fmt/json/base64/Uri/fs/process/
-   time/random/hash/crypto/log/testing/allocators/atomics/threads/compress/
-   archive/target/OS/debug-format surface; Rust's `core`/`alloc`/`std`,
-   `Option`/`Result`, slices, `Vec`, maps, `io`, `fs`, `path`, and `time`;
-   Go's `bufio`/`io`/`os`/`path`/`encoding`/`testing`/`crypto`/`compress`
-   breadth; Odin's base/core/vendor split and data-oriented package layout;
-   Ada's predefined strings, containers, IO, numerics, and command-line
-   units; SPARK's formal/functional containers, big numbers, IO restrictions,
-   and lemma libraries; and Lean's proof/library organization.
-2. (layout DONE: `docs/stdlib/HOSTED_STDLIB_SPLIT.md` records the four layers
-   — core / alloc / hosted / FFI — and `STDLIB_TARGET.md` the per-layer modules;
-   naming rule = method-canonical, item 2b, gate-enforced.)
-   Define stdlib module layout and naming: core/prelude, bytes/text/path,
-   collections, numeric helpers, formatting/parsing, console/file/network/
-   process/time, test/oracle helpers, and target-profile-specific modules.
-   Start from this explicit module checklist so none of the Concrete names or
-   comparison-driven additions disappear:
-   - Existing core/result modules: `std.option`, `std.result`.
-   - Existing numeric/memory modules: `std.numeric`, `std.math`, `std.mem`,
-     `std.ptr`, `std.alloc`.
-   - Existing byte/text/path modules: `std.bytes`, `std.slice`, `std.string`,
-     `std.text`, `std.ascii`, `std.path`.
-   - Existing format/parse/data modules: `std.fmt`, `std.parse`, `std.hex`,
-     `std.sha256`, `std.hash`, `std.rand`, `std.time`.
-   - Existing collection modules: `std.vec`, `std.map`, `std.set`,
-     `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
-     `std.bitset`.
-   - Existing hosted/capability modules: `std.io`, `std.fs`,
-     `std.env`, `std.args`, `std.process`, `std.net`, `std.libc`.
-   - Existing test module: `std.test`.
-   - Proposed iterator/builder modules: `std.iter`, `std.builder`.
-   - Proposed collection helper modules: `std.sort`, `std.search`.
-   - Proposed data/encoding modules: `std.checksum`, `std.base64`,
-     `std.uri`, `std.json`, `std.decode`, `std.bin`.
-   - Proposed package/config modules: `std.semver`, `std.config`.
-   - Proposed CLI/user-output modules: `std.cli`, `std.log`, `std.progress`.
-   - Proposed security/text-policy modules: `std.ct`, `std.unicode`.
-2a. Freeze the public stdlib surface as a five-fact manifest and gate it — the
-    builtin/intrinsic-registry discipline (Phase 6B item 16) applied to the
-    stdlib surface. `STDLIB_DESIGN_PRINCIPLES.md` already states these facts as
-    prose and `STDLIB_SURFACE_FREEZE.md` tabulates `Item | Kind | Capability`,
-    but the facts are partial (no consume/proof columns), prose-backed, and
-    unenforced. Make every public item carry a uniform row whose facts are
-    DERIVED from the compiler's own facts, not hand-written strings: allocates
-    (`no` / `with(Alloc)` — absence is provably non-allocating), consumes
-    (`borrows` / `mut` / `consumes` / `constructs`, from receiver mode + return
-    ownership), fails (`infallible` / `Option` / `Result` + error enum, from the
-    return type), capability (`none` or the concrete cap set), and proof-class
-    (`pure-core` / `deterministic` / `hosted-effect` / `trusted-boundary`, from
-    layer + effect facts). Pure-core items (`option`, `result`, `bytes`,
-    `numeric`) also carry a mathematical model and state contracts against the
-    model, not the representation (the SPARK formal-container lesson); the
-    `trusted` / `Unsafe` seam is where proof-class degrades to `trusted-boundary`
-    behind a contracted spec.
+Foundation items already completed in Phase 7:
+stdlib gap matrix, module layout, five-fact manifest, method-canonical rule,
+Option/Result helpers, conditional Copy, bytes/slice, Unicode/text policy, path
+boundary, Reader/Writer, core value rendering, std.test basics, ordered
+traversal, BitSet aliases, and the 13t error-convention gate. See
+[CHANGELOG.md](CHANGELOG.md).
 
-    Done when a gate (extending `STDLIB_SURFACE_FREEZE.md`) proves every public
-    item has a complete row, no fact is blank (absence is an explicit
-    `no` / `none` / `infallible`), and each row AGREES with the item's signature
-    — a row claiming `allocates: no` on a `with(Alloc)` signature fails, the same
-    "stale hand-written string disagrees with the compiler fact" negative as
-    item 17. Each `_unchecked` variant names a proof obligation, not UB.
-2b. Make method style the canonical public API shape; the free-function legacy is
-    migrated, not extended. The stdlib grew both a method API (`v.get(i)`,
-    `v.len()`, `v.push(x)`) and a free-function legacy (`vec_get`, `vec_len`,
-    `string_push_char(...)`). Post-landing evidence
-    (`research/stdlib/iterators.md`, `docs/stdlib/STDLIB_API_REVIEW.md`) shows the
-    biggest ergonomic win is migrating the free-function surface to methods, and
-    the mixed surface is a live source of naming sprawl. Rule: a method on the
-    receiver type is the canonical shape; a free-function form lands only where
-    there is no receiver (module-level constructors, cross-type helpers). Legacy
-    free-function names are migration targets, not a parallel API to extend.
-
-    Done when `STDLIB_DESIGN_PRINCIPLES.md` records method-canonical as the naming
-    rule and the item-2a manifest gate flags a new public free-function that
-    duplicates a method on its first argument's type (with an allowlist for genuine
-    no-receiver helpers). Migrating the existing legacy names tracks with the
-    single-file→project conversion that currently blocks it (per `iterators.md`),
-    not as a v1 release blocker.
-3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
-   construction, matching helpers,
-   fallible chaining, ignored-result behavior, test helpers, and audit facts
-   for fallible returns.
-   DONE: helpers shipped through P7#1 (is_*/unwrap_or/ok/err/ok_or + Tier-2
-   map/map_err/Option::map + and_then fallible chaining for both types, all
-   tested — stdlib 277/0); ignored-result behavior is E0286/E0294 per
-   docs/ERROR_CONVENTIONS.md; audit facts = the item-2a manifest `fails` column
-   (infallible/option/result derived per signature); test helpers live in
-   std.test. ✅ CONDITIONAL COPY landed 2026-07-05: `Option<T>` /
-   `Result<T, E>` / Copy-marked generic structs are Copy iff every substituted
-   field/payload is Copy (`isCopyType` evaluates instantiations; Mono demotes
-   non-qualifying specializations to linear instead of erroring; `if let` /
-   `while let` on `Option<Copy>` is legal for the right reason — the linear
-   `_` rule unbent). Fixtures: `conditional_copy.con`,
-   `error_conditional_copy_{option,result}.con`. Include the small ergonomic floor before real workloads
-   work around the canonical error types: `map_err`, `and_then`, `unwrap_or`,
-   `ok_or`, and any `unwrap_or_else`/callback form that remains explicit about
-   control flow and capabilities. If `?` gains conversion behavior, its
-   lowering and reports must remain explicit: no hidden allocation, no hidden
-   capability gain, and no silent conversion of one error set into another.
-3a. ✅ **DONE (2026-07-05) — conditional `Copy` for generic containers without
-   weakening linearity.** `Option<T>` is `Copy` iff `T` is `Copy`; `Result<T, E>`
-   is `Copy` iff both `T` and `E` are `Copy`; Copy-marked generic structs are
-   demoted to linear for non-qualifying instantiations. This is a convenience
-   and correctness-of-classification item, not an affine escape hatch:
-   non-`Copy` values still cannot be silently discarded, and `_` may ignore a
-   generic value only when the instantiated whole type is actually `Copy`.
-   Gates include positives for `Option<i32>` / `Result<i32, i32>` Copy behavior
-   and negatives for `Option<String>`, `Result<String, E>`, and nested
-   resource-owning payloads. Future generic containers must state their
-   conditional-`Copy` rule structurally and preserve the invariant that no
-   `Copy` value contains a non-`Copy` owner.
-4. Build raw-data APIs in `std.bytes` and `std.slice`: `Bytes`, byte slices,
-   fixed buffers, parser cursors,
-   byte-preserving formatting, and no implicit UTF-8 or lossy conversions.
-5. (v1 policy DONE: `docs/stdlib/UNICODE_POLICY.md` — String/Text valid UTF-8
-   only, checked or `_unchecked`-named crossings, ASCII helpers explicitly
-   ASCII-only, NO normalization/case-folding/display-width in v1, scalar
-   iteration deferred; gate = the unicode section of
-   `check_bytes_text_boundary.sh`. RECORDED FOLLOW-UP: `std.args.get_bytes` —
-   a raw OS-argument accessor returning `Bytes` for non-UTF-8 argv; `get`
-   returning "" for invalid argv is v1-safe but lossy.)
-   Build validated text APIs in `std.text`, `std.string`, and `std.ascii`:
-   `Text`, `String`, UTF-8 validation, slicing/indexing rules, formatting,
-   parse helpers, diagnostics, and explicit conversion from/to raw bytes.
-   Decide the `std.bytes.Bytes` / `std.text.Text` / `std.string.String` split
-   before `std.json`, `std.uri`, `std.path`, or `std.net` examples depend on
-   it.
-6. Define the Unicode policy in proposed `std.unicode` before text-heavy APIs
-   grow: validation, scalar/value iteration, normalization stance, case
-   folding stance, width/display policy, and which pieces are core-now versus
-   package-later. Do not silently normalize or case-fold text.
-7. Build path and OS-string APIs in `std.path`: `Path`, `OsString`,
-   byte-preserving platform
-   boundaries, normalization assumptions, symlink/TOCTOU notes, and explicit
-   failure modes.
-8. Build collection APIs across `std.vec`, `std.map`, `std.set`,
+1. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
    `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets,
    buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs
@@ -451,7 +302,7 @@ Do not duplicate compiler-command cleanup here.
    order is `OrderedMap`/`OrderedSet`'s job — which additionally must grow
    `for_each`/`fold` (today only `vec`/`map`/`set` have them). Do not add
    insertion-order tracking to the hash collections.
-   - 8a. Keep `Clone` and indexed move/swap as **workload-gated value-model
+   - 1a. Keep `Clone` and indexed move/swap as **workload-gated value-model
      research**, separate from H1 and not assumed inevitable. If admitted,
      `Clone` is explicit semantic duplication (capability-visible, usually
      `with(Alloc)`, audit-visible, and not silently proof-eligible), not a
@@ -461,7 +312,7 @@ Do not duplicate compiler-command cleanup here.
      after a real workload repeatedly needs owned duplication or indexed
      ownership-out and the existing `Copy` / move / borrow APIs are the wrong
      fit.
-   - 8b. Design arena/index safety before any arena-backed structure becomes a
+   - 1b. Design arena/index safety before any arena-backed structure becomes a
      flagship or stable stdlib API. Array-backed linked structures use indices,
      and a stale index into a removed/reused slot is a logic-level dangling
      pointer that ordinary ownership does not see. V1 answer should compare
@@ -472,7 +323,7 @@ Do not duplicate compiler-command cleanup here.
      and `scripts/tests/check_arena_index_safety.sh`; the gate must prove stale
      index reuse is rejected, trapped, or explicitly trusted, never silently
      treated as ordinary memory-safe access.
-   - 8c. Decide explicit-dictionary coherence before binary collection
+   - 1c. Decide explicit-dictionary coherence before binary collection
      operations harden. `HashMap<K, V>` values built with different `hash_fn` /
      `eq_fn`, or ordered maps/sets built with different comparators, have the
      same type but incompatible semantics; `union`, `merge`, `intersection`,
@@ -486,17 +337,17 @@ Do not duplicate compiler-command cleanup here.
      and `scripts/tests/check_collection_coherence.sh`; the gate must show the
      chosen verdict for incompatible dictionaries and prove the API cannot
      silently combine them.
-   - 8d. Keep `with_value_mut` / `modify` parked, not scheduled. Mutable scoped
+   - 1d. Keep `with_value_mut` / `modify` parked, not scheduled. Mutable scoped
      callbacks have a receiver/context aliasing hazard (`&mut self` plus a
      context that can reach the same container); ship them only if a workload
      requires single-element mutable borrowed access and a
      container-not-in-context gate enforces the invariant.
-   - 8e. Keep scalar `from(param)` returned references deeply deferred and
+   - 1e. Keep scalar `from(param)` returned references deeply deferred and
      evidence-gated. If ever added, they stay flat and scalar: no `Option`,
      `Result`, structs, arrays, containers, callback contexts, or generic
      wrappers. This is a research escape valve only if real workloads prove
      operation APIs, owned views, and scoped callbacks insufficient.
-   - 8f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
+   - 1f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
      need reusable capacities. `docs/CONST_GENERICS_V1.md` is the closed Phase 5
      design record; implementation is deferred until a real Phase 7 consumer
      appears (`BoundedVec<T, N>`, `RingBuffer<T, N>`, `PacketBuf<N>`, fixed hash
@@ -506,7 +357,7 @@ Do not duplicate compiler-command cleanup here.
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      comptime/reflection/runtime-bound forms are rejected.
-   - 8g. Research **allocator-as-value** before allocator-backed collections,
+   - 1g. Research **allocator-as-value** before allocator-backed collections,
      arenas, or freestanding APIs harden. Keep the distinction sharp:
      `with(Alloc)` is permission to allocate; an allocator value names which
      allocator/arena/pool is used. Do not replace capabilities with allocator
@@ -519,7 +370,7 @@ Do not duplicate compiler-command cleanup here.
      item should move ahead of allocator-heavy collection stabilization if the
      validation project needs arenas, test allocators, reload-safe allocation,
      or freestanding pools.
-9. Build internal-iteration and builder APIs in proposed `std.iter` and
+2. Build internal-iteration and builder APIs in proposed `std.iter` and
    `std.builder` after the collection shape is known. This is NOT Rust's
    external-iterator / adapter-tower model: `research/stdlib/iterators.md`
    resolved the v1 design as per-container internal traversal (`for_each`,
@@ -531,79 +382,36 @@ Do not duplicate compiler-command cleanup here.
    plus byte/text builders and tree/buffer builders inspired by Gleam's
    `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
-10. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
+3. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
    checked/wrapping/saturating arithmetic helpers,
    narrowing/conversion helpers, endian conversions, byte/word packing, and
    evidence classes for each helper.
-11. Build sorting and searching primitives in proposed `std.sort` and
+4. Build sorting and searching primitives in proposed `std.sort` and
     `std.search`: comparison conventions, stable/unstable sort decision,
     binary search, min/max helpers, and evidence/oracle tests over edge cases.
-12. Build hashing, checksums, and deterministic random helpers in `std.hash`,
+5. Build hashing, checksums, and deterministic random helpers in `std.hash`,
     proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets,
     non-cryptographic checksums, seeded deterministic RNG for tests/oracles,
     and a clear split from cryptographic randomness. Any OS entropy source is
     hosted-only and capability-visible.
-13. Build constant-time helper APIs in proposed `std.ct` only for narrow,
+6. Build constant-time helper APIs in proposed `std.ct` only for narrow,
     auditable cases: equality/compare over fixed-size bytes, no secret-dependent
     branches or early exits, source-shape audit evidence, and clear
     machine-level timing assumptions. This belongs to the narrow security
     surface, not broad crypto.
-14. Build time and duration helpers in `std.time`: monotonic versus wall-clock
+7. Build time and duration helpers in `std.time`: monotonic versus wall-clock
     distinction,
     timestamp formatting/parsing if admitted, timeout helpers, and explicit
     hosted authority for reading the clock.
-14a. Define the `std.io` `Reader` / `Writer` interface — the one narrow stream
-    contract every byte source/sink implements, before formatting, IO endpoints,
-    and streaming scanners build on it. A `Writer` is `write(bytes) ->
-    Result<usize, IoError>` plus `flush`/`close`; a `Reader` is
-    `read(buf) -> Result<usize, IoError>`; file, console, in-memory `Bytes`
-    buffer, and (later) socket all implement them. This is not a `dyn Writer`
-    trait object or hidden vtable: the v1 representation must be either a
-    concrete handle carrying explicit function pointers (the callable-values /
-    manual-vtable pattern) or a closed enum of sinks, with capabilities visible
-    in the handle/function type and reports. `std.fmt` output (item 15), the
-    capability-scoped file/console surface (item 26), `std.fs` (item 27), and
-    `ProgressWriter` all TARGET `Writer` rather than each rolling its own sink.
-    Add a buffered wrapper (`BufReader`/`BufWriter`) over any handle. Parsing stays
-    over in-memory `Bytes`/`Text` (item 16) for v1; streaming scanners can later
-    layer on `Reader`. Capability-visible (a hosted `Writer` carries its
-    `Console`/`File`/`Network` capability); no hidden allocation — buffered
-    wrappers carry `with(Alloc)` or use fixed buffers.
-
-    Done when `std.fmt`, `std.fs`, and the console surface all write through one
-    `Writer` contract (a gate rejects a second, parallel sink interface) and a
-    fixed-buffer `Writer` works with no `Alloc`. This is the Go `io.Writer` /
-    Hare `io::handle` lesson: one interface, not three.
-14b. Define the value-rendering / `Display`-equivalent contract over `Writer`.
-    This decides how user-defined values become bytes/text through the item-14a
-    `Writer` surface — not "pretty printing" but the single answer `std.fmt`,
-    `print`, diagnostics, logs, `std.test` output, and API examples all use, so
-    they do not each invent their own. Design:
-    - No automatic universal rendering for every struct, and no
-      trait-object-style `Display`.
-    - A simple convention: a type may expose
-      `write_to(&self, w: &mut Writer) -> Result<usize, IoError>` (or
-      `format_into`). `std.fmt` renders built-ins and calls the convention only
-      where the type is statically known — no runtime type dispatch.
-    - No hidden allocation: rendering targets a `Writer`; string-producing
-      helpers (`to_string`-style) are secondary wrappers over the Writer-based
-      path and carry `with(Alloc)`.
-    - The evidence/report surface shows the capability and allocation behavior of
-      a format call, especially when it writes to console/file/network.
-
-    Done when one built-in and one user struct both render through the same
-    `write_to`/`Writer` path, `std.fmt` dispatches to the convention only for
-    statically-known types, and a gate proves a string-producing formatter
-    carries `with(Alloc)` while a fixed-`Writer` formatter does not.
-15. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
+8. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
     integer/text formatting, simple
     scanners, structured parse results, error-set reports, and oracle-friendly
     output conventions.
-16. Build a reusable scanner/parser core in `std.parse` over
+9. Build a reusable scanner/parser core in `std.parse` over
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-17. Add `std.base64` as the first byte-format module, pulled by the
+10. Add `std.base64` as the first byte-format module, pulled by the
     `base64_cli` workload rather than designed in isolation. V1 should include
     only what the workload and RFC 4648 vectors require: encode/decode over
     fixed buffers and allocation-backed `Vec<u8>` as needed, strict error
@@ -613,42 +421,42 @@ Do not duplicate compiler-command cleanup here.
     `examples/base64_cli` builds and runs against an external
     oracle, so the module proves the args -> bytes/text -> parse/errors ->
     Writer path instead of just unit tests.
-18. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
+11. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
-19. Add `std.json` as the first structured data module: tokenization,
+12. Add `std.json` as the first structured data module: tokenization,
     string/number handling, error spans, bounded recursion policy, optional
     DOM-like representation only if the allocation story is explicit, and
     oracle tests against a reference implementation.
-20. Add a small typed decoding layer in proposed `std.decode` after
+13. Add a small typed decoding layer in proposed `std.decode` after
     `std.json`: dynamic value decoding, field access, error paths, and examples
     comparable to Gleam's `dynamic/decode`, without broad reflection or hidden
     runtime typing.
-21. Add binary serialization helpers in proposed `std.bin`: endian-aware
+14. Add binary serialization helpers in proposed `std.bin`: endian-aware
     reading/writing, fixed-width integers, length-prefixed fields only with
     explicit bounds, byte-span diagnostics, and no hidden allocation.
-22. Add semantic-version and config-format helpers in proposed `std.semver`
+15. Add semantic-version and config-format helpers in proposed `std.semver`
     and `std.config` if package/build work starts depending on them:
     `SemVer`, INI/TOML-style scanner, and manifest parsing support. These are
     stdlib/package-boundary helpers, not general metaprogramming.
-23. Add command-line parser helpers in proposed `std.cli`: flags, positional
+16. Add command-line parser helpers in proposed `std.cli`: flags, positional
     arguments, usage text, typed parse errors, no ambient environment access
     except through `std.args`, and examples that keep authority visible. This is
     for user programs. The `concrete` compiler's own command taxonomy and help
     behavior are Phase 6E, and `std.cli` should learn from that surface without
     coupling to compiler internals.
-24. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
+17. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
     writers, formatting
     integration, capability requirements, and policy for release builds. Keep
     this small; it is not a tracing framework.
-25. Add progress/status output helpers for CLI tools in proposed
+18. Add progress/status output helpers for CLI tools in proposed
     `std.progress` only after `examples/daily/word_count` and
     `examples/base64_cli` need visible progress output. V1
     surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`,
     `finish`, terminal detection through an explicit console handle, and no
     ambient terminal authority. Wire
     `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
-26. Build capability-scoped console, file, network, process, and time APIs in
+19. Build capability-scoped console, file, network, process, and time APIs in
     `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`,
     `std.net`, and `std.time`. Authority must be visible in function types and
     audit reports; no API may smuggle ambient authority through a convenience
@@ -668,18 +476,18 @@ Do not duplicate compiler-command cleanup here.
     the public safe wrapper surface has narrower authority than the underlying
     trusted/extern implementation and that the audit transcript shows both
     sides of the boundary.
-27. Build handle-relative filesystem APIs in `std.fs` as the preferred
+20. Build handle-relative filesystem APIs in `std.fs` as the preferred
     file/path shape: directory/file handles carry authority; operations are
     relative to handles for `open`, `create`, `read`, `write`, `metadata`,
     `remove`, `rename`, and `list`. Ambient absolute-path helpers must be
     hosted-only convenience wrappers with explicit authority. Temp-file,
     symlink, path-normalization, and TOCTOU behavior must appear in
     `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
-28. Build handle-based network surface in `std.net` only as far as the
+21. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
     package/workload evidence demands it.
-29. Build stdlib test/oracle helpers in `std.test`: expected failures,
+22. Build stdlib test/oracle helpers in `std.test`: expected failures,
     capability-scoped fixtures, temp directories, oracle vector runners,
     interpreter-vs-compiled helpers, and report snapshots. Stdlib tests must
     also serve as runnable API documentation: every public stdlib type/function
@@ -691,7 +499,7 @@ Do not duplicate compiler-command cleanup here.
     example, when a referenced example no longer compiles, or when a doc claims
     an evidence class/capability/allocation behavior that the test/report does
     not produce.
-29a. Add a public stdlib API snapshot/diff immediately after the first real
+22a. Add a public stdlib API snapshot/diff immediately after the first real
      workload (`base64_cli`) and before broad URI/JSON/CLI/log/progress breadth.
 
      Deliverable: `concrete std snapshot --json` (or an equivalent test helper)
@@ -707,7 +515,7 @@ Do not duplicate compiler-command cleanup here.
      stdlib-local version of Phase 10's proof/capability diff and Phase 18's
      package API artifacts; it prevents accidental drift while the library is
      still small.
-30. Define stdlib error-handling conventions: when APIs return `Result`,
+23. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported. Split
     recoverable domain/environment failures from fatal invariant failures:
@@ -722,7 +530,7 @@ Do not duplicate compiler-command cleanup here.
     small wrapping variant named at the call site, not an implicit trait
     conversion. State the pattern once so error-heavy code does not each invent
     its own.
-30a. Define the canonical **consume / destroy / handoff** conventions for
+23a. Define the canonical **consume / destroy / handoff** conventions for
     linear code. The guide must distinguish explicit cleanup (`destroy(x)` or
     the type's consuming `.drop()`/Destroy verb), ownership transfer by
     by-value call, ownership transfer by return, destructuring into owned
@@ -738,10 +546,10 @@ Do not duplicate compiler-command cleanup here.
     This guide is the user-facing explanation of the conditional-`Copy` and
     mode-based-checker refactors; it should be validated by small runnable
     examples and linked from README/site docs.
-31. Define stdlib evidence classes per public API: `proved`, `enforced`,
+24. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
-31a. Add proof-facing formal stdlib models only when a proof or contract
+24a. Add proof-facing formal stdlib models only when a proof or contract
     workload pulls them. These are not runtime containers: `std.formal_vec`,
     `std.formal_map`, and `std.formal_set` model mathematical sequences, maps,
     and sets for contracts, loop invariants, and Lean obligations; `std.bigint`
@@ -750,8 +558,8 @@ Do not duplicate compiler-command cleanup here.
     specs need it. Each formal module must state its erasure/runtime story, its
     evidence class, the Lean artifact it lowers to, and the refinement relation
     to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
-31b. Add a **shipped pure-core stdlib proof arc**, distinct from the pull-gated
-    formal-container work in 31a. This proves the stdlib code users actually
+24b. Add a **shipped pure-core stdlib proof arc**, distinct from the pull-gated
+    formal-container work in 24a. This proves the stdlib code users actually
     call, not separate mathematical containers. Scope v1 narrowly:
     `Option`/`Result` helpers (`map`, `and_then`, `map_err`, identity /
     composition where expressible), numeric checked helpers (success/failure
@@ -767,27 +575,27 @@ Do not duplicate compiler-command cleanup here.
     the report cannot keep `proved` after a body/spec drift. This is the
     "proved pure core" part of the Phase 7 excellence contract; do not let it be
     deferred behind breadth modules such as JSON, CLI, or networking.
-32. Add stdlib authority/allocation/runtime-obligation gates so core helpers
+25. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
-33. Add sanitizer/runtime-instrumentation hooks as debug and validation
+26. Add sanitizer/runtime-instrumentation hooks as debug and validation
     surfaces, not proof evidence. Inspired by Odin's sanitizer-facing base
     surface, Concrete should expose named hooks for bounds, overflow,
     use-after-free-like trusted/FFI probes where applicable, allocator checks,
     and generated-code validation. Audit output must classify this as
     `runtime_checked`, `tested`, or `instrumented`, never `proved`.
-34. Split hosted versus freestanding-ready stdlib modules at the API level:
+27. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
     The freestanding target implementation still lands in Phase 16.
-35. Record deliberately deferred stdlib families so they do not disappear from
+28. Record deliberately deferred stdlib families so they do not disappear from
     planning: compression/archive formats, broad crypto beyond the narrow
     hash/HMAC/constant-time story, full HTTP client/server, dynamic libraries,
     OS debug formats, atomics, threads, SIMD, target/ABI databases, and
     platform-specific C/POSIX wrappers. Each stays package-later,
     backend-later, freestanding-later, or research-later until a workload
     forces it.
-36. Add stdlib docs and examples for C/Rust users:
+29. Add stdlib docs and examples for C/Rust users:
     `docs/stdlib/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
     `path_fs`, `result_errors`, `vec_map`, `parser_cursor`, `json_scan`,
     `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
@@ -812,7 +620,7 @@ Do not duplicate compiler-command cleanup here.
     functions are fine for cross-type operations or functions whose capability
     story would be clearer outside a receiver. Add examples that teach the
     chosen style instead of preserving accidental historical names.
-37. Add a stdlib compatibility/oracle corpus under
+30. Add a stdlib compatibility/oracle corpus under
     `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
     `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
     `json_vectors`, `semver_vectors`, `sort_search_vectors`,
@@ -820,7 +628,7 @@ Do not duplicate compiler-command cleanup here.
     `scripts/tests/check_stdlib_compat.sh`; every vector must declare exactly
     one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`,
     `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
-38. Add real stdlib workload checks before Phase 8 relies on the library.
+31. Add real stdlib workload checks before Phase 8 relies on the library.
     Start with `examples/base64_cli`; it is the first
     workload, not just one item in the set. Then broaden to
     `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
@@ -834,17 +642,7 @@ Do not duplicate compiler-command cleanup here.
     `http_headers` against checked-in vectors, `path_normalizer` against
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
-38b. ✅ **DONE (2026-07-02) — H12 CLOSED.** std migrated fully under the
-    front-end checker in three same-day tranches (384 violations → 0) and the
-    exemption machinery was deleted; std is checked like any other code and
-    `check_submodule_check_coverage.sh` pins it at zero. The burn-down forced
-    seven checker fixes (divergence merges, return-path leaks, generic
-    field-assign, consume-then-exit, store-conservation, linear rebind,
-    outermost-binding merges) and the std API decisions recorded in
-    KNOWN_HOLES H12 (closed) and docs/OWNERSHIP_MODEL.md. This completed the
-    pre-trial requirement that the stdlib not undercut Concrete's enforcement
-    claims: std is now checked by the same front-end rules as user code.
-38a. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
+32. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
     checked-arithmetic flip exposed syscall/sentinel-style code that relied on
     silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,
     bit-packed flags, checksum/hash arithmetic). Add
@@ -857,7 +655,7 @@ Do not duplicate compiler-command cleanup here.
     arithmetic workload path (text/path/UTF-8, fs/process/env capabilities,
     maps/iterators, formatter/parser round-trip, or proof/report views) so the
     post-arithmetic validation does not overfit to numeric examples.
-39. Add the Phase 7 validation project:
+33. Add the Phase 7 validation project:
     `examples/stdlib_client/` plus `scripts/tests/check_phase6_stdlib.sh`.
     The client must use `std.option`, `std.result`, `std.bytes`, `std.text`,
     `std.path`, `std.vec`, `std.map`, `std.fs`, `std.io`, `std.fmt`,

@@ -10,6 +10,45 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 7 foundation tier — stdlib manifest, IO spine, boundaries, and first breadth slices (2026-07-14)
+
+The first Phase 7 foundation tier is complete and gated. The active roadmap now
+keeps the remaining stdlib frontier only; the shipped foundation details live here.
+
+- Public stdlib five-fact manifest (`docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv`)
+  is generated from signatures and checked by `check_stdlib_manifest.sh`: every
+  public item records allocation, ownership/consume behavior, failure shape,
+  capability set, and proof/evidence class. The same gate enforces the
+  method-canonical naming rule and domain-capability visibility for hosted APIs.
+- `std.option` / `std.result` helper surface landed: `is_*`, `unwrap_or`,
+  `ok`/`err`/`ok_or`, `map`, `map_err`, `and_then`, and conditional-`Copy`
+  behavior for `Option<T>` / `Result<T,E>` when their payloads are `Copy`.
+- Raw bytes / text / path boundaries are pinned: `Bytes::to_string` is checked,
+  `_unchecked` names caller obligations, `String`/`Text` are valid UTF-8 only,
+  ASCII helpers stay ASCII-only, Unicode normalization/case-folding/display
+  width are v1 non-goals, and `PathBuf` remains raw OS bytes with checked display.
+- `std.io.Reader` / `std.io.Writer` is the single IO spine: fn-pointer handles,
+  authority at acquisition (`File`, `Console`, or `Unsafe` for fixed buffers),
+  capability-free read/write/flush/close methods, fixed-buffer no-Alloc paths,
+  and no public `std.writer` sink surface.
+- Core value-rendering uses the Writer path: built-ins and a user-struct
+  `write_to` convention render through the same sink, with allocation/capability
+  behavior visible in reports.
+- `std.test` has the small oracle layer: `expect_ok`/`expect_err`,
+  `expect_some`/`expect_none`, sink matching, stable assertion shapes, and no
+  xUnit framework surface.
+- First breadth slices landed: bytes/slice `view` and `cmp`; Unicode policy doc
+  and gate; path checked conversion triad; OrderedMap/OrderedSet traversal; BitSet
+  canonical aliases.
+- The 13t error-convention gate is complete: recoverable (`Result`/`Option` and
+  ignored-result rejection), fatal (`trap_sites` telemetry), and policy-gated
+  (`--report caps`) buckets are all proven through compiler surfaces.
+- Audit fixes landed around the foundation: hosted domain capabilities are
+  re-exposed for `File`/`Env`/`Time`; parse overflow, rand range division by zero,
+  HashMap allocation facts, UTF-8/hex option returns, duplicate writer surface,
+  bug 029, and bug 030 were fixed and regression-locked. H18 remains open and
+  disclosed for non-`Copy` collection element destruction.
+
 ### Roadmap refactor — active roadmap starts at Phase 7 (2026-07-14)
 
 Collapsed the old pre-Phase-7 roadmap bulk into a compact active index. Detailed
