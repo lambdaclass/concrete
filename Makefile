@@ -336,6 +336,9 @@ test-incremental-shadow: build ## Phase 6C #7: cache-free incremental shadow —
 test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#1 telemetry, #2 complexity, #3 trace, #4 reduction, #5 mutation sample, #6 pass-hashes, #7 shadow)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6c_observability.sh
 
+test-error-conventions: build ## 13t gate: recoverable (ignored Result -> E0286), fatal (trap_sites in telemetry), policy-gated (caps names File) — one public API per bucket, report-visible
+	$(NIX_DEVELOP) bash ./scripts/tests/check_error_conventions.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 
