@@ -11,9 +11,9 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
 ## Friction found
 
 1. **Standalone files cannot import std** (`concrete file.con` rejects
-   `import std.args...`; project mode required). Fine once known, but the
-   error does not say "use a project"; a one-line hint would save the next
-   person the detour. → CLI diagnostics polish, small.
+   `import std.args...`; project mode required). → pulled and SHIPPED:
+   E0110 on a `std.*` import now hints "create a project (`concrete new`)
+   … build with `concrete build`".
 
 2. **`String.len` field is private cross-package; `len()` method required.**
    Error was clear enough (E-level, named the field). No change requested —
@@ -39,10 +39,10 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
 
 5. **base64 inline was ~70 lines and easy** — the alphabet/padding logic is
    self-contained. The friction was NOT the encoding math; it was everything
-   around it (3, 4). A `std.base64` is justified mostly so every CLI/proto
-   workload doesn't re-derive the padding edge cases (len%4, `=` handling,
-   invalid-char rejection) — encode_len/decode paths want the overflow-guarded
-   style parse.con already uses.
+   around it (3, 4). → pulled and SHIPPED as `std.base64` (RFC 4648 vectors,
+   reject tests, STRICTER padding rules than the inline version had —
+   padding only in the final group, pad2⇒pad3); this tool now imports it,
+   proving the pull. All four pulls from this workload are closed.
 
 6. **No byte-level argv.** `args.get` returns validated String (right default);
    for a hypothetical `base64_cli decode-file <path>` taking raw OS bytes the
@@ -62,8 +62,8 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
 |---|------|----------|------|
 | 1 | main return = exit code (not stdout echo) | friction 4 — blocks ALL CLI workloads | **SHIPPED stage 1** (docs/MAIN_EXIT_MODEL.md; stage 2 = `u8\|Unit` main, ROADMAP P7 #3) |
 | 2 | `Bytes::from_string` / `String.to_bytes` | friction 7 — every text↔bytes program | std, small — **SHIPPED** (bytes.con, this workload now uses it) |
-| 3 | `std.base64` (encode/decode, Option-failing decode) | friction 5 — proto/CLI recurrence | std, small-medium |
-| 4 | standalone-import diagnostic hint | friction 1 — first-contact UX | CLI, tiny |
+| 3 | `std.base64` (encode/decode, Option-failing decode) | friction 5 — proto/CLI recurrence | **SHIPPED** (std/src/base64.con, RFC 4648 vectors + reject tests; this tool now uses it) |
+| 4 | standalone-import diagnostic hint | friction 1 — first-contact UX | **SHIPPED** (E0110 hint names project mode) |
 
 Not pulled: scanner/parse helpers (b64_val's compare-chain was fine), Writer
 polish (console_writer + write + write_str covered it), error formatting

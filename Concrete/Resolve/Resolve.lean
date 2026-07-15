@@ -545,7 +545,14 @@ def resolveShallow (moduleSummaries : List FileSummary)
   let (importErrors, importedSymbols, importedTypes) := moduleSummaries.foldl (fun (errs, syms, tys) s =>
     s.imports.foldl (fun (errs, syms, tys) imp =>
       match fullExportTable.find? (fun (n, _) => n == imp.moduleName) with
-      | none => (errs ++ [mkResolveDiag (.unknownModule imp.moduleName) (some imp.span)], syms, tys)
+      | none =>
+        -- First-contact friction (base64_cli FRICTION #1): `concrete file.con`
+        -- can't resolve std.* — say why instead of a bare "unknown module".
+        let d := mkResolveDiag (.unknownModule imp.moduleName) (some imp.span)
+        let d := if imp.moduleName.startsWith "std." then
+            { d with hint := some "std.* imports resolve in project mode — create a project (`concrete new`, or add Concrete.toml + src/main.con) and build with `concrete build`; inside a project, check the module name for a typo" }
+          else d
+        (errs ++ [d], syms, tys)
       | some (_, pubNames) =>
         -- Look up the full module summary to get type info for imported symbols
         let modSummary := summaryTable.find? fun (n, _) => n == imp.moduleName

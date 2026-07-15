@@ -62,6 +62,55 @@ element destruction for all non-`Copy` elements. Phase 7 closes this with
 compiler-generated drop glue at monomorphization, not with permanent
 `drop_with(f)` APIs and not with stored destructor function pointers.
 
+**Drop-glue rules (RESOLVED 2026-07-15 — one source of truth; both review
+threads converged here).** Four decisions, each marked permanent or v1:
+
+1. **`Destroy` is infallible-only — PERMANENT semantic rule, not a v1
+   restriction.** A destructor cannot return `Result` (what would a
+   container's drop do with 50 close errors?), so any type whose cleanup can
+   fail must NOT implement `Destroy`. Fallible cleanup stays an explicit
+   linear consumer — `close(self) -> Result` — exactly as `io.Writer`/
+   `TextFile` already ship. This is the error-honesty rule (13t/E0286)
+   applied to generated code: swallowing close errors inside drop-glue would
+   reintroduce the must-use violation the checker exists to prevent, in the
+   one code path nobody reads.
+2. **`Destroy` propagates conditionally — PERMANENT.** `Vec<T>: Destroy` iff
+   `T: Destroy` (same conditional-impl machinery as conditional `Copy` on
+   `Option`/`Result`). Consequence: `Vec<File>` has NO `.drop()` — the
+   compile error names the reason, and the idiom is **drain-and-close**:
+   `pop()` each element, handle each `Result` visibly, then drop the empty
+   container. Every close error has an owner.
+3. **Drop-glue capabilities are derived and visible — PERMANENT (final
+   model).** The glue's `with(...)` is the union of the element/key/value
+   destructors' capabilities, computed per instantiation at monomorphization
+   and stamped on the container's `drop` signature. A drop that performs
+   authority-bearing work without that authority in its signature would be a
+   capability-laundering path (the fs.con leak class, arriving through
+   generated code). This invariant is non-negotiable.
+4. **v1 glue is `with(Alloc)` — DOCUMENTED V1 RESTRICTION, not the final
+   model.** Under rule 1, every `Destroy` impl the stdlib actually has needs
+   at most `Alloc` (String, Bytes, nested containers — memory cleanup), so
+   rule 3 holds degenerately and the front-end machinery for symbolic
+   "capabilities of `T`'s destructor" in generic checking (an associated
+   capability set — new Check machinery, beyond the shipped `<cap C>`
+   parameter propagation) is deferred until a workload writes a genuinely
+   infallible non-`Alloc` destructor (plausible candidate: a `with(Device)`
+   buffer release). When that pull arrives, rule 3's full mechanism is the
+   pinned design; v1 code must not assume `Alloc`-only anywhere it would be
+   load-bearing.
+
+Two adjacent rules pinned at the same time:
+
+- **Disposal stays forced-explicit — PERMANENT.** The generated glue runs
+  only inside an explicit `.drop()` / `defer x.drop()`; the compiler never
+  inserts destruction at scope end. E0208 (linear value not consumed) remains
+  the error. Implicit scope-end auto-drop is the precise step that would turn
+  Concrete from linear to affine; no ergonomics pass may take it.
+- **`replace(i, v) -> T` is the overwrite primitive.** Returning the
+  displaced element is linear-honest and needs no glue; destroying `set(i, v)`
+  is sugar available only for `T: Destroy`. Same for map `insert` returning
+  the previous value.
+
 **Read access split.** `get(i) -> Option<T>` is a copy-out API and exists only
 when `T: Copy`. For non-`Copy` elements, safe code uses scoped callbacks
 (`with_at`, `with_value`, and their mutation forms where the alias gate permits)

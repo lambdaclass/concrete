@@ -28,15 +28,28 @@ leaked (acknowledged at `vec.con:106`). LATENT today: every shipped user of
 these containers stores Copy elements, and the H12-checked front end still
 enforces linearity on the values BEFORE they enter the container.
 
-Decision (review 2026-07-14, refined again): Phase 7 now pulls this forward
-before broad stdlib breadth. The permanent fix is **compiler-generated
-drop-glue at monomorphization**: when `Vec<File>` / `HashMap<String, Buffer>` /
-etc. is instantiated, the compiler resolves the element/key/value destruction
-path statically and emits the loops that destroy live slots before storage is
-freed or reused. No trait objects, no stored destructor function pointer in
-each collection value, and no permanent caller-supplied `drop_with(f)` burden.
-`drop_with(f)`-style APIs are acceptable only as an explicitly-labeled temporary
-bridge if a workload needs non-Copy collections before drop-glue is ready.
+Decision (review 2026-07-14; RESOLVED 2026-07-15 — full rules in
+`docs/RUNTIME_COLLECTIONS.md` "Drop-glue rules", the single source of truth):
+Phase 7 pulls this forward before broad stdlib breadth. The permanent fix is
+**compiler-generated drop-glue at monomorphization**: when `Vec<String>` /
+`HashMap<String, Bytes>` / etc. is instantiated, the compiler resolves the
+element/key/value destruction path statically and emits the loops that destroy
+live slots before storage is freed or reused. No trait objects, no stored
+destructor function pointer in each collection value, and no permanent
+caller-supplied `drop_with(f)` burden. `drop_with(f)`-style APIs are acceptable
+only as an explicitly-labeled temporary bridge if a workload needs non-Copy
+collections before drop-glue is ready.
+
+Pinned rules (see RUNTIME_COLLECTIONS for the full statements): `Destroy` is
+infallible-only PERMANENTLY (fallible cleanup keeps explicit `close(self) ->
+Result` and no `Destroy` impl — so `Vec<File>` never gets `.drop()`; the idiom
+is drain-and-close, every error owned); `Vec<T>: Destroy` iff `T: Destroy`
+(conditional-impl machinery, compositional compile error); glue capabilities
+are derived from element destructors and visible in the drop signature (the
+final model — anything else is capability laundering through generated code);
+v1 glue is `with(Alloc)` as a documented V1 RESTRICTION (every real `Destroy`
+today is memory-only), with the symbolic associated-capability machinery in
+Check deferred until an infallible non-`Alloc` destructor is pulled.
 
 Because Concrete aborts rather than unwinds, the H18 fix does not need Rust's
 panic-unwind drop-flag machinery. It only needs normal-path destruction for

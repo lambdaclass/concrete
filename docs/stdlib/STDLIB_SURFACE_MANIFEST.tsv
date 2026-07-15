@@ -11,6 +11,8 @@ ascii	is_alnum	no	constructs	infallible	none	pure-core
 ascii	is_whitespace	no	constructs	infallible	none	pure-core
 ascii	to_lower	no	constructs	infallible	none	pure-core
 ascii	to_upper	no	constructs	infallible	none	pure-core
+base64	encode	yes	constructs	infallible	Alloc	hosted-effect
+base64	decode	yes	constructs	option	Alloc	hosted-effect
 bitset	new	no	constructs	infallible	none	pure-core
 bitset	with_capacity	yes	constructs	infallible	Alloc,Unsafe	hosted-effect
 bitset	set	yes	mut	infallible	Alloc,Unsafe	hosted-effect

@@ -1,0 +1,141 @@
+mod base64 {
+    // RFC 4648 base64 (standard alphabet, `=` padding). Pulled by Phase 7
+    // workload 1 (base64_cli, FRICTION #5): the alphabet math is trivial but
+    // the padding edge cases (len%4, `=` placement, invalid-char rejection)
+    // are the part every CLI/proto program re-derives wrong.
+    //
+    // Error shape (13t): decode failure is a single-cause domain outcome
+    // (input is not base64) -> Option. Encode is infallible.
+    import std.bytes.{Bytes, BytesRaw};
+
+    fn char_of(v: u64) -> u8 {
+        if v < 26 { return (65 + v) as u8; }        // A-Z
+        if v < 52 { return (97 + (v - 26)) as u8; } // a-z
+        if v < 62 { return (48 + (v - 52)) as u8; } // 0-9
+        if v == 62 { return 43; }                   // '+'
+        return 47;                                  // '/'
+    }
+
+    fn val_of(c: u8) -> u64 {
+        if c >= 65 { if c <= 90 { return (c - 65) as u64; } }
+        if c >= 97 { if c <= 122 { return (c - 97 + 26) as u64; } }
+        if c >= 48 { if c <= 57 { return (c - 48 + 52) as u64; } }
+        if c == 43 { return 62; }
+        if c == 47 { return 63; }
+        return 255;  // invalid
+    }
+
+    /// Encode bytes as standard base64 with `=` padding. Infallible.
+    pub fn encode(input: &Bytes) with(Alloc) -> Bytes {
+        let raw: BytesRaw = input.raw_view();
+        let mut out: Bytes = Bytes::with_capacity(((raw.len + 2) / 3) * 4);
+        let mut i: u64 = 0;
+        while i < raw.len {
+            let b0: u64 = input.get_unchecked(i) as u64;
+            let has1: bool = i + 1 < raw.len;
+            let has2: bool = i + 2 < raw.len;
+            let b1: u64 = if has1 { input.get_unchecked(i + 1) as u64 } else { 0 };
+            let b2: u64 = if has2 { input.get_unchecked(i + 2) as u64 } else { 0 };
+            let n: u64 = (b0 * 65536) + (b1 * 256) + b2;
+            out.push(char_of(n / 262144));
+            out.push(char_of((n / 4096) % 64));
+            if has1 { out.push(char_of((n / 64) % 64)); } else { out.push(61); }  // '='
+            if has2 { out.push(char_of(n % 64)); } else { out.push(61); }
+            i = i + 3;
+        }
+        return out;
+    }
+
+    /// Decode standard base64 (`=`-padded, length % 4 == 0). Invalid input
+    /// (wrong length, invalid character, misplaced padding) -> None.
+    pub fn decode(input: &Bytes) with(Alloc) -> Option<Bytes> {
+        let raw: BytesRaw = input.raw_view();
+        if raw.len % 4 != 0 {
+            return Option::<Bytes>::None;
+        }
+        let mut out: Bytes = Bytes::with_capacity((raw.len / 4) * 3);
+        let mut i: u64 = 0;
+        while i < raw.len {
+            let c0: u8 = input.get_unchecked(i);
+            let c1: u8 = input.get_unchecked(i + 1);
+            let c2: u8 = input.get_unchecked(i + 2);
+            let c3: u8 = input.get_unchecked(i + 3);
+            let v0: u64 = val_of(c0);
+            let v1: u64 = val_of(c1);
+            if v0 == 255 { out.drop(); return Option::<Bytes>::None; }
+            if v1 == 255 { out.drop(); return Option::<Bytes>::None; }
+            let pad2: bool = c2 == 61;
+            let pad3: bool = c3 == 61;
+            // padding is only legal in the FINAL group, and pad2 forces pad3
+            if pad2 { if !pad3 { out.drop(); return Option::<Bytes>::None; } }
+            let is_last: bool = i + 4 == raw.len;
+            if pad3 { if !is_last { out.drop(); return Option::<Bytes>::None; } }
+            let v2: u64 = if pad2 { 0 } else { val_of(c2) };
+            let v3: u64 = if pad3 { 0 } else { val_of(c3) };
+            if !pad2 { if v2 == 255 { out.drop(); return Option::<Bytes>::None; } }
+            if !pad3 { if v3 == 255 { out.drop(); return Option::<Bytes>::None; } }
+            let n: u64 = (v0 * 262144) + (v1 * 4096) + (v2 * 64) + v3;
+            out.push((n / 65536) as u8);
+            if !pad2 { out.push(((n / 256) % 256) as u8); }
+            if !pad3 { if !pad2 { out.push((n % 256) as u8); } }
+            i = i + 4;
+        }
+        return Option::<Bytes>::Some { value: out };
+    }
+
+    #[test]
+    fn test_base64_rfc4648_vectors() with(Alloc) -> i32 {
+        // RFC 4648 section 10 test vectors, each round-tripped through decode.
+        let mut rc: i32 = 0;
+        rc = rc + vec_case("", "");
+        rc = rc + vec_case("f", "Zg==");
+        rc = rc + vec_case("fo", "Zm8=");
+        rc = rc + vec_case("foo", "Zm9v");
+        rc = rc + vec_case("foob", "Zm9vYg==");
+        rc = rc + vec_case("fooba", "Zm9vYmE=");
+        rc = rc + vec_case("foobar", "Zm9vYmFy");
+        if rc != 0 { return 1; }
+        return 0;
+    }
+
+    fn vec_case(input: String, expect: String) with(Alloc) -> i32 {
+        let mut rc: i32 = 0;
+        let inb: Bytes = Bytes::from_string(&input);
+        let expb: Bytes = Bytes::from_string(&expect);
+        input.drop(); expect.drop();
+        let enc: Bytes = encode(&inb);
+        if !enc.eq(&expb) { rc = 1; }
+        let back: Option<Bytes> = decode(&enc);
+        match back {
+            Option::Some { value } => {
+                if !value.eq(&inb) { rc = 1; }
+                value.drop();
+            },
+            Option::None => { rc = 1; },
+        }
+        inb.drop(); expb.drop(); enc.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_base64_rejects_invalid() with(Alloc) -> i32 {
+        let mut rc: i32 = 0;
+        rc = rc + reject_case("abc");       // wrong length
+        rc = rc + reject_case("ab!c");      // invalid character
+        rc = rc + reject_case("Zg==Zm8=");  // padding not in final group
+        rc = rc + reject_case("Zm=v");      // pad2 without pad3
+        if rc != 0 { return 1; }
+        return 0;
+    }
+
+    fn reject_case(input: String) with(Alloc) -> i32 {
+        let b: Bytes = Bytes::from_string(&input);
+        input.drop();
+        let r: Option<Bytes> = decode(&b);
+        b.drop();
+        match r {
+            Option::Some { value } => { value.drop(); return 1; },
+            Option::None => { return 0; },
+        }
+    }
+}
