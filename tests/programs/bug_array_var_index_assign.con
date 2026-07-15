@@ -3,7 +3,7 @@
 // Expected: 42
 
 fn main() -> i32 {
-    let arr: [i32; 3] = [0, 0, 0];
+    let mut arr: [i32; 3] = [0, 0, 0];
     let i: i32 = 1;
     arr[i] = 99;
     // arr[1] should be 99 after the assignment

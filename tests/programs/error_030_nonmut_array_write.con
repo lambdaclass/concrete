@@ -1,0 +1,7 @@
+// Bug 030 regression: writing an element of a NON-mut array binding is
+// rejected (E0217, same rule as scalar assignment) — was silently accepted.
+fn main() -> Int {
+    let buf: [u8; 4] = [0; 4];
+    buf[0] = 7;
+    return buf[0] as Int;
+}

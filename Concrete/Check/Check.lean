@@ -1656,6 +1656,20 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move happens in value-mode checkExpr (auto-consume).
   | .arrayIndexAssign _ arr index value =>
     let arrTy ← checkExpr arr none .place
+    -- Bug 030: writing an element of a DIRECTLY-NAMED array requires the
+    -- binding to be `mut` (same rule as scalar assignment). Writes through
+    -- refs/ptrs are governed by their own &mut/(*mut) rules downstream.
+    (match arr with
+     | .ident _ arrName => do
+       match ← lookupVarInfo arrName with
+       | some info =>
+         match info.ty with
+         | .array _ _ =>
+           if !info.mutable then
+             throwCheck (.assignToImmutable arrName) (some stmt.getSpan)
+         | _ => pure ()
+       | none => pure ()
+     | _ => pure ())
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type
     match arrTy with

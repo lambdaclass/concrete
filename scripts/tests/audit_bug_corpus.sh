@@ -55,7 +55,7 @@ declare -A SKIP_BUGS=(
   [026]="huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)"
   [027]="EmitSSA O(n^2) rendering -- OPEN perf item; no .con regression (codegen perf, not correctness)"
   [028]="reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)"
-  [030]="OPEN non-mut array indexed write accepted (checker mutability gap; bug-029 probe D) -- fixtures land with the fix"
+  [030]="FIXED general (not trusted-only) -- error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule"
   [029]="FIXED both sites -- regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7)"
 )
 
