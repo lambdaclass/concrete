@@ -92,7 +92,7 @@ mod base64_cli {
 
         let input: Bytes = Bytes::from_string(&arg);
         arg.drop();
-        let w: Writer = console_writer();           // a linear Writer, must be closed
+        let mut w: Writer = console_writer();       // a linear Writer, must be closed
         let mut rc: Int = 0;
 
         if is_enc {
@@ -135,7 +135,7 @@ into each other, and each is cheaper *because* of the others:
 - **Capabilities and linearity compose.** When a collection is explicitly
   disposed, its compiler-generated drop glue **inherits its elements' destructor
   capabilities**, derived at monomorphization — otherwise automatic destruction
-  would perform authority invisibly. Two guarantees made to hold at once.
+  would become an invisible authority path. Two guarantees made to hold at once.
 - **The interpreter and the judgment modules make the compiler verifiable.** Each
   semantic decision lives in one pure module (arithmetic, types, capabilities,
   ownership); an interpreter runs the reference semantics and is differentially
@@ -145,6 +145,23 @@ into each other, and each is cheaper *because* of the others:
 
 The unifying pattern: **every design choice trades convenience for a property you
 can see and check.** That is the language.
+
+## What Concrete Deliberately Rejects
+
+Concrete's shape is defined as much by what it refuses as by what it adds:
+
+- **No affine implicit drop.** Non-`Copy` values do not disappear at scope exit;
+  cleanup is a visible consuming action.
+- **No returned safe references.** Safe references are scoped access paths, not
+  lifetime-bearing values that escape through APIs.
+- **No ambient authority.** Files, console, network, time, allocation, and unsafe
+  operations appear in capability headers.
+- **No trait objects or iterator tower.** Generic behavior is monomorphized;
+  traversal is internal (`for_each`/`fold`/callbacks), not a lazy adapter stack.
+- **No one-word "verified."** Proofs, tests, runtime checks, solver trust,
+  assumptions, and unsafe boundaries remain separate evidence classes.
+- **No hidden runtime convenience as the default story.** No GC, no unwinding
+  destructors, no implicit allocation, no implicit conversions.
 
 ## Evidence, Not One Badge
 
