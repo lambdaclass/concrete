@@ -106,6 +106,36 @@ hex.decode
   % divisor 2
     status: checked: divisor is a nonzero constant
 
+base64.encode
+  / divisor 3
+    status: checked: divisor is a nonzero constant
+  / divisor 262144
+    status: checked: divisor is a nonzero constant
+  % divisor 64
+    status: checked: divisor is a nonzero constant
+  / divisor 4096
+    status: checked: divisor is a nonzero constant
+  % divisor 64
+    status: checked: divisor is a nonzero constant
+  / divisor 64
+    status: checked: divisor is a nonzero constant
+  % divisor 64
+    status: checked: divisor is a nonzero constant
+
+base64.decode
+  % divisor 4
+    status: checked: divisor is a nonzero constant
+  / divisor 4
+    status: checked: divisor is a nonzero constant
+  / divisor 65536
+    status: checked: divisor is a nonzero constant
+  % divisor 256
+    status: checked: divisor is a nonzero constant
+  / divisor 256
+    status: checked: divisor is a nonzero constant
+  % divisor 256
+    status: checked: divisor is a nonzero constant
+
 sha256.hash_raw
   % divisor 64
     status: checked: divisor is a nonzero constant
