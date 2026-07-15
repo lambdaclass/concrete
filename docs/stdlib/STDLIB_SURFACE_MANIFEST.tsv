@@ -20,6 +20,9 @@ bitset	with_capacity	yes	constructs	infallible	Alloc,Unsafe	hosted-effect
 bitset	set	yes	mut	infallible	Alloc,Unsafe	hosted-effect
 bitset	unset	no	mut	infallible	none	pure-core
 bitset	test	no	borrows	infallible	none	pure-core
+bitset	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect
+bitset	remove	no	mut	infallible	none	pure-core
+bitset	contains	no	borrows	infallible	none	pure-core
 bitset	count	no	borrows	infallible	none	pure-core
 bitset	union	yes	mut	infallible	Alloc,Unsafe	hosted-effect
 bitset	intersect	no	mut	infallible	none	pure-core

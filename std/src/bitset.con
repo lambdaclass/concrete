@@ -73,6 +73,21 @@ mod bitset {
         }
 
         /// Count the number of set bits (popcount).
+        // ---- Canonical collection-vocabulary aliases (P7 #8 naming pass;
+        // audit 2026-07-14). set/unset/test predate the method-canonical
+        // vocabulary; insert/remove/contains are the CANONICAL names (matching
+        // map/set). The old names remain as compatible aliases — migration
+        // targets, not a parallel API to extend (2b rule).
+        pub fn insert(&mut self, bit: u64) with(Alloc, Unsafe) {
+            self.set(bit);
+        }
+        pub fn remove(&mut self, bit: u64) {
+            self.unset(bit);
+        }
+        pub fn contains(&self, bit: u64) -> bool {
+            return self.test(bit);
+        }
+
         pub fn count(&self) -> u64 {
             let mut total: u64 = 0;
             let mut i: u64 = 0;

@@ -48,6 +48,18 @@ grep -q "drop_with\|clear_with\|remove_with" std/src/vec.con \
   && no "*_with family present — H18 may be closable; update KNOWN_HOLES + this gate" \
   || ok "*_with destruction family not yet shipped (H18 open as disclosed)"
 
+echo "=== traversal policy (P7 #8): HashMap unordered; OrderedMap/Set own defined order ==="
+M="docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv"
+# ordered traversal APIs exist
+for m in ordered_map ordered_set; do
+  for f in fold for_each; do
+    grep -P "^$m\t$f\t" "$M" | grep -q . && ok "$m.$f present (defined ascending order)"       || no "$m.$f missing"
+  done
+done
+# HashMap makes NO ordering promise: no insertion-order machinery, no doc claim
+grep -qE "insertion[- ]order" std/src/map.con && no "map.con grew insertion-order machinery/claims"   || ok "HashMap stays unordered (no insertion-order tracking)"
+grep -qiE "visits? in (key|sorted|insertion) order" std/src/map.con && no "map.con promises an order"   || ok "HashMap traversal docs promise no order"
+
 echo
 echo "COLLECTIONS-COPY-ONLY (H18): PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
