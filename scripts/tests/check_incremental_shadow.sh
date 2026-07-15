@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6C #7: cache-free incremental shadow manifest + edit corpus.
 #
 # A SHADOW of what an incremental cache WOULD do — without ever reusing a compiled

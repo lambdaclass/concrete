@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Overflow migration gate (ROADMAP Phase 3 #7) — three discharge routes.
 #
 # Phase 3 #7 routes no-overflow obligations (only from `#[overflow_checked]`)

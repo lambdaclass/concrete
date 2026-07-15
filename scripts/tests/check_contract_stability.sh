@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Contract-stability gate (Phase 1 hardening, #6).
 #
 # A function's #[requires]/#[ensures]/#[invariant] are part of its published API.

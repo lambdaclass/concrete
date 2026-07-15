@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6 13r: doc-snippet compile gate — doc snippets are first-class evidence.
 #
 # Every fenced ```con / ```concrete block in README.md + docs/*.md must either:

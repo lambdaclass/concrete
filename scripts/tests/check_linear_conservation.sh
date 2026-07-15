@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Linear-conservation gate — the systematic backstop for "a linear value silently
 # duplicated or dropped through a value-flow site the main linearity path missed"
 # (the class that produced the array-literal duplication bug and the struct-

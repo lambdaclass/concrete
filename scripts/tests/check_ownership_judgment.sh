@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # OwnershipJudgment agreement matrix (Phase 6.5).
 #
 # Ownership/linearity is decided in Check (accept/reject), realized by Lower as a

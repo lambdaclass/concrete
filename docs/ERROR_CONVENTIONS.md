@@ -79,6 +79,16 @@ Convention: policy-gated failures must be visible in `--report caps`/`audit`/
 `obligations` — the report names the function and the class, so an auditor can
 see which bucket every public API's failure modes fall into.
 
+## Process exit (the CLI projection of bucket 1)
+
+A program-level recoverable failure maps to the process boundary as: message
+to STDERR, nonzero EXIT CODE, stdout untouched. Compiled `main`'s return value
+IS the process exit code (8-bit masked; Unit main exits 0; nothing is echoed —
+see `docs/MAIN_EXIT_MODEL.md`). The idiom, per `examples/base64_cli`:
+match the `Result`/`Option`, `eprintln` the message, return nonzero. Traps
+(bucket 2) surface as abnormal termination (signal), which shells already
+distinguish from status codes — do not convert a trap into a status.
+
 ## Classification checklist for a new stdlib API
 
 1. Enumerate failure modes. For each: could a CORRECT caller hit it at runtime

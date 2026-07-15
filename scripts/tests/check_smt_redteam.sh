@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Red-team VC/SMT gate (ROADMAP Phase 2 #4) — try to break everything.
 #
 # Every adversarial input must stay a NON-PROOF or an honest diagnostic, never a

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Nested place-write regression gate (ROADMAP Phase 4 #44c — FIXED 2026-06-10).
 #
 # `o.inner.v = x` and friends (a place expression deeper than one level) used to

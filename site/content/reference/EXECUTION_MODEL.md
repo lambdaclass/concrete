@@ -29,8 +29,15 @@ Concrete currently targets a **hosted** environment only. All programs assume:
 The compiler generates a `main` function that calls the user's `main` (renamed to `user_main` internally). The generated `main`:
 
 1. Calls `user_main`
-2. Optionally prints the return value (for scalar types: i32/i64 → `printf "%lld"`, bool → `"true"`/`"false"`)
-3. Returns `0` to the OS
+2. Returns the result as the PROCESS EXIT CODE, masked to the OS's 8-bit
+   status range (`-1` exits 255, `257` exits 1). Unit `main` exits 0.
+   Nothing is written to stdout — stdout belongs to the program.
+
+`fn main() -> Int` is the current entry signature; the model narrows to
+`fn main() -> u8 | Unit` so the 8-bit contract lives in the type (see
+`docs/MAIN_EXIT_MODEL.md` for the full decision record, including why there
+is deliberately no `process.exit()` in a linear language and the harness
+compatibility knob `CONCRETE_ECHO_RESULT=1`).
 
 There is no Concrete runtime initialization. No global constructors, no GC setup, no thread-local storage initialization, no allocator setup. The program starts in `main`, calls libc functions directly, and exits when `main` returns.
 
@@ -70,16 +77,16 @@ Concrete does not have a runtime in the traditional sense (no GC, no green threa
 
 ### Startup
 
-1. OS/libc calls `main(argc, argv)` (Concrete ignores argc/argv today)
+1. OS/libc calls `main(argc, argv)`; the wrapper saves argc/argv to globals
+   for `std.args`
 2. `main` calls `user_main` (the user's `fn main()`)
 3. No global initialization, no module init functions, no static constructors
 
 ### Shutdown
 
 1. `user_main` returns
-2. `main` optionally prints the return value
-3. `main` returns `0`
-4. OS reclaims process resources
+2. `main` returns the (8-bit masked) value as the process exit status
+3. OS reclaims process resources
 
 There is no cleanup hook, no `atexit` registration, no destructor ordering. Linear ownership and `defer` handle resource cleanup within function scope. When the process exits, the OS reclaims everything.
 

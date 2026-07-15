@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Mixed-width binop gate (E0228) + `as`-cast value normalization.
 #
 # 1. Numeric binop operands must agree EXACTLY (width and signedness). The old

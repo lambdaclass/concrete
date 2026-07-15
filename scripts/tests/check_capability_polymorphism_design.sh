@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Callable-values / capability-polymorphism design gate (ROADMAP Phase 5 #24a).
 #
 # Two invariants until docs/CALLABLE_VALUES_AND_CAPABILITIES.md exists:

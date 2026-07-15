@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Submodule front-end-checking gate (KNOWN_HOLES H12 — CLOSED 2026-07-02).
 #
 # Submodule function BODIES — every `mod x;` file in a project and inline

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6C #5: gate mutation-testing — prove the pipeline gates are load-bearing.
 #
 # For each rule FAMILY, apply a one-line source mutation that disables the rule

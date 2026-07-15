@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # defer / cleanup gate (ROADMAP Phase 6 #7).
 #
 # `defer <call>;` registers a call to run at scope exit. This gate locks the

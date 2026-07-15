@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 1 source-contract VALIDATION ARTIFACT (ROADMAP Phase 1 #9).
 #
 # The single gate for the whole source-contract surface. It:

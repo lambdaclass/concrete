@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Loop-control gate (ROADMAP Phase 6 #4).
 #
 # break / continue / labeled loops / while-as-expression are implemented; this

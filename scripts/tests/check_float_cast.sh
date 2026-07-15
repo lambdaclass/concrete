@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Checked float→int cast gate — ROADMAP #10 (closes former KNOWN_HOLES H2).
 #
 # `f as iN` / `f as uN` is a CHECKED conversion, profile-invariant:

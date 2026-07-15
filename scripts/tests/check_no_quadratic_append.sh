@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Anti-pattern ratchet: `xs ++ [x]` in the hot pipeline files.
 #
 # The 2026-07 Phase 6C #2 complexity-guard sweep found 5+ real O(n²) bugs of ONE

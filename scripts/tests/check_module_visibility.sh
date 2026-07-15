@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Module / import / visibility gate (ROADMAP Phase 5 #1).
 #
 # Locks the module-system semantics so they cannot silently regress as packages

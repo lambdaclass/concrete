@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # KNOWN_HOLES H18 gate: collections do not destroy non-Copy elements — pinned.
 #
 # Pins the DISCLOSED status quo until the explicit-destruction design lands

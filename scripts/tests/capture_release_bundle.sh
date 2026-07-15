@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Release evidence bundle (Phase 7/8 surface).
 #
 # Captures everything needed to reproduce and audit a SUCCESSFUL

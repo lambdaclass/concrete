@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Backend discharge-adapter gate (ROADMAP Phase 3 #13).
 #
 # Every status-changing backend is a typed `DischargeAdapter` with a DECLARED set

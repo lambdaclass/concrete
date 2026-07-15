@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Differential position gate: a flexible-literal overflow (or a width-sensitive
 # shift) placed in many SYNTACTIC POSITIONS, asserting the interpreter and the
 # compiled binary agree (same value, or both trap on the checked overflow).

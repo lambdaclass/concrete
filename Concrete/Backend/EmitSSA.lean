@@ -1185,12 +1185,24 @@ private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List
       emitDecl s { name := name, retTy := retLLTy, params := paramTys }
   ) s
 
-/-- Emit the main wrapper that calls user_main and prints the result.
-    For void/unit return types, the wrapper just calls user_main without printing.
-    For int/bool/other scalar types, it prints the result.
+/-- Emit the main wrapper that calls user_main.
+
+    Default (exit-code semantics, MAIN_EXIT_MODEL stage 1): the returned value
+    becomes the PROCESS EXIT CODE — integer returns are masked to the OS's
+    8-bit status range (`ret & 255`, so `-1` exits 255), Unit exits 0, bool
+    exits 1/0 (a deprecated corner slated for removal when main narrows to
+    `Unit | u8`), non-scalar returns exit 0. Nothing is written to stdout —
+    stdout belongs to the program.
+
+    With `echoResult` (harness compatibility, `CONCRETE_ECHO_RESULT=1`): the
+    legacy behavior — print the result to stdout at full i64 width and exit 0.
+    The differential harness (run_ok fixtures, interp-vs-compiled fuzzing)
+    compares values wider than 8 bits, so it opts in during the stage-2
+    migration; the knob dies when fixtures print their own results.
+
     The wrapper accepts (argc, argv) from the C runtime and saves them
     to globals so user code can access them via __concrete_get_argc/argv. -/
-private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
+private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) (echoResult : Bool) : EmitSSAState :=
   let retLLTy := tyToLLVMTy s retTy
   let ret0 : LLVMTerm := .ret .i32 (some (.intLit 0))
   let printfTarget : LLVMOperand := .global "printf"
@@ -1222,10 +1234,47 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
   let mkMainFn (blk : LLVMBlock) : LLVMFnDef :=
     { name := "main", retTy := .i32, params := [("argc", .i32), ("argv", .ptr)], blocks := [blk] }
   if retLLTy == .void then
-    -- Unit/void return: just call, no print
+    -- Unit/void return: just call; exit 0 either way
     let instrs : List LLVMInstr := saveArgcArgv ++ [.call none .void (.global "user_main") []]
     let mainFn := mkMainFn ⟨"entry", instrs, ret0⟩
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
+  else if !echoResult then
+    -- Exit-code semantics: mask the scalar result into 0-255 and return it.
+    if retLLTy == .i1 then
+      let instrs : List LLVMInstr := saveArgcArgv ++ [
+        .call (some "result") .i1 (.global "user_main") [],
+        .cast "code" .zext .i1 (.reg "result") .i32
+      ]
+      let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
+      { s with moduleFunctions := s.moduleFunctions.push mainFn }
+    else if retLLTy == .i64 then
+      let instrs : List LLVMInstr := saveArgcArgv ++ [
+        .call (some "result") .i64 (.global "user_main") [],
+        .binOp "masked" .and_ .i64 (.reg "result") (.intLit 255),
+        .cast "code" .trunc .i64 (.reg "masked") .i32
+      ]
+      let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
+      { s with moduleFunctions := s.moduleFunctions.push mainFn }
+    else if retLLTy == .i32 then
+      let instrs : List LLVMInstr := saveArgcArgv ++ [
+        .call (some "result") .i32 (.global "user_main") [],
+        .binOp "code" .and_ .i32 (.reg "result") (.intLit 255)
+      ]
+      let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
+      { s with moduleFunctions := s.moduleFunctions.push mainFn }
+    else if retLLTy == .i16 || retLLTy == .i8 then
+      let instrs : List LLVMInstr := saveArgcArgv ++ [
+        .call (some "result") retLLTy (.global "user_main") [],
+        .cast "wide" .zext retLLTy (.reg "result") .i32,
+        .binOp "code" .and_ .i32 (.reg "wide") (.intLit 255)
+      ]
+      let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
+      { s with moduleFunctions := s.moduleFunctions.push mainFn }
+    else
+      -- Non-scalar main return (struct/string): no meaningful status; exit 0.
+      let instrs : List LLVMInstr := saveArgcArgv ++ [.call (some "result") retLLTy (.global "user_main") []]
+      let mainFn := mkMainFn ⟨"entry", instrs, ret0⟩
+      { s with moduleFunctions := s.moduleFunctions.push mainFn }
   else if retLLTy == .i1 then
     -- Bool return: print "true" or "false"
     let s := emitGlobal s { name := "fmt.true", ty := .array 5 .i8, value := "c\"true\\00\"" }
@@ -1312,7 +1361,7 @@ private def collectSInstTys (inst : SInst) : List Ty :=
 -- Entry point: emit full SSA program as LLVM IR
 -- ============================================================
 
-def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : EmitSSAState :=
+def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) (echoResult : Bool := false) : EmitSSAState :=
   let s := { s with structDefs := s.structDefs ++ m.structs, enumDefs := s.enumDefs ++ m.enums,
                      newtypes := s.newtypes ++ m.newtypes,
                      linkerAliases := s.linkerAliases ++ m.linkerAliases,
@@ -1409,7 +1458,7 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
   if testMode then s
   else if hasMain then
     match m.functions.find? fun f => f.isEntryPoint with
-    | some mainFn => emitMainWrapper s mainFn.retTy
+    | some mainFn => emitMainWrapper s mainFn.retTy echoResult
     | none => s
   else s
 
@@ -1559,7 +1608,7 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
     let mainFn : LLVMFnDef := { name := "main", retTy := .i32, params := [], blocks := allBlocks }
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
 
-def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
+def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFilter : Option String := none) (echoResult : Bool := false) : String :=
   let s : EmitSSAState := {}
   -- Collect all structs and enums for type resolution
   let allStructs := modules.foldl (fun acc m => acc ++ m.structs) []
@@ -1641,7 +1690,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   ) ([] : List String)
   let s := { s with definedFnNames := definedFnNames }
   -- Emit each module
-  let s := modules.foldl (fun s m => emitSModule s m testMode) s
+  let s := modules.foldl (fun s m => emitSModule s m testMode echoResult) s
   -- In test mode, emit the test runner instead of the normal main wrapper
   let s := if testMode then emitTestRunner s modules moduleFilter else s
   -- Emit builtin function implementations

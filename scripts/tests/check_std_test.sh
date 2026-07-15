@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 7 step 5 gate: the std.test oracle/helper layer discipline.
 #
 #   - basic expect_* helpers are SILENT, capability-free, allocation-free

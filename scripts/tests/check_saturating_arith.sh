@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Saturating-arithmetic gate — ROADMAP #10 Stage 2.2 (ARITHMETIC_POLICY.md §13 step 2).
 #
 # `saturating_add` / `saturating_sub` are the explicit spelling for intentional

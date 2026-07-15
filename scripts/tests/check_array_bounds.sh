@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Array-bounds gate — KNOWN_HOLES H8 (runtime bounds checking).
 #
 # Raw `a[i]` / `a[i] = v` on a fixed array is now CHECKED: a dynamic index that is

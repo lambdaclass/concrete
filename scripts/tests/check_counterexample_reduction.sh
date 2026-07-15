@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6C #4 gate: counterexample-first pipeline debugging.
 #
 # Any pipeline failure should reduce to a MINIMIZED `.con` fixture plus a REPLAY

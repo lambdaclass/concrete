@@ -477,6 +477,9 @@ jobs:
       - name: "Error conventions (13t — the three buckets report-visible: E0286 / trap_sites / caps)"
         run: bash scripts/tests/check_error_conventions.sh
 
+      - name: "Exit codes (MAIN_EXIT_MODEL stage 1 — main return = process status, clean stdout; echo only behind the harness knob)"
+        run: bash scripts/tests/check_exit_codes.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

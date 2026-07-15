@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Operational VC auto-discharge forcing-probe gate (ROADMAP Phase 9 #16a).
 #
 # Locks the result of the forcing probe that decided #16a: can a FIXED,

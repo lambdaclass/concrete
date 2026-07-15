@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # External-SMT path gate (ROADMAP Phase 2 #8/#9).
 #
 # Pins the trust boundary of the opt-in external-SMT slice:

@@ -339,6 +339,9 @@ test-phase6c: build ## Phase 6C #8 capstone: run the full observability suite (#
 test-error-conventions: build ## 13t gate: recoverable (ignored Result -> E0286), fatal (trap_sites in telemetry), policy-gated (caps names File) — one public API per bucket, report-visible
 	$(NIX_DEVELOP) bash ./scripts/tests/check_error_conventions.sh
 
+test-exit-codes: build ## MAIN_EXIT_MODEL stage 1: main return = process exit code (8-bit masked, clean stdout); legacy echo only behind CONCRETE_ECHO_RESULT=1
+	$(NIX_DEVELOP) bash ./scripts/tests/check_exit_codes.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 

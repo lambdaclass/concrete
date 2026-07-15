@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Compiler-internal API boundary gate (ROADMAP Phase 4 #16).
 #
 # External consumers (editor/LSP, MCP, package tooling, integrations) must depend

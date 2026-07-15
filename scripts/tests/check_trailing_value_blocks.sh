@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Trailing-value gate for if/match in value blocks (STATEMENT_EXPRESSION_MODEL
 # follow-up): inside a VALUE block (if-expression branch, while-else, match arm
 # block), a trailing `match` or `if/else` whose branches end with values IS the

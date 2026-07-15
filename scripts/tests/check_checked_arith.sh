@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Checked-arithmetic gate — ROADMAP #10 Stage 2.3 (ARITHMETIC_POLICY.md §13 step 5).
 #
 # Ordinary `+` is CHECKED: it traps (abort) on overflow, in every profile.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # ObligationCore ledger gate (ROADMAP Phase 3 #1/#2 — schema + vocabulary).
 #
 # Pins the v1 obligation ledger: every obligation carries the full schema-v1

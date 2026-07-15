@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Capability-judgment gate (Phase 6.5 CapabilityJudgment, slice 1 — direct calls).
 #
 # "Does the caller's authority cover this call, and if not which caps are missing"

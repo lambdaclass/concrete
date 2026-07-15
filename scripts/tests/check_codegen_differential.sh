@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Interpreter-vs-compiled differential gate (ROADMAP Phase 4 #44f / precursor to
 # #18). Runs every tests/codegen/*.con program through BOTH the source-level
 # interpreter (`--interp`) and the compiled binary, and asserts they agree.

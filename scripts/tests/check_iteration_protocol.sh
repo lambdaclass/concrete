@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Iteration-protocol gate (ROADMAP Phase 6 #17; docs/ITERATION_PROTOCOL.md).
 #
 # Concrete's traversal story is a fixed hierarchy of explicit forms — NOT a

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Nested-patterns decision gate (ROADMAP Phase 6 #5; docs/NESTED_PATTERNS.md).
 #
 # Concrete V1 destructures one level per match arm; nested patterns

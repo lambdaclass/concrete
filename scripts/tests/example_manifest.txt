@@ -164,7 +164,7 @@ examples/snippets/gcd.con compile
 examples/snippets/generic_enum_impl.con skip
 examples/snippets/generic_struct.con skip
 examples/snippets/generics_basic.con compile
-examples/snippets/hello_world.con skip
+examples/snippets/hello_world.con compile
 examples/snippets/hello_world_array.con skip
 examples/snippets/hello_world_hacky.con skip
 examples/snippets/if_else.con compile

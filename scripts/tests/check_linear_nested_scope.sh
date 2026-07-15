@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Nested-scope linearity gate — KNOWN_HOLES H9 (a NAMED linear value bound in a
 # nested if/else branch or a matched payload, left unconsumed, used to leak: the
 # branch/arm merge dropped it before the function-level scope-exit check ran).

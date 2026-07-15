@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6B / 6.5 validation artifact (ROADMAP item 32).
 #
 # The capstone contract for the compiler-pipeline refactor: a compact corpus that

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Raw-pointer / address-of-local aliasing regression gate
 # (ROADMAP Phase 4 #44d — FIXED 2026-06-11).
 #

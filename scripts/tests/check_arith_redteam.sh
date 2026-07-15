@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Arithmetic red-team gate — ROADMAP #10 checked-arithmetic hardening.
 #
 # Adversarial coverage for the checked-arithmetic model and the bugs the

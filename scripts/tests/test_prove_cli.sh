@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # `concrete prove` v1.1 CLI gate.
 #
 # Exercises the three read-only sub-modes on their fixtures and asserts a stable

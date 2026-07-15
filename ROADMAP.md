@@ -266,18 +266,26 @@ batteries-included breadth. Completed foundation work lives in
    `swap_remove` transfer ownership back to the caller. This is the
    linear-language-specific gap; it comes before allocator-as-value, arenas,
    and broad format/CLI modules.
-2. First real stdlib workload: `base64_cli`, before broadening the API surface.
-   It must exercise args -> bytes/text -> parse/errors -> `std.base64` ->
-   `Writer` output -> oracle tests, and it should pull only the APIs it needs.
-3. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-4. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+2. Workload-pulled follow-ups from `base64_cli` (workload 1 itself is done —
+   see CHANGELOG and `examples/base64_cli/FRICTION.md`): `std.base64`
+   (encode/decode with Option-failing decode; the padding edge cases are the
+   recurring part), and the standalone-import "use a project" diagnostic hint.
+3. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
+   signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
+   type), migrate the differential fuzzer to self-printing wrappers, sweep the
+   `run_ok` fixture corpus, then retire Int-main and delete the
+   `CONCRETE_ECHO_RESULT` harness knob (grep the stage-1 marker comment).
+   Later, workload-gated: `main -> Result<Unit, E>` printing the error
+   variant name to stderr (Zig-style nominal rendering, no display traits).
+4. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+5. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-5. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+6. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-6. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+7. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-7. Broad compression/crypto/networking/threading only after workload demand.
+8. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is

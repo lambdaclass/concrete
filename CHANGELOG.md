@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 7 workload 1 (base64_cli) + exit-code semantics + three compiler fixes (2026-07-14/15)
+
+The first workload program shipped and immediately paid rent: build first,
+record friction, implement only what is pulled.
+
+- `examples/base64_cli`: encode/decode verified against system `base64`
+  (fixed vectors + random round-trips), recoverable errors per the 13t
+  buckets, friction log with a ranked pull list (`examples/base64_cli/FRICTION.md`).
+- **Bug 031** (found by the workload): lazy address-of promotion inside a
+  branch left the promotion alloca uninitialized on sibling paths — a non-Copy
+  local borrowed (incl. method-call autoborrows) in more than one branch of
+  if/else, value-if, or match read garbage. Fixed with dominating
+  pre-promotion at all three lowering sites; three regression fixtures.
+- **Bug 032** (found by pull 2's UTF-8 test): multibyte string literals
+  miscompiled — `.ll` globals sized by char count with codepoint-hex escapes;
+  `llvm-as` rejected any compiled program containing a non-ASCII literal.
+  Emission is now UTF-8 byte based.
+- **Pull 2 shipped**: `Bytes::from_string` (the always-safe text→bytes
+  crossing); the workload uses it; manifest regenerated.
+- **Pull 1 stage 1 shipped (MAIN_EXIT_MODEL)**: compiled `main`'s return value
+  is now the process exit code (8-bit masked; Unit exits 0) and the runtime
+  writes nothing to stdout — compiled programs are real CLI citizens (clean
+  pipes, `set -e` works). Legacy full-width echo survives only behind the
+  `CONCRETE_ECHO_RESULT=1` harness knob, exported one-line-per-script across
+  the test harness until the stage-2 fixture migration deletes it. Gated by
+  `check_exit_codes.sh`; decision record in `docs/MAIN_EXIT_MODEL.md`
+  (end state: `fn main() -> u8 | Unit`, Zig-shaped; deliberately no
+  `process.exit()` in a linear language).
+
 ### Phase 7 foundation tier — stdlib manifest, IO spine, boundaries, and first breadth slices (2026-07-14)
 
 The first Phase 7 foundation tier is complete and gated. The active roadmap now

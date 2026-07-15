@@ -9,10 +9,13 @@ mod hello {
         cap: u64,
     }
 
-    fn main() -> u64 {
+    extern fn free(ptr: *mut u8);
+
+    fn main() with(Unsafe) -> u64 {
         let x: String = "hello \nworld!";
         puts(x.ptr);
-
+        let String { ptr, len, cap } = x;
+        free(ptr);
         return 0;
     }
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Unified command-plumbing gate (ROADMAP Phase 4 #14a).
 #
 # Commands must share their plumbing: one project-root prologue (one message, one

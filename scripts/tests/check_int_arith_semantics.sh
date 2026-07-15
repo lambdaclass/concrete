@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Integer-arithmetic semantics gate (ROADMAP Phase 6.5 #1).
 #
 # One source of truth for integer arithmetic (Concrete/Semantics/IntArith.lean)

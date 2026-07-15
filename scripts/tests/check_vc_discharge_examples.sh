@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # VC/discharge example matrix gate (ROADMAP Phase 2 #15).
 #
 # A small worked reference for EVERY VC status a user will see in --report vcs /

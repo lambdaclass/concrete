@@ -29,13 +29,13 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
    paying rent**: the shape "first borrow of a local inside command-dispatch
    branches" is the CLI-program shape, and no fixture/fuzzer had it.
 
-4. **`main`'s return value is echoed to stdout and the process exits 0.**
-   A CLI tool cannot (a) keep its stdout clean — the trailing `0`/`1` line
-   corrupts piped output (`base64_cli encode x | pbcopy` includes it), or
-   (b) signal failure to the shell — `decode "!!!!"` prints the error but
-   exits 0, so `&&`/`set -e` scripting is broken. This is THE gap between
-   "example program" and "usable CLI tool". → pull: compiled `main`'s Int
-   should become the process EXIT CODE, not stdout content.
+4. **`main`'s return value was echoed to stdout and the process exited 0.**
+   A CLI tool could neither keep its stdout clean when piped nor signal
+   failure to the shell. → pulled and SHIPPED (stage 1): compiled `main`'s
+   return IS the process exit code (8-bit masked), stdout untouched; this
+   tool now pipes cleanly and exits 1 on invalid input. Full decision record
+   and the stage-2 end state (`fn main() -> u8 | Unit`) in
+   `docs/MAIN_EXIT_MODEL.md`.
 
 5. **base64 inline was ~70 lines and easy** — the alphabet/padding logic is
    self-contained. The friction was NOT the encoding math; it was everything
@@ -60,7 +60,7 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
 
 | # | Pull | Evidence | Size |
 |---|------|----------|------|
-| 1 | main return = exit code (not stdout echo) | friction 4 — blocks ALL CLI workloads | backend/runtime, medium |
+| 1 | main return = exit code (not stdout echo) | friction 4 — blocks ALL CLI workloads | **SHIPPED stage 1** (docs/MAIN_EXIT_MODEL.md; stage 2 = `u8\|Unit` main, ROADMAP P7 #3) |
 | 2 | `Bytes::from_string` / `String.to_bytes` | friction 7 — every text↔bytes program | std, small — **SHIPPED** (bytes.con, this workload now uses it) |
 | 3 | `std.base64` (encode/decode, Option-failing decode) | friction 5 — proto/CLI recurrence | std, small-medium |
 | 4 | standalone-import diagnostic hint | friction 1 — first-contact UX | CLI, tiny |

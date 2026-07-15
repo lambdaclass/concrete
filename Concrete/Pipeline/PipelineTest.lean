@@ -80,7 +80,7 @@ def fullPipelineNoIO (source : String) : Except Diagnostics String :=
   | .ok mono =>
   match Pipeline.lower mono with
   | .error ds => .error ds
-  | .ok ssa => .ok (Pipeline.emit ssa)
+  | .ok ssa => .ok (Pipeline.emit ssa (echoResult := true))
 
 /-- Run frontend + monomorphize + raw lowering (no verify/cleanup) on a source string.
     Returns raw SSA modules for testing verify and cleanup in isolation. -/

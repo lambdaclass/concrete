@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Check/Elab source-type AGREEMENT gate (Phase 6.5 #9 — TypeJudgment).
 #
 # The E0228/E0715 bug class was Check and Elab each running their own source-type
