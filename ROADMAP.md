@@ -259,13 +259,14 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-1. Owned-resource collections / H18 closure: make `Vec<T>`, maps, sets,
-   deques, heaps, and slices correct for non-`Copy` elements before broadening
-   the stdlib surface. Collection `drop`/`clear`/overwrite/replacement paths
-   must destroy every live owned element exactly once, while `pop`/`remove`/
-   `swap_remove` transfer ownership back to the caller. This is the
-   linear-language-specific gap; it comes before allocator-as-value, arenas,
-   and broad format/CLI modules.
+1. Owned-resource collections / H18 — DONE 2026-07-16 (see CHANGELOG): all
+   containers destroy live non-`Copy` elements exactly once via compiler
+   drop-glue; `pop`/`remove`/`swap_remove` transfer ownership out; overwrite
+   is honest (`Vec.replace`, displaced-key destruction); conditional `Destroy`
+   composes through nesting; v1 Alloc fence (E0584). Pulled, not scheduled:
+   lifting the v1 fence needs associated-capability machinery in Check (the
+   first infallible non-Alloc destructor pulls it); raw `*_unchecked`
+   overwrite escapes stay documented trusted escapes.
 2. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
    signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
    type), migrate the differential fuzzer to self-printing wrappers, sweep the
