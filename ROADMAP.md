@@ -312,17 +312,28 @@ traversal, BitSet aliases, and the 13t error-convention gate. See
 
    **First subtask: close H18 / owned-resource collections.** A collection that
    owns `T` values is responsible for consuming all live `T` values unless they
-   are explicitly moved out. Permanent design: generic drop-through via the
-   language's `Destroy`/drop mechanism, not a permanent caller-supplied
-   `drop_with(f)` burden. `clear`, `drop`, overwrite, set/replacement, and
-   compaction paths destroy displaced live elements; `pop`, `remove`, and
-   `swap_remove` transfer ownership to the caller. `get -> Option<T>` remains
-   `T: Copy`; non-`Copy` indexed access remains scoped callback / borrow /
-   explicit move-out, with no returned mutable references. Add a gate that
-   demonstrates `Vec<File>`, `HashMap<String, File>`, `Deque<File>`, and
-   `BinaryHeap<File>` either correctly destroy all live elements or move them
-   out exactly once, and that mutation disabling live-element destruction is
-   caught.
+   are explicitly moved out. Permanent design: monomorphized, compiler-generated
+   drop glue via the language's infallible `Destroy`/drop mechanism, not a
+   permanent caller-supplied `drop_with(f)` burden and not a stored destructor
+   function pointer inside each collection value. Disposal stays forced-explicit
+   (`x.drop()` / `defer x.drop()`); do not introduce silent scope-end auto-drop.
+   Fallible cleanup remains an explicit operation such as
+   `close(self) -> Result<_, _>`, never hidden in `Destroy`.
+
+   The final model is capability-polymorphic: generated drop glue inherits the
+   union of the element/key/value destructor capabilities, so `Vec<File>.drop`
+   cannot close files unless `File` authority is visible on the drop path. V1 may
+   be restricted to infallible cap-free / `with(Alloc)`-only destruction while
+   associated destructor-capability machinery is built, but that restriction must
+   be reported as a limitation rather than silently erasing capabilities.
+   `clear`, `drop`, overwrite, set/replacement, and compaction paths destroy
+   displaced live elements; `pop`, `remove`, and `swap_remove` transfer ownership
+   to the caller. `get -> Option<T>` remains `T: Copy`; non-`Copy` indexed access
+   remains scoped callback / borrow / explicit move-out, with no returned mutable
+   references. Add a gate that demonstrates `Vec<File>`, `HashMap<String, File>`,
+   `Deque<File>`, and `BinaryHeap<File>` either correctly destroy all live
+   elements or move them out exactly once, and that mutation disabling
+   live-element destruction is caught.
 
    Traversal must be **deterministic but not ordered**:
    `for_each`/`fold` over `std.map`/`std.set` need a fixed hasher and no per-run
