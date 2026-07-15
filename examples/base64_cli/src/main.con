@@ -1,0 +1,150 @@
+// base64_cli — the first WORKLOAD program (P7 "stdlib proven under use").
+// Usage:  base64_cli encode <text>   |   base64_cli decode <base64>
+// Exercises: std.args, bytes/text boundary, error conventions (bad input is
+// recoverable -> message + exit 1), Writer/console path, std.fmt.
+// base64 is implemented INLINE deliberately: its friction is the pull
+// evidence for a future std.base64 (see FRICTION.md).
+mod base64_cli {
+    import std.args.{count, get};
+    import std.bytes.{Bytes, BytesRaw};
+    import std.io.{Writer, console_writer, console_error_writer, IoError, println, eprintln};
+
+    fn b64_char(v: u64) -> u8 {
+        if v < 26 { return (65 + v) as u8; }        // A-Z
+        if v < 52 { return (97 + (v - 26)) as u8; } // a-z
+        if v < 62 { return (48 + (v - 52)) as u8; } // 0-9
+        if v == 62 { return 43; }                   // '+'
+        return 47;                                  // '/'
+    }
+
+    fn b64_val(c: u8) -> u64 {
+        if c >= 65 { if c <= 90 { return (c - 65) as u64; } }
+        if c >= 97 { if c <= 122 { return (c - 97 + 26) as u64; } }
+        if c >= 48 { if c <= 57 { return (c - 48 + 52) as u64; } }
+        if c == 43 { return 62; }
+        if c == 47 { return 63; }
+        return 255;  // invalid
+    }
+
+    fn encode(input: &Bytes) with(Alloc) -> Bytes {
+        let raw: BytesRaw = input.raw_view();
+        let mut out: Bytes = Bytes::with_capacity(((raw.len + 2) / 3) * 4);
+        let mut i: u64 = 0;
+        while i < raw.len {
+            // full or partial 3-byte group starting at i
+            let b0: u64 = input.get_unchecked(i) as u64;
+            let has1: bool = i + 1 < raw.len;
+            let has2: bool = i + 2 < raw.len;
+            let b1: u64 = if has1 { input.get_unchecked(i + 1) as u64 } else { 0 };
+            let b2: u64 = if has2 { input.get_unchecked(i + 2) as u64 } else { 0 };
+            let n: u64 = (b0 * 65536) + (b1 * 256) + b2;
+            out.push(b64_char(n / 262144));
+            out.push(b64_char((n / 4096) % 64));
+            if has1 { out.push(b64_char((n / 64) % 64)); } else { out.push(61); }  // '='
+            if has2 { out.push(b64_char(n % 64)); } else { out.push(61); }
+            i = i + 3;
+        }
+        return out;
+    }
+
+    fn decode(input: &Bytes) with(Alloc) -> Option<Bytes> {
+        let raw: BytesRaw = input.raw_view();
+        if raw.len % 4 != 0 {
+            return Option::<Bytes>::None;
+        }
+        let mut out: Bytes = Bytes::with_capacity((raw.len / 4) * 3);
+        let mut i: u64 = 0;
+        while i < raw.len {
+            let c0: u8 = input.get_unchecked(i);
+            let c1: u8 = input.get_unchecked(i + 1);
+            let c2: u8 = input.get_unchecked(i + 2);
+            let c3: u8 = input.get_unchecked(i + 3);
+            let v0: u64 = b64_val(c0);
+            let v1: u64 = b64_val(c1);
+            if v0 == 255 { out.drop(); return Option::<Bytes>::None; }
+            if v1 == 255 { out.drop(); return Option::<Bytes>::None; }
+            let pad2: bool = c2 == 61;
+            let pad3: bool = c3 == 61;
+            let v2: u64 = if pad2 { 0 } else { b64_val(c2) };
+            let v3: u64 = if pad3 { 0 } else { b64_val(c3) };
+            if !pad2 { if v2 == 255 { out.drop(); return Option::<Bytes>::None; } }
+            if !pad3 { if v3 == 255 { out.drop(); return Option::<Bytes>::None; } }
+            let n: u64 = (v0 * 262144) + (v1 * 4096) + (v2 * 64) + v3;
+            out.push((n / 65536) as u8);
+            if !pad2 { out.push(((n / 256) % 256) as u8); }
+            if !pad3 { if !pad2 { out.push((n % 256) as u8); } }
+            i = i + 4;
+        }
+        return Option::<Bytes>::Some { value: out };
+    }
+
+    fn string_to_bytes(s: &String) with(Alloc) -> Bytes {
+        let mut b: Bytes = Bytes::with_capacity(s.len());
+        let mut i: u64 = 0;
+        while i < s.len() {
+            b.push(s.get_unchecked(i) as u8);
+            i = i + 1;
+        }
+        return b;
+    }
+
+    fn print_bytes(w: &Writer, b: &Bytes) -> Result<u64, IoError> {
+        return w.write(b);
+    }
+
+    fn main() with(Std) -> Int {
+        if count() < 3 {
+            let u: String = "usage: base64_cli encode|decode <text>";
+            eprintln(&u);
+            u.drop();
+            return 1;
+        }
+        let cmd: String = get(1);
+        let arg: String = get(2);
+        let enc: String = "encode";
+        let dec: String = "decode";
+        let is_enc: bool = cmd.eq(&enc);
+        let is_dec: bool = cmd.eq(&dec);
+        enc.drop(); dec.drop(); cmd.drop();
+        let input: Bytes = string_to_bytes(&arg);
+        arg.drop();
+        let w: Writer = console_writer();
+        let mut rc: Int = 0;
+        if is_enc {
+            let out: Bytes = encode(&input);
+            let r: Result<u64, IoError> = print_bytes(&w, &out);
+            let ignored: u64 = r.unwrap_or(0);
+            out.drop();
+        } else {
+            if is_dec {
+                let maybe: Option<Bytes> = decode(&input);
+                match maybe {
+                    Option::Some { value } => {
+                        let r: Result<u64, IoError> = print_bytes(&w, &value);
+                        let ignored: u64 = r.unwrap_or(0);
+                        value.drop();
+                    },
+                    Option::None => {
+                        let m: String = "error: invalid base64 input";
+                        eprintln(&m);
+                        m.drop();
+                        rc = 1;
+                    },
+                }
+            } else {
+                let m: String = "error: unknown command (use encode|decode)";
+                eprintln(&m);
+                m.drop();
+                rc = 1;
+            }
+        }
+        let nl: String = "\n";
+        let r2: Result<u64, IoError> = w.write_str(&nl);
+        let ignored2: u64 = r2.unwrap_or(0);
+        nl.drop();
+        let rc2: Result<u64, IoError> = w.close();
+        let ignored3: u64 = rc2.unwrap_or(0);
+        input.drop();
+        return rc;
+    }
+}

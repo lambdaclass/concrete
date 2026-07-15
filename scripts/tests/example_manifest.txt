@@ -23,12 +23,13 @@ examples/backend_contracts/arithmetic.con compile
 examples/backend_contracts/assert_path.con compile
 examples/backend_contracts/capability.con compile
 examples/backend_contracts/layout.con compile
+examples/base64_cli/src/main.con project-build
 examples/byte_view/http_header_view/src/main.con project-build
 examples/byte_view/tlv_packet_view/src/main.con project-build
 examples/byte_view/utf8_text_slice/src/main.con project-build
 examples/byte_view/wrong_buffer/src/main.con project-build
-examples/patterns/byte_ranges/src/main.con project-build
-examples/defer/cleanup_order/src/main.con project-build
+examples/conlog/src/main.con project-build
+examples/conlog/src/parser.con project-build
 examples/constant_time_tag/catches/01_alloc_in_compare_core.con expected-error
 examples/constant_time_tag/src/main.con compile
 examples/contract_negatives/assert_obligation/src/main.con expected-error
@@ -58,6 +59,7 @@ examples/contract_stability/v2.con skip
 examples/crypto_verify/catches/01_alloc_in_pure_core.con expected-error
 examples/crypto_verify/src/main.con compile
 examples/crypto_verify/src/main_drifted.con compile
+examples/defer/cleanup_order/src/main.con project-build
 examples/diagnostics_rich/missing_capability.con expected-error
 examples/diagnostics_rich/parser_error.con expected-error
 examples/diagnostics_rich/type_mismatch.con expected-error
@@ -65,6 +67,7 @@ examples/diagnostics_rich/unknown_name.con expected-error
 examples/diagnostics_rich/use_after_move.con expected-error
 examples/elf_header/src/main.con compile
 examples/elf_header/src/main_drifted.con compile
+examples/error_conventions/src/main.con compile
 examples/evidence_classes/assumed_boundary/src/main.con compile
 examples/evidence_classes/partial_contract/src/main.con compile
 examples/evidence_classes/proved_by_kernel_decision_bv/src/main.con compile
@@ -94,8 +97,6 @@ examples/known_holes/proven_oob_index/src/main.con expected-error
 examples/known_holes/raw_ptr_to_local/src/main.con skip
 examples/known_holes/returned_ref_provenance_map/src/main.con skip
 examples/known_holes/returned_ref_provenance_vec/src/main.con skip
-examples/conlog/src/main.con project-build
-examples/conlog/src/parser.con project-build
 examples/kvstore/src/main.con project-build
 examples/loop_invariant/src/main.con compile
 examples/lox/src/main.con project-build
@@ -107,6 +108,7 @@ examples/parse_validate/src/main.con compile
 examples/partial_facts/bad_decl_then_typed_error.con expected-error
 examples/partial_facts/resolve_error_hides_nothing.con expected-error
 examples/partial_facts/two_bad_decls.con expected-error
+examples/patterns/byte_ranges/src/main.con project-build
 examples/policy_engine/main.con skip
 examples/project/src/main.con compile
 examples/project/src/mymod/mod.con project-build
@@ -215,4 +217,3 @@ examples/vc_suite/rate_limiter.con skip
 examples/vc_suite/ring_buffer_indices.con skip
 examples/verify/src/main.con project-build
 examples/vm/main.con skip
-examples/error_conventions/src/main.con compile

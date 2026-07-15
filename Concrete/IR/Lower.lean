@@ -541,6 +541,29 @@ partial def cstmtsTakeAddrOf (name : String) (body : List CStmt) : Bool :=
   body.any (cstmtTakesAddrOf name)
 end
 
+/-- Bug 031: pre-promote any pre-branch local whose address is taken inside a
+    branch arm/body (incl. method-call autoborrows — `x.m()` is `M_m(&x)` in
+    Core). Lazy `addrOfLocal` promotion emits the initializing store inside the
+    branch where the FIRST address-take is lowered; the promotion registration
+    is global, so a sibling branch (and post-merge code on that path) reads an
+    UNINITIALIZED alloca. Call this in the still-dominating block BEFORE the
+    conditional terminator — alloca goes to entry, the store lands here. Same
+    rule the while-loop lowering applies to its body (C9). Skips types
+    `addrOfLocal` never promotes (arrays/refs/ptrs/heap are already
+    addressable) and already-promoted names. `takes name` = "some branch takes
+    `&name`"; callers compose it from cstmtsTakeAddrOf / cmatchArmTakesAddrOf. -/
+private def prePromoteAddrTaken (preVars : List (String × SVal))
+    (takes : String → Bool) : LowerM Unit := do
+  for (name, val) in preVars do
+    match val.ty with
+    | .array _ _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => pure ()
+    | vty =>
+      if (← isPromoted name).isNone && takes name then
+        let allocaReg ← freshReg "ifpro."
+        emitEntryAlloca (.alloca allocaReg vty)
+        emit (.store val (.reg allocaReg vty))
+        addPromotedAlloca name allocaReg vty
+
 mutual
 
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
@@ -825,6 +848,17 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let preMatchVars ← snapshotVars
     -- Collect (endVars, endLabel, terminated) for each arm for var merge
     let mut armEndSnapshots : List (List (String × SVal) × String × Bool) := []
+
+    -- Bug 031: see prePromoteAddrTaken — the store must dominate every arm.
+    -- Exclude names any arm REBINDS (enum payload binding / var arm): promotion
+    -- is keyed by name, so a shadowed binding's setVar would store the arm-local
+    -- value into the OUTER variable's alloca.
+    let armShadows (n : String) : Bool := arms.any fun arm => match arm with
+      | .enumArm _ _ bindings _ _ => bindings.any fun (bn, _) => bn == n
+      | .varArm v _ _ _ => v == n
+      | _ => false
+    prePromoteAddrTaken preMatchVars fun name =>
+      !armShadows name && arms.any (cmatchArmTakesAddrOf name)
 
     -- Determine if this is an enum match (check first arm)
     let isEnumMatch := arms.any fun arm => match arm with
@@ -1279,6 +1313,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- materialize, and `alloca void` is illegal IR).
     let resultSlot? ← freshResultSlot "ifslot." ty
     let preIfVars ← snapshotVars
+    -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
+    prePromoteAddrTaken preIfVars fun name =>
+      cstmtsTakeAddrOf name then_ || cstmtsTakeAddrOf name else_
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block. Compute termination BEFORE storing the branch value: a branch
     -- that diverged (ended in return/break/continue) has no value, so storing
@@ -1625,6 +1662,10 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let elseLabel ← freshLabel "else"
     let mergeLabel ← freshLabel "merge"
     let preIfVars ← snapshotVars
+    -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
+    prePromoteAddrTaken preIfVars fun name =>
+      cstmtsTakeAddrOf name then_ ||
+        (match else_ with | some el => cstmtsTakeAddrOf name el | none => false)
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block
     startBlock thenLabel

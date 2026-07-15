@@ -1,0 +1,18 @@
+// Bug 031 shape 2 (value if): same uninitialized-promotion hole through the
+// .ifExpr lowering — the pre-promotion store must dominate both value branches.
+// Expected: 107 (else arm: geta()=7, +100).
+mod m {
+    struct Box3 { a: u64, b: u64, c: u64 }
+    impl Destroy for Box3 { fn destroy(&self) {} }
+    impl Box3 {
+        fn geta(&self) -> u64 { return self.a; }
+    }
+    fn cond() -> bool { return false; }
+    fn main() -> Int {
+        let x: Box3 = Box3 { a: 7, b: 2, c: 3 };
+        let f: bool = cond();
+        let n: u64 = if f { x.geta() } else { x.geta() + 100 };
+        destroy(x);
+        return n as Int;
+    }
+}

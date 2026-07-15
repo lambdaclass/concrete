@@ -57,6 +57,7 @@ declare -A SKIP_BUGS=(
   [028]="reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)"
   [030]="FIXED general (not trusted-only) -- error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule"
   [029]="FIXED both sites -- regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7)"
+  [031]="FIXED all 3 sites -- regress_031_if_branch_borrow.con + regress_031_ifexpr_branch_borrow.con + regress_031_match_arm_borrow.con (run_ok 101/107/8); Lower prePromoteAddrTaken"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

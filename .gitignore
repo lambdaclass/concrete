@@ -24,6 +24,7 @@ build/
 examples/grep/cgrep
 examples/verify/conhash
 examples/project/project
+examples/base64_cli/base64_cli
 examples/json/main
 examples/toml/toml_parser
 examples/integrity/fcheck

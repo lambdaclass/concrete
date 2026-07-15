@@ -1,0 +1,28 @@
+// Bug 031 shape 3 (match): the address-take sits in an arm that is NOT taken
+// at runtime; the post-match use then reads the promotion alloca, which the
+// lazy scheme only initialized inside that untaken arm. Expected: 8
+// (arm B: rc=1; post-match geta()=7; 1+7).
+mod m {
+    struct Box3 { a: u64, b: u64, c: u64 }
+    impl Destroy for Box3 { fn destroy(&self) {} }
+    impl Box3 {
+        fn geta(&self) -> u64 { return self.a; }
+    }
+    enum E { A, B }
+    fn pick() -> E { return E::B; }
+    fn main() -> Int {
+        let x: Box3 = Box3 { a: 7, b: 2, c: 3 };
+        let e: E = pick();
+        let mut rc: Int = 0;
+        match e {
+            E::A => {
+                let n: u64 = x.geta();
+                rc = n as Int;
+            },
+            E::B => { rc = 1; },
+        }
+        let m: u64 = x.geta();
+        destroy(x);
+        return rc + (m as Int);
+    }
+}

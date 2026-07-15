@@ -6652,6 +6652,11 @@ run_ok "$TESTDIR/regress_if_expr_divergent_branch.con"  8
 run_ok "$TESTDIR/regress_if_expr_unit_slot.con"       5
 run_ok "$TESTDIR/regress_029_if_merge_array_addr.con"  42
 run_ok "$TESTDIR/regress_029_loop_exit_array_addr.con" 7
+# Bug 031: lazy addrOfLocal promotion inside a branch left the promotion alloca
+# uninitialized on the sibling path (if/else, value-if, match). Silent garbage.
+run_ok "$TESTDIR/regress_031_if_branch_borrow.con"     101
+run_ok "$TESTDIR/regress_031_ifexpr_branch_borrow.con" 107
+run_ok "$TESTDIR/regress_031_match_arm_borrow.con"     8
 run_err "$TESTDIR/error_030_nonmut_array_write.con" "cannot assign to immutable"
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42
