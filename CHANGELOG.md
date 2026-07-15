@@ -38,6 +38,11 @@ record friction, implement only what is pulled.
   `check_exit_codes.sh`; decision record in `docs/MAIN_EXIT_MODEL.md`
   (end state: `fn main() -> u8 | Unit`, Zig-shaped; deliberately no
   `process.exit()` in a linear language).
+- **Pulls 3 and 4 shipped**: `std.base64` landed with RFC 4648 vectors and
+  strict `Option`-failing decode (including padding-edge rejection), and
+  `examples/base64_cli` now imports it instead of carrying inline codec logic.
+  The standalone-import diagnostic now points first-contact users toward project
+  mode instead of leaving them at a dead end.
 
 ### Phase 7 foundation tier — stdlib manifest, IO spine, boundaries, and first breadth slices (2026-07-14)
 
