@@ -259,18 +259,25 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-1. First real stdlib workload: `base64_cli`, before broadening the API surface.
+1. Owned-resource collections / H18 closure: make `Vec<T>`, maps, sets,
+   deques, heaps, and slices correct for non-`Copy` elements before broadening
+   the stdlib surface. Collection `drop`/`clear`/overwrite/replacement paths
+   must destroy every live owned element exactly once, while `pop`/`remove`/
+   `swap_remove` transfer ownership back to the caller. This is the
+   linear-language-specific gap; it comes before allocator-as-value, arenas,
+   and broad format/CLI modules.
+2. First real stdlib workload: `base64_cli`, before broadening the API surface.
    It must exercise args -> bytes/text -> parse/errors -> `std.base64` ->
    `Writer` output -> oracle tests, and it should pull only the APIs it needs.
-2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+3. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+4. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-4. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+5. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-5. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+6. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-6. Broad compression/crypto/networking/threading only after workload demand.
+7. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -293,7 +300,23 @@ traversal, BitSet aliases, and the 13t error-convention gate. See
    `insert`, `remove`, `retain`, `sort`, `search` for vectors and slices;
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
-   obligations it creates. Traversal must be **deterministic but not ordered**:
+   obligations it creates.
+
+   **First subtask: close H18 / owned-resource collections.** A collection that
+   owns `T` values is responsible for consuming all live `T` values unless they
+   are explicitly moved out. Permanent design: generic drop-through via the
+   language's `Destroy`/drop mechanism, not a permanent caller-supplied
+   `drop_with(f)` burden. `clear`, `drop`, overwrite, set/replacement, and
+   compaction paths destroy displaced live elements; `pop`, `remove`, and
+   `swap_remove` transfer ownership to the caller. `get -> Option<T>` remains
+   `T: Copy`; non-`Copy` indexed access remains scoped callback / borrow /
+   explicit move-out, with no returned mutable references. Add a gate that
+   demonstrates `Vec<File>`, `HashMap<String, File>`, `Deque<File>`, and
+   `BinaryHeap<File>` either correctly destroy all live elements or move them
+   out exactly once, and that mutation disabling live-element destruction is
+   caught.
+
+   Traversal must be **deterministic but not ordered**:
    `for_each`/`fold` over `std.map`/`std.set` need a fixed hasher and no per-run
    random seed (so the oracle/differential story is stable given the same
    operations), but the visitation order is deliberately **not** a defined key
@@ -357,7 +380,8 @@ traversal, BitSet aliases, and the 13t error-convention gate. See
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      comptime/reflection/runtime-bound forms are rejected.
-   - 1g. Research **allocator-as-value** before allocator-backed collections,
+   - 1g. Research **allocator-as-value** after H18 is closed and before
+     allocator-backed collections,
      arenas, or freestanding APIs harden. Keep the distinction sharp:
      `with(Alloc)` is permission to allocate; an allocator value names which
      allocator/arena/pool is used. Do not replace capabilities with allocator
