@@ -225,6 +225,8 @@ ordered_map	len	no	borrows	infallible	none	deterministic
 ordered_map	is_empty	no	borrows	infallible	none	deterministic
 ordered_map	clear	no	mut	infallible	none	deterministic
 ordered_map	drop	yes	consumes	infallible	Alloc	hosted-effect
+ordered_map	fold	no	borrows	infallible	C	hosted-effect
+ordered_map	for_each	no	borrows	infallible	C	hosted-effect
 ordered_map	get	no	borrows	option	none	deterministic
 ordered_map	min_key	no	borrows	option	none	deterministic
 ordered_map	max_key	no	borrows	option	none	deterministic
@@ -236,6 +238,8 @@ ordered_set	len	no	borrows	infallible	none	deterministic
 ordered_set	is_empty	no	borrows	infallible	none	deterministic
 ordered_set	clear	no	mut	infallible	none	deterministic
 ordered_set	drop	yes	consumes	infallible	Alloc	hosted-effect
+ordered_set	fold	no	borrows	infallible	C	hosted-effect
+ordered_set	for_each	no	borrows	infallible	C	hosted-effect
 ordered_set	min	no	borrows	option	none	deterministic
 ordered_set	max	no	borrows	option	none	deterministic
 parse	parse_uint	no	constructs	option	none	deterministic

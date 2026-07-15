@@ -260,6 +260,32 @@ mod ordered_map {
 
     // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
     trusted impl<K, V: Copy> OrderedMap<K, V> {
+        /// In-order fold (ascending key order — the DEFINED-order traversal
+        /// that HashMap deliberately does not promise; see the HashMap policy
+        /// in KNOWN_HOLES). Capability-polymorphic like map.fold.
+        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
+            let mut acc: A = init;
+            let mut i: u64 = 0;
+            while i < self.len {
+                let kp: *mut K = self.keys + i;
+                let vp: *mut V = self.values + i;
+                acc = f(acc, kp as &K, vp as &V);
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// In-order visit (ascending key order).
+        pub fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let kp: *mut K = self.keys + i;
+                let vp: *mut V = self.values + i;
+                f(kp as &K, vp as &V);
+                i = i + 1;
+            }
+        }
+
         pub fn get(&self, key: &K) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
@@ -308,6 +334,28 @@ mod ordered_map {
     fn om_read(c: &OmCtx, v: &i32) -> i32 { return *v + c.add; }
     fn om_bump(c: &mut OmCtx, v: &mut i32) -> i32 { c.calls = c.calls + 1; *v = *v + c.add; return *v; }
     fn om_zero(c: &mut OmCtx, v: &mut i32) { c.calls = c.calls + 1; *v = 0; }
+
+    fn tst_sum_ordered(acc: i32, k: &i32, v: &i32) -> i32 {
+        // encodes ORDER into the fold: acc*10 + key — only ascending visits
+        // produce the expected digits.
+        return acc * 10 + *k;
+    }
+
+    #[test]
+    fn test_ordered_map_in_order_traversal() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        // inserted OUT of order; traversal must be ascending: 1,3,5
+        let a: Option<i32> = m.insert(5, 50);
+        ignore_opt::<i32>(a);
+        let b: Option<i32> = m.insert(1, 10);
+        ignore_opt::<i32>(b);
+        let c: Option<i32> = m.insert(3, 30);
+        ignore_opt::<i32>(c);
+        let order: i32 = m.fold::<i32>(0, tst_sum_ordered);
+        m.drop();
+        if order != 135 { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_om_with_value_trio() with(Alloc) -> i32 {

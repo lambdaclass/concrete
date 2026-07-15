@@ -53,6 +53,31 @@ mod ordered_set {
         }
     }
 
+    impl<K> OrderedSet<K> {
+        /// In-order fold over set members (ascending order).
+        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
+            // delegate through the inner map, ignoring the u8 payload
+            let mut acc: A = init;
+            let mut i: u64 = 0;
+            while i < self.inner.len {
+                let kp: *mut K = self.inner.keys + i;
+                acc = f(acc, kp as &K);
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// In-order visit over set members (ascending order).
+        pub fn for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
+            let mut i: u64 = 0;
+            while i < self.inner.len {
+                let kp: *mut K = self.inner.keys + i;
+                f(kp as &K);
+                i = i + 1;
+            }
+        }
+    }
+
     // Min/max value readers for Copy keys (the Copy cell of the value model).
     impl<K: Copy> OrderedSet<K> {
         pub fn min(&self) -> Option<K> {
