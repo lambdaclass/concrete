@@ -443,13 +443,16 @@ private def ssaEscapeCharForLLVM (c : Char) : String :=
   else if c.toNat == 0 then "\\00"
   else if c.toNat >= 32 && c.toNat <= 126 then String.singleton c
   else
-    let n := c.toNat
-    let hi := n / 16
-    let lo := n % 16
+    -- Bug 032: emit the char's UTF-8 BYTES, each as a \XX hex escape. The old
+    -- code hex-escaped the CODEPOINT — for a multibyte char (>0xFF) that
+    -- produced garbage escape text and disagreed with the array size.
     let hexDigit (d : Nat) : Char :=
       if d < 10 then Char.ofNat (d + '0'.toNat)
       else Char.ofNat (d - 10 + 'A'.toNat)
-    "\\" ++ String.ofList [hexDigit hi, hexDigit lo]
+    let byteEsc (b : UInt8) : String :=
+      let n := b.toNat
+      "\\" ++ String.ofList [hexDigit (n / 16), hexDigit (n % 16)]
+    (String.singleton c).toUTF8.toList.foldl (fun acc b => acc ++ byteEsc b) ""
 
 private def ssaEscapeStringForLLVM (str : String) : String :=
   str.foldl (fun acc c => acc ++ ssaEscapeCharForLLVM c) ""
@@ -1365,9 +1368,12 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
   -- String literal globals
   let s := m.globals.foldl (fun s (name, val) =>
     let escaped := ssaEscapeStringForLLVM val
-    let len := val.length + 1
+    -- Bug 032: sizes are BYTE counts (UTF-8), not char counts — a multibyte
+    -- literal otherwise declares an array smaller than its content and lies
+    -- about String.len downstream.
+    let len := val.utf8ByteSize + 1
     let s := emitGlobal s { name := name, ty := .array len .i8, value := s!"c\"{escaped}\\00\"" }
-    { s with stringLengths := s.stringLengths ++ [(name, val.length)] }
+    { s with stringLengths := s.stringLengths ++ [(name, val.utf8ByteSize)] }
   ) s
   -- Functions
   -- Build per-module local aliases for colliding function names:

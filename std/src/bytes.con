@@ -36,6 +36,23 @@ mod bytes {
             return b;
         }
 
+        /// Copy a String's bytes into a fresh owned buffer. The always-safe
+        /// direction of the bytes/text boundary (a String is valid UTF-8, and
+        /// any valid UTF-8 is valid bytes — no validation, no failure path).
+        /// Pulled by workload 1 (base64_cli): text→bytes programs were
+        /// hand-writing this loop. The reverse crossing stays checked
+        /// (`to_string` -> Option) per UNICODE_POLICY.
+        pub fn from_string(s: &String) with(Alloc) -> Bytes {
+            let mut b: Bytes = Bytes::with_capacity(s.len);
+            let mut i: u64 = 0;
+            while i < s.len {
+                let p: *mut u8 = s.ptr + i;
+                b.push(*p);
+                i = i + 1;
+            }
+            return b;
+        }
+
         pub fn push(&mut self, byte: u8) with(Alloc) {
             if self.len >= self.cap {
                 self.grow();
@@ -237,6 +254,26 @@ mod bytes {
         let s2: Option<String> = good.to_string();
         match s2 {
             Option::Some { value } => { value.drop(); return 0; },
+            Option::None => { return 1; },
+        }
+    }
+
+    #[test]
+    fn test_bytes_from_string() with(Alloc) -> i32 {
+        // text→bytes is the unchecked-safe direction; round-trip through the
+        // CHECKED reverse crossing must reproduce the original text.
+        let s: String = "hi✓";
+        let b: Bytes = Bytes::from_string(&s);
+        if b.len() != s.len() { s.drop(); b.drop(); return 1; }
+        if b.get_unchecked(0) != 104 { s.drop(); b.drop(); return 1; }  // 'h'
+        s.drop();
+        let back: Option<String> = b.to_string();
+        match back {
+            Option::Some { value } => {
+                if value.len() != 5 { value.drop(); return 1; }  // h + i + 3-byte ✓
+                value.drop();
+                return 0;
+            },
             Option::None => { return 1; },
         }
     }

@@ -78,16 +78,6 @@ mod base64_cli {
         return Option::<Bytes>::Some { value: out };
     }
 
-    fn string_to_bytes(s: &String) with(Alloc) -> Bytes {
-        let mut b: Bytes = Bytes::with_capacity(s.len());
-        let mut i: u64 = 0;
-        while i < s.len() {
-            b.push(s.get_unchecked(i) as u8);
-            i = i + 1;
-        }
-        return b;
-    }
-
     fn print_bytes(w: &Writer, b: &Bytes) -> Result<u64, IoError> {
         return w.write(b);
     }
@@ -106,7 +96,7 @@ mod base64_cli {
         let is_enc: bool = cmd.eq(&enc);
         let is_dec: bool = cmd.eq(&dec);
         enc.drop(); dec.drop(); cmd.drop();
-        let input: Bytes = string_to_bytes(&arg);
+        let input: Bytes = Bytes::from_string(&arg);  // pull 2 (FRICTION #7), now std
         arg.drop();
         let w: Writer = console_writer();
         let mut rc: Int = 0;

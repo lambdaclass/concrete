@@ -52,15 +52,16 @@ zero mismatches. Invalid input (`!!!!`, bad length) → recoverable error messag
 7. **`String → Bytes` needed a hand loop** (`string_to_bytes` here, byte-wise
    push). Crossing from validated text down to bytes is policy-clean
    (UNICODE_POLICY: String→Bytes is always safe, it's the reverse that
-   validates) but has no std helper. → pull: `Bytes::from_string(&String)`
-   (or `String.to_bytes()`), alloc-carrying, infallible.
+   validates) but had no std helper. → pulled and SHIPPED as
+   `Bytes::from_string(&String)` (alloc-carrying, infallible); this program
+   now uses it.
 
 ## Pull list (ranked)
 
 | # | Pull | Evidence | Size |
 |---|------|----------|------|
 | 1 | main return = exit code (not stdout echo) | friction 4 — blocks ALL CLI workloads | backend/runtime, medium |
-| 2 | `Bytes::from_string` / `String.to_bytes` | friction 7 — every text↔bytes program | std, small |
+| 2 | `Bytes::from_string` / `String.to_bytes` | friction 7 — every text↔bytes program | std, small — **SHIPPED** (bytes.con, this workload now uses it) |
 | 3 | `std.base64` (encode/decode, Option-failing decode) | friction 5 — proto/CLI recurrence | std, small-medium |
 | 4 | standalone-import diagnostic hint | friction 1 — first-contact UX | CLI, tiny |
 

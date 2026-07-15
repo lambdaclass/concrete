@@ -1,0 +1,13 @@
+// Bug 032: a MULTIBYTE UTF-8 string literal miscompiled — the .ll emitter
+// sized the global by CHAR count ([4 x i8] for "hi✓" + NUL) while emitting
+// 5 content bytes, and hex-escaped the CODEPOINT (garbage text for >0xFF).
+// llvm-as rejected the module ("constant expression type mismatch"), so ANY
+// compiled program containing a non-ASCII literal failed to build.
+// Sizes and escapes are now UTF-8 BYTE based. Expected: 42.
+mod m {
+    fn main() -> Int {
+        let s: String = "hi✓ ünïcödé";
+        drop_string(s);
+        return 42;
+    }
+}

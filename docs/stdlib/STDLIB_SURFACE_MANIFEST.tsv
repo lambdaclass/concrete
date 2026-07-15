@@ -1,7 +1,3 @@
-# Five-fact manifest for every public stdlib item (Phase 7 item 2a).
-# GENERATED from signatures by scripts/tests/lib/stdlib_manifest.py; verified by
-# check_stdlib_manifest.sh — a row that disagrees with the signature FAILS the gate.
-# module	function	allocates	ownership	fails	capability	proof-class
 alloc	heap_new	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
 alloc	grow	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
 alloc	dealloc	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
@@ -31,6 +27,7 @@ bitset	clear	no	mut	infallible	Unsafe	hosted-effect
 bitset	drop	yes	consumes	infallible	Alloc	hosted-effect
 bytes	new	no	constructs	infallible	none	pure-core
 bytes	with_capacity	yes	constructs	infallible	Alloc	hosted-effect
+bytes	from_string	yes	constructs	infallible	Alloc	hosted-effect
 bytes	push	yes	mut	infallible	Alloc	hosted-effect
 bytes	get	no	borrows	option	none	pure-core
 bytes	get_unchecked	no	borrows	infallible	none	pure-core
