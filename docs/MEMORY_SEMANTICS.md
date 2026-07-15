@@ -313,6 +313,15 @@ defer destroy(resource);
 
 A type with `impl Destroy for T` provides a `destroy(x)` function that consumes the value and runs cleanup. The convention is `defer destroy(x)` immediately after allocation.
 
+Concrete is linear, not affine: `Destroy` is never an implicit scope-end
+destructor. A live non-`Copy` value that reaches scope exit without being
+consumed or reserved by an explicit `defer` is an error. The compiler may
+generate recursive drop glue only inside an explicit owner-consuming operation
+such as `v.drop()` / `defer v.drop()`: the outer disposal point remains visible
+in source, and the generated code is just the implementation of that explicit
+disposal. Collection drop glue must also expose any capabilities required by
+the element/key/value destructors in the drop path.
+
 ### `reserved` state interaction
 
 | Operation | On `reserved` variable | Result |
@@ -390,7 +399,10 @@ The checker treats arrays as single values. There is no per-index ownership trac
 Borrows are scoped by explicit borrow blocks. There is no Rust-style NLL or region inference. References cannot outlive their borrow block.
 
 ### No automatic destruction
-There is no implicit drop. Resources must be explicitly cleaned up via `destroy(x)` or `defer destroy(x)`.
+There is no implicit drop. Resources must be explicitly cleaned up via
+`destroy(x)`, `x.drop()`, `defer destroy(x)`, or `defer x.drop()`. Generated
+drop glue may recursively clean owned fields/elements only after one of those
+explicit consuming operations has been written.
 
 ### No interior mutability
 There is no `Cell`/`RefCell`/`UnsafeCell` equivalent. Mutability flows from the binding (`let mut`) through borrows (`&mut T`).

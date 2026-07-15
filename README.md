@@ -132,6 +132,12 @@ Concrete's design bias is deliberately conservative:
 
 - no GC as the default runtime story;
 - linear ownership: non-`Copy` values are used exactly once;
+- explicit disposal: the compiler does **not** silently destroy linear values at
+  scope exit; user code must consume them directly or schedule visible cleanup
+  with `defer x.drop()` / `defer destroy(x)`;
+- aggregate cleanup stays explicit at the owner boundary: when code explicitly
+  drops a collection, generated drop glue may recursively destroy the live
+  elements it owns, but the outer disposal remains visible in source;
 - Hylo/Val-style second-class references: mutation is allowed, but safe
   references are scoped access paths, not returned/stored lifetime-bearing
   values. This is how Concrete gets in-place mutation without making users

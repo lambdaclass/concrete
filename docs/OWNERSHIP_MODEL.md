@@ -215,6 +215,12 @@ sibling) and **Linear Haskell** (multiplicities). Unlike Rust — which is affin
 an *implicit* `Drop` that runs cleanup for you — Concrete makes cleanup explicit, so
 it must reject silent disappearance rather than paper over it with a destructor.
 
+Aggregate drop glue does not change this rule. If source code explicitly consumes an
+owner (`v.drop()` / `defer v.drop()` / `destroy(v)`), the implementation of that
+operation may recursively destroy the live owned fields or collection elements. The
+outer disposal decision remains visible in source; the compiler still must not insert
+an implicit scope-end destructor for an otherwise-live linear value.
+
 ## Conditional `Copy` (landed 2026-07-05)
 
 `Copy` on a generic declaration is a *conditional* mark: the instantiation is `Copy`

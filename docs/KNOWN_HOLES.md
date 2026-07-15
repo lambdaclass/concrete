@@ -83,6 +83,11 @@ v1 glue is `with(Alloc)` as a documented V1 RESTRICTION (every real `Destroy`
 today is memory-only), with the symbolic associated-capability machinery in
 Check deferred until an infallible non-`Alloc` destructor is pulled.
 
+This does **not** authorize implicit scope-end destruction. Concrete stays
+linear, not affine: the outer disposal remains a source-visible consuming action
+(`x.drop()` / `defer x.drop()` / `destroy(x)`). Generated glue only implements
+that explicit action by recursively destroying the live owned parts.
+
 Because Concrete aborts rather than unwinds, the H18 fix does not need Rust's
 panic-unwind drop-flag machinery. It only needs normal-path destruction for
 `drop`/`clear`/overwrite/replacement/compaction, and explicit ownership transfer

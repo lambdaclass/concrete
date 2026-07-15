@@ -113,6 +113,10 @@ Every stdlib type has one clear ownership story. The story is visible from the t
 
 **The ownership rules**:
 - **Allocating types** (`String`, `Vec`, `Bytes`, `HashMap`, etc.) are linear. They must be explicitly dropped. They are constructed with `new` and destroyed with `drop`. `defer x.drop()` at the declaration site is the canonical cleanup pattern.
+- **No implicit auto-drop**. Stdlib APIs must not rely on scope-end destruction
+  that the user did not write. `drop()` may recursively destroy live owned
+  fields/elements after the user explicitly consumes the owner, but the owner
+  boundary is always visible as `x.drop()` or `defer x.drop()`.
 - **Copy types** (`Option<T>` where T is Copy, numeric results, small structs) are Copy. They can be used multiple times without consumption.
 - **Borrowed types** (`Slice<T>`, `Text`, `&String`, `&Vec<T>`) do not own their data. They cannot outlive the owner. They are created from an owner and carry no cleanup obligation.
 
@@ -229,7 +233,7 @@ When there is a choice between a shorter API that hides behavior and a longer AP
 - **Allocation vs. no-allocation**: `new()` does not allocate (returns empty container with null pointer). `with_capacity(n)` allocates. The difference is visible in the function name and the capability requirement.
 - **Owned vs. borrowed**: `String` is owned. `&String` is borrowed. `Text` is a borrowed view. The type name tells you the ownership story.
 - **Error handling**: `Result<T, E>` is explicit about failure modes. `Option<T>` is explicit about absence. There is no sentinel value or magic return code.
-- **Drop is explicit**: `defer s.drop()` is not hidden by a destructor. The cleanup point is visible in the source.
+- **Drop is explicit**: `defer s.drop()` is not hidden by a destructor. The cleanup point is visible in the source. Recursive cleanup of fields or collection elements is allowed only as the implementation of that explicit drop.
 
 **What Zig does well**: Zig's `@import("std").mem.Allocator` is explicit in every API that allocates. Error unions (`!T`) make failure visible in every return type.
 

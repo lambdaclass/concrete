@@ -91,6 +91,18 @@ For heap values, the important idea is:
 
 So the compiler does not silently free memory for you, but it does force ownership to balance out correctly.
 
+That distinction is load-bearing. Concrete is linear, not affine:
+
+- the compiler must not insert an implicit scope-end destructor for a live
+  linear value;
+- user code must consume the value, return it, move it somewhere else, or
+  schedule visible cleanup with `defer`;
+- once user code explicitly disposes an aggregate owner, such as `v.drop()`, the
+  implementation may recursively destroy the live values inside that aggregate.
+
+In other words, the outer cleanup decision is explicit in source; generated
+drop glue is only the implementation of that explicit owner-consuming action.
+
 ## `destroy` And `defer`
 
 Concrete deliberately avoids hidden destructor behavior.
@@ -108,6 +120,18 @@ This means:
 - the reader can see where resource release was scheduled
 
 `defer` is the usual way to express "clean this up when the scope ends."
+
+For collections, the same rule applies:
+
+```concrete
+let files = Vec::<File>::new();
+defer files.drop();  // visible aggregate disposal
+```
+
+The `drop()` implementation is responsible for the elements it still owns. It
+may destroy live elements recursively, with the required capabilities in the
+`drop` signature, but the compiler did not silently decide to dispose `files`;
+the program did.
 
 ## `with(Alloc)` Means Allocation Is Part Of The API
 
