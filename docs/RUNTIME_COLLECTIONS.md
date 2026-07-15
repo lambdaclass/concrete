@@ -63,7 +63,15 @@ compiler-generated drop glue at monomorphization, not with permanent
 `drop_with(f)` APIs and not with stored destructor function pointers.
 
 **Drop-glue rules (RESOLVED 2026-07-15 — one source of truth; both review
-threads converged here).** Four decisions, each marked permanent or v1:
+threads converged here).** The enforcer behind every rule below is
+**linearity itself**: the must-consume checker (E0208/E0294, enforced by the
+H12-checked front end) makes an unconsumed non-`Copy` value a COMPILE ERROR.
+That is what turns these rules from conventions into guarantees — you cannot
+compile code that drops a `File` on the floor, forgets to drain a
+`Vec<File>`, or leaks a `Vec<String>` without `.drop()`. Everything below is
+sound because the checker won't let you forget.
+
+Four decisions, each marked permanent or v1:
 
 1. **`Destroy` is infallible-only — PERMANENT semantic rule, not a v1
    restriction.** A destructor cannot return `Result` (what would a
@@ -79,7 +87,10 @@ threads converged here).** Four decisions, each marked permanent or v1:
    `Option`/`Result`). Consequence: `Vec<File>` has NO `.drop()` — the
    compile error names the reason, and the idiom is **drain-and-close**:
    `pop()` each element, handle each `Result` visibly, then drop the empty
-   container. Every close error has an owner.
+   container. Every close error has an owner. The rule COMPOSES recursively:
+   `Vec<Vec<ConsoleHandle>>: Destroy` because `Vec<ConsoleHandle>` is, and
+   the glue's capability set unions up the nesting the same way — nested
+   containers need no extra rules.
 3. **Drop-glue capabilities are derived and visible — PERMANENT (final
    model).** The glue's `with(...)` is the union of the element/key/value
    destructors' capabilities, computed per instantiation at monomorphization
@@ -98,6 +109,13 @@ threads converged here).** Four decisions, each marked permanent or v1:
    buffer release). When that pull arrives, rule 3's full mechanism is the
    pinned design; v1 code must not assume `Alloc`-only anywhere it would be
    load-bearing.
+5. **Glue destroys LIVE slots only — and abort-not-unwind makes that the
+   entire liveness story.** After `pop`/`remove`/`swap_remove`, the vacated
+   slots are skipped; liveness comes free from the existing `len`/occupancy
+   flags. Because Concrete aborts rather than unwinds, there is no
+   panic-partial-init state to track — no Rust-style drop-flags, no
+   unwind-safety analysis. This is why the design is materially simpler than
+   Rust's.
 
 Two adjacent rules pinned at the same time:
 
@@ -111,11 +129,15 @@ Two adjacent rules pinned at the same time:
   is sugar available only for `T: Destroy`. Same for map `insert` returning
   the previous value.
 
-**Read access split.** `get(i) -> Option<T>` is a copy-out API and exists only
-when `T: Copy`. For non-`Copy` elements, safe code uses scoped callbacks
+**Read/write access split.** `get(i) -> Option<T>` is a copy-out API and exists
+only when `T: Copy`. For non-`Copy` elements, safe code uses scoped callbacks
 (`with_at`, `with_value`, and their mutation forms where the alias gate permits)
-or explicit move-out (`pop`, `remove`, `swap_remove`). Safe collection APIs do
-not return `&T` / `&mut T`; references stay second-class and scoped.
+or explicit move-out (`pop`, `remove`, `swap_remove`). The OVERWRITE primitive
+is `replace(i, v) -> T` (and map `insert` returning the previous value): the
+displaced element is handed back to the caller, never silently destroyed — a
+destroying `set(i, v)` is sugar available only for `T: Destroy`. Safe
+collection APIs do not return `&T` / `&mut T`; references stay second-class
+and scoped.
 
 **Not in the stable surface** (deliberately deferred):
 
