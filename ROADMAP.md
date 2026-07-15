@@ -326,7 +326,7 @@ Do not duplicate compiler-command cleanup here.
    - Existing collection modules: `std.vec`, `std.map`, `std.set`,
      `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
      `std.bitset`.
-   - Existing hosted/capability modules: `std.io`, `std.writer`, `std.fs`,
+   - Existing hosted/capability modules: `std.io`, `std.fs`,
      `std.env`, `std.args`, `std.process`, `std.net`, `std.libc`.
    - Existing test module: `std.test`.
    - Proposed iterator/builder modules: `std.iter`, `std.builder`.
@@ -610,7 +610,7 @@ Do not duplicate compiler-command cleanup here.
     reporting, invalid-padding negatives, oracle comparison, and evidence
     classification. Streaming encode/decode is explicitly deferred to
     package/workload pressure, not hidden in v1. Done when
-    `examples/stdlib_workloads/base64_cli` builds and runs against an external
+    `examples/base64_cli` builds and runs against an external
     oracle, so the module proves the args -> bytes/text -> parse/errors ->
     Writer path instead of just unit tests.
 18. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
@@ -643,7 +643,7 @@ Do not duplicate compiler-command cleanup here.
     this small; it is not a tracing framework.
 25. Add progress/status output helpers for CLI tools in proposed
     `std.progress` only after `examples/daily/word_count` and
-    `examples/stdlib_workloads/base64_cli` need visible progress output. V1
+    `examples/base64_cli` need visible progress output. V1
     surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`,
     `finish`, terminal detection through an explicit console handle, and no
     ambient terminal authority. Wire
@@ -821,7 +821,7 @@ Do not duplicate compiler-command cleanup here.
     one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`,
     `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
 38. Add real stdlib workload checks before Phase 8 relies on the library.
-    Start with `examples/stdlib_workloads/base64_cli`; it is the first
+    Start with `examples/base64_cli`; it is the first
     workload, not just one item in the set. Then broaden to
     `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
     `path_normalizer`, and `lru_cache` or `ring_buffer`. Wire them with
