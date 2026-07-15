@@ -64,6 +64,60 @@ Lean's kernel proved, what a decision procedure discharged, what an external
 solver was trusted for, what an oracle tested, and what remains assumed, trusted,
 stale, or unproven.
 
+## A Complete Program
+
+A whole program — the base64 CLI, Concrete's first real stdlib workload (trimmed;
+full source in [examples/base64_cli/src/main.con](examples/base64_cli/src/main.con)).
+Notice that every owned value is *explicitly* disposed and the `Writer` is closed
+by hand: that visible cleanup is the linear-ownership pillar, not boilerplate.
+
+```con pseudocode
+mod base64_cli {
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.io.{Writer, console_writer, eprintln, IoError};
+    import std.base64.{encode, decode};
+
+    fn main() with(Std) -> Int {
+        if count() < 3 {
+            let u: String = "usage: base64_cli encode|decode <text>";
+            eprintln(&u); u.drop();                 // owned String, disposed
+            return 1;
+        }
+        let cmd: String = get(1);
+        let arg: String = get(2);
+        let enc: String = "encode";
+        let is_enc: bool = cmd.eq(&enc);
+        enc.drop(); cmd.drop();
+
+        let input: Bytes = Bytes::from_string(&arg);
+        arg.drop();
+        let w: Writer = console_writer();           // a linear Writer, must be closed
+        let mut rc: Int = 0;
+
+        if is_enc {
+            let out: Bytes = encode(&input);        // from std.base64
+            let r: Result<u64, IoError> = w.write(&out);
+            let ignored: u64 = r.unwrap_or(0);
+            out.drop();
+        } else {
+            // decode is symmetric: decode(&input) -> Option<Bytes>; None sets rc = 1
+            rc = 1;
+        }
+
+        let closed: Result<u64, IoError> = w.close();
+        let ignored2: u64 = closed.unwrap_or(0);
+        input.drop();
+        return rc;
+    }
+}
+```
+
+`with(Std)` is the entrypoint's bundled authority; `encode`/`decode` come from
+`std.base64`; a bad argument is a *recoverable* failure (message + exit 1), never
+a trap. The two small snippets above show the obligation and capability surfaces;
+this shows how they read in a real program.
+
 ## Why It Coheres
 
 Systems code usually asks reviewers to infer authority, failure, and ownership
