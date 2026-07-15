@@ -568,11 +568,26 @@ run_ok_worker() {
     name=$(path_key "${file%.con}")
     local out="$TMPDIR/$name"
 
-    local actual
+    # MAIN_EXIT_MODEL stage 2.1: a numeric expectation in 0-255 is compared as
+    # the PROCESS EXIT CODE (compiled without the legacy echo knob; stdout must
+    # be empty). Out-of-range / string expectations keep the knob path until
+    # their fixtures self-print (stage 2.2).
+    local rc_mode=0
+    case "$expected" in
+        ''|*[!0-9]*) rc_mode=0 ;;
+        *) if [ "$expected" -le 255 ]; then rc_mode=1; fi ;;
+    esac
+    local actual actual_rc=0
     if [ -n "$LLI" ]; then
         # Fast path: emit LLVM IR and interpret directly (no clang)
         local llpath="$out.ll"
-        if ! $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null; then
+        local emit_ok=1
+        if [ "$rc_mode" = "1" ]; then
+            CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
+        else
+            $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
+        fi
+        if [ "$emit_ok" = "0" ]; then
             {
                 echo "FAIL"
                 echo "FAIL  $file — compilation failed (expected success)"
@@ -583,10 +598,16 @@ run_ok_worker() {
         # Capture program stdout only; LLVM 21's lli sometimes prints a
         # signal-handler crash dump on stderr during process teardown
         # even when the program exited cleanly with the correct output.
-        actual=$($LLI "$llpath" 2>/dev/null) || true
+        actual=$($LLI "$llpath" 2>/dev/null) && actual_rc=0 || actual_rc=$?
     else
         # Fallback: compile to native binary via clang
-        if ! $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
+        local comp_ok=1
+        if [ "$rc_mode" = "1" ]; then
+            CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
+        else
+            $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
+        fi
+        if [ "$comp_ok" = "0" ]; then
             {
                 echo "FAIL"
                 echo "FAIL  $file — compilation failed (expected success)"
@@ -594,7 +615,32 @@ run_ok_worker() {
             } > "$result_file"
             return
         fi
-        actual=$("$out" 2>/dev/null) || true
+        actual=$("$out" 2>/dev/null) && actual_rc=0 || actual_rc=$?
+    fi
+    if [ "$rc_mode" = "1" ]; then
+        # lli's teardown signal-handler quirk can corrupt the EXIT CODE the
+        # same way it corrupts stderr (see comment above): on a mismatch from
+        # the lli path, confirm via a native build before failing — only
+        # mismatches pay the clang cost.
+        if [ -n "$LLI" ] && [ "$actual_rc" != "$expected" ] && ! { [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ]; }; then
+            if CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
+                actual=$("$out" 2>/dev/null) && actual_rc=0 || actual_rc=$?
+            fi
+        fi
+        # Two unambiguous shapes under no-echo: a value-returning fixture
+        # (rc == expected, clean stdout) or a self-printing one (prints the
+        # value, returns success).
+        if { [ "$actual_rc" = "$expected" ] && [ -z "$actual" ]; } || \
+           { [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ]; }; then
+            { echo "PASS"; echo "  ok  $file => $expected"; } > "$result_file"
+        else
+            {
+                echo "FAIL"
+                echo "FAIL  $file — expected rc $expected (clean stdout) or printed '$expected' (rc 0); got rc $actual_rc stdout '$actual'"
+                echo "# Rerun: CONCRETE_ECHO_RESULT= $COMPILER $file -o /tmp/test_rerun && /tmp/test_rerun"
+            } > "$result_file"
+        fi
+        return
     fi
     if [ "$actual" = "$expected" ]; then
         {
@@ -637,18 +683,34 @@ run_ok_O2_worker() {
     local llpath="$TMPDIR/${name}.ll"
     local out="$TMPDIR/${name}_O2"
 
+    local rc_mode=0
+    case "$expected" in
+        ''|*[!0-9]*) rc_mode=0 ;;
+        *) if [ "$expected" -le 255 ]; then rc_mode=1; fi ;;
+    esac
     local llvm_ir
-    if ! llvm_ir=$($COMPILER "$file" --emit-llvm 2>&1); then
-        { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
-        return
+    if [ "$rc_mode" = "1" ]; then
+        llvm_ir=$(CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
+    else
+        llvm_ir=$($COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
     fi
+    [ -s "$result_file" ] && return
     echo "$llvm_ir" > "$llpath"
     if ! clang "$llpath" -o "$out" -O2 -Wno-override-module > /dev/null 2>&1; then
         { echo "FAIL"; echo "FAIL  $file -O2 — clang -O2 failed"; } > "$result_file"
         return
     fi
-    local actual
-    actual=$("$out" 2>&1) || true
+    local actual actual_rc=0
+    actual=$("$out" 2>&1) && actual_rc=0 || actual_rc=$?
+    if [ "$rc_mode" = "1" ]; then
+        if { [ "$actual_rc" = "$expected" ] && [ -z "$actual" ]; } || \
+           { [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ]; }; then
+            { echo "PASS"; echo "  ok  $file -O2 => $expected"; } > "$result_file"
+        else
+            { echo "FAIL"; echo "FAIL  $file -O2 — expected rc $expected (clean stdout) or printed '$expected' (rc 0); got rc $actual_rc stdout '$actual'"; } > "$result_file"
+        fi
+        return
+    fi
     if [ "$actual" = "$expected" ]; then
         { echo "PASS"; echo "  ok  $file -O2 => $expected"; } > "$result_file"
     else
