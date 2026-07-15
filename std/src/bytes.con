@@ -219,7 +219,7 @@ mod bytes {
     // H18 drop-glue: trait-form destructor for collection elements (see
     // string.con note).
     trusted impl Destroy for Bytes {
-        fn destroy(&self) with(Alloc) {
+        pub fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
     }

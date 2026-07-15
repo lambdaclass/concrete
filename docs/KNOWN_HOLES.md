@@ -19,7 +19,32 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-### H18. Collections do not destroy non-Copy elements on drop/clear/remove/overwrite (NARROWED: Vec closed 2026-07-16)
+### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
+
+`for_each`/`fold` walk raw slot order: reproducible within a build, NOT a
+public ordering contract (and never will be — insertion-order tracking is a
+deliberate NON-goal; lower memory, no accidental semantic promise).
+Order-sensitive code uses `OrderedMap`/`OrderedSet` (traversal APIs to land
+with collections phase 2). Deterministic internals remain fine for replay.
+
+## Recently closed
+
+### H18. Collections did not destroy non-Copy elements on drop/clear/remove/overwrite — CLOSED 2026-07-16
+
+ALL collections now carry compiler drop-glue: Vec (slice 1), HashMap/HashSet/
+Deque/BinaryHeap/OrderedMap/OrderedSet (slice 2 — occupied-slot walks for the
+hash map, ring walk for the deque, contiguous walks elsewhere; K AND V bounds
+for maps). Same-key `insert` overwrites destroy the DISPLACED key (never
+silently leaked); `Vec.replace(at, v) -> T` is the overwrite primitive
+(displaced element returned; bounds trap via checked arithmetic). Every
+container has a conditional `impl Destroy` so nesting composes
+(`Vec<HashMap<String, Bytes>>` destroys leaves recursively). The v1 capability
+fence (E0584) rejects any Destroy impl requiring caps beyond Alloc — rule 3
+holds degenerately by construction. Destruction counts proven by std tests
+(vec: 6 and nested 5; map: 4 across insert-overwrite/remove/drop).
+Gate: COLLECTIONS-DROP-GLUE (25 checks). Residual (deliberate, documented):
+`slice.set_unchecked`/`vec.set_unchecked` remain raw trusted overwrite escapes.
+
 
 `Vec/HashMap/OrderedMap/Deque/BinaryHeap` (`+ slice.set_unchecked`) reclaim
 their buffers on `drop`/`clear`/`remove`/overwrite but never run any
@@ -70,15 +95,6 @@ clear/remove/overwrite paths, `replace(i,v)->T`, `slice.set_unchecked`.
 Gate: `check_collections_copy_only.sh` (now COLLECTIONS-DROP-GLUE) pins the new behavior: glue accept/reject pairs, the counting test, the no-*_with rule, and the
 traversal policy.
 
-### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
-
-`for_each`/`fold` walk raw slot order: reproducible within a build, NOT a
-public ordering contract (and never will be — insertion-order tracking is a
-deliberate NON-goal; lower memory, no accidental semantic promise).
-Order-sensitive code uses `OrderedMap`/`OrderedSet` (traversal APIs to land
-with collections phase 2). Deterministic internals remain fine for replay.
-
-## Recently closed
 
 ### H13–H17. The 2026-07-05/06 value-flow discharge sweep — ALL CLOSED 2026-07-06
 

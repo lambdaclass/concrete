@@ -85,6 +85,58 @@ grep -q "test_vec_destroys_elements" std/src/vec.con \
   && ok "destruction-count std test present (exactly-once, live slots only)" \
   || no "destruction-count std test missing from vec.con"
 
+# (c2) slice 2: every container carries the glue + composition impls
+for spec in "map.con:impl<K: Destroy, V: Destroy> HashMap" "map.con:Destroy for HashMap" \
+            "set.con:Destroy for HashSet" "deque.con:impl<T: Destroy> Deque" \
+            "deque.con:Destroy for Deque" "heap.con:impl<T: Destroy> BinaryHeap" \
+            "heap.con:Destroy for BinaryHeap" "ordered_map.con:impl<K: Destroy, V: Destroy> OrderedMap" \
+            "ordered_map.con:Destroy for OrderedMap" "ordered_set.con:Destroy for OrderedSet" \
+            "vec.con:pub fn replace"; do
+  f="${spec%%:*}"; pat="${spec#*:}"
+  grep -qF "$pat" "std/src/$f" && ok "$f: $pat" || no "$f missing: $pat"
+done
+grep -q "test_map_destroys_entries" std/src/map.con \
+  && ok "map destruction-count std test present" \
+  || no "map destruction-count std test missing"
+
+# (b2) reject: HashMap with a non-destroyable VALUE cannot be dropped
+mkproj draincol <<'CON'
+mod draincol {
+    import std.map.{HashMap};
+    struct Res { token: i64 }
+    fn h(k: &i64) -> u64 { return *k as u64; }
+    fn e(a: &i64, b: &i64) -> bool { return *a == *b; }
+    fn main() with(Std) -> Int {
+        let mut m: HashMap<i64, Res> = HashMap::<i64, Res>::new(h, e);
+        m.drop();   // must NOT compile: Res is not destroyable
+        return 0;
+    }
+}
+CON
+if (cd "$TMP/draincol" && "$C" build >"$TMP/draincol.out" 2>&1); then
+  no "HashMap<_, non-Destroy>.drop() compiled — drain rule regressed for maps"
+else
+  grep -q "E0241" "$TMP/draincol.out" && ok "HashMap<_, non-Destroy>.drop() rejected (E0241)" \
+    || no "HashMap reject fired without E0241"
+fi
+
+# (e) v1 capability fence: a Destroy impl beyond Alloc is E0584
+cat > "$TMP/fence.con" <<'CON'
+mod m {
+    struct Chatty { v: i64 }
+    impl Destroy for Chatty with(Console) {
+        fn destroy(&self) with(Console) {}
+    }
+    fn main() -> Int { let c: Chatty = Chatty { v: 1 }; destroy(c); return 0; }
+}
+CON
+if "$C" "$TMP/fence.con" -o "$TMP/fence.bin" >"$TMP/fence.out" 2>&1; then
+  no "cap-carrying Destroy impl compiled — v1 Alloc fence regressed"
+else
+  grep -q "E0584" "$TMP/fence.out" && ok "Destroy-beyond-Alloc rejected (E0584 v1 fence)" \
+    || no "fence reject fired without E0584"
+fi
+
 # (d) permanent design: no caller-supplied destructor family
 grep -q "drop_with\|clear_with\|remove_with" std/src/vec.con \
   && no "*_with destructor-passing family present — the permanent design is compiler glue" \

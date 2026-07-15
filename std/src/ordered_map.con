@@ -146,53 +146,6 @@ mod ordered_map {
             return cmp(key, k as &K) == 0;
         }
 
-        /// Insert a key-value pair. Returns the old value if the key already existed.
-        pub fn insert(&mut self, key: K, value: V) with(Alloc) -> Option<V> {
-            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
-            let idx: u64 = self.find_index(&key);
-
-            // Check if key already exists at idx
-            if idx < self.len {
-                let existing: *mut K = self.keys + idx;
-                if cmp(&key, existing as &K) == 0 {
-                    // Overwrite the stored key too (consumes the new key, same
-                    // as HashMap.insert) — otherwise it leaks on this path.
-                    *existing = key;
-                    let old_val_ptr: *mut V = self.values + idx;
-                    let old: V = *old_val_ptr;
-                    *old_val_ptr = value;
-                    return Option::<V>::Some { value: old };
-                }
-            }
-
-            // Need to insert at idx — shift elements right
-            if self.len >= self.cap {
-                self.grow();
-            }
-
-            // Shift keys and values from idx..len one position right
-            let mut i: u64 = self.len;
-            while i > idx {
-                let src_k: *mut K = self.keys + (i - 1);
-                let dst_k: *mut K = self.keys + i;
-                *dst_k = *src_k;
-
-                let src_v: *mut V = self.values + (i - 1);
-                let dst_v: *mut V = self.values + i;
-                *dst_v = *src_v;
-
-                i = i - 1;
-            }
-
-            let key_ptr: *mut K = self.keys + idx;
-            *key_ptr = key;
-            let val_ptr: *mut V = self.values + idx;
-            *val_ptr = value;
-            self.len = self.len + 1;
-
-            return Option::<V>::None;
-        }
-
         pub fn remove(&mut self, key: &K) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
@@ -238,9 +191,6 @@ mod ordered_map {
             return self.len == 0;
         }
 
-        pub fn clear(&mut self) {
-            self.len = 0;
-        }
 
         fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
@@ -249,13 +199,6 @@ mod ordered_map {
             self.cap = new_cap;
         }
 
-        pub fn drop(self) with(Alloc) {
-            let OrderedMap { keys, values, len, cap, cmp_fn } = self;
-            if cap > 0 {
-                dealloc::<K>(keys);
-                dealloc::<V>(values);
-            }
-        }
     }
 
     // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
@@ -339,6 +282,101 @@ mod ordered_map {
         // encodes ORDER into the fold: acc*10 + key — only ascending visits
         // produce the expected digits.
         return acc * 10 + *k;
+    }
+
+    // H18: insert destroys the displaced key on same-key overwrite.
+    trusted impl<K: Destroy, V> OrderedMap<K, V> {
+        /// Insert a key-value pair. Returns the old value if the key already existed.
+        pub fn insert(&mut self, key: K, value: V) with(Alloc) -> Option<V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            let idx: u64 = self.find_index(&key);
+
+            // Check if key already exists at idx
+            if idx < self.len {
+                let existing: *mut K = self.keys + idx;
+                if cmp(&key, existing as &K) == 0 {
+                    // Overwrite: the DISPLACED old key is destroyed (H18
+                    // overwrite rule — never silently leaked; Copy elides).
+                    (existing as &K).destroy();
+                    *existing = key;
+                    let old_val_ptr: *mut V = self.values + idx;
+                    let old: V = *old_val_ptr;
+                    *old_val_ptr = value;
+                    return Option::<V>::Some { value: old };
+                }
+            }
+
+            // Need to insert at idx — shift elements right
+            if self.len >= self.cap {
+                self.grow();
+            }
+
+            // Shift keys and values from idx..len one position right
+            let mut i: u64 = self.len;
+            while i > idx {
+                let src_k: *mut K = self.keys + (i - 1);
+                let dst_k: *mut K = self.keys + i;
+                *dst_k = *src_k;
+
+                let src_v: *mut V = self.values + (i - 1);
+                let dst_v: *mut V = self.values + i;
+                *dst_v = *src_v;
+
+                i = i - 1;
+            }
+
+            let key_ptr: *mut K = self.keys + idx;
+            *key_ptr = key;
+            let val_ptr: *mut V = self.values + idx;
+            *val_ptr = value;
+            self.len = self.len + 1;
+
+            return Option::<V>::None;
+        }
+
+    }
+
+    // H18 drop-glue: destroy every live K and V in [0, len), then free.
+    trusted impl<K: Destroy, V: Destroy> OrderedMap<K, V> {
+        pub fn clear(&mut self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.keys + i) as &K).destroy();
+                ((self.values + i) as &V).destroy();
+                i = i + 1;
+            }
+            self.len = 0;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.keys + i) as &K).destroy();
+                ((self.values + i) as &V).destroy();
+                i = i + 1;
+            }
+            let OrderedMap { keys, values, len, cap, cmp_fn } = self;
+            if cap > 0 {
+                dealloc::<K>(keys);
+                dealloc::<V>(values);
+            }
+        }
+    }
+
+    // Composition: OrderedMap is destroyable iff K and V are.
+    trusted impl<K: Destroy, V: Destroy> Destroy for OrderedMap<K, V> {
+        pub fn destroy(&self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.keys + i) as &K).destroy();
+                ((self.values + i) as &V).destroy();
+                i = i + 1;
+            }
+            if self.cap > 0 {
+                dealloc::<K>(self.keys);
+                dealloc::<V>(self.values);
+            }
+        }
     }
 
     #[test]

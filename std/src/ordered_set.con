@@ -13,13 +13,6 @@ mod ordered_set {
             return s;
         }
 
-        pub fn insert(&mut self, key: K) with(Alloc) -> bool {
-            let old: Option<u8> = self.inner.insert(key, 0);
-            match old {
-                Option::Some { value } => { return false; },
-                Option::None => { return true; }
-            }
-        }
 
         pub fn contains(&self, key: &K) -> bool {
             return self.inner.contains(key);
@@ -43,14 +36,7 @@ mod ordered_set {
             return self.inner.is_empty();
         }
 
-        pub fn clear(&mut self) {
-            self.inner.clear();
-        }
 
-        pub fn drop(self) with(Alloc) {
-            let OrderedSet { inner } = self;
-            inner.drop();
-        }
     }
 
     impl<K> OrderedSet<K> {
@@ -96,6 +82,34 @@ mod ordered_set {
     }
 
     import std.test.{assert_eq};
+
+    // H18: clear/drop delegate to the inner OrderedMap glue (u8 values are
+    // Copy — trivially destroyable).
+    impl<K: Destroy> OrderedSet<K> {
+        pub fn insert(&mut self, key: K) with(Alloc) -> bool {
+            let old: Option<u8> = self.inner.insert(key, 0);
+            match old {
+                Option::Some { value } => { return false; },
+                Option::None => { return true; }
+            }
+        }
+
+        pub fn clear(&mut self) with(Alloc) {
+            self.inner.clear();
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let OrderedSet { inner } = self;
+            inner.drop();
+        }
+    }
+
+    // Composition: OrderedSet is destroyable iff K is.
+    trusted impl<K: Destroy> Destroy for OrderedSet<K> {
+        pub fn destroy(&self) with(Alloc) {
+            (&self.inner).destroy();
+        }
+    }
 
     #[test]
     fn test_insert_contains() with(Alloc) -> i32 {

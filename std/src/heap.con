@@ -118,9 +118,6 @@ mod heap {
             return self.len == 0;
         }
 
-        pub fn clear(&mut self) {
-            self.len = 0;
-        }
 
         fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
@@ -128,12 +125,6 @@ mod heap {
             self.cap = new_cap;
         }
 
-        pub fn drop(self) with(Alloc) {
-            let BinaryHeap { data, len, cap, cmp_fn } = self;
-            if cap > 0 {
-                dealloc(data);
-            }
-        }
     }
 
     // Value reader for Copy elements (the Copy cell of the value model).
@@ -155,6 +146,45 @@ mod heap {
     }
 
     import std.test.{assert_eq, ignore_opt};
+
+    // H18 drop-glue: disposal destroys every live element [0, len), then
+    // frees the buffer. Non-destroyable T: drain with pop() instead.
+    trusted impl<T: Destroy> BinaryHeap<T> {
+        pub fn clear(&mut self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.data + i) as &T).destroy();
+                i = i + 1;
+            }
+            self.len = 0;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.data + i) as &T).destroy();
+                i = i + 1;
+            }
+            let BinaryHeap { data, len, cap, cmp_fn } = self;
+            if cap > 0 {
+                dealloc(data);
+            }
+        }
+    }
+
+    // Composition: BinaryHeap is destroyable iff T is.
+    trusted impl<T: Destroy> Destroy for BinaryHeap<T> {
+        pub fn destroy(&self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                ((self.data + i) as &T).destroy();
+                i = i + 1;
+            }
+            if self.cap > 0 {
+                dealloc(self.data);
+            }
+        }
+    }
 
     #[test]
     fn test_max_heap_basic() with(Alloc) -> i32 {

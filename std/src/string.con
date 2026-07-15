@@ -211,7 +211,7 @@ mod string {
     // (with(Alloc)) per RUNTIME_COLLECTIONS.md drop-glue rules; `.drop()`
     // remains the direct disposal verb for owned locals.
     trusted impl Destroy for String {
-        fn destroy(&self) with(Alloc) {
+        pub fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
     }

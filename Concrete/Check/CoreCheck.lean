@@ -95,6 +95,7 @@ inductive CoreCheckError where
   | unknownTrait (traitName : String)
   | missingTraitMethod (typeName methodName : String)
   | traitMethodRetTyMismatch (methodName expectedRetTy actualRetTy : String)
+  | destroyImplCapsBeyondAlloc (typeName : String) (caps : String)
   | recursiveType (typeName : String)
 
 def CoreCheckError.message : CoreCheckError → String
@@ -140,6 +141,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .unknownTrait traitName => s!"unknown trait '{traitName}'"
   | .missingTraitMethod typeName methodName => s!"trait impl for '{typeName}' is missing method '{methodName}'"
   | .traitMethodRetTyMismatch methodName expectedRetTy actualRetTy => s!"method '{methodName}' signature does not match trait definition: expected return type {expectedRetTy}, got {actualRetTy}"
+  | .destroyImplCapsBeyondAlloc typeName caps => s!"impl Destroy for '{typeName}' requires capabilities ({caps}) beyond Alloc — v1 drop-glue restriction: destructors are memory-only; fallible or authority-bearing cleanup stays an explicit consuming API (RUNTIME_COLLECTIONS.md drop-glue rule 4)"
   | .recursiveType typeName => s!"recursive type '{typeName}' has infinite size"
 
 private def getEnv : StateM CoreCheckEnv CoreCheckEnv := get
@@ -217,6 +219,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .unknownTrait _ => "E0580"
   | .missingTraitMethod _ _ => "E0581"
   | .traitMethodRetTyMismatch _ _ _ => "E0582"
+  | .destroyImplCapsBeyondAlloc _ _ => "E0584"
   | .recursiveType _ => "E0583"
 
 /-- WHY this is an error (rich diagnostic surface, Phase 4 #11). Capability family
@@ -764,7 +767,8 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
   Layout.isCopyTyCore allStructs allEnums (typeVarIsCopy := true) ty
 
 private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagnostic :=
-  { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint }
+  { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint,
+    code := e.code }
 
 /-- Does `ty` reach struct/enum `target` through by-VALUE field edges only?
     Named-struct, named-enum, and array-of-T edges are by-value and continue the
@@ -871,6 +875,17 @@ def ccCheckModuleDecls (m : CModule)
           let expectedRetTy := resolveSelfTy sig.retTy implTy
           if expectedRetTy != actualRetTy then
             errors := errors ++ [mkDeclDiag (.traitMethodRetTyMismatch sig.name (tyToString expectedRetTy) (tyToString actualRetTy)) ti.declSpan]
+      -- H18 v1 capability fence: a Destroy impl's destructor may require at
+      -- most Alloc. Rule 3 (glue caps derived+visible) holds degenerately in
+      -- v1 BECAUSE this fence guarantees no cap-carrying destructor exists;
+      -- lifting it requires the associated-capability machinery in Check
+      -- (RUNTIME_COLLECTIONS.md drop-glue rule 4).
+      if ti.traitName == destroyTraitName then
+        match m.functions.find? fun f => f.name == ti.typeName ++ "_" ++ destroyMethodName with
+        | some dfn =>
+          if !Capabilities.capsContain (.concrete ["Alloc"]) dfn.capSet then
+            errors := errors ++ [mkDeclDiag (.destroyImplCapsBeyondAlloc ti.typeName (capSetToString dfn.capSet)) ti.declSpan]
+        | none => pure ()
   errors
 
 -- ============================================================

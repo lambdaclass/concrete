@@ -17,18 +17,6 @@ mod set {
             return s;
         }
 
-        pub fn insert(&mut self, key: K) with(Alloc, Unsafe) -> bool {
-            let result: Option<u8> = self.inner.insert(key, 0);
-            match result {
-                Option::Some { value } => {
-                    return false;
-                },
-                Option::None => {
-                    return true;
-                }
-            }
-        }
-
         pub fn contains(&self, key: &K) -> bool {
             return self.inner.contains(key);
         }
@@ -53,11 +41,6 @@ mod set {
             return self.inner.is_empty();
         }
 
-        pub fn clear(&mut self) with(Unsafe) {
-            self.inner.clear();
-        }
-
-        /// Fold over all elements, threading an accumulator.
         pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             return self.inner.keys_fold::<A>(init, f);
         }
@@ -72,9 +55,40 @@ mod set {
             return self.inner.keys();
         }
 
+    }
+
+    // H18: insert may displace an equal key inside the inner map (which
+    // destroys it), so K must be destroyable; clear/drop destroy live keys.
+    impl<K: Destroy> HashSet<K> {
+        pub fn insert(&mut self, key: K) with(Alloc, Unsafe) -> bool {
+            let result: Option<u8> = self.inner.insert(key, 0);
+            match result {
+                Option::Some { value } => {
+                    return false;
+                },
+                Option::None => {
+                    return true;
+                }
+            }
+        }
+
+
+        pub fn clear(&mut self) with(Alloc, Unsafe) {
+            self.inner.clear();
+        }
+
+        /// Fold over all elements, threading an accumulator.
+
         pub fn drop(self) with(Alloc) {
             let HashSet { inner } = self;
             inner.drop();
+        }
+    }
+
+    // Composition: HashSet is destroyable iff K is (inner map: V=u8 is Copy).
+    trusted impl<K: Destroy> Destroy for HashSet<K> {
+        pub fn destroy(&self) with(Alloc) {
+            (&self.inner).destroy();
         }
     }
 

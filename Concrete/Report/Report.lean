@@ -4381,6 +4381,7 @@ def diagnosticCodesReport : String :=
     entry "E0581" "core-check" "error" "missing trait method",
     entry "E0582" "core-check" "error" "trait method return type mismatch",
     entry "E0583" "core-check" "error" "recursive type has infinite size",
+    entry "E0584" "core-check" "error" "Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

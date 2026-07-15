@@ -3,6 +3,8 @@ mod vec {
     import std.alloc.{grow,dealloc};
     import std.math.{max};
 
+
+
     pub struct Vec<T> {
         ptr: *mut T,
         len: u64,
@@ -96,6 +98,24 @@ mod vec {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
             self.ptr = grow::<T>(self.ptr, new_cap);
             self.cap = new_cap;
+        }
+
+        /// Overwrite primitive (H18): swap `value` into slot `at` and hand the
+        /// DISPLACED element back to the caller — no hidden destruction, works
+        /// for ANY element type (a destroying `set` exists only for T: Copy).
+        /// `at` must be in bounds: out-of-range is an invariant violation and
+        /// traps (bucket 2) — Option<T> can't carry BOTH the rejected new
+        /// value and the absence signal without tuples.
+        pub fn replace(&mut self, at: u64, value: T) -> T {
+            // Bounds trap (bucket 2): checked u64 subtraction underflows —
+            // and therefore traps — exactly when at >= len. The compiler's
+            // own checked arithmetic is the trap mechanism, so no capability
+            // is needed (same class as array-index bounds checks).
+            discard(self.len - (at + 1));
+            let target_ptr: *mut T = self.ptr + at;
+            let old: T = *target_ptr;
+            *target_ptr = value;
+            return old;
         }
 
         /// Fold over all elements, threading an accumulator. Capability-
@@ -224,7 +244,7 @@ mod vec {
     // drop(); borrows &self (trusted) because the trait destructor is
     // invoked through the container's glue, which owns the consumption.
     trusted impl<T: Destroy> Destroy for Vec<T> {
-        fn destroy(&self) with(Alloc) {
+        pub fn destroy(&self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
@@ -265,7 +285,7 @@ mod vec {
     // Observable destructor: counts invocations through a raw cell.
     struct Tracked { cell: *mut u64 }
     trusted impl Destroy for Tracked {
-        fn destroy(&self) {
+        pub fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }
@@ -297,6 +317,21 @@ mod vec {
         v.drop();                       // destroys 2
         let n: u64 = h18_cell_get(cell);
         if n != 6 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_replace_returns_displaced() with(Alloc) -> i32 {
+        // H18 overwrite rule: replace() hands the displaced element back —
+        // no hidden destruction.
+        let cell: *mut u64 = h18_cell_new();
+        let mut v: Vec<Tracked> = Vec::<Tracked>::new();
+        v.push(Tracked { cell: cell });
+        let old: Tracked = v.replace(0, Tracked { cell: cell });
+        if h18_cell_get(cell) != 0 { v.drop(); destroy(old); return 1; }  // nothing destroyed yet
+        destroy(old);                                                     // +1, caller-owned
+        v.drop();                                                         // +1, the replacement
+        if h18_cell_get(cell) != 2 { return 1; }
         return 0;
     }
 

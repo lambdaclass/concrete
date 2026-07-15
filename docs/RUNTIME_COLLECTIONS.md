@@ -56,11 +56,12 @@ These are enough for every interpreter, analyzer, and scheduler we have written 
 **Owned-resource collections.** The intended long-term rule is that collections
 own their live elements. Dropping or clearing a collection destroys every live
 non-`Copy` element exactly once; `pop`, `remove`, and `swap_remove` move an
-element out and transfer ownership to the caller. H18 is the current tracked
-gap: the shipped trusted buffers reclaim storage but do not yet run generic
-element destruction for all non-`Copy` elements. Phase 7 closes this with
-compiler-generated drop glue at monomorphization, not with permanent
-`drop_with(f)` APIs and not with stored destructor function pointers.
+element out and transfer ownership to the caller. H18 CLOSED 2026-07-16:
+every shipped container destroys its live non-`Copy` elements through
+compiler drop-glue (the `Destroy`-bounded impls + conditional `impl Destroy`
+for composition), with no `drop_with(f)` APIs and no stored destructor
+function pointers — exactly the rules below, now implemented and gated
+(COLLECTIONS-DROP-GLUE).
 
 **Drop-glue rules (RESOLVED 2026-07-15 — one source of truth; both review
 threads converged here).** The enforcer behind every rule below is

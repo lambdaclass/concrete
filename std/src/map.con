@@ -136,51 +136,6 @@ mod map {
         // E0293 container-not-in-context, gated in check_callable_values.sh.
         // `update(k, fn(V) -> V)` remains the move-out/move-back alternative.)
 
-        pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
-            // Grow if load factor >= 75%
-            if self.len * 4 >= self.cap * 3 {
-                self.grow();
-            }
-
-            let hash_f: fn(&K) -> u64 = self.hash_fn;
-            let h: u64 = hash_f(&key);
-            let mask: u64 = self.cap - 1;
-            let mut idx: u64 = h & mask;
-
-            while true {
-                let flag_ptr: *mut u8 = self.flags + idx;
-                let flag: u8 = *flag_ptr;
-
-                if flag == 0 || flag == 2 {
-                    // Empty or tombstone — insert here
-                    let key_ptr: *mut K = self.keys + idx;
-                    *key_ptr = key;
-                    let val_ptr: *mut V = self.values + idx;
-                    *val_ptr = value;
-                    *flag_ptr = 1;
-                    self.len = self.len + 1;
-                    return Option::<V>::None;
-                }
-
-                if flag == 1 {
-                    // Occupied — check if same key
-                    let key_ptr: *mut K = self.keys + idx;
-                    let eq_f: fn(&K, &K) -> bool = self.eq_fn;
-                    if eq_f(key_ptr as &K, &key) {
-                        // Overwrite: return old value
-                        let val_ptr: *mut V = self.values + idx;
-                        let old: V = *val_ptr;
-                        *val_ptr = value;
-                        // Also overwrite key for consistency
-                        *key_ptr = key;
-                        return Option::<V>::Some { value: old };
-                    }
-                }
-
-                idx = (idx + 1) & mask;
-            }
-        }
-
         pub fn remove(&mut self, key: &K) -> Option<V> {
             let idx: u64 = self.find_slot(key);
             let flag_ptr: *mut u8 = self.flags + idx;
@@ -193,18 +148,6 @@ mod map {
             *flag_ptr = 2;  // tombstone
             self.len = self.len - 1;
             return Option::<V>::Some { value: old };
-        }
-
-        pub fn clear(&mut self) with(Unsafe) {
-            memset(self.flags as *mut u8, 0, self.cap * sizeof::<u8>());
-            self.len = 0;
-        }
-
-        pub fn drop(self) with(Alloc) {
-            let HashMap { keys, values, flags, len, cap, hash_fn, eq_fn } = self;
-            dealloc::<K>(keys);
-            dealloc::<V>(values);
-            dealloc::<u8>(flags);
         }
 
         // --- Internal helpers ---
@@ -472,6 +415,169 @@ mod map {
     // --- scoped-accessor (callable-values) test helpers ---
     struct Copy WvCtx { add: i64, calls: i64 }
     fn wv_read(c: &WvCtx, v: &i32) -> i64 { return c.add + (*v as i64); }
+
+    // H18: insert needs K destroyable — a same-key overwrite destroys the
+    // DISPLACED old key (Copy keys elide). V is unconstrained: values move
+    // in/out, insert never destroys one (the old value is RETURNED).
+    trusted impl<K: Destroy, V> HashMap<K, V> {
+        pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
+            // Grow if load factor >= 75%
+            if self.len * 4 >= self.cap * 3 {
+                self.grow();
+            }
+
+            let hash_f: fn(&K) -> u64 = self.hash_fn;
+            let h: u64 = hash_f(&key);
+            let mask: u64 = self.cap - 1;
+            let mut idx: u64 = h & mask;
+
+            while true {
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+
+                if flag == 0 || flag == 2 {
+                    // Empty or tombstone — insert here
+                    let key_ptr: *mut K = self.keys + idx;
+                    *key_ptr = key;
+                    let val_ptr: *mut V = self.values + idx;
+                    *val_ptr = value;
+                    *flag_ptr = 1;
+                    self.len = self.len + 1;
+                    return Option::<V>::None;
+                }
+
+                if flag == 1 {
+                    // Occupied — check if same key
+                    let key_ptr: *mut K = self.keys + idx;
+                    let eq_f: fn(&K, &K) -> bool = self.eq_fn;
+                    if eq_f(key_ptr as &K, &key) {
+                        // Overwrite: return old value; the DISPLACED old key
+                        // is destroyed (H18 overwrite rule — never silently
+                        // leaked; Copy keys elide to a no-op).
+                        let val_ptr: *mut V = self.values + idx;
+                        let old: V = *val_ptr;
+                        *val_ptr = value;
+                        (key_ptr as &K).destroy();
+                        *key_ptr = key;
+                        return Option::<V>::Some { value: old };
+                    }
+                }
+
+                idx = (idx + 1) & mask;
+            }
+        }
+
+    }
+
+    // H18 drop-glue (RUNTIME_COLLECTIONS.md): disposal destroys every
+    // OCCUPIED slot's key and value (flags==1; empties and tombstones hold
+    // no live values), then frees the three buffers. Non-destroyable K or V
+    // makes clear/drop uncallable — drain with remove() and close explicitly.
+    trusted impl<K: Destroy, V: Destroy> HashMap<K, V> {
+        pub fn clear(&mut self) with(Alloc, Unsafe) {
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                if *flag_ptr == 1 {
+                    ((self.keys + i) as &K).destroy();
+                    ((self.values + i) as &V).destroy();
+                }
+                i = i + 1;
+            }
+            memset(self.flags as *mut u8, 0, self.cap * sizeof::<u8>());
+            self.len = 0;
+        }
+
+        pub fn drop(self) with(Alloc, Unsafe) {
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                if *flag_ptr == 1 {
+                    ((self.keys + i) as &K).destroy();
+                    ((self.values + i) as &V).destroy();
+                }
+                i = i + 1;
+            }
+            let HashMap { keys, values, flags, len, cap, hash_fn, eq_fn } = self;
+            dealloc::<K>(keys);
+            dealloc::<V>(values);
+            dealloc::<u8>(flags);
+        }
+    }
+
+    // Composition: HashMap is destroyable iff K and V are.
+    trusted impl<K: Destroy, V: Destroy> Destroy for HashMap<K, V> {
+        pub fn destroy(&self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                if *flag_ptr == 1 {
+                    ((self.keys + i) as &K).destroy();
+                    ((self.values + i) as &V).destroy();
+                }
+                i = i + 1;
+            }
+            dealloc::<K>(self.keys);
+            dealloc::<V>(self.values);
+            dealloc::<u8>(self.flags);
+        }
+    }
+
+    // --- H18 drop-glue test helpers ---
+    struct MTracked { cell: *mut u64 }
+    trusted impl Destroy for MTracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    trusted fn m_cell_new() with(Alloc) -> *mut u64 {
+        let p: *mut u64 = grow::<u64>(0 as *mut u64, 1);
+        *p = 0;
+        return p;
+    }
+    trusted fn m_cell_get(p: *mut u64) -> u64 { return *p; }
+    fn h_i64(k: &i64) -> u64 { return *k as u64; }
+    fn e_i64(a: &i64, b: &i64) -> bool { return *a == *b; }
+
+    #[test]
+    fn test_map_destroys_entries() with(Alloc, Unsafe) -> i32 {
+        // H18: drop destroys every OCCUPIED slot's value exactly once;
+        // remove transfers the value out; overwrite returns the old value.
+        let cell: *mut u64 = m_cell_new();
+        let mut m: HashMap<i64, MTracked> = HashMap::<i64, MTracked>::new(h_i64, e_i64);
+        let o1: Option<MTracked> = m.insert(1, MTracked { cell: cell });
+        match o1 {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        let o2: Option<MTracked> = m.insert(2, MTracked { cell: cell });
+        match o2 {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        let o3: Option<MTracked> = m.insert(3, MTracked { cell: cell });
+        match o3 {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        // overwrite key 1: old value RETURNED (destroy by hand = +1)
+        let old: Option<MTracked> = m.insert(1, MTracked { cell: cell });
+        match old {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        // remove key 2: transferred out (destroy by hand = +1)
+        let rem: Option<MTracked> = m.remove(&2);
+        match rem {
+            Option::Some { value } => { destroy(value); },
+            Option::None => {},
+        }
+        // drop destroys the 2 remaining live values (keys are Copy i64)
+        m.drop();
+        let n: u64 = m_cell_get(cell);
+        if n != 4 { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_map_with_value() with(Alloc, Unsafe) -> i32 {

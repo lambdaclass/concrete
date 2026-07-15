@@ -75,10 +75,6 @@ mod deque {
             return self.len == 0;
         }
 
-        pub fn clear(&mut self) {
-            self.len = 0;
-            self.head = 0;
-        }
 
         fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
@@ -102,12 +98,6 @@ mod deque {
             self.cap = new_cap;
         }
 
-        pub fn drop(self) with(Alloc) {
-            let Deque { ptr, head, len, cap } = self;
-            if cap > 0 {
-                dealloc(ptr);
-            }
-        }
     }
 
     // Value reader for Copy elements (the Copy cell of the value model).
@@ -128,6 +118,49 @@ mod deque {
     }
 
     import std.test.{assert_eq, assert_true, ignore_opt};
+
+    // H18 drop-glue: live elements occupy the RING [head, head+len) mod cap;
+    // destroy each, then free. Non-destroyable T: drain with pop_front().
+    trusted impl<T: Destroy> Deque<T> {
+        pub fn clear(&mut self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let idx: u64 = (self.head + i) & (self.cap - 1);
+                ((self.ptr + idx) as &T).destroy();
+                i = i + 1;
+            }
+            self.len = 0;
+            self.head = 0;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let idx: u64 = (self.head + i) & (self.cap - 1);
+                ((self.ptr + idx) as &T).destroy();
+                i = i + 1;
+            }
+            let Deque { ptr, head, len, cap } = self;
+            if cap > 0 {
+                dealloc(ptr);
+            }
+        }
+    }
+
+    // Composition: Deque is destroyable iff T is.
+    trusted impl<T: Destroy> Destroy for Deque<T> {
+        pub fn destroy(&self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let idx: u64 = (self.head + i) & (self.cap - 1);
+                ((self.ptr + idx) as &T).destroy();
+                i = i + 1;
+            }
+            if self.cap > 0 {
+                dealloc(self.ptr);
+            }
+        }
+    }
 
     #[test]
     fn test_push_back_pop_front() with(Alloc) -> i32 {
