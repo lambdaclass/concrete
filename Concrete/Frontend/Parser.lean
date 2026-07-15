@@ -1588,6 +1588,15 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
     -- Trait impl: impl TraitName for TypeName with(Caps) { ... }
     advance
     let typeName ← expectIdent
+    -- Conditional trait impl target may be generic: `impl<T: Destroy> Destroy
+    -- for Vec<T>` — consume the target's type args (the impl's typeParams
+    -- already name them).
+    let tkTA ← peek
+    if tkTA == .lt then
+      advance
+      let _targetTypeArgs ← parseTypeArgList
+      expect .gt
+      pure ()
     let implCapSet ← parseWithCaps
     expect .lbrace
     let mut methods : List FnDef := []
@@ -1607,7 +1616,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inr { traitName := firstName, typeName, typeParams, methods, capSet := implCapSet, span := declSp }
+    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp }
   | _ =>
     -- Inherent impl: impl TypeName { ... }
     let typeName := firstName

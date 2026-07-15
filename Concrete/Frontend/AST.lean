@@ -431,6 +431,7 @@ structure ImplTraitBlock where
   traitName : String
   typeName : String
   typeParams : List String := []
+  typeBounds : List (String × List String) := []  -- impl-level param bounds (conditional trait impls, H18)
   methods : List FnDef
   capSet : CapSet := .empty        -- capabilities on the impl (used by Destroy in Phase 3)
   isTrusted : Bool := false        -- trusted impl Trait for Type: methods inherit trusted boundary

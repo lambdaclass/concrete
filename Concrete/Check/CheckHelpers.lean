@@ -686,17 +686,31 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
           -- Copy or Destroy bound. A non-Copy type WITHOUT Destroy (fallible
           -- cleanup: File/Writer/socket) fails — by design, those are drained
           -- and closed explicitly, never dropped (RUNTIME_COLLECTIONS.md
-          -- drop-glue rules 1-2).
-          if !(← isCopyType concreteType) then
-            match concreteType with
-            | .named tn | .generic tn _ =>
-              if !(env.traitImpls.any fun (t, tr) => t == tn && tr == "Destroy") then
-                throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
-            | .typeVar n =>
-              let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
-              if !(callerBounds.contains "Destroy" || callerBounds.contains "Copy") then
-                throwCheck (.traitBoundNotSatisfied n "Destroy" context)
-            | _ => pure ()
+          -- drop-glue rules 1-2). For a GENERIC target the registered impl is
+          -- treated as CONDITIONAL: all type args must be destroyable too
+          -- (`Vec<Vec<String>>` composes recursively; `Vec<Writer>` fails at
+          -- any depth). Conservative: an unconditional generic Destroy impl
+          -- would be over-restricted — refine to bound-aware registry entries
+          -- if a workload ever writes one.
+          let rec destroyable (fuel : Nat) (t : Ty) : CheckM Bool := do
+            match fuel with
+            | 0 => return false
+            | fuel+1 =>
+              if ← isCopyType t then return true
+              else match t with
+              | .named tn =>
+                return env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy"
+              | .generic tn args =>
+                if env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy" then
+                  args.allM (destroyable fuel)
+                else return false
+              | .typeVar n =>
+                let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
+                return callerBounds.contains "Destroy" || callerBounds.contains "Copy"
+              | _ => return true  -- primitives
+          if !(← destroyable 8 concreteType) then
+            let tn := match concreteType with | .named n => n | .generic n _ => n | .typeVar n => n | _ => "<type>"
+            throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
         else
           match concreteType with
           | .named tn | .generic tn _ =>

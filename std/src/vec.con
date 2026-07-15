@@ -218,6 +218,23 @@ mod vec {
         }
     }
 
+    // H18: trait-form destructor so Vec composes as an ELEMENT of other
+    // containers (Vec<Vec<String>> destroys recursively) — the conditional
+    // impl makes destroyable(Vec<T>) iff destroyable(T). Same glue as
+    // drop(); borrows &self (trusted) because the trait destructor is
+    // invoked through the container's glue, which owns the consumption.
+    trusted impl<T: Destroy> Destroy for Vec<T> {
+        fn destroy(&self) with(Alloc) {
+            let mut i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                (target_ptr as &T).destroy();
+                i = i + 1;
+            }
+            dealloc(self.ptr);
+        }
+    }
+
     // Value reader for Copy elements (the Copy cell of the value model).
     trusted impl<T: Copy> Vec<T> {
         /// Bounds-checked set. Returns false if index is out of bounds.
@@ -280,6 +297,27 @@ mod vec {
         v.drop();                       // destroys 2
         let n: u64 = h18_cell_get(cell);
         if n != 6 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_nested_destroys() with(Alloc) -> i32 {
+        // H18 composition: Vec<Vec<Tracked>> destroys every LEAF exactly once
+        // through the conditional `impl<T: Destroy> Destroy for Vec<T>`.
+        let cell: *mut u64 = h18_cell_new();
+        let mut in1: Vec<Tracked> = Vec::<Tracked>::new();
+        in1.push(Tracked { cell: cell });
+        in1.push(Tracked { cell: cell });
+        let mut in2: Vec<Tracked> = Vec::<Tracked>::new();
+        in2.push(Tracked { cell: cell });
+        in2.push(Tracked { cell: cell });
+        in2.push(Tracked { cell: cell });
+        let mut outer: Vec<Vec<Tracked>> = Vec::<Vec<Tracked>>::new();
+        outer.push(in1);
+        outer.push(in2);
+        outer.drop();
+        let n: u64 = h18_cell_get(cell);
+        if n != 5 { return 1; }
         return 0;
     }
 

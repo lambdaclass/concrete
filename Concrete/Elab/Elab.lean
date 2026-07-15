@@ -1601,6 +1601,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar)
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,
+                typeBounds := tb.typeBounds ++ f.typeBounds,
                 isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs

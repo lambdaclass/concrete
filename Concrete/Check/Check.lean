@@ -2145,7 +2145,8 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar)
     acc ++ tb.methods.map fun f =>
-      ({ f with typeParams := tb.typeParams ++ f.typeParams }, some implTy)
+      ({ f with typeParams := tb.typeParams ++ f.typeParams
+              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>
