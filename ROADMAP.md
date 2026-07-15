@@ -265,15 +265,18 @@ batteries-included breadth. The ranked build order is:
 5. `String`/`Text`/`Bytes` coherence.
 6. Collections phase 2 on the callable-values surface.
 7. `std.test` tests-as-docs and doc-snippet gates.
-8. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-9. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+8. First real stdlib workload: `base64_cli`, before broadening the API surface.
+   It must exercise args -> bytes/text -> parse/errors -> `std.base64` ->
+   `Writer` output -> oracle tests, and it should pull only the APIs it needs.
+9. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+10. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-10. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+11. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-11. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+12. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-12. Broad compression/crypto/networking/threading only after workload demand.
+13. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -600,11 +603,16 @@ Do not duplicate compiler-command cleanup here.
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-17. Add `std.base64` as the first byte-format module: encode/decode, streaming
-    encode/decode over fixed buffers and allocation-backed `Vec<u8>`, strict
-    error reporting, RFC 4648 vectors, invalid-padding negatives, oracle
-    comparison, and evidence classification. Streaming encode/decode is
-    explicitly deferred to package/workload pressure, not hidden in v1.
+17. Add `std.base64` as the first byte-format module, pulled by the
+    `base64_cli` workload rather than designed in isolation. V1 should include
+    only what the workload and RFC 4648 vectors require: encode/decode over
+    fixed buffers and allocation-backed `Vec<u8>` as needed, strict error
+    reporting, invalid-padding negatives, oracle comparison, and evidence
+    classification. Streaming encode/decode is explicitly deferred to
+    package/workload pressure, not hidden in v1. Done when
+    `examples/stdlib_workloads/base64_cli` builds and runs against an external
+    oracle, so the module proves the args -> bytes/text -> parse/errors ->
+    Writer path instead of just unit tests.
 18. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
@@ -641,10 +649,11 @@ Do not duplicate compiler-command cleanup here.
     ambient terminal authority. Wire
     `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
 26. Build capability-scoped console, file, network, process, and time APIs in
-    `std.io`, `std.writer`, `std.fs`, `std.env`, `std.args`, `std.process`,
+    `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`,
     `std.net`, and `std.time`. Authority must be visible in function types and
     audit reports; no API may smuggle ambient authority through a convenience
-    wrapper.
+    wrapper. New output/input APIs target the `std.io.Reader` / `std.io.Writer`
+    spine; a separate public `std.writer` sink surface must not reappear.
     Add an explicit **boundary-module pattern**, borrowing the useful part of
     Elm's ports without copying Elm's web-application architecture: authority
     enters through a small named module, the wrapper exposes a narrow safe API,
@@ -682,7 +691,8 @@ Do not duplicate compiler-command cleanup here.
     example, when a referenced example no longer compiles, or when a doc claims
     an evidence class/capability/allocation behavior that the test/report does
     not produce.
-29a. Add a public stdlib API snapshot/diff before the surface freezes.
+29a. Add a public stdlib API snapshot/diff immediately after the first real
+     workload (`base64_cli`) and before broad URI/JSON/CLI/log/progress breadth.
 
      Deliverable: `concrete std snapshot --json` (or an equivalent test helper)
      and `scripts/tests/check_stdlib_api_snapshot.sh`.
@@ -810,8 +820,9 @@ Do not duplicate compiler-command cleanup here.
     `scripts/tests/check_stdlib_compat.sh`; every vector must declare exactly
     one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`,
     `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
-38. Add real stdlib workload checks before Phase 8 relies on the library:
-    `examples/stdlib_workloads/base64_cli`,
+38. Add real stdlib workload checks before Phase 8 relies on the library.
+    Start with `examples/stdlib_workloads/base64_cli`; it is the first
+    workload, not just one item in the set. Then broaden to
     `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
     `path_normalizer`, and `lru_cache` or `ring_buffer`. Wire them with
     `scripts/tests/check_stdlib_workloads.sh`. Each workload must build, run,
