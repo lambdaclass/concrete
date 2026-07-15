@@ -150,6 +150,33 @@ Concrete's design bias is deliberately conservative:
 - audit reports that refuse to collapse different evidence classes into one
   green badge.
 
+## Why It Coheres
+
+These are not independent features bolted together — they lock into each other,
+and each one is cheaper because of the others:
+
+- **Second-class references make ownership provable.** No returned references
+  means no aliasing to track, which means no lifetime algebra — a small,
+  checkable ownership fragment. The ergonomic cost buys the proof simplicity.
+- **Linear ownership plus abort-not-unwind makes cleanup simple.** Because
+  Concrete aborts rather than unwinding, destruction runs only on normal control
+  flow — no drop flags, no partial-initialization tracking, none of the
+  machinery an unwinding language needs to keep destructors panic-safe.
+- **Capabilities and linearity compose.** When a collection is explicitly
+  disposed, its compiler-generated drop glue is capability-polymorphic: dropping
+  a collection of files carries `with(File)`, derived from the element
+  destructors — because otherwise automatic destruction would perform authority
+  invisibly. Two guarantees made to hold at once.
+- **The interpreter and the judgment modules make the compiler verifiable.**
+  Each semantic decision lives in one pure module (arithmetic, types,
+  capabilities, ownership); an interpreter runs the reference semantics and is
+  differentially tested against compiled output; and stage contracts catch a
+  violation at the first boundary it crosses — so the pipeline stays honest
+  enough to prove against.
+
+The unifying pattern: **every design choice trades convenience for a property
+you can see and check.** That is the language.
+
 ## Evidence, Not One Badge
 
 Concrete reports evidence classes separately. That distinction is the product.
