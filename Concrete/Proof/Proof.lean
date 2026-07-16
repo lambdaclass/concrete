@@ -2117,14 +2117,55 @@ def optionUnwrapOrExpr : PExpr :=
     [ (.enumPat "Option" "Some" ["value"], .var "value")
     , (.enumPat "Option" "None" [], .var "default") ]
 
-/-- Fn table for the pure-core specs: the exprs are self-contained (no
-    sibling calls), so the table is empty. -/
-def pureCoreFns : FnTable := fun _ => none
+/-- Extracted spec for `option.map`: apply `f` under Some, pass None through.
+    `f` is the fn-pointer PARAMETER — the spec calls it by its parameter
+    name, and the theorem's fn table binds a representative callback. -/
+def optionMapExpr : PExpr :=
+  .match_ (.var "self")
+    [ (.enumPat "Option" "Some" ["value"],
+        .enumLit "Option" "Some" [("value", .call "f" [.var "value"])])
+    , (.enumPat "Option" "None" [], .enumLit "Option" "None" []) ]
+
+/-- Extracted spec for `result.map`. -/
+def resultMapExpr : PExpr :=
+  .match_ (.var "self")
+    [ (.enumPat "Result" "Ok" ["value"],
+        .enumLit "Result" "Ok" [("value", .call "f" [.var "value"])])
+    , (.enumPat "Result" "Err" ["error"],
+        .enumLit "Result" "Err" [("error", .var "error")]) ]
+
+/-- Extracted spec for `result.map_err`. -/
+def resultMapErrExpr : PExpr :=
+  .match_ (.var "self")
+    [ (.enumPat "Result" "Ok" ["value"],
+        .enumLit "Result" "Ok" [("value", .var "value")])
+    , (.enumPat "Result" "Err" ["error"],
+        .enumLit "Result" "Err" [("error", .call "f" [.var "error"])]) ]
+
+/-- Representative callback for the HOF laws: `f(x) = x * 3 + 1` — injective
+    enough that a mapped payload is visibly transformed. The map theorems are
+    proven for THIS registered callback and quantified over the payload; the
+    coverage attribute records that limitation (callback quantification is a
+    model extension, see PURE_CORE_PROOF_ARC.md). -/
+def pureCoreReprFExpr : PExpr :=
+  .binOp .add (.binOp .mul (.var "x") (.lit (.int 3))) (.lit (.int 1))
+
+def pureCoreReprFFn : PFnDef :=
+  { name := "f", params := ["x"], body := pureCoreReprFExpr }
+
+/-- Fn table for the pure-core specs: binds the representative callback `f`
+    (the HOF specs call their fn-pointer parameter by name). -/
+def pureCoreFns : FnTable
+  | "f" => some pureCoreReprFFn
+  | _ => none
 
 def specs : List (String × PExpr) :=
   [ -- pure-core stdlib (slice 1)
     ("bytes.view", bytesViewExpr)
   , ("option.unwrap_or", optionUnwrapOrExpr)
+  , ("option.map",       optionMapExpr)
+  , ("result.map",       resultMapExpr)
+  , ("result.map_err",   resultMapErrExpr)
     -- parse_validate
   ,
     ("parse_validate.validate_version",       validateVersionExpr)

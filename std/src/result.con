@@ -48,6 +48,10 @@ mod result {
         // working, so map/map_err ship. The fn value transforms the SUCCESS
         // payload only; the error passes through untouched (and vice versa) —
         // per docs/ERROR_CONVENTIONS.md these never change a failure's bucket.
+        #[spec(Concrete.Proof.resultMapExpr)]
+        #[proof_by(Examples.PureCore.Proofs.result_map_correct)]
+        #[proof_coverage(representative)]
+        #[proof_fingerprint("ec92f3ef57cfa90815bb368a967b46db")]
         pub fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
             match self {
                 Result::Ok { value } => { return Result::<U, E>::Ok { value: f(value) }; },
@@ -64,6 +68,10 @@ mod result {
             }
         }
 
+        #[spec(Concrete.Proof.resultMapErrExpr)]
+        #[proof_by(Examples.PureCore.Proofs.result_map_err_correct)]
+        #[proof_coverage(representative)]
+        #[proof_fingerprint("c2e5e72209481ec9b27e072f7d40c3d0")]
         pub fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
             match self {
                 Result::Ok { value } => { return Result::<T, F>::Ok { value: value }; },

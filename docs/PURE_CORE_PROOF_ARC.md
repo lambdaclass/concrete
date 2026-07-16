@@ -61,8 +61,9 @@ Start with the least callback-heavy target and wire ONE API all the way to
 3. Then `Option.map` / `Result.map` structural laws (they expose exactly
    what the model needs next for callbacks).
 
-Scoped to what the PExpr model expresses TODAY (match_/enumLit/call-by-name;
-NO loops, NO quantification over callbacks):
+Scoped to keep the first theorems small (match_/enumLit/call-by-name with a
+representative callback; loops exist in the model — `while_`/`while_step` —
+but whole-loop invariant proofs are deferred to slice 2+):
 
 - `Option.map` / `Option.and_then`: structural laws — `map(None) = None`,
   `map(Some v) = Some (f v)` for a registered representative callback,
@@ -81,11 +82,18 @@ NO loops, NO quantification over callbacks):
 
 ## Slice 1 status (2026-07-16)
 
-DONE — the vertical works end-to-end. `Option.unwrap_or` is the first
-kernel-backed stdlib proof link: `proof-status` shows fingerprint-fresh,
-`check-proofs` kernel-verifies `option_unwrap_or_correct` through the
-Examples import, and a body mutation flips it to STALE (the gate's mutation
-leg pins this). Gate: `check_purecore_proofs.sh` (`make test-purecore-proofs`).
+COMPLETE — the vertical works end-to-end and the slice's target surface is
+linked. Four kernel-backed stdlib proof links: `Option.unwrap_or`,
+`Option.map`, `Result.map`, `Result.map_err` — each `proof-status`
+fingerprint-fresh and `check-proofs` kernel-verified through the Examples
+import ("4 verified, 0 failed"); a body mutation flips to STALE (the gate's
+mutation leg pins this). The map laws use a registered representative
+callback (`f(x) = x*3+1` in the spec fn-table) with
+`#[proof_coverage(representative)]` recording the limitation. The H1
+radix-overflow guard step is kernel-checked (`hex_guard_step_preserves_u64`,
+by omega — kernel-decision class, no solver needed) and referenced by a
+`parse_hex` source comment. Gate: `check_purecore_proofs.sh` (15 checks,
+`make test-purecore-proofs`).
 
 Two pipeline discoveries, both fixed/recorded:
 - Proof attributes did not PARSE on impl methods (flagships only ever
@@ -100,13 +108,23 @@ Two pipeline discoveries, both fixed/recorded:
   referenced by a source comment; a distinct trusted-refinement link class
   (`#[model_refined_by]`-style, rendered as its own evidence class, never
   `proved`) is the recorded follow-up for linking it.
+- The registry also requires a whole-function `#[spec]` on every link
+  ("empty spec name" is an error) — so a STEP lemma (the H1 guard fact)
+  cannot ride `#[proof_by]` either. Same resolution as the trusted case:
+  kernel theorem + source comment now, the partial/refinement link class
+  later. Both exclusions are the machinery refusing overclaims, which is
+  the behavior we want.
 
 ## Model gaps (recorded, not hidden)
 
-- PExpr has no loops: full `parse_hex` correctness needs either recursive
-  spec functions with fuel (the eval already threads fuel) or a model
-  extension. Slice 1 proves the GUARD step, not the whole loop — stated
-  honestly in the coverage attribute.
+- CORRECTION (2026-07-16): PExpr DOES have loops — `while_` and
+  `while_step` constructors exist and eval threads fuel through them (the
+  earlier draft of this section claimed otherwise). Full `parse_hex`
+  correctness is therefore a MODELING-EFFORT gap (string/char iteration +
+  the loop invariant), not a model-capability gap. Slice 1 proves the
+  GUARD step only, deliberately: whole-loop correctness is slice-2+
+  territory, and the registry's whole-function `#[spec]` requirement keeps
+  the step lemma from overclaiming in the report.
 - No callback quantification: HOF laws are proven for representative
   callbacks; quantified versions need the fn-table hypothesis pattern
   (`h : fns "f" = some fBody`) — deferred until slice 1 shows the shape.

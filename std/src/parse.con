@@ -90,6 +90,12 @@ mod parse {
         return -1;
     }
 
+    // Proof note: the H1 overflow-guard STEP is kernel-checked as
+    // Examples.PureCore.Proofs.hex_guard_step_preserves_u64 (acc <= (u64::MAX-15)/16
+    // implies acc*16+digit fits u64). Not a #[proof_by] link: the registry requires
+    // a whole-function #[spec], and claiming one from a step lemma would overstate
+    // coverage. A distinct trusted/partial-refinement link class (#[model_refined_by])
+    // is the recorded follow-up (docs/PURE_CORE_PROOF_ARC.md).
     pub fn parse_hex(s: &String) -> Option<u64> {
         if s.len == 0 {
             return Option::<u64>::None;

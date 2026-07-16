@@ -21,14 +21,30 @@ grep -q '✓ `std.option.option_Option_unwrap_or` — proof matches current body
   && ok "unwrap_or: registered + fingerprint-fresh" \
   || no "unwrap_or: proof link missing or stale"
 
-# 2. the Lean kernel verifies the referenced theorem (import-reachable)
+# 1b. slice-1 remainder: the Option/Result map laws are linked and fresh
+for fn in std.option.option_Option_map std.result.result_Result_map std.result.result_Result_map_err; do
+  grep -q "✓ \`$fn\` — proof matches current body" <<<"$st" \
+    && ok "$fn: registered + fingerprint-fresh" \
+    || no "$fn: proof link missing or stale"
+done
+
+# 2. the Lean kernel verifies the referenced theorems (import-reachable)
 cp=$("$C" "$TMP/std/lib.con" --report check-proofs 2>&1)
 grep -q '✓ std.option.option_Option_unwrap_or — Examples.PureCore.Proofs.option_unwrap_or_correct' <<<"$cp" \
   && ok "unwrap_or: kernel-verified via Examples.PureCore.Proofs" \
   || no "unwrap_or: kernel check failed or theorem unreachable"
-grep -qE 'Summary: [0-9]+ verified, 0 failed' <<<"$cp" \
-  && ok "check-proofs: zero failures" \
-  || no "check-proofs reports failures"
+grep -q '✓ std.option.option_Option_map — Examples.PureCore.Proofs.option_map_correct' <<<"$cp" \
+  && ok "option.map: kernel-verified" \
+  || no "option.map: kernel check failed or theorem unreachable"
+grep -q '✓ std.result.result_Result_map — Examples.PureCore.Proofs.result_map_correct' <<<"$cp" \
+  && ok "result.map: kernel-verified" \
+  || no "result.map: kernel check failed or theorem unreachable"
+grep -q '✓ std.result.result_Result_map_err — Examples.PureCore.Proofs.result_map_err_correct' <<<"$cp" \
+  && ok "result.map_err: kernel-verified" \
+  || no "result.map_err: kernel check failed or theorem unreachable"
+grep -q 'Summary: 4 verified, 0 failed' <<<"$cp" \
+  && ok "check-proofs: exactly 4 verified, zero failures" \
+  || no "check-proofs count drifted or reports failures"
 
 # 3. MUTATION: a body change must go STALE (evidence is load-bearing)
 perl -0pi -e 's/Option::None => \{ return default; \},/Option::None => { let d2: T = default; return d2; },/' "$TMP/std/option.con"
@@ -45,6 +61,18 @@ grep -q '#\[proof_by' std/src/bytes.con \
 grep -q "bytes_view_guard_correct" proofs/Examples/PureCore/Proofs.lean \
   && ok "bytes.view model theorem present (kernel-checked in Examples lib)" \
   || no "bytes.view model theorem missing"
+
+# 5. the H1 radix guard-step fact: same pattern (step lemma is not a
+#    whole-function spec, so no registry link — comment + kernel theorem).
+grep -qE '^\s*#\[proof_by' std/src/parse.con \
+  && no "parse.con carries proof_by attributes (step lemma must not claim a whole-fn link)" \
+  || ok "parse_hex: guard-step comment only (no whole-loop overclaim)"
+grep -q "hex_guard_step_preserves_u64" proofs/Examples/PureCore/Proofs.lean \
+  && ok "H1 guard-step lemma present (kernel-checked, by omega)" \
+  || no "H1 guard-step lemma missing"
+grep -q "hex_guard_step_preserves_u64" std/src/parse.con \
+  && ok "parse_hex source comment references the lemma" \
+  || no "parse_hex source comment missing lemma reference"
 
 echo
 echo "PURECORE-PROOFS: PASS=$PASS FAIL=$FAIL"
