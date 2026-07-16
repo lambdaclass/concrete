@@ -5,6 +5,7 @@
 pub fn recursive_sum(n: Int) with(Console) -> Int {
     if n <= 0 {
         println(0);
+        return 0;
     }
     return n + recursive_sum(n - 1);
 }
@@ -12,5 +13,4 @@ pub fn recursive_sum(n: Int) with(Console) -> Int {
 pub fn main() with(Console) {
     let result: Int = recursive_sum(5);
     println(result);
-    return 0;
 }
