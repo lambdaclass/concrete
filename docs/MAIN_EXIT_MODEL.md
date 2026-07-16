@@ -73,6 +73,26 @@ Sequencing rationale: stage 1 is a strict prefix — the exit-code plumbing in
 the main wrapper is identical; stage 2 only narrows the accepted signature and
 deletes the echo. Nothing built in stage 1 is thrown away.
 
+## Stage 2 status (2026-07-16)
+
+Landed: run_ok/run_ok_O2 verify EXIT CODES (explicit rc arg for echoed-tail
+expectations); the fixture corpus, differential fuzzer (self-printing Unit
+mains), oracle (interp-echo↔rc bridge for meaningful-rc flagships), golden,
+and the test_ssa scraper are echo-free; 119 gates de-knobbed by the
+remove→run→keep-if-green sweep.
+
+REMAINING before the knob can die: 39 gates whose inline fixtures test
+WIDE/NEGATIVE values by design (cast/arith/semantic matrices — an rc bridge
+cannot represent them, verified empirically: cast_matrix 16/18 red under the
+bridge). Their fixtures need real println conversion, one gate at a time,
+with the run_ok-corpus playbook (three consumer layers: compile, runtime,
+REPORT assertions — check purity/evidence counts before push). Until then
+the knob stays, carried ONLY by those 39 exports + run_tests.sh's own
+top-level export + the meta-runners (mutation, fuzz wrapper, ci-gates).
+
+Int-main deprecation is deliberately decoupled: Int-main-as-exit-code is
+valid semantics, not scaffolding — it waits for a later surface pass.
+
 ## Test-harness inventory (stage 2 checklist)
 
 Consumers of the legacy echo, all currently opted in via the exported knob:
