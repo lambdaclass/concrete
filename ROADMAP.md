@@ -25,6 +25,20 @@ mutation-style guard for the failure mode that would be most damaging. If a task
 cannot yet have that gate, the item must say why and name the trigger that makes
 it testable.
 
+**When a fix addresses a bug CLASS, "done" means a gate that catches every
+instance of the class, not only the reported one.** This project has repeatedly
+fixed one instance — a decimal parser while `hex`/`bin`/`oct` still trapped, one
+snapshot while sibling ledgers still drifted, one fixture main while the corpus
+still failed — and had the siblings resurface a CI run later. The fix that holds
+is a class-level gate (a grep/lint over the shape, or a corpus check), not a
+per-instance patch.
+
+**Large semantic migrations land in a worktree/branch and merge green — never
+incrementally on `main`.** A change to a cross-cutting contract (e.g. the
+main-return / exit-code model across the whole fixture corpus) done commit-by-
+commit on `main` has produced multi-commit red streaks; isolate it, finish it to
+green, and merge once.
+
 ### Pull-Gated Work
 
 Deferred work stays in the phase where its trigger lives. Do not build machinery
@@ -365,11 +379,11 @@ lifting it is pulled by the first infallible non-`Alloc` destructor; raw
      and `scripts/tests/check_collection_coherence.sh`; the gate must show the
      chosen verdict for incompatible dictionaries and prove the API cannot
      silently combine them.
-   - 1d. Keep `with_value_mut` / `modify` parked, not scheduled. Mutable scoped
-     callbacks have a receiver/context aliasing hazard (`&mut self` plus a
-     context that can reach the same container); ship them only if a workload
-     requires single-element mutable borrowed access and a
-     container-not-in-context gate enforces the invariant.
+   - 1d. `with_value_mut` / `modify` — SHIPPED 2026-07-06 with the guard.
+     The receiver/context aliasing hazard (`&mut self` plus a context that can
+     reach the same container) is rejected as `E0293` (container-not-in-context),
+     gated in `check_callable_values.sh`. Was parked pending exactly that guard;
+     the guard landed, so the API is live.
    - 1e. Keep scalar `from(param)` returned references deeply deferred and
      evidence-gated. If ever added, they stay flat and scalar: no `Option`,
      `Result`, structs, arrays, containers, callback contexts, or generic
