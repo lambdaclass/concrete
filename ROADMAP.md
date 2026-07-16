@@ -278,6 +278,20 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
+Before more breadth, close the **stdlib hardening pass** found by the latest
+API review. This is foundation repair, not new surface:
+non-decimal parsers (`parse_hex` / `parse_bin` / `parse_oct`) must return
+`None` on overflow instead of trapping; `bytes` / `numeric` / `io` / `path` /
+`base64` guard code must avoid overflow-prone `start + len > total` checks;
+`io.Reader` / `io.Writer` `Result` APIs must either report real read / write /
+flush / close errors or document the trusted ignored-error boundary explicitly;
+`OrderedMap` borrowed traversal must not require `V: Copy`; stale bytes/text
+comments and the `std.base64` canonical-padding policy must be reconciled.
+Done when gates prove parser overflows are domain failures, bounds guards cannot
+wrap before rejecting, IO error semantics match the docs, non-`Copy`
+`OrderedMap` traversal works through scoped callbacks, and the bytes/text/base64
+docs match the implementation.
+
 1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
    signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
    type), migrate the differential fuzzer to self-printing wrappers, sweep the
@@ -341,9 +355,9 @@ lifting it is pulled by the first infallible non-`Alloc` destructor; raw
    operations), but the visitation order is deliberately **not** a defined key
    order — `HashMap`/`HashSet` are permanently unordered (a map is unordered in
    the proof model, so this costs the evidence story nothing). A defined key
-   order is `OrderedMap`/`OrderedSet`'s job — which additionally must grow
-   `for_each`/`fold` (today only `vec`/`map`/`set` have them). Do not add
-   insertion-order tracking to the hash collections.
+   order is `OrderedMap`/`OrderedSet`'s job; their `for_each`/`fold` APIs have
+   landed and must remain ascending-key traversal. Do not add insertion-order
+   tracking to the hash collections.
    - 1a. Keep `Clone` and indexed move/swap as **workload-gated value-model
      research**, separate from H1 and not assumed inevitable. If admitted,
      `Clone` is explicit semantic duplication (capability-visible, usually
@@ -454,16 +468,12 @@ lifting it is pulled by the first infallible non-`Alloc` destructor; raw
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-10. Add `std.base64` as the first byte-format module, pulled by the
-    `base64_cli` workload rather than designed in isolation. V1 should include
-    only what the workload and RFC 4648 vectors require: encode/decode over
-    fixed buffers and allocation-backed `Vec<u8>` as needed, strict error
-    reporting, invalid-padding negatives, oracle comparison, and evidence
-    classification. Streaming encode/decode is explicitly deferred to
-    package/workload pressure, not hidden in v1. Done when
-    `examples/base64_cli` builds and runs against an external
-    oracle, so the module proves the args -> bytes/text -> parse/errors ->
-    Writer path instead of just unit tests.
+10. Keep `std.base64` as the first byte-format module's completed workload
+    precedent, not an open design task. V1 and `examples/base64_cli` have
+    landed; future work is only the explicit tail: decide and gate canonical
+    padding-bit strictness, add streaming encode/decode only when a workload
+    pulls it, and preserve the args -> bytes/text -> parse/errors -> Writer
+    oracle path as the model for the next byte-format module.
 11. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
