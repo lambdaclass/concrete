@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Workload 4: tar_list — ustar lister, tar-differential (2026-07-16)
+
+`examples/tar_list` lists ustar archives byte-identical to `tar -tf`
+(size edges 0/511/512/513, directories, >100-char paths via the ustar
+prefix/name join), gated by `check_tar_list_differential.sh` (8 checks,
+Makefile + CI; system tar is the oracle). First workload written WITH
+std.cli from the start — zero arg-parsing friction, as designed. 13t exit
+codes throughout; a truncated-archive u64 underflow in the first draft was
+caught by the checked-subtraction trap on the first test run and fixed to
+the H2 overflow-safe shape (the trap contract working as promised —
+recorded as positive friction). Pull candidates held at one ask:
+bytes-until-NUL field extraction, numeral parsing over &Bytes+offset,
+String::push_str. Not pulled: pax/GNU long names, -tvf verbose rows,
+streaming reads.
+
 ### Bugs 035 + 036 fixed — layout is program-wide, type metadata travels with the type (2026-07-16)
 
 The two bugs std.cli's first contact filed are closed same-day. **035**:

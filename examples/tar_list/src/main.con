@@ -1,0 +1,162 @@
+// tar_list — WORKLOAD 4 (P7: binary format with ASCII-encoded numerics).
+// Usage: tar_list <file.tar>
+// Lists ustar archive entries one name per line, byte-identical to
+// `tar -tf` for archives of ordinary files/dirs — the check script diffs
+// against the system tool. Exercises: NUL-padded fixed-width text fields
+// extracted from Bytes, OCTAL numerals stored as ASCII inside a binary
+// header, 512-block arithmetic, std.cli (dogfood), 13t exit codes
+// (usage=2, bad archive/io=1, clean=0).
+mod tar_list {
+    import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
+                   println, eprintln};
+
+    // NUL-padded fixed-width text field -> String (tar name/prefix fields).
+    // FRICTION: every binary format with embedded text re-rolls this loop;
+    // candidate pull: Bytes.field_string(off, max) or Text::from_bytes_until_nul.
+    fn field_string(data: &Bytes, off: u64, maxlen: u64) with(Alloc) -> String {
+        let mut s: String = String::new();
+        let mut k: u64 = 0;
+        while k < maxlen {
+            let b: u8 = data.get_unchecked(off + k);
+            if b == 0 { return s; }
+            s.push_char(b as char);
+            k = k + 1;
+        }
+        return s;
+    }
+
+    // Octal ASCII numeral inside a binary header (tar size/mode fields):
+    // leading spaces/NULs skipped, digits accumulate, space/NUL terminates.
+    // FRICTION: std.parse.parse_oct takes &String — parsing a numeral out
+    // of a Bytes REGION needs either this re-roll or a String round-trip
+    // allocation per field; candidate pull: parse feeding on &Bytes+offset.
+    fn parse_octal(data: &Bytes, off: u64, len: u64) -> u64 {
+        let mut v: u64 = 0;
+        let mut k: u64 = 0;
+        let mut started: bool = false;
+        while k < len {
+            let b: u8 = data.get_unchecked(off + k);
+            if b >= 48 && b <= 55 {
+                v = v * 8 + ((b - 48) as u64);
+                started = true;
+            } else {
+                if started { return v; }
+                // skip leading padding (space or NUL)
+            }
+            k = k + 1;
+        }
+        return v;
+    }
+
+    fn is_zero_block(data: &Bytes, off: u64) -> bool {
+        let mut k: u64 = 0;
+        while k < 512 {
+            if data.get_unchecked(off + k) != 0 { return false; }
+            k = k + 1;
+        }
+        return true;
+    }
+
+    // "ustar" magic at header offset 257.
+    fn has_magic(data: &Bytes, off: u64) -> bool {
+        return data.get_unchecked(off + 257) == 117    // 'u'
+            && data.get_unchecked(off + 258) == 115    // 's'
+            && data.get_unchecked(off + 259) == 116    // 't'
+            && data.get_unchecked(off + 260) == 97     // 'a'
+            && data.get_unchecked(off + 261) == 114;   // 'r'
+    }
+
+    fn fail(msg: String) with(Console) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    // Walk header blocks; print one entry name per line (ustar prefix field
+    // joined when present, matching tar -tf).
+    fn walk(data: &Bytes) with(Std) -> u8 {
+        let total: u64 = data.len();
+        let mut off: u64 = 0;
+        while off < total {
+            // overflow-safe (H2): off < total holds here, so total - off is exact
+            if total - off < 512 {
+                return fail("tar_list: truncated archive");
+            }
+            if is_zero_block(data, off) { return 0; }
+            if !has_magic(data, off) {
+                return fail("tar_list: bad header (not ustar)");
+            }
+            let name: String = field_string(data, off, 100);
+            let prefix: String = field_string(data, off + 345, 155);
+            if prefix.is_empty() {
+                prefix.drop();
+                println(&name);
+                name.drop();
+            } else {
+                let mut full: String = prefix;
+                full.push_char('/');
+                let mut k: u64 = 0;
+                while k < name.len() {
+                    full.push_char(name.get_unchecked(k));
+                    k = k + 1;
+                }
+                name.drop();
+                println(&full);
+                full.drop();
+            }
+            let size: u64 = parse_octal(data, off + 124, 12);
+            // overflow-safe block math (H2): blocks = ceil(size/512)
+            let data_blocks: u64 = size / 512 + (if size % 512 == 0 { 0 } else { 1 });
+            off = off + 512 + data_blocks * 512;
+        }
+        // ran past the end without the terminating zero block (data blocks
+        // truncated, or end-of-archive marker missing) — recoverable, rc 1
+        return fail("tar_list: truncated archive");
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        match cli.parse(1, 1) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: tar_list <file.tar>";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let maybe_path: Option<String> = ps.pop();
+                ps.drop();
+                match maybe_path {
+                    Option::None => { return 2; },
+                    Option::Some { value } => {
+                        let mode: String = "rb";
+                        let opened: Result<TextFile, IoError> = TextFile::open(&value, &mode);
+                        mode.drop();
+                        value.drop();
+                        match opened {
+                            Result::Err { error } => {
+                                discard(error);
+                                return fail("tar_list: cannot open file");
+                            },
+                            Result::Ok { value } => {
+                                let r: Reader = reader_from_file(value);
+                                let data: Bytes = read_all(&r);
+                                let rc: Result<u64, IoError> = r.close();
+                                discard(rc.is_ok());
+                                let status: u8 = walk(&data);
+                                data.drop();
+                                return status;
+                            },
+                        }
+                    },
+                }
+            },
+        }
+    }
+}

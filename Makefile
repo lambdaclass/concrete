@@ -354,6 +354,9 @@ test-hexdump: build ## P7 workload 3: hexdump byte-identical to xxd (default/-s/
 test-cli-helpers: build ## std.cli v1: cli_tool matrix (flags/arity/13t exit codes) + bug-034 regression + proof-of-pull
 	$(NIX_DEVELOP) bash ./scripts/tests/check_cli_helpers.sh
 
+test-tar-list: build ## P7 workload 4: tar_list byte-identical to tar -tf (size edges/prefix paths) + 13t exit codes
+	$(NIX_DEVELOP) bash ./scripts/tests/check_tar_list_differential.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 
