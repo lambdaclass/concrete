@@ -28,7 +28,7 @@ build_expect(){ local dir="$1" exp="$2" code="$3" label="$4"
   local out rc
   out="$(cd "$dir" && "$COMPILER" build 2>&1)"; rc=$?
   local codeok=1
-  if [ "$code" != "-" ]; then printf '%s' "$out" | grep -qF "$code" || codeok=0; fi
+  if [ "$code" != "-" ]; then grep -qF <<<"$out" "$code" || codeok=0; fi
   if [ "$rc" = "$exp" ] && [ "$codeok" = "1" ]; then ok "$label (exit $rc${code:+, $code})"
   else no "$label (exit=$rc want $exp; code $code)"; fi
 }

@@ -37,11 +37,11 @@ clean_reject(){
   local out rc
   out="$("$C" "$TMP/$n.con" -o "$TMP/$n.bin" 2>&1)" && rc=0 || rc=$?
   if [ "$rc" -eq 0 ]; then no "$n: expected rejection, but it compiled"; return; fi
-  if printf '%s' "$out" | grep -qE "$LEAK"; then
+  if grep -qE <<<"$out" "$LEAK"; then
     no "$n: LEAKED a lower-layer error: $(printf '%s' "$out" | grep -oE "$LEAK" | head -1)"; return; fi
-  if ! printf '%s' "$out" | grep -q "error\["; then
+  if ! grep -q <<<"$out" "error\["; then
     no "$n: rejected but with no clean 'error[...]' diagnostic: $(printf '%s' "$out" | head -1)"; return; fi
-  if [ $# -ge 3 ] && ! printf '%s' "$out" | grep -qi "$3"; then
+  if [ $# -ge 3 ] && ! grep -qi <<<"$out" "$3"; then
     no "$n: diagnostic missing expected text '$3': $(printf '%s' "$out" | head -1)"; return; fi
   ok "$n"
 }

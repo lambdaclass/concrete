@@ -33,13 +33,13 @@ for r in vcs contracts proof-status audit; do
 done
 
 echo "=== soundness: nothing adversarial is mis-proved ==="
-printf '%s' "$(vc_status 'reassigned_guard#aa0')" | grep -qF "proved_by_kernel_decision" \
+grep -qF <<<"$(vc_status 'reassigned_guard#aa0')" "proved_by_kernel_decision" \
   && no "reassigned guard mis-proved (stale hypothesis used) — UNSOUND" || ok "reassigned guard → not proved (stale hypothesis dropped)"
 # non-literal divisor: must not produce a kernel proof (no sound lowering).
 "$COMPILER" "$RT" --report vcs 2>/dev/null | awk '/var_divisor#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
   && no "var_divisor (non-literal divisor) was mis-proved — UNSOUND" || ok "var_divisor → not mis-proved (no sound lowering)"
 # edge/huge literal: omega proves the in-range assert (no crash, sound).
-printf '%s' "$(vc_status 'edge_bounds#aa0')" | grep -qF "proved_by_kernel_decision (omega)" \
+grep -qF <<<"$(vc_status 'edge_bounds#aa0')" "proved_by_kernel_decision (omega)" \
   && ok "edge_bounds (huge i32 literal) → omega-proved (no crash, sound)" || no "edge_bounds not omega-proved"
 
 echo "=== default report carries no SMT data ==="

@@ -33,13 +33,13 @@ build_expect(){ local dir="$1" want="$2" needle="$3" label="$4"
   if [ "$want" = "0" ]; then
     [ "$rc" -eq 0 ] && ok "$label" || { no "$label (exit=$rc)"; printf '%s\n' "$out" | grep -iE "error|E061" | head -2 | sed 's/^/      /'; }
   else
-    if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qF "$needle"; then ok "$label";
+    if [ "$rc" -ne 0 ] && grep -qF <<<"$out" "$needle"; then ok "$label";
     else no "$label (exit=$rc, missing '$needle')"; printf '%s\n' "$out" | head -2 | sed 's/^/      /'; fi
   fi; }
 
 echo "=== policy parses (no 'unrecognized key' for solver-evidence/assumption) ==="
 warn="$("$COMPILER" examples/smt/policy_allow/src/main.con 2>&1 || true)"
-printf '%s' "$warn" | grep -qiE "unrecognized key '(solver-evidence|solver-assumption)'" \
+grep -qiE <<<"$warn" "unrecognized key '(solver-evidence|solver-assumption)'" \
   && no "solver-evidence/solver-assumption flagged unrecognized" || ok "solver-evidence/solver-assumption are recognized keys"
 
 echo "=== counterexample / non-proof: a sat VC is never solver_trusted ==="

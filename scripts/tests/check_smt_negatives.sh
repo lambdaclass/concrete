@@ -35,7 +35,7 @@ sys.exit(0 if not bad else 1)" && ok "$label" || no "$label"; }
 
 echo "=== out-of-fragment: SMT produces NO query for a linear obligation ==="
 emit="$("$COMPILER" "$NEG" --report vcs --emit-smt 2>/dev/null)"
-printf '%s' "$emit" | grep -qiF "no SMT-eligible" && ok "linear a+b → no SMT query (SMT does not grab kernel-owned facts)" \
+grep -qiF <<<"$emit" "no SMT-eligible" && ok "linear a+b → no SMT query (SMT does not grab kernel-owned facts)" \
   || no "linear obligation unexpectedly produced an SMT query"
 # and its VC is never solver-classified.
 assert_no_proof "linear obligation never becomes a solver proof" "$("$COMPILER" "$NEG" --report vcs --smt --json 2>/dev/null)"
@@ -72,7 +72,7 @@ sys.exit(0 if sc and sc['status']=='solver_trusted' and not any(v['status']=='pr
   # policy forbids solver_trusted → release build fails (E0615).
   out="$( cd examples/smt/policy_forbid && "$ABS" build -o /tmp/smtneg_out 2>&1 )" && rc=0 || rc=$?
   rm -f /tmp/smtneg_out
-  { [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qF "E0615"; } \
+  { [ "$rc" -ne 0 ] && grep -qF <<<"$out" "E0615"; } \
     && ok "policy forbid + solver_trusted → release build REJECTED (E0615)" || no "forbid policy did not reject (exit=$rc)"
 else
   echo "=== Z3 absent: solver_error is the verdict, never a proof ==="

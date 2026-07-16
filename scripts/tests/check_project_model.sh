@@ -34,7 +34,7 @@ name = "p"
 version = "0.1.0"
 '
 out="$(build_out)"
-printf '%s' "$out" | grep -qE "Built" && ! printf '%s' "$out" | grep -qiE "warning: Concrete.toml" \
+grep -qE <<<"$out" "Built" && ! grep -qiE <<<"$out" "warning: Concrete.toml" \
   && ok "valid [package]+name builds, no structural warning" \
   || no "valid manifest warned or failed to build"
 
@@ -45,21 +45,21 @@ version = "0.1.0"
 [mystery]
 secret = true
 '
-printf '%s' "$(build_out)" | grep -qiE "unrecognized section '\[mystery\]'" \
+grep -qiE <<<"$(build_out)" "unrecognized section '\[mystery\]'" \
   && ok "unknown section warned — no silent hidden config" \
   || no "unknown section was NOT warned (ambient-config guard missing)"
 
 echo "=== 3. missing [package] is warned ==="
 setup_toml '[dependencies]
 '
-printf '%s' "$(build_out)" | grep -qiE "missing \[package\] section" \
+grep -qiE <<<"$(build_out)" "missing \[package\] section" \
   && ok "missing [package] warned" || no "missing [package] not warned"
 
 echo "=== 4. missing name is warned ==="
 setup_toml '[package]
 version = "0.1.0"
 '
-printf '%s' "$(build_out)" | grep -qiE "\[package\] missing 'name'" \
+grep -qiE <<<"$(build_out)" "\[package\] missing 'name'" \
   && ok "missing name warned" || no "missing name not warned"
 
 echo "=== 5. entry point is src/main.con; absence is a clean error ==="
@@ -69,7 +69,7 @@ version = "0.1.0"
 '
 mv "$TMP/p/src/main.con" "$TMP/p/src/other.con"
 out="$(build_out)"
-if printf '%s' "$out" | grep -qiE "src/main.con|entry point" && ! printf '%s' "$out" | grep -qE "Built"; then
+if grep -qiE <<<"$out" "src/main.con|entry point" && ! grep -qE <<<"$out" "Built"; then
   ok "missing src/main.con is a clean error naming the entry point"
 else
   no "missing entry point not reported cleanly"

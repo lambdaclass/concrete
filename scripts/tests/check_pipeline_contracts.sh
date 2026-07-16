@@ -41,9 +41,9 @@ contract(){
   local out rc
   out="$("$C" "$TMP/$label.con" -o "$TMP/$label.bin" 2>&1)" && rc=0 || rc=$?
   if [ "$rc" -eq 0 ]; then no "$label: contract not enforced — it compiled"; return; fi
-  if printf '%s' "$out" | grep -qE "$LEAK"; then
+  if grep -qE <<<"$out" "$LEAK"; then
     no "$label: LEAKED past the boundary: $(printf '%s' "$out" | grep -oE "$LEAK" | head -1)"; return; fi
-  if ! printf '%s' "$out" | grep -q "error\[${passtag}\]"; then
+  if ! grep -q <<<"$out" "error\[${passtag}\]"; then
     no "$label: not caught at the '${passtag}' boundary: $(printf '%s' "$out" | grep -oE 'error\[[a-z-]+\]' | head -1)"; return; fi
   ok "$label (caught at ${passtag})"
 }

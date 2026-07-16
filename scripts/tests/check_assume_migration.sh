@@ -62,7 +62,7 @@ ckl "ledger marks assume as a forbid-assume policy input" \
 echo "=== forbid-assume policy still rejects the build (E0614) ==="
 ADVDIR="examples/contract_negatives/assume_scope_adversarial"
 asm_out="$( cd "$ADVDIR" && "$ROOT_DIR/$COMPILER" build 2>&1 )" && asm_exit=0 || asm_exit=$?
-if [ "$asm_exit" -ne 0 ] && printf '%s' "$asm_out" | grep -qF "E0614"; then
+if [ "$asm_exit" -ne 0 ] && grep -qF <<<"$asm_out" "E0614"; then
   ok "forbid-assume rejects build (E0614)"
 else
   no "forbid-assume should reject build with E0614 (exit=$asm_exit)"

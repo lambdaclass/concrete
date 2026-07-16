@@ -23,7 +23,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 assert_in(){ local label="$1" file="$2"; shift 2
   local needle="${@: -1}"; set -- "${@:1:$(($#-1))}"
   local out; out="$("$COMPILER" "$file" --report "$@" 2>/dev/null)"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then ok "$label"; else no "$label — missing '$needle'"; fi; }
+  if grep -qF <<<"$out" -- "$needle"; then ok "$label"; else no "$label — missing '$needle'"; fi; }
 
 echo "=== self-contained subexamples (examples/vc_discharge/) ==="
 assert_in "omega          → proved_by_kernel_decision (omega)"      "$VC/omega.con"   vcs "proved_by_kernel_decision (omega)"

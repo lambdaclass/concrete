@@ -77,7 +77,7 @@ out="$(cd "$DIR" && PATH="$TMP:$PATH" "$COMPILER" build 2>&1)"; rc=$?
 rm -rf "$TMP" "$DIR/obligation_redteam"
 [ "$rc" -ne 0 ] && ok "strict release profile rejects the project (exit $rc)" || no "release profile accepted the red-team project"
 for code in E0613 E0614 E0615; do
-  printf '%s' "$out" | grep -qF "$code" && ok "policy raised $code" || no "policy did not raise $code"
+  grep -qF <<<"$out" "$code" && ok "policy raised $code" || no "policy did not raise $code"
 done
 
 echo ""

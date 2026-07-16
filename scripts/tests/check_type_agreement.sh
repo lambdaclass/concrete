@@ -49,7 +49,7 @@ agree(){ local label="$1" F="$2" want="$3"
 # (both passes agree it is ill-typed, rather than one accepting it).
 rejects(){ local label="$1" F="$2" code="$3"
   local OUT; OUT="$("$COMPILER" "$F" --interp 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "$code"; then ok "$label"
+  if [ $? -ne 0 ] && grep -q <<<"$OUT" "$code"; then ok "$label"
   else no "$label (want $code, got: $(printf '%s' "$OUT" | head -1))"; fi; }
 
 # both_trap <label> <file>: interp AND the compiled binary both trap on a
@@ -66,7 +66,7 @@ both_trap(){ local label="$1" F="$2"
   # Run the binary inside command substitution so the shell's job-control signal
   # notice ("Abort trap: 6") is absorbed rather than printed to the gate log.
   if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then local _o; _o="$("$F.bin" 2>&1)"; CRC=$?; else CRC=200; fi
-  if [ $IRC -ne 0 ] && printf '%s' "$IOUT" | grep -qi "overflow" && [ $CRC -ne 0 ]; then ok "$label"
+  if [ $IRC -ne 0 ] && grep -qi <<<"$IOUT" "overflow" && [ $CRC -ne 0 ]; then ok "$label"
   else no "$label (interp rc=$IRC compiled rc=$CRC; interp: $(printf '%s' "$IOUT" | head -1))"; fi; }
 
 echo "=== flexible literal tree adopts the SIBLING's width (no rescuing hint) ==="

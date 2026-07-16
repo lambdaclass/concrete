@@ -35,7 +35,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 rejects_cap(){
   local n="$1"; printf '%s' "$2" > "$TMP/$n.con"
   local out; out="$("$C" "$TMP/$n.con" -o "$TMP/$n.bin" 2>&1)" || true
-  if printf '%s' "$out" | grep -qE "error\[core-check\].*(Unsafe|capability|requires)"; then ok "$n: rejected at core-check"
+  if grep -qE <<<"$out" "error\[core-check\].*(Unsafe|capability|requires)"; then ok "$n: rejected at core-check"
   else no "$n: expected a capability rejection; got: $(printf '%s' "$out" | head -1)"; fi
 }
 

@@ -27,7 +27,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 rejects_e0228(){ local label="$1" F="$2"
   local OUT; OUT="$("$COMPILER" "$F" --interp 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "E0228"; then ok "$label"
+  if [ $? -ne 0 ] && grep -q <<<"$OUT" "E0228"; then ok "$label"
   else no "$label (got: $(printf '%s' "$OUT" | head -1))"; fi; }
 
 # agree <label> <file> <expected>: interp and compiled both print <expected>.

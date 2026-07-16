@@ -34,7 +34,7 @@ value(){ local label="$1" F="$TMPDIR/$2.con" want="$3"
 # rejects <label> <name> <code>: check rejects with the given diagnostic code.
 rejects(){ local label="$1" F="$TMPDIR/$2.con" code="$3"
   local OUT; OUT="$("$COMPILER" "$F" --interp 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "$code"; then ok "$label"
+  if [ $? -ne 0 ] && grep -q <<<"$OUT" "$code"; then ok "$label"
   else no "$label (want $code, got $(printf '%s' "$OUT"|head -1))"; fi; }
 
 echo "=== Copy types may be duplicated; linear types may not ==="

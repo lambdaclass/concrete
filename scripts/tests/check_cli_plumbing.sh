@@ -31,7 +31,7 @@ for cmd in build test check; do
   out="$(cd "$TMP" && "$COMPILER" "$cmd" 2>&1)"; rc=$?
   [ "$rc" = "1" ] || allone=0
   outs+=("$out")
-  printf '%s' "$out" | grep -q "no Concrete.toml found" || allsame=0
+  grep -q <<<"$out" "no Concrete.toml found" || allsame=0
 done
 [ "$allone" = "1" ] && ok "build/test/check all exit 1 outside a project" \
   || no "project commands disagree on the no-project exit code"
@@ -45,7 +45,7 @@ grep -qE "def taxonomy" Main.lean && grep -qE "def helpBlock" Main.lean \
 HELP="$("$COMPILER" prove --help=agent 2>/dev/null)"
 block="$(printf '%s' "$HELP" | sed -n '/EXIT CODES:/,/internal compiler error/p')"
 okcodes=1
-for c in 0 1 2 3 4 5 6; do printf '%s' "$block" | grep -qE "^  $c  " || okcodes=0; done
+for c in 0 1 2 3 4 5 6; do grep -qE <<<"$block" "^  $c  " || okcodes=0; done
 [ "$okcodes" = "1" ] && ok "help EXIT CODES block lists codes 0..6 (generated from taxonomy)" \
   || no "help EXIT CODES block does not match the taxonomy"
 # the prove exit-code values are still routed through named constants (no literals).

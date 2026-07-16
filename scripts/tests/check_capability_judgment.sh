@@ -28,7 +28,7 @@ rejects(){ local F="$TMPDIR/$2.con"; if "$COMPILER" "$F" -o "$F.bin" >/dev/null 
 rejects_code(){ local F="$TMPDIR/$2.con" want="$3" out
   out="$("$COMPILER" "$F" -o "$F.bin" 2>&1)"
   if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then no "$1 (compiled — $want not raised!)"
-  elif printf '%s' "$out" | grep -q "$want"; then ok "$1"
+  elif grep -q <<<"$out" "$want"; then ok "$1"
   else no "$1 (rejected but not $want: $(printf '%s' "$out" | head -1))"; fi; }
 
 echo "=== direct-call capability decision (caller must cover callee) ==="

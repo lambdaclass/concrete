@@ -40,18 +40,18 @@ EOF
 
 echo "=== 1. project 'concrete test' builds + runs (no dup-global miscompile) ==="
 out="$(cd "$TMP/p" && "$COMPILER" test 2>&1)"; rc=$?
-if printf '%s' "$out" | grep -qiE "redefinition|LLVM IR validation failed"; then
+if grep -qiE <<<"$out" "redefinition|LLVM IR validation failed"; then
   no "project test build miscompiled (dup global regressed)"; printf '%s\n' "$out" | head -3 | sed 's/^/      /'
 else
   ok "project test build is valid LLVM (no dup global)"
 fi
 
 echo "=== 2. a passing #[test] reports PASS ==="
-printf '%s' "$out" | grep -qE "PASS: t_ok" \
+grep -qE <<<"$out" "PASS: t_ok" \
   && ok "passing test reported PASS" || no "passing test not reported"
 
 echo "=== 3. a failing #[test] reports FAIL and the run exits nonzero ==="
-if printf '%s' "$out" | grep -qE "FAIL: t_bad" && [ "$rc" -ne 0 ]; then
+if grep -qE <<<"$out" "FAIL: t_bad" && [ "$rc" -ne 0 ]; then
   ok "failing test reported FAIL; run exited nonzero ($rc)"
 else
   no "failing test not reported / exit code wrong (rc=$rc)"
@@ -59,7 +59,7 @@ fi
 
 echo "=== 4. --module scopes to one module's tests ==="
 out2="$(cd "$TMP/p" && "$COMPILER" test --module p 2>&1)"
-if printf '%s' "$out2" | grep -qE "PASS: t_ok" && printf '%s' "$out2" | grep -qE "FAIL: t_bad"; then
+if grep -qE <<<"$out2" "PASS: t_ok" && grep -qE <<<"$out2" "FAIL: t_bad"; then
   ok "--module p runs that module's tests"
 else
   no "--module filter did not run the expected tests"

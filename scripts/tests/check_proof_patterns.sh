@@ -29,10 +29,10 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # assert_contains <label> <needle> <cmd...>
 assert_contains(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
-  if printf '%s' "$o" | grep -qF -- "$n"; then ok "$l"; else no "$l — missing '$n'"; printf '%s\n' "$o"|sed 's/^/      /'|head -8; fi; }
+  if grep -qF <<<"$o" -- "$n"; then ok "$l"; else no "$l — missing '$n'"; printf '%s\n' "$o"|sed 's/^/      /'|head -8; fi; }
 # assert_absent <label> <needle> <cmd...>
 assert_absent(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
-  if printf '%s' "$o" | grep -qF -- "$n"; then no "$l — unexpected '$n'"; else ok "$l"; fi; }
+  if grep -qF <<<"$o" -- "$n"; then no "$l — unexpected '$n'"; else ok "$l"; fi; }
 # assert_json <label> <pyexpr> <cmd...>
 assert_json(){ local l="$1" e="$2"; shift 2; local o; o="$("$@" 2>/dev/null)"
   if printf '%s' "$o" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if ($e) else 1)" 2>/dev/null; then ok "$l"; else no "$l — JSON/assert failed: $e"; fi; }

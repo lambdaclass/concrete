@@ -18,7 +18,7 @@ PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 emit(){ printf '%s\n' "$2" > "$TMPDIR/$1.con"; }
-has(){ printf '%s' "$1" | grep -q "$2"; }
+has(){ grep -q <<<"$1" "$2"; }
 
 # names_stage <label> <name> <outcome> <firstFailingStage-json> [code]
 names_stage(){ local label="$1" T="$("$COMPILER" "$TMPDIR/$2.con" --trace-pipeline 2>&1)"
@@ -53,7 +53,7 @@ names_stage "use-after-move → firstFailingStage=check (E0205)" echeck "rejecte
 
 echo "=== schema stability + no private paths ==="
 if has "$CLEAN" '"schema":"concrete.pipeline.trace.v1"'; then ok "stable schema tag"; else no "missing schema tag"; fi
-if printf '%s' "$CLEAN" | grep -qE '/(Users|home|private|tmp|root)/'; then
+if grep -qE <<<"$CLEAN" '/(Users|home|private|tmp|root)/'; then
   no "absolute path leaked into trace"
 else ok "no absolute path in trace"; fi
 

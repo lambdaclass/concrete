@@ -26,7 +26,7 @@ FAIL=0
 assert_contains() {
   local label="$1"; local needle="$2"; shift 2
   local out; out="$("$@" 2>&1)"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then
+  if grep -qF <<<"$out" -- "$needle"; then
     echo "  ok   $label — found '$needle'"
     PASS=$((PASS + 1))
   else
@@ -40,7 +40,7 @@ assert_contains() {
 assert_absent() {
   local label="$1"; local needle="$2"; shift 2
   local out; out="$("$@" 2>&1)"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then
+  if grep -qF <<<"$out" -- "$needle"; then
     echo "  FAIL $label — unexpected '$needle'"
     FAIL=$((FAIL + 1))
   else
@@ -222,7 +222,7 @@ fi
 echo "=== prove --workspace (composed proof workspace) ==="
 WS="$(mktemp -d)/ws"
 WS_OUT="$("$COMPILER" prove "$LI" loop_invariant.count_up --workspace "$WS" 2>&1)"
-if printf '%s' "$WS_OUT" | grep -qF "wrote proof workspace"; then
+if grep -qF <<<"$WS_OUT" "wrote proof workspace"; then
   echo "  ok   workspace generated"; PASS=$((PASS+1))
 else
   echo "  FAIL workspace generation — $WS_OUT"; FAIL=$((FAIL+1))

@@ -37,7 +37,7 @@ EOF
 # rejects <label> <dir> <code>: project build must fail with the given code.
 rejects(){ local label="$1" dir="$2" code="$3"
   local OUT; OUT="$(cd "$dir" && "$COMPILER" build 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "($code)"; then ok "$label"
+  if [ $? -ne 0 ] && grep -q <<<"$OUT" "($code)"; then ok "$label"
   else no "$label (want $code; got: $(printf '%s' "$OUT" | head -1))"; fi; }
 
 echo "=== user submodule bodies are front-end checked ==="
@@ -53,7 +53,7 @@ rejects "immutable assignment in sub-file (E0217)" "$TMPDIR/imm" "E0217"
 # #24a: the diagnostic must NAME the sub-file (and quote ITS source line),
 # not the main file the build started from.
 OUT="$(cd "$TMPDIR/imm" && "$COMPILER" build 2>&1)"
-if printf '%s' "$OUT" | grep -q "helper.con:4" && printf '%s' "$OUT" | grep -qF 'c = c + 1'; then
+if grep -q <<<"$OUT" "helper.con:4" && grep -qF <<<"$OUT" 'c = c + 1'; then
   ok "sub-file diagnostics name the sub-file with its own snippet (#24a)"
 else
   no "sub-file diagnostics misattributed (got: $(printf '%s' "$OUT" | head -1))"

@@ -35,7 +35,7 @@ no() { echo "  FAIL $1"; GATE_FAIL=$((GATE_FAIL+1)); }
 rejects() {
   local label="$1" f="$2" code="$3" out
   out="$("$GATE_COMPILER" "$f" -o "$GATE_TMP/r.bin" 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$out" | grep -q "($code)"; then ok "$label"
+  if [ $? -ne 0 ] && grep -q <<<"$out" "($code)"; then ok "$label"
   else no "$label (want $code; got: $(printf '%s' "$out" | head -1))"; fi
 }
 

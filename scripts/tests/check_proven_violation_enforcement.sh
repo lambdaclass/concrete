@@ -23,13 +23,13 @@ DIV="examples/known_holes/proven_div_zero/src/main.con"
 
 echo "=== proven violations are rejected in safe code ==="
 OUT="$("$COMPILER" "$OOB" -o "$TMP/oob" 2>&1)"
-if printf '%s' "$OUT" | grep -q "E0900" && printf '%s' "$OUT" | grep -qi "out of bounds"; then
+if grep -q <<<"$OUT" "E0900" && grep -qi <<<"$OUT" "out of bounds"; then
   ok "constant out-of-bounds index a[5] is rejected (E0900)"
 else
   no "constant OOB no longer rejected — H2 enforcement regressed"
 fi
 OUT="$("$COMPILER" "$DIV" -o "$TMP/div" 2>&1)"
-if printf '%s' "$OUT" | grep -q "E0900" && printf '%s' "$OUT" | grep -qi "zero"; then
+if grep -q <<<"$OUT" "E0900" && grep -qi <<<"$OUT" "zero"; then
   ok "literal divide-by-zero 10/0 is rejected (E0900)"
 else
   no "literal div-by-zero no longer rejected — H2 enforcement regressed"

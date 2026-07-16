@@ -29,7 +29,7 @@ TRACE="$("$COMPILER" "$TMPDIR/rich.con" --emit-trace-json 2>&1)"
 TINY="$("$COMPILER" "$TMPDIR/tiny.con" --emit-trace-json 2>&1)"
 
 echo "=== schema stability ==="
-has(){ printf '%s' "$1" | grep -q "$2"; }
+has(){ grep -q <<<"$1" "$2"; }
 
 for key in '"schema":"concrete.pipeline.telemetry.v2"' '"compiler":"' \
            '"stages":' '"ast":' '"core":' '"mono":' '"ssa":' '"diagnostics":' \
@@ -75,12 +75,12 @@ done
 
 echo "=== rss_kb is platform-graceful (null OR a non-negative integer) ==="
 rss="$(printf '%s' "$TRACE" | grep -oE '"rss_kb":(null|[0-9]+)')"
-if [ "$rss" = '"rss_kb":null' ] || printf '%s' "$rss" | grep -qE '"rss_kb":[0-9]+'; then
+if [ "$rss" = '"rss_kb":null' ] || grep -qE <<<"$rss" '"rss_kb":[0-9]+'; then
   ok "rss_kb graceful ($rss)"
 else no "rss_kb neither null nor integer ($rss)"; fi
 
 echo "=== no private absolute paths leak into the trace ==="
-if printf '%s' "$TRACE" | grep -qE '/(Users|home|private|tmp|root)/'; then
+if grep -qE <<<"$TRACE" '/(Users|home|private|tmp|root)/'; then
   no "absolute path leaked: $(printf '%s' "$TRACE" | grep -oE '/(Users|home|private|tmp|root)/[^"]*' | head -1)"
 else ok "no absolute path in the trace"; fi
 

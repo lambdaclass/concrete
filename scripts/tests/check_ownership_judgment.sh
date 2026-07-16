@@ -41,7 +41,7 @@ both_reject(){ local label="$1" F="$TMPDIR/$2.con" code="$3"
   local IOUT CRC
   IOUT="$("$COMPILER" "$F" --interp 2>&1)"
   "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; CRC=$?
-  if [ $CRC -ne 0 ] && printf '%s' "$IOUT" | grep -q "$code"; then ok "$label"
+  if [ $CRC -ne 0 ] && grep -q <<<"$IOUT" "$code"; then ok "$label"
   else no "$label (want reject $code; compiled rc=$CRC, interp=$(printf '%s' "$IOUT"|head -1))"; fi; }
 
 echo "=== ACCEPT: interp move/drop/consumption == compiled runtime ==="

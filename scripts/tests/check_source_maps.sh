@@ -37,7 +37,7 @@ print(x['code'], x['pass'], sp.get('line','null'))" 2>/dev/null)
 
 echo "=== the human render shows the file:line for the core-check diagnostic ==="
 H="$("$COMPILER" "$FIX" --report caps 2>&1)"
-printf '%s' "$H" | grep -qE "capability_at_line\.con:${FNLINE}:" \
+grep -qE <<<"$H" "capability_at_line\.con:${FNLINE}:" \
   && ok "human output prefixes the diagnostic with file:${FNLINE}" \
   || no "human output missing the source location"
 
@@ -70,7 +70,7 @@ echo "=== source location survives Core→SSA into the emitted backend artifact 
 # names the source line of each function it lowers.
 OBLINE="$(grep -n "fn divide" "$OBF" | head -1 | cut -d: -f1)"
 SSA="$("$COMPILER" "$OBF" --emit-ssa 2>/dev/null)"
-printf '%s' "$SSA" | grep -qE "^; source: divide @ line ${OBLINE}\$" \
+grep -qE <<<"$SSA" "^; source: divide @ line ${OBLINE}\$" \
   && ok "the SSA dump names divide's source line ($OBLINE)" \
   || no "SSA dump missing source-line provenance for divide"
 # pin the Core→SSA plumbing.
@@ -84,7 +84,7 @@ echo "=== declaration-level diagnostics carry the declaration span ==="
 CDF="tests/programs/error_copy_destroy.con"
 CDLINE="$(grep -n "struct Copy Widget" "$CDF" | head -1 | cut -d: -f1)"
 CD="$("$COMPILER" "$CDF" 2>&1)"
-printf '%s' "$CD" | grep -qE "error_copy_destroy\.con:${CDLINE}:" \
+grep -qE <<<"$CD" "error_copy_destroy\.con:${CDLINE}:" \
   && ok "Copy/Destroy conflict points at the struct declaration (line $CDLINE)" \
   || no "Copy/Destroy conflict missing its declaration span"
 # pin the decl-span plumbing for structs/enums/traits/trait-impls.

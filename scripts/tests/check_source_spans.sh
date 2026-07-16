@@ -34,9 +34,9 @@ span_on_line(){
   local out rc
   out="$("$C" "$TMP/$label.con" -o "$TMP/$label.bin" 2>&1)" && rc=0 || rc=$?
   if [ "$rc" -eq 0 ]; then no "$label: expected a diagnostic, but it compiled"; return; fi
-  if ! printf '%s' "$out" | grep -qE "\.con:${line}:[0-9]+:"; then
+  if ! grep -qE <<<"$out" "\.con:${line}:[0-9]+:"; then
     no "$label: diagnostic not anchored to line ${line}: $(printf '%s' "$out" | head -1)"; return; fi
-  if ! printf '%s' "$out" | grep -q "error\[${passtag}"; then
+  if ! grep -q <<<"$out" "error\[${passtag}"; then
     # pass tag is advisory — warn but do not fail if the line anchor is right
     ok "$label (line ${line}; note: pass tag not '${passtag}')"; return; fi
   ok "$label (${passtag} @ line ${line})"

@@ -20,7 +20,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 echo "=== (a) help is context-free and never throws ==="
 for inv in "--help" "help" "-h" "test --help" "fmt --help" "prove --help" "reduce --help" "trace --help"; do
   out="$("$C" $inv 2>&1)"; rc=$?
-  if [ $rc -eq 0 ] && ! printf '%s' "$out" | grep -qi "uncaught exception"; then
+  if [ $rc -eq 0 ] && ! grep -qi <<<"$out" "uncaught exception"; then
     ok "concrete $inv (exit 0, no exception)"
   else no "concrete $inv (rc=$rc)"; fi
 done
@@ -40,14 +40,14 @@ echo "=== (c) legacy spellings still work ==="
 echo "=== (d) invalid invocations: structured error, no exception ==="
 for inv in "nonexistent-cmd" "report" "trace" "p.con --report bogus-kind"; do
   out="$("$C" $inv 2>&1 || true)"
-  if printf '%s' "$out" | grep -qi "uncaught exception"; then no "concrete $inv threw"
+  if grep -qi <<<"$out" "uncaught exception"; then no "concrete $inv threw"
   else ok "concrete $inv -> structured error"; fi
 done
 
 echo "=== (e) help names every public command group ==="
 H="$("$C" --help 2>&1)"
 for grp in DAILY "REPORTS & EVIDENCE" DEBUGGING "INTERNALS" build run test fmt prove reduce debug-bundle; do
-  printf '%s' "$H" | grep -q "$grp" && ok "help mentions $grp" || no "help missing $grp"
+  grep -q <<<"$H" "$grp" && ok "help mentions $grp" || no "help missing $grp"
 done
 
 echo

@@ -20,7 +20,7 @@ PASS=0; FAIL=0
 run(){ local l="$1"; shift; if "$@" >/tmp/6d_sub.log 2>&1; then echo "  ok   $l"; PASS=$((PASS+1)); else echo "  FAIL $l"; tail -3 /tmp/6d_sub.log | sed 's/^/       /'; FAIL=$((FAIL+1)); fi; }
 rejects(){ local l="$1" f="$2" pat="$3" out
   out="$("$COMPILER" "$f" 2>&1 || true)"
-  if printf '%s' "$out" | grep -q "$pat"; then echo "  ok   $l"; PASS=$((PASS+1));
+  if grep -q <<<"$out" "$pat"; then echo "  ok   $l"; PASS=$((PASS+1));
   else echo "  FAIL $l"; FAIL=$((FAIL+1)); fi; }
 
 echo "=== grammar stays LL(1) ==="

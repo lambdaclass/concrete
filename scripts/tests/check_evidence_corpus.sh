@@ -25,7 +25,7 @@ PASS=0; FAIL=0
 want() {
   local label="$1" report="$2" sub="$3" needle="$4"
   local out; out="$("$COMPILER" "$EC/$sub/src/main.con" --report "$report" 2>&1)"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then
+  if grep -qF <<<"$out" -- "$needle"; then
     echo "  ok   $label"; PASS=$((PASS + 1))
   else
     echo "  FAIL $label — '$report' missing '$needle'"
@@ -55,14 +55,16 @@ echo ""
 echo "=== loop-invariant feeds runtime-safety (bounds from #[invariant]) ==="
 rc="$("$COMPILER" "$EC/runtime_checked/src/main.con" --report contracts 2>&1)"
 # sum_loop: body a[i] proved from the loop invariant + guard, no #[requires].
-if printf '%s' "$rc" | grep -A2 -E '^demo\.sum_loop$' | grep -q "proved_by_kernel_decision (omega)"; then
+sum_loop_seg=$(grep -A2 -E '^demo\.sum_loop$' <<<"$rc")
+if grep -q "proved_by_kernel_decision (omega)" <<<"$sum_loop_seg"; then
   echo "  ok   loop-invariant bounds → proved from #[invariant]"; PASS=$((PASS + 1))
 else
   echo "  FAIL loop-invariant bounds not proved from #[invariant]"; FAIL=$((FAIL + 1))
 fi
 # sum_loop_unsound: index mutated before the access → invariant hypothesis
 # dropped → access correctly stays unproven (no false green).
-if printf '%s' "$rc" | grep -A2 -E '^demo\.sum_loop_unsound$' | grep -q "unproven"; then
+sum_loop_unsound_seg=$(grep -A2 -E '^demo\.sum_loop_unsound$' <<<"$rc")
+if grep -q "unproven" <<<"$sum_loop_unsound_seg"; then
   echo "  ok   mutated index → stays unproven (soundness guard)"; PASS=$((PASS + 1))
 else
   echo "  FAIL mutated-index access should stay unproven"; FAIL=$((FAIL + 1))
@@ -72,7 +74,7 @@ echo ""
 echo "=== integrity cross-checks (beyond snapshots) ==="
 # proved_by_lean: the linked theorem must actually kernel-check.
 pl="$("$COMPILER" "$EC/proved_by_lean/src/main.con" --report check-proofs 2>&1)"
-if printf '%s' "$pl" | grep -qE "0 failed"; then
+if grep -qE <<<"$pl" "0 failed"; then
   echo "  ok   proved_by_lean — check-proofs reports 0 failed"; PASS=$((PASS + 1))
 else
   echo "  FAIL proved_by_lean — check-proofs did not report 0 failed"
@@ -81,7 +83,7 @@ fi
 # stale_proof: staleness MUST be detected (negative case — a regression here is
 # a silent-acceptance bug, the worst kind).
 sp="$("$COMPILER" "$EC/stale_proof/src/main.con" --report proof-status 2>&1)"
-if printf '%s' "$sp" | grep -qiE "stale"; then
+if grep -qiE <<<"$sp" "stale"; then
   echo "  ok   stale_proof — drift detected (reported stale)"; PASS=$((PASS + 1))
 else
   echo "  FAIL stale_proof — drift NOT detected (silent acceptance!)"; FAIL=$((FAIL + 1))

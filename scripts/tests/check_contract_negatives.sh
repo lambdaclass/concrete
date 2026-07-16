@@ -25,7 +25,7 @@ assert_block(){ local l="$1" anchor="$2" needle="$3" file="$4"
   local out; out="$("$COMPILER" "$file" --report contracts 2>/dev/null \
     | sed -n '/=== Call-site obligations/,/^=== /p' \
     | awk -v a="$anchor" 'index($0,a){f=1} f{print} f&&/^$/{exit}')"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok   $l"; PASS=$((PASS+1));
+  if grep -qF <<<"$out" -- "$needle"; then echo "  ok   $l"; PASS=$((PASS+1));
   else echo "  FAIL $l — '$anchor' block missing '$needle'"; printf '%s\n' "$out"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi; }
 
 echo "=== precondition_callsite (unmet precondition at call site) ==="
@@ -43,11 +43,11 @@ fi
 
 # assert_contains <label> <needle> <cmd...>
 assert_contains(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
-  if printf '%s' "$o" | grep -qF -- "$n"; then echo "  ok   $l"; PASS=$((PASS+1));
+  if grep -qF <<<"$o" -- "$n"; then echo "  ok   $l"; PASS=$((PASS+1));
   else echo "  FAIL $l — missing '$n'"; printf '%s\n' "$o"|sed 's/^/      /'|head -6; FAIL=$((FAIL+1)); fi; }
 # assert_absent <label> <needle> <cmd...>
 assert_absent(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
-  if printf '%s' "$o" | grep -qF -- "$n"; then echo "  FAIL $l — unexpected '$n'"; FAIL=$((FAIL+1));
+  if grep -qF <<<"$o" -- "$n"; then echo "  FAIL $l — unexpected '$n'"; FAIL=$((FAIL+1));
   else echo "  ok   $l"; fi; }
 # assert_json <label> <pyexpr> <cmd...>
 assert_json(){ local l="$1" e="$2"; shift 2; local o; o="$("$@" 2>/dev/null)"
@@ -91,7 +91,7 @@ assert_contains "impure (effectful) call in contract rejected" \
 assert_block_absent() { local l="$1" anchor="$2" needle="$3" file="$4"
   local out; out="$("$COMPILER" "$file" --report contracts 2>/dev/null \
     | awk -v a="$anchor" 'index($0,a){f=1} f{print} f&&/^$/{exit}')"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  FAIL $l — unexpected '$needle'"; FAIL=$((FAIL+1));
+  if grep -qF <<<"$out" -- "$needle"; then echo "  FAIL $l — unexpected '$needle'"; FAIL=$((FAIL+1));
   else echo "  ok   $l"; fi; }
 assert_block_absent "pure-helper contract not over-rejected" "cn.good" "impure call" "$SGT"
 
@@ -116,7 +116,7 @@ assert_aa_block(){ local l="$1" anchor="$2" needle="$3" file="$4"
   local out; out="$("$COMPILER" "$file" --report contracts 2>/dev/null \
     | sed -n '/=== assert \/ assume/,/^=== /p' \
     | awk -v a="$anchor" 'index($0,a){f=1} f{print} f&&/^$/{exit}')"
-  if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok   $l"; PASS=$((PASS+1));
+  if grep -qF <<<"$out" -- "$needle"; then echo "  ok   $l"; PASS=$((PASS+1));
   else echo "  FAIL $l — '$anchor' block missing '$needle'"; printf '%s\n' "$out"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi; }
 # always-false assert is a VIOLATION (constant fold — no Lean needed):
 assert_aa_block "assert(0>1) → VIOLATION (always false)" "cn.always_false" "VIOLATION: assert is always false" "$AO"
@@ -142,7 +142,7 @@ assert_aa_block "clean sibling function not tainted" "cn.clean" "proved_by_kerne
 # release profile forbids the escape hatch: `concrete build` must fail with E0614.
 ATDIR="$CN/assume_taint"
 asm_out="$( cd "$ATDIR" && "$ROOT_DIR/$COMPILER" build 2>&1 )" && asm_exit=0 || asm_exit=$?
-if [ "$asm_exit" -ne 0 ] && printf '%s' "$asm_out" | grep -qF "E0614"; then
+if [ "$asm_exit" -ne 0 ] && grep -qF <<<"$asm_out" "E0614"; then
   echo "  ok   forbid-assume policy rejects build (E0614)"; PASS=$((PASS+1));
 else
   echo "  FAIL forbid-assume policy should reject build with E0614 (exit=$asm_exit)"; printf '%s\n' "$asm_out"|sed 's/^/      /'|head -4; FAIL=$((FAIL+1)); fi
@@ -173,14 +173,14 @@ POS="examples/contract_positive/valid_complex_contract_scope/src/main.con"
 posrep="$("$COMPILER" "$POS" --report contracts 2>/dev/null)"
 # no false positives of any class:
 for bad in "invalid_contract_expression" "impure call" "unknown identifier" "unknown function/spec" "VACUOUS" "vacuous"; do
-  if printf '%s' "$posrep" | grep -qF -- "$bad"; then
+  if grep -qF <<<"$posrep" -- "$bad"; then
     echo "  FAIL positive fixture flagged '$bad' (false positive)"; printf '%s\n' "$posrep" | grep -F -- "$bad" | sed 's/^/      /'; FAIL=$((FAIL+1));
   else echo "  ok   no false '$bad'"; PASS=$((PASS+1)); fi
 done
 # and the legal names actually resolve to normal statuses (not silently dropped):
-if printf '%s' "$posrep" | grep -qF "requires in_range(x, lo, hi)" \
-   && printf '%s' "$posrep" | grep -qF "ensures result == clamp_spec(x, lo, hi)" \
-   && printf '%s' "$posrep" | grep -qF "invariant 0 <= i && i <= span && acc <= LIMIT"; then
+if grep -qF <<<"$posrep" "requires in_range(x, lo, hi)" \
+   && grep -qF <<<"$posrep" "ensures result == clamp_spec(x, lo, hi)" \
+   && grep -qF <<<"$posrep" "invariant 0 <= i && i <= span && acc <= LIMIT"; then
   echo "  ok   params/result/const/helper/spec/counter/ghost/local all resolve"; PASS=$((PASS+1));
 else
   echo "  FAIL positive fixture: a legal contract name did not render"; FAIL=$((FAIL+1)); fi
@@ -198,12 +198,12 @@ if command -v lake >/dev/null 2>&1; then
   hmrep="$("$COMPILER" "$HMAC" --report contracts 2>/dev/null \
     | sed -n '/=== Call-site obligations/,/^=== /p')"
   cab="$(printf '%s' "$hmrep" | awk '/hmac_sha256.sha256_compress_at/{f=1} f{print} f&&/^$/{exit}')"
-  if printf '%s' "$cab" | grep -qF "call block_to_words_at(buf, off)" \
-     && printf '%s' "$cab" | grep -qF "omega (from caller's #[requires]"; then
+  if grep -qF <<<"$cab" "call block_to_words_at(buf, off)" \
+     && grep -qF <<<"$cab" "omega (from caller's #[requires]"; then
     echo "  ok   block_to_words_at precond discharged symbolically by omega from caller #[requires]"; PASS=$((PASS+1));
   else echo "  FAIL hmac: expected symbolic omega discharge of block_to_words_at precond"; printf '%s\n' "$cab"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi
   hab="$(printf '%s' "$hmrep" | awk '/hmac_sha256.sha256_hash/{f=1} f{print} f&&/^$/{exit}')"
-  if printf '%s' "$hab" | grep -qF "unproven_at_callsite"; then
+  if grep -qF <<<"$hab" "unproven_at_callsite"; then
     echo "  ok   sha256_hash block-offset call stays honestly unproven (no false green)"; PASS=$((PASS+1));
   else echo "  FAIL hmac: sha256_hash call site should be honestly unproven"; printf '%s\n' "$hab"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi
 else

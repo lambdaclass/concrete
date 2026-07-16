@@ -57,7 +57,7 @@ both_trap(){ local label="$1" F="$TMPDIR/$2.con" IRC CRC _o
 closed(){ local label="$1" F="$TMPDIR/$2.con" want="$3" out
   out="$("$COMPILER" "$F" -o "$F.bin" 2>&1)"
   if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then no "$label (compiled — $want not raised, MISCOMPILE RISK)"
-  elif printf '%s' "$out" | grep -q "$want"; then ok "$label (fail-closed $want)"
+  elif grep -q <<<"$out" "$want"; then ok "$label (fail-closed $want)"
   else no "$label (rejected but not $want: $(printf '%s' "$out" | head -1))"; fi; }
 
 echo "=== (A) behavior-preserving: interp (reference) == compiled ==="

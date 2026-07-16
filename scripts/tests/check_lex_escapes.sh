@@ -22,8 +22,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # must name the problem (never a downstream "expected X, got Y").
 rejects(){ local label="$1" F="$2" needle="$3"
   local OUT; OUT="$("$COMPILER" "$F" --interp 2>&1)"
-  if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q "E0001" \
-     && printf '%s' "$OUT" | grep -qF "$needle"; then
+  if [ $? -ne 0 ] && grep -q <<<"$OUT" "E0001" \
+     && grep -qF <<<"$OUT" "$needle"; then
     ok "$label"
   else
     no "$label (got: $(printf '%s' "$OUT" | head -1))"
@@ -73,7 +73,7 @@ EOF
 if "$COMPILER" "$TMPDIR/valid.con" -o "$TMPDIR/valid.bin" >/dev/null 2>&1; then
   OUT="$("$TMPDIR/valid.bin")"
   # tab, newline, quotes, backslash all survive; \r and \0 are in the bytes.
-  if printf '%s' "$OUT" | grep -q 'a	b' && printf '%s' "$OUT" | grep -qF '"c"\d'; then
+  if grep -q <<<"$OUT" 'a	b' && grep -qF <<<"$OUT" '"c"\d'; then
     ok "all valid escapes round-trip through compile+run"
   else
     no "valid-escape output wrong (got: $(printf '%q' "$OUT"))"

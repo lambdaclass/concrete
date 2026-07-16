@@ -30,7 +30,7 @@ EXPECT='(((((a + b) - (a * 1)) ≤ 200 ∧ (a ≥ 0 ∨ b ≠ 7)) ∧ a = a))'
 
 echo "=== SMT-LIB lowering: the nonlinear-overflow query uses the shared prefix forms ==="
 SMT="$("$COMPILER" "$F" --report vcs --emit-smt 2>/dev/null)"
-chk(){ printf '%s' "$SMT" | grep -qF "$1" && ok "SMT query contains: $1" || no "SMT query missing: $1"; }
+chk(){ grep -qF <<<"$SMT" "$1" && ok "SMT query contains: $1" || no "SMT query missing: $1"; }
 chk '(<= s 30000)'                 # leq prefix
 chk '(* s g)'                      # mul prefix
 chk '(- 30000)'                    # negative literal lowering
@@ -40,7 +40,7 @@ chk '(not (and'                    # overflow goal negation (no-overflow)
 echo "=== cross-target consistency: the SAME leq op is ≤ in Lean and <= in SMT ==="
 # Lean conclusion uses the infix ≤; the SMT query uses the prefix <= — both must
 # be present, proving the one operator is spelled per-target from the shared table.
-{ printf '%s' "$CONCL" | grep -q '≤' && printf '%s' "$SMT" | grep -qF '(<= '; } \
+{ grep -q <<<"$CONCL" '≤' && grep -qF <<<"$SMT" '(<= '; } \
   && ok "leq renders ≤ (Lean) and <= (SMT) from the one table" \
   || no "leq lowering inconsistent across targets"
 

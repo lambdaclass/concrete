@@ -28,7 +28,7 @@ mod m {
 }
 CON
 out="$("$C" "$TMP/ign.con" 2>&1 || true)"
-printf '%s' "$out" | grep -q "E0286" \
+grep -q <<<"$out" "E0286" \
   && ok "ignored Result rejected (E0286 — the compile error IS the surface)" \
   || no "ignored Result not rejected"
 

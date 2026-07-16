@@ -29,11 +29,11 @@ import json,sys
 d=json.load(sys.stdin); x=d['diagnostics'][0]
 print(x['code'], x['severity'], x['pass'], (x['span'] or {}).get('line',''))" 2>/dev/null)
   local spanOk=1
-  if [ -n "$jline" ]; then printf '%s' "$HUMAN" | grep -qE ":${jline}:" || spanOk=0; fi
+  if [ -n "$jline" ]; then grep -qE <<<"$HUMAN" ":${jline}:" || spanOk=0; fi
   if [ "$jcode" = "$wantCode" ] && [ "$jpass" = "$wantPass" ] && [ "$jsev" = "error" ] \
      && [ "$spanOk" = "1" ] \
-     && printf '%s' "$HUMAN" | grep -qF "($jcode)" \
-     && printf '%s' "$HUMAN" | grep -qE "${jsev}\[${jpass}\]"; then
+     && grep -qF <<<"$HUMAN" "($jcode)" \
+     && grep -qE <<<"$HUMAN" "${jsev}\[${jpass}\]"; then
     ok "$label: human and JSON agree ($jcode/$jsev/$jpass${jline:+ @ line $jline})"
   else
     no "$label: human/JSON disagree (json=$jcode/$jsev/$jpass@${jline:-none} want $wantCode/$wantPass)"
@@ -52,8 +52,8 @@ TMJ="$("$COMPILER" "$TM" --diagnostics-json 2>/dev/null)"
 TMH="$("$COMPILER" "$TM" --report caps 2>&1)"
 read -r jexp jact < <(printf '%s' "$TMJ" | python3 -c "import json,sys;x=json.load(sys.stdin)['diagnostics'][0];print(x['expected'],x['actual'])" 2>/dev/null)
 if [ "$jexp" = "i32" ] && [ "$jact" = "bool" ] \
-   && printf '%s' "$TMH" | grep -qE "expected: i32" \
-   && printf '%s' "$TMH" | grep -qE "found: +bool"; then
+   && grep -qE <<<"$TMH" "expected: i32" \
+   && grep -qE <<<"$TMH" "found: +bool"; then
   ok "type mismatch: expected/actual structured + shown in human and JSON (i32 vs bool)"
 else
   no "type mismatch expected/actual mismatch (json exp=$jexp act=$jact)"
@@ -72,9 +72,9 @@ if r:
 else:
   print(0, '', '')" 2>/dev/null)
 if [ "$relCount" = "1" ] && [ "$relLine" = "9" ] \
-   && printf '%s' "$relNote" | grep -qF "moved here" \
-   && printf '%s' "$UAMH" | grep -qF "related (9:" \
-   && printf '%s' "$UAMH" | grep -qF "moved here"; then
+   && grep -qF <<<"$relNote" "moved here" \
+   && grep -qF <<<"$UAMH" "related (9:" \
+   && grep -qF <<<"$UAMH" "moved here"; then
   ok "use-after-move: related move site structured + shown in human and JSON"
 else
   no "use-after-move related span mismatch (json count=$relCount line=$relLine note=$relNote)"
@@ -90,9 +90,9 @@ x=json.load(sys.stdin)['diagnostics'][0]
 ev={e['key']:e['value'] for e in x['evidence']}
 print(x['code'], ev.get('requires',''), ev.get('caller_has',''), 'yes' if x['reason'] else 'no')" 2>/dev/null)
 if [ "$jcode" = "E0520" ] && [ "$jreq" = "Alloc" ] && [ "$jhas" = "(none)" ] && [ "$jreason" = "yes" ] \
-   && printf '%s' "$MCH" | grep -qE "requires: Alloc" \
-   && printf '%s' "$MCH" | grep -qE "caller_has: \(none\)" \
-   && printf '%s' "$MCH" | grep -qE "reason: capabilities are part of"; then
+   && grep -qE <<<"$MCH" "requires: Alloc" \
+   && grep -qE <<<"$MCH" "caller_has: \(none\)" \
+   && grep -qE <<<"$MCH" "reason: capabilities are part of"; then
   ok "capability: evidence (requires/caller_has) + reason structured + shown in human and JSON"
 else
   no "capability evidence/reason mismatch (json code=$jcode req=$jreq has=$jhas reason=$jreason)"

@@ -69,8 +69,8 @@ echo "=== --report contracts renders the ledger, not a private discharge (Phase 
 # its own per-family discharge (kernelDischargeLoopVCs / bvDischarge*). Extract just
 # its body (def → next top-level def) and assert the shim has not crept back.
 rc_body="$(awk '/^def renderContracts /{f=1;print;next} /^def [A-Za-z]/{f=0} f{print}' "$M")"
-if printf '%s' "$rc_body" | grep -q "computeVCsDischarged" \
-   && ! printf '%s' "$rc_body" | grep -qE "kernelDischargeLoopVCs|bvDischargeCallSites|bvDischargeOverflow"; then
+if grep -q <<<"$rc_body" "computeVCsDischarged" \
+   && ! grep -qE <<<"$rc_body" "kernelDischargeLoopVCs|bvDischargeCallSites|bvDischargeOverflow"; then
   ok "renderContracts consumes the ledger (no private kernel/bv discharge path)"
 else
   no "renderContracts re-introduced a private discharge path (#18e shim returned)"

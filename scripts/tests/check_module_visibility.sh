@@ -44,7 +44,7 @@ mod lib { pub fn pub_fn() -> i64 { return 1; } fn priv_fn() -> i64 { return 2; }
 mod Main { import lib.{ pub_fn, priv_fn }; fn main() -> i64 { return pub_fn(); } }
 EOF
 "$COMPILER" build 2>&1)"
-printf '%s' "$out" | grep -qE "E0111" && printf '%s' "$out" | grep -qiE "priv_fn.*not public|not public.*priv_fn" \
+grep -qE <<<"$out" "E0111" && grep -qiE <<<"$out" "priv_fn.*not public|not public.*priv_fn" \
   && ok "import of a private name rejected with E0111" \
   || no "import of a private name not rejected as expected"
 
@@ -53,7 +53,7 @@ out="$(cd "$TMP/p1" && cat > src/main.con <<'EOF'
 mod Main { import nosuch.{ x }; fn main() -> i64 { return 0; } }
 EOF
 "$COMPILER" build 2>&1)"
-printf '%s' "$out" | grep -qE "E0110" \
+grep -qE <<<"$out" "E0110" \
   && ok "import from unknown module rejected with E0110" \
   || no "unknown-module import not rejected with E0110"
 
@@ -63,7 +63,7 @@ printf 'mod aa;\nfn main() -> Int { return 0; }\n' > "$TMP/p4/src/main.con"
 printf 'mod bb;\npub fn fa() -> Int { return 1; }\n' > "$TMP/p4/src/aa.con"
 printf 'mod aa;\npub fn fb() -> Int { return 2; }\n' > "$TMP/p4/src/bb.con"
 out="$(cd "$TMP/p4" && "$COMPILER" build 2>&1)"
-printf '%s' "$out" | grep -qiE "circular module import" \
+grep -qiE <<<"$out" "circular module import" \
   && ok "circular file-module import diagnosed" \
   || no "circular file-module import not diagnosed"
 
@@ -73,9 +73,9 @@ mod lib { pub fn pub_fn() -> i64 { return 1; } fn priv_fn() -> i64 { return 2; }
 mod Main { import lib.{ pub_fn }; fn main() -> i64 { return pub_fn(); } }
 EOF
 "$COMPILER" src/main.con --report interface 2>&1)"
-if printf '%s' "$out" | grep -qE "pub_fn" \
-   && ! printf '%s' "$out" | grep -qE "priv_fn" \
-   && printf '%s' "$out" | grep -qiE "interface|exports"; then
+if grep -qE <<<"$out" "pub_fn" \
+   && ! grep -qE <<<"$out" "priv_fn" \
+   && grep -qiE <<<"$out" "interface|exports"; then
   ok "interface report lists public exports and hides private names"
 else
   no "interface report did not summarize the public surface correctly"

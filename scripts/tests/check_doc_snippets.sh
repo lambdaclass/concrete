@@ -47,7 +47,7 @@ for meta in "$TMP"/*.meta; do
     reject:*)
       code="${tag#reject:}"
       out="$("$COMPILER" "$b.con" --emit-core 2>&1 >/dev/null || true)"
-      if printf '%s' "$out" | grep -q "$code"; then PASS=$((PASS+1));
+      if grep -q <<<"$out" "$code"; then PASS=$((PASS+1));
       else echo "  FAIL $loc — expected reject $code, got: $(printf '%s' "$out" | head -1)"; FAIL=$((FAIL+1)); fi ;;
     *)
       if "$COMPILER" "$b.con" --emit-core >/dev/null 2>&1; then PASS=$((PASS+1));

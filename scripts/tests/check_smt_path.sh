@@ -23,15 +23,15 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== --emit-smt produces a sound, well-formed QF_NIA query ==="
 emit="$("$COMPILER" "$EX" --report vcs --emit-smt 2>/dev/null)"
-printf '%s' "$emit" | grep -qF "(set-logic QF_NIA)" && ok "declares QF_NIA logic" || no "missing set-logic QF_NIA"
-printf '%s' "$emit" | grep -qF "(check-sat)" && ok "has (check-sat)" || no "missing check-sat"
-printf '%s' "$emit" | grep -qF "(get-model)" && ok "requests (get-model) for counterexamples" || no "missing get-model"
-printf '%s' "$emit" | grep -qF "(* sample gain)" && ok "encodes the nonlinear product" || no "missing the product term"
+grep -qF <<<"$emit" "(set-logic QF_NIA)" && ok "declares QF_NIA logic" || no "missing set-logic QF_NIA"
+grep -qF <<<"$emit" "(check-sat)" && ok "has (check-sat)" || no "missing check-sat"
+grep -qF <<<"$emit" "(get-model)" && ok "requests (get-model) for counterexamples" || no "missing get-model"
+grep -qF <<<"$emit" "(* sample gain)" && ok "encodes the nonlinear product" || no "missing the product term"
 # SOUNDNESS: both #[requires] bounds must be asserted, else the query is a lie.
-printf '%s' "$emit" | grep -qF "(<= sample 30000)" \
-  && printf '%s' "$emit" | grep -qF "(<= gain 60000)" \
+grep -qF <<<"$emit" "(<= sample 30000)" \
+  && grep -qF <<<"$emit" "(<= gain 60000)" \
   && ok "asserts the #[requires] bounds (sound query)" || no "query omits a #[requires] bound (UNSOUND)"
-printf '%s' "$emit" | grep -qF "(not (and (<= -2147483648 (* sample gain))" \
+grep -qF <<<"$emit" "(not (and (<= -2147483648 (* sample gain))" \
   && ok "asserts the NEGATED range goal (refutation query)" || no "missing negated goal"
 
 echo "=== provenance + determinism (no solver needed: the query is deterministic) ==="

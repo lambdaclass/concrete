@@ -118,7 +118,7 @@ fi
 # The reducer must REFUSE to fabricate a counterexample: it reports "predicate does
 # not hold on the original source" and leaves the source unchanged (no shrink).
 red_msg="$("$COMPILER" reduce "$TMP/c2.con" --predicate "external:bash scripts/reduce/expect-oracle-mismatch.sh" -o "$TMP/c2.out" 2>&1)"
-if printf '%s' "$red_msg" | grep -q "predicate does not hold" && cmp -s "$TMP/c2.con" "$TMP/c2.out"; then
+if grep -q <<<"$red_msg" "predicate does not hold" && cmp -s "$TMP/c2.con" "$TMP/c2.out"; then
   ok "oracle_mismatch: reducer refuses to fabricate a counterexample (source left unchanged)"
 else
   no "oracle_mismatch: reducer did not cleanly refuse (msg='$red_msg')"

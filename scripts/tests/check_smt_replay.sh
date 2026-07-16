@@ -22,10 +22,10 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== --emit-lean-replay produces a well-formed kernel-checkable theorem ==="
 emit="$("$COMPILER" "$EX" --report vcs --emit-lean-replay 2>/dev/null)"
-printf '%s' "$emit" | grep -qE "^theorem vc_replay .*: Int\)" && ok "theorem with Int binders" || no "missing theorem/Int binders"
-printf '%s' "$emit" | grep -qF "(sample * gain)" && ok "restates the nonlinear obligation" || no "missing the product"
-printf '%s' "$emit" | grep -qF ":= by omega" && ok "carries an in-toolchain proof attempt (by omega)" || no "missing proof attempt"
-printf '%s' "$emit" | grep -qF "lake env lean" && ok "includes the check command" || no "missing check command"
+grep -qE <<<"$emit" "^theorem vc_replay .*: Int\)" && ok "theorem with Int binders" || no "missing theorem/Int binders"
+grep -qF <<<"$emit" "(sample * gain)" && ok "restates the nonlinear obligation" || no "missing the product"
+grep -qF <<<"$emit" ":= by omega" && ok "carries an in-toolchain proof attempt (by omega)" || no "missing proof attempt"
+grep -qF <<<"$emit" "lake env lean" && ok "includes the check command" || no "missing check command"
 
 echo "=== the in-toolchain attempt genuinely FAILS (nonlinear → not omega-replayable) ==="
 # This is the honest negative: omega cannot close it, so the VC must stay
