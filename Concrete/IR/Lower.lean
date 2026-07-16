@@ -2244,15 +2244,33 @@ private def renameStrConstsInTerm (rmap : List (String × String)) : STerm → S
   | .condBr cond tl el => .condBr (renameSVal rmap cond) tl el
   | other => other
 
-def lowerModule (m : CModule) : Except Diagnostics SModule := do
+def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostics SModule := do
   let allFunctionsWithPath := collectAllFunctionsWithPath m
   -- Add synthetic String struct so fieldOffset can compute offsets for built-in .string type
   let syntheticStringDef : CStructDef := { name := "String", fields := [("ptr", .ptrMut .u8), ("len", .uint), ("cap", .uint)] }
-  let allStructs := syntheticStringDef :: collectAllStructs m
-  let allEnums := collectAllEnums m
+  -- Bug 035: layout is a PROGRAM-wide fact. A user module constructing an
+  -- imported enum whose payload mentions another module's generic struct
+  -- (CliResult's Vec<String>) panicked in Layout.fieldOffset because the
+  -- template lived in a sibling module tree. Own-module defs keep lookup
+  -- priority (name-collision safety: nothing that resolved before resolves
+  -- differently now); program-wide defs only FILL names absent locally.
+  let ownStructs := collectAllStructs m
+  let ownEnums := collectAllEnums m
+  let ownNewtypes := collectAllNewtypes m
+  let extStructs := (program.flatMap collectAllStructs).filter (fun sd =>
+    !(ownStructs.any (·.name == sd.name)) && sd.name != "String")
+    |>.foldl (fun acc sd => if acc.any (·.name == sd.name) then acc else acc ++ [sd]) []
+  let extEnums := (program.flatMap collectAllEnums).filter (fun ed =>
+    !(ownEnums.any (·.name == ed.name)))
+    |>.foldl (fun acc ed => if acc.any (·.name == ed.name) then acc else acc ++ [ed]) []
+  let extNewtypes := (program.flatMap collectAllNewtypes).filter (fun nt =>
+    !(ownNewtypes.any (·.name == nt.name)))
+    |>.foldl (fun acc nt => if acc.any (·.name == nt.name) then acc else acc ++ [nt]) []
+  let allStructs := syntheticStringDef :: (ownStructs ++ extStructs)
+  let allEnums := ownEnums ++ extEnums
   let allExterns := collectAllExterns m
   let allConstants := collectAllConstants m
-  let allNewtypes := collectAllNewtypes m
+  let allNewtypes := ownNewtypes ++ extNewtypes
   -- Skip generic functions (non-empty typeParams); only their monomorphized
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty

@@ -57,12 +57,12 @@ Those belong in:
 - [032_multibyte_string_literal_emit.md](032_multibyte_string_literal_emit.md)
 - [033_ifexpr_merge_aggregate_phi.md](033_ifexpr_merge_aggregate_phi.md) — found by workload 2 (png_chunks)
 - [034_shortcircuit_borrow_promotion.md](034_shortcircuit_borrow_promotion.md) — found by std.cli v1 (031 class, third site)
+- [035_fieldoffset_generic_enum_panic.md](035_fieldoffset_generic_enum_panic.md) — layout made program-wide (own-module priority)
+- [036_import_dependent_type_metadata.md](036_import_dependent_type_metadata.md) — import closure: type metadata travels with the type
 
 ## Open Numbered Bugs
 
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
-- [035_fieldoffset_generic_enum_panic.md](035_fieldoffset_generic_enum_panic.md) — loud lowering panic: user enum with generic-container struct payload
-- [036_import_dependent_type_metadata.md](036_import_dependent_type_metadata.md) — Copy/method visibility depends on the import list (false rejections)
 
 ## Still Open, But Not Numbered Bugs
 

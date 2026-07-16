@@ -1,0 +1,22 @@
+// Bug 035 regression: USER-module construction of an imported enum whose
+// OTHER variant carries generic-container struct payloads (CliResult::Ok
+// holds CliFlags{Vec,Vec} + Vec<String>). Pre-fix: Layout.fieldOffset
+// PANIC "struct 'Vec' not found" — layout is a program-wide fact but
+// lowerModule only collected the current module tree's defs.
+mod m {
+    import std.cli.{CliError, CliResult, CliFlags};
+    fn main() with(Alloc) -> Int {
+        let r: CliResult = CliResult::Err { error: CliError::UnknownFlag };
+        match r {
+            CliResult::Err { error } => {
+                discard(error);
+                return 0;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                positionals.drop();
+                return 1;
+            },
+        }
+    }
+}

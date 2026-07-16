@@ -232,6 +232,16 @@ def buildSummaryTable (modules : List Module) : List (String × FileSummary) :=
     acc ++ [(m.name, summary)] ++ subEntries
   ) []
 
+/-- Every user-type head name referenced by a type (for the bug-036 import
+    closure): `.named`/`.generic` heads, recursing through wrappers. -/
+partial def tyHeadNames : Ty → List String
+  | .named n => [n]
+  | .generic n args => n :: args.flatMap tyHeadNames
+  | .ref i | .refMut i | .ptrMut i | .ptrConst i | .heap i | .heapArray i => tyHeadNames i
+  | .array e _ => tyHeadNames e
+  | .fn_ ps _ r => ps.flatMap tyHeadNames ++ tyHeadNames r
+  | _ => []
+
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
@@ -318,6 +328,66 @@ def resolveImports (imports : List ImportDecl)
     { acc with implMethodSigs := acc.implMethodSigs ++ newSigs,
                implBlocks := acc.implBlocks ++ newImpls,
                traitImpls := acc.traitImpls ++ newTraitImpls }
-  pure builtinResult
+  -- Bug 036: a type's metadata (Copy marker, impl methods) must travel with
+  -- the TYPE, not with whether the user named it in the import list. Close
+  -- over public types REACHABLE through what was imported: an enum variant's
+  -- payload type (CliResult -> CliError/CliFlags), a struct field's type, a
+  -- signature's param/return types. Without this, matching a payload out of
+  -- an imported enum produced false E0295 (payload judged non-Copy) and
+  -- false E0264 (its methods invisible). Same-module closure only — a public
+  -- export referencing a PRIVATE type still requires today's behavior.
+  let importedModules := imports.filterMap fun imp =>
+    (summaryTable.lookup imp.moduleName).map fun s => s
+  let closed := Id.run do
+    let mut acc := builtinResult
+    for _round in [0:4] do
+      let referenced :=
+        acc.functions.flatMap (fun (_, sig) =>
+          sig.params.flatMap (fun (_, t) => tyHeadNames t) ++ tyHeadNames sig.retTy)
+        ++ acc.implMethodSigs.flatMap (fun (_, sig) =>
+          sig.params.flatMap (fun (_, t) => tyHeadNames t) ++ tyHeadNames sig.retTy)
+        ++ acc.structs.flatMap (fun sd => sd.fields.flatMap (fun f => tyHeadNames f.ty))
+        ++ acc.enums.flatMap (fun ed =>
+          ed.variants.flatMap (fun v => v.fields.flatMap (fun f => tyHeadNames f.ty)))
+        ++ acc.newtypes.flatMap (fun nt => tyHeadNames nt.innerTy)
+      let present := acc.structs.map (·.name) ++ acc.enums.map (·.name)
+        ++ acc.newtypes.map (·.name) ++ acc.typeAliases.map (·.1)
+      let missing := (referenced.filter fun n => !present.contains n).eraseDups
+      if missing.isEmpty then break
+      let mut grew := false
+      for summary in importedModules do
+        for n in missing do
+          if !summary.publicNames.contains n then continue
+          -- re-check presence (an earlier module this round may have added it)
+          if acc.structs.any (·.name == n) || acc.enums.any (·.name == n)
+             || acc.newtypes.any (·.name == n) then continue
+          match summary.structs.find? fun sd => sd.name == n with
+          | some sd =>
+            let impls := summary.implBlocks.filter fun ib => ib.typeName == n
+            let traitImpls := summary.traitImpls.filter fun tb => tb.typeName == n
+            let mangled := impls.foldl (fun ns ib =>
+              ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
+              ++ traitImpls.foldl (fun ns tb =>
+              ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
+            let sigs := summary.implMethodSigs.filter fun (name, _) => mangled.contains name
+            acc := { acc with structs := acc.structs ++ [sd],
+                              implBlocks := acc.implBlocks ++ impls,
+                              traitImpls := acc.traitImpls ++ traitImpls,
+                              implMethodSigs := acc.implMethodSigs ++ sigs }
+            grew := true
+          | none =>
+            match summary.enums.find? fun ed => ed.name == n with
+            | some ed =>
+              acc := { acc with enums := acc.enums ++ [ed] }
+              grew := true
+            | none =>
+              match summary.newtypes.find? fun nt => nt.isPublic && nt.name == n with
+              | some nt =>
+                acc := { acc with newtypes := acc.newtypes ++ [nt] }
+                grew := true
+              | none => pure ()
+      if !grew then break
+    return acc
+  pure closed
 
 end Concrete

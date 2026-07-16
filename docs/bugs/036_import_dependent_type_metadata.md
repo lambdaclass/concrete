@@ -1,6 +1,14 @@
 # Bug 036: Copy-ness and methods of a cross-module type are import-list-dependent
 
-**Status:** OPEN (conservative false rejections, not a soundness hole)
+**Status:** Fixed (2026-07-16)
+**Fixed in:** FileSummary.lean `resolveImports` — after named-symbol
+resolution, a bounded closure pass pulls in PUBLIC types of the imported
+modules that are REACHABLE through what was imported (signature param/return
+types, struct field types, enum variant payload types, newtype inners),
+with their impls and method sigs. Same-module closure only; a public export
+referencing a PRIVATE type keeps today's behavior.
+**Regression test:** `tests/programs/import_closure_metadata/` (project
+test, exit 0).
 **Discovered:** 2026-07-16, switching hexdump to std.cli.
 
 ## Repro
@@ -25,10 +33,9 @@ must travel with the type itself, not with whether the user named it in an
 import. Both failures are in the safe direction (rejection), but they are
 false positives a user cannot decode — nothing suggests "import the type".
 
-## Direction
+## Note
 
-Resolve/Check should register type metadata (Copy marker, impls) for every
-type REACHABLE through imported signatures, not only for types imported by
-name. Until then, the workaround is importing payload types explicitly
-(hexdump/base64_cli/cli_tool do). Pull the fix when the next workload
-trips it — or fold it into the #13b one-source-of-typing-truth work.
+The consumers' explicit payload-type imports (hexdump/base64_cli/cli_tool)
+are now stylistic, not required. The #13b one-source-of-typing-truth work
+remains the place where this whole class (metadata keyed by reachability,
+not import spelling) gets its systematic treatment.

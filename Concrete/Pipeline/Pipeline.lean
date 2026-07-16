@@ -141,7 +141,7 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
 
 /-- Lower to SSA, verify, and clean up. -/
 def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
-  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m)
+  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   match ssaVerifyProgram ssaModules with
   | .error ds => .error ds
   | .ok () =>
@@ -156,7 +156,7 @@ def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
     raw SSA that the verifier rejects. Not on the production compile
     path. -/
 def lowerUnverified (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
-  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m)
+  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   .ok { ssaModules }
 
 /-- Per-gate verify report.  Each field collects diagnostics produced
@@ -226,7 +226,7 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
     if !postMono.isEmpty then
       { VerifyReport.empty with postElab := postElab, postMono := postMono }
     else
-      let ssa := monoMods.map lowerModule
+      let ssa := monoMods.map (fun m => lowerModule m monoMods)
       -- Each lowerModule produces Except — short-circuit on first error.
       let lowerErrors : Diagnostics := ssa.foldl (fun acc r =>
         match r with | .error ds => acc ++ ds | .ok _ => acc) []

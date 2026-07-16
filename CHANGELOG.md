@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Bugs 035 + 036 fixed — layout is program-wide, type metadata travels with the type (2026-07-16)
+
+The two bugs std.cli's first contact filed are closed same-day. **035**:
+`lowerModule` collected struct/enum/newtype defs only from its own module
+tree, so a user module constructing an imported enum whose payload
+mentions another module's generic struct (CliResult's Vec<String>)
+panicked in Layout.fieldOffset. The pipeline now passes all mono modules
+and lowerModule appends their defs AFTER its own — own-module lookup
+priority means nothing that resolved before resolves differently;
+external defs only fill names that would otherwise panic. **036**:
+`resolveImports` now runs a bounded closure — public types of the
+imported modules REACHABLE through imported signatures (enum payloads,
+struct fields, param/return types, newtype inners) arrive with their
+Copy markers, impls, and method sigs, killing the false E0295/E0264 that
+forced consumers to import payload types by hand. Regression projects
+`tests/programs/enum_generic_payload_layout` and
+`import_closure_metadata` (auto-discovered project tests); corpus audit
+remapped. Wide battery: affected 1636/0, trust-gate 1463/0, examples
+136/0, codegen differential 34/34, quick fuzz 40/40, all ritual gates.
+
 ### std.cli v1 shipped — both consumers switched, one compiler bug fixed, two filed (2026-07-16)
 
 `std.cli` landed per its design note: declare-then-parse (presence + u64

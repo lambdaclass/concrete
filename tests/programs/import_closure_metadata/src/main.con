@@ -1,0 +1,25 @@
+// Bug 036 regression: a cross-module type's metadata (Copy marker, impl
+// methods) must travel with the TYPE, not the import list. CliError and
+// CliFlags are NOT imported here — they arrive only as CliResult payloads;
+// pre-fix this was false E0295 (discard) + false E0264 (get_u64).
+mod m {
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    fn main() with(Std) -> Int {
+        let mut cli: Cli = Cli::new();
+        let f: u64 = cli.flag_u64("-q", 3);
+        match cli.parse(0, 9) {
+            CliResult::Err { error } => {
+                discard(error);
+                return 1;
+            },
+            CliResult::Ok { flags, positionals } => {
+                let n: u64 = flags.get_u64(f);
+                flags.drop();
+                positionals.drop();
+                if n != 3 { return 1; }
+                return 0;
+            },
+        }
+    }
+}

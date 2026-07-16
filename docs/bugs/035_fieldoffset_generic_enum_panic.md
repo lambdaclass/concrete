@@ -1,6 +1,13 @@
 # Bug 035: Layout.fieldOffset PANIC — user enum with generic-container struct payload
 
-**Status:** OPEN (loud crash, not silent wrong code)
+**Status:** Fixed (2026-07-16)
+**Fixed in:** Lower.lean `lowerModule` — layout is a program-wide fact; the
+pipeline now passes ALL mono modules, and lowerModule appends their
+struct/enum/newtype defs AFTER its own tree's (own-module lookup priority,
+so nothing that resolved before resolves differently — external defs only
+fill names that would otherwise panic).
+**Regression test:** `tests/programs/enum_generic_payload_layout/` (project
+test, exit 0).
 **Discovered:** 2026-07-16, while probing bug 034 (std.cli work).
 
 ## Repro
@@ -37,12 +44,9 @@ The stdlib's own consumers never construct `CliResult` in user code — only
 user code only MATCHES on it, which is fine. examples/cli_tool, hexdump,
 and base64_cli all pass their gates.
 
-## Direction
+## Residual
 
-`Layout.fieldOffset`'s `none => panic!` arm is reachable whenever a
-generic struct's mono-instance name and the source name disagree at a
-cross-module construction site. The fix belongs with the mono/layout name
-resolution (look up the instantiated name, or thread typeArgs like the
-`fieldByteOffset` callers do at the OTHER sites); the panic should also
-become a diagnostic. File under the Lower structured-builder cleanup or
-pull it forward when a workload constructs such an enum from user code.
+`Layout.fieldOffset`'s `none => panic!` arm still exists; with program-wide
+defs it should now be unreachable for well-formed programs, but converting
+it to a diagnostic remains worthwhile hygiene (tracked with the Lower
+structured-builder cleanup).
