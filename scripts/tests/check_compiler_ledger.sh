@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # CompilerLedger gate (ROADMAP Phase 4 #2).
 #
 # The non-proof compiler fact store is built ONCE in `loadProject` and carried on

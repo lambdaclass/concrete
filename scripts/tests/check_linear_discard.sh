@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Linear-discard gate — KNOWN_HOLES H6 (silent discard of a non-Copy value).
 #
 # Two rules, locked here (Concrete is LINEAR — a non-Copy value must be used exactly

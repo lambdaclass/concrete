@@ -1,5 +1,4 @@
 #!/bin/bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Regenerate golden test baselines for --emit-core, --emit-ssa, and --fmt
 set -e
 

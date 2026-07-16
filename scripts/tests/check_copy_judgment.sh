@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Copy-judgment gate (Phase 6.5 CopyJudgment axis).
 #
 # "Is this type Copy?" (freely duplicated) vs linear (use-once) decides linearity

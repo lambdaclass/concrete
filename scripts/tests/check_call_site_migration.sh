@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Call-site precondition migration gate (ROADMAP Phase 3 #4).
 #
 # Phase 3 #4 routes call-site precondition obligations through the unified

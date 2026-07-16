@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Capability-fact source-of-truth gate (ROADMAP Phase 6.5 #5).
 #
 # Capabilities are the second identity-defining semantic axis of Concrete. The

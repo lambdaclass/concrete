@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Build-profiles gate — ROADMAP #10, Stage 1 (mechanism only).
 #
 # Stage 1 makes the active build profile visible; it has NO codegen/semantic

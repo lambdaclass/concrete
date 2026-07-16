@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # External-SMT teaching group gate (ROADMAP Phase 2 #16).
 #
 # Teaches when SMT is useful and when Concrete REFUSES it. Pins:

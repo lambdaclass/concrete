@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # SMT negatives gate (ROADMAP Phase 2 #14) — locks the honesty boundaries.
 #
 # Every external-solver result class is a NON-PROOF unless it is a genuine

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 7 item 14a gate: the Writer IO spine discipline (option A: fn-pointer handle).
 #
 #  1. the fixed-buffer writer writes without Alloc

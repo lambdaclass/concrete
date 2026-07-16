@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # 13t gate (the report/assertion tail): the three error buckets of
 # docs/ERROR_CONVENTIONS.md are REPORT-VISIBLE on the fixture — one public API
 # per bucket, each classification shown by a compiler surface, not prose.

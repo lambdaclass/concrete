@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Axiom-inventory gate (ROADMAP Phase 10 #16).
 #
 # Every theorem the compiler treats as `proved_by_lean` evidence must depend

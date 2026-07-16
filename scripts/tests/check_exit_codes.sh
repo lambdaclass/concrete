@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# MAIN_EXIT_MODEL stage 1 gate: compiled `main`'s return value IS the process
 # exit code (masked to the OS's 8-bit status), and the runtime writes NOTHING
 # to stdout. The legacy echoed-result behavior survives only behind
 # CONCRETE_ECHO_RESULT=1 (harness knob, dies in stage 2).

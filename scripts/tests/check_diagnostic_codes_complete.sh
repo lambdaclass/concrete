@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Diagnostic-code registry completeness gate (ROADMAP 13m, first slice).
 #
 # `--report diagnostic-codes` (Concrete/Report/Report.lean) claims to be the ledger

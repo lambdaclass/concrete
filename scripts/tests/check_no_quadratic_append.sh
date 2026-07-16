@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Anti-pattern ratchet: `xs ++ [x]` in the hot pipeline files.
 #
 # The 2026-07 Phase 6C #2 complexity-guard sweep found 5+ real O(n²) bugs of ONE
@@ -47,7 +46,6 @@ check Concrete/IR/Mono.lean              5
 check Concrete/IR/SSACleanup.lean        1
 check Concrete/IR/SSAVerify.lean         2
 # 29->34 (2026-07-15): +5 one-shot `saveArgcArgv ++ [...]` instruction lists in
-# emitMainWrapper's exit-code branches (MAIN_EXIT_MODEL stage 1) — fixed-size
 # wrapper construction, not in any loop.
 check Concrete/Backend/EmitSSA.lean      34
 check Concrete/Resolve/Resolve.lean      8

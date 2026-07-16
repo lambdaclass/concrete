@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # H18 drop-glue gate (RUNTIME_COLLECTIONS.md "Drop-glue rules"): Vec destroys
 # its live non-Copy elements on drop/clear — FLIPPED DELIBERATELY 2026-07-16
 # from the old "leak pinned as disclosed" form when slice 1 landed.

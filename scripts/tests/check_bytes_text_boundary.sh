@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # P7 #4 gate: the Bytes/Text boundary — Bytes is raw data; String/Text is
 # validated UTF-8. No implicit conversion, no lossy conversion, no
 # "string-ish bytes": every bytes->text crossing is CHECKED (Option) or an

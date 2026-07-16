@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Returned-reference provenance gate (H1) — CLOSED (2026-06-13).
 #
 # H1 is resolved by the language invariant "references are second-class — never

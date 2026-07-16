@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Project-model gate (ROADMAP Phase 5 #2).
 #
 # Locks the Concrete.toml project-model STRUCTURE and validation so the manifest

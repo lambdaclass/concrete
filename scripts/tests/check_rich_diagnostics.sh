@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Rich-diagnostics gate (ROADMAP Phase 4 #4 / #11).
 #
 # Diagnostics are structured records rendered to BOTH human text and JSON from the

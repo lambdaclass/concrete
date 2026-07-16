@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 3 capstone: ObligationCore is the single truth source (ROADMAP #19).
 #
 # Runs the obligation_core_probe — one project exercising every migrated

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Registry-retirement gate: example proofs must be SOURCE-LINKED, not JSON-backed.
 #
 # Every example/flagship proof now lives in source as

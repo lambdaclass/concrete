@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6 #35a — red-team hardening gate.
 #
 # Targeted coverage for the failure classes that the dead-CI window hid and the

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6C #2: anti-superlinear compiler-complexity guard.
 #
 # Telemetry (6C #1) says what happened; this gate fails when a compiler pass

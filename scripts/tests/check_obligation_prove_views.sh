@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # `concrete prove` as a ledger view (ROADMAP Phase 3 #16).
 #
 # `concrete prove` is a proof-authoring surface (lemma hints, theorem shapes,

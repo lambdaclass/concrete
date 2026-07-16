@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6C #3 gate: `concrete <file> --trace-pipeline` per-stage trace.
 #
 # The trace runs the pipeline stage by stage and, for a rejected program, names

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Stdlib handoff gate (ROADMAP Phase 6 #19; docs/stdlib/STDLIB_HANDOFF.md).
 #
 # The handoff contract names every language surface the Phase 7 stdlib depends on

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Proof-link freshness migration gate (ROADMAP Phase 3 #11).
 #
 # The proof-status model (proved / stale / missing / blocked / ineligible /

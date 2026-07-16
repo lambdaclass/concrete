@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Backend-contract gate (ROADMAP Phase 4 #17a; #17b expands the fixture matrix).
 #
 # `--report backend-contracts` states the guarantees the code generator commits to

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6E #6: CLI coherence gate — the exit criterion before Phase 7 stdlib.
 #
 # Locks: (a) help works from ANY directory (no project), never throws;

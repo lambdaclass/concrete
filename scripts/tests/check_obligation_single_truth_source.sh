@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Single-truth-source guard (ROADMAP Phase 3 #18d, step 5).
 #
 # After the model merge there is ONE obligation record type. This guard FAILS CI
