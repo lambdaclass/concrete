@@ -403,7 +403,11 @@ logging/progress).
      pointer that ordinary ownership does not see. V1 answer should compare
      typed index newtypes (`NodeId`, not `u64`), generation-counted slots,
      arena validity invariants, and proof obligations that inject newtype
-     invariants as scoped hypotheses. Add
+     invariants as scoped hypotheses. Public stdlib arenas remain workload-
+     gated: do not add a generic `Arena<T>` until a parser/graph/runtime
+     workload needs it, and never expose raw integer indices as the stable API.
+     Any admitted arena-backed container must preserve linear destruction,
+     allocator visibility, and stale-index rejection or explicit trust. Add
      `docs/ARENA_INDEX_SAFETY.md`, `examples/arena_indices/{stale_index,generation_checked,typed_node_id}/`,
      and `scripts/tests/check_arena_index_safety.sh`; the gate must prove stale
      index reuse is rejected, trapped, or explicitly trusted, never silently
@@ -1079,12 +1083,19 @@ that conversion, and that payoff exists only if the bet validates.
    canonically ordered arrays/lists own iteration, serialization, and output so
    hash-table order never leaks. Use dense arrays where stable ids permit them
    and builders/reverse accumulation for large strings and collections.
+   Index-heavy compiler artifacts must carry table/arena identity in the type
+   or validated artifact schema (`FunctionId`, `TypeId`, `BlockId`,
+   `ObligationId`, not raw integers). Serialized artifact bytes are hostile
+   until decoded and validated: cross-table IDs, stale generation IDs where
+   slots can be reused, and out-of-range IDs must be rejected before they become
+   semantic facts or cache hits.
 
    This is profiler-driven, not a blanket ban on `List`: replace hot repeated
    `find?`/`contains`, `acc ++ [x]`, growing-string append, and repeated global
    scans selected by Phase 6C telemetry and bug 027's corpus. Add duplicate-key
-   and index-finalization verifiers, plus a mutation that reintroduces a
-   quadratic builder and must fail the scaling gate.
+   and index-finalization verifiers, plus mutations that reintroduce a
+   quadratic builder and that swap two incompatible typed IDs; both must fail
+   their gates.
 
 3. Make reusable frontend artifact boundaries operational.
    Add or validate durable `ParsedFile`, split `InterfaceSummary` and body
