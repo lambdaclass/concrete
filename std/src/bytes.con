@@ -179,6 +179,33 @@ mod bytes {
             } };
         }
 
+        /// Big/little-endian integer reads at a byte offset. UNCHECKED like
+        /// get_unchecked — the caller has bounds-checked the frame (pulled by
+        /// workload 2: every binary format decodes these).
+        pub fn be16(&self, off: u64) -> u64 {
+            return (self.get_unchecked(off) as u64) * 256
+                 + (self.get_unchecked(off + 1) as u64);
+        }
+
+        pub fn be32(&self, off: u64) -> u64 {
+            return (self.get_unchecked(off) as u64) * 16777216
+                 + (self.get_unchecked(off + 1) as u64) * 65536
+                 + (self.get_unchecked(off + 2) as u64) * 256
+                 + (self.get_unchecked(off + 3) as u64);
+        }
+
+        pub fn le16(&self, off: u64) -> u64 {
+            return (self.get_unchecked(off) as u64)
+                 + (self.get_unchecked(off + 1) as u64) * 256;
+        }
+
+        pub fn le32(&self, off: u64) -> u64 {
+            return (self.get_unchecked(off) as u64)
+                 + (self.get_unchecked(off + 1) as u64) * 256
+                 + (self.get_unchecked(off + 2) as u64) * 65536
+                 + (self.get_unchecked(off + 3) as u64) * 16777216;
+        }
+
         /// Lexicographic byte compare: -1 / 0 / 1. Pure, byte-preserving —
         /// NO text semantics (collation belongs to validated Text, never here).
         pub fn cmp(&self, other: &Bytes) -> i32 {
@@ -222,6 +249,17 @@ mod bytes {
         pub fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
+    }
+
+    #[test]
+    fn test_bytes_endian() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::with_capacity(4);
+        b.push(0x12); b.push(0x34); b.push(0x56); b.push(0x78);
+        let ok: bool = b.be16(0) == 0x1234 && b.le16(0) == 0x3412
+                    && b.be32(0) == 0x12345678 && b.le32(0) == 0x78563412;
+        b.drop();
+        if !ok { return 1; }
+        return 0;
     }
 
     #[test]

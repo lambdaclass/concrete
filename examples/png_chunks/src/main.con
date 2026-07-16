@@ -5,66 +5,15 @@
 // parsing with big-endian numerics, byte/text boundary (chunk types are
 // ASCII-in-bytes), Writer+fmt output, 13t recoverable errors with REAL exit
 // codes (usage=2, bad file/signature/truncation/CRC=1, clean=0).
-// CRC32 and BE decoding are implemented INLINE deliberately: friction is the
-// pull evidence (see FRICTION.md).
+// read_all / be32 / crc32 now come from std — this workload pulled all
+// three, then switched over as proof-of-pull (FRICTION.md).
 mod png_chunks {
     import std.args.{count, get};
     import std.bytes.{Bytes};
-    import std.io.{Reader, TextFile, reader_from_file, IoError, Writer,
-                   console_writer, eprintln};
+    import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
+                   Writer, console_writer, eprintln};
+    import std.checksum.{crc32};
     import std.fmt.{write_uint};
-
-    // Read the whole source into an owned Bytes via a stack chunk buffer.
-    fn read_all(r: &Reader) with(Alloc) -> Bytes {
-        let mut out: Bytes = Bytes::with_capacity(4096);
-        let mut buf: [u8; 1024] = [0; 1024];
-        let mut done: bool = false;
-        while !done {
-            let res: Result<u64, IoError> = r.read(&buf as *mut u8, 1024);
-            let n: u64 = res.unwrap_or(0);
-            if n == 0 {
-                done = true;
-            } else {
-                let mut i: u64 = 0;
-                while i < n {
-                    out.push(buf[i]);
-                    i = i + 1;
-                }
-            }
-        }
-        return out;
-    }
-
-    // Big-endian u32 at offset (caller checks bounds).
-    fn be32(b: &Bytes, off: u64) -> u64 {
-        return (b.get_unchecked(off) as u64) * 16777216
-             + (b.get_unchecked(off + 1) as u64) * 65536
-             + (b.get_unchecked(off + 2) as u64) * 256
-             + (b.get_unchecked(off + 3) as u64);
-    }
-
-    // CRC32 (ISO-HDLC, the PNG polynomial), bitwise variant. All arithmetic
-    // in u64 with an explicit 32-bit mask.
-    fn crc32(b: &Bytes, start: u64, len: u64) -> u64 {
-        let mask: u64 = 4294967295;
-        let poly: u64 = 3988292384;   // 0xEDB88320
-        let mut crc: u64 = mask;
-        let mut i: u64 = 0;
-        while i < len {
-            crc = crc ^ (b.get_unchecked(start + i) as u64);
-            let mut k: u64 = 0;
-            while k < 8 {
-                if crc % 2 == 1 {
-                    crc = ((crc / 2) ^ poly) & mask;
-                } else {
-                    crc = (crc / 2) & mask;
-                }
-                k = k + 1;
-            }
-            i = i + 1;
-        }
-        return (crc ^ mask) & mask;
-    }
 
     fn is_png_sig(b: &Bytes) -> bool {
         if b.len() < 8 { return false; }
@@ -92,7 +41,7 @@ mod png_chunks {
         let mut bad_crc: u64 = 0;
         let total: u64 = data.len();
         while off + 12 <= total {
-            let dlen: u64 = be32(data, off);
+            let dlen: u64 = data.be32(off);
             if off + 12 + dlen > total {
                 w_str(w, "truncated chunk\n");
                 return 1;
@@ -106,7 +55,7 @@ mod png_chunks {
             let iend: String = "IEND";
             let is_end: bool = ty.eq(&iend);
             iend.drop();
-            let stored: u64 = be32(data, off + 8 + dlen);
+            let stored: u64 = data.be32(off + 8 + dlen);
             let calc: u64 = crc32(data, off + 4, dlen + 4);
             w_str(w, ty);
             w_str(w, " len=");

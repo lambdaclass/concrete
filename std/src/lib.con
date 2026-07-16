@@ -20,6 +20,7 @@ mod std {
     mod ascii;
     mod hex;
     mod base64;
+    mod checksum;
     mod sha256;
     mod hash;
     mod map;

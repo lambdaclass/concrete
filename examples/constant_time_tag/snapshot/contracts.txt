@@ -136,6 +136,14 @@ base64.decode
   % divisor 256
     status: checked: divisor is a nonzero constant
 
+checksum.crc32
+  % divisor 2
+    status: checked: divisor is a nonzero constant
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+
 sha256.hash_raw
   % divisor 64
     status: checked: divisor is a nonzero constant

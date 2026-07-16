@@ -1,0 +1,64 @@
+mod checksum {
+    // Checksums (NOT cryptography — no breadth-hold violation): integrity
+    // codes real formats require. Pulled by workload 2 (png_chunks): CRC32
+    // (ISO-HDLC, the PNG/gzip/zip polynomial) was hand-rolled and easy to
+    // get subtly wrong (polynomial constant, reflection, final xor).
+    import std.bytes.{Bytes};
+
+    /// CRC32 (ISO-HDLC / IEEE 802.3, reflected, init and final-xor
+    /// 0xFFFFFFFF) over bytes [start, start+len). Bitwise variant; all
+    /// arithmetic in u64 under an explicit 32-bit mask. Result fits u32.
+    pub fn crc32(b: &Bytes, start: u64, len: u64) -> u64 {
+        let mask: u64 = 4294967295;
+        let poly: u64 = 3988292384;   // 0xEDB88320
+        let mut crc: u64 = mask;
+        let mut i: u64 = 0;
+        while i < len {
+            crc = crc ^ (b.get_unchecked(start + i) as u64);
+            let mut k: u64 = 0;
+            while k < 8 {
+                if crc % 2 == 1 {
+                    crc = ((crc / 2) ^ poly) & mask;
+                } else {
+                    crc = (crc / 2) & mask;
+                }
+                k = k + 1;
+            }
+            i = i + 1;
+        }
+        return (crc ^ mask) & mask;
+    }
+
+    /// CRC32 of an entire buffer.
+    pub fn crc32_all(b: &Bytes) with() -> u64 {
+        return crc32(b, 0, b.len());
+    }
+
+    #[test]
+    fn test_crc32_check_value() with(Alloc) -> i32 {
+        // The standard check value: CRC32("123456789") == 0xCBF43926.
+        let s: String = "123456789";
+        let b: Bytes = Bytes::from_string(&s);
+        s.drop();
+        let c: u64 = crc32_all(&b);
+        b.drop();
+        if c != 3421780262 { return 1; }   // 0xCBF43926
+        return 0;
+    }
+
+    #[test]
+    fn test_crc32_empty_and_slice() with(Alloc) -> i32 {
+        // CRC32("") == 0; and a sub-range matches the same bytes standalone.
+        let e: Bytes = Bytes::new();
+        let c0: u64 = crc32_all(&e);
+        e.drop();
+        if c0 != 0 { return 1; }
+        let s: String = "xx123456789yy";
+        let b: Bytes = Bytes::from_string(&s);
+        s.drop();
+        let c: u64 = crc32(&b, 2, 9);
+        b.drop();
+        if c != 3421780262 { return 1; }
+        return 0;
+    }
+}

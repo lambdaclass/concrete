@@ -41,9 +41,9 @@ workload written in the u8-main style): 0 clean, 1 bad input, 2 usage.
 
 | # | Pull | Evidence | Size |
 |---|------|----------|------|
-| 1 | `io.read_all` / `Bytes::from_reader` | friction 4 — every file parser | std, small |
-| 2 | endian helpers (`be32`/`le32`/...) | friction 2 — every binary format | std, small |
-| 3 | `std.checksum.crc32` | friction 3 — PNG/gzip/zip recurrence | std, small |
+| 1 | `io.read_all` / `Bytes::from_reader` | friction 4 — every file parser | **SHIPPED** (io.con, fixed_reader-tested; this tool uses it) |
+| 2 | endian helpers (`be32`/`le32`/...) | friction 2 — every binary format | **SHIPPED** (Bytes.be16/be32/le16/le32; this tool uses be32) |
+| 3 | `std.checksum.crc32` | friction 3 — PNG/gzip/zip recurrence | **SHIPPED** (std.checksum, check-value 0xCBF43926 tested; this tool uses it) |
 | 4 | literal-vs-String ergonomics | friction 5 — every parser | design question, hold |
 
 Not pulled: hex formatting (cosmetic), chunked/streaming parse (whole-file

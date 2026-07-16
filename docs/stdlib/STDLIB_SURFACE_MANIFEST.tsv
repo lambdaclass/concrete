@@ -44,11 +44,17 @@ bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect
 bytes	to_string	yes	consumes	option	Alloc	hosted-effect
 bytes	to_string_unchecked	no	consumes	infallible	none	pure-core
 bytes	view	no	borrows	option	none	pure-core
+bytes	be16	no	borrows	infallible	none	pure-core
+bytes	be32	no	borrows	infallible	none	pure-core
+bytes	le16	no	borrows	infallible	none	pure-core
+bytes	le32	no	borrows	infallible	none	pure-core
 bytes	cmp	no	borrows	infallible	none	pure-core
 bytes	raw_view	no	borrows	infallible	none	pure-core
 bytes	into_raw_parts	no	consumes	infallible	none	pure-core
 bytes	drop	yes	consumes	infallible	Alloc	hosted-effect
 bytes	destroy	yes	borrows	infallible	Alloc	hosted-effect
+checksum	crc32	no	constructs	infallible	none	deterministic
+checksum	crc32_all	no	constructs	infallible	none	deterministic
 deque	new	no	constructs	infallible	none	deterministic
 deque	push_back	yes	mut	infallible	Alloc	hosted-effect
 deque	push_front	yes	mut	infallible	Alloc	hosted-effect
@@ -131,6 +137,7 @@ io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary
 io	read	no	borrows	result	none	deterministic
 io	close	no	consumes	result	none	deterministic
 io	reader_from_file	no	constructs	infallible	File	trusted-boundary
+io	read_all	yes	constructs	infallible	Alloc	trusted-boundary
 io	fixed_reader	no	constructs	infallible	Unsafe	trusted-boundary
 io	print	no	constructs	infallible	Console	trusted-boundary
 io	println	no	constructs	infallible	Console	trusted-boundary
