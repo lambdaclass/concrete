@@ -167,6 +167,142 @@ theorem port_try_from_u32_correct (v : Int) (fuel : Nat) :
             else .enum_ "Option" "Some" [("value", .int v)]) :=
   numeric_try_from_correct 65535 v fuel
 
+/-- Semantic mirror of `base64.char_of` — the RFC 4648 alphabet as a plain
+    Int function (guard-shaped, so the eval theorem's cases align 1:1). -/
+def base64CharOfSem (v : Int) : Int :=
+  if v < 26 then 65 + v
+  else if v < 52 then 97 + (v - 26)
+  else if v < 62 then 48 + (v - 52)
+  else if v = 62 then 43
+  else 47
+
+/-- Semantic mirrors of `base64.val_of`'s continuation levels (the source's
+    fall-through guard pairs duplicate each continuation — mirrored here so
+    each eval lemma is 3 cases, not a 31-leaf tree). -/
+def base64ValOfSemK3 (c : Int) : Int :=
+  if c = 43 then 62 else if c = 47 then 63 else 255
+
+def base64ValOfSemK2 (c : Int) : Int :=
+  if 48 ≤ c then (if c ≤ 57 then c - 48 + 52 else base64ValOfSemK3 c)
+  else base64ValOfSemK3 c
+
+def base64ValOfSemK1 (c : Int) : Int :=
+  if 97 ≤ c then (if c ≤ 122 then c - 97 + 26 else base64ValOfSemK2 c)
+  else base64ValOfSemK2 c
+
+def base64ValOfSem (c : Int) : Int :=
+  if 65 ≤ c then (if c ≤ 90 then c - 65 else base64ValOfSemK1 c)
+  else base64ValOfSemK1 c
+
+set_option linter.unusedSimpArgs false in
+/-- `base64.char_of` computes the RFC 4648 alphabet byte — total over v. -/
+theorem base64_char_of_correct (v : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "v" (.int v)) (fuel + 8) base64CharOfExpr
+    = some (.int (base64CharOfSem v)) := by
+  unfold base64CharOfSem
+  by_cases h1 : v < 26
+  · have hd1 : decide (v < 26) = true := decide_eq_true h1
+    simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+  · have hd1 : decide (v < 26) = false := decide_eq_false h1
+    by_cases h2 : v < 52
+    · have hd2 : decide (v < 52) = true := decide_eq_true h2
+      simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+    · have hd2 : decide (v < 52) = false := decide_eq_false h2
+      by_cases h3 : v < 62
+      · have hd3 : decide (v < 62) = true := decide_eq_true h3
+        simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, hd3, h1, h2, h3]
+      · have hd3 : decide (v < 62) = false := decide_eq_false h3
+        by_cases h4 : v = 62
+        · have hd4 : decide (v = 62) = true := decide_eq_true h4
+          simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, hd3, hd4, h1, h2, h3, h4]
+        · have hd4 : decide (v = 62) = false := decide_eq_false h4
+          simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, hd3, hd4, h1, h2, h3, h4]
+
+set_option linter.unusedSimpArgs false in
+private theorem base64_val_of_k3 (c : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "c" (.int c)) (fuel + 4) base64ValOfK3Expr
+    = some (.int (base64ValOfSemK3 c)) := by
+  unfold base64ValOfSemK3
+  by_cases h1 : c = 43
+  · have hd1 : decide (c = 43) = true := decide_eq_true h1
+    simp [base64ValOfK3Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+  · have hd1 : decide (c = 43) = false := decide_eq_false h1
+    by_cases h2 : c = 47
+    · have hd2 : decide (c = 47) = true := decide_eq_true h2
+      simp [base64ValOfK3Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+    · have hd2 : decide (c = 47) = false := decide_eq_false h2
+      simp [base64ValOfK3Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+
+set_option linter.unusedSimpArgs false in
+private theorem base64_val_of_k2 (c : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "c" (.int c)) (fuel + 8) base64ValOfK2Expr
+    = some (.int (base64ValOfSemK2 c)) := by
+  unfold base64ValOfSemK2
+  by_cases h1 : 48 ≤ c
+  · have hd1 : decide (c ≥ 48) = true := decide_eq_true h1
+    by_cases h2 : c ≤ 57
+    · have hd2 : decide (c ≤ 57) = true := decide_eq_true h2
+      simp [base64ValOfK2Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+    · have hd2 : decide (c ≤ 57) = false := decide_eq_false h2
+      simpa [base64ValOfK2Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+        using base64_val_of_k3 c (fuel + 2)
+  · have hd1 : decide (c ≥ 48) = false := decide_eq_false h1
+    simpa [base64ValOfK2Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+      using base64_val_of_k3 c (fuel + 3)
+
+set_option linter.unusedSimpArgs false in
+private theorem base64_val_of_k1 (c : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "c" (.int c)) (fuel + 12) base64ValOfK1Expr
+    = some (.int (base64ValOfSemK1 c)) := by
+  unfold base64ValOfSemK1
+  by_cases h1 : 97 ≤ c
+  · have hd1 : decide (c ≥ 97) = true := decide_eq_true h1
+    by_cases h2 : c ≤ 122
+    · have hd2 : decide (c ≤ 122) = true := decide_eq_true h2
+      simp [base64ValOfK1Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+    · have hd2 : decide (c ≤ 122) = false := decide_eq_false h2
+      simpa [base64ValOfK1Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+        using base64_val_of_k2 c (fuel + 2)
+  · have hd1 : decide (c ≥ 97) = false := decide_eq_false h1
+    simpa [base64ValOfK1Expr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+      using base64_val_of_k2 c (fuel + 3)
+
+set_option linter.unusedSimpArgs false in
+/-- `base64.val_of` computes the RFC 4648 alphabet inverse, and 255 rejects
+    every byte outside the alphabet — total over c. -/
+theorem base64_val_of_correct (c : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "c" (.int c)) (fuel + 16) base64ValOfExpr
+    = some (.int (base64ValOfSem c)) := by
+  unfold base64ValOfSem
+  by_cases h1 : 65 ≤ c
+  · have hd1 : decide (c ≥ 65) = true := decide_eq_true h1
+    by_cases h2 : c ≤ 90
+    · have hd2 : decide (c ≤ 90) = true := decide_eq_true h2
+      simp [base64ValOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+    · have hd2 : decide (c ≤ 90) = false := decide_eq_false h2
+      simpa [base64ValOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+        using base64_val_of_k1 c (fuel + 2)
+  · have hd1 : decide (c ≥ 65) = false := decide_eq_false h1
+    simpa [base64ValOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+      using base64_val_of_k1 c (fuel + 3)
+
+set_option linter.unusedSimpArgs false in
+/-- Alphabet ROUNDTRIP (the conversion contract the decoder relies on):
+    every 6-bit value survives encode-then-decode. Pure Int fact over the
+    semantic mirrors, so it composes with the two eval theorems. -/
+theorem base64_alphabet_roundtrip (v : Int) (h0 : 0 ≤ v) (h63 : v ≤ 63) :
+    base64ValOfSem (base64CharOfSem v) = v := by
+  unfold base64CharOfSem base64ValOfSem base64ValOfSemK1 base64ValOfSemK2 base64ValOfSemK3
+  by_cases h1 : v < 26
+  · simp [h1]; omega
+  · by_cases h2 : v < 52
+    · simp [h1, h2]; omega
+    · by_cases h3 : v < 62
+      · simp [h1, h2, h3]; omega
+      · by_cases h4 : v = 62
+        · simp [h1, h2, h3, h4]
+        · simp [h1, h2, h3, h4]; omega
+
 /-- H1 radix-overflow guard STEP fact (kernel decision, no solver needed):
     if the pre-shift guard accepts (`acc ≤ (2^64-1) >> 4`) then one hex
     accumulation step stays within u64 — the loop invariant's inductive

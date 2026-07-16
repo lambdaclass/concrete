@@ -155,11 +155,62 @@ fingerprint freshness ran, the model tie did not. Fixed three ways:
 The `fabricated_proof` adversarial fixture now visibly renders
 `NOT drift-covered`, which is that fixture doing its job.
 
-Remaining in slice 2: a crc32 `while_`-loop fact (first loop-invariant
-proof) and one checked text/path conversion contract.
+**Stage 2 — checked conversions: DONE.** `base64.char_of` and
+`base64.val_of` (the RFC 4648 alphabet and its inverse, workload-1's pull)
+are kernel-linked with total (`iff`) coverage — 11 std links — plus the
+ROUNDTRIP corollary `base64_alphabet_roundtrip` (`val_of(char_of(v)) = v`
+for all 6-bit v) over the semantic mirror functions. Two machinery notes:
+- `val_of`'s `if lo { if hi { return } }` fall-through guards duplicate the
+  continuation into both branches (cStmtsToPExprK's if-without-else rule);
+  the spec shares the K levels as defs and the theorems layer one lemma per
+  level, so the proof is 3 cases per level instead of a 31-leaf tree.
+- Free-fn links in std submodules were mis-qualified TWICE over (nested
+  module path not accumulated; Core module-prefix name mangling not
+  resolved) — fixed in `synthesizeSourceLinks` with the same
+  match-the-fingerprint-table approach as impl methods. Flagship (root
+  module, unmangled) links unchanged.
 
-## Sequencing after slice 1
+**Descoped from slice 2 (recorded, not dropped): the crc32 loop fact.**
+`checksum.crc32` fails the predictable profile (its outer loop is bounded
+by the runtime `len` — "unbounded" to the profile) so NO registry link is
+possible today regardless of proof effort; and bounded-loop proof machinery
+is already exercised by the SHA flagship (64-round loops via the
+loop-induction keystone), so a std loop fact would demonstrate nothing new.
+It waits for the `#[model_refined_by]`-class work, where a loop-invariant
+fact can be linked honestly as partial evidence. Checked text/path
+conversions beyond ASCII/base64: `text.validate_utf8` is trusted (same
+class), so its model refinement also lands with that follow-up.
 
-Only after slice 1's DoD holds end-to-end (stable names, exact manifest
-marking, mutation-fails): numeric checked helpers, checksum.crc32 loop
-facts, checked text/path conversions. Breadth never precedes a green DoD.
+## Selective-proving rule (pinned 2026-07-16 — the arc's scope ceiling)
+
+The arc's goal was never "prove the whole stdlib"; it was to prove the
+stdlib CAN carry real kernel-checked evidence where it matters.
+"Everything has an evidence class" > "everything is proved." The rule:
+
+- **Prove**: the tiny stable algebraic core (Option/Result helpers, a
+  couple of Bytes contracts) and APIs a real workload has pulled and
+  stabilized (the base64 alphabet pair). Done — 11 links.
+- **Wait for workload pressure**: `parse_*` (surface may still move),
+  further Bytes/endian contracts, anything whose ergonomics are unsettled.
+- **Do not prove**: CLI, IO, fs/env/process/net/time, collections in
+  active design, formatting — broad or unstable surfaces keep their
+  lighter evidence (manifest facts, oracle tests, mutation gates,
+  capability/allocation/error gates).
+- CRC/checksum stays oracle-tested unless it becomes proof-critical.
+
+**With slice 2 shipped, the proof arc PAUSES**: the seed is planted and
+gated; the frontier goes back to workloads and API ergonomics. New proofs
+are added one at a time when an API becomes foundational AND stable —
+never as a breadth sweep over the manifest.
+
+## Where proofs live (layout rule)
+
+Source APIs carry the proof metadata
+(`#[spec]`/`#[proof_by]`/`#[proof_coverage]`/`#[proof_fingerprint]`);
+Lean theorem bodies live in `proofs/Examples/PureCore/Proofs.lean`
+(namespace `Examples.PureCore.Proofs`), imported through
+`proofs/Examples.lean` so `check-proofs` kernel-checks them. Proofs are
+evidence, not runtime dependencies — they never move into `std/src/`.
+When the suite outgrows one file, split by module
+(`PureCore/Option.lean`, `PureCore/Bytes.lean`, ...) under the SAME
+import root and namespace.

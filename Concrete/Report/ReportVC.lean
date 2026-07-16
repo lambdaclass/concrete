@@ -173,24 +173,46 @@ partial def allImplMethods (pfx : String) (m : Module) : List (String × String 
   let own := m.implBlocks.flatMap fun ib => ib.methods.map fun f => (here, ib.typeName, f)
   own ++ m.submodules.flatMap (allImplMethods here)
 
+/-- `(fullPfx, ownModuleName, f)` for every free function, with the FULL
+    nested module path accumulated. `allFunctions` is single-level by design
+    (it matches the flat Core fingerprint table); source-link synthesis needs
+    both: the flat name to find the fingerprint, the full path to name the
+    entry (validation names are fully qualified — a std submodule fn linked
+    under its flat name reports "unknown function"). -/
+partial def allFunctionsQualified (pfx : String) (m : Module) : List (String × String × FnDef) :=
+  let here := if m.name.isEmpty then pfx else pfx ++ m.name ++ "."
+  m.functions.map (fun f => (here, m.name, f))
+    ++ m.submodules.flatMap (allFunctionsQualified here)
+
 def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule) : ProofRegistry := Id.run do
   let fps := coreModules.flatMap coreFnFingerprints
   let mut entries : ProofRegistry := []
-  for (pfx, f) in astModules.flatMap allFunctions do
+  for (fullPfx, ownMod, f) in astModules.flatMap (allFunctionsQualified "") do
     match f.proofLink with
     | none => pure ()
     | some link =>
-      let qual := pfx ++ f.name
-      let fp := (fps.find? (·.1 == qual)).map (·.2) |>.getD ""
-      let entry : ProofRegistryEntry :=
-        { function := qual, bodyFingerprint := fp,
-          proof := link.proofBy.getD "", spec := link.spec.getD "",
-          coverage := link.coverage.getD "", ensuresProof := link.ensuresProof,
-          -- when present, staleness compares hash(currentFp) against this stored
-          -- hash — so source-linked functions get drift detection even without
-          -- spec-drift coverage (the soundness gap that kept point proofs on JSON).
-          expectedHash := link.fingerprint, sourceLinked := true }
-      entries := entries ++ [entry]
+      -- The flat fingerprint table carries the CORE name: unmangled for a
+      -- root-module fn ("mod.fn", the flagship shape), module-prefix-mangled
+      -- for a submodule fn ("mod.mod_fn", the std shape). Match either and
+      -- take the Core base name so validation (fully-qualified Core names)
+      -- finds the entry.
+      let plainKey := (if ownMod.isEmpty then "" else ownMod ++ ".") ++ f.name
+      let mangledSuffix := "." ++ ownMod ++ "_" ++ f.name
+      let hits := fps.filter fun (n, _) => n == plainKey || n.endsWith mangledSuffix
+      match hits with
+      | [] => pure ()  -- fn not in this pipeline's Core (e.g. std compiled as a dependency); no bogus entry
+      | (coreKey, fp) :: _ =>
+        let baseName := (coreKey.splitOn ".").getLast? |>.getD coreKey
+        let qual := fullPfx ++ baseName
+        let entry : ProofRegistryEntry :=
+          { function := qual, bodyFingerprint := fp,
+            proof := link.proofBy.getD "", spec := link.spec.getD "",
+            coverage := link.coverage.getD "", ensuresProof := link.ensuresProof,
+            -- when present, staleness compares hash(currentFp) against this stored
+            -- hash — so source-linked functions get drift detection even without
+            -- spec-drift coverage (the soundness gap that kept point proofs on JSON).
+            expectedHash := link.fingerprint, sourceLinked := true }
+        entries := entries ++ [entry]
   -- Impl METHODS may carry proof links too (pure-core proof arc: stdlib APIs
   -- are methods). Their Core names are mangled (module/Type prefixes vary by
   -- linker aliasing), so resolve the qualified name by unique suffix match

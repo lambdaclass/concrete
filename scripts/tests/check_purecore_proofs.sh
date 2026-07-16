@@ -29,7 +29,9 @@ for fn in std.option.option_Option_map std.result.result_Result_map \
           std.numeric.numeric_NonZeroU32_try_from_u64 \
           std.numeric.numeric_NonZeroU64_try_new \
           std.numeric.numeric_Port_try_new \
-          std.numeric.numeric_Port_try_from_u32; do
+          std.numeric.numeric_Port_try_from_u32 \
+          std.base64.base64_char_of \
+          std.base64.base64_val_of; do
   grep -q "✓ \`$fn\` — proof matches current body" <<<"$st" \
     && ok "$fn: registered + fingerprint-fresh" \
     || no "$fn: proof link missing or stale"
@@ -40,9 +42,9 @@ done
 #     spec silently skips the drift check; slice 2 made that state visible).
 drift_ok=$(grep -c "spec: drift-checked" <<<"$st")
 drift_no=$(grep -c "spec: NOT drift-covered" <<<"$st")
-[ "$drift_ok" -eq 9 ] && [ "$drift_no" -eq 0 ] \
-  && ok "drift coverage: all 9 std links drift-checked, none uncovered" \
-  || no "drift coverage: expected 9 drift-checked / 0 uncovered, got $drift_ok/$drift_no"
+[ "$drift_ok" -eq 11 ] && [ "$drift_no" -eq 0 ] \
+  && ok "drift coverage: all 11 std links drift-checked, none uncovered" \
+  || no "drift coverage: expected 11 drift-checked / 0 uncovered, got $drift_ok/$drift_no"
 
 # 2. the Lean kernel verifies the referenced theorems (import-reachable)
 cp=$("$C" "$TMP/std/lib.con" --report check-proofs 2>&1)
@@ -68,8 +70,14 @@ for pair in "numeric_NonZeroU32_try_new:numeric_try_new_correct" \
     && ok "$fn: kernel-verified" \
     || no "$fn: kernel check failed or theorem unreachable"
 done
-grep -q 'Summary: 9 verified, 0 failed' <<<"$cp" \
-  && ok "check-proofs: exactly 9 verified, zero failures" \
+grep -q '✓ std.base64.base64_char_of — Examples.PureCore.Proofs.base64_char_of_correct' <<<"$cp" \
+  && ok "base64.char_of: kernel-verified" \
+  || no "base64.char_of: kernel check failed or theorem unreachable"
+grep -q '✓ std.base64.base64_val_of — Examples.PureCore.Proofs.base64_val_of_correct' <<<"$cp" \
+  && ok "base64.val_of: kernel-verified" \
+  || no "base64.val_of: kernel check failed or theorem unreachable"
+grep -q 'Summary: 11 verified, 0 failed' <<<"$cp" \
+  && ok "check-proofs: exactly 11 verified, zero failures" \
   || no "check-proofs count drifted or reports failures"
 
 # 3. MUTATION: a body change must go STALE (evidence is load-bearing)
@@ -99,6 +107,15 @@ grep -q "hex_guard_step_preserves_u64" proofs/Examples/PureCore/Proofs.lean \
 grep -q "hex_guard_step_preserves_u64" std/src/parse.con \
   && ok "parse_hex source comment references the lemma" \
   || no "parse_hex source comment missing lemma reference"
+
+# 6. the alphabet ROUNDTRIP corollary (encode-then-decode identity) is
+#    kernel-present and referenced from the base64 source.
+grep -q "base64_alphabet_roundtrip" proofs/Examples/PureCore/Proofs.lean \
+  && ok "base64 roundtrip theorem present (kernel-checked)" \
+  || no "base64 roundtrip theorem missing"
+grep -q "base64_alphabet_roundtrip" std/src/base64.con \
+  && ok "base64 source comment references the roundtrip" \
+  || no "base64 source comment missing roundtrip reference"
 
 echo
 echo "PURECORE-PROOFS: PASS=$PASS FAIL=$FAIL"

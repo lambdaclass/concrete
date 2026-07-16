@@ -2178,6 +2178,56 @@ def numericTryFromExpr (max : Int) : PExpr :=
       (.enumLit "Option" "None" [])
       (.enumLit "Option" "Some" [("value", .cast (.cast (.var "value")))]))
 
+/-- Extracted spec for `base64.char_of` (std/src/base64.con): the RFC 4648
+    alphabet — 0..25 → 'A'..'Z', 26..51 → 'a'..'z', 52..61 → '0'..'9',
+    62 → '+', 63 → '/'. Terminal early-return guards become a nested
+    ifThenElse chain; the u8 casts are width-erased identities. -/
+def base64CharOfExpr : PExpr :=
+  .ifThenElse (.binOp .lt (.var "v") (.lit (.int 26)))
+    (.cast (.binOp .add (.lit (.int 65)) (.var "v")))
+    (.ifThenElse (.binOp .lt (.var "v") (.lit (.int 52)))
+      (.cast (.binOp .add (.lit (.int 97)) (.binOp .sub (.var "v") (.lit (.int 26)))))
+      (.ifThenElse (.binOp .lt (.var "v") (.lit (.int 62)))
+        (.cast (.binOp .add (.lit (.int 48)) (.binOp .sub (.var "v") (.lit (.int 52)))))
+        (.ifThenElse (.binOp .eq (.var "v") (.lit (.int 62)))
+          (.lit (.int 43))
+          (.lit (.int 47)))))
+
+/-- `base64.val_of` continuation levels. The source's `if lo { if hi
+    { return } }` fall-through shape duplicates the continuation into BOTH
+    branches of each guard pair (cStmtsToPExprK's if-without-else rule), so
+    the spec shares the K levels as defs — structurally identical to the
+    extraction after elaboration. -/
+def base64ValOfK3Expr : PExpr :=
+  .ifThenElse (.binOp .eq (.var "c") (.lit (.int 43)))
+    (.lit (.int 62))
+    (.ifThenElse (.binOp .eq (.var "c") (.lit (.int 47)))
+      (.lit (.int 63))
+      (.lit (.int 255)))
+
+def base64ValOfK2Expr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "c") (.lit (.int 48)))
+    (.ifThenElse (.binOp .le (.var "c") (.lit (.int 57)))
+      (.cast (.binOp .add (.binOp .sub (.var "c") (.lit (.int 48))) (.lit (.int 52))))
+      base64ValOfK3Expr)
+    base64ValOfK3Expr
+
+def base64ValOfK1Expr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "c") (.lit (.int 97)))
+    (.ifThenElse (.binOp .le (.var "c") (.lit (.int 122)))
+      (.cast (.binOp .add (.binOp .sub (.var "c") (.lit (.int 97))) (.lit (.int 26))))
+      base64ValOfK2Expr)
+    base64ValOfK2Expr
+
+/-- Extracted spec for `base64.val_of`: the alphabet inverse — 255 rejects
+    every byte outside the alphabet (the decoder's guard value). -/
+def base64ValOfExpr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "c") (.lit (.int 65)))
+    (.ifThenElse (.binOp .le (.var "c") (.lit (.int 90)))
+      (.cast (.binOp .sub (.var "c") (.lit (.int 65))))
+      base64ValOfK1Expr)
+    base64ValOfK1Expr
+
 /-- Spec table keys are the registry entries' QUALIFIED function names
     (`qualName`, e.g. `std.option.option_Option_map`) — the drift check in
     `validateRegistry` looks specs up by that exact key, so any other key
@@ -2195,6 +2245,8 @@ def specs : List (String × PExpr) :=
   , ("std.numeric.numeric_Port_try_new",            numericTryNewExpr)
   , ("std.numeric.numeric_NonZeroU32_try_from_u64", numericTryFromExpr 4294967295)
   , ("std.numeric.numeric_Port_try_from_u32",       numericTryFromExpr 65535)
+  , ("std.base64.base64_char_of",                   base64CharOfExpr)
+  , ("std.base64.base64_val_of",                    base64ValOfExpr)
     -- parse_validate
   ,
     ("parse_validate.validate_version",       validateVersionExpr)

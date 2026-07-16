@@ -8,6 +8,13 @@ mod base64 {
     // (input is not base64) -> Option. Encode is infallible.
     import std.bytes.{Bytes, BytesRaw};
 
+    #[spec(Concrete.Proof.base64CharOfExpr)]
+    #[proof_by(Examples.PureCore.Proofs.base64_char_of_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("03f8761e89e966746a78db6cec178709")]
+    // Roundtrip corollary: Examples.PureCore.Proofs.base64_alphabet_roundtrip
+    // (val_of(char_of(v)) = v for all 6-bit v) composes this theorem with
+    // val_of's over the semantic mirrors.
     fn char_of(v: u64) -> u8 {
         if v < 26 { return (65 + v) as u8; }        // A-Z
         if v < 52 { return (97 + (v - 26)) as u8; } // a-z
@@ -16,6 +23,10 @@ mod base64 {
         return 47;                                  // '/'
     }
 
+    #[spec(Concrete.Proof.base64ValOfExpr)]
+    #[proof_by(Examples.PureCore.Proofs.base64_val_of_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("970ac36bfb86b9cfdc6e02ee327131a0")]
     fn val_of(c: u8) -> u64 {
         if c >= 65 { if c <= 90 { return (c - 65) as u64; } }
         if c >= 97 { if c <= 122 { return (c - 97 + 26) as u64; } }
