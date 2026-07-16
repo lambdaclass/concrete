@@ -15,3 +15,4 @@ import Examples.FixedCapacity.Proofs
 import Examples.ConstantTimeTag.Proofs
 import Examples.ElfHeader.Proofs
 import Examples.ProofPatterns.Proofs
+import Examples.PureCore.Proofs

@@ -483,6 +483,9 @@ jobs:
       - name: "Stdlib hardening (P7 item 0, H1-H5 class gates + unproven-content check)"
         run: bash scripts/tests/check_std_hardening.sh
 
+      - name: "Pure-core proofs (slice 1 — kernel-verified stdlib proof link, mutation-sensitive)"
+        run: bash scripts/tests/check_purecore_proofs.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

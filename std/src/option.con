@@ -47,6 +47,10 @@ mod option {
             }
         }
 
+        #[spec(Concrete.Proof.optionUnwrapOrExpr)]
+        #[proof_by(Examples.PureCore.Proofs.option_unwrap_or_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("7917f9e25872f429b0838c8297bd91dc")]
         pub fn unwrap_or(self, default: T) -> T {
             match self {
                 Option::Some { value } => { return value; },

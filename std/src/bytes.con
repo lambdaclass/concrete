@@ -168,6 +168,13 @@ mod bytes {
         /// Bounds-checked sub-view: a Copy view of bytes [start, start+len).
         /// Out-of-range -> None (domain outcome). The view borrows this
         /// buffer's memory — it must not outlive it.
+        // Model-refined (PURE_CORE_PROOF_ARC.md): the guard-and-geometry
+        // theorem `Examples.PureCore.Proofs.bytes_view_guard_correct` is
+        // kernel-checked against `Concrete.Proof.bytesViewExpr`. The proof
+        // registry deliberately REJECTS links on trusted fns (raw-pointer
+        // bodies are outside checked semantics), so this stays a documented
+        // model refinement until a distinct trusted-refinement link class
+        // (#[model_refined_by]-style) exists — recorded in the arc doc.
         pub fn view(&self, start: u64, vlen: u64) -> Option<BytesRaw> {
             // H2: overflow-safe bounds (start+vlen could wrap u64)
             if start > self.len || vlen > self.len - start {

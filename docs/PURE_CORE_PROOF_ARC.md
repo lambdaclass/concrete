@@ -79,6 +79,28 @@ NO loops, NO quantification over callbacks):
   step preserves `result ≤ u64::MAX` given the guard (SMT-assisted if
   useful, reported as `solver_checked` unless Lean-replayed).
 
+## Slice 1 status (2026-07-16)
+
+DONE — the vertical works end-to-end. `Option.unwrap_or` is the first
+kernel-backed stdlib proof link: `proof-status` shows fingerprint-fresh,
+`check-proofs` kernel-verifies `option_unwrap_or_correct` through the
+Examples import, and a body mutation flips it to STALE (the gate's mutation
+leg pins this). Gate: `check_purecore_proofs.sh` (`make test-purecore-proofs`).
+
+Two pipeline discoveries, both fixed/recorded:
+- Proof attributes did not PARSE on impl methods (flagships only ever
+  attributed free fns) — the impl-method loops now accept
+  spec/proof_by/proof_coverage/proof_fingerprint, and
+  `synthesizeSourceLinks` walks impl methods (core names resolved by unique
+  suffix match; nested module paths re-qualified).
+- The registry REJECTS links on trusted fns ("ineligible: from trusted
+  impl") — principled, and it means `Bytes.view` cannot be the proved
+  exemplar. Its guard-and-geometry theorem
+  (`bytes_view_guard_correct`) IS kernel-checked in the Examples lib and
+  referenced by a source comment; a distinct trusted-refinement link class
+  (`#[model_refined_by]`-style, rendered as its own evidence class, never
+  `proved`) is the recorded follow-up for linking it.
+
 ## Model gaps (recorded, not hidden)
 
 - PExpr has no loops: full `parse_hex` correctness needs either recursive

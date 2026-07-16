@@ -2089,8 +2089,44 @@ theorem drift_test_theorem : driftTestSpec = .lit (.int 42) := rfl
 
 -- ============================================================
 
+-- ============================================================
+-- Pure-core stdlib specs (PURE_CORE_PROOF_ARC.md slice 1)
+-- ============================================================
+
+/-- Extracted spec for `bytes.view` (std/src/bytes.con): the bounds-checked
+    sub-view. The abstract model: `total` is the buffer's length, `base` the
+    abstract address; the H2 overflow-safe guard rejects out-of-range
+    requests (`start > total ∨ vlen > total - start`), otherwise the view is
+    `Some(BytesRaw { ptr: base + start, len: vlen, cap: vlen })`. The `||` is
+    modeled as nested if — the same short-circuit shape the front end lowers. -/
+def bytesViewExpr : PExpr :=
+  .ifThenElse (.binOp .gt (.var "start") (.var "total"))
+    (.enumLit "Option" "None" [])
+    (.ifThenElse (.binOp .gt (.var "vlen") (.binOp .sub (.var "total") (.var "start")))
+      (.enumLit "Option" "None" [])
+      (.enumLit "Option" "Some"
+        [("value", .structLit "BytesRaw"
+          [ ("ptr", .binOp .add (.var "base") (.var "start"))
+          , ("len", .var "vlen")
+          , ("cap", .var "vlen") ])]))
+
+/-- Extracted spec for `option.unwrap_or` (std/src/option.con): the payload
+    if Some, the default if None. -/
+def optionUnwrapOrExpr : PExpr :=
+  .match_ (.var "self")
+    [ (.enumPat "Option" "Some" ["value"], .var "value")
+    , (.enumPat "Option" "None" [], .var "default") ]
+
+/-- Fn table for the pure-core specs: the exprs are self-contained (no
+    sibling calls), so the table is empty. -/
+def pureCoreFns : FnTable := fun _ => none
+
 def specs : List (String × PExpr) :=
-  [ -- parse_validate
+  [ -- pure-core stdlib (slice 1)
+    ("bytes.view", bytesViewExpr)
+  , ("option.unwrap_or", optionUnwrapOrExpr)
+    -- parse_validate
+  ,
     ("parse_validate.validate_version",       validateVersionExpr)
   , ("parse_validate.validate_header_fields", validateHeaderFieldsExpr)
   , ("parse_validate.parse_header",           parseHeaderExpr)

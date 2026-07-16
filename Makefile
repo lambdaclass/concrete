@@ -345,6 +345,9 @@ test-exit-codes: build ## MAIN_EXIT_MODEL stage 1: main return = process exit co
 test-std-hardening: build ## Phase 7 item 0 (H1-H5): radix overflow->None, no additive bounds guards (lint), IO error honesty, non-Copy ordered traversal, strict base64 pads, unproven-content check
 	$(NIX_DEVELOP) bash ./scripts/tests/check_std_hardening.sh
 
+test-purecore-proofs: build ## Proof arc slice 1: unwrap_or kernel-verified + fingerprint-fresh + mutation-sensitive; trusted fns stay link-excluded
+	$(NIX_DEVELOP) bash ./scripts/tests/check_purecore_proofs.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 

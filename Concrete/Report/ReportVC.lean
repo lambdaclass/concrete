@@ -168,6 +168,11 @@ partial def coreFnFingerprints (m : CModule) : List (String × String) :=
     `#[ensures_proof]`/`#[proof_coverage]` links. The body fingerprint is
     computed from the current Core body, so a source edit is detected by the
     same spec-drift / fingerprint machinery as a JSON entry. -/
+partial def allImplMethods (pfx : String) (m : Module) : List (String × String × FnDef) :=
+  let here := if m.name.isEmpty then pfx else pfx ++ m.name ++ "."
+  let own := m.implBlocks.flatMap fun ib => ib.methods.map fun f => (here, ib.typeName, f)
+  own ++ m.submodules.flatMap (allImplMethods here)
+
 def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule) : ProofRegistry := Id.run do
   let fps := coreModules.flatMap coreFnFingerprints
   let mut entries : ProofRegistry := []
@@ -186,6 +191,29 @@ def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule
           -- spec-drift coverage (the soundness gap that kept point proofs on JSON).
           expectedHash := link.fingerprint, sourceLinked := true }
       entries := entries ++ [entry]
+  -- Impl METHODS may carry proof links too (pure-core proof arc: stdlib APIs
+  -- are methods). Their Core names are mangled (module/Type prefixes vary by
+  -- linker aliasing), so resolve the qualified name by unique suffix match
+  -- against the Core fingerprint table instead of replicating name mangling.
+  for (fullPfx, tyName, f) in astModules.flatMap (allImplMethods "") do
+    match f.proofLink with
+    | none => pure ()
+    | some link =>
+      let suffix := "_" ++ tyName ++ "_" ++ f.name
+      let hits := fps.filter fun (n, _) => n.endsWith suffix
+      match hits with
+      | [(coreKey, fp)] =>
+        -- Re-qualify with the FULL nested module path (the fingerprint table
+        -- is single-level; validation names are fully qualified).
+        let baseName := (coreKey.splitOn ".").getLast? |>.getD coreKey
+        let qual := fullPfx ++ baseName
+        let entry : ProofRegistryEntry :=
+          { function := qual, bodyFingerprint := fp,
+            proof := link.proofBy.getD "", spec := link.spec.getD "",
+            coverage := link.coverage.getD "", ensuresProof := link.ensuresProof,
+            expectedHash := link.fingerprint, sourceLinked := true }
+        entries := entries ++ [entry]
+      | _ => pure ()  -- ambiguous/absent: no silent guess (surfaces as no-registered-proof)
   return entries
 
 /-- Merge JSON-registry entries with synthesized in-source link entries. A

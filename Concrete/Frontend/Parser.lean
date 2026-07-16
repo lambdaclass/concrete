@@ -1568,6 +1568,120 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
   let body ← parseBlock
   return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }, selfKind)
 
+/-- Repr attribute result: isReprC, reprAlign, isPacked. -/
+structure ReprOpts where
+  isReprC : Bool := false
+  reprAlign : Option Nat := none
+  isPacked : Bool := false
+
+/-- Parse an attribute like #[repr(C, align(16), packed)], #[intrinsic = "sizeof"], or #[foo].
+    Returns (key, optional value, optional repr opts). -/
+partial def parseAttribute : ParseM (String × Option String × Option ReprOpts × Option Expr) := do
+  expect .hash
+  expect .lbracket
+  let attrSp ← peekSpan
+  let key ← expectIdent
+  -- Reject unknown attributes instead of silently ignoring them. Attributes
+  -- here carry proof/capability/trust/test meaning, so a typo like
+  -- `#[overflow_checkd]` or `#[tes]` would silently drop a security-relevant
+  -- annotation — a semantically dark construct. Keep this list complete; a new
+  -- attribute must be added here as well as wired into its consumer.
+  let knownAttrs := ["repr", "test", "overflow_checked", "spec", "proof_by",
+    "ensures_proof", "proof_coverage", "proof_fingerprint", "requires",
+    "ensures", "invariant", "variant", "intrinsic", "langitem"]
+  unless knownAttrs.contains key do
+    throwParse s!"unknown attribute '#[{key}]'"
+      (span := some attrSp)
+      (hint := some s!"known attributes: {", ".intercalate knownAttrs}")
+  let tk ← peek
+  if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+    -- source-contract expressions: ensures/requires (function level) and
+    -- invariant/variant (loop level). Each carries one expression.
+    advance
+    let e ← parseExpr
+    expect .rparen
+    expect .rbracket
+    return (key, none, none, some e)
+  else if tk == .assign then
+    -- #[key = "value"]
+    advance
+    let valTk ← peek
+    let val ← match valTk with
+      | .strLit s => advance; pure s
+      | _ =>
+        let sp ← peekSpan
+        throwParse "expected string literal in attribute value" (span := some sp)
+    expect .rbracket
+    return (key, some val, none, none)
+  else if tk == .lparen && key == "repr" then
+    -- #[repr(C, align(16), packed)]
+    advance
+    let mut opts : ReprOpts := {}
+    let mut tk2 ← peek
+    while tk2 != .rparen && tk2 != .eof do
+      let arg ← expectIdent
+      if arg == "C" then
+        opts := { opts with isReprC := true }
+      else if arg == "packed" then
+        opts := { opts with isPacked := true }
+      else if arg == "align" then
+        expect .lparen
+        let alignTk ← peek
+        match alignTk with
+        | .intLit n =>
+          advance
+          opts := { opts with reprAlign := some n.toNat }
+        | _ =>
+          let sp ← peekSpan
+          throwParse "expected integer literal in align()" (span := some sp)
+        expect .rparen
+      else
+        let sp ← peekSpan
+        throwParse s!"unknown repr option '{arg}'" (span := some sp)
+      tk2 ← peek
+      if tk2 == .comma then advance; tk2 ← peek
+    expect .rparen
+    expect .rbracket
+    return ("repr", none, some opts, none)
+  else if tk == .lparen && (key == "spec" || key == "proof_by"
+      || key == "ensures_proof" || key == "proof_coverage") then
+    -- in-source proof links: #[proof_by(Concrete.Proof.thm)], #[spec(Q.Name)],
+    -- #[ensures_proof(Q.Name)], #[proof_coverage(iff)]. The value is a
+    -- (possibly dotted) qualified Lean name, or a bare coverage kind.
+    advance
+    let mut name ← expectIdent
+    let mut t ← peek
+    while t == .dot do
+      advance
+      let part ← expectIdent
+      name := name ++ "." ++ part
+      t ← peek
+    expect .rparen
+    expect .rbracket
+    return (key, some name, none, none)
+  else if tk == .lparen && key == "proof_fingerprint" then
+    -- #[proof_fingerprint("ab12cd…")]: a short body-hash string literal stored
+    -- in source so staleness is detected for functions spec-drift can't cover.
+    advance
+    let hash ← match (← peek) with
+      | .strLit s => advance; pure s
+      | _ => let sp ← peekSpan; throwParse "expected a string literal in proof_fingerprint(\"…\")" (span := some sp)
+    expect .rparen
+    expect .rbracket
+    return (key, some hash, none, none)
+  else if tk == .lparen then
+    -- #[key(value)]
+    advance
+    let val ← expectIdent
+    expect .rparen
+    expect .rbracket
+    return (key, some val, none, none)
+  else
+    expect .rbracket
+    return (key, none, none, none)
+
+/-- Parse a newtype definition: newtype Name = Type; or newtype Name<T> = Type; -/
+
 partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let declSp ← peekSpan
   expect .impl_
@@ -1624,9 +1738,29 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
     let mut methods : List FnDef := []
     let mut tk ← peek
     while tk != .rbrace && tk != .eof do
+      -- Proof-link attributes on impl METHODS (pure-core proof arc: stdlib
+      -- APIs are methods, and the evidence pipeline attaches at the fn).
+      let mut mSpec : Option String := none
+      let mut mProofBy : Option String := none
+      let mut mCoverage : Option String := none
+      let mut mFingerprint : Option String := none
+      while tk == .hash do
+        let (key, attrVal, _, _) ← parseAttribute
+        if key == "spec" then mSpec := attrVal
+        else if key == "proof_by" then mProofBy := attrVal
+        else if key == "proof_coverage" then mCoverage := attrVal
+        else if key == "proof_fingerprint" then mFingerprint := attrVal
+        else throwParse s!"attribute '#[{key}]' is not supported on impl methods"
+        tk ← peek
+      let mProofLink : Option SourceProofLink :=
+        if mSpec.isSome || mProofBy.isSome || mCoverage.isSome || mFingerprint.isSome
+        then some { spec := mSpec, proofBy := mProofBy
+                  , coverage := mCoverage, fingerprint := mFingerprint }
+        else none
       let isPub := tk == .pub_
       if isPub then advance; tk ← peek
-      let (f, selfKind) ← parseMethodDef
+      let (f0, selfKind) ← parseMethodDef
+      let f := { f0 with proofLink := mProofLink }
       -- Inject self parameter based on selfKind
       let selfTy := if typeParams.isEmpty then tyFromName typeName
                      else Ty.generic typeName (typeParams.map Ty.typeVar)
@@ -1862,119 +1996,6 @@ partial def parseImport : ParseM ImportDecl := do
   expect .semicolon
   return { moduleName := modPath, symbols, span := sp }
 
-/-- Repr attribute result: isReprC, reprAlign, isPacked. -/
-structure ReprOpts where
-  isReprC : Bool := false
-  reprAlign : Option Nat := none
-  isPacked : Bool := false
-
-/-- Parse an attribute like #[repr(C, align(16), packed)], #[intrinsic = "sizeof"], or #[foo].
-    Returns (key, optional value, optional repr opts). -/
-partial def parseAttribute : ParseM (String × Option String × Option ReprOpts × Option Expr) := do
-  expect .hash
-  expect .lbracket
-  let attrSp ← peekSpan
-  let key ← expectIdent
-  -- Reject unknown attributes instead of silently ignoring them. Attributes
-  -- here carry proof/capability/trust/test meaning, so a typo like
-  -- `#[overflow_checkd]` or `#[tes]` would silently drop a security-relevant
-  -- annotation — a semantically dark construct. Keep this list complete; a new
-  -- attribute must be added here as well as wired into its consumer.
-  let knownAttrs := ["repr", "test", "overflow_checked", "spec", "proof_by",
-    "ensures_proof", "proof_coverage", "proof_fingerprint", "requires",
-    "ensures", "invariant", "variant", "intrinsic", "langitem"]
-  unless knownAttrs.contains key do
-    throwParse s!"unknown attribute '#[{key}]'"
-      (span := some attrSp)
-      (hint := some s!"known attributes: {", ".intercalate knownAttrs}")
-  let tk ← peek
-  if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
-    -- source-contract expressions: ensures/requires (function level) and
-    -- invariant/variant (loop level). Each carries one expression.
-    advance
-    let e ← parseExpr
-    expect .rparen
-    expect .rbracket
-    return (key, none, none, some e)
-  else if tk == .assign then
-    -- #[key = "value"]
-    advance
-    let valTk ← peek
-    let val ← match valTk with
-      | .strLit s => advance; pure s
-      | _ =>
-        let sp ← peekSpan
-        throwParse "expected string literal in attribute value" (span := some sp)
-    expect .rbracket
-    return (key, some val, none, none)
-  else if tk == .lparen && key == "repr" then
-    -- #[repr(C, align(16), packed)]
-    advance
-    let mut opts : ReprOpts := {}
-    let mut tk2 ← peek
-    while tk2 != .rparen && tk2 != .eof do
-      let arg ← expectIdent
-      if arg == "C" then
-        opts := { opts with isReprC := true }
-      else if arg == "packed" then
-        opts := { opts with isPacked := true }
-      else if arg == "align" then
-        expect .lparen
-        let alignTk ← peek
-        match alignTk with
-        | .intLit n =>
-          advance
-          opts := { opts with reprAlign := some n.toNat }
-        | _ =>
-          let sp ← peekSpan
-          throwParse "expected integer literal in align()" (span := some sp)
-        expect .rparen
-      else
-        let sp ← peekSpan
-        throwParse s!"unknown repr option '{arg}'" (span := some sp)
-      tk2 ← peek
-      if tk2 == .comma then advance; tk2 ← peek
-    expect .rparen
-    expect .rbracket
-    return ("repr", none, some opts, none)
-  else if tk == .lparen && (key == "spec" || key == "proof_by"
-      || key == "ensures_proof" || key == "proof_coverage") then
-    -- in-source proof links: #[proof_by(Concrete.Proof.thm)], #[spec(Q.Name)],
-    -- #[ensures_proof(Q.Name)], #[proof_coverage(iff)]. The value is a
-    -- (possibly dotted) qualified Lean name, or a bare coverage kind.
-    advance
-    let mut name ← expectIdent
-    let mut t ← peek
-    while t == .dot do
-      advance
-      let part ← expectIdent
-      name := name ++ "." ++ part
-      t ← peek
-    expect .rparen
-    expect .rbracket
-    return (key, some name, none, none)
-  else if tk == .lparen && key == "proof_fingerprint" then
-    -- #[proof_fingerprint("ab12cd…")]: a short body-hash string literal stored
-    -- in source so staleness is detected for functions spec-drift can't cover.
-    advance
-    let hash ← match (← peek) with
-      | .strLit s => advance; pure s
-      | _ => let sp ← peekSpan; throwParse "expected a string literal in proof_fingerprint(\"…\")" (span := some sp)
-    expect .rparen
-    expect .rbracket
-    return (key, some hash, none, none)
-  else if tk == .lparen then
-    -- #[key(value)]
-    advance
-    let val ← expectIdent
-    expect .rparen
-    expect .rbracket
-    return (key, some val, none, none)
-  else
-    expect .rbracket
-    return (key, none, none, none)
-
-/-- Parse a newtype definition: newtype Name = Type; or newtype Name<T> = Type; -/
 partial def parseNewtypeDef : ParseM NewtypeDef := do
   let sp ← peekSpan
   expect .newtype_
