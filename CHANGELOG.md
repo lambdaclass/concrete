@@ -10,6 +10,45 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pure-core proof arc: seed planted, paused by the selective rule (2026-07-16)
+
+The Phase 7 exit obligation (item 4) opened contract-first
+(docs/PURE_CORE_PROOF_ARC.md: Lean kernel = judge, SMT = worker with a
+separate `solver_checked` class, five-point DoD incl. mutation-sensitivity)
+and shipped its seed: **11 kernel-backed stdlib proof links** — Option
+unwrap_or/map, Result map/map_err, NonZeroU32/U64/Port try_new,
+try_from_u64/try_from_u32, and the base64 alphabet pair char_of/val_of with
+the encode-decode roundtrip corollary. Every link is fingerprint-fresh,
+spec-drift-covered, kernel-verified through the Examples import, and
+mutation-flips-stale (check_purecore_proofs.sh, 32 checks).
+
+Machinery hardened en route: proof attributes parse on impl methods;
+source-link synthesis resolves impl-method AND free-fn names in nested std
+submodules (Core mangling matched via the fingerprint table, skip-not-
+fabricate in dependency pipelines); spec-drift coverage is keyed by
+qualified name and now RENDERED per entry ("spec: drift-checked / NOT
+drift-covered") with the fabricated_proof fixture visibly uncovered;
+trusted fns (Bytes.view) and step lemmas (parse_hex H1 guard) are refused
+links by the registry — their kernel theorems ride source comments until
+the #[model_refined_by] partial-evidence class lands.
+
+The arc then PAUSED by the pinned selective rule: prove the stable
+algebraic core + workload-pulled APIs only; broad/unstable surfaces keep
+lighter evidence; crc32 stays oracle-tested. "Everything has an evidence
+class" > "everything is proved."
+
+### Stdlib API snapshot/diff gate current (ROADMAP 22a, 2026-07-16)
+
+The five-fact manifest grew into the full API snapshot: every public stdlib
+item's row now also carries its **canonical signature** and its **evidence
+class** (`proved` derived from the actual `#[proof_by]` attribute — exactly
+the 9 kernel-linked public APIs, pinned; everything else `gated`). The gate
+(check_stdlib_manifest.sh, 12 checks) fails on add/remove, signature change,
+capability widening, allocation/failure-profile change, or evidence-class
+change until docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv is regenerated —
+both new negatives mutation-verified. Deprecation/doc-link columns are
+deliberately absent until those mechanisms exist (no decorative facts).
+
 ### H18 closed — owned-resource collections destroy their elements (2026-07-16)
 
 The linear-language-specific stdlib gap (ROADMAP Phase 7 item 1) is closed:

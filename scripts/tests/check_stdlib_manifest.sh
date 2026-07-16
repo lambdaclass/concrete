@@ -31,9 +31,35 @@ else
   echo "       regenerate: python3 scripts/tests/lib/stdlib_manifest.py (with header) > $MANIFEST"
 fi
 
-# 2. no blank facts (7 non-empty fields per row)
-bad=$(awk -F'\t' 'NF!=7 || $3=="" || $4=="" || $5=="" || $6=="" || $7==""' "$TMP/committed.tsv" | head -3)
+# 2. no blank facts (9 non-empty fields per row; 22a added evidence+signature)
+bad=$(awk -F'\t' 'NF!=9 || $3=="" || $4=="" || $5=="" || $6=="" || $7=="" || $8=="" || $9==""' "$TMP/committed.tsv" | head -3)
 [ -z "$bad" ] && ok "no blank facts (absence is explicit no/none/infallible)" || no "blank facts: $bad"
+
+# 2a. item 22a EVIDENCE marking is exact: `proved` rows are precisely the
+#     public fns carrying kernel proof links today — no spillover, no drift.
+#     A new proof link updates BOTH this pin and the TSV (that is the gate).
+want_proved="numeric.try_from_u32
+numeric.try_from_u64
+numeric.try_new
+numeric.try_new
+numeric.try_new
+option.map
+option.unwrap_or
+result.map
+result.map_err"
+got_proved=$(awk -F'\t' '$8=="proved"{print $1"."$2}' "$TMP/committed.tsv" | sort)
+[ "$got_proved" = "$want_proved" ] \
+  && ok "evidence: exactly the 9 kernel-linked public APIs marked proved" \
+  || no "evidence drift: proved set is [$(echo $got_proved | tr '\n' ' ')]"
+
+# 2b. proved is never decorative: each proved row's source fn also carries a
+#     #[proof_fingerprint] (the stale-detection half of the link).
+pf_fns=$(grep -B1 -h 'pub fn' std/src/*.con | grep -c 'proof_fingerprint' || true)
+n_proved=$(awk -F'\t' '$8=="proved"' "$TMP/committed.tsv" | wc -l | tr -d ' ')
+fp_count=$(grep -h 'proof_fingerprint' std/src/*.con | wc -l | tr -d ' ')
+[ "$fp_count" -ge "$n_proved" ] \
+  && ok "every proved row is fingerprint-backed ($n_proved proved, $fp_count fingerprints in std)" \
+  || no "proved rows without fingerprints ($n_proved proved > $fp_count fingerprints)"
 
 # 3. item 2b: free-function (constructs) duplicating a method name in its module
 ALLOW="new|with_capacity|from|default|empty"   # genuine no-receiver constructors

@@ -1,414 +1,414 @@
-alloc	heap_new	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
-alloc	grow	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
-alloc	dealloc	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary
-args	count	no	constructs	infallible	none	deterministic
-args	get	yes	constructs	infallible	Alloc,Env	trusted-boundary
-ascii	is_digit	no	constructs	infallible	none	pure-core
-ascii	is_upper	no	constructs	infallible	none	pure-core
-ascii	is_lower	no	constructs	infallible	none	pure-core
-ascii	is_alpha	no	constructs	infallible	none	pure-core
-ascii	is_alnum	no	constructs	infallible	none	pure-core
-ascii	is_whitespace	no	constructs	infallible	none	pure-core
-ascii	to_lower	no	constructs	infallible	none	pure-core
-ascii	to_upper	no	constructs	infallible	none	pure-core
-base64	encode	yes	constructs	infallible	Alloc	hosted-effect
-base64	decode	yes	constructs	option	Alloc	hosted-effect
-bitset	new	no	constructs	infallible	none	pure-core
-bitset	with_capacity	yes	constructs	infallible	Alloc,Unsafe	hosted-effect
-bitset	set	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-bitset	unset	no	mut	infallible	none	pure-core
-bitset	test	no	borrows	infallible	none	pure-core
-bitset	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-bitset	remove	no	mut	infallible	none	pure-core
-bitset	contains	no	borrows	infallible	none	pure-core
-bitset	count	no	borrows	infallible	none	pure-core
-bitset	union	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-bitset	intersect	no	mut	infallible	none	pure-core
-bitset	len	no	borrows	infallible	none	pure-core
-bitset	clear	no	mut	infallible	Unsafe	hosted-effect
-bitset	drop	yes	consumes	infallible	Alloc	hosted-effect
-bytes	new	no	constructs	infallible	none	pure-core
-bytes	with_capacity	yes	constructs	infallible	Alloc	hosted-effect
-bytes	from_string	yes	constructs	infallible	Alloc	hosted-effect
-bytes	push	yes	mut	infallible	Alloc	hosted-effect
-bytes	get	no	borrows	option	none	pure-core
-bytes	get_unchecked	no	borrows	infallible	none	pure-core
-bytes	set	no	mut	infallible	none	pure-core
-bytes	set_unchecked	no	mut	infallible	none	pure-core
-bytes	len	no	borrows	infallible	none	pure-core
-bytes	cap	no	borrows	infallible	none	pure-core
-bytes	is_empty	no	borrows	infallible	none	pure-core
-bytes	clear	no	mut	infallible	none	pure-core
-bytes	eq	no	borrows	infallible	none	pure-core
-bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect
-bytes	to_string	yes	consumes	option	Alloc	hosted-effect
-bytes	to_string_unchecked	no	consumes	infallible	none	pure-core
-bytes	view	no	borrows	option	none	pure-core
-bytes	be16	no	borrows	infallible	none	pure-core
-bytes	be32	no	borrows	infallible	none	pure-core
-bytes	le16	no	borrows	infallible	none	pure-core
-bytes	le32	no	borrows	infallible	none	pure-core
-bytes	cmp	no	borrows	infallible	none	pure-core
-bytes	raw_view	no	borrows	infallible	none	pure-core
-bytes	into_raw_parts	no	consumes	infallible	none	pure-core
-bytes	drop	yes	consumes	infallible	Alloc	hosted-effect
-bytes	destroy	yes	borrows	infallible	Alloc	hosted-effect
-checksum	crc32	no	constructs	infallible	none	deterministic
-checksum	crc32_all	no	constructs	infallible	none	deterministic
-deque	new	no	constructs	infallible	none	deterministic
-deque	push_back	yes	mut	infallible	Alloc	hosted-effect
-deque	push_front	yes	mut	infallible	Alloc	hosted-effect
-deque	pop_back	no	mut	option	none	deterministic
-deque	pop_front	no	mut	option	none	deterministic
-deque	len	no	borrows	infallible	none	deterministic
-deque	is_empty	no	borrows	infallible	none	deterministic
-deque	get_unchecked	no	borrows	infallible	none	deterministic
-deque	get	no	borrows	option	none	deterministic
-deque	clear	yes	mut	infallible	Alloc	hosted-effect
-deque	drop	yes	consumes	infallible	Alloc	hosted-effect
-deque	destroy	yes	borrows	infallible	Alloc	hosted-effect
-env	get	yes	constructs	option	Alloc,Env,Unsafe	trusted-boundary
-env	set	no	constructs	infallible	Env,Unsafe	trusted-boundary
-env	unset	no	constructs	infallible	Env,Unsafe	trusted-boundary
-fmt	write_to	no	borrows	result	none	deterministic
-fmt	write_int	no	constructs	result	none	trusted-boundary
-fmt	write_uint	no	constructs	result	none	trusted-boundary
-fmt	write_bool	no	constructs	result	none	trusted-boundary
-fmt	write_char	no	constructs	result	none	trusted-boundary
-fmt	format_int	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	format_uint	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	format_hex	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	format_bin	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	format_oct	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	format_bool	yes	constructs	infallible	Alloc	trusted-boundary
-fmt	pad_left	yes	constructs	infallible	Alloc	hosted-effect
-fmt	pad_right	yes	constructs	infallible	Alloc	hosted-effect
-fmt	write_to	no	borrows	result	none	deterministic
-fs	open	yes	constructs	result	Alloc,File,Unsafe	hosted-effect
-fs	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect
-fs	write_bytes	no	borrows	infallible	File,Unsafe	hosted-effect
-fs	read_bytes	no	borrows	infallible	File,Unsafe	hosted-effect
-fs	seek	no	borrows	infallible	File,Unsafe	hosted-effect
-fs	tell	no	borrows	infallible	File,Unsafe	hosted-effect
-fs	close	no	consumes	infallible	File,Unsafe	hosted-effect
-fs	read_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary
-fs	write_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary
-fs	append_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary
-fs	file_exists	yes	constructs	infallible	Alloc,File,Unsafe	trusted-boundary
-fs	read_to_string	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary
-hash	fnv1a_bytes	no	constructs	infallible	none	pure-core
-hash	fnv1a_string	no	constructs	infallible	none	pure-core
-hash	hash_u64	no	constructs	infallible	none	trusted-boundary
-hash	hash_i32	no	constructs	infallible	none	trusted-boundary
-hash	hash_i64	no	constructs	infallible	none	trusted-boundary
-hash	hash_string	no	constructs	infallible	none	pure-core
-hash	eq_u64	no	constructs	infallible	none	trusted-boundary
-hash	eq_i32	no	constructs	infallible	none	trusted-boundary
-hash	eq_i64	no	constructs	infallible	none	trusted-boundary
-hash	eq_string	no	constructs	infallible	none	pure-core
-heap	new	no	constructs	infallible	none	deterministic
-heap	push	yes	mut	infallible	Alloc	hosted-effect
-heap	pop	no	mut	option	none	deterministic
-heap	len	no	borrows	infallible	none	deterministic
-heap	is_empty	no	borrows	infallible	none	deterministic
-heap	peek	no	borrows	option	none	deterministic
-heap	clear	yes	mut	infallible	Alloc	hosted-effect
-heap	drop	yes	consumes	infallible	Alloc	hosted-effect
-heap	destroy	yes	borrows	infallible	Alloc	hosted-effect
-hex	encode_bytes	yes	constructs	infallible	Alloc	hosted-effect
-hex	encode_u32	yes	constructs	infallible	Alloc	hosted-effect
-hex	encode_u32_vec	yes	constructs	infallible	Alloc	hosted-effect
-hex	decode	yes	constructs	option	Alloc	hosted-effect
-io	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect
-io	open	no	constructs	result	File,Unsafe	hosted-effect
-io	write	no	borrows	infallible	File,Unsafe	hosted-effect
-io	read_byte	no	borrows	infallible	File,Unsafe	hosted-effect
-io	flush	no	borrows	infallible	File,Unsafe	hosted-effect
-io	close	no	consumes	infallible	File,Unsafe	hosted-effect
-io	write_raw	no	borrows	result	none	deterministic
-io	write	no	borrows	result	none	deterministic
-io	write_str	no	borrows	result	none	deterministic
-io	flush	no	borrows	result	none	deterministic
-io	close	no	consumes	result	none	deterministic
-io	writer_from_file	no	constructs	infallible	File	trusted-boundary
-io	console_writer	no	constructs	infallible	Console	trusted-boundary
-io	console_error_writer	no	constructs	infallible	Console	trusted-boundary
-io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary
-io	read	no	borrows	result	none	deterministic
-io	close	no	consumes	result	none	deterministic
-io	reader_from_file	no	constructs	infallible	File	trusted-boundary
-io	read_all	yes	constructs	infallible	Alloc	trusted-boundary
-io	fixed_reader	no	constructs	infallible	Unsafe	trusted-boundary
-io	print	no	constructs	infallible	Console	trusted-boundary
-io	println	no	constructs	infallible	Console	trusted-boundary
-io	eprint	no	constructs	infallible	Console	trusted-boundary
-io	eprintln	no	constructs	infallible	Console	trusted-boundary
-io	read_line	yes	constructs	infallible	Alloc,Console	trusted-boundary
-map	new	no	constructs	infallible	none	deterministic
-map	len	no	borrows	infallible	none	deterministic
-map	is_empty	no	borrows	infallible	none	deterministic
-map	contains	no	borrows	infallible	none	deterministic
-map	update	no	mut	infallible	none	deterministic
-map	with_value	no	borrows	infallible	C	hosted-effect
-map	with_value_mut	no	mut	infallible	C	hosted-effect
-map	modify	no	mut	infallible	C	hosted-effect
-map	fold	no	borrows	infallible	C	hosted-effect
-map	for_each_with	no	borrows	infallible	C	hosted-effect
-map	for_each_ctx	no	borrows	infallible	C	hosted-effect
-map	for_each	no	borrows	infallible	C	hosted-effect
-map	keys_fold	no	borrows	infallible	C	hosted-effect
-map	values_fold	no	borrows	infallible	C	hosted-effect
-map	keys_for_each	no	borrows	infallible	C	hosted-effect
-map	values_for_each	no	borrows	infallible	C	hosted-effect
-map	keys	yes	borrows	infallible	Alloc	hosted-effect
-map	values	yes	borrows	infallible	Alloc	hosted-effect
-map	get	no	borrows	option	none	deterministic
-map	remove	no	mut	option	none	deterministic
-map	insert	yes	mut	option	Alloc,Unsafe	hosted-effect
-map	clear	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-map	drop	yes	consumes	infallible	Alloc,Unsafe	hosted-effect
-map	destroy	yes	borrows	infallible	Alloc	hosted-effect
-map	destroy	no	borrows	infallible	none	deterministic
-map	destroy	no	borrows	infallible	none	deterministic
-math	max	no	constructs	infallible	none	pure-core
-math	min	no	constructs	infallible	none	pure-core
-math	abs	no	constructs	infallible	none	pure-core
-math	clamp	no	constructs	infallible	none	pure-core
-mem	sizeof	no	constructs	infallible	none	deterministic
-mem	alignof	no	constructs	infallible	none	deterministic
-net	bind	yes	constructs	result	Alloc,Network,Unsafe	hosted-effect
-net	accept	no	borrows	result	Network,Unsafe	hosted-effect
-net	close	no	consumes	infallible	Network,Unsafe	hosted-effect
-net	connect	yes	constructs	result	Alloc,Network,Unsafe	hosted-effect
-net	write	no	borrows	infallible	Network,Unsafe	hosted-effect
-net	read	no	borrows	infallible	Network,Unsafe	hosted-effect
-net	write_all	no	borrows	infallible	Network,Unsafe	hosted-effect
-net	read_all	yes	borrows	infallible	Alloc,Network,Unsafe	hosted-effect
-net	close	no	consumes	infallible	Network,Unsafe	hosted-effect
-numeric	try_new	no	constructs	option	none	pure-core
-numeric	try_from_u64	no	constructs	option	none	pure-core
-numeric	try_new	no	constructs	option	none	pure-core
-numeric	try_new	no	constructs	option	none	pure-core
-numeric	try_from_u32	no	constructs	option	none	pure-core
-numeric	from_raw	no	constructs	infallible	none	pure-core
-numeric	from_bytes	no	constructs	infallible	none	pure-core
-numeric	pos	no	borrows	infallible	none	pure-core
-numeric	remaining	no	borrows	infallible	none	pure-core
-numeric	is_empty	no	borrows	infallible	none	pure-core
-numeric	read_u8	no	mut	result	none	pure-core
-numeric	peek_u8	no	borrows	result	none	pure-core
-numeric	skip	no	mut	result	none	pure-core
-numeric	read_u16_be	no	mut	result	none	pure-core
-numeric	read_u32_be	no	mut	result	none	pure-core
-numeric	read_u64_be	no	mut	result	none	pure-core
-numeric	read_u16_le	no	mut	result	none	pure-core
-numeric	read_u32_le	no	mut	result	none	pure-core
-numeric	read_u64_le	no	mut	result	none	pure-core
-numeric	new	no	constructs	option	none	pure-core
-numeric	of_cursor	no	constructs	infallible	none	pure-core
-numeric	off	no	borrows	infallible	none	pure-core
-numeric	len	no	borrows	infallible	none	pure-core
-numeric	is_empty	no	borrows	infallible	none	pure-core
-numeric	cursor	no	borrows	option	none	pure-core
-numeric	byte	no	borrows	option	none	pure-core
-numeric	try_text	no	borrows	option	none	pure-core
-numeric	from_raw	no	constructs	infallible	none	pure-core
-numeric	pos	no	borrows	infallible	none	pure-core
-numeric	remaining	no	borrows	infallible	none	pure-core
-numeric	write_u8	no	mut	result	none	pure-core
-numeric	write_u16_be	no	mut	result	none	pure-core
-numeric	write_u32_be	no	mut	result	none	pure-core
-numeric	write_u64_be	no	mut	result	none	pure-core
-numeric	write_u16_le	no	mut	result	none	pure-core
-numeric	write_u32_le	no	mut	result	none	pure-core
-numeric	write_u64_le	no	mut	result	none	pure-core
-option	is_some	no	borrows	infallible	none	pure-core
-option	is_none	no	borrows	infallible	none	pure-core
-option	ok_or	no	consumes	result	none	pure-core
-option	map	no	consumes	infallible	none	pure-core
-option	and_then	no	consumes	option	none	pure-core
-option	unwrap_or	no	consumes	infallible	none	pure-core
-ordered_map	new	no	constructs	infallible	none	deterministic
-ordered_map	with_value	no	borrows	infallible	C	hosted-effect
-ordered_map	with_value_mut	no	mut	infallible	C	hosted-effect
-ordered_map	modify	no	mut	infallible	C	hosted-effect
-ordered_map	update	no	mut	infallible	none	deterministic
-ordered_map	contains	no	borrows	infallible	none	deterministic
-ordered_map	len	no	borrows	infallible	none	deterministic
-ordered_map	is_empty	no	borrows	infallible	none	deterministic
-ordered_map	fold	no	borrows	infallible	C	hosted-effect
-ordered_map	for_each	no	borrows	infallible	C	hosted-effect
-ordered_map	get	no	borrows	option	none	deterministic
-ordered_map	min_key	no	borrows	option	none	deterministic
-ordered_map	max_key	no	borrows	option	none	deterministic
-ordered_map	remove	no	mut	option	none	deterministic
-ordered_map	insert	yes	mut	option	Alloc	hosted-effect
-ordered_map	clear	yes	mut	infallible	Alloc	hosted-effect
-ordered_map	drop	yes	consumes	infallible	Alloc	hosted-effect
-ordered_map	destroy	yes	borrows	infallible	Alloc	hosted-effect
-ordered_map	destroy	no	borrows	infallible	none	deterministic
-ordered_set	new	no	constructs	infallible	none	deterministic
-ordered_set	contains	no	borrows	infallible	none	deterministic
-ordered_set	len	no	borrows	infallible	none	deterministic
-ordered_set	is_empty	no	borrows	infallible	none	deterministic
-ordered_set	fold	no	borrows	infallible	C	hosted-effect
-ordered_set	for_each	no	borrows	infallible	C	hosted-effect
-ordered_set	min	no	borrows	option	none	deterministic
-ordered_set	max	no	borrows	option	none	deterministic
-ordered_set	remove	no	mut	infallible	none	deterministic
-ordered_set	insert	yes	mut	infallible	Alloc	hosted-effect
-ordered_set	clear	yes	mut	infallible	Alloc	hosted-effect
-ordered_set	drop	yes	consumes	infallible	Alloc	hosted-effect
-ordered_set	destroy	yes	borrows	infallible	Alloc	hosted-effect
-ordered_set	destroy	no	borrows	infallible	none	deterministic
-parse	parse_uint	no	constructs	option	none	deterministic
-parse	parse_int	no	constructs	option	none	deterministic
-parse	parse_hex	no	constructs	option	none	deterministic
-parse	parse_bin	no	constructs	option	none	deterministic
-parse	parse_oct	no	constructs	option	none	deterministic
-parse	parse_bool	no	constructs	option	none	deterministic
-parse	new	no	constructs	infallible	none	deterministic
-parse	pos	no	borrows	infallible	none	deterministic
-parse	remaining	no	borrows	infallible	none	deterministic
-parse	is_eof	no	borrows	infallible	none	deterministic
-parse	peek	no	borrows	option	none	deterministic
-parse	advance	no	mut	option	none	deterministic
-parse	skip_whitespace	no	mut	infallible	none	deterministic
-parse	expect_char	no	mut	infallible	none	deterministic
-path	new	no	constructs	infallible	none	deterministic
-path	from_string	yes	constructs	infallible	Alloc	hosted-effect
-path	push	yes	mut	infallible	Alloc	hosted-effect
-path	from_bytes	yes	constructs	infallible	Alloc	hosted-effect
-path	to_string	yes	borrows	option	Alloc	hosted-effect
-path	bytes_view	no	borrows	infallible	none	deterministic
-path	as_path	no	borrows	infallible	none	deterministic
-path	drop	yes	consumes	infallible	Alloc	hosted-effect
-path	path_join	yes	constructs	infallible	Alloc	trusted-boundary
-process	sig_int	no	constructs	infallible	none	deterministic
-process	sig_kill	no	constructs	infallible	none	deterministic
-process	sig_term	no	constructs	infallible	none	deterministic
-process	process_exit	no	constructs	infallible	Process,Unsafe	hosted-effect
-process	process_getpid	no	constructs	infallible	Process,Unsafe	hosted-effect
-process	process_fork	no	constructs	infallible	Process,Unsafe	hosted-effect
-process	process_kill	no	constructs	result	Process,Unsafe	hosted-effect
-process	new	no	constructs	infallible	none	deterministic
-process	pid	no	borrows	infallible	none	deterministic
-process	wait	no	consumes	result	Process,Unsafe	hosted-effect
-process	spawn	no	constructs	result	Process,Unsafe	hosted-effect
-ptr	offset	no	constructs	infallible	none	trusted-boundary
-rand	seed	no	constructs	infallible	Random,Unsafe	hosted-effect
-rand	random_int	no	constructs	infallible	Random,Unsafe	hosted-effect
-rand	random_range	no	constructs	infallible	Random,Unsafe	hosted-effect
-result	is_ok	no	borrows	infallible	none	pure-core
-result	is_err	no	borrows	infallible	none	pure-core
-result	unwrap_or	no	consumes	infallible	none	pure-core
-result	ok	no	consumes	option	none	pure-core
-result	err	no	consumes	option	none	pure-core
-result	map	no	consumes	infallible	none	pure-core
-result	and_then	no	consumes	result	none	pure-core
-result	map_err	no	consumes	infallible	none	pure-core
-set	new	no	constructs	infallible	none	deterministic
-set	contains	no	borrows	infallible	none	deterministic
-set	len	no	borrows	infallible	none	deterministic
-set	is_empty	no	borrows	infallible	none	deterministic
-set	fold	no	borrows	infallible	C	hosted-effect
-set	for_each	no	borrows	infallible	C	hosted-effect
-set	elements	yes	borrows	infallible	Alloc	hosted-effect
-set	remove	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-set	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-set	clear	yes	mut	infallible	Alloc,Unsafe	hosted-effect
-set	drop	yes	consumes	infallible	Alloc	hosted-effect
-set	destroy	yes	borrows	infallible	Alloc	hosted-effect
-set	destroy	no	borrows	infallible	none	deterministic
-sha256	hash_raw	yes	constructs	infallible	Alloc	trusted-boundary
-sha256	hash_string	yes	constructs	infallible	Alloc	trusted-boundary
-slice	len	no	borrows	infallible	none	pure-core
-slice	is_empty	no	borrows	infallible	none	pure-core
-slice	set_unchecked	no	mut	infallible	none	pure-core
-slice	len	no	borrows	infallible	none	pure-core
-slice	is_empty	no	borrows	infallible	none	pure-core
-slice	get_unchecked	no	borrows	infallible	none	pure-core
-slice	get	no	borrows	option	none	pure-core
-slice	set	no	mut	infallible	none	pure-core
-slice	get_unchecked	no	borrows	infallible	none	pure-core
-slice	get	no	borrows	option	none	pure-core
-string	new	no	constructs	infallible	none	deterministic
-string	from_raw_unchecked	no	constructs	infallible	none	deterministic
-string	len	no	borrows	infallible	none	deterministic
-string	cap	no	borrows	infallible	none	deterministic
-string	is_empty	no	borrows	infallible	none	deterministic
-string	get	no	borrows	option	none	deterministic
-string	get_unchecked	no	borrows	infallible	none	deterministic
-string	push_char	yes	mut	infallible	Alloc	hosted-effect
-string	append	yes	mut	infallible	Alloc	hosted-effect
-string	append_int	yes	mut	infallible	Alloc	hosted-effect
-string	clear	no	mut	infallible	none	deterministic
-string	eq	no	borrows	infallible	none	deterministic
-string	clone	yes	borrows	infallible	Alloc	hosted-effect
-string	drop	yes	consumes	infallible	Alloc	hosted-effect
-string	starts_with	no	borrows	infallible	none	deterministic
-string	ends_with	no	borrows	infallible	none	deterministic
-string	contains	no	borrows	infallible	none	deterministic
-string	to_lower	yes	borrows	infallible	Alloc	hosted-effect
-string	to_upper	yes	borrows	infallible	Alloc	hosted-effect
-string	destroy	yes	borrows	infallible	Alloc	hosted-effect
-string	digit_to_int	no	constructs	infallible	none	deterministic
-string	int_to_digit	no	constructs	infallible	none	deterministic
-test	ignore_opt	no	constructs	infallible	none	deterministic
-test	ignore_res	no	constructs	infallible	none	deterministic
-test	assert_eq	no	constructs	infallible	Console	hosted-effect
-test	assert_ne	no	constructs	infallible	Console	hosted-effect
-test	assert_true	no	constructs	infallible	Console	hosted-effect
-test	assert_false	no	constructs	infallible	Console	hosted-effect
-test	assert_gt	no	constructs	infallible	Console	hosted-effect
-test	assert_lt	no	constructs	infallible	Console	hosted-effect
-test	assert_ge	no	constructs	infallible	Console	hosted-effect
-test	assert_le	no	constructs	infallible	Console	hosted-effect
-test	expect_ok	no	constructs	infallible	none	deterministic
-test	expect_err	no	constructs	infallible	none	deterministic
-test	expect_some	no	constructs	infallible	none	deterministic
-test	expect_none	no	constructs	infallible	none	deterministic
-test	sink_matches	no	constructs	infallible	none	trusted-boundary
-test	expect_sink	no	constructs	infallible	Console	hosted-effect
-test	str_eq	no	constructs	infallible	none	deterministic
-test	assert_str_eq	no	constructs	infallible	Console	hosted-effect
-text	try_new	yes	constructs	option	Alloc	hosted-effect
-text	from_string	no	constructs	infallible	none	deterministic
-text	len	no	borrows	infallible	none	deterministic
-text	is_empty	no	borrows	infallible	none	deterministic
-text	get_unchecked	no	borrows	infallible	none	deterministic
-text	eq	no	borrows	infallible	none	deterministic
-text	from_raw_unchecked	no	constructs	infallible	none	deterministic
-text	try_from_raw	no	constructs	option	none	deterministic
-text	validate_utf8	no	constructs	infallible	none	trusted-boundary
-time	from_secs	no	constructs	infallible	none	deterministic
-time	from_millis	no	constructs	infallible	none	deterministic
-time	from_nanos	no	constructs	infallible	none	deterministic
-time	now	yes	constructs	infallible	Alloc,Time,Unsafe	hosted-effect
-time	elapsed	yes	borrows	infallible	Alloc,Time,Unsafe	hosted-effect
-time	sleep	yes	constructs	infallible	Alloc,Time,Unsafe	trusted-boundary
-time	unix_timestamp	no	constructs	infallible	Time,Unsafe	trusted-boundary
-vec	new	no	constructs	infallible	none	deterministic
-vec	push	yes	mut	infallible	Alloc	hosted-effect
-vec	pop	no	mut	option	none	deterministic
-vec	swap_remove	no	mut	option	none	deterministic
-vec	get_mut	no	mut	infallible	none	deterministic
-vec	set_unchecked	no	mut	infallible	none	deterministic
-vec	len	no	borrows	infallible	none	deterministic
-vec	cap	no	borrows	infallible	none	deterministic
-vec	is_empty	no	borrows	infallible	none	deterministic
-vec	replace	no	mut	infallible	none	deterministic
-vec	fold	no	borrows	infallible	C	hosted-effect
-vec	for_each	no	borrows	infallible	C	hosted-effect
-vec	for_each_ctx	no	borrows	infallible	C	hosted-effect
-vec	map	no	borrows	infallible	C	hosted-effect
-vec	with_at	no	borrows	infallible	C	hosted-effect
-vec	with_at_mut	no	mut	infallible	C	hosted-effect
-vec	for_each_with	no	borrows	infallible	C	hosted-effect
-vec	clear	yes	mut	infallible	Alloc	hosted-effect
-vec	drop	yes	consumes	infallible	Alloc	hosted-effect
-vec	destroy	yes	borrows	infallible	Alloc	hosted-effect
-vec	set	no	mut	infallible	none	deterministic
-vec	get_unchecked	no	borrows	infallible	none	deterministic
-vec	get	no	borrows	option	none	deterministic
-vec	destroy	no	borrows	infallible	none	deterministic
+alloc	heap_new	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary	gated	<T>() with(Alloc,Unsafe) -> *mut T
+alloc	grow	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary	gated	<T>(old_ptr: *mut T, size: u64) with(Alloc,Unsafe) -> *mut T
+alloc	dealloc	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary	gated	<T>(ptr: *mut T) with(Alloc,Unsafe)
+args	count	no	constructs	infallible	none	deterministic	gated	() -> Int
+args	get	yes	constructs	infallible	Alloc,Env	trusted-boundary	gated	(idx: Int) with(Env,Alloc) -> String
+ascii	is_digit	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	is_upper	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	is_lower	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	is_alpha	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	is_alnum	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	is_whitespace	no	constructs	infallible	none	pure-core	gated	(ch: char) -> bool
+ascii	to_lower	no	constructs	infallible	none	pure-core	gated	(ch: char) -> char
+ascii	to_upper	no	constructs	infallible	none	pure-core	gated	(ch: char) -> char
+base64	encode	yes	constructs	infallible	Alloc	hosted-effect	gated	(input: &Bytes) with(Alloc) -> Bytes
+base64	decode	yes	constructs	option	Alloc	hosted-effect	gated	(input: &Bytes) with(Alloc) -> Option<Bytes>
+bitset	new	no	constructs	infallible	none	pure-core	gated	() -> BitSet
+bitset	with_capacity	yes	constructs	infallible	Alloc,Unsafe	hosted-effect	gated	(n: u64) with(Alloc,Unsafe) -> BitSet
+bitset	set	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self, bit: u64) with(Alloc,Unsafe)
+bitset	unset	no	mut	infallible	none	pure-core	gated	(&mut self, bit: u64)
+bitset	test	no	borrows	infallible	none	pure-core	gated	(&self, bit: u64) -> bool
+bitset	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self, bit: u64) with(Alloc,Unsafe)
+bitset	remove	no	mut	infallible	none	pure-core	gated	(&mut self, bit: u64)
+bitset	contains	no	borrows	infallible	none	pure-core	gated	(&self, bit: u64) -> bool
+bitset	count	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+bitset	union	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self, other: &BitSet) with(Alloc,Unsafe)
+bitset	intersect	no	mut	infallible	none	pure-core	gated	(&mut self, other: &BitSet)
+bitset	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+bitset	clear	no	mut	infallible	Unsafe	hosted-effect	gated	(&mut self) with(Unsafe)
+bitset	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+bytes	new	no	constructs	infallible	none	pure-core	gated	() -> Bytes
+bytes	with_capacity	yes	constructs	infallible	Alloc	hosted-effect	gated	(cap: u64) with(Alloc) -> Bytes
+bytes	from_string	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String) with(Alloc) -> Bytes
+bytes	push	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, byte: u8) with(Alloc)
+bytes	get	no	borrows	option	none	pure-core	gated	(&self, at: u64) -> Option<u8>
+bytes	get_unchecked	no	borrows	infallible	none	pure-core	gated	(&self, at: u64) -> u8
+bytes	set	no	mut	infallible	none	pure-core	gated	(&mut self, at: u64, byte: u8) -> bool
+bytes	set_unchecked	no	mut	infallible	none	pure-core	gated	(&mut self, at: u64, byte: u8)
+bytes	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+bytes	cap	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+bytes	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+bytes	clear	no	mut	infallible	none	pure-core	gated	(&mut self)
+bytes	eq	no	borrows	infallible	none	pure-core	gated	(&self, other: &Bytes) -> bool
+bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, other: &Bytes) with(Alloc)
+bytes	to_string	yes	consumes	option	Alloc	hosted-effect	gated	(self) with(Alloc) -> Option<String>
+bytes	to_string_unchecked	no	consumes	infallible	none	pure-core	gated	(self) -> String
+bytes	view	no	borrows	option	none	pure-core	gated	(&self, start: u64, vlen: u64) -> Option<BytesRaw>
+bytes	be16	no	borrows	infallible	none	pure-core	gated	(&self, off: u64) -> u64
+bytes	be32	no	borrows	infallible	none	pure-core	gated	(&self, off: u64) -> u64
+bytes	le16	no	borrows	infallible	none	pure-core	gated	(&self, off: u64) -> u64
+bytes	le32	no	borrows	infallible	none	pure-core	gated	(&self, off: u64) -> u64
+bytes	cmp	no	borrows	infallible	none	pure-core	gated	(&self, other: &Bytes) -> i32
+bytes	raw_view	no	borrows	infallible	none	pure-core	gated	(&self) -> BytesRaw
+bytes	into_raw_parts	no	consumes	infallible	none	pure-core	gated	(self) -> BytesRaw
+bytes	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+bytes	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+checksum	crc32	no	constructs	infallible	none	deterministic	gated	(b: &Bytes, start: u64, len: u64) -> u64
+checksum	crc32_all	no	constructs	infallible	none	deterministic	gated	(b: &Bytes) with() -> u64
+deque	new	no	constructs	infallible	none	deterministic	gated	() -> Deque<T>
+deque	push_back	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)
+deque	push_front	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)
+deque	pop_back	no	mut	option	none	deterministic	gated	(&mut self) -> Option<T>
+deque	pop_front	no	mut	option	none	deterministic	gated	(&mut self) -> Option<T>
+deque	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+deque	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+deque	get_unchecked	no	borrows	infallible	none	deterministic	gated	(&self, at: u64) -> T
+deque	get	no	borrows	option	none	deterministic	gated	(&self, at: u64) -> Option<T>
+deque	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
+deque	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+deque	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+env	get	yes	constructs	option	Alloc,Env,Unsafe	trusted-boundary	gated	(name: &String) with(Env,Unsafe,Alloc) -> Option<String>
+env	set	no	constructs	infallible	Env,Unsafe	trusted-boundary	gated	(name: &String, value: &String) with(Env,Unsafe)
+env	unset	no	constructs	infallible	Env,Unsafe	trusted-boundary	gated	(name: &String) with(Env,Unsafe)
+fmt	write_to	no	borrows	result	none	deterministic	gated	(&self, w: &Writer) -> Result<u64, IoError> // called only where the type is statically known. // ================================================================ // Digit emission is SCALAR (no stack array): the magnitude is reversed // arithmetically, then digits stream high-to-low one byte per write. This // keeps std free of unproven bounds obligations (the array-index analyzer // only accepts constants / #[requires]-bounded indices) and avoids the // bug-029 array-merge shape entirely. Sinks see <= 20 one-byte writes
+fmt	write_int	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: i64) -> Result<u64, IoError>
+fmt	write_uint	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: u64) -> Result<u64, IoError>
+fmt	write_bool	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: bool) -> Result<u64, IoError>
+fmt	write_char	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: char) -> Result<u64, IoError>
+fmt	format_int	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: i64) with(Alloc) -> String
+fmt	format_uint	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
+fmt	format_hex	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
+fmt	format_bin	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
+fmt	format_oct	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
+fmt	format_bool	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: bool) with(Alloc) -> String
+fmt	pad_left	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String, width: u64, fill: char) with(Alloc) -> String
+fmt	pad_right	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String, width: u64, fill: char) with(Alloc) -> String
+fmt	write_to	no	borrows	result	none	deterministic	gated	(&self, w: &Writer) -> Result<u64, IoError>
+fs	open	yes	constructs	result	Alloc,File,Unsafe	hosted-effect	gated	(path: &String, mode: &String) with(File,Unsafe,Alloc) -> Result<File, FsError>
+fs	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect	gated	(path: &String) with(File,Unsafe,Alloc) -> Result<File, FsError>
+fs	write_bytes	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self, buf: *const u8, len: u64) with(File,Unsafe) -> u64
+fs	read_bytes	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self, buf: *mut u8, len: u64) with(File,Unsafe) -> u64
+fs	seek	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self, offset: i64, whence: i32) with(File,Unsafe) -> i32
+fs	tell	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self) with(File,Unsafe) -> i64
+fs	close	no	consumes	infallible	File,Unsafe	hosted-effect	gated	(self) with(File,Unsafe)
+fs	read_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary	gated	(path: &String) with(File,Unsafe,Alloc) -> Result<Bytes, FsError>
+fs	write_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary	gated	(path: &String, data: &Bytes) with(File,Unsafe,Alloc) -> Result<u64, FsError>
+fs	append_file	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary	gated	(path: &String, data: &Bytes) with(File,Unsafe,Alloc) -> Result<u64, FsError>
+fs	file_exists	yes	constructs	infallible	Alloc,File,Unsafe	trusted-boundary	gated	(path: &String) with(File,Unsafe,Alloc) -> bool
+fs	read_to_string	yes	constructs	result	Alloc,File,Unsafe	trusted-boundary	gated	(path: &String) with(File,Unsafe,Alloc) -> Result<String, FsError>
+hash	fnv1a_bytes	no	constructs	infallible	none	pure-core	gated	(data: &Bytes) -> u64
+hash	fnv1a_string	no	constructs	infallible	none	pure-core	gated	(data: &String) -> u64
+hash	hash_u64	no	constructs	infallible	none	trusted-boundary	gated	(key: &u64) -> u64
+hash	hash_i32	no	constructs	infallible	none	trusted-boundary	gated	(key: &i32) -> u64
+hash	hash_i64	no	constructs	infallible	none	trusted-boundary	gated	(key: &i64) -> u64
+hash	hash_string	no	constructs	infallible	none	pure-core	gated	(key: &String) -> u64
+hash	eq_u64	no	constructs	infallible	none	trusted-boundary	gated	(a: &u64, b: &u64) -> bool
+hash	eq_i32	no	constructs	infallible	none	trusted-boundary	gated	(a: &i32, b: &i32) -> bool
+hash	eq_i64	no	constructs	infallible	none	trusted-boundary	gated	(a: &i64, b: &i64) -> bool
+hash	eq_string	no	constructs	infallible	none	pure-core	gated	(a: &String, b: &String) -> bool
+heap	new	no	constructs	infallible	none	deterministic	gated	(cmp_fn: fn(&T, &T) -> bool) -> BinaryHeap<T>
+heap	push	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)
+heap	pop	no	mut	option	none	deterministic	gated	(&mut self) -> Option<T>
+heap	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+heap	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+heap	peek	no	borrows	option	none	deterministic	gated	(&self) -> Option<T>
+heap	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
+heap	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+heap	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+hex	encode_bytes	yes	constructs	infallible	Alloc	hosted-effect	gated	(data: &Vec<u8>) with(Alloc) -> String
+hex	encode_u32	yes	constructs	infallible	Alloc	hosted-effect	gated	(val: u32, out: &mut String) with(Alloc)
+hex	encode_u32_vec	yes	constructs	infallible	Alloc	hosted-effect	gated	(words: &Vec<u32>) with(Alloc) -> String
+hex	decode	yes	constructs	option	Alloc	hosted-effect	gated	(s: &String) with(Alloc) -> Option<Vec<u8>>
+io	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect	gated	(path: &String) with(File,Unsafe,Alloc) -> Result<TextFile, IoError>
+io	open	no	constructs	result	File,Unsafe	hosted-effect	gated	(path: &String, mode: &String) with(File,Unsafe) -> Result<TextFile, IoError>
+io	write	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self, data: &String) with(File,Unsafe)
+io	read_byte	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self) with(File,Unsafe) -> i32
+io	flush	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self) with(File,Unsafe)
+io	close	no	consumes	infallible	File,Unsafe	hosted-effect	gated	(self) with(File,Unsafe)
+io	write_raw	no	borrows	result	none	deterministic	gated	(&self, data: *const u8, len: u64) -> Result<u64, IoError>
+io	write	no	borrows	result	none	deterministic	gated	(&self, data: &Bytes) -> Result<u64, IoError>
+io	write_str	no	borrows	result	none	deterministic	gated	(&self, data: &String) -> Result<u64, IoError>
+io	flush	no	borrows	result	none	deterministic	gated	(&self) -> Result<u64, IoError>
+io	close	no	consumes	result	none	deterministic	gated	(self) -> Result<u64, IoError>
+io	writer_from_file	no	constructs	infallible	File	trusted-boundary	gated	(f: TextFile) with(File) -> Writer
+io	console_writer	no	constructs	infallible	Console	trusted-boundary	gated	() with(Console) -> Writer
+io	console_error_writer	no	constructs	infallible	Console	trusted-boundary	gated	() with(Console) -> Writer
+io	fixed_writer	no	constructs	infallible	Unsafe	trusted-boundary	gated	(state: *mut FixedSinkState) with(Unsafe) -> Writer
+io	read	no	borrows	result	none	deterministic	gated	(&self, buf: *mut u8, len: u64) -> Result<u64, IoError>
+io	close	no	consumes	result	none	deterministic	gated	(self) -> Result<u64, IoError>
+io	reader_from_file	no	constructs	infallible	File	trusted-boundary	gated	(f: TextFile) with(File) -> Reader
+io	read_all	yes	constructs	infallible	Alloc	trusted-boundary	gated	(r: &Reader) with(Alloc) -> Bytes
+io	fixed_reader	no	constructs	infallible	Unsafe	trusted-boundary	gated	(state: *mut FixedSrcState) with(Unsafe) -> Reader
+io	print	no	constructs	infallible	Console	trusted-boundary	gated	(value: &String) with(Console)
+io	println	no	constructs	infallible	Console	trusted-boundary	gated	(value: &String) with(Console)
+io	eprint	no	constructs	infallible	Console	trusted-boundary	gated	(value: &String) with(Console)
+io	eprintln	no	constructs	infallible	Console	trusted-boundary	gated	(value: &String) with(Console)
+io	read_line	yes	constructs	infallible	Alloc,Console	trusted-boundary	gated	() with(Console,Alloc) -> String
+map	new	no	constructs	infallible	none	deterministic	gated	(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc) -> HashMap<K, V>
+map	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+map	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+map	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool
+map	update	no	mut	infallible	none	deterministic	gated	(&mut self, key: &K, f: fn(V) -> V) -> bool
+map	with_value	no	borrows	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R>
+map	with_value_mut	no	mut	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R>
+map	modify	no	mut	infallible	C	hosted-effect	gated	<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)
+map	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A
+map	for_each_with	no	borrows	infallible	C	hosted-effect	gated	<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &K, &V) with(C)
+map	for_each_ctx	no	borrows	infallible	C	hosted-effect	gated	<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &K, &V) with(C)
+map	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K, &V) with(C)
+map	keys_fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A
+map	values_fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &V) with(C) -> A) with(C) -> A
+map	keys_for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K) with(C)
+map	values_for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&V) with(C)
+map	keys	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> Vec<K>
+map	values	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> Vec<V>
+map	get	no	borrows	option	none	deterministic	gated	(&self, key: &K) -> Option<V>
+map	remove	no	mut	option	none	deterministic	gated	(&mut self, key: &K) -> Option<V>
+map	insert	yes	mut	option	Alloc,Unsafe	hosted-effect	gated	(&mut self, key: K, value: V) with(Alloc,Unsafe) -> Option<V>
+map	clear	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self) with(Alloc,Unsafe)
+map	drop	yes	consumes	infallible	Alloc,Unsafe	hosted-effect	gated	(self) with(Alloc,Unsafe)
+map	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+map	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
+map	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
+math	max	no	constructs	infallible	none	pure-core	gated	<T: Copy>(a: T, b: T) -> T
+math	min	no	constructs	infallible	none	pure-core	gated	<T: Copy>(a: T, b: T) -> T
+math	abs	no	constructs	infallible	none	pure-core	gated	(value: i64) -> i64
+math	clamp	no	constructs	infallible	none	pure-core	gated	<T: Copy>(value: T, lo: T, hi: T) -> T
+mem	sizeof	no	constructs	infallible	none	deterministic	gated	<T>() -> u64
+mem	alignof	no	constructs	infallible	none	deterministic	gated	<T>() -> u64
+net	bind	yes	constructs	result	Alloc,Network,Unsafe	hosted-effect	gated	(addr: &String, port: u16) with(Unsafe,Alloc,Network) -> Result<TcpListener, NetError>
+net	accept	no	borrows	result	Network,Unsafe	hosted-effect	gated	(&self) with(Unsafe,Network) -> Result<TcpStream, NetError>
+net	close	no	consumes	infallible	Network,Unsafe	hosted-effect	gated	(self) with(Unsafe,Network)
+net	connect	yes	constructs	result	Alloc,Network,Unsafe	hosted-effect	gated	(addr: &String, port: u16) with(Unsafe,Alloc,Network) -> Result<TcpStream, NetError>
+net	write	no	borrows	infallible	Network,Unsafe	hosted-effect	gated	(&self, data: *const u8, len: u64) with(Unsafe,Network) -> i64
+net	read	no	borrows	infallible	Network,Unsafe	hosted-effect	gated	(&self, buf: *mut u8, len: u64) with(Unsafe,Network) -> i64
+net	write_all	no	borrows	infallible	Network,Unsafe	hosted-effect	gated	(&self, data: *const u8, len: u64) with(Unsafe,Network) -> bool
+net	read_all	yes	borrows	infallible	Alloc,Network,Unsafe	hosted-effect	gated	(&self, buf: &mut Bytes) with(Unsafe,Alloc,Network) -> i64
+net	close	no	consumes	infallible	Network,Unsafe	hosted-effect	gated	(self) with(Unsafe,Network)
+numeric	try_new	no	constructs	option	none	pure-core	proved	(value: u32) -> Option<NonZeroU32>
+numeric	try_from_u64	no	constructs	option	none	pure-core	proved	(value: u64) -> Option<NonZeroU32>
+numeric	try_new	no	constructs	option	none	pure-core	proved	(value: u64) -> Option<NonZeroU64>
+numeric	try_new	no	constructs	option	none	pure-core	proved	(value: u16) -> Option<Port>
+numeric	try_from_u32	no	constructs	option	none	pure-core	proved	(value: u32) -> Option<Port>
+numeric	from_raw	no	constructs	infallible	none	pure-core	gated	(data: *const u8, len: u64) -> ByteCursor
+numeric	from_bytes	no	constructs	infallible	none	pure-core	gated	(b: &Bytes) -> ByteCursor
+numeric	pos	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	remaining	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+numeric	read_u8	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u8, CursorError>
+numeric	peek_u8	no	borrows	result	none	pure-core	gated	(&self) -> Result<u8, CursorError>
+numeric	skip	no	mut	result	none	pure-core	gated	(&mut self, n: u64) -> Result<u64, CursorError>
+numeric	read_u16_be	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u16, CursorError>
+numeric	read_u32_be	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u32, CursorError>
+numeric	read_u64_be	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u64, CursorError>
+numeric	read_u16_le	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u16, CursorError>
+numeric	read_u32_le	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u32, CursorError>
+numeric	read_u64_le	no	mut	result	none	pure-core	gated	(&mut self) -> Result<u64, CursorError>
+numeric	new	no	constructs	option	none	pure-core	gated	(off: u64, len: u64, buf: &Bytes) -> Option<ByteView>
+numeric	of_cursor	no	constructs	infallible	none	pure-core	gated	(start: u64, cur: &ByteCursor) -> ByteView
+numeric	off	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+numeric	cursor	no	borrows	option	none	pure-core	gated	(&self, buf: &Bytes) -> Option<ByteCursor>
+numeric	byte	no	borrows	option	none	pure-core	gated	(&self, buf: &Bytes, i: u64) -> Option<u8>
+numeric	try_text	no	borrows	option	none	pure-core	gated	(&self, buf: &Bytes) -> Option<Text>
+numeric	from_raw	no	constructs	infallible	none	pure-core	gated	(data: *mut u8, len: u64) -> ByteWriter
+numeric	pos	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	remaining	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+numeric	write_u8	no	mut	result	none	pure-core	gated	(&mut self, val: u8) -> Result<u64, CursorError>
+numeric	write_u16_be	no	mut	result	none	pure-core	gated	(&mut self, val: u16) -> Result<u64, CursorError>
+numeric	write_u32_be	no	mut	result	none	pure-core	gated	(&mut self, val: u32) -> Result<u64, CursorError>
+numeric	write_u64_be	no	mut	result	none	pure-core	gated	(&mut self, val: u64) -> Result<u64, CursorError>
+numeric	write_u16_le	no	mut	result	none	pure-core	gated	(&mut self, val: u16) -> Result<u64, CursorError>
+numeric	write_u32_le	no	mut	result	none	pure-core	gated	(&mut self, val: u32) -> Result<u64, CursorError>
+numeric	write_u64_le	no	mut	result	none	pure-core	gated	(&mut self, val: u64) -> Result<u64, CursorError>
+option	is_some	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+option	is_none	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+option	ok_or	no	consumes	result	none	pure-core	gated	<E: Copy>(self, err: E) -> Result<T, E>
+option	map	no	consumes	infallible	none	pure-core	proved	<U>(self, f: fn(T) -> U) -> Option<U>
+option	and_then	no	consumes	option	none	pure-core	gated	<U>(self, f: fn(T) -> Option<U>) -> Option<U>
+option	unwrap_or	no	consumes	infallible	none	pure-core	proved	(self, default: T) -> T
+ordered_map	new	no	constructs	infallible	none	deterministic	gated	(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V>
+ordered_map	with_value	no	borrows	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R>
+ordered_map	with_value_mut	no	mut	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R>
+ordered_map	modify	no	mut	infallible	C	hosted-effect	gated	<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)
+ordered_map	update	no	mut	infallible	none	deterministic	gated	(&mut self, key: &K, f: fn(V) -> V) -> bool
+ordered_map	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool
+ordered_map	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+ordered_map	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+ordered_map	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A
+ordered_map	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K, &V) with(C)
+ordered_map	get	no	borrows	option	none	deterministic	gated	(&self, key: &K) -> Option<V>
+ordered_map	min_key	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>
+ordered_map	max_key	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>
+ordered_map	remove	no	mut	option	none	deterministic	gated	(&mut self, key: &K) -> Option<V>
+ordered_map	insert	yes	mut	option	Alloc	hosted-effect	gated	(&mut self, key: K, value: V) with(Alloc) -> Option<V>
+ordered_map	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
+ordered_map	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+ordered_map	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+ordered_map	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
+ordered_set	new	no	constructs	infallible	none	deterministic	gated	(cmp_fn: fn(&K, &K) -> i32) -> OrderedSet<K>
+ordered_set	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool
+ordered_set	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+ordered_set	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+ordered_set	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A
+ordered_set	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K) with(C)
+ordered_set	min	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>
+ordered_set	max	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>
+ordered_set	remove	no	mut	infallible	none	deterministic	gated	(&mut self, key: &K) -> bool
+ordered_set	insert	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, key: K) with(Alloc) -> bool
+ordered_set	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
+ordered_set	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+ordered_set	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+ordered_set	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
+parse	parse_uint	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<u64>
+parse	parse_int	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<i64>
+parse	parse_hex	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<u64>
+parse	parse_bin	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<u64>
+parse	parse_oct	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<u64>
+parse	parse_bool	no	constructs	option	none	deterministic	gated	(s: &String) -> Option<bool>
+parse	new	no	constructs	infallible	none	deterministic	gated	(s: &String) -> Cursor
+parse	pos	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+parse	remaining	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+parse	is_eof	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+parse	peek	no	borrows	option	none	deterministic	gated	(&self) -> Option<char>
+parse	advance	no	mut	option	none	deterministic	gated	(&mut self) -> Option<char>
+parse	skip_whitespace	no	mut	infallible	none	deterministic	gated	(&mut self)
+parse	expect_char	no	mut	infallible	none	deterministic	gated	(&mut self, expected: char) -> bool
+path	new	no	constructs	infallible	none	deterministic	gated	() -> PathBuf
+path	from_string	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String) with(Alloc) -> PathBuf
+path	push	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, segment: &String) with(Alloc)
+path	from_bytes	yes	constructs	infallible	Alloc	hosted-effect	gated	(b: &Bytes) with(Alloc) -> PathBuf
+path	to_string	yes	borrows	option	Alloc	hosted-effect	gated	(&self) with(Alloc) -> Option<String>
+path	bytes_view	no	borrows	infallible	none	deterministic	gated	(&self) -> BytesRaw
+path	as_path	no	borrows	infallible	none	deterministic	gated	(&self) -> Path
+path	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+path	path_join	yes	constructs	infallible	Alloc	trusted-boundary	gated	(base: &Path, segment: &String) with(Alloc) -> PathBuf
+process	sig_int	no	constructs	infallible	none	deterministic	gated	() -> i32
+process	sig_kill	no	constructs	infallible	none	deterministic	gated	() -> i32
+process	sig_term	no	constructs	infallible	none	deterministic	gated	() -> i32
+process	process_exit	no	constructs	infallible	Process,Unsafe	hosted-effect	gated	(code: i32) with(Unsafe,Process)
+process	process_getpid	no	constructs	infallible	Process,Unsafe	hosted-effect	gated	() with(Unsafe,Process) -> i32
+process	process_fork	no	constructs	infallible	Process,Unsafe	hosted-effect	gated	() with(Unsafe,Process) -> ForkResult
+process	process_kill	no	constructs	result	Process,Unsafe	hosted-effect	gated	(pid: i32, sig: i32) with(Unsafe,Process) -> Result<bool, ProcessError>
+process	new	no	constructs	infallible	none	deterministic	gated	(pid: i32) -> Child
+process	pid	no	borrows	infallible	none	deterministic	gated	(&self) -> i32
+process	wait	no	consumes	result	Process,Unsafe	hosted-effect	gated	(self) with(Unsafe,Process) -> Result<ExitStatus, ProcessError>
+process	spawn	no	constructs	result	Process,Unsafe	hosted-effect	gated	(cmd: &String, args: *const *const u8) with(Unsafe,Process) -> Result<Child, ProcessError>
+ptr	offset	no	constructs	infallible	none	trusted-boundary	gated	<T>(ptr: *mut T, offset: u64) -> *mut T
+rand	seed	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	(s: u32) with(Unsafe,Random)
+rand	random_int	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	() with(Unsafe,Random) -> i32
+rand	random_range	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	(lo: i32, hi: i32) with(Unsafe,Random) -> i32
+result	is_ok	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+result	is_err	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+result	unwrap_or	no	consumes	infallible	none	pure-core	gated	(self, default: T) -> T
+result	ok	no	consumes	option	none	pure-core	gated	(self) -> Option<T>
+result	err	no	consumes	option	none	pure-core	gated	(self) -> Option<E>
+result	map	no	consumes	infallible	none	pure-core	proved	<U>(self, f: fn(T) -> U) -> Result<U, E>
+result	and_then	no	consumes	result	none	pure-core	gated	<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E>
+result	map_err	no	consumes	infallible	none	pure-core	proved	<F>(self, f: fn(E) -> F) -> Result<T, F>
+set	new	no	constructs	infallible	none	deterministic	gated	(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc, Unsafe) -> HashSet<K>
+set	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool
+set	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+set	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+set	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A
+set	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K) with(C)
+set	elements	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> Vec<K>
+set	remove	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self, key: &K) with(Alloc,Unsafe) -> bool
+set	insert	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self, key: K) with(Alloc,Unsafe) -> bool
+set	clear	yes	mut	infallible	Alloc,Unsafe	hosted-effect	gated	(&mut self) with(Alloc,Unsafe)
+set	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+set	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+set	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
+sha256	hash_raw	yes	constructs	infallible	Alloc	trusted-boundary	gated	(data: *mut u8, data_len: u64) with(Alloc) -> Vec<u32>
+sha256	hash_string	yes	constructs	infallible	Alloc	trusted-boundary	gated	(s: &String) with(Alloc) -> Vec<u32>
+slice	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+slice	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+slice	set_unchecked	no	mut	infallible	none	pure-core	gated	(&mut self, at: u64, value: T)
+slice	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
+slice	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+slice	get_unchecked	no	borrows	infallible	none	pure-core	gated	(&self, at: u64) -> T
+slice	get	no	borrows	option	none	pure-core	gated	(&self, at: u64) -> Option<T>
+slice	set	no	mut	infallible	none	pure-core	gated	(&mut self, at: u64, value: T) -> bool
+slice	get_unchecked	no	borrows	infallible	none	pure-core	gated	(&self, at: u64) -> T
+slice	get	no	borrows	option	none	pure-core	gated	(&self, at: u64) -> Option<T>
+string	new	no	constructs	infallible	none	deterministic	gated	() -> String
+string	from_raw_unchecked	no	constructs	infallible	none	deterministic	gated	(ptr: *mut u8, len: u64, cap: u64) -> String
+string	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+string	cap	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+string	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+string	get	no	borrows	option	none	deterministic	gated	(&self, at: u64) -> Option<char>
+string	get_unchecked	no	borrows	infallible	none	deterministic	gated	(&self, at: u64) -> char
+string	push_char	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, c: char) with(Alloc)
+string	append	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, other: &String) with(Alloc)
+string	append_int	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, n: Int) with(Alloc)
+string	clear	no	mut	infallible	none	deterministic	gated	(&mut self)
+string	eq	no	borrows	infallible	none	deterministic	gated	(&self, other: &String) -> bool
+string	clone	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> String
+string	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+string	starts_with	no	borrows	infallible	none	deterministic	gated	(&self, prefix: &String) -> bool
+string	ends_with	no	borrows	infallible	none	deterministic	gated	(&self, suffix: &String) -> bool
+string	contains	no	borrows	infallible	none	deterministic	gated	(&self, needle: &String) -> bool
+string	to_lower	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> String
+string	to_upper	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> String
+string	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+string	digit_to_int	no	constructs	infallible	none	deterministic	gated	<T>(value: char) -> T
+string	int_to_digit	no	constructs	infallible	none	deterministic	gated	<T: Copy>(value: T) -> char
+test	ignore_opt	no	constructs	infallible	none	deterministic	gated	<T: Copy>(o: Option<T>)
+test	ignore_res	no	constructs	infallible	none	deterministic	gated	<T: Copy, E: Copy>(r: Result<T, E>)
+test	assert_eq	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(expected: T, result: T, message: String) with(Console) -> bool
+test	assert_ne	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(a: T, b: T, message: String) with(Console) -> bool
+test	assert_true	no	constructs	infallible	Console	hosted-effect	gated	(value: bool, message: String) with(Console) -> bool
+test	assert_false	no	constructs	infallible	Console	hosted-effect	gated	(value: bool, message: String) with(Console) -> bool
+test	assert_gt	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(a: T, b: T, message: String) with(Console) -> bool
+test	assert_lt	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(a: T, b: T, message: String) with(Console) -> bool
+test	assert_ge	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(a: T, b: T, message: String) with(Console) -> bool
+test	assert_le	no	constructs	infallible	Console	hosted-effect	gated	<T: Copy>(a: T, b: T, message: String) with(Console) -> bool
+test	expect_ok	no	constructs	infallible	none	deterministic	gated	<T: Copy, E: Copy>(r: &Result<T, E>) -> bool
+test	expect_err	no	constructs	infallible	none	deterministic	gated	<T: Copy, E: Copy>(r: &Result<T, E>) -> bool
+test	expect_some	no	constructs	infallible	none	deterministic	gated	<T: Copy>(o: &Option<T>) -> bool
+test	expect_none	no	constructs	infallible	none	deterministic	gated	<T: Copy>(o: &Option<T>) -> bool
+test	sink_matches	no	constructs	infallible	none	trusted-boundary	gated	(buf: *const u8, len: u64, expected: &String) -> bool
+test	expect_sink	no	constructs	infallible	Console	hosted-effect	gated	(buf: *const u8, len: u64, expected: &String, message: String) with(Console) -> bool
+test	str_eq	no	constructs	infallible	none	deterministic	gated	(a: &String, b: &String) -> bool
+test	assert_str_eq	no	constructs	infallible	Console	hosted-effect	gated	(a: &String, b: &String, message: String) with(Console) -> bool
+text	try_new	yes	constructs	option	Alloc	hosted-effect	gated	(s: String) with(Alloc) -> Option<AsciiText>
+text	from_string	no	constructs	infallible	none	deterministic	gated	(s: &String) -> Text
+text	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+text	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+text	get_unchecked	no	borrows	infallible	none	deterministic	gated	(&self, at: u64) -> u8
+text	eq	no	borrows	infallible	none	deterministic	gated	(&self, other: &Text) -> bool
+text	from_raw_unchecked	no	constructs	infallible	none	deterministic	gated	(ptr: *const u8, len: u64) -> Text
+text	try_from_raw	no	constructs	option	none	deterministic	gated	(ptr: *const u8, len: u64) -> Option<Text>
+text	validate_utf8	no	constructs	infallible	none	trusted-boundary	gated	(ptr: *const u8, len: u64) -> bool
+time	from_secs	no	constructs	infallible	none	deterministic	gated	(s: i64) -> Duration
+time	from_millis	no	constructs	infallible	none	deterministic	gated	(ms: i64) -> Duration
+time	from_nanos	no	constructs	infallible	none	deterministic	gated	(ns: i64) -> Duration
+time	now	yes	constructs	infallible	Alloc,Time,Unsafe	hosted-effect	gated	() with(Time,Unsafe,Alloc) -> Instant
+time	elapsed	yes	borrows	infallible	Alloc,Time,Unsafe	hosted-effect	gated	(&self) with(Time,Unsafe,Alloc) -> Duration
+time	sleep	yes	constructs	infallible	Alloc,Time,Unsafe	trusted-boundary	gated	(dur: &Duration) with(Time,Unsafe,Alloc)
+time	unix_timestamp	no	constructs	infallible	Time,Unsafe	trusted-boundary	gated	() with(Time,Unsafe) -> i64
+vec	new	no	constructs	infallible	none	deterministic	gated	() -> Vec<T>
+vec	push	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)
+vec	pop	no	mut	option	none	deterministic	gated	(&mut self) -> Option<T>
+vec	swap_remove	no	mut	option	none	deterministic	gated	(&mut self, at: u64) -> Option<T>
+vec	get_mut	no	mut	infallible	none	deterministic	gated	(&mut self, at: u64) -> *mut T
+vec	set_unchecked	no	mut	infallible	none	deterministic	gated	(&mut self, at: u64, value: T)
+vec	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+vec	cap	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+vec	is_empty	no	borrows	infallible	none	deterministic	gated	(&self) -> bool
+vec	replace	no	mut	infallible	none	deterministic	gated	(&mut self, at: u64, value: T) -> T
+vec	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, init: A, f: fn(A, &T) with(C) -> A) with(C) -> A
+vec	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&T) with(C)
+vec	for_each_ctx	no	borrows	infallible	C	hosted-effect	gated	<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &T) with(C)
+vec	map	no	borrows	infallible	C	hosted-effect	gated	<U, cap C>(&self, f: fn(&T) with(C) -> U) with(C, Alloc) -> Vec<U>
+vec	with_at	no	borrows	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&self, at: u64, ctx: &Ctx, f: fn(&Ctx, &T) with(C) -> R) with(C) -> Option<R>
+vec	with_at_mut	no	mut	infallible	C	hosted-effect	gated	<Ctx, R, cap C>(&mut self, at: u64, ctx: &mut Ctx, f: fn(&mut Ctx, &mut T) with(C) -> R) with(C) -> Option<R>
+vec	for_each_with	no	borrows	infallible	C	hosted-effect	gated	<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &T) with(C)
+vec	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
+vec	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+vec	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
+vec	set	no	mut	infallible	none	deterministic	gated	(&mut self, at: u64, value: T) -> bool
+vec	get_unchecked	no	borrows	infallible	none	deterministic	gated	(&self, at: u64) -> T
+vec	get	no	borrows	option	none	deterministic	gated	(&self, at: u64) -> Option<T>
+vec	destroy	no	borrows	infallible	none	deterministic	gated	(&self)
