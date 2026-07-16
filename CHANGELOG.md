@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Hex-fmt pull shipped + std.cli v1 design resolved (2026-07-16)
+
+Workload 3's two pulls landed the same day. (1) `fmt.hex_digit` made pub +
+`fmt.push_hex(s, value, width)` (fixed-width, prefix-free, zero-padded,
+buffer-appending, %0*x growth semantics) — hexdump switched over as
+proof-of-pull and stays byte-identical to xxd; the two new constant-divisor
+divisions are kernel-discharged (div trio 35→38, determined then regen).
+(2) `research/stdlib/cli.md` resolves the std.cli v1 design:
+declare-then-parse over std.args (presence + value flags, space-separated
+only, unknown flags are errors, one 13t error bucket → exit 2, result owns
+its Strings, explicit positional arity); subcommands/aliases/auto-help are
+append-only extensions. Exit criterion: v1 ships only when a workload
+switch-over deletes the hand loops.
+
 ### Workload 3: hexdump — CLI-shaped, xxd-differential (2026-07-16)
 
 `examples/hexdump` is the third Phase 7 workload (first CLI-flag-shaped

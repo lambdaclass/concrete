@@ -170,13 +170,45 @@ mod fmt {
         return buf;
     }
 
-    fn hex_digit(v: u64) -> char {
+    /// Lowercase hex digit for a nibble. Callers pass 0-15; larger values
+    /// produce non-hex chars (same total-but-caller-guaranteed contract as
+    /// int_to_digit). Pulled pub by workloads 2+3 (hexdump FRICTION #1).
+    pub fn hex_digit(v: u64) -> char {
         if v < 10 {
             return int_to_digit::<u64>(v);
         }
         // 'a' = 97, so 97 + (v - 10)
         let base: u64 = 87;
         return (base + v) as char;
+    }
+
+    /// Append `value` as lowercase hex, zero-padded to at least `width`
+    /// digits, NO 0x prefix, into an existing buffer (no per-field alloc —
+    /// the dump-loop shape format_hex cannot serve). Wider values print all
+    /// their digits (printf %0*x semantics, never truncated).
+    /// Pulled by workloads 2+3 (fixed-width offsets and bytes).
+    pub fn push_hex(s: &mut String, value: u64, width: u64) {
+        // count digits (>= 1)
+        let mut digits: u64 = 1;
+        let mut probe: u64 = value;
+        while probe > 15 {
+            probe = probe / 16;
+            digits = digits + 1;
+        }
+        let mut field: u64 = digits;
+        if width > field { field = width; }
+        // emit most-significant first: shift down (field-1-k) nibbles
+        let mut k: u64 = 0;
+        while k < field {
+            let mut d: u64 = value;
+            let mut sh: u64 = field - 1 - k;
+            while sh > 0 {
+                d = d / 16;
+                sh = sh - 1;
+            }
+            s.push_char(hex_digit(d % 16));
+            k = k + 1;
+        }
     }
 
     pub trusted fn format_hex(value: u64) with(Alloc) -> String {
@@ -502,6 +534,38 @@ mod fmt {
         s.drop();
         expected.drop();
         return 0;
+    }
+
+    fn eq_and_drop(s: String, expected: String) -> i32 {
+        if s.len != expected.len {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        let mut i: u64 = 0;
+        while i < s.len {
+            if s.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_push_hex() with(Alloc) -> i32 {
+        let mut b: String = String::new();
+        push_hex(&mut b, 255, 2);      // "ff"
+        push_hex(&mut b, 255, 4);      // "00ff"
+        push_hex(&mut b, 0, 1);        // "0"
+        push_hex(&mut b, 4096, 2);     // "1000" (wider than width: all digits)
+        push_hex(&mut b, 0, 8);        // "00000000"
+        let expected: String = "ff00ff0100000000000";
+        return eq_and_drop(b, expected);
     }
 
     #[test]

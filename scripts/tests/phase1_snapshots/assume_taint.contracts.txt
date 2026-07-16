@@ -79,6 +79,14 @@ fmt.format_uint
   / divisor 10
     status: checked: divisor is a nonzero constant
 
+fmt.push_hex
+  / divisor 16
+    status: checked: divisor is a nonzero constant
+  / divisor 16
+    status: checked: divisor is a nonzero constant
+  % divisor 16
+    status: checked: divisor is a nonzero constant
+
 parse.parse_uint
   / divisor 10
     status: checked: divisor is a nonzero constant

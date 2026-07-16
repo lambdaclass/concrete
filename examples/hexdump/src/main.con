@@ -12,39 +12,11 @@ mod hexdump {
     import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
                    Writer, console_writer, eprintln};
     import std.parse.{parse_uint};
+    import std.fmt.{push_hex};
 
-    // FRICTION: std.fmt has format_hex (0x-prefixed, minimal width, String
-    // alloc per call) and a PRIVATE hex_digit. A fixed-width byte/offset
-    // dump wants digit-level control without per-field allocation, so the
-    // nibble table is re-rolled here — the second workload to do so.
-    fn hex_digit(v: u64) -> char {
-        if v < 10 { return (48 + v) as char; }
-        return (87 + v) as char;
-    }
-
-    fn push_hex_byte(s: &mut String, b: u64) {
-        s.push_char(hex_digit(b / 16));
-        s.push_char(hex_digit(b % 16));
-    }
-
-    // 8-digit zero-padded offset (xxd's column 1).
-    fn push_hex_off(s: &mut String, v: u64) {
-        let mut shift: u64 = 8;
-        while shift > 0 {
-            shift = shift - 1;
-            let mut d: u64 = v;
-            let mut k: u64 = 0;
-            while k < shift {
-                d = d / 16;
-                k = k + 1;
-            }
-            push_hex_byte_nibble(s, d % 16);
-        }
-    }
-
-    fn push_hex_byte_nibble(s: &mut String, nib: u64) {
-        s.push_char(hex_digit(nib));
-    }
+    // Fixed-width hex (offsets + bytes) comes from std.fmt.push_hex — this
+    // workload's FRICTION #1 pulled it (second ask), then switched over as
+    // proof-of-pull.
 
     fn w_str(w: &Writer, s: String) {
         let r: Result<u64, IoError> = w.write_str(&s);
@@ -68,13 +40,13 @@ mod hexdump {
     // One xxd-format line for data[off .. off+n) where 1 <= n <= 16.
     fn dump_line(data: &Bytes, off: u64, n: u64, w: &Writer) with(Alloc) {
         let mut line: String = String::new();
-        push_hex_off(&mut line, off);
+        push_hex(&mut line, off, 8);
         line.push_char(':');
         line.push_char(' ');
         let mut i: u64 = 0;
         while i < 16 {
             if i < n {
-                push_hex_byte(&mut line, data.get_unchecked(off + i) as u64);
+                push_hex(&mut line, data.get_unchecked(off + i) as u64, 2);
             } else {
                 line.push_char(' ');
                 line.push_char(' ');

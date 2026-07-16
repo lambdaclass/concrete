@@ -77,6 +77,8 @@ fmt	write_bool	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, val
 fmt	write_char	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: char) -> Result<u64, IoError>
 fmt	format_int	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: i64) with(Alloc) -> String
 fmt	format_uint	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
+fmt	hex_digit	no	constructs	infallible	none	deterministic	gated	(v: u64) -> char
+fmt	push_hex	no	constructs	infallible	none	deterministic	gated	(s: &mut String, value: u64, width: u64)
 fmt	format_hex	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
 fmt	format_bin	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String
 fmt	format_oct	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u64) with(Alloc) -> String

@@ -25,6 +25,7 @@ Start here:
 8. [iterators.md](iterators.md) — iterator/traversal direction.
 9. [allocation-budgets.md](allocation-budgets.md) — allocation classification.
 10. [no-std-freestanding.md](no-std-freestanding.md) — hosted/freestanding split.
-11. [concurrency.md](concurrency.md) and
+11. [cli.md](cli.md) — std.cli v1 design (declare-then-parse, workload-pulled).
+12. [concurrency.md](concurrency.md) and
     [async-concurrency-evidence.md](async-concurrency-evidence.md) — runtime and
     concurrency research.

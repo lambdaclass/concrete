@@ -70,8 +70,11 @@ echo "=== existing corpus: div VCs exact-stable (the migration changed nothing) 
 # exactly the prior 30. Zero-unproven invariant intact.
 # 33->35 (2026-07-16): H5 strict base64 pad-bit checks (+2 mod-by-constant
 # VCs, both proved). Old modules byte-identical (base64 13->15 only).
-ck "hmac_sha256: 35 div VCs, all proved" "examples/hmac_sha256/src/main.con" \
-  "len(DZ)==35 and dist().get('proved_by_kernel_decision')==35 and not dist().get('unproven')"
+# 35->38 (2026-07-16): fmt.push_hex landed (workload-3 hex pull: +2 /16 and
+# +1 %16, constant divisors, all proved). Old modules byte-identical
+# (fmt only grew).
+ck "hmac_sha256: 38 div VCs, all proved" "examples/hmac_sha256/src/main.con" \
+  "len(DZ)==38 and dist().get('proved_by_kernel_decision')==38 and not dist().get('unproven')"
 ck "precondition_callsite: ratio#div0 proved" "examples/contract_negatives/precondition_callsite/src/main.con" \
   "vc('cn.ratio#div0')['status']=='proved_by_kernel_decision'"
 ck "range_block_count: 2 div VCs proved" "examples/smt/teaching/range_block_count.con" \

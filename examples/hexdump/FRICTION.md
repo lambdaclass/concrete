@@ -8,14 +8,15 @@ failure, 2 usage/malformed flag value.
 
 ## Friction found
 
-1. **Hex formatting re-rolled — SECOND ask.** `std.fmt.format_hex` is
-   `0x`-prefixed, minimal-width, and allocates a String per call;
-   `fmt.hex_digit` is module-private. A dump loop wants fixed-width
-   digit-level control (2-digit bytes, 8-digit offsets) pushed into an
-   existing buffer. png_chunks held this pull at one ask ("not pulled:
-   hex fmt"); this is the second. → pull candidates: `fmt.hex_digit` made
-   pub, plus `push_hex(s, value, width)` (no prefix, zero-padded,
-   buffer-appending — no per-field alloc).
+1. **Hex formatting re-rolled — SECOND ask → PULLED (shipped).**
+   `std.fmt.format_hex` is `0x`-prefixed, minimal-width, and allocates a
+   String per call; `fmt.hex_digit` was module-private. A dump loop wants
+   fixed-width digit-level control (2-digit bytes, 8-digit offsets) pushed
+   into an existing buffer. png_chunks held this pull at one ask ("not
+   pulled: hex fmt"); this workload was the second. Shipped:
+   `fmt.hex_digit` now pub + `fmt.push_hex(s, value, width)` (no prefix,
+   zero-padded, %0*x growth semantics, buffer-appending). This workload
+   switched over as proof-of-pull — still byte-identical to xxd.
 
 2. **Flag parsing is a hand loop — expected, and now measured.** Indexed
    `get(i)` + String literals + `eq` + manual value-flag lookahead +
