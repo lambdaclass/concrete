@@ -278,10 +278,9 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-First, before more breadth: complete the **stdlib hardening pass** — foundation
-repair, not new surface — detailed as items H1–H5 further below (ahead of the
-collection-API build-out).
-
+0. Stdlib hardening pass H1-H5 — before all remaining breadth. This is
+   foundation repair, not new surface; details live below, ahead of the
+   collection-API build-out.
 1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
    signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
    type), migrate the differential fuzzer to self-printing wrappers, sweep the
@@ -320,26 +319,30 @@ existing core has correctness gaps that any module built on top of it (URI, JSON
 CLI helpers, logging) would inherit, so harden the foundation before growing it.
 No philosophy change; the API shape is good. Each item lands as a *class*-gate
 per the Definition Of Done, not a one-instance patch. Frontier order for this
-band: (1) this hardening pass → (2) API snapshot/diff gate current → (3) real
-workload 2 → (4) then broad modules (URI, JSON, CLI helpers, logging/progress).
+band: (1) this hardening pass → (2) item 22a API snapshot/diff gate current →
+(3) real workload 2 → (4) then broad modules (URI, JSON, CLI helpers,
+logging/progress).
 
    - H1. Parser domain failures must not trap. `parse_hex` / `parse_bin` /
      `parse_oct` return `None` on overflow, matching the already-guarded
      `parse_int` (decimal). Gate: huge/overflowing inputs in *every* radix
      return `None` with no trap — one fixture per radix, so the class cannot
      regress to "decimal-only guarded" again.
-   - H2. Overflow-safe bounds checks. Replace additive `start + len > total`
+   - H2. Overflow-safe bounds / capacity arithmetic. Replace additive
+     `start + len > total`
      guards (`io.con` `cur + len > cap`, `numeric.con` `off + len`, and the
      `bytes` / path / base64 siblings) with non-overflowing forms
-     (`len > total - start` after an ordering check, or a checked add). Gate: a
-     grep/lint that fails if a std API returning `Option`/`Result` uses
-     overflow-prone additive guard arithmetic on a length.
-   - H3. IO honesty. Decide whether file/console read/write/flush/close OS
-     errors are truly represented. Preferred answer: add `ReadFailed` /
-     `FlushFailed` / `CloseFailed` to `IoError` so sinks report real failures;
-     otherwise document, per sink, exactly which trusted sinks intentionally
-     ignore OS errors and why. Gate: every hosted IO op either surfaces the error
-     in its `Result` or carries a documented ignore-rationale the manifest checks.
+     (`len > total - start` after an ordering check, or a checked add). Include
+     allocation-size calculations, not only access checks. Gate: a grep/lint
+     that fails if a std API returning `Option`/`Result` uses overflow-prone
+     additive guard arithmetic on a length.
+   - H3. IO honesty. Preferred answer: file/console read/write/flush/close
+     operations represent real OS errors (`ReadFailed`, `WriteFailed`,
+     `FlushFailed`, `CloseFailed`) rather than returning a decorative `Result`.
+     Only document an ignored error where the platform API genuinely gives no
+     recoverable signal or the sink is explicitly trusted. Gate: every hosted IO
+     op either surfaces the error in its `Result` or carries a documented
+     ignore-rationale the manifest checks.
    - H4. Collection traversal for non-`Copy` values. Move `OrderedMap::fold` /
      `for_each` out of `impl<K, V: Copy>` (`ordered_map.con`) so borrowed
      traversal works for non-`Copy` values — the scoped-callback model already
