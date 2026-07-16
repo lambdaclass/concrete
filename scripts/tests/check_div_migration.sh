@@ -68,8 +68,10 @@ echo "=== existing corpus: div VCs exact-stable (the migration changed nothing) 
 # 30->33 (2026-07-16): std.checksum landed (+3 div/mod VCs — crc32's /2 and
 # %2, constant divisors, all proved_by_kernel_decision). Old modules sum to
 # exactly the prior 30. Zero-unproven invariant intact.
-ck "hmac_sha256: 33 div VCs, all proved" "examples/hmac_sha256/src/main.con" \
-  "len(DZ)==33 and dist().get('proved_by_kernel_decision')==33 and not dist().get('unproven')"
+# 33->35 (2026-07-16): H5 strict base64 pad-bit checks (+2 mod-by-constant
+# VCs, both proved). Old modules byte-identical (base64 13->15 only).
+ck "hmac_sha256: 35 div VCs, all proved" "examples/hmac_sha256/src/main.con" \
+  "len(DZ)==35 and dist().get('proved_by_kernel_decision')==35 and not dist().get('unproven')"
 ck "precondition_callsite: ratio#div0 proved" "examples/contract_negatives/precondition_callsite/src/main.con" \
   "vc('cn.ratio#div0')['status']=='proved_by_kernel_decision'"
 ck "range_block_count: 2 div VCs proved" "examples/smt/teaching/range_block_count.con" \

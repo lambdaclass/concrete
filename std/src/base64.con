@@ -74,6 +74,11 @@ mod base64 {
             let v3: u64 = if pad3 { 0 } else { val_of(c3) };
             if !pad2 { if v2 == 255 { out.drop(); return Option::<Bytes>::None; } }
             if !pad3 { if v3 == 255 { out.drop(); return Option::<Bytes>::None; } }
+            // H5: STRICT canonical padding — the unused low bits of the last
+            // symbol must be zero ("Zh==" is rejected, "Zg==" accepted), so
+            // every decodable string has exactly one encoding.
+            if pad2 { if v1 % 16 != 0 { out.drop(); return Option::<Bytes>::None; } }
+            if pad3 { if !pad2 { if v2 % 4 != 0 { out.drop(); return Option::<Bytes>::None; } } }
             let n: u64 = (v0 * 262144) + (v1 * 4096) + (v2 * 64) + v3;
             out.push((n / 65536) as u8);
             if !pad2 { out.push(((n / 256) % 256) as u8); }
@@ -124,6 +129,8 @@ mod base64 {
         rc = rc + reject_case("ab!c");      // invalid character
         rc = rc + reject_case("Zg==Zm8=");  // padding not in final group
         rc = rc + reject_case("Zm=v");      // pad2 without pad3
+        rc = rc + reject_case("Zh==");      // non-canonical pad bits (v1 low 4 nonzero)
+        rc = rc + reject_case("Zm9=");      // non-canonical pad bits (v2 low 2 nonzero; canonical is Zm8=)
         if rc != 0 { return 1; }
         return 0;
     }

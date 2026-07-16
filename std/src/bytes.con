@@ -134,11 +134,11 @@ mod bytes {
             }
         }
 
-        /// Convert Bytes to String by transferring ownership of the buffer.
-        /// The Bytes value is consumed; no copy is made.
-        /// The caller is responsible for ensuring the bytes are valid text.
-        /// Reinterpret as String after UTF-8 VALIDATION. Invalid bytes return
-        /// None and the buffer is dropped (recoverable, bucket 1).
+        /// Convert Bytes to String by transferring ownership of the buffer
+        /// (consumed, no copy) AFTER UTF-8 validation: invalid bytes return
+        /// None and the buffer is deallocated (recoverable, bucket 1). The
+        /// unvalidated crossing is `to_string_unchecked` below, which NAMES
+        /// the caller's obligation.
         pub fn to_string(self) with(Alloc) -> Option<String> {
             let Bytes { ptr, len, cap } = self;
             if !validate_utf8(ptr as *const u8, len) {
@@ -169,7 +169,8 @@ mod bytes {
         /// Out-of-range -> None (domain outcome). The view borrows this
         /// buffer's memory — it must not outlive it.
         pub fn view(&self, start: u64, vlen: u64) -> Option<BytesRaw> {
-            if start + vlen > self.len {
+            // H2: overflow-safe bounds (start+vlen could wrap u64)
+            if start > self.len || vlen > self.len - start {
                 return Option::<BytesRaw>::None;
             }
             return Option::<BytesRaw>::Some { value: BytesRaw {

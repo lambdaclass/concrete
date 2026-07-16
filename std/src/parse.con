@@ -120,6 +120,11 @@ mod parse {
             if val < 0 {
                 return Option::<u64>::None;
             }
+            // H1: overflow is a DOMAIN outcome (None), never a silent shl
+            // wrap. u64::MAX >> 4 — one more hex digit would drop high bits.
+            if result > 1152921504606846975 {
+                return Option::<u64>::None;
+            }
             result = (result << 4) + (val as u64);
             i = i + 1;
         }
@@ -153,6 +158,11 @@ mod parse {
         let mut i: u64 = start;
         while i < s.len {
             let c: char = s.get_unchecked(i);
+            // H1: overflow -> None (u64::MAX >> 1), never a wrap — guarded
+            // at the loop head so BOTH bit branches are covered.
+            if result > 9223372036854775807 {
+                return Option::<u64>::None;
+            }
             if c == '0' {
                 result = result << 1;
             } else {
@@ -198,6 +208,10 @@ mod parse {
                 return Option::<u64>::None;
             }
             if c > '7' {
+                return Option::<u64>::None;
+            }
+            // H1: overflow -> None (u64::MAX >> 3), never a wrap.
+            if result > 2305843009213693951 {
                 return Option::<u64>::None;
             }
             result = (result << 3) + digit_to_int::<u64>(c);
@@ -322,6 +336,34 @@ mod parse {
     // Tests
 
     import std.test.{assert_eq, assert_true, expect_none, expect_some};
+
+    #[test]
+    fn test_parse_radix_overflow_is_none() with(Alloc) -> i32 {
+        // H1 class-gate: overflowing inputs in EVERY radix return None —
+        // no trap, no silent shl wraparound.
+        let hex: String = "1FFFFFFFFFFFFFFFF";   // 17 hex digits > u64
+        let hr: Option<u64> = parse_hex(&hex);
+        hex.drop();
+        if !hr.is_none() { return 1; }
+        let bin: String = "11111111111111111111111111111111111111111111111111111111111111111"; // 65 bits
+        let br: Option<u64> = parse_bin(&bin);
+        bin.drop();
+        if !br.is_none() { return 1; }
+        let oct: String = "3777777777777777777777";  // 22 oct digits > u64
+        let orr: Option<u64> = parse_oct(&oct);
+        oct.drop();
+        if !orr.is_none() { return 1; }
+        // boundary values still parse
+        let hmax: String = "FFFFFFFFFFFFFFFF";
+        let hm: Option<u64> = parse_hex(&hmax);
+        hmax.drop();
+        if hm.is_none() { return 1; }
+        match hm {
+            Option::Some { value } => { if value != 18446744073709551615 { return 1; } },
+            Option::None => { return 1; },
+        }
+        return 0;
+    }
 
     #[test]
     fn test_expected_failure_shape() -> i32 {

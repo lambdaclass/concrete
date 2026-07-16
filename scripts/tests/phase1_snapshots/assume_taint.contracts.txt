@@ -112,6 +112,10 @@ base64.decode
     status: checked: divisor is a nonzero constant
   / divisor 4
     status: checked: divisor is a nonzero constant
+  % divisor 16
+    status: checked: divisor is a nonzero constant
+  % divisor 4
+    status: checked: divisor is a nonzero constant
   / divisor 65536
     status: checked: divisor is a nonzero constant
   % divisor 256

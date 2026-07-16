@@ -167,8 +167,9 @@ mod ordered_map {
 
     }
 
-    // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
-    trusted impl<K, V: Copy> OrderedMap<K, V> {
+    // H4: borrowed traversal works for ANY value type — the scoped-callback
+    // model passes &K/&V, so no Copy bound belongs here.
+    trusted impl<K, V> OrderedMap<K, V> {
         /// In-order fold (ascending key order — the DEFINED-order traversal
         /// that HashMap deliberately does not promise; see the HashMap policy
         /// in KNOWN_HOLES). Capability-polymorphic like map.fold.
@@ -195,6 +196,10 @@ mod ordered_map {
             }
         }
 
+    }
+
+    // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
+    trusted impl<K, V: Copy> OrderedMap<K, V> {
         pub fn get(&self, key: &K) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
@@ -400,6 +405,32 @@ mod ordered_map {
         return p;
     }
     trusted fn o_cell_get(p: *mut u64) -> u64 { return *p; }
+
+    fn cmp_i64_h4(a: &i64, b: &i64) -> i32 {
+        if *a < *b { return 0 - 1; }
+        if *a > *b { return 1; }
+        return 0;
+    }
+    fn sum_val_lens_h4(acc: u64, k: &i64, v: &String) -> u64 {
+        discard(*k == *k);
+        return acc + v.len();
+    }
+
+    #[test]
+    fn test_omap_traversal_non_copy_values() with(Alloc) -> i32 {
+        // H4 class-gate: fold/for_each traverse borrowed non-Copy values.
+        let mut m: OrderedMap<i64, String> = OrderedMap::<i64, String>::new(cmp_i64_h4);
+        let a: String = "b-val";
+        let b: String = "a-val";
+        let o1: Option<String> = m.insert(2, a);
+        match o1 { Option::Some { value } => { value.drop(); }, Option::None => {}, }
+        let o2: Option<String> = m.insert(1, b);
+        match o2 { Option::Some { value } => { value.drop(); }, Option::None => {}, }
+        let total: u64 = m.fold::<u64>(0, sum_val_lens_h4);
+        m.drop();
+        if total != 10 { return 1; }   // "a-val" + "b-val" = 5 + 5
+        return 0;
+    }
 
     #[test]
     fn test_omap_remove_destroys_key() with(Alloc) -> i32 {

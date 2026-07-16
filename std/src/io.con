@@ -1,10 +1,13 @@
 mod io {
-    import std.libc.{fopen, fclose, fwrite, fread, fflush, write as libc_write, read as libc_read};
+    import std.libc.{fopen, fclose, fwrite, fread, fflush, ferror, write as libc_write, read as libc_read};
     import std.bytes.{Bytes};
 
     pub enum Copy IoError {
         OpenFailed,
+        ReadFailed,
         WriteFailed,
+        FlushFailed,
+        CloseFailed,
         BufferFull,
     }
 
@@ -114,12 +117,20 @@ mod io {
         return Result::<u64, IoError>::Ok { value: n };
     }
     trusted fn file_flush(ctx: *mut u8) -> Result<u64, IoError> {
-        fflush(ctx as *const u8);
+        // H3 IO honesty: surface the real OS result.
+        if fflush(ctx as *const u8) != 0 {
+            return Result::<u64, IoError>::Err { error: IoError::FlushFailed };
+        }
         return Result::<u64, IoError>::Ok { value: 0 };
     }
     trusted fn file_close(ctx: *mut u8) -> Result<u64, IoError> {
-        fflush(ctx as *const u8);
-        fclose(ctx as *const u8);
+        // H3 IO honesty: a failed flush-at-close is a lost-data signal the
+        // caller must see (the whole reason close(self) returns Result).
+        let flush_rc: i32 = fflush(ctx as *const u8);
+        let close_rc: i32 = fclose(ctx as *const u8);
+        if flush_rc != 0 || close_rc != 0 {
+            return Result::<u64, IoError>::Err { error: IoError::CloseFailed };
+        }
         return Result::<u64, IoError>::Ok { value: 0 };
     }
     /// Consume an open `TextFile` into a `Writer`. Authority: `File`.
@@ -130,7 +141,14 @@ mod io {
 
     // ---- console sink (authority: Console at acquisition) ----
     trusted fn console_write(ctx: *mut u8, data: *const u8, len: u64) -> Result<u64, IoError> {
-        if len > 0 { libc_write(1, data, len); }
+        // H3 IO honesty: report short/failed writes (closed pipe, full disk
+        // behind a redirect) instead of pretending len bytes always landed.
+        if len > 0 {
+            let n: i64 = libc_write(1, data, len);
+            if n < 0 || (n as u64) != len {
+                return Result::<u64, IoError>::Err { error: IoError::WriteFailed };
+            }
+        }
         return Result::<u64, IoError>::Ok { value: len };
     }
     trusted fn console_noop(ctx: *mut u8) -> Result<u64, IoError> {
@@ -162,7 +180,8 @@ mod io {
         let st: *mut FixedSinkState = ctx as *mut FixedSinkState;
         let cur: u64 = (*st).len;
         let cap: u64 = (*st).cap;
-        if cur + len > cap { return Result::<u64, IoError>::Err { error: IoError::BufferFull }; }
+        // H2: overflow-safe capacity check (cur+len could wrap u64)
+        if cur > cap || len > cap - cur { return Result::<u64, IoError>::Err { error: IoError::BufferFull }; }
         let base: *mut u8 = (*st).buf;
         let mut i: u64 = 0;
         while i < len {
@@ -210,6 +229,13 @@ mod io {
     trusted fn file_read(ctx: *mut u8, buf: *mut u8, len: u64) -> Result<u64, IoError> {
         if len == 0 { return Result::<u64, IoError>::Ok { value: 0 }; }
         let n: u64 = fread(buf, 1, len, ctx as *const u8);
+        // H3 IO honesty: a short read is EOF (Ok, possibly 0) ONLY if the
+        // stream carries no error flag; otherwise it is a real ReadFailed.
+        if n < len {
+            if ferror(ctx as *const u8) != 0 {
+                return Result::<u64, IoError>::Err { error: IoError::ReadFailed };
+            }
+        }
         return Result::<u64, IoError>::Ok { value: n };
     }
     /// Consume an open `TextFile` into a `Reader`. Authority: `File`.

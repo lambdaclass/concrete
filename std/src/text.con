@@ -118,50 +118,50 @@ mod text {
                 i = i + 1;
             } else if in_range(b0, 194 as u8, 223 as u8) {
                 // 2-byte: C2..DF | 80..BF
-                if i + 2 > len { return false; }
+                if len - i < 2 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
                 i = i + 2;
             } else if b0 == (224 as u8) {
                 // E0 | A0..BF | 80..BF
-                if i + 3 > len { return false; }
+                if len - i < 3 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 160 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 i = i + 3;
             } else if in_range(b0, 225 as u8, 236 as u8) {
                 // E1..EC | 80..BF | 80..BF
-                if i + 3 > len { return false; }
+                if len - i < 3 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 i = i + 3;
             } else if b0 == (237 as u8) {
                 // ED | 80..9F | 80..BF  (excludes surrogates)
-                if i + 3 > len { return false; }
+                if len - i < 3 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 159 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 i = i + 3;
             } else if in_range(b0, 238 as u8, 239 as u8) {
                 // EE..EF | 80..BF | 80..BF
-                if i + 3 > len { return false; }
+                if len - i < 3 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 i = i + 3;
             } else if b0 == (240 as u8) {
                 // F0 | 90..BF | 80..BF | 80..BF
-                if i + 4 > len { return false; }
+                if len - i < 4 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 144 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
                 i = i + 4;
             } else if in_range(b0, 241 as u8, 243 as u8) {
                 // F1..F3 | 80..BF | 80..BF | 80..BF
-                if i + 4 > len { return false; }
+                if len - i < 4 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
                 i = i + 4;
             } else if b0 == (244 as u8) {
                 // F4 | 80..8F | 80..BF | 80..BF  (caps at U+10FFFF)
-                if i + 4 > len { return false; }
+                if len - i < 4 { return false; }  // H2 overflow-safe
                 if !in_range(byte_at(ptr, i + 1), 128 as u8, 143 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
                 if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
