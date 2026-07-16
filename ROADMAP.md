@@ -325,6 +325,42 @@ workload, MAIN_EXIT_MODEL stage 1, and the 13t error-convention gate. See
 lifting it is pulled by the first infallible non-`Alloc` destructor; raw
 `*_unchecked` overwrite escapes remain documented trusted escapes.
 
+**Stdlib hardening pass — do this before more breadth.** The review found the
+existing core has correctness gaps that any module built on top of it (URI, JSON,
+CLI helpers, logging) would inherit, so harden the foundation before growing it.
+No philosophy change; the API shape is good. Each item lands as a *class*-gate
+per the Definition Of Done, not a one-instance patch. Frontier order for this
+band: (1) this hardening pass → (2) API snapshot/diff gate current → (3) real
+workload 2 → (4) then broad modules (URI, JSON, CLI helpers, logging/progress).
+
+   - H1. Parser domain failures must not trap. `parse_hex` / `parse_bin` /
+     `parse_oct` return `None` on overflow, matching the already-guarded
+     `parse_int` (decimal). Gate: huge/overflowing inputs in *every* radix
+     return `None` with no trap — one fixture per radix, so the class cannot
+     regress to "decimal-only guarded" again.
+   - H2. Overflow-safe bounds checks. Replace additive `start + len > total`
+     guards (`io.con` `cur + len > cap`, `numeric.con` `off + len`, and the
+     `bytes` / path / base64 siblings) with non-overflowing forms
+     (`len > total - start` after an ordering check, or a checked add). Gate: a
+     grep/lint that fails if a std API returning `Option`/`Result` uses
+     overflow-prone additive guard arithmetic on a length.
+   - H3. IO honesty. Decide whether file/console read/write/flush/close OS
+     errors are truly represented. Preferred answer: add `ReadFailed` /
+     `FlushFailed` / `CloseFailed` to `IoError` so sinks report real failures;
+     otherwise document, per sink, exactly which trusted sinks intentionally
+     ignore OS errors and why. Gate: every hosted IO op either surfaces the error
+     in its `Result` or carries a documented ignore-rationale the manifest checks.
+   - H4. Collection traversal for non-`Copy` values. Move `OrderedMap::fold` /
+     `for_each` out of `impl<K, V: Copy>` (`ordered_map.con`) so borrowed
+     traversal works for non-`Copy` values — the scoped-callback model already
+     passes `&V`, so the `Copy` bound is spurious and blocks the model we want.
+     Gate: a fixture folds / `for_each`-es an `OrderedMap` of a non-`Copy` value.
+   - H5. Docs / canonical cleanup. Fix the stale `Bytes::to_string` comment
+     (`bytes.con`). If base64 `decode` stays permissive on non-canonical pad
+     bits, document it as a deliberate sharp edge; otherwise add strict canonical
+     pad-bit checks with a reject fixture. (The `with_value_mut` / `modify`
+     "parked" drift is already fixed — see item 1d below.)
+
 1. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
    `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets,
