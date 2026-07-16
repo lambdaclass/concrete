@@ -1371,9 +1371,29 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | some v => incoming := incoming ++ [(v, elseEndLabel)]
           | none => pure ()
           if incoming.length >= 2 then
-            let phiReg ← freshReg "ifphi."
-            emit (.phi phiReg incoming vty)
-            setVar name (.reg phiReg vty)
+            -- Bug 033: aggregates may not phi (E0714) — use the same
+            -- alloca+store merge as the statement-if, including the
+            -- bug-029 array rule (arrays rebind their alloca ADDRESS).
+            -- Triggered by discard()'s `if true { e; }` desugar with any
+            -- live String/struct var across it.
+            let isAgg ← isAggregateForPromotion vty
+            if isAgg then
+              let allocaReg ← freshReg "ifexpr.merge."
+              emitEntryAlloca (.alloca allocaReg vty)
+              for (v, fromLabel) in incoming do
+                insertStoreBeforeTerm fromLabel v (.reg allocaReg vty)
+              match vty with
+              | .array _ _ =>
+                setVar name (.reg allocaReg vty)
+              | _ =>
+                let loadReg ← freshReg "ifexpr.load."
+                emit (.load loadReg (.reg allocaReg vty) vty)
+                setVar name (.reg loadReg vty)
+            else if vty != .unit then
+              let phiReg ← freshReg "ifphi."
+              emit (.phi phiReg incoming vty)
+              setVar name (.reg phiReg vty)
+            else pure ()
           else match incoming with
             | [(val, _)] => setVar name val
             | _ => pure ()

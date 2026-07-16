@@ -119,3 +119,4 @@ examples/defer/cleanup_order/cleanup_order
 # Python bytecode cache (compiled test/tooling scripts)
 __pycache__/
 *.pyc
+examples/png_chunks/png_chunks

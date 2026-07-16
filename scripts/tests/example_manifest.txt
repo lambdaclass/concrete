@@ -109,6 +109,7 @@ examples/partial_facts/bad_decl_then_typed_error.con expected-error
 examples/partial_facts/resolve_error_hides_nothing.con expected-error
 examples/partial_facts/two_bad_decls.con expected-error
 examples/patterns/byte_ranges/src/main.con project-build
+examples/png_chunks/src/main.con project-build
 examples/policy_engine/main.con skip
 examples/project/src/main.con compile
 examples/project/src/mymod/mod.con project-build

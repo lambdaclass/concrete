@@ -1,0 +1,166 @@
+// png_chunks — WORKLOAD 2 (P7: parse/protocol-shaped, real binary format).
+// Usage: png_chunks <file.png>
+// Lists every chunk: type, data length, CRC status. Validates the 8-byte
+// signature and per-chunk CRC32. Exercises: Reader (file authority), byte
+// parsing with big-endian numerics, byte/text boundary (chunk types are
+// ASCII-in-bytes), Writer+fmt output, 13t recoverable errors with REAL exit
+// codes (usage=2, bad file/signature/truncation/CRC=1, clean=0).
+// CRC32 and BE decoding are implemented INLINE deliberately: friction is the
+// pull evidence (see FRICTION.md).
+mod png_chunks {
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.io.{Reader, TextFile, reader_from_file, IoError, Writer,
+                   console_writer, eprintln};
+    import std.fmt.{write_uint};
+
+    // Read the whole source into an owned Bytes via a stack chunk buffer.
+    fn read_all(r: &Reader) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::with_capacity(4096);
+        let mut buf: [u8; 1024] = [0; 1024];
+        let mut done: bool = false;
+        while !done {
+            let res: Result<u64, IoError> = r.read(&buf as *mut u8, 1024);
+            let n: u64 = res.unwrap_or(0);
+            if n == 0 {
+                done = true;
+            } else {
+                let mut i: u64 = 0;
+                while i < n {
+                    out.push(buf[i]);
+                    i = i + 1;
+                }
+            }
+        }
+        return out;
+    }
+
+    // Big-endian u32 at offset (caller checks bounds).
+    fn be32(b: &Bytes, off: u64) -> u64 {
+        return (b.get_unchecked(off) as u64) * 16777216
+             + (b.get_unchecked(off + 1) as u64) * 65536
+             + (b.get_unchecked(off + 2) as u64) * 256
+             + (b.get_unchecked(off + 3) as u64);
+    }
+
+    // CRC32 (ISO-HDLC, the PNG polynomial), bitwise variant. All arithmetic
+    // in u64 with an explicit 32-bit mask.
+    fn crc32(b: &Bytes, start: u64, len: u64) -> u64 {
+        let mask: u64 = 4294967295;
+        let poly: u64 = 3988292384;   // 0xEDB88320
+        let mut crc: u64 = mask;
+        let mut i: u64 = 0;
+        while i < len {
+            crc = crc ^ (b.get_unchecked(start + i) as u64);
+            let mut k: u64 = 0;
+            while k < 8 {
+                if crc % 2 == 1 {
+                    crc = ((crc / 2) ^ poly) & mask;
+                } else {
+                    crc = (crc / 2) & mask;
+                }
+                k = k + 1;
+            }
+            i = i + 1;
+        }
+        return (crc ^ mask) & mask;
+    }
+
+    fn is_png_sig(b: &Bytes) -> bool {
+        if b.len() < 8 { return false; }
+        return b.get_unchecked(0) == 137 && b.get_unchecked(1) == 80
+            && b.get_unchecked(2) == 78  && b.get_unchecked(3) == 71
+            && b.get_unchecked(4) == 13  && b.get_unchecked(5) == 10
+            && b.get_unchecked(6) == 26  && b.get_unchecked(7) == 10;
+    }
+
+    fn w_str(w: &Writer, s: String) {
+        let r: Result<u64, IoError> = w.write_str(&s);
+        discard(r.is_ok());
+        s.drop();
+    }
+
+    fn fail(msg: String) with(Console) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    // Walk and print chunks; return process status.
+    fn walk(data: &Bytes, w: &Writer) with(Alloc) -> u8 {
+        let mut off: u64 = 8;
+        let mut bad_crc: u64 = 0;
+        let total: u64 = data.len();
+        while off + 12 <= total {
+            let dlen: u64 = be32(data, off);
+            if off + 12 + dlen > total {
+                w_str(w, "truncated chunk\n");
+                return 1;
+            }
+            // type: 4 ASCII bytes
+            let mut ty: String = String::new();
+            ty.push_char(data.get_unchecked(off + 4) as char);
+            ty.push_char(data.get_unchecked(off + 5) as char);
+            ty.push_char(data.get_unchecked(off + 6) as char);
+            ty.push_char(data.get_unchecked(off + 7) as char);
+            let iend: String = "IEND";
+            let is_end: bool = ty.eq(&iend);
+            iend.drop();
+            let stored: u64 = be32(data, off + 8 + dlen);
+            let calc: u64 = crc32(data, off + 4, dlen + 4);
+            w_str(w, ty);
+            w_str(w, " len=");
+            let r1: Result<u64, IoError> = write_uint(w, dlen);
+            discard(r1.is_ok());
+            if stored == calc {
+                w_str(w, " crc=OK\n");
+            } else {
+                w_str(w, " crc=BAD\n");
+                bad_crc = bad_crc + 1;
+            }
+            off = off + 12 + dlen;
+            if is_end {
+                if bad_crc > 0 { return 1; }
+                return 0;
+            }
+        }
+        w_str(w, "missing IEND\n");
+        return 1;
+    }
+
+    fn main() with(Std) -> u8 {
+        if count() < 2 {
+            let u: String = "usage: png_chunks <file.png>";
+            eprintln(&u);
+            u.drop();
+            return 2;
+        }
+        let path: String = get(1);
+        let mode: String = "rb";
+        let opened: Result<TextFile, IoError> = TextFile::open(&path, &mode);
+        mode.drop();
+        path.drop();
+        match opened {
+            Result::Err { error } => {
+                discard(error == error);
+                return fail("error: cannot open file");
+            },
+            Result::Ok { value } => {
+                let r: Reader = reader_from_file(value);
+                let data: Bytes = read_all(&r);
+                let rc: Result<u64, IoError> = r.close();
+                discard(rc.is_ok());
+                if !is_png_sig(&data) {
+                    data.drop();
+                    return fail("error: not a PNG (bad signature)");
+                }
+                let w: Writer = console_writer();
+                let status: u8 = walk(&data, &w);
+                let wc: Result<u64, IoError> = w.close();
+                discard(wc.is_ok());
+                data.drop();
+                return status;
+            },
+        }
+    }
+}

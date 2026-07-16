@@ -1,0 +1,13 @@
+// Bug 033: discard(e) desugars to a value-`if`; the ifExpr merge loop phied
+// live AGGREGATE vars (String here) across it — E0714 at SSA verify (the
+// verifier correctly refuses aggregate phis). The merge now uses the same
+// alloca+store path as the statement-if. Expected: prints "live-across".
+mod m {
+    fn main() with(Console) {
+        let mut s: String = "live-across";
+        let x: bool = true;
+        discard(x);
+        println(&s);
+        drop_string(s);
+    }
+}
