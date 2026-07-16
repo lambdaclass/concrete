@@ -60,6 +60,9 @@ declare -A SKIP_BUGS=(
   [033]="FIXED -- regress_033_discard_live_string.con (run_ok live-across); Lower ifExpr merge aggregate alloca path"
   [032]="FIXED -- regress_032_multibyte_str_literal.con (run_ok 42); EmitSSA byte-based literal sizes+escapes"
   [031]="FIXED all 3 sites -- regress_031_if_branch_borrow.con + regress_031_ifexpr_branch_borrow.con + regress_031_match_arm_borrow.con (run_ok 101/107/8); Lower prePromoteAddrTaken"
+  [034]="FIXED -- regress_034_shortcircuit_borrow_promotion.con (run_ok 133) guards the shape; LOAD-BEARING regression = check_cli_helpers.sh two-positionals leg (pre-fix compiler aborts 134, verified); Lower &&/|| prePromoteAddrTaken"
+  [035]="OPEN -- Layout.fieldOffset panic on user-module enum construction with generic-container struct payload; repro in the bug doc; std-internal construction unaffected (cli gates green)"
+  [036]="OPEN -- import-list-dependent Copy/method visibility (false E0295/E0264, safe direction); consumers import payload types as workaround; fix folds into #13b typing-truth"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="
