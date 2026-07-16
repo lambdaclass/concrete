@@ -220,9 +220,10 @@ checked it and must detect drift.
 ### Stdlib Direction
 
 The stdlib should be small, explicit, and auditable: Gleam/Roc-sized coherence,
-Zig-style allocator/authority explicitness, Rust-style `Option`/`Result` and
-layering where useful, Ada/SPARK evidence discipline, Go-style `Reader`/`Writer`
-simplicity, and Go/Odin breadth only after workload pressure.
+Hare-style restrained systems modules, Zig-style allocator/authority
+explicitness, Rust-style `Option`/`Result` and layering where useful, Ada/SPARK
+evidence discipline, Go-style `Reader`/`Writer` simplicity, and Odin-style
+pragmatic breadth only after workload pressure.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -300,6 +301,15 @@ batteries-included breadth. Completed foundation work lives in
 5. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
 6. Broad compression/crypto/networking/threading only after workload demand.
+
+The comparison-language bias for remaining breadth is deliberate: copy module
+categories from Hare/Zig/Odin/Go, not their API volume. The near-term systems
+set is `cli`, `fmt`/`parse`, `io` buffering and memory sinks/sources,
+`fs`/`path`/`temp`/`dirs`, `log`, `sort`/`search`, `uri`, `json`, checksums,
+and narrow shell helpers (`shlex`/`glob`/`fnmatch`) when a workload pulls them.
+Keep broad crypto, compression/archive formats, OS debug formats, DNS/Unix
+sockets, full HTTP, threads, SIMD, and platform databases out of the core until
+there is a validation workload and an evidence story.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -474,6 +484,13 @@ logging/progress).
    plus byte/text builders and tree/buffer builders inspired by Gleam's
    `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
+2a. Complete the Hare/Zig-shaped IO adapter layer on top of the one
+    `std.io.Reader` / `std.io.Writer` spine: buffered reader/writer helpers
+    (`bufio` shape), fixed-memory readers/writers (`memio` shape), byte-counting
+    and tee/discard adapters, and small copy/drain helpers. These are adapters,
+    not a second IO abstraction. Every adapter must preserve the underlying
+    capability story, keep allocation explicit (`with(Alloc)` or caller-provided
+    buffers), and be covered by `std.test` sink/source oracles.
 3. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
    checked/wrapping/saturating arithmetic helpers,
    narrowing/conversion helpers, endian conversions, byte/word packing, and
@@ -525,7 +542,9 @@ logging/progress).
     explicit bounds, byte-span diagnostics, and no hidden allocation.
 15. Add semantic-version and config-format helpers in proposed `std.semver`
     and `std.config` if package/build work starts depending on them:
-    `SemVer`, INI/TOML-style scanner, and manifest parsing support. These are
+    `SemVer`, INI/TOML-style scanner, and manifest parsing support. Prefer a
+    small Hare-like `format/ini`-class module before any broad configuration
+    framework; keep TOML/YAML/package manifests workload-gated. These are
     stdlib/package-boundary helpers, not general metaprogramming.
 16. Add command-line parser helpers in proposed `std.cli`: flags, positional
     arguments, usage text, typed parse errors, no ambient environment access
@@ -533,6 +552,12 @@ logging/progress).
     for user programs. The `concrete` compiler's own command taxonomy and help
     behavior are Phase 6E, and `std.cli` should learn from that surface without
     coupling to compiler internals.
+16a. Add narrow shell/path helper modules only as tool workloads demand them:
+     `std.shlex` for shell-word splitting/quoting, `std.glob` / `std.fnmatch`
+     for file-pattern matching, and no `wordexp`-style command/variable
+     expansion in the core. These APIs are byte/path aware, carry no hidden
+     filesystem authority, and must keep expansion separate from matching so a
+     pure parser cannot accidentally become a hosted operation.
 17. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
     writers, formatting
     integration, capability requirements, and policy for release builds. Keep
@@ -571,6 +596,12 @@ logging/progress).
     hosted-only convenience wrappers with explicit authority. Temp-file,
     symlink, path-normalization, and TOCTOU behavior must appear in
     `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
+20a. Add small `std.temp` and `std.dirs` helpers after the handle-relative
+     filesystem shape is gated. `std.temp` owns temporary files/directories with
+     explicit cleanup (`drop`/`defer`, no implicit scope-end delete) and visible
+     `with(File)` authority; `std.dirs` exposes only conservative hosted
+     directory discovery needed by tools. Do not add XDG/platform policy sprawl
+     until package/build workloads pull it.
 21. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
@@ -685,9 +716,11 @@ logging/progress).
     The freestanding target implementation still lands in Phase 16.
 28. Record deliberately deferred stdlib families so they do not disappear from
     planning: compression/archive formats, broad crypto beyond the narrow
-    hash/HMAC/constant-time story, full HTTP client/server, dynamic libraries,
-    OS debug formats, atomics, threads, SIMD, target/ABI databases, and
-    platform-specific C/POSIX wrappers. Each stays package-later,
+    hash/HMAC/constant-time story, PEM/ASN.1/X509, MIME helpers beyond the first
+    workload, full HTTP client/server, DNS/Unix-socket breadth, dynamic
+    libraries, OS debug formats (`ELF`, DWARF, image parsing), atomics, threads,
+    SIMD, target/ABI databases, and platform-specific C/POSIX wrappers. Each
+    stays package-later,
     backend-later, freestanding-later, or research-later until a workload
     forces it.
 29. Add stdlib docs and examples for C/Rust users:
@@ -2683,6 +2716,95 @@ replayable; and every boundary after that slice remains explicitly trusted.
     equivalence, cached-object substitution negatives, and stdlib
     authority/allocation/evidence gates. The artifact must show the exact point
     at which independent checking stops and backend/toolchain trust begins.
+
+## Phase 15.5: Unsafe Concrete And Trusted Systems Profile
+
+Goal: make deliberately unsafe Concrete code boring to write, easy to audit, and
+hard to misuse. This phase borrows the useful Zig lesson: low-level programs
+need excellent tools for pointers, slices, allocators, debug allocators, and
+runtime instrumentation; the answer is not a global unsafe mode or Rust-style
+lifetime algebra, but small explicit unsafe islands with visible authority and
+replayable checks.
+
+Done when: every raw-pointer, unchecked, trusted, allocator, and FFI escape hatch
+has a named safe wrapper pattern, audit/report output shows the underlying
+assumption, debug/profile instrumentation can catch representative misuse, and a
+validation project proves safe code cannot reach these operations accidentally.
+
+This phase does **not** weaken Concrete's philosophy. Safe Concrete remains
+linear, capability-visible, second-class-reference, and no-hidden-cleanup.
+Unsafe Concrete is a deliberately marked profile for the code that must cross
+those boundaries: runtimes, allocators, FFI, VM/interpreter internals,
+freestanding/MMIO, sanitizer probes, and backend/ABI glue. Its evidence class is
+`trusted`, `runtime_checked`, `tested_by_oracle`, or `assumed` unless a later
+proof actually discharges the exact claim.
+
+Reference languages: Zig for pointer/slice taxonomy, allocator-passing and
+debug allocator tooling; Odin for sanitizer/runtime-instrumentation pragmatism;
+Hare for small Unix-shaped unsafe wrappers; Rust only as the cautionary example
+that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
+
+1. Freeze the unsafe-surface taxonomy:
+   - safe references remain second-class and may not be returned;
+   - raw single pointers, many-item pointers, fixed-size array pointers, and
+     slices are distinct source/report concepts;
+   - nullable pointers are explicit (`Option<Ptr>`-style), not the default;
+   - every raw pointer/slice carries mutability, provenance/trust class,
+     alignment fact where known, and optional length/bounds facts where known.
+   Add `docs/UNSAFE_CONCRETE.md` and make it point back to Phase 12's
+   `UNSAFE_ISLAND.md`, not duplicate it.
+2. Add safe-wrapper recipes for the common unsafe shapes: checked slice from raw
+   pointer + length, bounds-checked indexed access, non-null construction,
+   alignment-refined pointer construction, FFI-owned handle wrappers,
+   allocator-backed buffers, and raw-place writes. Each recipe must show the
+   public safe wrapper, the private trusted/Unsafe operation, the accepted
+   assumption, and the report line that exposes it.
+3. Add a debug allocator / checked allocator profile inspired by Zig's
+   development allocators: allocation/free stack identity where available,
+   double-free detection, use-after-free-like sentinel checks where applicable,
+   leak reporting for tests, red-zone or canary checks where practical, and
+   allocator-name reporting in audit output. This is `runtime_checked`, not
+   proof evidence. It must work with Concrete's allocator-as-value direction:
+   `with(Alloc)` grants authority; allocator values name strategy/identity.
+4. Add pointer/slice runtime-instrumentation hooks for unsafe code: null checks,
+   bounds checks for trusted slice views, alignment checks, provenance/trust
+   labels, lifetime/owner debugging where the runtime can track it, and explicit
+   opt-out for trusted performance paths. A checked profile may trap; a release
+   profile may erase checks only when reports still say which checks became
+   assumptions.
+5. Add an unsafe-aliasing policy that avoids Rust's hidden reference-UB trap:
+   safe references keep Concrete's ordinary borrow/linearity rules; raw pointers
+   do not silently become safe references. Any operation that temporarily
+   upgrades raw memory to a safe borrow must state its exclusivity, lifetime, and
+   frame assumptions in the wrapper contract/report. No "trust me, this raw
+   pointer is an ordinary `&mut` now" shortcut.
+6. Add allocator-strategy examples: global allocator, arena/bump allocator,
+   fixed-buffer allocator, debug allocator, and test allocator. Every example
+   must show allocation authority, allocator identity, cleanup path, and failure
+   behavior. Do not add ambient allocation.
+7. Add VM/interpreter-style pressure test as the validation workload:
+   a small bytecode stack, value array, call-frame/upvalue-like structure, or
+   mark/sweep-shaped toy heap that deliberately needs raw pointers/slices. The
+   workload should compare the safe-indexed version and the unsafe-pointer
+   version, then prove the unsafe version's assumptions are visible in reports
+   and checked in debug/profile gates.
+8. Add FFI/trusted-boundary red-team tests: wrong length, stale pointer,
+   null pointer, alignment mismatch, double free, missing capability, hidden
+   allocation, and wrapper that forgets to report the underlying trusted call.
+   Safe code must fail to reach the operation; unsafe code must appear in
+   `concrete audit --trust-boundaries`.
+9. Add syntax/ergonomics only after the taxonomy and gates exist. Candidate
+   sugar may include pointer-field access or checked slice construction helpers,
+   but it must not reintroduce removed `->` syntax as a general language form
+   and must not blur raw pointers with safe references. Ergonomics serve audit,
+   not the other way around.
+10. Add the Phase 15.5 validation artifact:
+    `examples/unsafe_concrete_vm/` plus
+    `scripts/tests/check_unsafe_concrete.sh`. The gate must run the workload in
+    normal and checked profiles, compare interpreter-vs-compiled behavior where
+    applicable, prove audit output lists every trusted/Unsafe/allocator/FFI
+    assumption, and include at least one mutation per unsafe class that the
+    checked profile or audit gate catches.
 
 ## Phase 16: Freestanding And Embedded Target
 
