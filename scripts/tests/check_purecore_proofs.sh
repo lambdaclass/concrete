@@ -21,12 +21,28 @@ grep -q '✓ `std.option.option_Option_unwrap_or` — proof matches current body
   && ok "unwrap_or: registered + fingerprint-fresh" \
   || no "unwrap_or: proof link missing or stale"
 
-# 1b. slice-1 remainder: the Option/Result map laws are linked and fresh
-for fn in std.option.option_Option_map std.result.result_Result_map std.result.result_Result_map_err; do
+# 1b. slice 1+2 surface: Option/Result laws + numeric checked helpers,
+#     each linked and fresh
+for fn in std.option.option_Option_map std.result.result_Result_map \
+          std.result.result_Result_map_err \
+          std.numeric.numeric_NonZeroU32_try_new \
+          std.numeric.numeric_NonZeroU32_try_from_u64 \
+          std.numeric.numeric_NonZeroU64_try_new \
+          std.numeric.numeric_Port_try_new \
+          std.numeric.numeric_Port_try_from_u32; do
   grep -q "✓ \`$fn\` — proof matches current body" <<<"$st" \
     && ok "$fn: registered + fingerprint-fresh" \
     || no "$fn: proof link missing or stale"
 done
+
+# 1c. every std proved link is SPEC-DRIFT-COVERED — the specs table is keyed
+#     by qualified name and proof-status witnesses the lookup (a mis-keyed
+#     spec silently skips the drift check; slice 2 made that state visible).
+drift_ok=$(grep -c "spec: drift-checked" <<<"$st")
+drift_no=$(grep -c "spec: NOT drift-covered" <<<"$st")
+[ "$drift_ok" -eq 9 ] && [ "$drift_no" -eq 0 ] \
+  && ok "drift coverage: all 9 std links drift-checked, none uncovered" \
+  || no "drift coverage: expected 9 drift-checked / 0 uncovered, got $drift_ok/$drift_no"
 
 # 2. the Lean kernel verifies the referenced theorems (import-reachable)
 cp=$("$C" "$TMP/std/lib.con" --report check-proofs 2>&1)
@@ -42,8 +58,18 @@ grep -q '✓ std.result.result_Result_map — Examples.PureCore.Proofs.result_ma
 grep -q '✓ std.result.result_Result_map_err — Examples.PureCore.Proofs.result_map_err_correct' <<<"$cp" \
   && ok "result.map_err: kernel-verified" \
   || no "result.map_err: kernel check failed or theorem unreachable"
-grep -q 'Summary: 4 verified, 0 failed' <<<"$cp" \
-  && ok "check-proofs: exactly 4 verified, zero failures" \
+for pair in "numeric_NonZeroU32_try_new:numeric_try_new_correct" \
+            "numeric_NonZeroU32_try_from_u64:nonzero_u32_try_from_u64_correct" \
+            "numeric_NonZeroU64_try_new:numeric_try_new_correct" \
+            "numeric_Port_try_new:numeric_try_new_correct" \
+            "numeric_Port_try_from_u32:port_try_from_u32_correct"; do
+  fn=${pair%%:*}; thm=${pair##*:}
+  grep -q "✓ std.numeric.$fn — Examples.PureCore.Proofs.$thm" <<<"$cp" \
+    && ok "$fn: kernel-verified" \
+    || no "$fn: kernel check failed or theorem unreachable"
+done
+grep -q 'Summary: 9 verified, 0 failed' <<<"$cp" \
+  && ok "check-proofs: exactly 9 verified, zero failures" \
   || no "check-proofs count drifted or reports failures"
 
 # 3. MUTATION: a body change must go STALE (evidence is load-bearing)

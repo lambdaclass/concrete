@@ -116,6 +116,57 @@ theorem result_map_err_correct (v e : Int) (fuel : Nat) :
           eval.bindEnumFields, eval.evalArgs, bindArgs,
           Env.bind, evalBinOp, BEq.beq]
 
+set_option linter.unusedSimpArgs false in
+/-- `numeric` try_new (shared by NonZeroU32/NonZeroU64/Port): zero is
+    rejected, any other value is wrapped — for ALL values, iff-shaped via
+    the if on the RHS. The newtype constructor is a width-erased identity
+    cast in the model. -/
+theorem numeric_try_new_correct (v : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 4) numericTryNewExpr
+    = some (if v = 0 then .enum_ "Option" "None" []
+            else .enum_ "Option" "Some" [("value", .int v)]) := by
+  by_cases h : v = 0
+  · have hd : decide (v = 0) = true := decide_eq_true h
+    simp [numericTryNewExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd, h]
+  · have hd : decide (v = 0) = false := decide_eq_false h
+    simp [numericTryNewExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd, h]
+
+set_option linter.unusedSimpArgs false in
+/-- `numeric` try_from (shared by NonZeroU32::try_from_u64 with
+    max = u32::MAX and Port::try_from_u32 with max = u16::MAX): zero and
+    out-of-range rejected, in-range wrapped. The narrowing cast is
+    guard-dominated, so the identity-cast model is faithful on every
+    reached path. -/
+theorem numeric_try_from_correct (max v : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6) (numericTryFromExpr max)
+    = some (if v = 0 ∨ v > max then .enum_ "Option" "None" []
+            else .enum_ "Option" "Some" [("value", .int v)]) := by
+  by_cases h0 : v = 0
+  · have hd0 : decide (v = 0) = true := decide_eq_true h0
+    simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, h0]
+  · have hd0 : decide (v = 0) = false := decide_eq_false h0
+    by_cases h1 : v > max
+    · have hd1 : decide (max < v) = true := decide_eq_true h1
+      simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, hd1, h0, h1]
+    · have hd1 : decide (max < v) = false := decide_eq_false (by omega)
+      simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, hd1, h0, h1]
+
+/-- NonZeroU32::try_from_u64 — `numeric_try_from_correct` at max = u32::MAX. -/
+theorem nonzero_u32_try_from_u64_correct (v : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6)
+      (numericTryFromExpr 4294967295)
+    = some (if v = 0 ∨ v > 4294967295 then .enum_ "Option" "None" []
+            else .enum_ "Option" "Some" [("value", .int v)]) :=
+  numeric_try_from_correct 4294967295 v fuel
+
+/-- Port::try_from_u32 — `numeric_try_from_correct` at max = u16::MAX. -/
+theorem port_try_from_u32_correct (v : Int) (fuel : Nat) :
+    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6)
+      (numericTryFromExpr 65535)
+    = some (if v = 0 ∨ v > 65535 then .enum_ "Option" "None" []
+            else .enum_ "Option" "Some" [("value", .int v)]) :=
+  numeric_try_from_correct 65535 v fuel
+
 /-- H1 radix-overflow guard STEP fact (kernel decision, no solver needed):
     if the pre-shift guard accepts (`acc ≤ (2^64-1) >> 4`) then one hex
     accumulation step stays within u64 — the loop invariant's inductive

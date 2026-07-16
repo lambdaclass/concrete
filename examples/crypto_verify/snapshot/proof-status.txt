@@ -9,6 +9,8 @@
 
   coverage: iff
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:32
@@ -19,6 +21,8 @@
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: one_direction
+
+  spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
 
@@ -31,6 +35,8 @@
 
   coverage: iff
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:68
@@ -41,6 +47,8 @@
     | ^^^^^^^^^^^^^^^^^^
 
   coverage: one_direction
+
+  spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
 

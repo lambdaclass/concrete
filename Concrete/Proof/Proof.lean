@@ -2159,13 +2159,42 @@ def pureCoreFns : FnTable
   | "f" => some pureCoreReprFFn
   | _ => none
 
+/-- Extracted spec shared by `NonZeroU32/NonZeroU64/Port::try_new`
+    (std/src/numeric.con): zero is rejected, anything else wraps. The newtype
+    constructor extracts as a width-erased identity `cast`. -/
+def numericTryNewExpr : PExpr :=
+  .ifThenElse (.binOp .eq (.var "value") (.lit (.int 0)))
+    (.enumLit "Option" "None" [])
+    (.enumLit "Option" "Some" [("value", .cast (.var "value"))])
+
+/-- Extracted spec shared by `NonZeroU32::try_from_u64` (max = u32::MAX) and
+    `Port::try_from_u32` (max = u16::MAX): zero and out-of-range are rejected,
+    in-range values narrow (guard-dominated, so the identity-cast model is
+    faithful on every reached path) and wrap in the newtype. -/
+def numericTryFromExpr (max : Int) : PExpr :=
+  .ifThenElse (.binOp .eq (.var "value") (.lit (.int 0)))
+    (.enumLit "Option" "None" [])
+    (.ifThenElse (.binOp .gt (.var "value") (.lit (.int max)))
+      (.enumLit "Option" "None" [])
+      (.enumLit "Option" "Some" [("value", .cast (.cast (.var "value")))]))
+
+/-- Spec table keys are the registry entries' QUALIFIED function names
+    (`qualName`, e.g. `std.option.option_Option_map`) — the drift check in
+    `validateRegistry` looks specs up by that exact key, so any other key
+    silently leaves the entry drift-uncovered (`proof-status` now renders
+    which it is per entry). -/
 def specs : List (String × PExpr) :=
-  [ -- pure-core stdlib (slice 1)
-    ("bytes.view", bytesViewExpr)
-  , ("option.unwrap_or", optionUnwrapOrExpr)
-  , ("option.map",       optionMapExpr)
-  , ("result.map",       resultMapExpr)
-  , ("result.map_err",   resultMapErrExpr)
+  [ -- pure-core stdlib (slices 1-2)
+    ("std.bytes.bytes_Bytes_view",             bytesViewExpr)
+  , ("std.option.option_Option_unwrap_or",     optionUnwrapOrExpr)
+  , ("std.option.option_Option_map",           optionMapExpr)
+  , ("std.result.result_Result_map",           resultMapExpr)
+  , ("std.result.result_Result_map_err",       resultMapErrExpr)
+  , ("std.numeric.numeric_NonZeroU32_try_new",      numericTryNewExpr)
+  , ("std.numeric.numeric_NonZeroU64_try_new",      numericTryNewExpr)
+  , ("std.numeric.numeric_Port_try_new",            numericTryNewExpr)
+  , ("std.numeric.numeric_NonZeroU32_try_from_u64", numericTryFromExpr 4294967295)
+  , ("std.numeric.numeric_Port_try_from_u32",       numericTryFromExpr 65535)
     -- parse_validate
   ,
     ("parse_validate.validate_version",       validateVersionExpr)
@@ -2199,6 +2228,13 @@ def specs : List (String × PExpr) :=
     -- adversarial spec-drift fixture (deliberately wrong)
   , ("test_drift.simple_add",        driftTestSpec)
   ]
+
+/-- The one spec lookup: registry drift checking AND the proof-status
+    "spec: drift-checked / NOT drift-covered" line both go through this,
+    so the rendered coverage state is a faithful witness of what the
+    drift check actually consulted. -/
+def specFor (qualName : String) : Option PExpr :=
+  (specs.find? fun (n, _) => n == qualName).map (·.2)
 
 -- ============================================================
 -- Reusable verification library (the proof ladder)

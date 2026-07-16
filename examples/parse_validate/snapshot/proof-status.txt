@@ -9,6 +9,8 @@
 
   coverage: iff
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- no proof ----------------------------------------------- examples/parse_validate/src/main.con:64
@@ -80,6 +82,8 @@
 
   coverage: one_direction
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- proved [one_direction] ------------------------------------------------ examples/parse_validate/src/main.con:137
@@ -90,6 +94,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: one_direction
+
+  spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
 

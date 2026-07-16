@@ -131,6 +131,33 @@ Two pipeline discoveries, both fixed/recorded:
 - Trusted bodies (Bytes internals) are refined against models, never
   "proved" directly — the trusted-boundary class remains visible.
 
+## Slice 2 status (2026-07-16, in progress)
+
+**Stage 1 — numeric checked helpers: DONE.** Five more kernel-backed links
+(9 total): `NonZeroU32/NonZeroU64/Port::try_new` (one shared spec+theorem,
+`iff` coverage over all values) and `NonZeroU32::try_from_u64` /
+`Port::try_from_u32` (shared parameterized spec `numericTryFromExpr max`,
+instantiated at u32::MAX / u16::MAX). Narrowing casts in the try_from pair
+are guard-dominated, so the model's identity `cast` is faithful on every
+reached path — noted in the spec docstring.
+
+**Finding en route (fixed): spec-drift coverage was silently keyed.** The
+drift check looks specs up by the registry entry's QUALIFIED name; slice 1's
+keys (`option.map` vs `std.option.option_Option_map`) never matched, so the
+spec↔source comparison silently did not run for the stdlib links —
+fingerprint freshness ran, the model tie did not. Fixed three ways:
+1. slice-1 spec keys re-qualified;
+2. one shared lookup (`Proof.specFor`) now feeds BOTH the drift check and
+   a new per-entry `proof-status` line — `spec: drift-checked` /
+   `spec: NOT drift-covered` — so the rendered state is a faithful witness
+   of what the drift check consulted (no more silent-uncovered);
+3. the gate requires all 9 std links `drift-checked` and 0 uncovered.
+The `fabricated_proof` adversarial fixture now visibly renders
+`NOT drift-covered`, which is that fixture doing its job.
+
+Remaining in slice 2: a crc32 `while_`-loop fact (first loop-invariant
+proof) and one checked text/path conversion contract.
+
 ## Sequencing after slice 1
 
 Only after slice 1's DoD holds end-to-end (stable names, exact manifest

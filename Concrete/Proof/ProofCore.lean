@@ -1795,9 +1795,9 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
         match entry.extracted with
         | none => none  -- extraction failed; covered by extractionBlocked
         | some extractedPExpr =>
-          match Proof.specs.find? fun (n, _) => n == re.function with
-          | none => none  -- function not in specs table; gate uncovered (intentional)
-          | some (_, specPExpr) =>
+          match Proof.specFor re.function with
+          | none => none  -- not drift-covered; proof-status renders this state per entry
+          | some specPExpr =>
             if extractedPExpr == normalizePExpr specPExpr then none
             else some (.specDrift re)
   unknowns ++ duplicates ++ conflicts ++ stales ++ ineligibles ++ blocked ++ emptyProofs ++ emptySpecs ++ specDrifts

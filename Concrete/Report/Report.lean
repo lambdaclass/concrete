@@ -825,6 +825,7 @@ structure ProofStatusEntry where
   proofSource   : String       -- "registry" | "hardcoded" | "none"
   origin        : String       -- "source_linked" | "json_backed" | "hardcoded" | "" (link provenance)
   coverage      : String       -- proof coverage kind: point|one_direction|iff|invariant|runtime_error|full_contract|""
+  specDriftCovered : Bool := false  -- Proof.specFor hit for qualName (the drift check ran)
   loc           : Option SourceLoc
   fnSpan        : Option Span
 
@@ -882,7 +883,9 @@ private partial def collectProofStatus
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName
-    , proofSource := pSrc, origin, coverage, loc := fnLoc, fnSpan := fnSp }
+    , proofSource := pSrc, origin, coverage
+    , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
+    , loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectProofStatus pc locMap sub qualPrefix registry) []
 
@@ -908,7 +911,10 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
   | .proved =>
     let coverageTag := if e.coverage.isEmpty then "" else s!" [{e.coverage}]"
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
-    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{originLine}"
+    let specLine :=
+      if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
+      else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
+    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{specLine}{originLine}"
   | .stale =>
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}{originLine}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."

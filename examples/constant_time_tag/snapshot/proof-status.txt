@@ -9,6 +9,8 @@
 
   coverage: iff
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:67

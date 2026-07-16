@@ -14,11 +14,19 @@ mod numeric {
     pub newtype Port = u16;
 
     impl NonZeroU32 {
+        #[spec(Concrete.Proof.numericTryNewExpr)]
+        #[proof_by(Examples.PureCore.Proofs.numeric_try_new_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("9ec8f1fd516e3daf1f0cd7dfa9a46ad7")]
         pub fn try_new(value: u32) -> Option<NonZeroU32> {
             if value == 0 { return Option::<NonZeroU32>::None; }
             return Option::<NonZeroU32>::Some { value: NonZeroU32(value) };
         }
 
+        #[spec(Concrete.Proof.numericTryFromExpr)]
+        #[proof_by(Examples.PureCore.Proofs.nonzero_u32_try_from_u64_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("e2fd55dd4caba0bf84444277651389c8")]
         pub fn try_from_u64(value: u64) -> Option<NonZeroU32> {
             if value == 0 { return Option::<NonZeroU32>::None; }
             if value > 4294967295 { return Option::<NonZeroU32>::None; }
@@ -27,6 +35,10 @@ mod numeric {
     }
 
     impl NonZeroU64 {
+        #[spec(Concrete.Proof.numericTryNewExpr)]
+        #[proof_by(Examples.PureCore.Proofs.numeric_try_new_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("95f3bd3a52aa175412da63b513b560e1")]
         pub fn try_new(value: u64) -> Option<NonZeroU64> {
             if value == 0 { return Option::<NonZeroU64>::None; }
             return Option::<NonZeroU64>::Some { value: NonZeroU64(value) };
@@ -34,11 +46,19 @@ mod numeric {
     }
 
     impl Port {
+        #[spec(Concrete.Proof.numericTryNewExpr)]
+        #[proof_by(Examples.PureCore.Proofs.numeric_try_new_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("add908e23c2aa3730f721c9de6ded66b")]
         pub fn try_new(value: u16) -> Option<Port> {
             if value == 0 { return Option::<Port>::None; }
             return Option::<Port>::Some { value: Port(value) };
         }
 
+        #[spec(Concrete.Proof.numericTryFromExpr)]
+        #[proof_by(Examples.PureCore.Proofs.port_try_from_u32_correct)]
+        #[proof_coverage(iff)]
+        #[proof_fingerprint("f87fb5c677827de64b3ead111edf1faf")]
         pub fn try_from_u32(value: u32) -> Option<Port> {
             if value == 0 { return Option::<Port>::None; }
             if value > 65535 { return Option::<Port>::None; }

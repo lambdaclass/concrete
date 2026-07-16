@@ -9,6 +9,8 @@
 
   coverage: point
 
+  spec: drift-checked (Concrete.Proof.specs)
+
   origin: source_linked
 
 -- not eligible ------------------------------------------- examples/evidence_classes/proved_by_lean/src/main.con:16
