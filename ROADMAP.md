@@ -2775,10 +2775,36 @@ freestanding/MMIO, sanitizer probes, and backend/ABI glue. Its evidence class is
 `trusted`, `runtime_checked`, `tested_by_oracle`, or `assumed` unless a later
 proof actually discharges the exact claim.
 
-Reference languages: Zig for pointer/slice taxonomy, allocator-passing and
-debug allocator tooling; Odin for sanitizer/runtime-instrumentation pragmatism;
-Hare for small Unix-shaped unsafe wrappers; Rust only as the cautionary example
-that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
+Reference languages and reading:
+- Zig for pointer/slice taxonomy, allocator-passing, arena/fixed-buffer/debug
+  allocators, and the "prefer slices over raw many-item pointers when length is
+  known" rule:
+  `https://ziglang.org/documentation/master/` and
+  `https://zig.guide/standard-library/allocators/`.
+- Hare for checked slices by default, unbounded arrays as an explicit escape
+  hatch, small Unix-shaped wrappers, and honest docs about what remains manual:
+  `https://harelang.org/blog/2022-06-21-safety-features/` and
+  `https://harelang.org/blog/2021-02-09-hare-advances-on-c/`.
+- Odin for tracking allocators, sanitizer/runtime-instrumentation pragmatism,
+  foreign-system ergonomics, layout/endian control, and fine-grained
+  bounds-check controls:
+  `https://odin-lang.org/docs/overview/` and
+  `https://odin-lang.org/docs/faq/`.
+- Rust/Rustonomicon as cautionary input: unsafe reference/aliasing validity is
+  subtle, pervasive unsafe can become harder to audit than raw pointer code, and
+  Concrete should avoid silently upgrading raw pointers into ordinary safe
+  references:
+  `https://dev-doc.rust-lang.org/beta/nomicon/what-unsafe-does.html` and
+  `https://doc.rust-lang.org/stable/reference/behavior-considered-undefined.html`.
+- Counterpoint reading, to keep the claims honest:
+  `https://rustmagazine.org/issue-3/is-zig-safer-than-unsafe-rust`.
+
+Borrow the techniques, not the philosophy. Concrete must not adopt hidden
+authority, implicit allocation, implicit cleanup, lifetime syntax, trait-object
+unsafe abstractions, ambient context, or a broad "unsafe mode." Debug allocators,
+sanitizers, and runtime checks are `runtime_checked` / `tested` evidence, never
+proof. Unsafe ergonomics are allowed only when they make the trusted assumption
+more legible in source and reports.
 
 1. Freeze the unsafe-surface taxonomy:
    - safe references remain second-class and may not be returned;
@@ -2789,6 +2815,11 @@ that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
      alignment fact where known, and optional length/bounds facts where known.
    Add `docs/UNSAFE_CONCRETE.md` and make it point back to Phase 12's
    `UNSAFE_ISLAND.md`, not duplicate it.
+   The design note must include a comparison table mapping Zig's `*T`, `[*]T`,
+   `[*c]T`, `?*T`, slices, fixed array pointers, Hare unbounded arrays/slices,
+   and Odin pointers/slices onto Concrete's chosen surface. Every row must name
+   whether bounds/null/alignment/provenance are statically known, runtime-
+   checked, trusted, or unavailable.
 2. Add safe-wrapper recipes for the common unsafe shapes: checked slice from raw
    pointer + length, bounds-checked indexed access, non-null construction,
    alignment-refined pointer construction, FFI-owned handle wrappers,
@@ -2802,12 +2833,19 @@ that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
    allocator-name reporting in audit output. This is `runtime_checked`, not
    proof evidence. It must work with Concrete's allocator-as-value direction:
    `with(Alloc)` grants authority; allocator values name strategy/identity.
+   Include the Odin tracking-allocator lesson, but reject Odin's implicit
+   `context` as hidden authority: Concrete allocator identity is an explicit
+   value or report fact, and allocation permission remains visible as
+   `with(Alloc)`.
 4. Add pointer/slice runtime-instrumentation hooks for unsafe code: null checks,
    bounds checks for trusted slice views, alignment checks, provenance/trust
    labels, lifetime/owner debugging where the runtime can track it, and explicit
    opt-out for trusted performance paths. A checked profile may trap; a release
    profile may erase checks only when reports still say which checks became
    assumptions.
+   Include sanitizer opt-out attributes only as named unsafe/trusted facts
+   (`no_sanitize_address`-style behavior must appear in audit output), never as
+   comments or unreported compiler flags.
 5. Add an unsafe-aliasing policy that avoids Rust's hidden reference-UB trap:
    safe references keep Concrete's ordinary borrow/linearity rules; raw pointers
    do not silently become safe references. Any operation that temporarily
@@ -2824,6 +2862,12 @@ that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
    workload should compare the safe-indexed version and the unsafe-pointer
    version, then prove the unsafe version's assumptions are visible in reports
    and checked in debug/profile gates.
+   The pressure test should deliberately exercise the cases from the Zig/Rust
+   unsafe-code debate: stack-top pointer movement, array/slice access, closure
+   or upvalue-like indirection, allocator-triggered collection/checking, and a
+   path where a safe-index/handle version is simpler but measurably different
+   from the unsafe pointer version. The output is not a performance claim; it is
+   an ergonomics/evidence stress test.
 8. Add FFI/trusted-boundary red-team tests: wrong length, stale pointer,
    null pointer, alignment mismatch, double free, missing capability, hidden
    allocation, and wrapper that forgets to report the underlying trusted call.
@@ -2834,6 +2878,9 @@ that pervasive unsafe plus hidden aliasing rules is not the Concrete model.
    but it must not reintroduce removed `->` syntax as a general language form
    and must not blur raw pointers with safe references. Ergonomics serve audit,
    not the other way around.
+   Candidate ergonomics must be rejected if they make a raw pointer look like a
+   safe reference, hide a bounds/null/alignment assumption, or make an unchecked
+   operation harder to grep.
 10. Add the Phase 15.5 validation artifact:
     `examples/unsafe_concrete_vm/` plus
     `scripts/tests/check_unsafe_concrete.sh`. The gate must run the workload in
