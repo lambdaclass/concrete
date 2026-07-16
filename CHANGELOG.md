@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Workload 3: hexdump — CLI-shaped, xxd-differential (2026-07-16)
+
+`examples/hexdump` is the third Phase 7 workload (first CLI-flag-shaped
+one): an xxd-compatible dumper (`[-s skip] [-n len] <file>`) proven
+byte-identical to the system `xxd` across default/flag/edge cases
+(`check_hexdump_differential.sh`, Makefile + CI; xxd is the differential
+oracle, skipped loudly if absent) with 13t exit codes. Pull evidence
+recorded in its FRICTION.md: hex formatting hit its SECOND ask
+(fixed-width, no-prefix, buffer-appending — `format_hex` is 0x-prefixed
+minimal-width per-call-alloc), and hand-rolled flag parsing (~45 lines for
+two value flags + one positional) is the measured case ROADMAP item 2
+(`std.cli`) asked for. Held at one ask: `&String == literal` ergonomics,
+stdin reader, streaming dump.
+
 ### Pure-core proof arc: seed planted, paused by the selective rule (2026-07-16)
 
 The Phase 7 exit obligation (item 4) opened contract-first

@@ -1,0 +1,202 @@
+// hexdump — WORKLOAD 3 (P7: CLI-shaped, flag parsing + formatted output).
+// Usage: hexdump [-s skip] [-n len] <file>
+// xxd-compatible dump: 8-hex-digit offset, 16 bytes per line in 2-byte
+// groups, ASCII gutter ('.' for non-printable). Byte-identical to `xxd`
+// for the default form, so the check script diffs against the real tool.
+// Exercises: hand-rolled flag parsing (std.cli pull evidence), hex
+// formatting of fixed-width fields (2nd ask — see FRICTION.md), Reader,
+// Writer, parse_uint on flag values, 13t exit codes (usage=2, io=1, ok=0).
+mod hexdump {
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
+                   Writer, console_writer, eprintln};
+    import std.parse.{parse_uint};
+
+    // FRICTION: std.fmt has format_hex (0x-prefixed, minimal width, String
+    // alloc per call) and a PRIVATE hex_digit. A fixed-width byte/offset
+    // dump wants digit-level control without per-field allocation, so the
+    // nibble table is re-rolled here — the second workload to do so.
+    fn hex_digit(v: u64) -> char {
+        if v < 10 { return (48 + v) as char; }
+        return (87 + v) as char;
+    }
+
+    fn push_hex_byte(s: &mut String, b: u64) {
+        s.push_char(hex_digit(b / 16));
+        s.push_char(hex_digit(b % 16));
+    }
+
+    // 8-digit zero-padded offset (xxd's column 1).
+    fn push_hex_off(s: &mut String, v: u64) {
+        let mut shift: u64 = 8;
+        while shift > 0 {
+            shift = shift - 1;
+            let mut d: u64 = v;
+            let mut k: u64 = 0;
+            while k < shift {
+                d = d / 16;
+                k = k + 1;
+            }
+            push_hex_byte_nibble(s, d % 16);
+        }
+    }
+
+    fn push_hex_byte_nibble(s: &mut String, nib: u64) {
+        s.push_char(hex_digit(nib));
+    }
+
+    fn w_str(w: &Writer, s: String) {
+        let r: Result<u64, IoError> = w.write_str(&s);
+        discard(r.is_ok());
+        s.drop();
+    }
+
+    fn usage() with(Console) -> u8 {
+        let u: String = "usage: hexdump [-s skip] [-n len] <file>";
+        eprintln(&u);
+        u.drop();
+        return 2;
+    }
+
+    fn fail(msg: String) with(Console) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    // One xxd-format line for data[off .. off+n) where 1 <= n <= 16.
+    fn dump_line(data: &Bytes, off: u64, n: u64, w: &Writer) with(Alloc) {
+        let mut line: String = String::new();
+        push_hex_off(&mut line, off);
+        line.push_char(':');
+        line.push_char(' ');
+        let mut i: u64 = 0;
+        while i < 16 {
+            if i < n {
+                push_hex_byte(&mut line, data.get_unchecked(off + i) as u64);
+            } else {
+                line.push_char(' ');
+                line.push_char(' ');
+            }
+            if i % 2 == 1 { line.push_char(' '); }
+            i = i + 1;
+        }
+        line.push_char(' ');
+        let mut j: u64 = 0;
+        while j < n {
+            let b: u64 = data.get_unchecked(off + j) as u64;
+            if b >= 32 && b <= 126 {
+                line.push_char(b as char);
+            } else {
+                line.push_char('.');
+            }
+            j = j + 1;
+        }
+        line.push_char('\n');
+        w_str(w, line);
+    }
+
+    fn dump(data: &Bytes, skip: u64, limit: u64, has_limit: bool, w: &Writer) with(Alloc) {
+        let total: u64 = data.len();
+        if skip >= total { return; }
+        let mut end: u64 = total;
+        if has_limit {
+            // overflow-safe: cap limit by what remains (H2 discipline)
+            let remain: u64 = total - skip;
+            if limit < remain { end = skip + limit; }
+        }
+        let mut off: u64 = skip;
+        while off < end {
+            let mut n: u64 = end - off;
+            if n > 16 { n = 16; }
+            dump_line(data, off, n, w);
+            off = off + 16;
+        }
+    }
+
+    // Parse a numeric flag value; None on malformed input.
+    fn flag_value(idx: Int) with(Alloc) -> Option<u64> {
+        if idx >= count() { return Option::<u64>::None; }
+        let v: String = get(idx);
+        let parsed: Option<u64> = parse_uint(&v);
+        v.drop();
+        return parsed;
+    }
+
+    fn main() with(Std) -> u8 {
+        // FRICTION: flag parsing is a hand loop over indexed get(i) with
+        // String eq against literals — every CLI tool re-writes this.
+        // Pull evidence for std.cli (flag/positional split, value flags).
+        let mut skip: u64 = 0;
+        let mut limit: u64 = 0;
+        let mut has_limit: bool = false;
+        // FRICTION: holding the path as a String here needs a
+        // consume-then-rebind inside a loop branch, which the ownership
+        // rules reject (E0207 shape) — tracking the ARG INDEX instead and
+        // fetching once after the loop is both legal and simpler.
+        let mut path_idx: Int = 0;
+        let mut have_path: bool = false;
+        let mut bad: bool = false;
+        let mut i: Int = 1;
+        while i < count() {
+            let a: String = get(i);
+            let s_flag: String = "-s";
+            let n_flag: String = "-n";
+            if a.eq(&s_flag) {
+                match flag_value(i + 1) {
+                    Option::Some { value } => { skip = value; i = i + 1; },
+                    Option::None => { bad = true; },
+                }
+            } else {
+                if a.eq(&n_flag) {
+                    match flag_value(i + 1) {
+                        Option::Some { value } => {
+                            limit = value;
+                            has_limit = true;
+                            i = i + 1;
+                        },
+                        Option::None => { bad = true; },
+                    }
+                } else {
+                    if have_path {
+                        bad = true;
+                    } else {
+                        path_idx = i;
+                        have_path = true;
+                    }
+                }
+            }
+            s_flag.drop();
+            n_flag.drop();
+            a.drop();
+            i = i + 1;
+        }
+        if bad || !have_path {
+            return usage();
+        }
+        let path: String = get(path_idx);
+        let mode: String = "rb";
+        let opened: Result<TextFile, IoError> = TextFile::open(&path, &mode);
+        mode.drop();
+        path.drop();
+        match opened {
+            Result::Err { error } => {
+                discard(error == error);
+                return fail("hexdump: cannot open file");
+            },
+            Result::Ok { value } => {
+                let r: Reader = reader_from_file(value);
+                let data: Bytes = read_all(&r);
+                let rc: Result<u64, IoError> = r.close();
+                discard(rc.is_ok());
+                let w: Writer = console_writer();
+                dump(&data, skip, limit, has_limit, &w);
+                let wc: Result<u64, IoError> = w.close();
+                discard(wc.is_ok());
+                data.drop();
+                return 0;
+            },
+        }
+    }
+}
