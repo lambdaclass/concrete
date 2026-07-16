@@ -911,10 +911,14 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
   | .proved =>
     let coverageTag := if e.coverage.isEmpty then "" else s!" [{e.coverage}]"
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    -- Honesty line (audit 2026-07-16): this REPORT verifies link presence +
+    -- fingerprint freshness only; it does not run the Lean kernel. The
+    -- kernel replay is `--report check-proofs` (gated in CI for std).
+    let trustLine := "\n\n  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`"
     let specLine :=
       if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
       else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
-    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{specLine}{originLine}"
+    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{trustLine}{specLine}{originLine}"
   | .stale =>
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}{originLine}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."

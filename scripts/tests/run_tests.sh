@@ -6893,8 +6893,11 @@ if [ -x "$PIPELINE_TEST" ]; then
         echo "$output"
     fi
 else
-    echo "  SKIP: $PIPELINE_TEST not built (run 'lake build pipeline-test')"
-    SKIP=$((SKIP + 1))
+    # FAIL-CLOSED (audit 2026-07-16): a missing binary silently skipped all
+    # pass-level Lean tests in CI for months. pipeline-test is now in
+    # lakefile defaultTargets; absence is a broken build, not a skip.
+    echo "  FAIL: $PIPELINE_TEST not built (it is a defaultTarget — run 'lake build')"
+    FAIL=$((FAIL + 1))
 fi
 fi # end section: passlevel
 

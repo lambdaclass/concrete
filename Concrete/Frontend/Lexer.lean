@@ -160,22 +160,26 @@ where
         match s.peekAt 1 with
         | some c2 =>
           if c2.isDigit then
-            lexFloatFrac s.advance (Float.ofNat acc) 0.1
+            lexFloatFrac s.advance acc 0
           else
             (s, .intLit acc)
         | none => (s, .intLit acc)
       else
         (s, .intLit acc)
     | none => (s, .intLit acc)
-  lexFloatFrac (s : LexerState) (acc : Float) (place : Float) : LexerState × TokenKind :=
+  -- Fraction digits accumulate into the EXACT Nat mantissa; the single
+  -- correctly-rounded conversion happens once at the end via
+  -- Float.ofScientific (the same path Lean's own float literals take).
+  -- The old form (acc + digit * place, place *= 0.1) compounded binary
+  -- rounding error per digit — `0.7` lexed one ulp off (audit 2026-07-16).
+  lexFloatFrac (s : LexerState) (mantissa : Nat) (fracDigits : Nat) : LexerState × TokenKind :=
     match s.peek with
     | some c =>
       if c.isDigit then
-        let digit := Float.ofNat (c.toNat - '0'.toNat)
-        lexFloatFrac s.advance (acc + digit * place) (place * 0.1)
+        lexFloatFrac s.advance (mantissa * 10 + (c.toNat - '0'.toNat)) (fracDigits + 1)
       else
-        (s, .floatLit acc)
-    | none => (s, .floatLit acc)
+        (s, .floatLit (Float.ofScientific mantissa true fracDigits))
+    | none => (s, .floatLit (Float.ofScientific mantissa true fracDigits))
 
 /-- Lex a string literal (after opening quote). Only the escapes listed here
     exist; anything else after `\` is an error token (never silently dropped). -/

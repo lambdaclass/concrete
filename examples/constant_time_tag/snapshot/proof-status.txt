@@ -9,6 +9,8 @@
 
   coverage: iff
 
+  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
+
   spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked

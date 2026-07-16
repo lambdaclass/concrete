@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete", "Examples"]
+defaultTargets = ["concrete", "Examples", "pipeline-test"]
 
 [leanOptions]
 warningAsError = true

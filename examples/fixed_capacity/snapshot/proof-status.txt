@@ -117,6 +117,8 @@
 
   coverage: point
 
+  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
+
   spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
@@ -129,6 +131,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
+
+  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
   spec: drift-checked (Concrete.Proof.specs)
 
@@ -143,6 +147,8 @@
 
   coverage: point
 
+  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
+
   spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
@@ -155,6 +161,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
+
+  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
   spec: drift-checked (Concrete.Proof.specs)
 

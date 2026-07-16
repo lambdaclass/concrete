@@ -319,6 +319,33 @@ batteries-included breadth. Completed foundation work lives in
      `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md
      (`std.writer` as a separate module; old args.get concerns) — design
      clarity, not code risk.
+   Audit additions (external audit 2026-07-16, spot-verified; first three
+   landed same-day — see CHANGELOG):
+   - DONE: float-literal lexing correctly rounded (Nat mantissa +
+     Float.ofScientific; the old per-digit 0.1 accumulation lexed `0.7`
+     one ulp off, invisible to the differential oracle because both sides
+     shared the lexer).
+   - DONE: pipeline-test in defaultTargets + run_tests fail-closed (32
+     pass-level Lean tests were vacuously green for months).
+   - DONE: proof-status proved entries carry an explicit trust line
+     ("linked + fingerprint-fresh — kernel replay via check-proofs").
+   - Intrinsic identity threaded to CALL SITES (Elab/Lower intercept by
+     raw name; user fns named sizeof/_sizeof/wrapping_add get hijacked —
+     the IntrinsicId tagging exists for declarations, finish the thread).
+   - Option/Result canonical-enum sizing must respect ALIGNMENT, not just
+     max tySize (repr(align(N)) payload can overflow the chosen alloca).
+   - Interp/backend builtin drift (string_char_at OOB 0-vs--1, codepoint
+     vs byte indexing) — single-source the builtin semantics.
+   - Fuzzer grammar extension: aggregates + borrows-in-branches +
+     strings/non-Copy (the classes that actually bit in 029-034).
+   - Evidence-doc drift: five examples/*/assumptions.toml say
+     overflow="wrapping" (language traps); check_assumptions.sh must read
+     the arithmetic field; CLAIMS_TODAY.md understates safety.
+   - CI: wire catches/showcase/wrong-code/reducer/release-bundle or
+     delete; fix run_ci_gates_local extraction (misses run_tests.sh
+     invocations); drop the silent 3x retry.
+   - Phantom `concrete new` (book + Resolve hint) — implement or unhint;
+     delete stale ideas.org; consolidate idea backlogs under ROADMAP.
    Deliberately NOT queued: std.cli abstraction polish (one more workload
    first), ByteCursor/ByteWriter renames (no signal), vec_get/vec_len
    builtin cleanup (deeper than a pass), roadmap compaction (collides with
