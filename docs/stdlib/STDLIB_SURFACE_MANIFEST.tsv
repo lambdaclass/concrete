@@ -55,6 +55,13 @@ bytes	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
 bytes	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
 checksum	crc32	no	constructs	infallible	none	deterministic	gated	(b: &Bytes, start: u64, len: u64) -> u64
 checksum	crc32_all	no	constructs	infallible	none	deterministic	gated	(b: &Bytes) with() -> u64
+cli	get_u64	no	borrows	infallible	none	deterministic	gated	(&self, f: u64) -> u64
+cli	seen	no	borrows	infallible	none	deterministic	gated	(&self, f: u64) -> bool
+cli	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
+cli	new	yes	constructs	infallible	Alloc	hosted-effect	gated	() with(Alloc) -> Cli
+cli	flag_bool	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, name: String) with(Alloc) -> u64
+cli	flag_u64	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, name: String, default: u64) with(Alloc) -> u64
+cli	parse	yes	consumes	infallible	Alloc,Env	hosted-effect	gated	(self, min_pos: u64, max_pos: u64) with(Alloc,Env) -> CliResult
 deque	new	no	constructs	infallible	none	deterministic	gated	() -> Deque<T>
 deque	push_back	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)
 deque	push_front	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, value: T) with(Alloc)

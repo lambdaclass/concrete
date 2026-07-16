@@ -51,10 +51,18 @@ Those belong in:
 - [025_no_main_linker_error.md](025_no_main_linker_error.md) — no `main` in an executable build → clean `error[link]` instead of an ld leak
 - [026_array_repeat_count_hang.md](026_array_repeat_count_hang.md) — huge `[v; N]` repeat count → clean parse diagnostic instead of O(N²) hang/OOM
 - [028_reserved_name_collision.md](028_reserved_name_collision.md) — user fn named `user_main`/`__*` → clean `reserved identifier` instead of an LLVM duplicate-symbol leak
+- [029_divergent_if_array_addr_after_loop.md](029_divergent_if_array_addr_after_loop.md)
+- [030_nonmut_array_write.md](030_nonmut_array_write.md)
+- [031_branch_lazy_promotion_uninit.md](031_branch_lazy_promotion_uninit.md) — found by workload 1 (base64_cli)
+- [032_multibyte_string_literal_emit.md](032_multibyte_string_literal_emit.md)
+- [033_ifexpr_merge_aggregate_phi.md](033_ifexpr_merge_aggregate_phi.md) — found by workload 2 (png_chunks)
+- [034_shortcircuit_borrow_promotion.md](034_shortcircuit_borrow_promotion.md) — found by std.cli v1 (031 class, third site)
 
 ## Open Numbered Bugs
 
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
+- [035_fieldoffset_generic_enum_panic.md](035_fieldoffset_generic_enum_panic.md) — loud lowering panic: user enum with generic-container struct payload
+- [036_import_dependent_type_metadata.md](036_import_dependent_type_metadata.md) — Copy/method visibility depends on the import list (false rejections)
 
 ## Still Open, But Not Numbered Bugs
 

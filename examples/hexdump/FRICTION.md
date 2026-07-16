@@ -18,14 +18,16 @@ failure, 2 usage/malformed flag value.
    zero-padded, %0*x growth semantics, buffer-appending). This workload
    switched over as proof-of-pull — still byte-identical to xxd.
 
-2. **Flag parsing is a hand loop — expected, and now measured.** Indexed
-   `get(i)` + String literals + `eq` + manual value-flag lookahead +
-   positional/flag split + duplicate-positional rejection: ~45 lines for
-   two value flags and one positional. Every CLI tool re-writes exactly
-   this. This workload is the pull evidence ROADMAP item 2 (`std.cli`)
-   asked for; design should cover: value flags, flag=value or
-   space-separated, unknown-flag rejection, positional collection, and
-   the usage/exit-2 convention from 13t.
+2. **Flag parsing is a hand loop — measured, then PULLED (shipped).**
+   Indexed `get(i)` + String literals + `eq` + manual value-flag lookahead
+   + positional/flag split + duplicate-positional rejection: ~45 lines for
+   two value flags and one positional. std.cli v1 shipped from this
+   evidence (design: research/stdlib/cli.md) and this workload switched
+   over — main() is now ~25 lines of declaration + match, the hand loop is
+   deleted, and unknown flags are properly rejected (the old loop would
+   have mis-eaten them). Building the helper found compiler bugs 034
+   (fixed: &&-RHS borrow promotion, the 031 class's third site) and
+   035/036 (open, docs/bugs/).
 
 3. **String-literal comparison ergonomics.** Comparing an arg against a
    literal takes three statements (bind literal, `eq(&lit)`, drop) ×2
@@ -39,7 +41,8 @@ failure, 2 usage/malformed flag value.
    legal-and-simpler restructure (track `path_idx: Int`, fetch once after
    the loop) took a minute; recording because it is the same
    control-flow-ownership edge the exemption work tracks, not new
-   evidence for a rule change.
+   evidence for a rule change. (Made moot by std.cli: the parse result
+   OWNS the positional Strings, exactly as the design predicted.)
 
 ## Deliberately not pulled
 

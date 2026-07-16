@@ -1,0 +1,71 @@
+// cli_tool — std.cli's end-to-end fixture (design: research/stdlib/cli.md).
+// Declares both flag kinds + positional arity and reports what it parsed;
+// check_cli_helpers.sh drives it through good/malformed/unknown/missing/
+// arity inputs and asserts output + 13t exit codes (usage class = 2).
+// Usage: cli_tool [-n num] [-s num] [-v] <pos> [pos2]
+mod cli_tool {
+    import std.cli.{Cli, CliResult, CliError, CliFlags};
+    import std.vec.{Vec};
+    import std.io.{Writer, console_writer, eprintln, IoError};
+    import std.fmt.{write_uint};
+
+    fn w_str(w: &Writer, s: String) {
+        let r: Result<u64, IoError> = w.write_str(&s);
+        discard(r.is_ok());
+        s.drop();
+    }
+
+    fn w_num(w: &Writer, v: u64) {
+        let r: Result<u64, IoError> = write_uint(w, v);
+        discard(r.is_ok());
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        let f_n: u64 = cli.flag_u64("-n", 7);
+        let f_s: u64 = cli.flag_u64("-s", 0);
+        let f_v: u64 = cli.flag_bool("-v");
+        match cli.parse(1, 2) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: cli_tool [-n num] [-s num] [-v] <pos> [pos2]";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                let w: Writer = console_writer();
+                w_str(&w, "n=");
+                w_num(&w, flags.get_u64(f_n));
+                w_str(&w, " s=");
+                w_num(&w, flags.get_u64(f_s));
+                w_str(&w, " sseen=");
+                if flags.seen(f_s) { w_str(&w, "1"); } else { w_str(&w, "0"); }
+                w_str(&w, " v=");
+                if flags.seen(f_v) { w_str(&w, "1"); } else { w_str(&w, "0"); }
+                w_str(&w, " npos=");
+                w_num(&w, positionals.len());
+                w_str(&w, "\n");
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let mut going: bool = true;
+                while going {
+                    match ps.pop() {
+                        Option::Some { value } => {
+                            w_str(&w, "pos=");
+                            let r: Result<u64, IoError> = w.write_str(&value);
+                            discard(r.is_ok());
+                            value.drop();
+                            w_str(&w, "\n");
+                        },
+                        Option::None => { going = false; },
+                    }
+                }
+                ps.drop();
+                let wc: Result<u64, IoError> = w.close();
+                discard(wc.is_ok());
+                return 0;
+            },
+        }
+    }
+}

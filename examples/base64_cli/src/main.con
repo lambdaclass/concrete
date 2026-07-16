@@ -5,8 +5,9 @@
 // base64 now comes from std.base64 — this workload pulled it into std
 // (FRICTION.md #5), then switched over as proof-of-pull.
 mod base64_cli {
-    import std.args.{count, get};
     import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult, CliError, CliFlags};
+    import std.vec.{Vec};
     import std.io.{Writer, console_writer, console_error_writer, IoError, println, eprintln};
     import std.base64.{encode, decode};
 
@@ -14,15 +15,14 @@ mod base64_cli {
         return w.write(b);
     }
 
-    fn main() with(Std) -> Int {
-        if count() < 3 {
-            let u: String = "usage: base64_cli encode|decode <text>";
-            eprintln(&u);
-            u.drop();
-            return 1;
-        }
-        let cmd: String = get(1);
-        let arg: String = get(2);
+    fn usage() with(Console) -> Int {
+        let u: String = "usage: base64_cli encode|decode <text>";
+        eprintln(&u);
+        u.drop();
+        return 2;
+    }
+
+    fn run(cmd: String, arg: String) with(Std) -> Int {
         let enc: String = "encode";
         let dec: String = "decode";
         let is_enc: bool = cmd.eq(&enc);
@@ -60,13 +60,50 @@ mod base64_cli {
                 rc = 1;
             }
         }
-        let nl: String = "\n";
-        let r2: Result<u64, IoError> = w.write_str(&nl);
-        let ignored2: u64 = r2.unwrap_or(0);
-        nl.drop();
-        let rc2: Result<u64, IoError> = w.close();
-        let ignored3: u64 = rc2.unwrap_or(0);
+        let wc: Result<u64, IoError> = w.close();
+        discard(wc.is_ok());
         input.drop();
         return rc;
+    }
+
+    fn main() with(Std) -> Int {
+        // std.cli replaced the hand-rolled count()/get() prologue
+        // (proof-of-pull; design: research/stdlib/cli.md). Usage errors now
+        // exit 2 per 13t (was 1 — pre-convention workload-1 code).
+        let mut cli: Cli = Cli::new();
+        match cli.parse(2, 2) {
+            CliResult::Err { error } => {
+                discard(error);
+                return usage();
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let maybe_arg: Option<String> = ps.pop();
+                let maybe_cmd: Option<String> = ps.pop();
+                ps.drop();
+                match maybe_cmd {
+                    Option::None => {
+                        match maybe_arg {
+                            Option::Some { value } => { value.drop(); },
+                            Option::None => {},
+                        }
+                        return usage();
+                    },
+                    Option::Some { value } => {
+                        let cmd: String = value;
+                        match maybe_arg {
+                            Option::None => {
+                                cmd.drop();
+                                return usage();
+                            },
+                            Option::Some { value } => {
+                                return run(cmd, value);
+                            },
+                        }
+                    },
+                }
+            },
+        }
     }
 }

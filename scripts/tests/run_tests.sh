@@ -6707,6 +6707,9 @@ run_ok "$TESTDIR/regress_031_match_arm_borrow.con"     8
 run_ok "$TESTDIR/regress_032_multibyte_str_literal.con" 42
 # Bug 033: discard() value-if desugar phied live aggregates (E0714 reject).
 run_ok "$TESTDIR/regress_033_discard_live_string.con" "live-across"
+# Bug 034: &&/|| RHS borrow skipped lazy-promotion pre-store (031 class, 3rd
+# site). Shape guard; the LOAD-BEARING regression is check_cli_helpers.sh.
+run_ok "$TESTDIR/regress_034_shortcircuit_borrow_promotion.con" 133
 run_err "$TESTDIR/error_030_nonmut_array_write.con" "cannot assign to immutable"
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42

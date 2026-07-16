@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### std.cli v1 shipped — both consumers switched, one compiler bug fixed, two filed (2026-07-16)
+
+`std.cli` landed per its design note: declare-then-parse (presence + u64
+value flags, positional arity, unknown-flag rejection, one 13t bucket →
+exit 2, parse result owns its Strings). hexdump AND base64_cli switched
+over in the same stack — hand loops deleted, base64_cli's usage errors
+standardized to exit 2 — and examples/cli_tool + check_cli_helpers.sh (14
+checks, Makefile + CI) drive the full input matrix. String-valued flags
+stay append-only (no consumer). The H2 lint caught the new module's own
+additive guard — fixed to the class form.
+
+First contact found three compiler bugs (docs/bugs/): **034 FIXED** —
+the short-circuit `&&`/`||` lowering missed bug-031's pre-promotion, so an
+RHS receiver-borrow inside a loop silently corrupted an adjacent local
+(std.cli's positionals Vec); the fix mirrors the ifElse/ifExpr/match
+sites, and check_cli_helpers.sh's "two positionals" leg is the verified
+load-bearing regression (pre-fix compiler: rc 134). **035 OPEN** —
+Layout.fieldOffset panics on a user-module enum construction whose other
+variant carries a generic-container struct payload. **036 OPEN** —
+a cross-module type's Copy-ness and methods are visible only when the
+type is named in the import list (false E0295/E0264).
+
 ### Hex-fmt pull shipped + std.cli v1 design resolved (2026-07-16)
 
 Workload 3's two pulls landed the same day. (1) `fmt.hex_digit` made pub +

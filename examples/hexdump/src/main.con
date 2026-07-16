@@ -11,8 +11,9 @@ mod hexdump {
     import std.bytes.{Bytes};
     import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
                    Writer, console_writer, eprintln};
-    import std.parse.{parse_uint};
     import std.fmt.{push_hex};
+    import std.cli.{Cli, CliResult, CliError, CliFlags};
+    import std.vec.{Vec};
 
     // Fixed-width hex (offsets + bytes) comes from std.fmt.push_hex — this
     // workload's FRICTION #1 pulled it (second ask), then switched over as
@@ -87,67 +88,7 @@ mod hexdump {
         }
     }
 
-    // Parse a numeric flag value; None on malformed input.
-    fn flag_value(idx: Int) with(Alloc) -> Option<u64> {
-        if idx >= count() { return Option::<u64>::None; }
-        let v: String = get(idx);
-        let parsed: Option<u64> = parse_uint(&v);
-        v.drop();
-        return parsed;
-    }
-
-    fn main() with(Std) -> u8 {
-        // FRICTION: flag parsing is a hand loop over indexed get(i) with
-        // String eq against literals — every CLI tool re-writes this.
-        // Pull evidence for std.cli (flag/positional split, value flags).
-        let mut skip: u64 = 0;
-        let mut limit: u64 = 0;
-        let mut has_limit: bool = false;
-        // FRICTION: holding the path as a String here needs a
-        // consume-then-rebind inside a loop branch, which the ownership
-        // rules reject (E0207 shape) — tracking the ARG INDEX instead and
-        // fetching once after the loop is both legal and simpler.
-        let mut path_idx: Int = 0;
-        let mut have_path: bool = false;
-        let mut bad: bool = false;
-        let mut i: Int = 1;
-        while i < count() {
-            let a: String = get(i);
-            let s_flag: String = "-s";
-            let n_flag: String = "-n";
-            if a.eq(&s_flag) {
-                match flag_value(i + 1) {
-                    Option::Some { value } => { skip = value; i = i + 1; },
-                    Option::None => { bad = true; },
-                }
-            } else {
-                if a.eq(&n_flag) {
-                    match flag_value(i + 1) {
-                        Option::Some { value } => {
-                            limit = value;
-                            has_limit = true;
-                            i = i + 1;
-                        },
-                        Option::None => { bad = true; },
-                    }
-                } else {
-                    if have_path {
-                        bad = true;
-                    } else {
-                        path_idx = i;
-                        have_path = true;
-                    }
-                }
-            }
-            s_flag.drop();
-            n_flag.drop();
-            a.drop();
-            i = i + 1;
-        }
-        if bad || !have_path {
-            return usage();
-        }
-        let path: String = get(path_idx);
+    fn run(path: String, skip: u64, limit: u64, has_limit: bool) with(Std) -> u8 {
         let mode: String = "rb";
         let opened: Result<TextFile, IoError> = TextFile::open(&path, &mode);
         mode.drop();
@@ -168,6 +109,34 @@ mod hexdump {
                 discard(wc.is_ok());
                 data.drop();
                 return 0;
+            },
+        }
+    }
+
+    fn main() with(Std) -> u8 {
+        // The ~45-line hand loop this replaced is std.cli's pull evidence
+        // (FRICTION.md #2; design: research/stdlib/cli.md).
+        let mut cli: Cli = Cli::new();
+        let f_skip: u64 = cli.flag_u64("-s", 0);
+        let f_limit: u64 = cli.flag_u64("-n", 0);
+        match cli.parse(1, 1) {
+            CliResult::Err { error } => {
+                discard(error);                return usage();
+            },
+            CliResult::Ok { flags, positionals } => {
+                let skip: u64 = flags.get_u64(f_skip);
+                let limit: u64 = flags.get_u64(f_limit);
+                let has_limit: bool = flags.seen(f_limit);
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let maybe_path: Option<String> = ps.pop();
+                ps.drop();
+                match maybe_path {
+                    Option::None => { return usage(); },
+                    Option::Some { value } => {
+                        return run(value, skip, limit, has_limit);
+                    },
+                }
             },
         }
     }

@@ -1,6 +1,11 @@
 # std.cli — v1 design (Phase 7 item 2, decision note)
 
-Status: DESIGN RESOLVED — v1 scoped, pulled by measured workload evidence.
+Status: v1 SHIPPED (2026-07-16) — std/src/cli.con, gated by
+check_cli_helpers.sh; hexdump AND base64_cli switched over (hand loops
+deleted — the exit criterion below is met). u64 value flags only: the
+String-valued flag kind stays append-only (still no consumer). Building it
+surfaced THREE compiler bugs (034 fixed same-day: &&-RHS borrow promotion;
+035/036 open: docs/bugs/). Original design record follows.
 Written 2026-07-16, after workload 3 (`examples/hexdump`) put a number on
 the friction: ~45 lines of hand loop for two value flags and one
 positional (indexed `get(i)` + String-literal `eq` + manual value

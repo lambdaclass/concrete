@@ -1,0 +1,39 @@
+// Bug 034 regression (031 class at the &&/|| lowering site): the RHS of a
+// short-circuit && address-takes a local (method-call borrow) inside a loop;
+// without pre-promotion the lazy alloca lands in scand.rhs and corrupts an
+// adjacent local (observed: a Vec's contents). Expected output: collects
+// both non-dash items and sums 100 (dash) + 11 + 22 = 133.
+mod m {
+    struct Copy Item { mark: u64, tag: u64 }
+
+    impl Item {
+        fn first_is_dash(&self) -> bool {
+            return self.tag == 45;
+        }
+    }
+
+    fn main() -> Int {
+        let mut total: u64 = 0;
+        let mut kept: [u64; 4] = [0, 0, 0, 0];
+        let mut nkept: u64 = 0;
+        let mut i: u64 = 0;
+        while i < 3 {
+            let it: Item = Item { mark: (i + 1) * 11, tag: if i == 2 { 45 } else { 0 } };
+            // field read in && LHS, borrowing method call in && RHS
+            let is_dash: bool = it.mark >= 11 && it.first_is_dash();
+            if is_dash {
+                total = total + 100;
+            } else {
+                kept[nkept] = it.mark;
+                nkept = nkept + 1;
+            }
+            i = i + 1;
+        }
+        let mut k: u64 = 0;
+        while k < nkept {
+            total = total + kept[k];
+            k = k + 1;
+        }
+        return total as Int;
+    }
+}

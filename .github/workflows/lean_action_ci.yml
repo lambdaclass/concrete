@@ -489,6 +489,9 @@ jobs:
       - name: "Workload 3: hexdump differential vs xxd + exit codes"
         run: bash scripts/tests/check_hexdump_differential.sh
 
+      - name: "std.cli v1: cli_tool matrix + bug-034 regression + proof-of-pull"
+        run: bash scripts/tests/check_cli_helpers.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

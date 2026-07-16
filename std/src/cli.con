@@ -1,0 +1,270 @@
+// std.cli — declare-then-parse command-line helper (v1).
+// Design: research/stdlib/cli.md (workload-pulled by base64_cli, png_chunks,
+// hexdump — three hand-rolled arg loops, one shape). v1 scope, deliberately
+// brutal: presence flags + u64 value flags + positional arity. Unknown flags
+// are ERRORS. Space-separated values only. One recoverable error bucket
+// (13t: every case maps to exit 2 at the caller). The parse result OWNS its
+// positional Strings. String-valued flags are append-only: no consumer has
+// pulled them yet, so they do not exist yet.
+mod cli {
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+    import std.parse.{parse_uint};
+
+    /// Why a parse failed. Data for the usage message; every variant is the
+    /// same 13t bucket (caller prints usage, exits 2).
+    pub enum Copy CliError {
+        UnknownFlag,
+        MissingValue,
+        MalformedValue,
+        WrongArity,
+    }
+
+    /// Parsed flag values, indexed by declaration order (the u64 returned
+    /// by flag_bool/flag_u64).
+    pub struct CliFlags {
+        vals: Vec<u64>,
+        hits: Vec<bool>,
+    }
+
+    impl CliFlags {
+        /// Value of a u64 flag (its default if not given on the command line).
+        pub fn get_u64(&self, f: u64) -> u64 {
+            return self.vals.get_unchecked(f);
+        }
+
+        /// Whether the flag appeared on the command line at all.
+        pub fn seen(&self, f: u64) -> bool {
+            return self.hits.get_unchecked(f);
+        }
+
+        pub fn drop(self) with(Alloc) {
+            let CliFlags { vals, hits } = self;
+            vals.drop();
+            hits.drop();
+        }
+    }
+
+    pub enum CliResult {
+        Ok { flags: CliFlags, positionals: Vec<String> },
+        Err { error: CliError },
+    }
+
+    /// Flag declarations. Names are stored as concatenated bytes + offsets
+    /// (flag tables are tiny; no map, no non-Copy indexed access needed).
+    pub struct Cli {
+        names: Bytes,
+        offs: Vec<u64>,
+        lens: Vec<u64>,
+        kinds: Vec<u64>,    // 0 = presence, 1 = u64 value
+        defaults: Vec<u64>,
+    }
+
+    impl Cli {
+        pub fn new() with(Alloc) -> Cli {
+            return Cli {
+                names: Bytes::new(),
+                offs: Vec::<u64>::new(),
+                lens: Vec::<u64>::new(),
+                kinds: Vec::<u64>::new(),
+                defaults: Vec::<u64>::new(),
+            };
+        }
+
+        fn declare(&mut self, name: String, kind: u64, default: u64) with(Alloc) -> u64 {
+            let f: u64 = self.offs.len();
+            self.offs.push(self.names.len());
+            self.lens.push(name.len);
+            let mut k: u64 = 0;
+            while k < name.len {
+                self.names.push(name.get_unchecked(k) as u8);
+                k = k + 1;
+            }
+            name.drop();
+            self.kinds.push(kind);
+            self.defaults.push(default);
+            return f;
+        }
+
+        /// Declare a presence flag (e.g. "-v"). Returns its index.
+        pub fn flag_bool(&mut self, name: String) with(Alloc) -> u64 {
+            return self.declare(name, 0, 0);
+        }
+
+        /// Declare a value flag (e.g. "-n 16"), space-separated value,
+        /// parsed as decimal u64. Returns its index.
+        pub fn flag_u64(&mut self, name: String, default: u64) with(Alloc) -> u64 {
+            return self.declare(name, 1, default);
+        }
+
+        fn matches(&self, a: &String, f: u64) -> bool {
+            let off: u64 = self.offs.get_unchecked(f);
+            let len: u64 = self.lens.get_unchecked(f);
+            if a.len != len { return false; }
+            let mut k: u64 = 0;
+            while k < len {
+                if (a.get_unchecked(k) as u64) != (self.names.get_unchecked(off + k) as u64) {
+                    return false;
+                }
+                k = k + 1;
+            }
+            return true;
+        }
+
+        fn find(&self, a: &String) -> Option<u64> {
+            let n: u64 = self.offs.len();
+            let mut f: u64 = 0;
+            while f < n {
+                if self.matches(a, f) {
+                    return Option::<u64>::Some { value: f };
+                }
+                f = f + 1;
+            }
+            return Option::<u64>::None;
+        }
+
+        fn destroy(self) with(Alloc) {
+            let Cli { names, offs, lens, kinds, defaults } = self;
+            names.drop();
+            offs.drop();
+            lens.drop();
+            kinds.drop();
+            defaults.drop();
+        }
+
+        /// Walk the process arguments once. Anything of len >= 2 starting
+        /// with '-' must be a declared flag (bare "-" stays a positional —
+        /// the conventional stdin name is not interpreted here). Positional
+        /// count must land in [min_pos, max_pos]. On success the result owns
+        /// the positional Strings, in command-line order. A repeated value
+        /// flag: last occurrence wins.
+        pub fn parse(self, min_pos: u64, max_pos: u64) with(Alloc, Env) -> CliResult {
+            let nflags: u64 = self.offs.len();
+            let mut vals: Vec<u64> = Vec::<u64>::new();
+            let mut hits: Vec<bool> = Vec::<bool>::new();
+            let mut f: u64 = 0;
+            while f < nflags {
+                vals.push(self.defaults.get_unchecked(f));
+                hits.push(false);
+                f = f + 1;
+            }
+            let mut pos: Vec<String> = Vec::<String>::new();
+            // 0 = ok, 1 = unknown flag, 2 = missing value, 3 = malformed value
+            let mut err: u64 = 0;
+            let mut i: Int = 1;
+            while i < count() {
+                let a: String = get(i);
+                let is_flag: bool = a.len >= 2 && a.get_unchecked(0) == '-';
+                if is_flag {
+                    match self.find(&a) {
+                        Option::None => { err = 1; },
+                        Option::Some { value } => {
+                            let fidx: u64 = value;
+                            if self.kinds.get_unchecked(fidx) == 0 {
+                                hits.set_unchecked(fidx, true);
+                            } else {
+                                // overflow-safe (H2 class form): count() >= 1 always (argv[0])
+                                if count() - 1 <= i {
+                                    err = 2;
+                                } else {
+                                    let v: String = get(i + 1);
+                                    let parsed: Option<u64> = parse_uint(&v);
+                                    v.drop();
+                                    match parsed {
+                                        Option::Some { value } => {
+                                            vals.set_unchecked(fidx, value);
+                                            hits.set_unchecked(fidx, true);
+                                        },
+                                        Option::None => { err = 3; },
+                                    }
+                                    i = i + 1;
+                                }
+                            }
+                        },
+                    }
+                }
+                if is_flag {
+                    a.drop();
+                } else {
+                    pos.push(a);
+                }
+                if err != 0 { break; }
+                i = i + 1;
+            }
+            if err == 0 {
+                let np: u64 = pos.len();
+                if np < min_pos || np > max_pos { err = 4; }
+            }
+            if err != 0 {
+                self.destroy();
+                vals.drop();
+                hits.drop();
+                pos.drop();
+                if err == 1 { return CliResult::Err { error: CliError::UnknownFlag }; }
+                if err == 2 { return CliResult::Err { error: CliError::MissingValue }; }
+                if err == 3 { return CliResult::Err { error: CliError::MalformedValue }; }
+                return CliResult::Err { error: CliError::WrongArity };
+            }
+            self.destroy();
+            return CliResult::Ok {
+                flags: CliFlags { vals: vals, hits: hits },
+                positionals: pos,
+            };
+        }
+    }
+
+    // ---- tests (declaration/matching logic; parse() itself is exercised
+    // ---- end-to-end by examples/cli_tool + check_cli_helpers.sh with real
+    // ---- process arguments) ----
+
+    #[test]
+    fn test_declare_and_find() with(Alloc) -> i32 {
+        let mut c: Cli = Cli::new();
+        let fs: u64 = c.flag_u64("-s", 7);
+        let fv: u64 = c.flag_bool("-v");
+        if fs != 0 { c.destroy(); return 1; }
+        if fv != 1 { c.destroy(); return 1; }
+        let a1: String = "-s";
+        let a2: String = "-v";
+        let a3: String = "-x";
+        let a4: String = "-sv";
+        let mut rc: i32 = 0;
+        match c.find(&a1) {
+            Option::Some { value } => { if value != 0 { rc = 1; } },
+            Option::None => { rc = 1; },
+        }
+        match c.find(&a2) {
+            Option::Some { value } => { if value != 1 { rc = 1; } },
+            Option::None => { rc = 1; },
+        }
+        match c.find(&a3) {
+            Option::Some { value } => { discard(value); rc = 1; },
+            Option::None => {},
+        }
+        match c.find(&a4) {
+            Option::Some { value } => { discard(value); rc = 1; },
+            Option::None => {},
+        }
+        a1.drop(); a2.drop(); a3.drop(); a4.drop();
+        c.destroy();
+        return rc;
+    }
+
+    #[test]
+    fn test_flags_getters() with(Alloc) -> i32 {
+        let mut vals: Vec<u64> = Vec::<u64>::new();
+        let mut hits: Vec<bool> = Vec::<bool>::new();
+        vals.push(16);
+        vals.push(0);
+        hits.push(true);
+        hits.push(false);
+        let fl: CliFlags = CliFlags { vals: vals, hits: hits };
+        let mut rc: i32 = 0;
+        if fl.get_u64(0) != 16 { rc = 1; }
+        if !fl.seen(0) { rc = 1; }
+        if fl.seen(1) { rc = 1; }
+        fl.drop();
+        return rc;
+    }
+}

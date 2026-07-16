@@ -609,6 +609,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       emit (.store lVal (.reg resultSlot .bool))
       let preVars ← snapshotVars
       let entryEndLabel ← getCurrentLabel
+      -- Bug 034 (= the 031 class, missed at THIS branch site): the RHS block
+      -- may address-take a local (method call borrowing it). Without
+      -- pre-promotion the lazy alloca+store lands inside scand.rhs and does
+      -- not dominate later uses — silent neighbor corruption (found by
+      -- std.cli's `a.len >= 2 && a.get_unchecked(0) == '-'`).
+      prePromoteAddrTaken preVars fun name => cexprTakesAddrOf name rhs
       if op == .and_ then
         terminateBlock (.condBr lVal rhsLabel mergeLabel)
       else
