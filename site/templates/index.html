@@ -4,266 +4,151 @@
 <article class="home">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
-      <p class="eyebrow">Concrete</p>
-      <h1 id="hero-title">Linear systems code with evidence you can audit.</h1>
+      <h1 id="hero-title">The Concrete programming language</h1>
       <p class="lede">
-        Concrete is an LL(1), linear, capability-oriented systems programming
-        language designed for auditable and formally verifiable code. Non-<code>Copy</code>
-        values are used exactly once, function headers expose required
-        capabilities, and the compiler/tooling preserve a clear path from source
-        code to evidence.
+        Concrete is a verification-oriented systems language for code whose
+        authority, allocation, failure modes, ownership, and evidence should be
+        visible in source and reports.
       </p>
-      <div class="hero-actions">
-        <a class="button primary" href="#try">Try it</a>
-        <a class="button" href="#model">Language model</a>
-        <a class="button" href="#evidence">Evidence model</a>
-      </div>
-      <dl class="hero-facts" aria-label="Concrete language facts">
-        <div>
-          <dt>Grammar</dt>
-          <dd>LL(1)</dd>
-        </div>
-        <div>
-          <dt>Ownership</dt>
-          <dd>Linear</dd>
-        </div>
-        <div>
-          <dt>Effects</dt>
-          <dd>Capabilities</dd>
-        </div>
-        <div>
-          <dt>Evidence</dt>
-          <dd>Typed ledger</dd>
-        </div>
-      </dl>
+      <p>
+        It is linear rather than affine: non-<code>Copy</code> values must be
+        consumed explicitly. Capabilities such as <code>File</code>,
+        <code>Console</code>, <code>Alloc</code>, and <code>Unsafe</code> appear
+        in function types. Proofs, runtime checks, oracle tests, assumptions,
+        and trusted boundaries are reported as separate evidence classes.
+      </p>
     </div>
 
-    <div class="terminal-card" aria-label="Concrete report preview">
-      <div class="terminal-title">
-        <span></span><span></span><span></span>
-        <strong>concrete --report audit</strong>
-      </div>
-      <pre><code>function read_u16_be
-  caps              pure
-  linear values     conserved
-  array bounds      runtime_checked
-  overflow          obligation
-
-function report
-  caps              Console
-  unsafe            none
-
-evidence
-  kernel proof      linked where present
-  solver trust      named, not hidden
-  stale proofs      rejected by gate</code></pre>
-    </div>
-  </section>
-
-  <section class="principles" aria-label="Core principles">
-    <article>
-      <h2>Linear by default</h2>
-      <p>
-        <code>Copy</code> is the explicit escape for ordinary duplicable data.
-        Everything else is used exactly once: moved, consumed, returned, or
-        destroyed explicitly.
-      </p>
-    </article>
-    <article>
-      <h2>Authority in headers</h2>
-      <p>
-        A function that allocates, prints, reads files, uses unsafe code, or
-        crosses a trusted boundary has to say so in its signature and reports.
-      </p>
-    </article>
-    <article>
-      <h2>Proof without pretending</h2>
-      <p>
-        Lean proofs, kernel decisions, SMT runs, oracle tests, runtime checks,
-        and assumptions are reported as different evidence classes.
-      </p>
-    </article>
-  </section>
-
-  <section class="code-band" aria-labelledby="code-title">
-    <div class="section-copy">
-      <p class="eyebrow">Code Shape</p>
-      <h2 id="code-title">Small systems code, explicit obligations.</h2>
-      <p>
-        Concrete keeps the source ordinary enough to read, but makes authority,
-        ownership, and proof obligations visible instead of relying on comments
-        or review folklore.
-      </p>
-    </div>
-    <div class="code-panels">
-      <article>
-        <h3>Pure code with runtime obligations</h3>
-        <pre><code>#[requires(0 &lt;= off &amp;&amp; off + 1 &lt; len &amp;&amp; len &lt;= 512)]
-fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
+    <div class="terminal-card" aria-label="Concrete code sample">
+      <pre><code>fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
     let hi: i32 = packet[off] as i32;
     let lo: i32 = packet[off + 1] as i32;
     return hi * 256 + lo;
-}</code></pre>
-      </article>
-      <article>
-        <h3>Effects are part of the type surface</h3>
-        <pre><code>fn validate(data: i32, len: i32) -&gt; i32 {
-    if len &lt; 10 { return 1; }
-    return data + len;
 }
 
 fn report(result: i32) with(Console) {
     if result == 0 { println("ok"); }
     else { println("fail"); }
 }</code></pre>
-      </article>
-    </div>
-  </section>
-
-  <section id="model" class="model-section" aria-labelledby="model-title">
-    <div class="section-copy">
-      <p class="eyebrow">Language Model</p>
-      <h2 id="model-title">The rules are intentionally small.</h2>
-    </div>
-    <div class="model-grid">
-      <article>
-        <span>01</span>
-        <h3>LL(1) surface</h3>
-        <p>The grammar is meant to stay predictable and mechanically checked, so the language remains easy to parse, format, and audit.</p>
-      </article>
-      <article>
-        <span>02</span>
-        <h3>Linear ownership</h3>
-        <p>Non-<code>Copy</code> values cannot be duplicated or silently discarded. Resource handling stays explicit.</p>
-      </article>
-      <article>
-        <span>03</span>
-        <h3>Capability flow</h3>
-        <p>Authority is visible in function headers and can be traced through reports and call graphs.</p>
-      </article>
-      <article>
-        <span>04</span>
-        <h3>Checked runtime risk</h3>
-        <p>Bounds, arithmetic traps, division, assertions, and preconditions become checks or proof obligations.</p>
-      </article>
-      <article>
-        <span>05</span>
-        <h3>Named trust</h3>
-        <p>Unsafe code, backend assumptions, FFI, SMT trust, and environment assumptions appear as named boundaries.</p>
-      </article>
-      <article>
-        <span>06</span>
-        <h3>Lean substrate</h3>
-        <p>The compiler is written in Lean 4, and selected source-linked user claims can be checked by Lean's kernel.</p>
-      </article>
-    </div>
-  </section>
-
-  <section id="evidence" class="evidence-section" aria-labelledby="evidence-title">
-    <div class="section-copy">
-      <p class="eyebrow">Evidence Model</p>
-      <h2 id="evidence-title">No single green badge.</h2>
-      <p>
-        Concrete’s reports distinguish what was proved, what was checked at
-        runtime, what was tested, what was assumed, and what depends on a trusted
-        boundary.
-      </p>
-    </div>
-    <div class="evidence-table" role="table" aria-label="Concrete evidence classes">
-      <div role="row">
-        <strong role="cell">proved_by_lean</strong>
-        <span role="cell">A linked theorem checked by Lean's kernel.</span>
-      </div>
-      <div role="row">
-        <strong role="cell">proved_by_kernel_decision</strong>
-        <span role="cell">A generated obligation closed by Lean-owned decision procedures.</span>
-      </div>
-      <div role="row">
-        <strong role="cell">runtime_checked</strong>
-        <span role="cell">A dynamic check remains in the program or instrumentation.</span>
-      </div>
-      <div role="row">
-        <strong role="cell">tested_by_oracle</strong>
-        <span role="cell">Compiled behavior matched an independent implementation or corpus.</span>
-      </div>
-      <div role="row">
-        <strong role="cell">assumed / trusted</strong>
-        <span role="cell">The claim crosses a named boundary instead of disappearing into prose.</span>
-      </div>
-      <div role="row">
-        <strong role="cell">unproven / stale</strong>
-        <span role="cell">The obligation exists, or the linked proof no longer matches the source.</span>
-      </div>
-    </div>
-  </section>
-
-  <section class="compare-section" aria-labelledby="compare-title">
-    <div class="section-copy">
-      <p class="eyebrow">Positioning</p>
-      <h2 id="compare-title">Built between systems languages and proof tools.</h2>
-    </div>
-    <div class="compare-list">
-      <article>
-        <h3>Rust</h3>
-        <p>Concrete borrows the seriousness about ownership, but stays linear rather than affine and makes authority/proof evidence part of reports.</p>
-      </article>
-      <article>
-        <h3>Zig and Odin</h3>
-        <p>Concrete shares the taste for explicit low-level control, while rejecting ambient authority and adding a formal evidence ledger.</p>
-      </article>
-      <article>
-        <h3>SPARK, Dafny, F*</h3>
-        <p>Concrete learns from verification-first systems, but keeps a small C/Rust-shaped systems surface and separates every evidence class.</p>
-      </article>
-      <article>
-        <h3>Austral</h3>
-        <p>Concrete is closest in linearity, capabilities, no GC, and no implicit cleanup, then adds Lean-backed source evidence and audit reports.</p>
-      </article>
     </div>
   </section>
 
   <section id="try" class="try-section" aria-labelledby="try-title">
     <div class="section-copy">
-      <p class="eyebrow">Try It</p>
-      <h2 id="try-title">Start with the gates.</h2>
+      <h2 id="try-title">Getting started</h2>
       <p>
         Concrete is experimental. The most honest first contact is to build it,
-        run the focused gates, and inspect the reports.
+        run the gates, and inspect the reports.
       </p>
     </div>
-    <div class="try-grid">
-      <pre><code>$ make build
+    <pre><code>$ make build
 $ make test
-$ make test-linear-conservation
-$ make test-linear-discard
-$ make check-grammar</code></pre>
-      <pre><code>$ .lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
-$ .lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
-$ .lake/build/bin/concrete examples/constant_time_tag/src/main.con --report audit</code></pre>
+$ .lake/build/bin/concrete examples/base64_cli/src/main.con --report audit
+$ .lake/build/bin/concrete examples/png_chunks/src/main.con --emit-trace-json</code></pre>
+  </section>
+
+  <section class="principles" aria-label="Core principles">
+    <h2>Main ideas</h2>
+    <article>
+      <h3>Linear ownership</h3>
+      <p>
+        <code>Copy</code> is explicit. Other values are moved, returned,
+        consumed, or destroyed by a visible operation such as
+        <code>defer x.drop()</code>; the compiler does not insert hidden
+        scope-end destructors.
+      </p>
+    </article>
+    <article>
+      <h3>Capabilities</h3>
+      <p>
+        Hosted effects are authority, not folklore. A function that reads files,
+        writes to a console, allocates, crosses FFI, or uses unsafe code has to
+        say so in its type and reports.
+      </p>
+    </article>
+    <article>
+      <h3>Second-class references</h3>
+      <p>
+        References flow downward into calls and callbacks. They are not returned
+        from functions. This avoids lifetime syntax and keeps ownership facts
+        small enough to audit.
+      </p>
+    </article>
+    <article>
+      <h3>Evidence accounting</h3>
+      <p>
+        Concrete does not collapse evidence into one green badge. Lean proofs,
+        kernel decisions, SMT checks, oracle tests, runtime checks, assumptions,
+        and trusted code are different facts.
+      </p>
+    </article>
+  </section>
+
+  <section id="evidence" class="evidence-section" aria-labelledby="evidence-title">
+    <div class="section-copy">
+      <h2 id="evidence-title">A report is part of the program</h2>
+      <p>
+        Reports are meant to answer ordinary review questions: what authority
+        does this code have, what can fail, what allocates, what is linear, and
+        which claims are proved or merely checked?
+      </p>
     </div>
+    <pre><code>function report
+  caps              Console
+  alloc             no
+  unsafe            none
+
+function read_u16_be
+  caps              none
+  array bounds      runtime_checked
+  overflow          obligation
+
+evidence
+  proved_by_lean              linked where present
+  proved_by_kernel_decision   closed obligations
+  runtime_checked             checks remain in code
+  trusted                     named boundary, not hidden</code></pre>
+  </section>
+
+  <section id="model" class="model-section" aria-labelledby="model-title">
+    <h2 id="model-title">What Concrete is not</h2>
+    <ul>
+      <li>Not Rust with smaller syntax: Concrete rejects lifetime syntax and implicit drop.</li>
+      <li>Not Zig with proofs bolted on: authority and allocation are part of reports.</li>
+      <li>Not a GC language: ownership and cleanup stay visible.</li>
+      <li>Not a proof assistant as a programming language: proof is evidence for systems code.</li>
+      <li>Not a batteries-included platform: the standard library grows from workloads.</li>
+    </ul>
+  </section>
+
+  <section class="compare-section" aria-labelledby="compare-title">
+    <h2 id="compare-title">Influences</h2>
+    <p>
+      Concrete borrows restraint from Hare, allocator explicitness from Zig and
+      Odin, result-oriented error style from Rust and Go, assurance discipline
+      from SPARK/Ada, and kernel-checked evidence from Lean. The combination is
+      stricter than any one source: no hidden authority, no hidden allocation,
+      no hidden cleanup, no hidden proof class.
+    </p>
   </section>
 
   <section class="links-section" aria-labelledby="links-title">
-    <div class="section-copy">
-      <p class="eyebrow">Read Next</p>
-      <h2 id="links-title">Follow the evidence trail.</h2>
-    </div>
+    <h2 id="links-title">Read next</h2>
     <nav class="link-grid" aria-label="Documentation links">
       <a href="{{ get_url(path='@/guide/_index.md') }}">
-        <strong>Guide</strong>
-        <span>Language tour, workflow, reports, and current status.</span>
+        <strong>Guide</strong><span>language tour, workflow, reports, and current status</span>
       </a>
       <a href="{{ get_url(path='@/reference/_index.md') }}">
-        <strong>Reference</strong>
-        <span>Safety model, value model, invariants, and compiler passes.</span>
+        <strong>Reference</strong><span>safety model, value model, invariants, and compiler passes</span>
       </a>
       <a href="{{ get_url(path='@/paper.md') }}">
-        <strong>Paper</strong>
-        <span>The research framing behind Concrete.</span>
+        <strong>Paper</strong><span>research framing behind Concrete</span>
+      </a>
+      <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">
+        <strong>Roadmap</strong><span>current phase, closed phases, and future work</span>
       </a>
       <a href="{{ config.extra.repo_url }}">
-        <strong>Repository</strong>
-        <span>Source, tests, examples, roadmap, and changelog.</span>
+        <strong>Source code</strong><span>compiler, tests, examples, and gates</span>
       </a>
     </nav>
   </section>
