@@ -32,7 +32,6 @@ mod App {
 
 import App.{run};
 
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     println(run());
-    return 0;
 }

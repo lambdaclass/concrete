@@ -1,5 +1,5 @@
-fn main() -> Int {
+fn main() with(Console) {
     let x: Int = 10;
     let y: Int = 20;
-    return x + y * 3 - 5;
+    println((x + y * 3 - 5));
 }

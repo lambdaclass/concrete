@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase A.1 semantic-oracle differential harness.
 #
 # For each vector in tests/oracle/vectors.txt: compile to a native binary, run
@@ -52,7 +51,8 @@ run_vector() {
     FAIL_LINES+=("FAIL $file — compilation failed; see $TMPDIR/$name.cerr")
     return
   fi
-  compiled_out=$("$bin" 2>/dev/null) || true
+  local compiled_rc=0
+  compiled_out=$("$bin" 2>/dev/null) && compiled_rc=0 || compiled_rc=$?
 
   # Capture --interp; treat "interp: ..." as a pending skip, not a failure.
   interp_out=$("$COMPILER" "$file" --interp 2>&1)
@@ -77,6 +77,25 @@ run_vector() {
   local c_trim i_trim
   c_trim=$(printf '%s' "$compiled_out" | sed -e 's/[[:space:]]*$//')
   i_trim=$(printf '%s' "$interp_out"  | sed -e 's/[[:space:]]*$//')
+
+  # MAIN_EXIT_MODEL stage 2: for a value-returning main, the interpreter still
+  # echoes the result as its FINAL line while the compiled binary carries it in
+  # the EXIT CODE. If stdout differs only by that trailing bare integer, compare
+  # it against the compiled rc (8-bit masked) instead — the interp echo is the
+  # value oracle, the exit code is the compiled value channel.
+  if [ "$c_trim" != "$i_trim" ]; then
+    local i_last i_body
+    i_last=$(printf '%s' "$i_trim" | tail -n 1)
+    i_body=$(printf '%s' "$i_trim" | sed '$d')
+    case "$i_last" in
+      ''|*[!0-9-]*) : ;;
+      *)
+        if [ "$c_trim" = "$i_body" ] && [ "$compiled_rc" = "$(( i_last & 255 ))" ]; then
+          i_trim="$c_trim"
+        fi
+        ;;
+    esac
+  fi
 
   if [ "$c_trim" = "$i_trim" ]; then
     PASS=$((PASS + 1))

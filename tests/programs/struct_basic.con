@@ -8,7 +8,7 @@ fn sum_point(p: Point) -> Int {
     return x + y;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let p: Point = Point { x: 3, y: 4 };
-    return sum_point(p);
+    println((sum_point(p)));
 }

@@ -1,6 +1,6 @@
 // Option<String> — tests that the enum payload is large enough for String (16 bytes)
 // Expected output: 2
-fn main() -> Int {
+fn run() -> Int {
     let s: String = "hi";
     let some_val: Option<String> = Option::Some { value: s };
     match some_val {
@@ -13,4 +13,9 @@ fn main() -> Int {
             return 0;
         },
     }
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

@@ -8,7 +8,7 @@ fn consume(c: Counter) -> Int {
     return sum;
 }
 
-fn main() -> Int {
+fn run() -> Int {
     // Mutable struct with field assignment + break in loop.
     let mut c: Counter = Counter { count: 0, sum: 0 };
     while c.count < 100 {
@@ -24,4 +24,9 @@ fn main() -> Int {
         return 42;
     }
     return 1;
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

@@ -11,7 +11,7 @@ mod m {
             else { 0 };
         return g;
     }
-    fn main() -> Int {
-        return (grade(95) + grade(85) + grade(72) + grade(61) + grade(40)) as Int;
+    fn main() with(Console) {
+        println(((grade(95) + grade(85) + grade(72) + grade(61) + grade(40)) as Int));
     }
 }

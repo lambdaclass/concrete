@@ -7,7 +7,7 @@ fn consume(r: Resource) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut total: Int = 0;
     let mut i: Int = 0;
     while i < 3 {
@@ -15,5 +15,5 @@ fn main() -> Int {
         total = total + consume(r);
         i = i + 1;
     }
-    return total;
+    println((total));
 }

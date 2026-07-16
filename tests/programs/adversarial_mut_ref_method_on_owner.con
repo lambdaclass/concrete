@@ -14,10 +14,10 @@ fn consume(c: Counter) -> Int {
     return val;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut c: Counter = Counter { val: 10 };
     c.inc();
     c.inc();
     c.inc();
-    return consume(c);
+    println((consume(c)));
 }

@@ -21,7 +21,7 @@ fn pick(flag: Int) -> Int {
     return sum(p);
 }
 
-fn main() -> Int {
+fn run() -> Int {
     // Both branches reachable (not constant-folded)
     let a: Int = pick(1);   // 10 + 20 = 30
     let b: Int = pick(0);   // 100 + 200 = 300
@@ -29,4 +29,9 @@ fn main() -> Int {
         return 42;
     }
     return 1;
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

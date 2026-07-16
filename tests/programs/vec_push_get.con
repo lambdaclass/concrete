@@ -1,5 +1,5 @@
 // Test: push/get at various indices
-fn main() with(Std) -> Int {
+fn main() with(Std) {
     let mut v: Vec<Int> = vec_new::<Int>();
     vec_push(&mut v, 100);
     vec_push(&mut v, 200);
@@ -9,5 +9,4 @@ fn main() with(Std) -> Int {
     let last: Int = vec_get(&v, 3);
     vec_free(v);
     println(first + last);
-    return 0;
 }

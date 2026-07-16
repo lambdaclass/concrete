@@ -11,9 +11,9 @@ mod m {
             E::B {} => 3
         };
     }
-    fn main() -> Int {
+    fn main() with(Console) {
         let s: i32 = f(E::A {}, E::A {}) + f(E::A {}, E::B {})
                    + f(E::B {}, E::A {}) + f(E::B {}, E::B {});
-        return (s + 7) as Int;
+        println(((s + 7) as Int));
     }
 }

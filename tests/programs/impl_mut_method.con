@@ -11,8 +11,8 @@ fn consume_a(a: A) -> Int {
     return a;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut x: A = A { a: 2, b: 3 };
     x.set_a(42);
-    return consume_a(x);
+    println((consume_a(x)));
 }

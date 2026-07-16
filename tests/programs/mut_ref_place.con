@@ -6,7 +6,7 @@
 mod m {
     struct Copy P { x: i32, y: i32 }
     fn bump(r: &mut i32, d: i32) { *r = *r + d; }
-    fn main() -> Int {
+    fn run() -> Int {
         let mut a: [i32; 3] = [10, 20, 30];
         bump(&mut a[1], 5);            // a[1] -> 25
         let mut p: P = P { x: 1, y: 2 };
@@ -17,5 +17,9 @@ mod m {
                     && g[1].x == 1009 && g[0].x == 7;
         if ok { return 1; }
         return 0;
+    }
+
+    fn main() with(Console) {
+        println((run()));
     }
 }

@@ -4,8 +4,8 @@ fn read_x(p: &Point) -> Int { return p.x; }
 fn consume(p: Point) -> Int {
     let Point { x, y } = p; return x + y; }
 
-fn main() -> Int {
+fn main() with(Console) {
     let p: Point = Point { x: 10, y: 32 };
     let x: Int = read_x(&p);
-    return consume(p);
+    println((consume(p)));
 }

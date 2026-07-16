@@ -7,7 +7,7 @@ fn consume_resource(r: Resource) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let r: Resource = Resource { value: 42 };
-    return consume_resource(r);
+    println((consume_resource(r)));
 }

@@ -24,7 +24,6 @@ Usage:
 Exit nonzero on the first oracle/checker disagreement; prints the program.
 """
 import argparse, os, random, subprocess, sys, tempfile
-os.environ.setdefault("CONCRETE_ECHO_RESULT", "1")  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode (full-width differential compare)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")

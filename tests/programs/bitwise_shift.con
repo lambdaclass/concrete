@@ -1,6 +1,5 @@
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     let a: Int = 1 << 10;
     let b: Int = 1024 >> 5;
     println(a + b);
-    return 0;
 }

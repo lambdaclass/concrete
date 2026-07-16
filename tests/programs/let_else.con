@@ -13,7 +13,7 @@ mod let_else {
         return value;
     }
 
-    pub fn main() -> Int {
+    pub fn run() -> Int {
         // Test 1: successful match extracts value
         let ok: Result = Result::Ok { value: 42 };
         if try_unwrap(ok) != 42 { return 1; }
@@ -23,5 +23,9 @@ mod let_else {
         if try_unwrap(err) != -1 { return 2; }
 
         return 0;
+    }
+
+    fn main() with(Console) {
+        println((run()));
     }
 }

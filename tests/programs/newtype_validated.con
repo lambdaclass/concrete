@@ -18,11 +18,10 @@ fn takes_port(p: Port) -> u16 {
     return p.0;
 }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     let good: Port = Port(port_try_new(8080));
     let rescued: Port = Port(port_try_new(0));
     let a: u16 = good.0;
     let b: u16 = takes_port(rescued);
     println((a as Int) + (b as Int));
-    return 0;
 }

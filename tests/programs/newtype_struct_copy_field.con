@@ -7,8 +7,7 @@ struct Copy Endpoint {
     port: Port,
 }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     let e: Endpoint = Endpoint { port: Port(443) };
     println(e.port.0 as Int);
-    return 0;
 }

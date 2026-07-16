@@ -1,7 +1,7 @@
 // Deref read/write inside a loop is fine — not consumption.
 // Borrow-block ref from outer scope used via deref in loop.
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut n: Int = 0;
     borrow mut n as r in R {
         let mut i: Int = 0;
@@ -10,5 +10,5 @@ fn main() -> Int {
             i = i + 1;
         }
     }
-    return n;
+    println((n));
 }

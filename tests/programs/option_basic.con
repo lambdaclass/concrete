@@ -6,10 +6,10 @@ fn extract(opt: Option<Int>, default: Int) -> Int {
     }
 }
 
-fn main() with(Std) -> Int {
+fn main() with(Std) {
     let some_val: Option<Int> = Option::Some { value: 42 };
     let none_val: Option<Int> = Option::None {};
     let a: Int = extract(some_val, 0);
     let b: Int = extract(none_val, 10);
-    return a + b;
+    println((a + b));
 }

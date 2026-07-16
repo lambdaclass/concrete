@@ -11,9 +11,9 @@ fn consume_point(p: Point) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let p: Point = Point { x: 10, y: 20 };
     let s: Int = p.sum();
     let dummy: Int = consume_point(p);
-    return s;
+    println((s));
 }

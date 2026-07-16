@@ -22,7 +22,7 @@ mod struct_destructure {
         return a + b + c;
     }
 
-    pub fn main() -> Int {
+    pub fn run() -> Int {
         // Test 1: basic struct destructure
         let p: Point = Point { x: 10, y: 20 };
         if sum_point(p) != 30 { return 1; }
@@ -38,5 +38,9 @@ mod struct_destructure {
         if y != 7 { return 4; }
 
         return 0;
+    }
+
+    fn main() with(Console) {
+        println((run()));
     }
 }

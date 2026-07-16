@@ -15,9 +15,9 @@ impl Pair {
     }
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let p: Pair = Pair { a: 17, b: 25 };
     let s: Int = p.sum();
     let m: Int = p.max();
-    return s + m;
+    println((s + m));
 }

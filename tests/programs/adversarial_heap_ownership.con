@@ -29,9 +29,8 @@ fn heap_arrow_assign_no_consume() with(Std) -> Int {
     return result;
 }
 
-fn main() with(Std) -> Int {
+fn main() with(Std) {
     let r1: Int = heap_arrow_no_consume();
     let r2: Int = heap_arrow_assign_no_consume();
     println(r1 + r2);
-    return 0;
 }

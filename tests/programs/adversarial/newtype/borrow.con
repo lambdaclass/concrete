@@ -16,10 +16,9 @@ impl Port {
     }
 }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     let p: Port = Port(4040);
     let v: u16 = p.get_value();
     let d: u32 = p.double();
     println(d as Int);
-    return 0;
 }

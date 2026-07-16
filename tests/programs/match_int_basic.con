@@ -1,5 +1,5 @@
 // Test: basic match on integer with default arm
-fn main() -> Int {
+fn run() -> Int {
     let x: Int = 2;
     let mut result: Int = 0;
     match x {
@@ -12,4 +12,9 @@ fn main() -> Int {
         return 42;
     }
     return 1;
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

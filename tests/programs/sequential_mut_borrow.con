@@ -1,8 +1,8 @@
 fn add_one(x: &mut Int) { *x = *x + 1; }
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut n: Int = 41;
     add_one(&mut n);
     add_one(&mut n);
-    return n;
+    println((n));
 }

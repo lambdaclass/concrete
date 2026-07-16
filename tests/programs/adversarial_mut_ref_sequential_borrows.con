@@ -5,7 +5,7 @@ fn increment(x: &mut Int) {
     *x = *x + 1;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let mut n: Int = 10;
     borrow mut n as r1 in R1 {
         increment(r1);
@@ -13,5 +13,5 @@ fn main() -> Int {
     borrow mut n as r2 in R2 {
         increment(r2);
     }
-    return n;
+    println((n));
 }

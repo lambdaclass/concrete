@@ -19,11 +19,11 @@ fn extract_len(opt: Option<String>) -> Int {
     }
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let s: String = "hi";
     let opt_str: Option<String> = Option::Some { value: s };
     let opt_int: Option<Int> = Option::Some { value: 42 };
     let str_len: Int = extract_len(opt_str);
     let int_val: Int = extract_int(opt_int, 0);
-    return str_len + int_val;
+    println((str_len + int_val));
 }

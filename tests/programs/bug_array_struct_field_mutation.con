@@ -21,9 +21,8 @@ fn test_from_struct(b: Buf) -> i32 {
     return d[0];
 }
 
-pub fn main() with(Std) -> Int {
+pub fn main() with(Std) {
     let b: Buf = Buf { data: [0; 4], len: 0 };
     let result: i32 = test_from_struct(b);
     println(result);
-    return 0;
 }

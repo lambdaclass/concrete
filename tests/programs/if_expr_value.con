@@ -2,11 +2,11 @@
 // of each branch is the branch value). The interpreter must agree with compiled
 // code that the block yields its trailing value, not unit. Expected: 100507.
 mod m {
-    fn main() -> Int {
+    fn main() with(Console) {
         let a: i8 = if true { 7 } else { 0 };
         let b: i16 = if false { 0 } else { 300 };
         let c: i32 = if true { 100000 } else { 0 };
         let d: u8 = if true { 200 } else { 0 };
-        return (a as Int) + (b as Int) + (c as Int) + (d as Int);
+        println(((a as Int) + (b as Int) + (c as Int) + (d as Int)));
     }
 }

@@ -18,7 +18,6 @@ Exit nonzero if any mismatch/crash-divergence is found; prints a minimal-ish
 reproducer for the first failure.
 """
 import argparse, os, random, subprocess, sys, tempfile
-os.environ.setdefault("CONCRETE_ECHO_RESULT", "1")  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode (full-width differential compare)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")
@@ -197,15 +196,18 @@ class Gen:
             body.append(self.stmt(self.maxdepth))
         # Digest EVERY mutable location (all widths sign/zero-extend to Int), so
         # a miscompile in any of them changes the printed value.
-        body.append("return ((((v0) as Int) + ((v1) as Int) * 3 + ((v2) as Int) * 5"
+        # MAIN_EXIT_MODEL stage 2: the program PRINTS its digest (full-width,
+        # identical on interp and compiled) and exits 0 — no reliance on the
+        # retired result-echo.
+        body.append("println(((((v0) as Int) + ((v1) as Int) * 3 + ((v2) as Int) * 5"
                     " + ((a0[0]) as Int) * 7 + ((a0[3]) as Int) * 11"
-                    " + ((s0.x) as Int) * 13 + ((s0.y) as Int) * 17) % 100000);")
+                    " + ((s0.x) as Int) * 13 + ((s0.y) as Int) * 17) % 100000));")
         inner = "\n        ".join(body)
         return ("mod m {\n"
                 "    struct Copy P { x: i32, y: i32 }\n"
                 "    enum Copy E { A { v: i32 }, B { w: i32 }, C {} }\n"
                 "    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }\n"
-                "    fn main() with(Console) -> Int {\n"
+                "    fn main() with(Console) {\n"
                 f"        {inner}\n"
                 "    }\n}\n")
 

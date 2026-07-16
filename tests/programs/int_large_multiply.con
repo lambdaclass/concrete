@@ -1,7 +1,6 @@
-fn main() with(Console) -> Int {
+fn main() with(Console) {
     let a: Int = 123;
     let b: Int = 456;
     let product: Int = a * b;
     println(product);
-    return 0;
 }

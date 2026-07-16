@@ -8,7 +8,7 @@ fn make_str() with(Alloc) -> String {
     return s;
 }
 
-fn main() with(Std) -> Int {
+fn main() with(Std) {
     let mut strings: Vec<String> = vec_new::<String>();
     let mut i: Int = 0;
     while i < 200000 {
@@ -26,5 +26,4 @@ fn main() with(Std) -> Int {
     vec_free::<String>(strings);
     // Return element count to prove it ran
     println(slen);
-    return 0;
 }

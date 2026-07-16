@@ -7,7 +7,7 @@ fn eval(t: Token) -> Int {
     }
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let t: Token = Token::Num { value: 42 };
-    return eval(t);
+    println((eval(t)));
 }

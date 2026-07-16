@@ -18,7 +18,7 @@ mod m {
         while i < 3 { i = i + 1; }
         return i;
     }
-    fn main() -> Int {
-        return (loop_break() + loop_completes()) as Int;
+    fn main() with(Console) {
+        println(((loop_break() + loop_completes()) as Int));
     }
 }

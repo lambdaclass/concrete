@@ -5,7 +5,7 @@
 // corrupting the array — so the compiled binary disagreed with
 // the interpreter.  Exercises low, middle, and LAST indices.
 mod m {
-    pub fn main() -> Int {
+    pub fn main() with(Console) {
         let mut b: [u8; 8] = [0; 8];
         b[0] = 97;
         b[3] = 128;
@@ -15,6 +15,6 @@ mod m {
             acc = acc * 256 + (b[i] as Int);
         }
         // 97*256^7 + 128*256^4 + 24  =  big-endian pack of the bytes
-        return acc;
+        println((acc));
     }
 }

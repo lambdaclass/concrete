@@ -8,7 +8,7 @@
 mod m {
     struct Copy P { x: i32, y: i32 }
     fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }
-    fn main() -> Int {
+    fn main() with(Console) {
         let mut v0: i32 = 9;
         let mut v2: i32 = 5;
         let mut s0: P = P { x: 0, y: 3 };
@@ -19,6 +19,6 @@ mod m {
         } else {
             v0 = 1;
         }
-        return s0.x as Int;
+        println((s0.x as Int));
     }
 }

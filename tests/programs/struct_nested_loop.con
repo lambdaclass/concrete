@@ -10,7 +10,7 @@ fn sum_matrix(m: Matrix) -> Int {
     return a + b + c + d;
 }
 
-fn main() -> Int {
+fn run() -> Int {
     // Mutable struct with field assignment in nested loops.
     // Tests that aggregate state in stable allocas works across nesting.
     let mut m: Matrix = Matrix { a: 0, b: 0, c: 0, d: 0 };
@@ -36,4 +36,9 @@ fn main() -> Int {
         return 42;
     }
     return 1;
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

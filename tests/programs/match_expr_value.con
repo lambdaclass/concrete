@@ -11,7 +11,7 @@ mod m {
             E::C {} => 99
         };
     }
-    fn main() -> Int {
-        return (f(E::A { v: 10 }) + f(E::B { v: 10 }) + f(E::C {})) as Int;
+    fn main() with(Console) {
+        println(((f(E::A { v: 10 }) + f(E::B { v: 10 }) + f(E::C {})) as Int));
     }
 }

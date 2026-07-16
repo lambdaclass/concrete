@@ -3,7 +3,7 @@ struct Pair { a: Int, b: Int }
 fn sum(p: Pair) -> Int {
     let Pair { a, b } = p; return a + b; }
 
-fn main() -> Int {
+fn main() with(Console) {
     let p: Pair = Pair { a: 10, b: 20 };
-    return sum(p);
+    println((sum(p)));
 }

@@ -198,7 +198,7 @@ mod service_errors {
 
     // ---- Tests ----
 
-    pub fn main() -> Int {
+    pub fn run() -> Int {
         // Test 1: successful request (user=10, token=70, action=1, payload=50)
         let ok_req: Request = Request {
             user_id: 10, token: 70, action: 1, payload: 50
@@ -301,5 +301,9 @@ mod service_errors {
         }
 
         return 0;
+    }
+
+    fn main() with(Console) {
+        println((run()));
     }
 }

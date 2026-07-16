@@ -7,7 +7,7 @@ fn pick(c: Color) -> Int {
     }
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let c: Color = Color::Blue { };
-    return pick(c);
+    println((pick(c)));
 }

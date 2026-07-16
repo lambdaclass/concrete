@@ -7,7 +7,7 @@
 mod m {
     struct Copy P { x: i32, y: i32 }
     enum Copy E { A { v: i32 }, B { w: i32 }, C {} }
-    fn main() -> Int {
+    fn main() with(Console) {
         let mut a: i32 = 0;
         let s: P = P { x: 2, y: 2 };
         let e0: E = E::A { v: 7 };
@@ -18,6 +18,6 @@ mod m {
             E::C {} => s.x
         };
         let c: i32 = if a > 0 { 0 } else { 9 };         // if-expr after match too
-        return (a + b + c) as Int;                       // 5 + 7 + 0 = 12
+        println(((a + b + c) as Int));
     }
 }

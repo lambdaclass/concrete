@@ -3,13 +3,13 @@
 // `Int.toNat`, which clamps a negative to 0, so `-1 & 255` wrongly gave 0.
 // Expected: -2  (255 + (-1) + (-256)).
 mod m {
-    fn main() -> Int {
+    fn main() with(Console) {
         let d: i32 = -1;
         let e: i32 = d & 255;     // 255
         let x: i32 = -8;
         let y: i32 = x | 7;       // -1
         let z: i32 = -1;
         let w: i32 = z ^ 255;     // -256
-        return (e as Int) + (y as Int) + (w as Int);
+        println(((e as Int) + (y as Int) + (w as Int)));
     }
 }

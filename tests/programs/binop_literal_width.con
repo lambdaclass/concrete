@@ -6,7 +6,7 @@
 // ((8+5)+3=16, plus s.x*... — see below; deterministic).
 mod m {
     struct Copy P { x: i32, y: i32 }
-    fn main() -> Int {
+    fn main() with(Console) {
         let v1: i32 = 3;
         let s: P = P { x: 4, y: 5 };
         // compound-literal + i32 var, and compound-literal + i32 field, in a
@@ -14,6 +14,6 @@ mod m {
         let a: i32 = (8 + 5) + v1;                 // 16
         let mut r: i32 = a;
         if ((2 + 2) + s.x) > 0 { r = r + ((1 + 1) + s.y); }  // cond true; +7 -> 23
-        return (r + ((3 + 6) % 1000)) as Int;       // 23 + 9 = 32
+        println(((r + ((3 + 6) % 1000)) as Int));
     }
 }

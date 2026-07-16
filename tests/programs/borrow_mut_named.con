@@ -1,8 +1,8 @@
 // Mutable named borrow region
-fn main() -> Int {
+fn main() with(Console) {
     let mut x: Int = 10;
     borrow mut x as r in R {
         *r = 42;
     }
-    return x;
+    println((x));
 }

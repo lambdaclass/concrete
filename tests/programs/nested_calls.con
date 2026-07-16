@@ -6,6 +6,6 @@ fn double(x: Int) -> Int {
     return x + x;
 }
 
-fn main() -> Int {
-    return double(add(10, 11));
+fn main() with(Console) {
+    println((double(add(10, 11))));
 }

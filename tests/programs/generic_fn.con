@@ -1,5 +1,5 @@
 fn identity(x: Int) -> Int { return x; }
 
-fn main() -> Int {
-    return identity(42);
+fn main() with(Console) {
+    println((identity(42)));
 }

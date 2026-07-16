@@ -19,10 +19,15 @@ fn use_try() -> Result<Int, MyError> {
     return Result::<Int, MyError>::Ok { value: v };
 }
 
-fn main() -> Int {
+fn run() -> Int {
     let r: Result<Int, MyError> = use_try();
     match r {
         Result::Ok { value } => { return value; },
         Result::Err => { return 0; },
     }
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

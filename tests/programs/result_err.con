@@ -6,10 +6,15 @@ fn try_stuff() -> Result {
     return Result::Ok { value: v };
 }
 
-fn main() -> Int {
+fn run() -> Int {
     let r: Result = try_stuff();
     match r {
         Result::Ok { value } => { return value; },
         Result::Err { error } => { return error; },
     }
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

@@ -8,7 +8,7 @@ fn sum(p: Pair) -> Int {
     return x + y;
 }
 
-fn main() -> Int {
+fn run() -> Int {
     // Match expression that returns a struct from each arm.
     // Tests that aggregate values merge without phi %Pair.
     let mut p: Pair = Pair { x: 0, y: 0 };
@@ -33,4 +33,9 @@ fn main() -> Int {
         return 42;
     }
     return 1;
+
+}
+
+fn main() with(Console) {
+    println((run()));
 }

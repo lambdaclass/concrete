@@ -7,7 +7,7 @@ fn consume(r: Resource) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn main() with(Console) {
     let r: Resource = Resource { value: 42 };
     let mut result: Int = 0;
     if true {
@@ -15,5 +15,5 @@ fn main() -> Int {
     } else {
         result = consume(r);
     }
-    return result;
+    println((result));
 }
