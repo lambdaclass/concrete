@@ -51,6 +51,16 @@ An API counts as proved when ALL of:
 
 ## Slice 1 (small vertical, before any breadth)
 
+ORDER (revised 2026-07-16): stdlib has ZERO proof links today, so slice 1
+optimizes for the vertical path working end-to-end, not theorem volume.
+Start with the least callback-heavy target and wire ONE API all the way to
+`proved` (including the mutation test) before expanding:
+
+1. `Bytes.view` — proves the stdlib proof-link machinery works.
+2. The H1 radix-overflow guard step fact.
+3. Then `Option.map` / `Result.map` structural laws (they expose exactly
+   what the model needs next for callbacks).
+
 Scoped to what the PExpr model expresses TODAY (match_/enumLit/call-by-name;
 NO loops, NO quantification over callbacks):
 
