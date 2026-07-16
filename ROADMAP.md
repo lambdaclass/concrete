@@ -2731,6 +2731,31 @@ replayable; and every boundary after that slice remains explicitly trusted.
     options, pulled only if version pinning proves insufficient. Wire the check into
     `scripts/tests/check_backend_contracts.sh`: the compiler refuses or warns on an
     unsupported LLVM version, and the drift corpus re-runs on a bump.
+    - 20a. LLVM bitcode emitter — the heavy decoupling rung (pull-gated, deliberately
+      NOT its own phase). *What it is:* emit LLVM **bitcode** (LLVM IR's stable
+      serialized binary format) from a hand-written serializer that never links or
+      calls the churning LLVM C++ API. Zig's self-hosted compiler is the reference
+      implementation — it writes bitcode in Zig and hands it to whatever LLVM is
+      present, making it immune to the C++-API breakage that costs most frontends an
+      upgrade tax; Roc reused Zig's bitcode writer wholesale in its 2026 Rust→Zig
+      rewrite. Concrete today emits *textual* LLVM IR to `clang`
+      (`Concrete/Backend/EmitLLVM.lean`), which already avoids C++-API linkage but
+      stays coupled to textual-IR *syntax* drift across LLVM versions (the
+      opaque-pointer migration was one such event). A bitcode writer would remove
+      that coupling and enable `clang`-free, bit-identical cross-host emission.
+      *Why an item and not a phase, and why deferred:* (1) it is a sub-component of the
+      backend contract that gates nothing downstream; (2) it is *less* proof-relevant
+      than translation validation (#18) — it buys decoupling/reproducibility, not
+      correctness — so elevating it above #18 would invert priorities for a
+      proof-carrying compiler; (3) the cheap version pin (#20) already fixes the moving
+      trusted boundary, and LLVM churn has not been shown intolerable (one migration
+      eaten so far), so a phase-sized commitment now would be speculative scheduling.
+      *Pull-trigger* — promote to scheduled work when EITHER a freestanding / no-`clang`
+      target is pursued (Phase 16), where self-contained emission stops being optional,
+      OR LLVM version churn recurs intolerably despite the #20 pin. Same ladder as
+      `BackendIR` (#18): `ValidatedSSA → BackendIR → ValidatedBackendIR → EmitLLVM`
+      today; bitcode / own-backend later. Prior art: Zig (hand-written bitcode writer,
+      self-hosted backend), Roc (reused it in the Zig rewrite).
 21. Compiler-writing / verified-self-host language prerequisites (pull-gated
     research). Features a future proof-preserving self-host (CakeML-style, Phase 14)
     or a compiler-in-Concrete workload would need, surfaced by what makes ML/OCaml and
