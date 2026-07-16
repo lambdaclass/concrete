@@ -278,19 +278,9 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-Before more breadth, close the **stdlib hardening pass** found by the latest
-API review. This is foundation repair, not new surface:
-non-decimal parsers (`parse_hex` / `parse_bin` / `parse_oct`) must return
-`None` on overflow instead of trapping; `bytes` / `numeric` / `io` / `path` /
-`base64` guard code must avoid overflow-prone `start + len > total` checks;
-`io.Reader` / `io.Writer` `Result` APIs must either report real read / write /
-flush / close errors or document the trusted ignored-error boundary explicitly;
-`OrderedMap` borrowed traversal must not require `V: Copy`; stale bytes/text
-comments and the `std.base64` canonical-padding policy must be reconciled.
-Done when gates prove parser overflows are domain failures, bounds guards cannot
-wrap before rejecting, IO error semantics match the docs, non-`Copy`
-`OrderedMap` traversal works through scoped callbacks, and the bytes/text/base64
-docs match the implementation.
+First, before more breadth: complete the **stdlib hardening pass** — foundation
+repair, not new surface — detailed as items H1–H5 further below (ahead of the
+collection-API build-out).
 
 1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
    signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
@@ -429,11 +419,10 @@ workload 2 → (4) then broad modules (URI, JSON, CLI helpers, logging/progress)
      and `scripts/tests/check_collection_coherence.sh`; the gate must show the
      chosen verdict for incompatible dictionaries and prove the API cannot
      silently combine them.
-   - 1d. `with_value_mut` / `modify` — SHIPPED 2026-07-06 with the guard.
-     The receiver/context aliasing hazard (`&mut self` plus a context that can
-     reach the same container) is rejected as `E0293` (container-not-in-context),
-     gated in `check_callable_values.sh`. Was parked pending exactly that guard;
-     the guard landed, so the API is live.
+   - 1d. `with_value_mut` / `modify` are part of the completed foundation (see
+     CHANGELOG). Future collection APIs must preserve their `E0293`
+     container-not-in-context guard: the callback's `&mut ctx` may not alias the
+     `&mut self` container. Gated in `check_callable_values.sh`.
    - 1e. Keep scalar `from(param)` returned references deeply deferred and
      evidence-gated. If ever added, they stay flat and scalar: no `Option`,
      `Result`, structs, arrays, containers, callback contexts, or generic
@@ -2100,8 +2089,8 @@ lesson to keep is the framing: runtime safety is not just "the program probably
 doesn't crash"; it is a set of named obligations with source spans, replay
 commands, and visible proof/enforcement status.
 
-0. [DONE 2026-06-11] PROVEN violations are hard errors by default in safe
-   code. The obligation engine already discharges some obligations to
+0. PROVEN violations are hard errors by default in safe code (established
+   baseline; see CHANGELOG). The obligation engine already discharges some obligations to
    `violation` (a compile-time PROOF the access is wrong); safe build/check
    paths now reject those cases with E0900 instead of treating them like
    `unproven`. Constant OOB (`a[5]` on `[i64; 3]`) and literal div-zero
@@ -2287,7 +2276,7 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
 13. [relocated from closed Phase 4 — #44f tail / #44g] Compiler-correctness
-    hardening: (a) ✅ largely DONE and still growing — the random differential
+    hardening: (a) the random differential
     generator exists (`scripts/tests/fuzz_differential.py`, Makefile
     `test-fuzz-differential`), covers the through-reference / void-slot shapes,
     value-bearing if/match nesting, loops, enum payloads, and (2026-07-01) the
