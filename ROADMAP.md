@@ -366,6 +366,28 @@ logging/progress).
      bits, document it as a deliberate sharp edge; otherwise add strict canonical
      pad-bit checks with a reject fixture. (The `with_value_mut` / `modify`
      "parked" drift is already fixed — see item 1d below.)
+   - H6. Deterministic capability-fault simulation (pull-gated; the *dynamic*
+     complement to H3). H3's manifest gate proves an IO error *can* be surfaced
+     (static shape); this proves it *is* surfaced under real failure (dynamic).
+     Because every effect flows through an explicit capability/handle value — e.g.
+     `Writer`'s `write_fn: fn(...) -> Result<u64, IoError>` — faults are injected by
+     swapping the backend at the seam, with no whole-world simulator; the capability
+     model makes fault injection cheap by construction, which is why Concrete's
+     version is far smaller than Turso-style DST. Deterministic failure schedules
+     drive properties static analysis cannot reach: `write_all` never `Ok` after a
+     short/failed write; close-fail-after-flush is reported; allocation #N fails;
+     `Reader` treats `Ok(0)` as EOF only at the right boundary. Do NOT re-litigate
+     already-static properties (capability erasure = manifest gate; exit-status ≠
+     stdout = MAIN_EXIT_MODEL). Proof stays separate — the pure core's first line;
+     simulation covers only the effectful failure interleavings proofs do not, and
+     upgrades no evidence class to `proved`. Pull-gated: pulled when H3 lands or an IO
+     bug appears; run against `base64_cli`/`png_chunks`/workload 3, starting at the
+     `Writer`/`File` seam and expanding only as each capability (`Alloc`, `Time`)
+     gains an injectable backend. Design record:
+     [`docs/DETERMINISTIC_SIMULATION.md`](docs/DETERMINISTIC_SIMULATION.md), which
+     refines the tier-J+ "deterministic simulation backend" earmark in
+     `docs/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
+     replays a fixed fault schedule and asserts each effect-boundary property.
 
 1. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
