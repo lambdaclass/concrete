@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Array-bounds gate — KNOWN_HOLES H8 (runtime bounds checking).
 #
 # Raw `a[i]` / `a[i] = v` on a fixed array is now CHECKED: a dynamic index that is
@@ -17,6 +16,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -38,7 +38,8 @@ aborts(){ local n="$1"; printf '%s' "$2" > "$TMP/$n.con"
 
 # works <label> <source> <expected> : compiles, runs to <expected>, interp agrees.
 works(){ local n="$1" e="$3"; printf '%s' "$2" > "$TMP/$n.con"
-  if ! "$C" "$TMP/$n.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
+  gate_selfprint_wrap "$TMP/$n.con" "$TMP/$n.w.con"
+  if ! "$C" "$TMP/$n.w.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
     no "$n: expected to compile"; sed 's/^/        /' "$TMP/$n.err" | head -3; return; fi
   local co io; co="$("$TMP/$n.bin" 2>/dev/null)"; io="$("$C" "$TMP/$n.con" --interp 2>/dev/null | tail -1)"
   if [ "$co" = "$e" ] && [ "$io" = "$e" ]; then ok "$n: in-bounds works (= $e, interp agrees)"

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # defer / cleanup gate (ROADMAP Phase 6 #7).
 #
 # `defer <call>;` registers a call to run at scope exit. This gate locks the
@@ -24,10 +23,10 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 echo "=== defer ordering + exit-path semantics (examples/defer/cleanup_order) ==="
 ex="examples/defer/cleanup_order"
 if (cd "$ex" && "$C" build >"$TMP/build.txt" 2>&1) && [ -x "$ex/cleanup_order" ]; then
-  got="$("$ex/cleanup_order" 2>/dev/null)"
-  # f(true): body-start, early-return, then LIFO d2,d1 ; sep ; f(false): body-start, body-end, d2,d1 ; main ret 0
-  want=$'body-start\nearly-return\nd2\nd1\n----\nbody-start\nbody-end\nd2\nd1\n0'
-  if [ "$got" = "$want" ]; then
+  got="$("$ex/cleanup_order" 2>/dev/null)"; got_rc=$?
+  # f(true): body-start, early-return, then LIFO d2,d1 ; sep ; f(false): body-start, body-end, d2,d1
+  want=$'body-start\nearly-return\nd2\nd1\n----\nbody-start\nbody-end\nd2\nd1'
+  if [ "$got" = "$want" ] && [ "$got_rc" -eq 0 ]; then
     ok "defer runs LIFO on both early-return and fall-through"
   else
     no "defer output order mismatch"; echo "    --- got ---"; printf '%s\n' "$got" | sed 's/^/      /'

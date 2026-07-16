@@ -290,8 +290,39 @@ batteries-included breadth. Completed foundation work lives in
    type), migrate the differential fuzzer to self-printing wrappers, sweep the
    `run_ok` fixture corpus, then retire Int-main and delete the
    `CONCRETE_ECHO_RESULT` harness knob (grep the stage-1 marker comment).
-   Later, workload-gated: `main -> Result<Unit, E>` printing the error
-   variant name to stderr (Zig-style nominal rendering, no display traits).
+   The remaining knob tail is the ~35 `check_*` gates whose inline fixtures
+   return wide/negative values by design; the conversion playbook is the
+   self-printing wrapper (rename `main` → `wrapped_main`, add a `main` that
+   `print_int`s the result and returns 0 — stdout stays byte-identical to
+   the legacy echo, so gate expectations survive unchanged), one gate at a
+   time with the three consumer layers checked (compile / runtime / REPORT
+   assertions). Later, workload-gated: `main -> Result<Unit, E>` printing
+   the error variant name to stderr (Zig-style nominal rendering, no
+   display traits).
+1a. Refactor queue (review 2026-07-16, evidence-ranked; each item lands as
+   its own slice with the battery):
+   - Layout panic hygiene: convert `Concrete/Check/Layout.lean` `panic!`
+     paths (unknown struct/named type in fieldOffset/tySize) into
+     structured internal-error diagnostics — bug 035's fix made them
+     unreachable for well-formed programs, which is exactly when a panic
+     should become a diagnostic.
+   - Lower branch-site consolidation (structured-builder slice 2): four
+     branch-creating sites (statement-if, if-expr, match, `&&`/`||`) each
+     hand-maintain the same invariants (bug-031 pre-promotion, bug-033
+     aggregate-merge alloca path, result slots, live-var reconciliation);
+     bugs 029/031/033/034 are all one-site-missed-an-invariant. Extract a
+     shared branch prologue + merge/reconcile used by all four so the
+     fifth such bug is structurally impossible. Incremental, bug-pulled —
+     no big-bang rewrite.
+   - Stale stdlib docs refresh: STRING_TEXT_CONTRACT.md (argv/string
+     validation claims), BYTE_VIEW.md (`Text::from_raw` vs the shipped
+     `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md
+     (`std.writer` as a separate module; old args.get concerns) — design
+     clarity, not code risk.
+   Deliberately NOT queued: std.cli abstraction polish (one more workload
+   first), ByteCursor/ByteWriter renames (no signal), vec_get/vec_len
+   builtin cleanup (deeper than a pass), roadmap compaction (collides with
+   parallel work).
 2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.

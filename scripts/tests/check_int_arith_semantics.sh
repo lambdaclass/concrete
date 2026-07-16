@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Integer-arithmetic semantics gate (ROADMAP Phase 6.5 #1).
 #
 # One source of truth for integer arithmetic (Concrete/Semantics/IntArith.lean)
@@ -31,8 +30,10 @@ PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
-# run_prog <file> -> sets globals RC (exit code) and OUT (stdout, last line)
-run_prog(){ "$C" "$1" -o "$TMP/b.bin" >/dev/null 2>&1 && { OUT="$("$TMP/b.bin" 2>/dev/null)"; RC=$?; } || { OUT="<compile-failed>"; RC=255; }; }
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
+# run_prog <file> -> sets globals RC (exit code) and OUT (stdout, last line).
+# Compiled side runs the self-printing wrapper (MAIN_EXIT_MODEL stage 2).
+run_prog(){ gate_selfprint_wrap "$1" "$TMP/b_wrapped.con"; "$C" "$TMP/b_wrapped.con" -o "$TMP/b.bin" >/dev/null 2>&1 && { OUT="$("$TMP/b.bin" 2>/dev/null)"; RC=$?; } || { OUT="<compile-failed>"; RC=255; }; }
 interp_prog(){ IOUT="$("$C" "$1" --interp 2>&1)"; IRC=$?; }
 
 # trap_preserved <label> <program>: the program's integer op TRAPS. Both the

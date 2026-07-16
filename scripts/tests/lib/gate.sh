@@ -46,12 +46,16 @@ accepts() {
   else no "$label (expected to compile)"; fi
 }
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/selfprint.sh"
+
 # agree <label> <file.con> <expected>: interp and compiled binary both print
-# exactly <expected> — the differential assertion.
+# exactly <expected> — the differential assertion. Compiled side runs the
+# self-printing wrapper (see gate_selfprint_wrap).
 agree() {
   local label="$1" f="$2" want="$3" i c
   i="$("$GATE_COMPILER" "$f" --interp 2>&1)"
-  if "$GATE_COMPILER" "$f" -o "$GATE_TMP/g.bin" >/dev/null 2>&1; then
+  gate_selfprint_wrap "$f" "$GATE_TMP/g_wrapped.con"
+  if "$GATE_COMPILER" "$GATE_TMP/g_wrapped.con" -o "$GATE_TMP/g.bin" >/dev/null 2>&1; then
     c="$("$GATE_TMP/g.bin")"
   else
     c="<compile failed>"
@@ -62,10 +66,12 @@ agree() {
 
 # agree_both <label> <file.con>: interp and compiled must agree with EACH OTHER
 # (value or matching trap), without pinning the value — for generated matrices.
+# Compiled side runs the self-printing wrapper (see gate_selfprint_wrap).
 agree_both() {
   local label="$1" f="$2" i irc c crc
   i="$("$GATE_COMPILER" "$f" --interp 2>&1)"; irc=$?
-  if "$GATE_COMPILER" "$f" -o "$GATE_TMP/gb.bin" >/dev/null 2>&1; then
+  gate_selfprint_wrap "$f" "$GATE_TMP/gb_wrapped.con"
+  if "$GATE_COMPILER" "$GATE_TMP/gb_wrapped.con" -o "$GATE_TMP/gb.bin" >/dev/null 2>&1; then
     c="$("$GATE_TMP/gb.bin" 2>&1)"; crc=$?
   else
     no "$label (compile failed)"; return

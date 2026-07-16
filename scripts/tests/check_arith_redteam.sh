@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Arithmetic red-team gate — ROADMAP #10 checked-arithmetic hardening.
 #
 # Adversarial coverage for the checked-arithmetic model and the bugs the
@@ -28,6 +27,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -52,7 +52,8 @@ trap_both(){ local n="$1"
 # agree: interp stdout == compiled stdout (and both run to success). The strong
 # oracle for value-level correctness (wrap/clamp/sign-of-div).
 agree(){ local n="$1" want="$2"
-  if ! "$C" "$TMP/$n.con" -o "$TMP/$n.bin" >"$TMP/$n.cerr" 2>&1; then
+  gate_selfprint_wrap "$TMP/$n.con" "$TMP/$n.wrapped.con"
+  if ! "$C" "$TMP/$n.wrapped.con" -o "$TMP/$n.bin" >"$TMP/$n.cerr" 2>&1; then
     no "$n: expected to compile"; sed 's/^/        /' "$TMP/$n.cerr" | head -3; return; fi
   local cout iout; cout="$("$TMP/$n.bin" 2>/dev/null)"
   iout="$("$C" "$TMP/$n.con" --interp 2>/dev/null | tail -1)"
