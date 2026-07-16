@@ -256,13 +256,16 @@ not prose:
    `Clone`, no implicit move-out from indexed containers; deterministic map/set
    traversal. Until non-`Copy` element drop is wired, the limitation is recorded,
    not silent.
-4. **Self-enforcing + proven.** The five-fact manifest (allocate / consume /
+4. **Self-enforcing + selectively proven.** The five-fact manifest (allocate / consume /
    fail / capability / proof-class), derived from compiler facts and gated
    (the stdlib manifest gate); the strict error rule (`Option` for absence, `Result` for
    recoverable domain/environment failure, trap/abort for invariants / OOM /
    bounds / arithmetic, explicit cross-module wrapping, no hidden `?` conversion
-   web); and the pure core (`option`/`result`/`bytes`/`numeric`) carrying Lean
-   models written against the model, not the representation.
+   web); and the stable, workload-pulled pure core (`option`/`result`, selected
+   `bytes`/`numeric` helpers, and checked conversion boundaries) carrying Lean
+   evidence where the API has stopped moving. Do not try to prove all stdlib
+   APIs before workloads validate their usefulness; every API needs an evidence
+   class, but only stable central pure APIs should be upgraded to `proved`.
 
 These enforce a three-layer shape: a **pure core** (no capabilities, no
 allocation unless explicit), an **alloc layer** (`with(Alloc)`, later explicit
@@ -643,9 +646,11 @@ logging/progress).
     specs need it. Each formal module must state its erasure/runtime story, its
     evidence class, the Lean artifact it lowers to, and the refinement relation
     to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
-24b. Add a **shipped pure-core stdlib proof arc**, distinct from the pull-gated
-    formal-container work in 24a. This proves the stdlib code users actually
-    call, not separate mathematical containers. Scope v1 narrowly:
+24b. Add a **selective shipped pure-core stdlib proof arc**, distinct from the
+    pull-gated formal-container work in 24a. This proves stable stdlib code
+    users actually call, not separate mathematical containers, and it is not a
+    mandate to prove all 414+ public API rows before the API surface has been
+    validated by workloads. Scope v1 narrowly:
     `Option`/`Result` helpers (`map`, `and_then`, `map_err`, identity /
     composition where expressible), numeric checked helpers (success/failure
     agreement with documented overflow, divide-by-zero, and narrowing
@@ -654,12 +659,17 @@ logging/progress).
     (valid UTF-8 boundary, raw bytes preserved, unchecked constructors named
     `_unchecked`). Non-goals: hosted APIs, allocation behavior, filesystem,
     network, process, clock, console effects, broad collection proofs, and the
-    `formal_vec`/`formal_map`/`formal_set` model-container layer. Done when a
-    small Lean proof suite is CI-gated, each covered API's manifest/report row
-    distinguishes `proved` from `tested`/`enforced`, and a negative fixture proves
-    the report cannot keep `proved` after a body/spec drift. This is the
+    `formal_vec`/`formal_map`/`formal_set` model-container layer. Treat tests,
+    oracle vectors, manifest facts, mutation gates, and capability/allocation
+    gates as the right evidence for unstable or broad APIs; upgrade an API to
+    `proved` only after it is small, pure, central, and workload-pulled. Done
+    when a small Lean proof suite is CI-gated, each covered API's manifest/report
+    row distinguishes `proved` from `tested`/`enforced`, and a negative fixture
+    proves the report cannot keep `proved` after a body/spec drift. This is the
     "proved pure core" part of the Phase 7 excellence contract; do not let it be
-    deferred behind breadth modules such as JSON, CLI, or networking.
+    deferred behind breadth modules such as JSON, CLI, or networking, but also
+    do not turn it into an exhaustive stdlib-proof sweep before API ergonomics
+    have been validated.
 25. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
