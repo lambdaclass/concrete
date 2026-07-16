@@ -34,9 +34,14 @@ or public API forces it.
 ### Current Frontier
 
 The current frontier is **Phase 7: Standard Library And Core APIs**. Phases 1-6E
-are closed as active phases. Phase 7 has begun; `Option`/`Result` helper work has
-landed, and the next foundational work is the public stdlib manifest / API facts
-and the `Reader`/`Writer` IO spine.
+are closed as active phases. Phase 7's foundation work has landed: the public
+stdlib manifest/API facts, `Option`/`Result` helpers, Reader/Writer IO spine,
+bytes/text/path boundaries, std.test basics, ordered traversal, base64 workload,
+H18 owned-resource collection drop glue, and the first real CLI workload are in
+the historical record. The active frontier is the remaining Phase 7 surface:
+MAIN_EXIT_MODEL stage 2, stdlib CLI/env/process helpers, unsafe/trusted wrappers
+and trap/debug UX, the shipped pure-core proof arc, and pull-gated breadth after
+workloads ask for it.
 
 ## Closed Foundations: Phases 1-6
 
@@ -259,30 +264,22 @@ make Concrete's small core pleasant and auditable before copying broad
 batteries-included breadth. Completed foundation work lives in
 [CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
 
-1. Owned-resource collections / H18 — DONE 2026-07-16 (see CHANGELOG): all
-   containers destroy live non-`Copy` elements exactly once via compiler
-   drop-glue; `pop`/`remove`/`swap_remove` transfer ownership out; overwrite
-   is honest (`Vec.replace`, displaced-key destruction); conditional `Destroy`
-   composes through nesting; v1 Alloc fence (E0584). Pulled, not scheduled:
-   lifting the v1 fence needs associated-capability machinery in Check (the
-   first infallible non-Alloc destructor pulls it); raw `*_unchecked`
-   overwrite escapes stay documented trusted escapes.
-2. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
+1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
    signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
    type), migrate the differential fuzzer to self-printing wrappers, sweep the
    `run_ok` fixture corpus, then retire Int-main and delete the
    `CONCRETE_ECHO_RESULT` harness knob (grep the stage-1 marker comment).
    Later, workload-gated: `main -> Result<Unit, E>` printing the error
    variant name to stderr (Zig-style nominal rendering, no display traits).
-3. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-4. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
-5. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+4. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-6. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+5. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-7. Broad compression/crypto/networking/threading only after workload demand.
+6. Broad compression/crypto/networking/threading only after workload demand.
 
 Phase 6E owns the **compiler** command surface (`concrete build/run/test/fmt`,
 help, reports, trace/debug aliases, and compatibility). Phase 7's CLI work is
@@ -294,8 +291,11 @@ Foundation items already completed in Phase 7:
 stdlib gap matrix, module layout, five-fact manifest, method-canonical rule,
 Option/Result helpers, conditional Copy, bytes/slice, Unicode/text policy, path
 boundary, Reader/Writer, core value rendering, std.test basics, ordered
-traversal, BitSet aliases, and the 13t error-convention gate. See
-[CHANGELOG.md](CHANGELOG.md).
+traversal, BitSet aliases, H18 owned-resource collection drop glue, the base64
+workload, MAIN_EXIT_MODEL stage 1, and the 13t error-convention gate. See
+[CHANGELOG.md](CHANGELOG.md). H18's residual v1 fence is not scheduled work:
+lifting it is pulled by the first infallible non-`Alloc` destructor; raw
+`*_unchecked` overwrite escapes remain documented trusted escapes.
 
 1. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
@@ -307,30 +307,19 @@ traversal, BitSet aliases, and the 13t error-convention gate. See
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
 
-   **First subtask: close H18 / owned-resource collections.** A collection that
-   owns `T` values is responsible for consuming all live `T` values unless they
-   are explicitly moved out. Permanent design: monomorphized, compiler-generated
-   drop glue via the language's infallible `Destroy`/drop mechanism, not a
-   permanent caller-supplied `drop_with(f)` burden and not a stored destructor
-   function pointer inside each collection value. Disposal stays forced-explicit
-   (`x.drop()` / `defer x.drop()`); do not introduce silent scope-end auto-drop.
-   Fallible cleanup remains an explicit operation such as
-   `close(self) -> Result<_, _>`, never hidden in `Destroy`.
-
-   The final model is capability-polymorphic: generated drop glue inherits the
-   union of the element/key/value destructor capabilities, so `Vec<File>.drop`
-   cannot close files unless `File` authority is visible on the drop path. V1 may
-   be restricted to infallible cap-free / `with(Alloc)`-only destruction while
-   associated destructor-capability machinery is built, but that restriction must
-   be reported as a limitation rather than silently erasing capabilities.
-   `clear`, `drop`, overwrite, set/replacement, and compaction paths destroy
-   displaced live elements; `pop`, `remove`, and `swap_remove` transfer ownership
-   to the caller. `get -> Option<T>` remains `T: Copy`; non-`Copy` indexed access
-   remains scoped callback / borrow / explicit move-out, with no returned mutable
-   references. Add a gate that demonstrates `Vec<File>`, `HashMap<String, File>`,
-   `Deque<File>`, and `BinaryHeap<File>` either correctly destroy all live
-   elements or move them out exactly once, and that mutation disabling
-   live-element destruction is caught.
+   H18 / owned-resource collections is closed; keep the design pointer here
+   because every new collection API must preserve it. A collection owns its live
+   elements until they are explicitly moved out. `clear`, `drop`, overwrite,
+   set/replacement, and compaction paths destroy displaced live elements;
+   `pop`, `remove`, and `swap_remove` transfer ownership to the caller.
+   Disposal stays forced-explicit (`x.drop()` / `defer x.drop()`), never silent
+   scope-end auto-drop. `get -> Option<T>` remains `T: Copy`; non-`Copy` indexed
+   access remains scoped callback / borrow / explicit move-out, with no returned
+   mutable references. Full H18 mechanism and gates live in CHANGELOG and
+   `docs/RUNTIME_COLLECTIONS.md`; only the pull-gated v1 fence remains:
+   associated destructor-capability machinery is pulled by the first infallible
+   non-`Alloc` destructor, and raw `*_unchecked` overwrite escapes remain
+   documented trusted escapes.
 
    Traversal must be **deterministic but not ordered**:
    `for_each`/`fold` over `std.map`/`std.set` need a fixed hasher and no per-run
