@@ -120,3 +120,5 @@ examples/defer/cleanup_order/cleanup_order
 __pycache__/
 *.pyc
 examples/png_chunks/png_chunks
+tests/programs/adversarial_policy_deny_pass/adversarial_policy_deny_pass
+tests/programs/adversarial_policy_empty/adversarial_policy_empty
