@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Module / import / visibility gate (ROADMAP Phase 5 #1).
 #
 # Locks the module-system semantics so they cannot silently regress as packages
@@ -34,8 +33,8 @@ mod Main {
     fn main() -> i64 { return pub_fn() + 1; }
 }
 EOF
-( cd "$TMP/p1" && "$COMPILER" build >/dev/null 2>&1 && [ "$(./p1 2>/dev/null)" = "42" ] ) \
-  && ok "public cross-module import builds and runs (=> 42)" \
+( cd "$TMP/p1" && "$COMPILER" build >/dev/null 2>&1 && ./p1 >/dev/null 2>&1; [ $? -eq 42 ] ) \
+  && ok "public cross-module import builds and runs (rc 42)" \
   || no "public cross-module import failed to build/run"
 
 echo "=== 2. importing a non-pub name is rejected (E0111) ==="

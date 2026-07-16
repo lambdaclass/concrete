@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Nested-patterns decision gate (ROADMAP Phase 6 #5; docs/NESTED_PATTERNS.md).
 #
 # Concrete V1 destructures one level per match arm; nested patterns
@@ -10,6 +9,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -24,6 +24,7 @@ rejected(){ printf '%s' "$2" > "$TMP/t.con"
     no "$1: nested pattern was ACCEPTED (should be rejected in V1)"
   else ok "$1: rejected ($(grep -oE '\([A-Z0-9]+\)' "$TMP/t.out" | head -1))"; fi; }
 run_expect(){ printf '%s' "$2" > "$TMP/t.con"
+  gate_selfprint_wrap "$TMP/t.con" "$TMP/t.w.con"; mv "$TMP/t.w.con" "$TMP/t.con"
   if "$C" "$TMP/t.con" -o "$TMP/t.bin" >"$TMP/t.out" 2>&1; then
     local g; g="$("$TMP/t.bin" 2>/dev/null)"
     [ "$g" = "$3" ] && ok "$1 -> $g" || no "$1: got '$g' want '$3'"

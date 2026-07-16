@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Memory-model gate — ROADMAP Phase 6 #33 (docs/MEMORY_MODEL.md).
 #
 # Backs the headline invariant the user-facing memory model claims: safe
@@ -13,6 +12,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -28,6 +28,7 @@ reject(){ local n="$1"
     no "$n: expected rejection, compiled"; else ok "$n: rejected (no uninitialized binding)"; fi; }
 # accept_run: must compile, run, and print $want.
 accept_run(){ local n="$1" want="$2"
+  gate_selfprint_wrap "$TMP/$n.con" "$TMP/$n.w.con"; mv "$TMP/$n.w.con" "$TMP/$n.con"
   if ! "$C" "$TMP/$n.con" -o "$TMP/$n.bin" >"$TMP/$n.e" 2>&1; then
     no "$n: expected to compile"; sed 's/^/        /' "$TMP/$n.e" | head -3; return; fi
   local out; out="$("$TMP/$n.bin" 2>/dev/null)"

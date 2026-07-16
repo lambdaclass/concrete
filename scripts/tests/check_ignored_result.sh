@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Ignored-result diagnostics gate (ROADMAP Phase 6 #13; docs/IGNORED_RESULT.md).
 #
 # A `;`-terminated statement expression whose value is a fallible result
@@ -20,6 +19,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -32,7 +32,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # compiles + runs, asserting the program's stdout
 run_expect(){ local n="$1" e="$2"
-  if ! "$C" "$D/$n.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
+  gate_selfprint_wrap "$D/$n.con" "$TMP/$n.w.con"
+  if ! "$C" "$TMP/$n.w.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
     no "$n: expected to compile"; sed 's/^/        /' "$TMP/$n.err" | head -3; return; fi
   local g; g="$("$TMP/$n.bin" 2>/dev/null)"
   [ "$g" = "$e" ] && ok "$n -> $g" || no "$n: got '$g' want '$e'"; }

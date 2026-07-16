@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Codegen execution-oracle regression gate.
 #
 # Compile-run-assert-value fixtures over the codegen surface, built from the
@@ -16,6 +15,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -28,7 +28,8 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 expect() {
   local name="$1" exp="$2" src="tests/codegen/$1.con"
   [ -f "$src" ] || { no "$name: missing fixture $src"; return; }
-  if "$COMPILER" "$src" -o "$TMP/$name" >/dev/null 2>&1; then
+  gate_selfprint_wrap "$src" "$TMP/$name.w.con"
+  if "$COMPILER" "$TMP/$name.w.con" -o "$TMP/$name" >/dev/null 2>&1; then
     local out rc val; out="$("$TMP/$name" 2>/dev/null)"; rc=$?; val="$out"; [ -z "$val" ] && val="$rc"
     [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp"
   else

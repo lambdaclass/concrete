@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Numeric literal / cast gate (ROADMAP Phase 6 #6).
 #
 # Grows one section per landed #6 sub-fix. LANDED so far:
@@ -16,6 +15,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -33,7 +33,8 @@ reject_with(){ local n="$1" c="$2"
       || { no "$n rejected, wrong code"; grep <<<"$out" -oE '\([A-Z0-9]+\)' | head -1 | sed 's/^/        got: /'; }
   else no "$n: expected rejection ($c), compiled"; fi; }
 run_expect(){ local n="$1" e="$2"
-  if ! "$C" "$D/$n.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
+  gate_selfprint_wrap "$D/$n.con" "$TMP/$n.w.con"
+  if ! "$C" "$TMP/$n.w.con" -o "$TMP/$n.bin" >"$TMP/$n.err" 2>&1; then
     no "$n: expected to compile"; sed 's/^/        /' "$TMP/$n.err" | head -3; return; fi
   local g; g="$("$TMP/$n.bin" 2>/dev/null)"
   [ "$g" = "$e" ] && ok "$n -> $g" || no "$n: got '$g' want '$e'"; }
@@ -54,6 +55,7 @@ inl_reject(){ printf '%s' "$2" > "$TMP/m.con"
     && no "$1: expected rejection, compiled" \
     || ok "$1: rejected ($(grep -oE '\([A-Z0-9]+\)' "$TMP/m.out" | head -1))"; }
 inl_run(){ printf '%s' "$2" > "$TMP/m.con"
+  gate_selfprint_wrap "$TMP/m.con" "$TMP/m.w.con"; mv "$TMP/m.w.con" "$TMP/m.con"
   if "$C" "$TMP/m.con" -o "$TMP/m.bin" >"$TMP/m.out" 2>&1; then
     local g; g="$("$TMP/m.bin" 2>/dev/null)"
     [ "$g" = "$3" ] && ok "$1 -> $g" || no "$1: got '$g' want '$3'"

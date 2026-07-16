@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Loop-control gate (ROADMAP Phase 6 #4).
 #
 # break / continue / labeled loops / while-as-expression are implemented; this
@@ -21,6 +20,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
@@ -34,7 +34,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # run_expect <fixture> <expected-stdout>
 run_expect(){
   local name="$1" exp="$2"
-  if ! "$C" "$D/$name.con" -o "$TMP/$name.bin" >"$TMP/$name.err" 2>&1; then
+  gate_selfprint_wrap "$D/$name.con" "$TMP/$name.w.con"
+  if ! "$C" "$TMP/$name.w.con" -o "$TMP/$name.bin" >"$TMP/$name.err" 2>&1; then
     no "$name: expected to compile, but it failed"; sed 's/^/        /' "$TMP/$name.err" | head -3; return
   fi
   local got; got="$("$TMP/$name.bin" 2>/dev/null)"
