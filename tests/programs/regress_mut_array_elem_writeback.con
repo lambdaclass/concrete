@@ -20,8 +20,9 @@ fn fill(a: &mut [i32; 4]) {
     a[3] = 22;
 }
 
-fn main() -> i64 {
+fn main() with(Console) -> i64 {
     let mut a: [i32; 4] = [0; 4];
     fill(&mut a);
-    return (a[0] + a[1] * 10 + a[2] * 100 + a[3] * 1000) as i64;
+    println(((a[0] + a[1] * 10 + a[2] * 100 + a[3] * 1000) as i64) as Int);
+    return 0;
 }

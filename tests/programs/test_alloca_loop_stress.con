@@ -25,5 +25,6 @@ fn main() with(Std) -> Int {
     }
     vec_free::<String>(strings);
     // Return element count to prove it ran
-    return slen;
+    println(slen);
+    return 0;
 }

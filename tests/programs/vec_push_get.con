@@ -8,5 +8,6 @@ fn main() with(Std) -> Int {
     let first: Int = vec_get(&v, 0);
     let last: Int = vec_get(&v, 3);
     vec_free(v);
-    return first + last;
+    println(first + last);
+    return 0;
 }

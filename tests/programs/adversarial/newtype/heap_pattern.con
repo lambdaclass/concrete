@@ -10,9 +10,10 @@ struct Copy Box {
     flag: u8,
 }
 
-fn main() with(Alloc) -> Int {
+fn main() with(Alloc, Console) -> Int {
     let p: Heap<Box> = alloc(Box { code: Code(7777), flag: 1 });
     let raw: i32 = p.code.0;
     free(p);
-    return raw as Int;
+    println(raw as Int);
+    return 0;
 }

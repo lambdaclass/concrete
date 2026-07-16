@@ -2,7 +2,7 @@
 // Two sequential while loops with body-local variables.
 // Previously caused SSA domination error: registers from the first loop's
 // body appeared in the second loop's header phis.
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let mut total: Int = 0;
 
     let mut i: Int = 0;
@@ -19,5 +19,6 @@ fn main() -> Int {
         j = j + 1;
     }
 
-    return total;
+    println(total);
+    return 0;
 }

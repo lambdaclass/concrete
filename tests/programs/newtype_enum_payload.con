@@ -4,10 +4,10 @@
 // clobbering adjacent stack and returning 0 on readout.
 newtype Port = u16;
 
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let maybe: Option<Port> = Option::<Port>::Some { value: Port(8080) };
     match maybe {
-        Option::Some { value } => { return value.0 as Int; }
-        Option::None => { return 0; }
+        Option::Some { value } => { println(value.0 as Int); return 0; }
+        Option::None => { return 1; }
     }
 }

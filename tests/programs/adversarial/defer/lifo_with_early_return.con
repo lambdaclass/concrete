@@ -12,11 +12,12 @@ impl Counters {
     pub fn destroy(&mut self) {}
 }
 
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let mut counters: Counters = Counters { a: 0, b: 0, c: 0 };
     defer destroy(counters);
     if true {
-        return 333;
+        println(333);
+        return 0;
     }
-    return -1;
+    return 1;
 }

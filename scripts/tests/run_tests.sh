@@ -564,6 +564,8 @@ run_ok_worker() {
     local file="$1"
     local expected="$2"
     local result_file="$3"
+    local expected_rc_raw="${4:-}"
+    local expected_rc="${expected_rc_raw:-0}"
     local name
     name=$(path_key "${file%.con}")
     local out="$TMPDIR/$name"
@@ -577,16 +579,15 @@ run_ok_worker() {
         ''|*[!0-9]*) rc_mode=0 ;;
         *) if [ "$expected" -le 255 ]; then rc_mode=1; fi ;;
     esac
+    # An EXPLICIT expected_rc argument means "printed output + this exit code"
+    # — never reinterpret the expected string as an exit code.
+    if [ -n "$expected_rc_raw" ]; then rc_mode=0; fi
     local actual actual_rc=0
     if [ -n "$LLI" ]; then
         # Fast path: emit LLVM IR and interpret directly (no clang)
         local llpath="$out.ll"
         local emit_ok=1
-        if [ "$rc_mode" = "1" ]; then
-            CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
-        else
-            $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
-        fi
+        CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
         if [ "$emit_ok" = "0" ]; then
             {
                 echo "FAIL"
@@ -602,11 +603,7 @@ run_ok_worker() {
     else
         # Fallback: compile to native binary via clang
         local comp_ok=1
-        if [ "$rc_mode" = "1" ]; then
-            CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
-        else
-            $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
-        fi
+        CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
         if [ "$comp_ok" = "0" ]; then
             {
                 echo "FAIL"
@@ -642,15 +639,17 @@ run_ok_worker() {
         fi
         return
     fi
-    if [ "$actual" = "$expected" ]; then
+    # Printed-shape expectation (string / multi-line / numeric beyond the
+    # 8-bit status range): the fixture prints its result and exits 0.
+    if [ "$actual" = "$expected" ] && [ "$actual_rc" = "$expected_rc" ]; then
         {
             echo "PASS"
-            echo "  ok  $file => $expected"
+            echo "  ok  $file => $expected (rc $expected_rc)"
         } > "$result_file"
     else
         {
             echo "FAIL"
-            echo "FAIL  $file — expected '$expected', got '$actual'"
+            echo "FAIL  $file — expected printed '$expected' + rc $expected_rc, got rc $actual_rc '$actual'"
             echo "# Rerun: $COMPILER $file -o /tmp/test_rerun && /tmp/test_rerun"
         } > "$result_file"
     fi
@@ -659,16 +658,17 @@ run_ok_worker() {
 run_ok() {
     local file="$1"
     local expected="$2"
+    local expected_rc="${3:-}"
     if ! filter_match "$file"; then SKIP=$((SKIP + 1)); return; fi
     if [ "$TEST_JOBS" -le 1 ]; then
         JOB_SEQ=$((JOB_SEQ + 1)); local result_file="$JOBDIR/$JOB_SEQ.result"
-        run_ok_worker "$file" "$expected" "$result_file"
+        run_ok_worker "$file" "$expected" "$result_file" "$expected_rc"
         record_result "$result_file"
         return
     fi
     JOB_SEQ=$((JOB_SEQ + 1)); local result_file="$JOBDIR/$JOB_SEQ.result"
     throttle_jobs
-    (run_ok_worker "$file" "$expected" "$result_file") &
+    (run_ok_worker "$file" "$expected" "$result_file" "$expected_rc") &
     JOB_PIDS+=("$!")
     JOB_FILES+=("$result_file")
 }
@@ -678,6 +678,8 @@ run_ok_O2_worker() {
     local file="$1"
     local expected="$2"
     local result_file="$3"
+    local expected_rc_raw="${4:-}"
+    local expected_rc="${expected_rc_raw:-0}"
     local name
     name=$(path_key "${file%.con}")
     local llpath="$TMPDIR/${name}.ll"
@@ -688,12 +690,9 @@ run_ok_O2_worker() {
         ''|*[!0-9]*) rc_mode=0 ;;
         *) if [ "$expected" -le 255 ]; then rc_mode=1; fi ;;
     esac
+    if [ -n "$expected_rc_raw" ]; then rc_mode=0; fi
     local llvm_ir
-    if [ "$rc_mode" = "1" ]; then
-        llvm_ir=$(CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
-    else
-        llvm_ir=$($COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
-    fi
+    llvm_ir=$(CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
     [ -s "$result_file" ] && return
     echo "$llvm_ir" > "$llpath"
     if ! clang "$llpath" -o "$out" -O2 -Wno-override-module > /dev/null 2>&1; then
@@ -711,26 +710,27 @@ run_ok_O2_worker() {
         fi
         return
     fi
-    if [ "$actual" = "$expected" ]; then
-        { echo "PASS"; echo "  ok  $file -O2 => $expected"; } > "$result_file"
+    if [ "$actual" = "$expected" ] && [ "$actual_rc" = "$expected_rc" ]; then
+        { echo "PASS"; echo "  ok  $file -O2 => $expected (rc $expected_rc)"; } > "$result_file"
     else
-        { echo "FAIL"; echo "FAIL  $file -O2 — expected '$expected', got '$actual'"; } > "$result_file"
+        { echo "FAIL"; echo "FAIL  $file -O2 — expected printed '$expected' + rc $expected_rc, got rc $actual_rc '$actual'"; } > "$result_file"
     fi
 }
 
 run_ok_O2() {
     local file="$1"
     local expected="$2"
+    local expected_rc="${3:-}"
     if ! filter_match "$file"; then SKIP=$((SKIP + 1)); return; fi
     if [ "$TEST_JOBS" -le 1 ]; then
         JOB_SEQ=$((JOB_SEQ + 1)); local result_file="$JOBDIR/$JOB_SEQ.result"
-        run_ok_O2_worker "$file" "$expected" "$result_file"
+        run_ok_O2_worker "$file" "$expected" "$result_file" "$expected_rc"
         record_result "$result_file"
         return
     fi
     JOB_SEQ=$((JOB_SEQ + 1)); local result_file="$JOBDIR/$JOB_SEQ.result"
     throttle_jobs
-    (run_ok_O2_worker "$file" "$expected" "$result_file") &
+    (run_ok_O2_worker "$file" "$expected" "$result_file" "$expected_rc") &
     JOB_PIDS+=("$!")
     JOB_FILES+=("$result_file")
 }
@@ -1004,7 +1004,7 @@ run_ok "$TESTDIR/adversarial_mono_trait_method_chain.con" 42
 run_ok "$TESTDIR/adversarial_mono_trait_multi_impl.con" 42
 
 # Adversarial module tests
-run_ok "$TESTDIR/adversarial_module_cap_across.con" "$(printf '0\n42')"
+run_ok "$TESTDIR/adversarial_module_cap_across.con" "0" 42
 run_ok "$TESTDIR/adversarial_module_deep_nesting.con" 42
 run_ok "$TESTDIR/adversarial_module_enum_across.con" 42
 run_ok "$TESTDIR/adversarial_module_many_siblings.con" 42
@@ -1185,7 +1185,7 @@ run_ok "$TESTDIR/string_eq_basic.con" 1
 run_ok "$TESTDIR/int_to_string_basic.con" 2
 run_ok "$TESTDIR/string_to_int_basic.con" 123
 run_ok "$TESTDIR/string_trim_basic.con" 5
-run_ok "$TESTDIR/print_char_basic.con" "A0"
+run_ok "$TESTDIR/print_char_basic.con" "A" 0
 
 # Vec<T> tests
 run_ok "$TESTDIR/vec_basic.con" 23
@@ -1231,8 +1231,7 @@ run_ok "$TESTDIR/complex_recursive_enum.con" 19
 run_ok "$TESTDIR/struct_method_chain.con" 39
 run_ok "$TESTDIR/complex_option_chain.con" 26
 run_ok "$TESTDIR/complex_trait_hierarchy.con" 45
-run_ok "$TESTDIR/cap_propagation_deep.con" "1
-42"
+run_ok "$TESTDIR/cap_propagation_deep.con" "1" 42
 
 # Unsafe boundary: ref-to-ptr is safe (no Unsafe needed)
 run_ok "$TESTDIR/ref_to_ptr_safe.con" 0
@@ -1265,15 +1264,13 @@ run_ok "$TESTDIR/bug_i32_literal_type.con" 42
 run_ok "$TESTDIR/bug_cross_module_mut_borrow.con" 42
 run_ok "$TESTDIR/bug_array_var_index_assign.con" 42
 run_ok "$TESTDIR/bug_if_expression.con" 0
-run_ok "$TESTDIR/bug_print_builtins.con" "hello 42
-0"
+run_ok "$TESTDIR/bug_print_builtins.con" "hello 42" 0
 run_ok "$TESTDIR/bug_string_building.con" 0
 run_ok "$TESTDIR/variadic_append.con" 0
 run_ok "$TESTDIR/bug_clock_builtin.con" 0
 run_ok "$TESTDIR/bug_enum_in_struct.con" 0
 run_ok "$TESTDIR/bug_stack_array_borrow_copy.con" 42
-run_ok "$TESTDIR/bug_array_struct_field_mutation.con" "99
-0"
+run_ok "$TESTDIR/bug_array_struct_field_mutation.con" "99" 0
 run_ok "$TESTDIR/hardening_int_literal_inference.con" 42
 run_ok "$TESTDIR/hardening_borrow_edge_cases.con" 42
 run_ok "$TESTDIR/hardening_cross_module_enum.con" 42
@@ -1536,34 +1533,21 @@ run_ok "$TESTDIR/test_linearity_branch_agree.con" 42
 run_ok "$TESTDIR/test_linearity_match_consume.con" 42
 run_ok "$TESTDIR/test_defer_linearity.con" 42
 run_ok "$TESTDIR/test_defer_drop_string.con" "hello
-hello
-1"
+hello" 1
 run_ok "$TESTDIR/test_defer_multi_consuming.con" "ab
-cd
-2"
-run_ok "$TESTDIR/test_defer_break_no_double.con" "ok
-3"
+cd" 2
+run_ok "$TESTDIR/test_defer_break_no_double.con" "ok" 3
 run_ok "$TESTDIR/test_defer_nested_if.con" "yes
-yes
-1"
-run_ok "$TESTDIR/test_defer_consuming_lifo.con" "first second
-0"
-run_ok "$TESTDIR/test_defer_in_loop_func.con" "xxx
-3"
-run_ok "$TESTDIR/test_defer_block_scope.con" "inner
-1"
-run_ok "$TESTDIR/test_defer_loop_iteration.con" "xxx
-3"
-run_ok "$TESTDIR/test_defer_loop_break_scope.con" "yyy
-2"
-run_ok "$TESTDIR/test_defer_loop_continue_scope.con" "zzz
-3"
-run_ok "$TESTDIR/test_defer_try_nested.con" "inner outer
-109"
-run_ok "$TESTDIR/test_defer_nested_lifo.con" "cba
-0"
-run_ok "$TESTDIR/test_defer_loop_inner_return.con" "IIIIO
-3"
+yes" 1
+run_ok "$TESTDIR/test_defer_consuming_lifo.con" "first second" 0
+run_ok "$TESTDIR/test_defer_in_loop_func.con" "xxx" 3
+run_ok "$TESTDIR/test_defer_block_scope.con" "inner" 1
+run_ok "$TESTDIR/test_defer_loop_iteration.con" "xxx" 3
+run_ok "$TESTDIR/test_defer_loop_break_scope.con" "yyy" 2
+run_ok "$TESTDIR/test_defer_loop_continue_scope.con" "zzz" 3
+run_ok "$TESTDIR/test_defer_try_nested.con" "inner outer" 109
+run_ok "$TESTDIR/test_defer_nested_lifo.con" "cba" 0
+run_ok "$TESTDIR/test_defer_loop_inner_return.con" "IIIIO" 3
 run_ok "$TESTDIR/test_alloca_loop_stress.con" 200000
 run_ok "$TESTDIR/test_string_literal_in_loop.con" 5
 run_ok "$TESTDIR/test_argv.con" 0
@@ -6619,15 +6603,13 @@ run_ok_O2 "$TESTDIR/bug_i32_literal_type.con" 42
 run_ok_O2 "$TESTDIR/bug_cross_module_mut_borrow.con" 42
 run_ok_O2 "$TESTDIR/bug_array_var_index_assign.con" 42
 run_ok_O2 "$TESTDIR/bug_if_expression.con" 0
-run_ok_O2 "$TESTDIR/bug_print_builtins.con" "hello 42
-0"
+run_ok_O2 "$TESTDIR/bug_print_builtins.con" "hello 42" 0
 run_ok_O2 "$TESTDIR/bug_string_building.con" 0
 run_ok_O2 "$TESTDIR/variadic_append.con" 0
 ## bug_clock_builtin excluded from O2: loop between clock calls gets optimized away
 run_ok_O2 "$TESTDIR/bug_enum_in_struct.con" 0
 run_ok_O2 "$TESTDIR/bug_stack_array_borrow_copy.con" 42
-run_ok_O2 "$TESTDIR/bug_array_struct_field_mutation.con" "99
-0"
+run_ok_O2 "$TESTDIR/bug_array_struct_field_mutation.con" "99" 0
 
 # Hardening tests under O2
 run_ok_O2 "$TESTDIR/hardening_int_literal_inference.con" 42

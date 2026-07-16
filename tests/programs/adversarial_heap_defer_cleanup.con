@@ -11,5 +11,6 @@ fn main() with(Std) -> Int {
     defer free(p);
     // p is reserved by defer — can read via arrow but not move
     let result: Int = p.x + p.y;
-    return result;
+    println(result);
+    return 0;
 }

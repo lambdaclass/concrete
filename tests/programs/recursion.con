@@ -5,6 +5,7 @@ fn factorial(n: Int) -> Int {
     return n * factorial(n - 1);
 }
 
-fn main() -> Int {
-    return factorial(12);
+fn main() with(Console) -> Int {
+    println(factorial(12));
+    return 0;
 }

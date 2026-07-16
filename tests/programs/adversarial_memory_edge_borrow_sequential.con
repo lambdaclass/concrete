@@ -49,8 +49,9 @@ fn sequential_shared_then_mut() -> Int {
     return val + result;
 }
 
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let r1: Int = sequential_borrows();
     let r2: Int = sequential_shared_then_mut();
-    return r1 + r2;
+    println(r1 + r2);
+    return 0;
 }

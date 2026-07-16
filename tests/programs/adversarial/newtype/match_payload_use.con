@@ -17,7 +17,8 @@ fn split(m: Option<Mask>) -> Int {
     }
 }
 
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let m: Option<Mask> = Option::<Mask>::Some { value: Mask(1023) };
-    return split(m);
+    println(split(m));
+    return 0;
 }

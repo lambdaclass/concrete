@@ -1,4 +1,5 @@
-fn main() -> Int {
+fn main() with(Console) -> Int {
     let x: Int = ~0;
-    return x;
+    println(x);
+    return 0;
 }
