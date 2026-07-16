@@ -65,7 +65,12 @@ Concrete gets more leverage from:
 - a stronger artifact story
 - Lean-side proof support
 
-Self-hosting can become useful later. It is not the first trust milestone.
+Self-hosting can become useful later. It is not the first trust milestone. And it
+is only ever admissible as a **proof-preserving** bootstrap: the Lean kernel proofs
+are the product, so a self-host that dropped them — a plain rewrite in Concrete, like
+the OCaml→Rust bootstrap that merely traded away speed — would be a regression, not a
+milestone. The only version worth doing carries a correctness argument through the
+bootstrap (the CakeML discipline the roadmap already names).
 
 ## Why Not Prove The Whole Compiler First?
 

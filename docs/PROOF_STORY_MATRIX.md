@@ -58,7 +58,7 @@ reported, assumed, or trusted instead.
 | Raw pointers / `Unsafe` | trusted | visible `Unsafe` capability and trust reports | wrapper-specific assumptions; no general proof story |
 | FFI bodies | trusted/assumed | extern/trusted boundary reports, assumption files | ABI/layout and wrapper contracts |
 | `trusted fn` / trusted impl | trusted/assumed | `--report unsafe`, assumptions, policy gates | smaller wrappers and stronger audit evidence |
-| Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | Phase 8/9 compiler/backend soundness work |
+| Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | Phase 14/15 compiler/backend soundness work |
 | Machine-level constant time | assumed | constant_time_tag assumption files and manifest limits | source-level constant-time profile, backend timing assumptions |
 | Concurrency / async / threads / channels | open | research notes only | Phase 13 design, simulation, and evidence model |
 | Packages/dependencies | open | single-repo evidence today | Phase 11 dependency evidence |

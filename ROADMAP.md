@@ -2716,6 +2716,42 @@ replayable; and every boundary after that slice remains explicitly trusted.
     equivalence, cached-object substitution negatives, and stdlib
     authority/allocation/evidence gates. The artifact must show the exact point
     at which independent checking stops and backend/toolchain trust begins.
+20. Pin the supported LLVM/clang version and gate version drift. The backend today
+    targets whatever `clang` defaults to on the host (`docs/EXECUTION_MODEL.md`), yet
+    the TCB already conditions backend correctness on "LLVM version" — so a floating
+    toolchain leaves the trusted boundary a moving, un-audited target and makes native
+    output non-reproducible across hosts (`docs/DETERMINISM.md` already disclaims
+    binary reproducibility for exactly this reason). Declare one supported LLVM
+    version (or a narrow tested range) as part of the backend contract, and make an
+    upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the
+    backend-contract gate, and IR golden tests must re-pass before the new version is
+    declared supported. This is the cheap control that turns the moving boundary into
+    a fixed one; the structured `BackendIR` contract (#18) and a future hand-written
+    LLVM bitcode emitter (the Zig/Roc decoupling technique) are the heavier long-term
+    options, pulled only if version pinning proves insufficient. Wire the check into
+    `scripts/tests/check_backend_contracts.sh`: the compiler refuses or warns on an
+    unsupported LLVM version, and the drift corpus re-runs on a bump.
+21. Compiler-writing / verified-self-host language prerequisites (pull-gated
+    research). Features a future proof-preserving self-host (CakeML-style, Phase 14)
+    or a compiler-in-Concrete workload would need, surfaced by what makes ML/OCaml and
+    Zig good compiler hosts. None is scheduled; each is pulled by a real workload and
+    must preserve the linear / no-GC / visible-layout thesis — the OCaml GC path is
+    deliberately not taken; the non-GC arena (#1g) + typed-index (#1b) + layout path
+    is.
+    - 21a. Guaranteed tail-call optimization: a tail call lowers to a loop, so
+      recursive tree-walks (the dominant compiler shape) run in constant stack. Today
+      recursion is a stack-overflow risk the predictable profile avoids; guaranteed
+      TCO makes tail recursion predictable-profile-safe rather than banned. Pure
+      codegen guarantee — no ownership/capability/proof interaction. Gate: a deep
+      tail-form fixture runs in O(1) stack; non-tail recursion is diagnosed, not
+      silently stack-unsafe.
+    - 21b. Bit-level data layout: arbitrary-width integers (`uN`/`iN`) and packed
+      structs/enums with defined bit layout — compact IR nodes, discriminant/flag
+      packing. Fits the visible-systems-layout thesis directly. Gate: a packed
+      struct's size and field offsets equal the declared bit layout; an over-wide
+      store into a `uN` field is rejected or wraps per the declared width, not
+      silently. (SOA containers and `std.bigint` are stdlib-level, pulled the same
+      way; nested patterns is tracked in `docs/NESTED_PATTERNS.md`.)
 
 ## Phase 15.5: Unsafe Concrete And Trusted Systems Profile
 
