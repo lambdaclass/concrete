@@ -10,6 +10,8 @@
 # body `defer { … }` is rejected) — a documented V1 boundary (docs/DEFER.md).
 
 set -uo pipefail
+# knob-proof: this gate is converted; neutralize an inherited legacy-echo env
+unset CONCRETE_ECHO_RESULT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"

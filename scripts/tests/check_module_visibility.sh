@@ -9,6 +9,8 @@
 # docs/VISIBILITY_AND_MODULE_HYGIENE.md.
 
 set -uo pipefail
+# knob-proof: this gate is converted; neutralize an inherited legacy-echo env
+unset CONCRETE_ECHO_RESULT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
