@@ -14,11 +14,12 @@ toolchain = "llvm"
 runtime   = "hosted-libc"
 
 [arithmetic]
-# i32 throughout for header fields; u8 for raw bytes. Wrapping
-# arithmetic is the predictable-profile default.
-overflow       = "wrapping"
+# i32 throughout for header fields; u8 for raw bytes. Checked
+# (trapping) arithmetic is the default in every profile, predictable
+# included; wrapping needs the explicit wrapping_* intrinsics.
+overflow       = "trap"
 divide_by_zero = "trap"
-shift_oversize = "wrap"
+shift_oversize = "trap"
 
 [allocation]
 # Zero heap. Everything stack-allocated, including the 256-byte

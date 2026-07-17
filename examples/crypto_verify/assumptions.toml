@@ -17,9 +17,9 @@ runtime   = "hosted-libc"
 # Int (i64) operations. The toy tag function `key * message + nonce`
 # uses i64 arithmetic; overflow is part of the explicit "toy" framing
 # in the source docstring (the proof does not claim overflow-freedom).
-overflow       = "wrapping"
+overflow       = "trap"
 divide_by_zero = "trap"
-shift_oversize = "wrap"
+shift_oversize = "trap"
 
 [allocation]
 heap            = "none"

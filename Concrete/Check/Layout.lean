@@ -446,8 +446,21 @@ def structTypeDef (ctx : Ctx) (sd : CStructDef) : String :=
   else s!"%struct.{sd.name} = type \{ {fieldTypes} }"
 
 /-- Generate LLVM type definitions for an enum (variant types + tagged union).
-    For generic enums, pass typeArgs to get the correct payload size from substitution. -/
-def enumTypeDefs (ctx : Ctx) (ed : CEnumDef) (typeArgs : List Ty := []) : List String :=
+    For generic enums, pass typeArgs to get the correct payload size from substitution.
+
+    The union must cover every instantiation stored through it: `minEndBytes`
+    lets the caller raise the size floor to the program-wide worst footprint
+    (builtin Option/Result are canonicalized across ALL instantiations — audit
+    2026-07-16: selecting the canonical payload by max `tySize` ignored that a
+    higher-alignment instantiation writes at `alignUp 4 align` and could run
+    past the declared alloca). The storage stays a byte array: aggregate
+    load/store of a partially-initialized union is poison-safe only at byte
+    granularity (an `[N x i64]` union lets one uninit tail byte poison its whole
+    i64 element — and every initialized byte sharing it). The payload alignment
+    the byte array cannot carry is supplied at each alloca by an explicit
+    `align 8` attribute (EmitSSA). -/
+def enumTypeDefs (ctx : Ctx) (ed : CEnumDef) (typeArgs : List Ty := [])
+    (minPayloadAlign : Nat := 1) (minEndBytes : Nat := 0) : List String :=
   let substEd := substEnumTypeArgs ed typeArgs
   let variantDefs := substEd.variants.map fun (vn, fields) =>
     if fields.isEmpty then s!"%variant.{ed.name}.{vn} = type \{}"
@@ -460,10 +473,11 @@ def enumTypeDefs (ctx : Ctx) (ed : CEnumDef) (typeArgs : List Ty := []) : List S
       let aligned := alignUp acc (tyAlign ctx ft)
       (aligned + tySize ctx ft, ())) (0, ())
     Nat.max maxSz sz.1) 0
-  let payloadAlign := substEd.variants.foldl (fun maxA (_, vfields) =>
-    vfields.foldl (fun a (_, ft) => Nat.max a (tyAlign ctx ft)) maxA) 1
+  let payloadAlign := Nat.max (substEd.variants.foldl (fun maxA (_, vfields) =>
+    vfields.foldl (fun a (_, ft) => Nat.max a (tyAlign ctx ft)) maxA) 1) minPayloadAlign
   let payloadStart := alignUp 4 payloadAlign
-  let totalSize := alignUp (payloadStart + maxPayload) (Nat.max 4 payloadAlign)
+  let needed := Nat.max (payloadStart + maxPayload) minEndBytes
+  let totalSize := alignUp needed (Nat.max 4 payloadAlign)
   let payloadBytes := if totalSize <= 4 then 1 else totalSize - 4
   let enumDef := s!"%enum.{ed.name} = type \{ i32, [{payloadBytes} x i8] }"
   variantDefs ++ [enumDef]

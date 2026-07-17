@@ -14,9 +14,9 @@ toolchain = "llvm"
 runtime   = "hosted-libc"
 
 [arithmetic]
-overflow       = "wrapping"
+overflow       = "trap"
 divide_by_zero = "trap"
-shift_oversize = "wrap"
+shift_oversize = "trap"
 
 [allocation]
 heap            = "none"

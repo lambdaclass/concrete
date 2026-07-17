@@ -72,6 +72,13 @@ structure EmitSSAState where
       on every iteration; collecting them here and prepending to the
       entry block makes LLVM reuse the same stack slot. -/
   entryAllocas : Array LLVMInstr := #[]
+  /-- Program-wide worst payload alignment of the canonical builtin Option /
+      Result unions (from scanBuiltinEnumArgs). Their `{ i32, [N x i8] }`
+      declarations carry only 4-byte alignment, so allocas of these types (and
+      of any enum whose payload needs 8) get an explicit `align 8` attribute —
+      payload loads/stores assume natural alignment (audit 2026-07-16). -/
+  maxOptPayloadAlign : Nat := 1
+  maxResPayloadAlign : Nat := 1
 
 /-- Append a structured instruction to the current block. -/
 private def emitStructured (s : EmitSSAState) (instr : LLVMInstr) : EmitSSAState :=
@@ -119,6 +126,34 @@ private def ssaLookupStruct (s : EmitSSAState) (name : String) : Option CStructD
 
 private def ssaLookupEnum (s : EmitSSAState) (name : String) : Option CEnumDef :=
   Layout.lookupEnum (layoutCtxOf s) name
+
+/-- Alloca alignment for an SSA type. Byte-union enum declarations
+    (`{ i32, [N x i8] }`) carry only 4-byte alignment, but payload loads/stores
+    assume natural alignment — when any payload needs 8, every alloca of that
+    enum type must say so explicitly (audit 2026-07-16: the canonical builtin
+    Option/Result union covers ALL instantiations, so the decision uses the
+    program-wide worst payload alignment from scanBuiltinEnumArgs; user enums
+    use their own). -/
+private def enumAllocaAlign (s : EmitSSAState) (ty : Ty) : Option Nat :=
+  let needs (n : String) : Option Nat :=
+    if n == optionEnumName then (if s.maxOptPayloadAlign ≥ 8 then some 8 else none)
+    else if n == resultEnumName then (if s.maxResPayloadAlign ≥ 8 then some 8 else none)
+    else match ssaLookupEnum s n with
+      | some _ => if Layout.tyAlign (layoutCtxOf s) ty ≥ 8 then some 8 else none
+      | none => none
+  match ty with
+  | .named n => needs n
+  | .generic n _ => needs n
+  | _ => none
+
+/-- Alloca for a value of SSA type `ty` rendered as `llTy`, attaching
+    `align 8` when `ty` is a byte-union enum with align-8 payloads
+    (see enumAllocaAlign). Single choke point so every temp slot that may
+    back a payload access gets the same treatment. -/
+private def emitAllocaTy (s : EmitSSAState) (dst : String) (ty : Ty) (llTy : LLVMTy) : EmitSSAState :=
+  match enumAllocaAlign s ty with
+  | some a => emitEntryAlloca s (.allocaAlign dst llTy a)
+  | none => emitEntryAlloca s (.alloca dst llTy)
 
 /-- Is this type passed by pointer in function calls? Delegates to Layout.isPassByPtr. -/
 private def ssaIsPassByPtr (s : EmitSSAState) (ty : Ty) : Bool :=
@@ -556,7 +591,7 @@ private def ensurePtrOp (s : EmitSSAState) (v : SVal) : EmitSSAState × LLVMOper
     let llTy := tyToLLVMTy s v.ty
     let (s, tmp) := freshLocal s
     let tmpName := (tmp.drop 1).toString
-    let s := emitEntryAlloca s (.alloca tmpName llTy)
+    let s := emitAllocaTy s tmpName v.ty llTy
     let s := emitStructured s (.store llTy (svalToOperand s v) (.reg tmpName))
     (s, .reg tmpName)
   else
@@ -581,7 +616,7 @@ private def ensureValAsPtr (s : EmitSSAState) (v : SVal) : EmitSSAState × LLVMO
     let llTy := tyToLLVMTy s v.ty
     let (s, tmp) := freshLocal s
     let tmpName := (tmp.drop 1).toString
-    let s := emitEntryAlloca s (.alloca tmpName llTy)
+    let s := emitAllocaTy s tmpName v.ty llTy
     let s := emitStructured s (.store llTy (svalToOperand s v) (.reg tmpName))
     (s, .reg tmpName)
 
@@ -815,7 +850,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
             else
               let (s, tmp) := freshLocal s
               let tmpName := (tmp.drop 1).toString
-              let s := emitEntryAlloca s (.alloca tmpName valTy)
+              let s := emitAllocaTy s tmpName a.ty valTy
               let s := emitStructured s (.store valTy (svalToOperand s a) (.reg tmpName))
               (s, .reg tmpName)
           let (s, flat) := freshLocal s
@@ -828,7 +863,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
             else
               let (s, tmp) := freshLocal s
               let tmpName := (tmp.drop 1).toString
-              let s := emitEntryAlloca s (.alloca tmpName valTy)
+              let s := emitAllocaTy s tmpName a.ty valTy
               let s := emitStructured s (.store valTy (svalToOperand s a) (.reg tmpName))
               (s, .reg tmpName)
           let (s, lo) := freshLocal s
@@ -848,7 +883,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
           else
             let (s, tmp) := freshLocal s
             let tmpName := (tmp.drop 1).toString
-            let s := emitEntryAlloca s (.alloca tmpName valTy)
+            let s := emitAllocaTy s tmpName a.ty valTy
             let s := emitStructured s (.store valTy (svalToOperand s a) (.reg tmpName))
             (s, ops ++ [(.ptr, .reg tmpName)])
       else if paramTy == .ptr && valTy != .ptr then
@@ -860,7 +895,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         else
           let (s, tmp) := freshLocal s
           let tmpName := (tmp.drop 1).toString
-          let s := emitEntryAlloca s (.alloca tmpName valTy)
+          let s := emitAllocaTy s tmpName a.ty valTy
           let s := emitStructured s (.store valTy (svalToOperand s a) (.reg tmpName))
           (s, ops ++ [(.ptr, .reg tmpName)])
       else
@@ -902,14 +937,14 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       -- Alloca struct, store i64 into it, use alloca as the dst register
       match dst with
       | some dstName =>
-        let s := emitEntryAlloca s (.alloca dstName (tyToLLVMTy s retTy))
+        let s := emitAllocaTy s dstName retTy (tyToLLVMTy s retTy)
         let s := emitStructured s (.store .i64 (.reg flatRetName) (.reg dstName))
         markPtr s dstName
       | none => s
     else
       emitStructured s (.call dst retLLTy callTarget argOps)
   | .alloca dst ty =>
-    let s := emitEntryAlloca s (.alloca dst (tyToLLVMTy s ty))
+    let s := emitAllocaTy s dst ty (tyToLLVMTy s ty)
     markPtr s dst
   | .load dst ptr ty =>
     let (s, ptrOp) := ensurePtrOp s ptr
@@ -976,7 +1011,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       | .struct_ _ | .array _ _ | .enum_ _ =>
         let (s, tmp) := freshLocal s
         let tmpName := (tmp.drop 1).toString
-        let s := emitEntryAlloca s (.alloca tmpName srcLLTy)
+        let s := emitAllocaTy s tmpName targetTy srcLLTy
         let s := emitStructured s (.store srcLLTy valOp (.reg tmpName))
         emitStructured s (.load dst dstLLTy (.reg tmpName))
       | _ =>
@@ -994,7 +1029,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         if ssaIsPassByPtr s srcTy then
           let (s, tmp) := freshLocal s
           let tmpName := (tmp.drop 1).toString
-          let s := emitEntryAlloca s (.alloca tmpName srcLLTy)
+          let s := emitAllocaTy s tmpName srcTy srcLLTy
           let s := emitStructured s (.store srcLLTy valOp (.reg tmpName))
           let s := emitStructured s (.gep dst .i8 (.reg tmpName) [(.i32, .intLit 0)])
           markPtr s dst
@@ -1030,7 +1065,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       -- Fallback: alloca+store+load to "bitcast"
       let (s, tmp) := freshLocal s
       let tmpName := (tmp.drop 1).toString
-      let s := emitEntryAlloca s (.alloca tmpName srcLLTy)
+      let s := emitAllocaTy s tmpName srcTy srcLLTy
       let s := emitStructured s (.store srcLLTy valOp (.reg tmpName))
       emitStructured s (.load dst dstLLTy (.reg tmpName))
   | .memcpy dst src size =>
@@ -1464,8 +1499,14 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) (ech
 
 
 /-- Scan all SSA modules for concrete type arguments used with Option and Result.
-    Returns (largest Option payload type, largest Result payload types (ok, err)). -/
-private def scanBuiltinEnumArgs (ctx : Layout.Ctx) (modules : List SModule) : (Option Ty) × (Option (Ty × Ty)) :=
+    Returns ((canonical Option payload, max payload align, max end offset),
+    and the same for Result) over ALL instantiations: the single declared %enum
+    union must cover the worst ALIGNMENT-AWARE footprint — `end = alignUp 4 align
+    + size`, where Lower actually writes — not merely the worst `tySize`
+    (audit 2026-07-16: a max-size low-alignment canonical choice let a smaller
+    high-alignment payload run past the declared alloca). -/
+private def scanBuiltinEnumArgs (ctx : Layout.Ctx) (modules : List SModule) :
+    (Option Ty × Nat × Nat) × (Option (Ty × Ty) × Nat × Nat) :=
   let allTys := modules.foldl (fun acc m =>
     m.functions.foldl (fun acc f =>
       f.blocks.foldl (fun acc b =>
@@ -1485,22 +1526,32 @@ private def scanBuiltinEnumArgs (ctx : Layout.Ctx) (modules : List SModule) : (O
     match t with
     | .generic n [ok, err] => if n == resultEnumName then some (ok, err) else none
     | _ => none
-  -- Pick the largest payload type for Option
-  let bestOpt := optPayloads.foldl (fun best t =>
-    match best with
-    | none => some t
-    | some prev => if Layout.tySize ctx t > Layout.tySize ctx prev then some t else best
-  ) none
-  -- Pick the largest ok/err payload types for Result
-  let bestRes := resPayloads.foldl (fun best (ok, err) =>
-    match best with
-    | none => some (ok, err)
-    | some (prevOk, prevErr) =>
-      let newOk := if Layout.tySize ctx ok > Layout.tySize ctx prevOk then ok else prevOk
-      let newErr := if Layout.tySize ctx err > Layout.tySize ctx prevErr then err else prevErr
-      some (newOk, newErr)
-  ) none
-  (bestOpt, bestRes)
+  -- Footprint of one payload: where its writes end (tag aligned to payload
+  -- align, then size) — the quantity the union declaration must cover.
+  let footprint (t : Ty) : Nat × Nat :=
+    let a := Layout.tyAlign ctx t
+    (a, Layout.alignUp 4 a + Layout.tySize ctx t)
+  -- Canonical payload: worst footprint. Track worst align and worst end
+  -- independently — they need not be attained by the same instantiation.
+  let (bestOpt, optMaxA, optMaxE) := optPayloads.foldl (fun (best, maxA, maxE) t =>
+    let (a, e) := footprint t
+    let best' := match best with
+      | none => some t
+      | some prev => if e > (footprint prev).2 then some t else best
+    (best', Nat.max maxA a, Nat.max maxE e)) (none, 1, 0)
+  -- Result payload = union of Ok(T) and Err(E): align is the max across both
+  -- variants' fields, size the max of the two (enumPayloadOffset's own rule).
+  let (bestRes, resMaxA, resMaxE) := resPayloads.foldl (fun (best, maxA, maxE) (ok, err) =>
+    let a := Nat.max (Layout.tyAlign ctx ok) (Layout.tyAlign ctx err)
+    let e := Layout.alignUp 4 a + Nat.max (Layout.tySize ctx ok) (Layout.tySize ctx err)
+    let best' := match best with
+      | none => some (ok, err)
+      | some (pok, perr) =>
+        let pa := Nat.max (Layout.tyAlign ctx pok) (Layout.tyAlign ctx perr)
+        let pe := Layout.alignUp 4 pa + Nat.max (Layout.tySize ctx pok) (Layout.tySize ctx perr)
+        if e > pe then some (ok, err) else best
+    (best', Nat.max maxA a, Nat.max maxE e)) (none, 1, 0)
+  ((bestOpt, optMaxA, optMaxE), (bestRes, resMaxA, resMaxE))
 
 private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFilter : Option String := none) : EmitSSAState :=
   -- Provide argc/argv stubs ONCE (so std.args links under test mode). These used
@@ -1646,25 +1697,34 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let s := { s with emittedTypes := ["String", "Vec"] ++ s.emittedTypes }
   -- Whole-program monomorphic ABI for builtin generic enums:
   -- Scan all SSA modules for concrete type arguments, then emit a single LLVM type
-  -- definition sized to the largest payload across all instantiations.
+  -- definition covering the worst ALIGNMENT-AWARE footprint across all
+  -- instantiations (payload writes go to `alignUp 4 align`, not offset 4).
   -- Smaller payloads under-fill the slot (wasted padding) but are correct.
   -- Builtin functions (vec_pop, etc.) store i64 payloads, which always fit.
   -- NOTE: GEP offsets in Lower.lean assume tyAlign(.typeVar "T") = 8, which is correct
   -- only because all current Concrete types have alignment ≤ 8. If larger-aligned types
   -- are added, Lower.lean will need to thread concrete type args through offset computation.
   let ctx := layoutCtxOf s
-  let (bestOpt, bestRes) := scanBuiltinEnumArgs ctx modules
+  let ((bestOpt, optMaxA0, optMaxE0), (bestRes, resMaxA0, resMaxE0)) := scanBuiltinEnumArgs ctx modules
+  -- No user instantiation: the declared union still falls back to i64 payloads
+  -- (builtin fns like string_to_int store i64 at offset 8), so the fallback
+  -- footprint/alignment is the i64 one, not "no constraint".
+  let (optMaxA, optMaxE) := if bestOpt.isSome then (optMaxA0, optMaxE0) else (8, 16)
+  let (resMaxA, resMaxE) := if bestRes.isSome then (resMaxA0, resMaxE0) else (8, 16)
+  -- Publish the worst payload alignments: enumAllocaAlign attaches `align 8`
+  -- to Option/Result allocas when any instantiation needs it.
+  let s := { s with maxOptPayloadAlign := optMaxA, maxResPayloadAlign := resMaxA }
   -- Generate dynamic Option type def
   let optTypeArgs := match bestOpt with
     | some t => [t]
     | none => [Ty.int]  -- fallback: i64 payload
-  let optTypeDefs := Layout.enumTypeDefs ctx optionDef optTypeArgs
+  let optTypeDefs := Layout.enumTypeDefs ctx optionDef optTypeArgs optMaxA optMaxE
   let s := optTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Generate dynamic Result type def
   let resTypeArgs := match bestRes with
     | some (ok, err) => [ok, err]
     | none => [Ty.int, Ty.int]  -- fallback: i64 payloads
-  let resTypeDefs := Layout.enumTypeDefs ctx resultDef resTypeArgs
+  let resTypeDefs := Layout.enumTypeDefs ctx resultDef resTypeArgs resMaxA resMaxE
   let s := resTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark these as emitted so user enums with the same names won't duplicate
   let s := { s with emittedTypes := [resultEnumName, optionEnumName] ++ s.emittedTypes }

@@ -10,6 +10,64 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Audit batch 2026-07-16 (second pass): exact float literals, enum-union ABI, oracle drift, evidence-doc gates (2026-07-16)
+
+The remaining audit items from the 2026-07-16 external review, each with a
+class-level gate.
+
+**Float literals are now exactly rounded.** The audit's 1/3 fix (Nat mantissa
++ `Float.ofScientific`) was insufficient: `ofScientific` keeps only ~11 guard
+bits after dividing out `5^exp10` and still mis-rounds rare literals one ulp
+(corpus: `16.3633343`, `932183.9385014` — Lean's own literal path shares the
+flaw). New `floatOfDecimalMantissa` converts decimal→binary64 with exact
+big-Nat arithmetic (exact floor-log2 comparison, round-half-even with full
+sticky information, subnormal and overflow edges). Gate:
+`check_float_literals.sh` — 8022 fixed+LCG cases comparing both the exported
+function and the end-to-end lexer path bit-for-bit against CPython `float()`.
+
+**Canonical enum union covers the worst alignment-aware footprint; enum
+allocas carry `align 8` when payloads need it.** Audit item #3 grew two roots
+when pulled. (a) `scanBuiltinEnumArgs` picked the canonical Option/Result
+payload by max `tySize` only; a smaller high-alignment instantiation writes
+at `alignUp 4 align` and could run past the declared alloca
+(`Option<[i64;3]>` end 32 vs `Option<[u8;24]>` canonical 28). Selection is now
+by footprint and the declared union covers the program-wide worst end offset.
+(b) The union's `{ i32, [N x i8] }` declaration caps alloca alignment at 4
+while payload loads/stores assume natural alignment — `string_to_int` shipped
+exactly this (i64 store at offset 8 into a 4-aligned alloca). A first attempt
+(i64-array storage) was caught by its own fixture: aggregate load/store of a
+partially-initialized union is poison-safe only at byte granularity (lli=12,
+clang-O2=0, expected=7 on one program). Final design: byte-array storage +
+a single `emitAllocaTy` choke point attaching `align 8` to every enum alloca
+whose payload needs it (including `string_to_int`/`vec_pop` and the
+no-instantiation i64 fallback). Regression:
+`tests/programs/regress_enum_canonical_align.con` (run_ok 42007); class gate
+`check_enum_union_layout.sh`.
+
+**`string_char_at` oracle drift closed.** The interpreter indexed codepoints
+and returned 0 out-of-range; compiled code indexes bytes and returns -1 — any
+non-ASCII string or OOB index made the differential oracle disagree with
+codegen. Interp now matches the backend exactly; `check_string_char_at.sh`
+pins ASCII / non-ASCII / OOB / negative agreement.
+
+**Evidence-doc arithmetic fields enforced.** All five examples declared
+`overflow="wrapping"` (and `shift_oversize="wrap"`) months after the language
+started trapping, and `check_assumptions.sh` never read the section. Files
+corrected, the gate now asserts the frozen checked/trapping policy and
+cross-checks `--report arithmetic`, and `docs/ASSUMPTION_FILES.md`'s stale
+template and "not yet enforced" note are fixed.
+
+**Phantom `concrete new` scrubbed.** The compiler's std-import hint and the
+book/site project pages directed users to a command that does not exist; all
+three now describe the real flow (`Concrete.toml` + `src/main.con`).
+
+**CI plumbing.** `run_ci_gates_local.sh` extraction rewritten (bare
+`./scripts/...` invocations included — the two biggest CI gates were silently
+omitted from the pre-push ritual — arguments preserved, tree-mutating nightly
+mutation gate excluded); `run_tests.sh` passlevel is fail-closed on an
+unparseable pipeline-test summary; CI retry loops emit `::warning` on failed
+attempts instead of masking flakes; `ideas.org` carries a SUPERSEDED banner.
+
 ### Intrinsic identity threaded to call sites — name-hijack class closed (2026-07-16)
 
 Audit item #2: Elab and Lower intercepted intrinsics by RAW NAME, so a

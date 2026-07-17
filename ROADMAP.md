@@ -324,29 +324,45 @@ batteries-included breadth. Completed foundation work lives in
    - DONE: float-literal lexing correctly rounded (Nat mantissa +
      Float.ofScientific; the old per-digit 0.1 accumulation lexed `0.7`
      one ulp off, invisible to the differential oracle because both sides
-     shared the lexer).
+     shared the lexer). COMPLETED 2026-07-16 second pass: ofScientific
+     itself keeps only ~11 guard bits (1-ulp errors on `16.3633343`,
+     `932183.9385014`) — final fix is `floatOfDecimalMantissa`, exact
+     big-Nat conversion, gated by check_float_literals.sh (8022 cases
+     against CPython float(), function + end-to-end lexer path).
    - DONE: pipeline-test in defaultTargets + run_tests fail-closed (32
-     pass-level Lean tests were vacuously green for months).
+     pass-level Lean tests were vacuously green for months). Unparseable
+     pipeline-test summary is now fail-closed too.
    - DONE: proof-status proved entries carry an explicit trust line
      ("linked + fingerprint-fresh — kernel replay via check-proofs").
    - DONE: intrinsic identity threaded to call sites (Elab lookupFnSig
      guard + Lower definedFns guard; regress_intrinsic_shadowing.con).
      Residual: Check-side divergence/capability classifiers still match
      raw Core names (conservative misclassification only) — #13b.
-   - Option/Result canonical-enum sizing must respect ALIGNMENT, not just
-     max tySize (repr(align(N)) payload can overflow the chosen alloca).
-   - Interp/backend builtin drift (string_char_at OOB 0-vs--1, codepoint
-     vs byte indexing) — single-source the builtin semantics.
+   - DONE: Option/Result canonical-enum sizing is footprint-aware
+     (`alignUp 4 align + size`) and every enum alloca whose payload needs
+     8-byte alignment carries an explicit `align 8` (single emitAllocaTy
+     choke point; string_to_int shipped the 4-aligned-i64-store bug).
+     Byte-array storage kept deliberately: aggregate load/store of a
+     partially-initialized union is poison-safe only at byte granularity.
+     Gate: check_enum_union_layout.sh + regress_enum_canonical_align.con.
+   - DONE: interp/backend string_char_at drift (codepoint-vs-byte
+     indexing, OOB 0-vs--1) — interp matches the backend exactly;
+     check_string_char_at.sh. Residual: single-sourcing ALL builtin
+     semantics (interp table ↔ EmitBuiltins ↔ Check sigs) stays open.
+   - DONE: evidence-doc drift — five examples/*/assumptions.toml said
+     overflow="wrapping" (language traps); files corrected and
+     check_assumptions.sh now reads/enforces the arithmetic section
+     against --report arithmetic; ASSUMPTION_FILES.md template fixed.
+   - PARTIAL: CI — run_ci_gates_local extraction fixed (bare ./scripts
+     invocations + arguments preserved, tree-mutating mutation gate
+     excluded); retry loops emit ::warning on failed attempts. STILL
+     OPEN: wire catches/showcase/wrong-code/reducer/release-bundle into
+     CI or delete the Makefile targets.
+   - DONE: phantom `concrete new` scrubbed from the Resolve hint and the
+     book/site project pages (now document Concrete.toml + src/main.con);
+     ideas.org carries a SUPERSEDED banner (12b's gate will police).
    - Fuzzer grammar extension: aggregates + borrows-in-branches +
      strings/non-Copy (the classes that actually bit in 029-034).
-   - Evidence-doc drift: five examples/*/assumptions.toml say
-     overflow="wrapping" (language traps); check_assumptions.sh must read
-     the arithmetic field; CLAIMS_TODAY.md understates safety.
-   - CI: wire catches/showcase/wrong-code/reducer/release-bundle or
-     delete; fix run_ci_gates_local extraction (misses run_tests.sh
-     invocations); drop the silent 3x retry.
-   - Phantom `concrete new` (book + Resolve hint) — implement or unhint;
-     delete stale ideas.org; consolidate idea backlogs under ROADMAP.
    Deliberately NOT queued: std.cli abstraction polish (one more workload
    first), ByteCursor/ByteWriter renames (no signal), vec_get/vec_len
    builtin cleanup (deeper than a pass), roadmap compaction (collides with

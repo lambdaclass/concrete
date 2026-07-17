@@ -13,11 +13,12 @@ toolchain = "llvm"
 runtime   = "hosted-libc"
 
 [arithmetic]
-# u8 for tag bytes; i32 for loop counter and return.  Wrapping
-# arithmetic is the predictable-profile default.
-overflow       = "wrapping"
+# u8 for tag bytes; i32 for loop counter and return.  Checked
+# (trapping) arithmetic is the default in every profile, predictable
+# included; wrapping needs the explicit wrapping_* intrinsics.
+overflow       = "trap"
 divide_by_zero = "trap"
-shift_oversize = "wrap"
+shift_oversize = "trap"
 
 [allocation]
 # Zero heap.  Tag arrays are passed by value as [u8; 16];

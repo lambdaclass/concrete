@@ -11,6 +11,14 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 # gates; a full pass takes a while (proof/oracle gates are slow) — that is
 # still ~3x faster than one CI round-trip.
 #
+# Extraction contract: a workflow line invoking
+#   [VAR=value ...] [bash|python3|sh] [./]scripts/....(sh|py) [args...]
+# is a gate; the full argument list is preserved (fuzz seeds/counts,
+# --trust-gate, the grammar path), as are VAR=value env prefixes.
+# EXCLUDED on purpose: check_gate_mutation_coverage.sh — a nightly-only gate
+# that mutates compiler source files to verify gate coverage; running it as
+# a pre-push step would dirty the working tree it is meant to protect.
+#
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
 
 set -uo pipefail
@@ -20,11 +28,14 @@ WORKFLOW=".github/workflows/lean_action_ci.yml"
 [ -x ".lake/build/bin/concrete" ] || { echo "error: build first" >&2; exit 2; }
 FILTER="${1:-}"
 
+# The nightly fuzz steps derive SEED from the date in CI; the extracted fuzz
+# commands reference "$SEED", which would trip `set -u` here. Mirror CI.
+SEED="${SEED:-$(date -u +%Y%m%d)}"
+
 PASS=0; FAIL=0; FAILED=""
 while read -r cmd; do
-  # normalize ./ prefix; give check_ll1.py its argument
+  # normalize ./ prefix after an explicit interpreter
   cmd="${cmd/bash .\//bash }"
-  [ "$cmd" = "python3 scripts/check_ll1.py" ] && cmd="python3 scripts/check_ll1.py grammar/concrete.ebnf"
   if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
   if eval "$cmd" >/dev/null 2>&1; then
     PASS=$((PASS+1))
@@ -32,7 +43,10 @@ while read -r cmd; do
     FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"
     echo "  FAIL $cmd"
   fi
-done < <(grep -oE "(bash|python3) [^ ]*scripts[^ ]*\.(sh|py)" "$WORKFLOW" | sort -u)
+done < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$WORKFLOW" \
+         | grep -v 'check_gate_mutation_coverage\.sh' \
+         | sed 's/[[:space:]]*$//' \
+         | sort -u)
 
 echo
 echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL"

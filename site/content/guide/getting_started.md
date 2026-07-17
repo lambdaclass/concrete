@@ -35,6 +35,6 @@ make build
 ## What To Read Next
 
 - [Installation](@/guide/installation.md) for dependencies and build setup
-- [Creating a project](@/guide/project.md) for the `concrete new` workflow
+- [Creating a project](@/guide/project.md) for the manual project setup (no generator command yet)
 - [The Language](@/guide/language/intro.md) for the current language shape
 - [Internal Details](@/guide/internal/overview.md) if you want to understand the compiler pipeline

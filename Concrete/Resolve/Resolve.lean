@@ -550,7 +550,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
         -- can't resolve std.* — say why instead of a bare "unknown module".
         let d := mkResolveDiag (.unknownModule imp.moduleName) (some imp.span)
         let d := if imp.moduleName.startsWith "std." then
-            { d with hint := some "std.* imports resolve in project mode — create a project (`concrete new`, or add Concrete.toml + src/main.con) and build with `concrete build`; inside a project, check the module name for a typo" }
+            { d with hint := some "std.* imports resolve in project mode — create a project (add Concrete.toml + src/main.con) and build with `concrete build`; inside a project, check the module name for a typo" }
           else d
         (errs ++ [d], syms, tys)
       | some (_, pubNames) =>

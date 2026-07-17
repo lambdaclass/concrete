@@ -92,6 +92,10 @@ inductive LLVMInstr where
   | callVariadic (dst : Option String) (retTy : LLVMTy) (target : LLVMOperand) (args : List (LLVMTy × LLVMOperand)) (fnTyParams : List LLVMTy := [.ptr])
   /-- `%dst = alloca <ty>` -/
   | alloca (dst : String) (ty : LLVMTy)
+  /-- `%dst = alloca <ty>, align <align>` — for byte-union enum types whose
+      declaration carries only 4-byte alignment while payload accesses assume
+      natural (8-byte) alignment. -/
+  | allocaAlign (dst : String) (ty : LLVMTy) (align : Nat)
   /-- `%dst = load <ty>, ptr <src>` -/
   | load (dst : String) (ty : LLVMTy) (src : LLVMOperand)
   /-- `store <ty> <val>, ptr <dst>` -/

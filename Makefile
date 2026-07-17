@@ -108,6 +108,15 @@ test-proven-violation: build ## Proven-violation known-hole gate (constant OOB /
 test-float-cast: build ## Checked float->int cast gate: NaN/inf/out-of-range abort, in-range truncates (Phase 6 #10, closed H2)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_float_cast.sh
 
+test-float-literals: build ## Float-literal rounding gate: lexer == CPython float() bits over 8022 cases (audit 2026-07-16)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_float_literals.sh
+
+test-enum-union-layout: build ## Enum union layout gate: canonical Option/Result covers worst alignment-aware footprint; align-8 allocas (audit 2026-07-16)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_enum_union_layout.sh
+
+test-string-char-at: build ## string_char_at differential gate: interp == compiled, byte-indexed, -1 OOB (audit 2026-07-16)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_string_char_at.sh
+
 test-mono-collision: build ## Mono name-collision known-hole gate (nested-generic specializations merge)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_mono_name_collision.sh
 

@@ -503,9 +503,16 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
       | "string_char_at", [s, i] => do
         match ← autoDeref env s, ← autoDeref env i with
         | .string str, .int idx _ =>
-          match str.toList[idx.toNat]? with
-          | some c => return (env, .val (.int (Int.ofNat c.toNat) .char))
-          | none => return (env, .val (.int 0 .char))
+          -- Matches EmitBuiltins exactly: BYTE index into the UTF-8 data,
+          -- -1 on negative or out-of-range (audit 2026-07-16: the interp
+          -- indexed codepoints and returned 0, drifting from compiled output
+          -- for any non-ASCII string and making OOB invisible to the oracle).
+          let bytes := str.toUTF8
+          if idx < 0 then
+            return (env, .val (.int (-1) .int))
+          else match bytes.data[idx.toNat]? with
+            | some b => return (env, .val (.int (Int.ofNat b.toNat) .int))
+            | none => return (env, .val (.int (-1) .int))
         | _, _ => .error "interp: string_char_at: bad arguments"
       | "string_contains", [h, n] => do
         match ← autoDeref env h, ← autoDeref env n with

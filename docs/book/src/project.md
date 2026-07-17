@@ -1,40 +1,53 @@
 # Creating a project
 
-Concrete includes a `new` subcommand for creating a project skeleton.
-
-To create a project:
+Concrete projects are plain directories — there is no generator command (a
+`concrete new` scaffolding command is roadmap Phase 18 work, not implemented
+today). Create the two files by hand:
 
 ```bash
-concrete new <project_name> [--lib]
+mkdir my_project
+cd my_project
 ```
 
-Pass `--lib` to create a library project instead of a binary-oriented one.
+`Concrete.toml`:
 
-## What It Creates
+```toml
+[package]
+name = "my_project"
+version = "0.1.0"
+license = "MIT"
+```
 
-The intent is to give you a starting project with:
+`src/main.con`:
 
-- a project directory
-- package/project metadata
-- a main binary or library entry point
-
-The exact layout may still evolve as Concrete's package/project model matures.
+```con
+mod my_project {
+    fn main() with(Std) -> Int {
+        println("hello");
+        return 0;
+    }
+}
+```
 
 ## Building A Project
 
-To build the created project:
-
 ```bash
-cd <project_name>
-concrete build
+concrete build     # compile the package
+concrete run       # compile and run src/main.con
+concrete test      # run #[test] functions
 ```
+
+The manifest drives the project model: `[package]` metadata, the `src/`
+layout, and (for examples in this repository) dependency on the `std`
+package. See any `examples/*/Concrete.toml` for a working manifest.
 
 ## Current State
 
 The project/package workflow is still evolving. Today:
 
-- it is useful as a starting point
+- the manifest + `src/` layout is the supported project shape
 - it is not yet the final long-term package/dependency model
 - the roadmap treats package/dependency ecosystem work as a later explicit phase
 
-If you are working directly on the language or compiler, you will still often use the repository-level workflow rather than only the `concrete new` path.
+If you are working directly on the language or compiler, you will still often
+use the repository-level workflow rather than the project flow.

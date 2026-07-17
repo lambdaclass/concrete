@@ -40,12 +40,13 @@ runtime    = "hosted-libc"      # hosted-libc | freestanding | (future: wasi)
 
 [arithmetic]
 # Concrete's frozen arithmetic policy. See docs/ARITHMETIC_POLICY.md.
-# CI does not yet enforce these (the policy reaches reports only in
-# Phase 2 E.4 work). Declared here so reviewers can see what is
-# assumed without inferring from source.
-overflow         = "wrapping"   # wrapping | trap | undefined
+# Enforced by check_assumptions.sh: the declared values must equal the
+# language's checked/trapping semantics — an assumption file is the surface
+# the example's evidence is read under, so it must not misstate them.
+overflow         = "trap"       # trap (ordinary ops are checked and trap;
+                                # only explicit wrapping_* intrinsics wrap)
 divide_by_zero   = "trap"
-shift_oversize   = "wrap"
+shift_oversize   = "trap"
 
 [allocation]
 # What the example assumes about its allocation surface.
@@ -97,10 +98,11 @@ checks the following at first landing:
 | `ffi.externs = [...]` | Externs in the program match this list. | Source added or removed an FFI declaration. |
 | `trusted.functions / shells = [...]` | `--report unsafe` matches. | Source added or removed a trusted boundary. |
 
-Fields under `[target]`, `[arithmetic]`, and `[proof]` are
+| `arithmetic.overflow / divide_by_zero / shift_oversize` | Must equal the language's frozen checked/trapping policy; `--report arithmetic` must show no unchecked sites. | File declares semantics the language does not have (e.g. `overflow = "wrapping"`). |
+
+Fields under `[target]` and `[proof]` are
 declarative-only at v1. They become enforced when the corresponding
-compiler surfaces land (Phase 2 E.4 for arithmetic visibility in
-reports, Phase 5 for target/toolchain checks, Phase 4 for
+compiler surfaces land (Phase 5 for target/toolchain checks, Phase 4 for
 provable-subset naming).
 
 ## How to add an assumption file for a new example

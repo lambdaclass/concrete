@@ -63,6 +63,7 @@ Those belong in:
 ## Open Numbered Bugs
 
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
+- [037_repr_align_exceeds_declared_type.md](037_repr_align_exceeds_declared_type.md) — repr(align(N>8)) changes Layout but not the declared LLVM type (candidate fix: fail-closed rejection; found by the audit-3/3 enum work)
 
 ## Still Open, But Not Numbered Bugs
 

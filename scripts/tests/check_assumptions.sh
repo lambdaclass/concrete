@@ -227,6 +227,38 @@ check_example() {
     fi
   fi
 
+  # --- arithmetic.{overflow,divide_by_zero,shift_oversize} ---
+  # The frozen policy (docs/ARITHMETIC_POLICY.md): ordinary integer ops are
+  # checked and TRAP on overflow / div-zero / over-width shift; only explicit
+  # wrapping_*/saturating_* intrinsics do otherwise. An assumption file is the
+  # evidence surface the example's bundle is read under — it must not declare
+  # semantics the language does not have (audit 2026-07-16: all five files
+  # declared overflow="wrapping" months after the language started trapping).
+  local report_arith
+  report_arith=$("$COMPILER" "$source" --report arithmetic 2>&1) || {
+    echo "  FAIL --report arithmetic errored: $(head -1 <<<"$report_arith")"
+    errs=$((errs + 1))
+  }
+  local ovf dbz shf
+  ovf=$(toml_get "$af" arithmetic overflow)
+  dbz=$(toml_get "$af" arithmetic divide_by_zero)
+  shf=$(toml_get "$af" arithmetic shift_oversize)
+  [ "$ovf" = "trap" ] && echo "  ok   arithmetic.overflow=trap" || {
+    echo "  FAIL arithmetic.overflow='$ovf' — language policy is checked/trapping (only explicit wrapping_* intrinsics wrap)"
+    errs=$((errs + 1)); }
+  [ "$dbz" = "trap" ] && echo "  ok   arithmetic.divide_by_zero=trap" || {
+    echo "  FAIL arithmetic.divide_by_zero='$dbz' — language policy is trap"
+    errs=$((errs + 1)); }
+  [ "$shf" = "trap" ] && echo "  ok   arithmetic.shift_oversize=trap" || {
+    echo "  FAIL arithmetic.shift_oversize='$shf' — language policy is trap (over-width shift aborts)"
+    errs=$((errs + 1)); }
+  # Cross-check the declared trap semantics against the site classification:
+  # no site may be reported without a checked/proved/explicit class.
+  if grep -qE 'unchecked|implicit-wrapping' <<<"$report_arith"; then
+    echo "  FAIL --report arithmetic shows unchecked/implicit-wrapping sites under declared trap semantics"
+    errs=$((errs + 1))
+  fi
+
   if [ "$errs" -eq 0 ]; then
     PASS=$((PASS + 1))
   else

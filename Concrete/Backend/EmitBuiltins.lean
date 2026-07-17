@@ -279,7 +279,7 @@ def getBuiltinFns : List LLVMFnDef × List LLVMGlobal × List LLVMFnDecl :=
       .binOp "not_empty" .xor_ .i1 (.reg "empty_input") (.boolLit true),
       .binOp "final_ok" .and_ .i1 (.reg "valid") (.reg "not_empty"),
       .call none .void (.global "free") [(.ptr, .reg "sti_buf")],
-      .alloca "res.sti" resTy
+      .allocaAlign "res.sti" resTy 8
     ], .condBr (.reg "final_ok") "sti_ok" "sti_err"⟩,
     ⟨"sti_ok", [
       .store .i32 (.intLit 0) (.reg "res.sti"),
@@ -854,7 +854,7 @@ def getVecBuiltinFns (specs : List (Nat × Nat)) : List LLVMFnDef :=
         .binOp "offset" .mul .i64 (.reg "newlen") (.intLit es),
         .gep "slot" .i8 (.reg "data") [(.i64, .reg "offset")],
         -- Zero-initialize the Option, then copy element into payload
-        .alloca "res" optTy,
+        .allocaAlign "res" optTy 8,
         .call none .void (.global "memset") [(.ptr, .reg "res"), (.i32, .intLit 0), (.i64, .intLit (Layout.alignUp (payOff + esNat) (Nat.max 4 (Nat.min esNat 8))))],
         .store .i32 (.intLit 0) (.reg "res"),
         .gep "payload" .i8 (.reg "res") [(.i64, .intLit payOff)],
@@ -862,7 +862,7 @@ def getVecBuiltinFns (specs : List (Nat × Nat)) : List LLVMFnDef :=
         .load "r" optTy (.reg "res")
       ], .ret optTy (some (.reg "r"))⟩,
       ⟨"none", [
-        .alloca "res2" optTy,
+        .allocaAlign "res2" optTy 8,
         .call none .void (.global "memset") [(.ptr, .reg "res2"), (.i32, .intLit 0), (.i64, .intLit (Layout.alignUp (payOff + esNat) (Nat.max 4 (Nat.min esNat 8))))],
         .store .i32 (.intLit 1) (.reg "res2"),
         .load "r2" optTy (.reg "res2")

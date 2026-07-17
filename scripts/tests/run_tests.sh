@@ -6713,6 +6713,9 @@ run_ok "$TESTDIR/regress_034_shortcircuit_borrow_promotion.con" 133
 # Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
 # are USER fns at every pass — never name-hijacked.
 run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31
+# Enum canonical union (audit 2026-07-16): align-8 payload reads back through
+# the shared union; class gate is check_enum_union_layout.sh.
+run_ok "$TESTDIR/regress_enum_canonical_align.con" 42007
 run_err "$TESTDIR/error_030_nonmut_array_write.con" "cannot assign to immutable"
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42
@@ -6892,8 +6895,12 @@ if [ -x "$PIPELINE_TEST" ]; then
             grep <<<"$output" "^FAIL:" >&2
         fi
     else
-        echo "  WARNING: could not parse pipeline-test output"
+        # FAIL-CLOSED (audit 2026-07-16): the binary ran but its summary
+        # line did not parse — the output contract broke, so the pass-level
+        # results are unknown. Unknown is a failure, not a warning.
+        echo "  FAIL: could not parse pipeline-test summary ('=== N/M passed, F failed ===')"
         echo "$output"
+        FAIL=$((FAIL + 1))
     fi
 else
     # FAIL-CLOSED (audit 2026-07-16): a missing binary silently skipped all

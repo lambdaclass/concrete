@@ -138,6 +138,54 @@ partial def lexOctLoop (s : LexerState) (acc : Nat) : LexerState × TokenKind :=
       (s, .intLit acc)
   | none => (s, .intLit acc)
 
+/-- Correctly-rounded decimal → binary64: the nearest double to
+    `mantissa × 10^(-exp10)`, ties to even, by exact big-`Nat` arithmetic.
+    `Float.ofScientific` keeps only ~11 guard bits after dividing out `5^exp10`
+    and lands one ulp off on rare literals (corpus: `16.3633343`,
+    `932183.9385014`); this keeps all sticky information and never mis-rounds.
+    Overflows to +Inf like strtod; underflows gradually through subnormals to +0. -/
+def floatOfDecimalMantissa (mantissa : Nat) (exp10 : Nat) : Float :=
+  if mantissa == 0 then 0.0
+  else
+    -- v = mantissa / (den · 2^exp10), exactly
+    let den := 5 ^ exp10
+    -- e = ⌊log₂ v⌋; the estimate e0 satisfies e ∈ {e0, e0+1}.
+    -- v ≥ 2^(e0+1) ⟺ mantissa/den ≥ 2^(e0+1+exp10) (the 2^exp10 is inside gePow2's t)
+    let e0 := (mantissa.log2 : Int) - ((den.log2 : Int) + 1) - (exp10 : Int)
+    let e := if gePow2 mantissa den (e0 + 1 + (exp10 : Int)) then e0 + 1 else e0
+    if e ≥ -1022 then
+      -- normal: significand = round(v / 2^(e-52))
+      let sig := roundScaled mantissa den ((52 : Int) - e - (exp10 : Int))
+      let (sig, e) := if sig ≥ 2^53 then (sig / 2, e + 1) else (sig, e)
+      if e > 1023 then
+        Float.ofBits 0x7FF0000000000000
+      else
+        Float.ofBits (((e + 1023).toNat.toUInt64) <<< 52 ||| (sig - 2^52).toUInt64)
+    else
+      -- subnormal: significand = round(v / 2^(-1074))
+      let sig := roundScaled mantissa den ((1074 : Int) - (exp10 : Int))
+      if sig == 0 then 0.0
+      else if sig ≥ 2^52 then Float.ofBits ((1 : UInt64) <<< 52)  -- rounded up to min normal
+      else Float.ofBits sig.toUInt64
+where
+  /-- `num/den ≥ 2^t`, by exact big-`Nat` comparison (num, den > 0). -/
+  gePow2 (num den : Nat) (t : Int) : Bool :=
+    if t ≥ 0 then num ≥ den <<< t.toNat
+    else num <<< (-t).toNat ≥ den
+  /-- Exact round-to-nearest (ties to even) of `num · 2^shift / den`
+      (negative shift divides den instead). -/
+  roundScaled (num den : Nat) (shift : Int) : Nat :=
+    let (q, r, d) :=
+      if shift ≥ 0 then
+        let n := num <<< shift.toNat
+        (n / den, n % den, den)
+      else
+        let d := den <<< (-shift).toNat
+        (num / d, num % d, d)
+    let twice := r * 2
+    let up := if twice > d then true else if twice < d then false else q % 2 == 1
+    if up then q + 1 else q
+
 /-- Lex a number literal (integer or float), including hex/bin/oct. -/
 partial def lexNumberLoop (s : LexerState) (acc : Nat) : LexerState × TokenKind :=
   -- If acc is 0, check for hex/bin/oct prefix
@@ -169,7 +217,8 @@ where
     | none => (s, .intLit acc)
   -- Fraction digits accumulate into the EXACT Nat mantissa; the single
   -- correctly-rounded conversion happens once at the end via
-  -- Float.ofScientific (the same path Lean's own float literals take).
+  -- floatOfDecimalMantissa (Float.ofScientific keeps only ~11 guard bits and
+  -- still mis-rounds rare literals one ulp — corpus 2026-07-16).
   -- The old form (acc + digit * place, place *= 0.1) compounded binary
   -- rounding error per digit — `0.7` lexed one ulp off (audit 2026-07-16).
   lexFloatFrac (s : LexerState) (mantissa : Nat) (fracDigits : Nat) : LexerState × TokenKind :=
@@ -178,8 +227,8 @@ where
       if c.isDigit then
         lexFloatFrac s.advance (mantissa * 10 + (c.toNat - '0'.toNat)) (fracDigits + 1)
       else
-        (s, .floatLit (Float.ofScientific mantissa true fracDigits))
-    | none => (s, .floatLit (Float.ofScientific mantissa true fracDigits))
+        (s, .floatLit (floatOfDecimalMantissa mantissa fracDigits))
+    | none => (s, .floatLit (floatOfDecimalMantissa mantissa fracDigits))
 
 /-- Lex a string literal (after opening quote). Only the escapes listed here
     exist; anything else after `\` is an error token (never silently dropped). -/

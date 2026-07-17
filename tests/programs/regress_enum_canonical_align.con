@@ -1,0 +1,44 @@
+// Audit 2026-07-16: the builtin-enum canonical union was sized by max tySize
+// alone. Option<[u8; 24]> (size 24, align 1 → writes at bytes 4..28) could beat
+// Option<[i64; 3]> (size 24, align 8 → writes at bytes 8..32) on the size tie,
+// declaring a 28-byte %enum.Option while the i64 payload lands at bytes 8..32 —
+// four past the alloca, dropped by whole-enum copies, and 8-assumed-aligned
+// stores aimed at a 4-aligned alloca. Now the union covers the worst
+// alignment-aware footprint and carries the payload alignment ([N x i64]
+// storage when any instantiation needs 8-byte alignment).
+// Expected: prints 42 then 7.
+enum Option<T> {
+    Some { value: T },
+    None
+}
+
+fn make_big() -> Option<[i64; 3]> {
+    let v: [i64; 3] = [10, 20, 42];
+    return Option::Some { value: v };
+}
+
+fn make_arr() -> Option<[u8; 24]> {
+    let a: [u8; 24] = [7; 24];
+    return Option::Some { value: a };
+}
+
+fn read_big(big: Option<[i64; 3]>) -> Int {
+    match big {
+        Option::Some { value } => { return value[2] as Int; },
+        Option::None {} => { return -1; },
+    }
+}
+
+fn read_arr(arr: Option<[u8; 24]>) -> Int {
+    match arr {
+        Option::Some { value } => { return value[0] as Int; },
+        Option::None {} => { return -2; },
+    }
+}
+
+fn main() with(Console) -> Int {
+    let big: Option<[i64; 3]> = make_big();
+    let arr: Option<[u8; 24]> = make_arr();
+    print_int(read_big(big) * 1000 + read_arr(arr));
+    return 0;
+}

@@ -27,10 +27,12 @@ runtime   = "hosted-libc"
 # wrap mod 2^32 consistently across all three semantics — the proof
 # model (BitVec, register R-22..R-26), the interpreter (maskWidth),
 # and the compiled binary (LLVM) — verified by the oracle
-# differential.  Wrapping is the predictable-profile default.
-overflow       = "wrapping"
+# differential.  That wrapping comes from the explicit wrapping_add
+# intrinsic; ordinary + - * are checked (trapping) in every profile,
+# predictable included.
+overflow       = "trap"
 divide_by_zero = "trap"
-shift_oversize = "wrap"
+shift_oversize = "trap"
 
 [allocation]
 # Zero heap.  Every buffer is a fixed-size stack array

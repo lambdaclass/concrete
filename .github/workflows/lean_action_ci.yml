@@ -89,7 +89,7 @@ jobs:
             if SKIP_FLAKY_TCP_TEST=1 ./scripts/tests/run_tests.sh; then
               exit 0
             fi
-            echo "Main test suite failed on attempt $attempt"
+            echo "::warning file=run_tests::Main test suite failed on attempt $attempt of 3"
           done
           exit 1
 
@@ -113,7 +113,7 @@ jobs:
             if SKIP_FLAKY_TCP_TEST=1 ./scripts/tests/run_tests.sh; then
               exit 0
             fi
-            echo "Main test suite failed on attempt $attempt (macOS)"
+            echo "::warning file=run_tests::Main test suite failed on attempt $attempt of 3 (macOS)"
           done
           exit 1
 
