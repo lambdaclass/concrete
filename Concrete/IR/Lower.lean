@@ -569,6 +569,170 @@ private def prePromoteAddrTaken (preVars : List (String × SVal))
         emit (.store val (.reg allocaReg vty))
         addPromotedAlloca name allocaReg vty
 
+/-- Per-site rules for `reconcileBranchVars`. The three branch merge loops
+    (statement-if, if-expr, match) grew these shapes separately — bugs
+    029/031/033/038 were each "one site missed one invariant", so ROADMAP 1a
+    consolidates them into one function. The differences below could NOT be
+    unified without changing emitted IR, so they stay here as explicit fields;
+    do not "simplify" them away without a full battery run. -/
+private structure BranchMergeRules where
+  /-- Statement-if void rule: an arm whose end value is `.unit` for a
+      NON-unit var is not a real change, and such an arm contributes the
+      PRE-branch value (not the unit) to the merge. ifExpr/match use the
+      plain rule: a `.unit` end value counts as changed and flows into the
+      merge as-is. -/
+  unitArmUsesPreVal : Bool
+  /-- Bug 029: after the alloca merge, an ARRAY variable rebinds the merge
+      alloca's ADDRESS (arrays live at addresses everywhere); any other
+      aggregate binds a fresh by-value load. The match loop predates this
+      rule and binds the load for arrays too (false) — a real divergence,
+      kept byte-identical rather than fixed in this refactor. -/
+  arrayRebindsAllocaAddr : Bool
+  /-- Skip phi emission for a unit-typed variable (statement-if/ifExpr:
+      no-op). The match loop has no such guard. -/
+  skipUnitPhi : Bool
+  /-- Exactly one live arm carried the (changed) variable: bind that arm's
+      value directly (statement-if/ifExpr). The match loop leaves the
+      variable alone in that case (its single-live-arm shape is handled
+      outside the merge loop). -/
+  singleIncomingRebinds : Bool
+  /-- Register-name prefixes for the merge alloca / merge load / merge phi.
+      SSA names are part of the emitted IR — kept byte-identical per site. -/
+  mergePfx : String
+  loadPfx : String
+  phiPfx : String
+
+/-- Statement-if (`.ifElse`) merge rules. -/
+private def stmtIfMergeRules : BranchMergeRules where
+  unitArmUsesPreVal := true
+  arrayRebindsAllocaAddr := true
+  skipUnitPhi := true
+  singleIncomingRebinds := true
+  mergePfx := "if.merge."
+  loadPfx := "if.load."
+  phiPfx := "if.phi."
+
+/-- If-expression (`.ifExpr`) merge rules. -/
+private def ifExprMergeRules : BranchMergeRules where
+  unitArmUsesPreVal := false
+  arrayRebindsAllocaAddr := true
+  skipUnitPhi := true
+  singleIncomingRebinds := true
+  mergePfx := "ifexpr.merge."
+  loadPfx := "ifexpr.load."
+  phiPfx := "ifphi."
+
+/-- Match (`.match_`) merge rules. -/
+private def matchMergeRules : BranchMergeRules where
+  unitArmUsesPreVal := false
+  arrayRebindsAllocaAddr := false
+  skipUnitPhi := false
+  singleIncomingRebinds := false
+  mergePfx := "match.merge."
+  loadPfx := "match.load."
+  phiPfx := "match.phi."
+
+/-- Reconcile live pre-branch variables across the arms of a branch
+    (statement-if, if-expr, or match) at the merge block. For each pre-branch
+    variable, scan the LIVE arm-end snapshots — `(endVars, endLabel)` per
+    arm; the caller filters out diverged arms (return/break/continue), which
+    contribute nothing — detect whether any arm changed the variable, and
+    merge the differing values: a phi for scalars, an entry-block alloca +
+    `insertStoreBeforeTerm` per arm for aggregates.
+
+    Invariants held here (each maps to a regression test):
+    * A promoted variable is SKIPPED — the promoted alloca is the single
+      source of truth, written through by every arm; reconciling it would
+      re-store the stale pre-branch snapshot over the arms' writes (bugs
+      031/038 — aggregates included).
+    * Aggregates merge via entry alloca + per-arm store, never a phi
+      (E0714, bug 033); arrays then rebind the alloca ADDRESS, other
+      aggregates bind a fresh load (bug 029) — per
+      `rules.arrayRebindsAllocaAddr`.
+    * "Changed" detection and the void rule differ per site and are encoded
+      in `rules`, NOT unified away (no behavior change — ROADMAP 1a). -/
+private def reconcileBranchVars (rules : BranchMergeRules)
+    (preVars : List (String × SVal))
+    (liveArms : List (List (String × SVal) × String)) : LowerM Unit := do
+  for (name, preVal) in preVars do
+    -- A promoted variable is memory-backed and written through its alloca in
+    -- the branches, so the alloca is the single source of truth —
+    -- reconciling it would re-store the stale pre-branch snapshot at the
+    -- merge (C9-class miscompile, bug 031 family). This holds for AGGREGATES
+    -- too (bug 038: a string mutated via &mut in a branch arm was clobbered
+    -- by the merge's stale table value — audit 2026-07-16 fuzz).
+    if (← isPromoted name).isSome then continue
+    let ty := preVal.ty
+    let mut incoming : List (SVal × String) := []
+    let mut anyChanged := false
+    for (endVars, endLabel) in liveArms do
+      match endVars.find? fun (n, _) => n == name with
+      | none => pure ()
+      | some (_, v) =>
+        let changed :=
+          if rules.unitArmUsesPreVal then
+            -- Statement-if: a `.unit` end value only counts as a change for
+            -- a unit-typed var ("void in non-void context" is not a change).
+            match v with
+            | .unit => ty == .unit
+            | .reg n1 _ => match preVal with
+              | .reg n2 _ => n1 != n2
+              | _ => true
+            | _ => true
+          else
+            match v, preVal with
+            | .reg n1 _, .reg n2 _ => n1 != n2
+            | _, _ => true
+        if changed then anyChanged := true
+        let contrib :=
+          if rules.unitArmUsesPreVal then
+            -- Statement-if: use the pre-branch value for void in a non-void
+            -- context.
+            match v with
+            | .unit => if ty == .unit then v else preVal
+            | _ => v
+          else v
+        incoming := incoming ++ [(contrib, endLabel)]
+    if anyChanged then
+      if incoming.length >= 2 then
+        let isAgg ← isAggregateForPromotion ty
+        if isAgg then
+          -- Aggregates may not phi (E0714, bug 033): merge through an
+          -- entry-block alloca, storing each arm's value in its own end
+          -- block before the branch to the merge.
+          let allocaReg ← freshReg rules.mergePfx
+          emitEntryAlloca (.alloca allocaReg ty)
+          for (v, fromLabel) in incoming do
+            insertStoreBeforeTerm fromLabel v (.reg allocaReg ty)
+          match ty with
+          | .array _ _ =>
+            if rules.arrayRebindsAllocaAddr then
+              -- Bug 029: arrays live at ADDRESSES everywhere (arrayLit
+              -- returns its alloca; addrOfLocal assumes it; EmitSSA stores
+              -- memcpy address-form aggregates). A by-value load rebind
+              -- breaks that convention — post-merge `&arr` would use a
+              -- [N x T] VALUE where its address should flow (llvm-as
+              -- reject). Bind the merge alloca's ADDRESS instead; the
+              -- memcpy stores above filled it.
+              setVar name (.reg allocaReg ty)
+            else
+              let loadReg ← freshReg rules.loadPfx
+              emit (.load loadReg (.reg allocaReg ty) ty)
+              setVar name (.reg loadReg ty)
+          | _ =>
+            let loadReg ← freshReg rules.loadPfx
+            emit (.load loadReg (.reg allocaReg ty) ty)
+            setVar name (.reg loadReg ty)
+        else if !rules.skipUnitPhi || ty != .unit then
+          let phiReg ← freshReg rules.phiPfx
+          emit (.phi phiReg incoming ty)
+          setVar name (.reg phiReg ty)
+        else pure ()
+      else match incoming with
+        | [(val, _)] =>
+          if rules.singleIncomingRebinds then setVar name val
+        | _ => pure ()
+
 mutual
 
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
@@ -1064,41 +1228,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         terminateBlock .unreachable
 
     startBlock mergeLabel
-    -- Merge variables modified in match arms (same logic as if/else merge)
+    -- Merge variables modified in match arms (shared with the if sites via
+    -- reconcileBranchVars — ROADMAP 1a). Only arms that reached the merge
+    -- contribute; diverged arms were recorded with an empty snapshot.
     let liveSnapshots := armEndSnapshots.filter fun (_, _, term) => !term
     if liveSnapshots.length >= 2 then
-      for (name, preVal) in preMatchVars do
-        -- Promoted variables are memory-backed; skip (see the ifElse-statement
-        -- note — aggregates included, else the merge re-stores the stale
-        -- pre-match snapshot over the arms' writes).
-        if (← isPromoted name).isSome then continue
-        let varTy := preVal.ty
-        -- Collect (value, label) for arms that changed this variable
-        let mut incoming : List (SVal × String) := []
-        let mut anyChanged := false
-        for (endVars, endLabel, _) in liveSnapshots do
-          match endVars.find? fun (n, _) => n == name with
-          | some (_, v) =>
-            let changed := match v, preVal with
-              | .reg n1 _, .reg n2 _ => n1 != n2
-              | _, _ => true
-            if changed then anyChanged := true
-            incoming := incoming ++ [(v, endLabel)]
-          | none => pure ()
-        if anyChanged && incoming.length >= 2 then
-          let isAgg ← isAggregateForPromotion varTy
-          if isAgg then
-            let allocaReg ← freshReg "match.merge."
-            emitEntryAlloca (.alloca allocaReg varTy)
-            for (v, fromLabel) in incoming do
-              insertStoreBeforeTerm fromLabel v (.reg allocaReg varTy)
-            let loadReg ← freshReg "match.load."
-            emit (.load loadReg (.reg allocaReg varTy) varTy)
-            setVar name (.reg loadReg varTy)
-          else
-            let phiReg ← freshReg "match.phi."
-            emit (.phi phiReg incoming varTy)
-            setVar name (.reg phiReg varTy)
+      reconcileBranchVars matchMergeRules preMatchVars
+        (liveSnapshots.map fun (endVars, endLabel, _) => (endVars, endLabel))
       -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`)
       -- enter the var-table via `setVar` inside the arm body. After merge,
       -- those bindings are out of scope but still leak into vars; the next
@@ -1357,64 +1493,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let elseEndLabel ← getCurrentLabel
     if !term2 then
       terminateBlock (.br mergeLabel)
-    -- Merge block with phi nodes for variables that differ between branches
+    -- Merge block: reconcile variables that differ between branches (shared
+    -- with the statement-if and match via reconcileBranchVars — ROADMAP 1a).
+    -- Diverged branches contribute nothing to the reconciliation.
     startBlock mergeLabel
     if !term1 || !term2 then
-      for (name, preVal) in preIfVars do
-        -- Promoted variables are memory-backed; skip (see the ifElse-statement
-        -- note — aggregates included, else the merge re-stores the stale
-        -- pre-if snapshot over the branches' writes).
-        if (← isPromoted name).isSome then continue
-        let thenV := if term1 then none
-          else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
-        let elseV := if term2 then none
-          else (elseEndVars.find? fun (n, _) => n == name).map (·.2)
-        let vty := preVal.ty
-        let thenChanged := match thenV with
-          | some v => match v, preVal with
-            | .reg n1 _, .reg n2 _ => n1 != n2
-            | _, _ => true
-          | none => false
-        let elseChanged := match elseV with
-          | some v => match v, preVal with
-            | .reg n1 _, .reg n2 _ => n1 != n2
-            | _, _ => true
-          | none => false
-        if thenChanged || elseChanged then
-          let mut incoming : List (SVal × String) := []
-          match thenV with
-          | some v => incoming := incoming ++ [(v, thenEndLabel)]
-          | none => pure ()
-          match elseV with
-          | some v => incoming := incoming ++ [(v, elseEndLabel)]
-          | none => pure ()
-          if incoming.length >= 2 then
-            -- Bug 033: aggregates may not phi (E0714) — use the same
-            -- alloca+store merge as the statement-if, including the
-            -- bug-029 array rule (arrays rebind their alloca ADDRESS).
-            -- Triggered by discard()'s `if true { e; }` desugar with any
-            -- live String/struct var across it.
-            let isAgg ← isAggregateForPromotion vty
-            if isAgg then
-              let allocaReg ← freshReg "ifexpr.merge."
-              emitEntryAlloca (.alloca allocaReg vty)
-              for (v, fromLabel) in incoming do
-                insertStoreBeforeTerm fromLabel v (.reg allocaReg vty)
-              match vty with
-              | .array _ _ =>
-                setVar name (.reg allocaReg vty)
-              | _ =>
-                let loadReg ← freshReg "ifexpr.load."
-                emit (.load loadReg (.reg allocaReg vty) vty)
-                setVar name (.reg loadReg vty)
-            else if vty != .unit then
-              let phiReg ← freshReg "ifphi."
-              emit (.phi phiReg incoming vty)
-              setVar name (.reg phiReg vty)
-            else pure ()
-          else match incoming with
-            | [(val, _)] => setVar name val
-            | _ => pure ()
+      let liveArms :=
+        (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
+          (if term2 then [] else [(elseEndVars, elseEndLabel)])
+      reconcileBranchVars ifExprMergeRules preIfVars liveArms
     -- Load result from slot (a unit/never if-expr has no slot — yields unit).
     loadResult resultSlot? ty "ifload."
 
@@ -1726,97 +1813,15 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let term2 ← currentBlockTerminated
     if !term2 then
       terminateBlock (.br mergeLabel)
-    -- Merge with phi nodes for variables that differ between branches
+    -- Merge block: reconcile variables that differ between branches (shared
+    -- with the if-expr and match via reconcileBranchVars — ROADMAP 1a).
+    -- Diverged branches contribute nothing to the reconciliation.
     startBlock mergeLabel
     if !term1 || !term2 then
-      for (name, preVal) in preIfVars do
-        -- A promoted variable is memory-backed and written through its alloca
-        -- in the branches, so the alloca is the single source of truth —
-        -- reconciling it would re-store the stale pre-if snapshot at the
-        -- merge (C9-class miscompile). This holds for AGGREGATES too: the
-        -- promoted alloca is written through by every arm (bug-031 family,
-        -- string mutated via &mut in a branch arm was clobbered by the
-        -- merge's stale table value — audit 2026-07-16 fuzz).
-        if (← isPromoted name).isSome then continue
-        let thenVal := if term1 then none
-          else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
-        let elseVal := if term2 then none
-          else (elseEndVars.find? fun (n, _) => n == name).map (·.2)
-        let ty := preVal.ty
-        -- Check if any branch modified this variable
-        -- Check if a value truly changed (ignore void→non-void spurious changes)
-        let isRealChange (newVal : SVal) (oldVal : SVal) : Bool :=
-          match newVal with
-          | SVal.unit => ty == .unit  -- void only counts as change for void vars
-          | .reg n1 _ => match oldVal with
-            | .reg n2 _ => n1 != n2
-            | _ => true
-          | _ => true
-        let thenChanged := match thenVal with
-          | some v => isRealChange v preVal
-          | none => false
-        let elseChanged := match elseVal with
-          | some v => isRealChange v preVal
-          | none => false
-        if thenChanged || elseChanged then
-          let mut incoming : List (SVal × String) := []
-          match thenVal with
-          | some v =>
-            -- Use pre-if value for void in non-void context
-            match v with
-            | SVal.unit =>
-              if ty == .unit then
-                incoming := incoming ++ [(v, thenEndLabel)]
-              else
-                incoming := incoming ++ [(preVal, thenEndLabel)]
-            | _ => incoming := incoming ++ [(v, thenEndLabel)]
-          | none => pure ()
-          match elseVal with
-          | some v =>
-            match v with
-            | SVal.unit =>
-              if ty == .unit then
-                incoming := incoming ++ [(v, elseEndLabel)]
-              else
-                incoming := incoming ++ [(preVal, elseEndLabel)]
-            | _ => incoming := incoming ++ [(v, elseEndLabel)]
-          | none => pure ()
-          if incoming.length >= 2 then
-            let isAgg ← isAggregateForPromotion ty
-            if isAgg then
-              -- Aggregate: use entry-block alloca instead of phi
-              -- Stores from each branch were already done by setVar→promoted path,
-              -- or we retroactively insert an alloca + stores now.
-              let allocaReg ← freshReg "if.merge."
-              emitEntryAlloca (.alloca allocaReg ty)
-              -- Re-emit stores from each branch by inserting store at end of each
-              -- For correctness: we patch the last instruction of each branch block
-              -- to store into the alloca before the terminator.
-              -- Simpler approach: insert store-before-branch in each block.
-              for (v, fromLabel) in incoming do
-                insertStoreBeforeTerm fromLabel v (.reg allocaReg ty)
-              match ty with
-              | .array _ _ =>
-                -- Bug 029: arrays live at ADDRESSES everywhere (arrayLit returns
-                -- its alloca; addrOfLocal assumes it; EmitSSA stores memcpy
-                -- address-form aggregates). A by-value `if.load.` rebind broke
-                -- that convention — post-merge `&arr` then used a [N x T] VALUE
-                -- where its address should flow (llvm-as reject). Bind the merge
-                -- alloca's ADDRESS instead; the memcpy stores above filled it.
-                setVar name (.reg allocaReg ty)
-              | _ =>
-                let loadReg ← freshReg "if.load."
-                emit (.load loadReg (.reg allocaReg ty) ty)
-                setVar name (.reg loadReg ty)
-            else if ty != .unit then
-              let phiReg ← freshReg "if.phi."
-              emit (.phi phiReg incoming ty)
-              setVar name (.reg phiReg ty)
-            else pure ()
-          else if incoming.length == 1 then
-            match incoming.head? with
-            | some (v, _) => setVar name v
-            | none => pure ()
+      let liveArms :=
+        (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
+          (if term2 then [] else [(elseEndVars, elseEndLabel)])
+      reconcileBranchVars stmtIfMergeRules preIfVars liveArms
       -- Drop branch-local declarations (e.g. a loop counter `let mut k` declared
       -- inside a branch) so they do not leak into a later construct's variable
       -- snapshot. A leaked branch-local would make the next loop/merge build a

@@ -306,14 +306,16 @@ batteries-included breadth. Completed foundation work lives in
      structured internal-error diagnostics — bug 035's fix made them
      unreachable for well-formed programs, which is exactly when a panic
      should become a diagnostic.
-   - Lower branch-site consolidation (structured-builder slice 2): four
-     branch-creating sites (statement-if, if-expr, match, `&&`/`||`) each
-     hand-maintain the same invariants (bug-031 pre-promotion, bug-033
-     aggregate-merge alloca path, result slots, live-var reconciliation);
-     bugs 029/031/033/034/038 are all one-site-missed-an-invariant. Extract a
-     shared branch prologue + merge/reconcile used by all four so the
-     fifth such bug is structurally impossible. Incremental, bug-pulled —
-     no big-bang rewrite.
+   - DONE: Lower branch-site consolidation (structured-builder slice 2): the
+     three merge loops (statement-if, if-expr, match) now call ONE
+     `reconcileBranchVars`; the four residual semantic differences
+     (statement-if void rule, array-address rebind — the match loop still
+     binds loads, unit-phi guard, single-incoming rebind) are explicit
+     fields of `BranchMergeRules`, documented as deliberate and not to be
+     "simplified" without a full battery. No behavior change (byte-identical
+     IR by construction; 1680/0 + 531/0 + fuzz seeds green). The &&/|| site
+     keeps its own minimal shape. The fifth merge bug is now one function's
+     problem instead of four sites'.
    - Stale stdlib docs refresh: STRING_TEXT_CONTRACT.md (argv/string
      validation claims), BYTE_VIEW.md (`Text::from_raw` vs the shipped
      `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md

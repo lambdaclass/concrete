@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Merge loops unified — the 029/031/033/038 family is one function now (2026-07-16)
+
+ROADMAP 1a's Lower branch-site consolidation landed. The three branch merge
+loops (statement-if, if-expr, match) — each of which had shipped at least one
+"one site missed one invariant" miscompile (029 arrays, 031 pre-promotion,
+033 aggregate phi, 038 promoted-aggregate clobber) — now call a single
+`reconcileBranchVars`. The promoted-skip invariant (031/038), the
+aggregate-no-phi rule (033/E0714), and the array-address rebind (029) live
+in exactly one place. The four genuine semantic differences between sites
+(the statement-if void rule, the match loop's array-load binding, the
+unit-phi guard, the single-incoming rebind) are explicit fields of
+`BranchMergeRules` with "do not simplify without a full battery" warnings —
+byte-identical IR preserved, verified: fast suite 1680/0, SSA 531/0, all
+five merge-bug regression fixtures exact, fuzz seeds 1+3 clean, cli gate
+14/14. The &&/|| short-circuit site keeps its own minimal shape.
+
 ### Bugs 037+038, fuzzer grammar extension, dark-gate CI wiring (2026-07-16)
 
 **Bug 038 (found by the new fuzzer grammar).** The statement-if, if-expr, and
