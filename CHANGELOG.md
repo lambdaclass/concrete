@@ -117,6 +117,30 @@ mutation gate excluded); `run_tests.sh` passlevel is fail-closed on an
 unparseable pipeline-test summary; CI retry loops emit `::warning` on failed
 attempts instead of masking flakes; `ideas.org` carries a SUPERSEDED banner.
 
+### Builtin semantics single-sourced by detection + stage-2 completion corrections (2026-07-17)
+
+Builtin single-sourcing (audit follow-up): signatures were already one
+table (Resolve/BuiltinSigs.lean, shared by Check + Elab — "can never
+silently diverge"); behavior is now pinned the same way DETECTION-side:
+`check_builtin_semantics.sh` (Makefile + CI) runs an edge-heavy fixture
+per shared builtin (empty/non-ASCII/OOB/negative/wide inputs) under the
+interpreter and as a compiled binary and requires BYTE-EQUAL output, and
+pins the interp-PENDING inventory as an explicit 11-name list so a new
+backend builtin must land on both sides or extend the pin deliberately.
+A body-generation DSL is recorded as not-now: detection kills the drift
+class (the string_char_at 0-vs--1 class) without the machinery.
+
+Stage-2 completion CORRECTIONS (review findings on e8105359 — the
+"grep returns zero hits" claim was overstated): check_exit_codes.sh's
+knob case now pins the env var IGNORED (rc=1000&255=232, clean stdout)
+instead of asserting the deleted echo; the dead unsets and no-op
+`CONCRETE_ECHO_RESULT= ` env prefixes are swept from run_tests/test_ssa/
+selfprint/defer/module_visibility/enum_union/fixed-point oracle; and the
+stale prose in EXECUTION_MODEL (docs + site), MAIN_EXIT_MODEL's stage-1
+section, the Makefile target line, and ROADMAP item 1 now state the
+knob's deletion. The one remaining reference is check_exit_codes.sh's
+deliberate ignored-env pin.
+
 ### MAIN_EXIT_MODEL stage 2 COMPLETE — the echo knob is deleted (2026-07-17)
 
 Every consumer of the legacy result echo is converted and the knob is

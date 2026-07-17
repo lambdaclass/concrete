@@ -587,7 +587,7 @@ run_ok_worker() {
         # Fast path: emit LLVM IR and interpret directly (no clang)
         local llpath="$out.ll"
         local emit_ok=1
-        CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
+        $COMPILER "$file" --emit-llvm > "$llpath" 2>/dev/null || emit_ok=0
         if [ "$emit_ok" = "0" ]; then
             {
                 echo "FAIL"
@@ -603,7 +603,7 @@ run_ok_worker() {
     else
         # Fallback: compile to native binary via clang
         local comp_ok=1
-        CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
+        $COMPILER "$file" -o "$out" > /dev/null 2>&1 || comp_ok=0
         if [ "$comp_ok" = "0" ]; then
             {
                 echo "FAIL"
@@ -620,7 +620,7 @@ run_ok_worker() {
         # the lli path, confirm via a native build before failing — only
         # mismatches pay the clang cost.
         if [ -n "$LLI" ] && [ "$actual_rc" != "$expected" ] && ! { [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ]; }; then
-            if CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
+            if $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
                 actual=$("$out" 2>/dev/null) && actual_rc=0 || actual_rc=$?
             fi
         fi
@@ -634,7 +634,7 @@ run_ok_worker() {
             {
                 echo "FAIL"
                 echo "FAIL  $file — expected rc $expected (clean stdout) or printed '$expected' (rc 0); got rc $actual_rc stdout '$actual'"
-                echo "# Rerun: CONCRETE_ECHO_RESULT= $COMPILER $file -o /tmp/test_rerun && /tmp/test_rerun"
+                echo "# Rerun: $COMPILER $file -o /tmp/test_rerun && /tmp/test_rerun"
             } > "$result_file"
         fi
         return
@@ -692,7 +692,7 @@ run_ok_O2_worker() {
     esac
     if [ -n "$expected_rc_raw" ]; then rc_mode=0; fi
     local llvm_ir
-    llvm_ir=$(CONCRETE_ECHO_RESULT= $COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
+    llvm_ir=$($COMPILER "$file" --emit-llvm 2>&1) || { echo "FAIL"; echo "FAIL  $file -O2 — emit-llvm failed"; } > "$result_file"
     [ -s "$result_file" ] && return
     echo "$llvm_ir" > "$llpath"
     if ! clang "$llpath" -o "$out" -O2 -Wno-override-module > /dev/null 2>&1; then

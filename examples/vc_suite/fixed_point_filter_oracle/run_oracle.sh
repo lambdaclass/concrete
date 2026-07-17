@@ -5,9 +5,6 @@
 # the program's output to the reference. Disagreement = a real codegen/spec bug.
 #   Usage: run_oracle.sh [seed]   (default 0)
 set -uo pipefail
-# knob-proof: drivers self-print; the legacy result echo must stay off even
-# when a caller exports it for its own unconverted corpus
-unset CONCRETE_ECHO_RESULT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"

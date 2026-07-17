@@ -497,6 +497,9 @@ jobs:
       - name: "Workload 4: tar_list differential vs tar -tf + exit codes"
         run: bash scripts/tests/check_tar_list_differential.sh
 
+      - name: "Builtin semantics: interp == compiled per builtin + inventory pin"
+        run: bash scripts/tests/check_builtin_semantics.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

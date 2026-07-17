@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # exit code (masked to the OS's 8-bit status), and the runtime writes NOTHING
 # to stdout. The legacy echoed-result behavior survives only behind
-# CONCRETE_ECHO_RESULT=1 (harness knob, dies in stage 2).
+# The legacy echo knob is DELETED (stage 2 complete): case 7 pins that the
+# env var is ignored.
 #
 # This gate deliberately does NOT export the knob — it tests the new default.
 set -uo pipefail
-unset CONCRETE_ECHO_RESULT
 
 cd "$(dirname "$0")/../.."
 COMPILER=".lake/build/bin/concrete"
@@ -53,17 +53,18 @@ if "$COMPILER" "$TMP/exitprint.con" -o "$TMP/exitprint" >/dev/null 2>&1; then
 else
     ok "exitprint (skipped: putchar builtin unavailable — covered by cases 1-5)"
 fi
-# 7. the legacy knob still works (harness compatibility until stage 2)
+# 7. the legacy knob is DEAD (stage 2 complete): the env var is IGNORED —
+#    exit-code semantics hold and stdout stays clean even when it is set.
 printf '%s\n' 'mod m { fn main() -> Int { return 1000; } }' > "$TMP/echo1000.con"
 if CONCRETE_ECHO_RESULT=1 "$COMPILER" "$TMP/echo1000.con" -o "$TMP/echo1000" >/dev/null 2>&1; then
-    out=$("$TMP/echo1000" 2>/dev/null); rc=$?
-    if [ "$rc" = "0" ] && [ "$out" = "1000" ]; then
-        ok "legacy knob (full-width echo, exit 0)"
+    out=$(CONCRETE_ECHO_RESULT=1 "$TMP/echo1000" 2>/dev/null); rc=$?
+    if [ "$rc" = "232" ] && [ -z "$out" ]; then
+        ok "legacy knob is dead (env ignored: rc=1000&255=232, clean stdout)"
     else
-        bad "legacy knob (want rc=0 out='1000'; got rc=$rc out='$out')"
+        bad "legacy knob should be ignored (want rc=232 out=''; got rc=$rc out='$out')"
     fi
 else
-    bad "legacy knob (compile)"
+    bad "legacy-knob-dead case (compile)"
 fi
 # 8. NEGATIVE: without the knob the wide value must NOT appear on stdout
 out=$("$TMP/exitwide" 2>/dev/null)

@@ -36,8 +36,9 @@ The compiler generates a `main` function that calls the user's `main` (renamed t
 `fn main() -> Int` is the current entry signature; the model narrows to
 `fn main() -> u8 | Unit` so the 8-bit contract lives in the type (see
 `docs/MAIN_EXIT_MODEL.md` for the full decision record, including why there
-is deliberately no `process.exit()` in a linear language and the harness
-compatibility knob `CONCRETE_ECHO_RESULT=1`).
+is deliberately no `process.exit()` in a linear language; the transitional
+harness echo knob was deleted when stage 2 completed — the exit-code
+semantics above are the only behavior).
 
 There is no Concrete runtime initialization. No global constructors, no GC setup, no thread-local storage initialization, no allocator setup. The program starts in `main`, calls libc functions directly, and exits when `main` returns.
 

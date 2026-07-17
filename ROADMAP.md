@@ -285,20 +285,14 @@ batteries-included breadth. Completed foundation work lives in
 0. Stdlib hardening pass H1-H5 — before all remaining breadth. This is
    foundation repair, not new surface; details live below, ahead of the
    collection-API build-out.
-1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): narrow the entry
-   signature to `fn main() -> u8 | Unit` (the 8-bit OS status contract in the
-   type), migrate the differential fuzzer to self-printing wrappers, sweep the
-   `run_ok` fixture corpus, then retire Int-main and delete the
-   `CONCRETE_ECHO_RESULT` harness knob (grep the stage-1 marker comment).
-   The remaining knob tail is the ~35 `check_*` gates whose inline fixtures
-   return wide/negative values by design; the conversion playbook is the
-   self-printing wrapper (rename `main` → `wrapped_main`, add a `main` that
-   `print_int`s the result and returns 0 — stdout stays byte-identical to
-   the legacy echo, so gate expectations survive unchanged), one gate at a
-   time with the three consumer layers checked (compile / runtime / REPORT
-   assertions). Later, workload-gated: `main -> Result<Unit, E>` printing
-   the error variant name to stderr (Zig-style nominal rendering, no
-   display traits).
+1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): COMPLETE
+   2026-07-17 — the `CONCRETE_ECHO_RESULT` knob is deleted (compiler +
+   every harness consumer; check_exit_codes.sh pins the env var IGNORED).
+   Remaining tail, deliberately decoupled: retire Int-main (a later
+   surface pass narrows the entry signature to `fn main() -> u8 | Unit`)
+   and, workload-gated, `main -> Result<Unit, E>` printing the error
+   variant name to stderr (Zig-style nominal rendering, no display
+   traits).
 1a. Refactor queue (review 2026-07-16, evidence-ranked; each item lands as
    its own slice with the battery):
    - Layout panic hygiene: convert `Concrete/Check/Layout.lean` `panic!`
@@ -349,8 +343,16 @@ batteries-included breadth. Completed foundation work lives in
      Gate: check_enum_union_layout.sh + regress_enum_canonical_align.con.
    - DONE: interp/backend string_char_at drift (codepoint-vs-byte
      indexing, OOB 0-vs--1) — interp matches the backend exactly;
-     check_string_char_at.sh. Residual: single-sourcing ALL builtin
-     semantics (interp table ↔ EmitBuiltins ↔ Check sigs) stays open.
+     check_string_char_at.sh. Residual CLOSED 2026-07-17: builtin
+     semantics single-sourced by DETECTION — signatures were already one
+     table (Resolve/BuiltinSigs.lean, Check+Elab);
+     check_builtin_semantics.sh pins interp == compiled byte-equal per
+     shared builtin (edge-heavy: empty/non-ASCII/OOB/negative/wide) and
+     pins the interp-PENDING inventory as an explicit 11-name list so
+     additions land on both sides or extend the pin deliberately. A
+     body-generation DSL (one spec emitting interp Lean + backend LLVM)
+     is recorded as NOT-now: high machinery cost, detection already
+     kills the drift class.
    - DONE: evidence-doc drift — five examples/*/assumptions.toml said
      overflow="wrapping" (language traps); files corrected and
      check_assumptions.sh now reads/enforces the arithmetic section

@@ -14,8 +14,6 @@
 # for align-1-only programs.
 
 set -uo pipefail
-# knob-proof: fixtures here assert exit codes/stdout without the legacy echo
-unset CONCRETE_ECHO_RESULT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 C="$ROOT_DIR/.lake/build/bin/concrete"

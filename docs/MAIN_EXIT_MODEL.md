@@ -41,7 +41,8 @@ here so it is documented behavior, not a surprise). Unit exits 0. Bool exits
 1/0 — a deprecated corner that dies when the signature narrows. Non-scalar
 returns exit 0. Stdout belongs to the program.
 
-**Harness compatibility knob:** `CONCRETE_ECHO_RESULT=1` restores the legacy
+**Harness compatibility knob (HISTORICAL — deleted in stage 2, below):**
+`CONCRETE_ECHO_RESULT=1` restored the legacy
 wrapper (print result at full i64 width, exit 0). The `run_ok` fixture corpus
 and the interp-vs-compiled differential fuzzer compare values wider than
 8 bits, so every harness script under `scripts/tests/` exports the knob (one

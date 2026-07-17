@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Converted gates are knob-PROOF: neutralize an inherited legacy-echo env
-# (run_tests.sh still exports it for the unconverted corpus) so fixtures
-# compiled here never double-print. Dies with the knob itself.
-unset CONCRETE_ECHO_RESULT
-
 # gate_selfprint_wrap <src.con> <dst.con>: MAIN_EXIT_MODEL stage 2 — the
 # compiled binary no longer echoes main's result, so wide/negative-value
 # fixtures print their own: rename `fn main` and add a printing main

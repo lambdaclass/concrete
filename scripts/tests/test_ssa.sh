@@ -58,8 +58,8 @@ for spec in "$RESDIR"/test_*.spec; do
     fi
     (
         out="$OUTDIR/$spec_id"
-        if ! CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
-            msg=$(CONCRETE_ECHO_RESULT= $COMPILER "$file" -o "$out" 2>&1 | head -1)
+        if ! $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
+            msg=$($COMPILER "$file" -o "$out" 2>&1 | head -1)
             echo "FAIL $name: $msg"
             exit 1
         fi
