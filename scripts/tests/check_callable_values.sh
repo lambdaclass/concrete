@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Callable-values gate (ROADMAP Phase 5 #24 — docs/CALLABLE_VALUES_AND_CAPABILITIES.md §9).
 #
 # STEP 1 (bound-callback context threading) is implemented and checked here:
@@ -21,6 +20,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -43,7 +43,8 @@ run() {
 }
 
 echo "=== three context modes thread correctly (shared / mutable / consuming) ==="
-if "$COMPILER" tests/programs/callback_context_modes.con -o "$TMP/modes" >/dev/null 2>&1; then
+gate_selfprint_wrap tests/programs/callback_context_modes.con "$TMP/modes.w.con"
+if "$COMPILER" "$TMP/modes.w.con" -o "$TMP/modes" >/dev/null 2>&1; then
   V="$(timeout 10 "$TMP/modes" 2>/dev/null)"; RC=$?
   if [ "$RC" = "124" ]; then no "callback_context_modes TIMED OUT"; else
     [ "$V" = "245" ] && ok "callback_context_modes = 245 (203 shared + 30 mutable + 12 consuming)" \

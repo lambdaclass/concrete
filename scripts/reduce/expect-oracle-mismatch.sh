@@ -31,7 +31,14 @@ fi
 BIN=$(mktemp)
 trap 'rm -f "$BIN"' EXIT
 
-if ! "$COMPILER" "$CANDIDATE" -o "$BIN" >/dev/null 2>&1; then
+# self-printing wrapper (MAIN_EXIT_MODEL stage 2): compiled side prints its
+# own result so its stdout is comparable with interp's value print.
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
+WRAPPED=$(mktemp).con
+trap 'rm -f "$BIN" "$WRAPPED"' EXIT
+gate_selfprint_wrap "$CANDIDATE" "$WRAPPED"
+
+if ! "$COMPILER" "$WRAPPED" -o "$BIN" >/dev/null 2>&1; then
   exit 1
 fi
 COMPILED=$("$BIN" 2>/dev/null) || true

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase D wrong-code regression corpus runner.
 #
 # Reads tests/wrong-code/manifest.toml and asserts every fixed case
@@ -11,6 +10,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 
 COMPILER=".lake/build/bin/concrete"
@@ -94,7 +94,9 @@ ANY_FAIL=0
 run_runtime_case() {
   local id="$1" repro="$2" expected="$3" status="$4"
   local bin="$TMPDIR/$id"
-  if ! "$COMPILER" "$repro" -o "$bin" >"$TMPDIR/$id.cerr" 2>&1; then
+  # self-printing wrapper (MAIN_EXIT_MODEL stage 2): repros return wide values
+  gate_selfprint_wrap "$repro" "$TMPDIR/$id.w.con"
+  if ! "$COMPILER" "$TMPDIR/$id.w.con" -o "$bin" >"$TMPDIR/$id.cerr" 2>&1; then
     if [ "$status" = "fixed" ]; then
       echo "FAIL $id ($repro) — compilation failed"
       sed 's/^/  /' < "$TMPDIR/$id.cerr" | head -3

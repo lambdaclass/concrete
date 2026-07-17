@@ -28,7 +28,14 @@ fi
 BIN=$(mktemp)
 trap 'rm -f "$BIN"' EXIT
 
-if ! "$COMPILER" "$CANDIDATE" -o "$BIN" >/dev/null 2>&1; then
+# self-printing wrapper (MAIN_EXIT_MODEL stage 2): candidates whose main
+# returns a value print it themselves; unit mains pass through unchanged.
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
+WRAPPED=$(mktemp --suffix=.con 2>/dev/null || mktemp).con
+trap 'rm -f "$BIN" "$WRAPPED"' EXIT
+gate_selfprint_wrap "$CANDIDATE" "$WRAPPED"
+
+if ! "$COMPILER" "$WRAPPED" -o "$BIN" >/dev/null 2>&1; then
   exit 1
 fi
 

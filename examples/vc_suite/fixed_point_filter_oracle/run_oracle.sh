@@ -5,6 +5,9 @@
 # the program's output to the reference. Disagreement = a real codegen/spec bug.
 #   Usage: run_oracle.sh [seed]   (default 0)
 set -uo pipefail
+# knob-proof: drivers self-print; the legacy result echo must stay off even
+# when a caller exports it for its own unconverted corpus
+unset CONCRETE_ECHO_RESULT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
@@ -25,7 +28,9 @@ while IFS= read -r line; do
   c=$(echo "$line" | awk -F'|' '{print $2}' | xargs)
   expected=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
   drv="$TMPDIR/case_$TOTAL.con"; bin="$TMPDIR/case_$TOTAL"
-  { cat "$PRELUDE"; printf '    pub fn main() -> i32 { return scale(%s, %s); }\n}\n' "$s" "$c"; } > "$drv"
+  # self-printing driver (MAIN_EXIT_MODEL stage 2): the binary prints its own
+  # result at full width; nothing depends on the legacy result echo.
+  { cat "$PRELUDE"; printf '    pub fn main() with(Console) -> i32 { print_int((scale(%s, %s)) as Int); print_char(10); return 0; }\n}\n' "$s" "$c"; } > "$drv"
   if ! "$COMPILER" "$drv" -o "$bin" >/dev/null 2>&1; then
     FAIL=$((FAIL + 1)); echo "  FAIL case $TOTAL ($s * $c) — compilation failed"; continue
   fi

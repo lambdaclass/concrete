@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # End-of-Phase-2 VC/SMT examples gate (ROADMAP Phase 2 #5-9).
 #
 # Each example forces ONE named VC/SMT surface and carries a report gate. Together
