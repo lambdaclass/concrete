@@ -37,7 +37,16 @@ CC = os.path.join(ROOT, ".lake/build/bin/concrete")
 #     trailing values (`if c { match .. } else { .. }`).
 #   - `&mut place` deltas are LITERALS (never another var read), to avoid
 #     borrow-vs-use conflicts; &mut targets are i32-typed places only.
-# All locals are Copy, so nothing needs linear consumption.
+#   - aggregate-typed if-expressions (`s0 = if c { s0 } else { P {...} }`,
+#     `a0 = if c { a0 } else { [..] }`) — the value-if merge shapes of bugs
+#     029/033 — and method borrows inside BOTH arms of a branch
+#     (`if c { s0.bump(x) } else { s0.bump(y) }`) — the bug-031 shape the
+#     grammar previously could not generate (audit 2026-07-16).
+#   - one String (non-Copy): `string_push_char` mutations (ASCII codes only —
+#     the interp's byte model is exact there) at statement level incl. inside
+#     loops/branches, then full-content equality via `println(&str0)` and
+#     `string_length` in the digest; consumed by `drop_string` at the end.
+# All other locals are Copy, so nothing else needs linear consumption.
 WIDTHS = ["i8", "i16", "i32", "i64", "u8", "u16", "u32"]
 # Arithmetic bound per width: keep lit*lit and place*place inside the range
 # after `% B` (worst product (B-1)^2 must fit the SIGNED range, since i8 is the
@@ -142,7 +151,7 @@ class Gen:
 
     def stmt(self, d):
         r = self.rng
-        k = r.randint(0, 7)
+        k = r.randint(0, 10)
         if k == 4 and not self.loops:
             k = 3  # loops disabled → fall back to a &mut mutation
         if k == 7 and not self.defers:
@@ -181,6 +190,19 @@ class Gen:
                 self.deferid += 1
                 inner = f"defer print_int({self.deferid}); " + inner
             return f"let mut {kv}: i32 = 0; while {kv} < 3 {{ {inner} }}"
+        if k == 8:  # non-Copy string mutation (ASCII codes: the interp's byte
+            # model is exact there), at top level and inside loops/branches
+            return f"string_push_char(&mut str0, {r.randint(97, 122)});"
+        if k == 9:  # bug-031 shape: a &mut-self method borrowed inside BOTH arms
+            # of a branch (was missing from the grammar when 031 shipped)
+            return (f"if {self.bexpr(d)} {{ s0.bump({self.lit()}); }} "
+                    f"else {{ s0.bump({self.lit()}); }}")
+        if k == 10:  # aggregate-typed value-if (bugs 029/033 merge shapes)
+            if r.random() < 0.5:
+                return (f"s0 = if {self.bexpr(d)} {{ s0 }} "
+                        f"else {{ P {{ x: {self.lit()}, y: {self.lit()} }} }};")
+            return (f"a0 = if {self.bexpr(d)} {{ a0 }} "
+                    f"else {{ [{', '.join(self.lit() for _ in range(4))}] }};")
         return (f"if {self.bexpr(d)} {{ {self.stmt(max(0,d-1))} }} "
                 f"else {{ {self.stmt(max(0,d-1))} }}")
 
@@ -191,7 +213,8 @@ class Gen:
                 f"let mut v2: {self.varty['v2']} = {self.lit(self.varty['v2'])};",
                 "let mut a0: [i32; 4] = [" + ", ".join(self.lit() for _ in range(4)) + "];",
                 "let mut s0: P = P { x: " + self.lit() + ", y: " + self.lit() + " };",
-                "let mut e0: E = E::A { v: " + self.lit() + " };"]
+                "let mut e0: E = E::A { v: " + self.lit() + " };",
+                "let mut str0: String = \"q\";"]
         for _ in range(r.randint(4, 10)):
             body.append(self.stmt(self.maxdepth))
         # Digest EVERY mutable location (all widths sign/zero-extend to Int), so
@@ -201,11 +224,19 @@ class Gen:
         # retired result-echo.
         body.append("println(((((v0) as Int) + ((v1) as Int) * 3 + ((v2) as Int) * 5"
                     " + ((a0[0]) as Int) * 7 + ((a0[3]) as Int) * 11"
-                    " + ((s0.x) as Int) * 13 + ((s0.y) as Int) * 17) % 100000));")
+                    " + ((s0.x) as Int) * 13 + ((s0.y) as Int) * 17"
+                    " + string_length(&str0) * 23) % 100000));")
+        # Full string-content equality (byte-for-byte), then the linear
+        # consumption the non-Copy value requires.
+        body.append("println(&str0);")
+        body.append("drop_string(str0);")
         inner = "\n        ".join(body)
         return ("mod m {\n"
                 "    struct Copy P { x: i32, y: i32 }\n"
                 "    enum Copy E { A { v: i32 }, B { w: i32 }, C {} }\n"
+                "    impl P {\n"
+                "        fn bump(&mut self, d: i32) { self.x = ((self.x + d) % 1000); }\n"
+                "    }\n"
                 "    fn addv(r: &mut i32, d: i32) { *r = ((*r + d) % 1000); }\n"
                 "    fn main() with(Console) {\n"
                 f"        {inner}\n"

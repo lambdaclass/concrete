@@ -1707,9 +1707,11 @@ run_ok "$TESTDIR/adversarial/trait_dispatch/trait_method_via_bound.con" 84
 run_ok "$TESTDIR/sizeof_basic.con" 12
 run_ok "$TESTDIR/alignof_basic.con" 12
 run_ok "$TESTDIR/repr_packed.con" 7
-run_ok "$TESTDIR/repr_align.con" 16
+run_ok "$TESTDIR/repr_align.con" 8
 run_err "$TESTDIR/error_repr_packed_align.con" "cannot have both"
 run_err "$TESTDIR/error_repr_align_not_pow2.con" "must be a power of two"
+# Bug 037: over-aligned repr(align) is rejected (E0585) — codegen cannot carry it.
+run_err "$TESTDIR/error_repr_align_exceeds_natural.con" "exceeds its natural alignment"
 
 # === Summary-path tests ===
 run_ok "$TESTDIR/summary_import_pub_fn.con" 42
@@ -6710,6 +6712,9 @@ run_ok "$TESTDIR/regress_033_discard_live_string.con" "live-across"
 # Bug 034: &&/|| RHS borrow skipped lazy-promotion pre-store (031 class, 3rd
 # site). Shape guard; the LOAD-BEARING regression is check_cli_helpers.sh.
 run_ok "$TESTDIR/regress_034_shortcircuit_borrow_promotion.con" 133
+# Bug 038: promoted aggregate (String) mutated via &mut in an if-arm had the
+# mutation clobbered by the merge's stale snapshot (031 family, 4th site).
+run_ok "$TESTDIR/regress_038_if_merge_promoted_aggregate.con" "qm"
 # Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
 # are USER fns at every pass — never name-hijacked.
 run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31

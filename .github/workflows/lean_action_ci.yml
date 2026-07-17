@@ -759,3 +759,45 @@ jobs:
           if [ "$CRASH" -gt 0 ]; then
             exit 1
           fi
+
+  extra-gates:
+    name: Extra gates (dark-gate wiring, audit 2026-07-16)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      # These gates had Makefile targets but zero CI coverage ("dark gates") —
+      # test_wrong_code was already silently red (WC-0005's stale expectation)
+      # when wired here. One job, fail-fast per step.
+      - name: Catches (negative corpus)
+        run: bash ./scripts/tests/check_catches.sh
+
+      - name: Showcase corpus
+        run: bash ./scripts/tests/check_showcase.sh
+
+      - name: Wrong-code corpus
+        run: bash ./scripts/tests/test_wrong_code.sh
+
+      - name: Reducer smoke
+        run: bash ./scripts/tests/test_reducer_smoke.sh
+
+      - name: Release bundle
+        run: bash ./scripts/tests/test_release_bundle.sh
+
+      - name: Float-literal rounding corpus
+        run: bash ./scripts/tests/check_float_literals.sh
+
+      - name: Enum union layout
+        run: bash ./scripts/tests/check_enum_union_layout.sh
+
+      - name: string_char_at differential
+        run: bash ./scripts/tests/check_string_char_at.sh

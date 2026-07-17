@@ -1068,8 +1068,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let liveSnapshots := armEndSnapshots.filter fun (_, _, term) => !term
     if liveSnapshots.length >= 2 then
       for (name, preVal) in preMatchVars do
-        -- Promoted scalars are memory-backed; skip (see the ifElse-statement note).
-        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
+        -- Promoted variables are memory-backed; skip (see the ifElse-statement
+        -- note — aggregates included, else the merge re-stores the stale
+        -- pre-match snapshot over the arms' writes).
+        if (← isPromoted name).isSome then continue
         let varTy := preVal.ty
         -- Collect (value, label) for arms that changed this variable
         let mut incoming : List (SVal × String) := []
@@ -1359,8 +1361,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     startBlock mergeLabel
     if !term1 || !term2 then
       for (name, preVal) in preIfVars do
-        -- Promoted scalars are memory-backed; skip (see the ifElse-statement note).
-        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
+        -- Promoted variables are memory-backed; skip (see the ifElse-statement
+        -- note — aggregates included, else the merge re-stores the stale
+        -- pre-if snapshot over the branches' writes).
+        if (← isPromoted name).isSome then continue
         let thenV := if term1 then none
           else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
         let elseV := if term2 then none
@@ -1726,11 +1730,14 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     startBlock mergeLabel
     if !term1 || !term2 then
       for (name, preVal) in preIfVars do
-        -- A promoted SCALAR is memory-backed and written through its alloca in
-        -- the branches, so the alloca is the single source of truth — reconciling
-        -- it would re-store the stale pre-if snapshot at the merge (C9-class
-        -- miscompile). Promoted aggregates still use the isAgg merge path below.
-        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
+        -- A promoted variable is memory-backed and written through its alloca
+        -- in the branches, so the alloca is the single source of truth —
+        -- reconciling it would re-store the stale pre-if snapshot at the
+        -- merge (C9-class miscompile). This holds for AGGREGATES too: the
+        -- promoted alloca is written through by every arm (bug-031 family,
+        -- string mutated via &mut in a branch arm was clobbered by the
+        -- merge's stale table value — audit 2026-07-16 fuzz).
+        if (← isPromoted name).isSome then continue
         let thenVal := if term1 then none
           else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
         let elseVal := if term2 then none

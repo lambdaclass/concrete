@@ -1,0 +1,18 @@
+// Bug 038: an aggregate mutated via &mut inside an if-arm had its mutation
+// CLOBBERED at the merge. The variable was pre-promoted (bug 031) into a
+// stable alloca and the push correctly wrote through it — but the statement-if
+// merge reconciled promoted AGGREGATES from the var-table snapshot (the stale
+// pre-if literal) and stored it back over the promoted alloca. Promoted
+// scalars already skipped reconciliation ("memory is the source of truth");
+// the aggregate carve-out was the bug. Now all promoted variables skip the
+// merge at all three sites (statement-if, if-expr, match).
+// Expected: prints "qm" (pre-fix printed "q" compiled, "qm" interpreted —
+// found by the extended differential fuzzer, seed 3 depth 4).
+mod m {
+    fn main() with(Console) {
+        let mut str0: String = "q";
+        if true { string_push_char(&mut str0, 109); } else { }
+        println(&str0);
+        drop_string(str0);
+    }
+}

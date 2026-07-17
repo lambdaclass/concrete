@@ -10,6 +10,39 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Bugs 037+038, fuzzer grammar extension, dark-gate CI wiring (2026-07-16)
+
+**Bug 038 (found by the new fuzzer grammar).** The statement-if, if-expr, and
+match merge loops skipped reconciliation only for promoted SCALARS; a promoted
+AGGREGATE (e.g. a String mutated via `&mut` in an if-arm) was reconciled from
+the var-table snapshot — the stale pre-if value — and the merge stored it back
+over the promoted alloca, silently erasing the mutation
+(`if true { string_push_char(&mut str0, 109); }` printed "q" compiled, "qm"
+interpreted). All promoted variables now skip the merge at all three sites —
+fourth instance of the 029/031/033/034 family; unifying the four branch sites
+(ROADMAP 1a) is now overdue. Found by extending `fuzz_differential.py` to the
+shapes the grammar could not generate: aggregate value-ifs, `&mut`-self
+method borrows inside BOTH branch arms (the exact 031 shape), and a non-Copy
+String with push/read/print/drop. Prerequisites landed in the interpreter:
+`string_length` now returns BYTES (was codepoints — drifted on non-ASCII),
+and `string_push_char`/`string_append` were implemented (ASCII-exact;
+c >= 128 byte-truncation named as a residual). 600 fresh programs, 0
+mismatches post-fix.
+
+**Bug 037 (fail-closed).** `repr(align(N))` with N greater than the struct's
+natural alignment changed Layout but not the declared LLVM type (`{ i32 }`
+for an align-16 struct) — every alloca, containing-struct offset, and enum
+payload silently disagreed. Now rejected at CoreCheck with E0585
+(`reprAlignExceedsNatural`) until declarations carry explicit alignment; the
+no-op case (N ≤ natural) stays legal, and `repr_align.con` moved to it.
+Ledger entry + diagnostic-codes row included.
+
+**Dark gates wired.** `test_wrong_code` was already silently red when wired
+(WC-0005's expectation predated the exit-model migration) — exactly the
+failure mode "Makefile target, no CI" hides. New `extra-gates` CI job runs
+catches, showcase, wrong-code, reducer smoke, release bundle, and the three
+audit gates (float literals, enum union layout, string_char_at differential).
+
 ### Audit batch 2026-07-16 (second pass): exact float literals, enum-union ABI, oracle drift, evidence-doc gates (2026-07-16)
 
 The remaining audit items from the 2026-07-16 external review, each with a
