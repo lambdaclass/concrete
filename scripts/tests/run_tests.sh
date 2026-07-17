@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/selfprint.sh"
 cd "$ROOT_DIR"
 
 # --- CLI argument parsing ---
@@ -1881,7 +1881,8 @@ report_output=$(cached_output "$TESTDIR/report_layout_check.con" "--report layou
 padded_size=$(grep <<<"$report_output" "struct Padded" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
 packed_size=$(grep <<<"$report_output" "struct Packed" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
 expected_sum=$((padded_size + packed_size))
-$COMPILER "$TESTDIR/report_layout_check.con" -o "$TMPDIR/report_layout_check" > /dev/null 2>&1
+gate_selfprint_wrap "$TESTDIR/report_layout_check.con" "$TMPDIR/report_layout_check.w.con"
+$COMPILER "$TMPDIR/report_layout_check.w.con" -o "$TMPDIR/report_layout_check" > /dev/null 2>&1
 runtime_sum=$("$TMPDIR/report_layout_check" 2>&1) || true
 if [ "$expected_sum" = "$runtime_sum" ]; then
     echo "  ok  report_layout_check.con layout sizes ($padded_size + $packed_size = $expected_sum) match runtime sizeof ($runtime_sum)"
@@ -6119,7 +6120,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Run against bad magic fixture
-    elf_run_bad=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_magic.bin" 2>&1)
+    elf_run_bad=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_magic.bin" 2>&1) || true  # invalid input exits 1 (13t) — set -e guard
     if grep <<<"$elf_run_bad" -q "INVALID ELF header" && grep <<<"$elf_run_bad" -q "magic:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad magic"
         PASS=$((PASS + 1))
@@ -6130,7 +6131,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Run against bad class fixture
-    elf_run_badcls=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_class.bin" 2>&1)
+    elf_run_badcls=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_class.bin" 2>&1) || true  # invalid input exits 1 (13t) — set -e guard
     if grep <<<"$elf_run_badcls" -q "INVALID ELF header" && grep <<<"$elf_run_badcls" -q "class:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad class"
         PASS=$((PASS + 1))
@@ -6141,7 +6142,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Run against bad version fixture
-    elf_run_badver=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_version.bin" 2>&1)
+    elf_run_badver=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/bad_version.bin" 2>&1) || true  # invalid input exits 1 (13t) — set -e guard
     if grep <<<"$elf_run_badver" -q "INVALID ELF header" && grep <<<"$elf_run_badver" -q "version:.*INVALID"; then
         echo "  ok  elf_header: run rejects bad version"
         PASS=$((PASS + 1))
@@ -6152,7 +6153,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Run against too-short file
-    elf_run_short=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/too_short.bin" 2>&1)
+    elf_run_short=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run -- "$FIXTURE_DIR/too_short.bin" 2>&1) || true  # invalid input exits 1 (13t) — set -e guard
     if grep <<<"$elf_run_short" -q "too short"; then
         echo "  ok  elf_header: run rejects too-short file"
         PASS=$((PASS + 1))
@@ -6163,7 +6164,7 @@ if [ "$elf_build_exit" = "0" ]; then
     fi
 
     # Run with no args shows usage
-    elf_run_usage=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run 2>&1)
+    elf_run_usage=$(cd "$ROOT_DIR/examples/elf_header" && "$ROOT_DIR/$COMPILER" run 2>&1) || true  # usage exits nonzero (13t) — set -e guard
     if grep <<<"$elf_run_usage" -q "Usage:"; then
         echo "  ok  elf_header: run with no args shows usage"
         PASS=$((PASS + 1))
@@ -6476,12 +6477,12 @@ abi_bin="$TMPDIR/phase3_abi_interop"
 if filter_match "$TESTDIR/phase3_abi_interop.con"; then
     if $COMPILER "$TESTDIR/phase3_abi_interop.con" --emit-llvm > "$abi_ll" 2>/dev/null; then
         if clang "$abi_ll" "$TESTDIR/phase3_abi_interop.c" -o "$abi_bin" -Wno-override-module 2>/dev/null; then
-            abi_result=$("$abi_bin" 2>&1) || true
-            if [ "$abi_result" = "42" ]; then
-                echo "  ok  phase3_abi_interop.con C interop sizeof/offsetof match"
+            abi_rc=0; "$abi_bin" >/dev/null 2>&1 || abi_rc=$?
+            if [ "$abi_rc" = "42" ]; then
+                echo "  ok  phase3_abi_interop.con C interop sizeof/offsetof match (rc 42)"
                 PASS=$((PASS + 1))
             else
-                echo "FAIL  phase3_abi_interop.con C interop expected 42, got '$abi_result'"
+                echo "FAIL  phase3_abi_interop.con C interop expected rc 42, got $abi_rc"
                 FAIL=$((FAIL + 1))
             fi
         else
@@ -10375,7 +10376,10 @@ else
 fi
 
 # 8. Interpreter matches compiled binary for parse_validate (exit code AND stdout)
-if "$COMPILER" "$PV_SRC" -o /tmp/interp_pv_compiled 2>/dev/null; then
+# self-printing wrapper (MAIN_EXIT_MODEL stage 2): the compiled side prints its
+# result so stdout is comparable with interp's value print.
+gate_selfprint_wrap "$PV_SRC" /tmp/interp_pv_wrapped.con
+if "$COMPILER" /tmp/interp_pv_wrapped.con -o /tmp/interp_pv_compiled 2>/dev/null; then
     pv_compiled_out=$(/tmp/interp_pv_compiled 2>/dev/null) && pv_compiled_exit=0 || pv_compiled_exit=$?
     pv_interp_out=$("$COMPILER" "$PV_SRC" --interp 2>/dev/null) && pv_interp_exit2=0 || pv_interp_exit2=$?
     if [ "$pv_interp_exit2" -eq "$pv_compiled_exit" ] && [ "$pv_interp_out" = "$pv_compiled_out" ]; then

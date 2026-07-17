@@ -6,7 +6,10 @@ mod duplicate_basename {
     import b.foo.{from_b};
 
     pub fn main() with(Std) -> Int {
+        // exit-code semantics: 0 = success; the disambiguation result is
+        // CHECKED (from_a(2)=102 + from_b(3)=203 = 305), not echoed
         let r: i64 = from_a(2) + from_b(3);
-        return r as Int;
+        if r != 305 { return 1; }
+        return 0;
     }
 }

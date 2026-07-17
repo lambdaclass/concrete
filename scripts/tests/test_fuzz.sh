@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 
 # Structured fuzzing for the Concrete compiler.
@@ -285,16 +285,16 @@ gen_valid_enum_match() {
 enum Copy Shape { Circle { r: i32 }, Rect { w: i32 } }
 fn eval(s: Shape) -> i32 {
     match s {
-        Shape#Circle { r } => { return r * 3; },
-        Shape#Rect { w } => { return w + 10; },
+        Shape::Circle { r } => { return r * 3; },
+        Shape::Rect { w } => { return w + 10; },
     }
 }
 EOF
         if [ "$pick" -eq 0 ]; then
-            echo "fn main() -> i32 { return eval(Shape#Circle { r: ${val_a} }); }" >> "$file"
+            echo "fn main() -> i32 { return eval(Shape::Circle { r: ${val_a} }); }" >> "$file"
             echo $(( val_a * 3 ))
         else
-            echo "fn main() -> i32 { return eval(Shape#Rect { w: ${val_b} }); }" >> "$file"
+            echo "fn main() -> i32 { return eval(Shape::Rect { w: ${val_b} }); }" >> "$file"
             echo $(( val_b + 10 ))
         fi
     else
@@ -302,20 +302,20 @@ EOF
 enum Copy Color { Red {}, Green { val: i32 }, Blue { val: i32 } }
 fn score(c: Color) -> i32 {
     match c {
-        Color#Red {} => { return ${val_a}; },
-        Color#Green { val } => { return val; },
-        Color#Blue { val } => { return val * 2; },
+        Color::Red {} => { return ${val_a}; },
+        Color::Green { val } => { return val; },
+        Color::Blue { val } => { return val * 2; },
     }
 }
 EOF
         if [ "$pick" -eq 0 ]; then
-            echo "fn main() -> i32 { return score(Color#Red {}); }" >> "$file"
+            echo "fn main() -> i32 { return score(Color::Red {}); }" >> "$file"
             echo "$val_a"
         elif [ "$pick" -eq 1 ]; then
-            echo "fn main() -> i32 { return score(Color#Green { val: ${val_b} }); }" >> "$file"
+            echo "fn main() -> i32 { return score(Color::Green { val: ${val_b} }); }" >> "$file"
             echo "$val_b"
         else
-            echo "fn main() -> i32 { return score(Color#Blue { val: ${val_c} }); }" >> "$file"
+            echo "fn main() -> i32 { return score(Color::Blue { val: ${val_c} }); }" >> "$file"
             echo $(( val_c * 2 ))
         fi
     fi
@@ -425,7 +425,10 @@ run_valid_check() {
     local binpath="$TMPDIR_FUZZ/valid_out"
 
     local exit_code=0
-    "$COMPILER" "$file" --emit-llvm > "$llpath" 2>&1 || exit_code=$?
+    # self-printing wrapper (MAIN_EXIT_MODEL stage 2): generated programs
+    # return wide values; the binary prints its own result.
+    gate_selfprint_wrap "$file" "$TMPDIR_FUZZ/valid_wrapped.con"
+    "$COMPILER" "$TMPDIR_FUZZ/valid_wrapped.con" --emit-llvm > "$llpath" 2>&1 || exit_code=$?
     if [ "$exit_code" -ne 0 ]; then
         echo "FAIL  $label — compilation failed"
         echo "  Error: $(head -3 "$llpath")"

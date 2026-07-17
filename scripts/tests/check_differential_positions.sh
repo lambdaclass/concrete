@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Differential position gate: a flexible-literal overflow (or a width-sensitive
 # shift) placed in many SYNTACTIC POSITIONS, asserting the interpreter and the
 # compiled binary agree (same value, or both trap on the checked overflow).
@@ -24,6 +23,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -38,7 +38,8 @@ PASS=0; DIV=0
 agree_or_trap(){ local label="$1" F="$2"
   local IOUT IRC COUT CRC istate cstate
   IOUT="$("$COMPILER" "$F" --interp 2>&1)"; IRC=$?
-  if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then COUT="$("$F.bin" 2>&1)"; CRC=$?; else COUT="<compile-fail>"; CRC=250; fi
+  gate_selfprint_wrap "$F" "$F.w.con"
+  if "$COMPILER" "$F.w.con" -o "$F.bin" >/dev/null 2>&1; then COUT="$("$F.bin" 2>&1)"; CRC=$?; else COUT="<compile-fail>"; CRC=250; fi
   [ $IRC -eq 0 ] && istate="ok:$IOUT" || istate="trap"
   [ $CRC -eq 0 ] && cstate="ok:$COUT" || cstate="trap"
   if [ "$istate" = "$cstate" ]; then PASS=$((PASS+1)); echo "  ok   $label ($istate)"

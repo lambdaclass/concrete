@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Interpreter-vs-compiled differential gate (ROADMAP Phase 4 #44f / precursor to
 # #18). Runs every tests/codegen/*.con program through BOTH the source-level
 # interpreter (`--interp`) and the compiled binary, and asserts they agree.
@@ -25,6 +24,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -50,7 +50,8 @@ for f in tests/codegen/*.con; do
   name="$(basename "$f" .con)"
   ci="$("$COMPILER" "$f" --interp 2>/dev/null | tail -1)"
   "$COMPILER" "$f" --interp >/dev/null 2>&1; ie=$?
-  if "$COMPILER" "$f" -o "$TMP/d" >/dev/null 2>&1; then
+  gate_selfprint_wrap "$f" "$TMP/d.w.con"
+  if "$COMPILER" "$TMP/d.w.con" -o "$TMP/d" >/dev/null 2>&1; then
     cc="$("$TMP/d" 2>/dev/null)"; ce=$?; [ -z "$cc" ] && cc="$ce"
   else cc="CFAIL"; ce=99; fi
   if in_list "$name" "$EXPECTED_TRAP"; then

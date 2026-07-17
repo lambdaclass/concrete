@@ -40,15 +40,6 @@ namespace Cli
 /-- True iff the boolean flag `name` is present. -/
 def hasFlag (args : List String) (name : String) : Bool := args.contains name
 
-/-- MAIN_EXIT_MODEL stage 1 harness knob: `CONCRETE_ECHO_RESULT=1` restores the
-    legacy main wrapper (print result to stdout at full i64 width, exit 0).
-    Used by the test harness/differential fuzzer, which compare values wider
-    than the 8-bit OS exit status. Dies with stage 2 (fixtures print their own
-    results). Deliberately an env var, not a flag: the CLI dispatch is exact
-    pattern matching, and a transitional knob shouldn't multiply its arms. -/
-def echoResultEnv : IO Bool := do
-  return (← IO.getEnv "CONCRETE_ECHO_RESULT") == some "1"
-
 /-- The value following `name` (e.g. `--out PATH`), or `none` if `name` is absent
     or the next token is itself a flag — so `--out --json` does NOT capture
     `--json` as the path. This guard is applied uniformly (several call sites
@@ -315,7 +306,7 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
     if !emitLLVM && !(ssa.ssaModules.any fun m => m.functions.any (·.isEntryPoint)) then
       IO.eprintln "error[link]: no `main` function found; an executable needs an entry point — define `fn main() -> Int` in the root module"
       return 1
-    let llvmIR := Pipeline.emit ssa (echoResult := ← Cli.echoResultEnv)
+    let llvmIR := Pipeline.emit ssa
     let llPath := inputPath ++ ".ll"
     writeFile llPath llvmIR
     if emitLLVM then
@@ -1540,7 +1531,7 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
       IO.eprintln (renderDiagnostics ds (sourceMap := allSrcMap))
       return 1
     | .ok ssa =>
-      let llvmIR := Pipeline.emit ssa (echoResult := ← Cli.echoResultEnv)
+      let llvmIR := Pipeline.emit ssa
       let llPath := mainPath ++ ".ll"
       writeFile llPath llvmIR
       if emitLLVM then

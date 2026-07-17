@@ -117,6 +117,29 @@ mutation gate excluded); `run_tests.sh` passlevel is fail-closed on an
 unparseable pipeline-test summary; CI retry loops emit `::warning` on failed
 attempts instead of masking flakes; `ideas.org` carries a SUPERSEDED banner.
 
+### MAIN_EXIT_MODEL stage 2 COMPLETE — the echo knob is deleted (2026-07-17)
+
+Every consumer of the legacy result echo is converted and the knob is
+GONE: Main.echoResultEnv, Pipeline.emit's echoResult parameter, and
+EmitSSA's echo main-wrapper arms are deleted — exit-code semantics are
+the only main-wrapper behavior. The last 30 marker files fell in three
+slices: the mechanical gates (self-printing wrapper on the compiled
+side), the oracle-harness class (fixed_point_filter generates
+self-printing drivers; test_wrong_code wraps repros; both reducer
+predicates wrap candidates), the fuzz wrapper, and the meta-runners
+(mutation, ci-gates, triage, minimize, captures) whose exports were
+vestigial once every gate became knob-proof. run_tests.sh's own global
+export was the final flip, verified by the FULL suite before and after
+the compiler-side deletion.
+
+The wrapper (scripts/tests/lib/selfprint.sh) hardened along the way:
+inherits the wrapped main's capabilities, dedupes Console, passes unit
+mains through untouched (they already self-report), and is set-e-safe.
+The flip also exposed dark-runner rot fixed en route: test_fuzz's
+valid-program generator still emitted the removed `Shape#`/`Color#`/
+`Tag#` variant syntax (10 sites), and nested_field_write's canonical
+check read the test's own status on empty output.
+
 ### Intrinsic identity threaded to call sites — name-hijack class closed (2026-07-16)
 
 Audit item #2: Elab and Lower intercepted intrinsics by RAW NAME, so a

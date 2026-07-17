@@ -255,8 +255,8 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
           postLower := postLower, postCleanup := postCleanup }
 
 /-- Emit LLVM IR from SSA modules. -/
-def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) (echoResult : Bool := false) : String :=
-  emitSSAProgram ssa.ssaModules testMode moduleFilter echoResult
+def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
+  emitSSAProgram ssa.ssaModules testMode moduleFilter
 
 -- ============================================================
 -- Shared frontend helper

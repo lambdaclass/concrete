@@ -73,22 +73,28 @@ Sequencing rationale: stage 1 is a strict prefix — the exit-code plumbing in
 the main wrapper is identical; stage 2 only narrows the accepted signature and
 deletes the echo. Nothing built in stage 1 is thrown away.
 
-## Stage 2 status (2026-07-16)
+## Stage 2 status: COMPLETE (2026-07-17)
 
-Landed: run_ok/run_ok_O2 verify EXIT CODES (explicit rc arg for echoed-tail
-expectations); the fixture corpus, differential fuzzer (self-printing Unit
-mains), oracle (interp-echo↔rc bridge for meaningful-rc flagships), golden,
-and the test_ssa scraper are echo-free; 119 gates de-knobbed by the
-remove→run→keep-if-green sweep.
+The knob is DELETED. Every consumer was converted:
+- 119 gates de-knobbed by the remove→run→keep-if-green sweep (2026-07-16);
+- the remaining 44 marker files (wide/negative-value gates, oracle
+  harnesses, reducer predicates, the fuzz wrapper, meta-runners, and
+  run_tests.sh itself) converted 2026-07-16/17 via the self-printing
+  wrapper (`scripts/tests/lib/selfprint.sh` gate_selfprint_wrap): rename
+  the fixture main, add a `with(Console, <inherited caps>)` main that
+  print_int's the result at full i64 width + newline and returns 0 —
+  stdout byte-identical to the legacy echo, so expectations survived
+  unchanged. Unit mains (already self-reporting) pass through unwrapped.
+  Every conversion was verified under BOTH env states while the knob
+  still existed (run_tests exported it globally until the last flip).
+- The compiler-side path (Main.echoResultEnv, Pipeline.emit's echoResult,
+  EmitSSA's echo main-wrapper branch) is removed; the exit-code semantics
+  above are the ONLY main-wrapper behavior.
 
-REMAINING before the knob can die: 39 gates whose inline fixtures test
-WIDE/NEGATIVE values by design (cast/arith/semantic matrices — an rc bridge
-cannot represent them, verified empirically: cast_matrix 16/18 red under the
-bridge). Their fixtures need real println conversion, one gate at a time,
-with the run_ok-corpus playbook (three consumer layers: compile, runtime,
-REPORT assertions — check purity/evidence counts before push). Until then
-the knob stays, carried ONLY by those 39 exports + run_tests.sh's own
-top-level export + the meta-runners (mutation, fuzz wrapper, ci-gates).
+En route the flip exposed pre-existing rot in dark (never-in-CI) runners:
+test_fuzz's valid-program generator still emitted the removed `Shape#`
+variant syntax, and nested_field_write's canonical-fixture check read the
+test's own status on empty output. Both fixed.
 
 Int-main deprecation is deliberately decoupled: Int-main-as-exit-code is
 valid semantics, not scaffolding — it waits for a later surface pass.
