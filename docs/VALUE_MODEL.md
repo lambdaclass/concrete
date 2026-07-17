@@ -186,11 +186,20 @@ struct Header { version: u8, flags: u16, length: u32 }
 ```
 
 ### `#[repr(align(N))]`
-Minimum alignment override (N must be a power of 2).
-```concrete
+Minimum alignment override (N must be a power of 2). N may not EXCEED the
+struct's natural alignment: the declared LLVM type would not carry the
+extra alignment, so allocas, containing-struct offsets, and enum payloads
+would silently disagree with Layout — rejected fail-closed as E0585
+(bug 037) until declarations carry explicit alignment.
+```con reject:E0585
 #[repr(C, align(16))]
 struct Aligned { x: i32 }
-// sizeof = 16 (rounded up), alignof = 16
+```
+Within natural alignment it is a legal no-op:
+```concrete
+#[repr(C, align(4))]
+struct Aligned { x: i32 }
+// sizeof = 4, alignof = 4 (align(4) == i32's natural alignment)
 ```
 
 `packed` and `align(N)` cannot be combined on the same struct.
