@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Check/Elab source-type AGREEMENT gate (Phase 6.5 #9 — TypeJudgment).
 #
 # The E0228/E0715 bug class was Check and Elab each running their own source-type
@@ -28,6 +27,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -41,7 +41,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 agree(){ local label="$1" F="$2" want="$3"
   local I C
   I="$("$COMPILER" "$F" --interp 2>&1)"
-  "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1 && C="$("$F.bin")" || C="<compile/run failed>"
+  gate_selfprint_wrap "$F" "$F.w.con"
+  "$COMPILER" "$F.w.con" -o "$F.bin" >/dev/null 2>&1 && C="$("$F.bin")" || C="<compile/run failed>"
   if [ "$I" = "$want" ] && [ "$C" = "$want" ]; then ok "$label"
   else no "$label (want $want, interp=$I compiled=$C)"; fi; }
 

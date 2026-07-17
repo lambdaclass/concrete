@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Nested place-write regression gate (ROADMAP Phase 4 #44c — FIXED 2026-06-10).
 #
 # `o.inner.v = x` and friends (a place expression deeper than one level) used to
@@ -10,6 +9,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -22,7 +22,8 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 run() {
   local name="$1" src="$2" exp="$3"
   printf '%s' "$src" > "$TMP/$name.con"
-  if "$COMPILER" "$TMP/$name.con" -o "$TMP/$name" >/dev/null 2>&1; then
+  gate_selfprint_wrap "$TMP/$name.con" "$TMP/$name.w.con"
+  if "$COMPILER" "$TMP/$name.w.con" -o "$TMP/$name" >/dev/null 2>&1; then
     local out rc val; out="$("$TMP/$name" 2>/dev/null)"; rc=$?; val="$out"; [ -z "$val" ] && val="$rc"
     [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp (write dropped?)"
   else
@@ -32,8 +33,9 @@ run() {
 
 echo "=== nested place writes take effect (execution oracles) ==="
 # canonical fixture
-if "$COMPILER" examples/known_holes/nested_field_write/src/main.con -o "$TMP/canon" >/dev/null 2>&1; then
-  V="$("$TMP/canon" 2>/dev/null)"; [ -z "$V" ] && V=$?
+gate_selfprint_wrap examples/known_holes/nested_field_write/src/main.con "$TMP/canon.w.con"
+if "$COMPILER" "$TMP/canon.w.con" -o "$TMP/canon" >/dev/null 2>&1; then
+  V="$("$TMP/canon" 2>/dev/null)"
   [ "$V" = "7709" ] && ok "nested field write fixture = 7709" || no "fixture: got '$V' expect 7709"
 else no "canonical fixture failed to compile"; fi
 

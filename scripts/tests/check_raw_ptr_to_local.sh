@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Raw-pointer / address-of-local aliasing regression gate
 # (ROADMAP Phase 4 #44d — FIXED 2026-06-11).
 #
@@ -11,6 +10,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -19,12 +19,13 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
+# MAIN_EXIT_MODEL stage 2: no echo — main's return is the process exit code.
 run() {
   local name="$1" src="$2" exp="$3"
   printf '%s' "$src" > "$TMP/$name.con"
   if "$COMPILER" "$TMP/$name.con" -o "$TMP/$name" >/dev/null 2>&1; then
-    local out rc val; out="$("$TMP/$name" 2>/dev/null)"; rc=$?; val="$out"; [ -z "$val" ] && val="$rc"
-    [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp (pointer not aliasing local?)"
+    local rc; "$TMP/$name" >/dev/null 2>&1; rc=$?
+    [ "$rc" = "$exp" ] && ok "$name = $exp" || no "$name: got rc=$rc expect $exp (pointer not aliasing local?)"
   else
     no "$name failed to compile"
   fi
@@ -33,8 +34,8 @@ run() {
 echo "=== address-of a local aliases its storage ==="
 # canonical fixture (raw *mut through trusted)
 if "$COMPILER" examples/known_holes/raw_ptr_to_local/src/main.con -o "$TMP/canon" >/dev/null 2>&1; then
-  V="$("$TMP/canon" 2>/dev/null)"; [ -z "$V" ] && V=$?
-  [ "$V" = "99" ] && ok "raw-ptr-to-local fixture = 99 (aliases)" || no "fixture: got '$V' expect 99"
+  "$TMP/canon" >/dev/null 2>&1; rc=$?
+  [ "$rc" = "99" ] && ok "raw-ptr-to-local fixture = 99 (aliases)" || no "fixture: got rc=$rc expect 99"
 else no "canonical fixture failed to compile"; fi
 
 run raw_ptr_store 'trusted fn store(p: *mut i64, v: i64) -> i64 { *p = v; return 0; }

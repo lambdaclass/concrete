@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # SSA-verify behavior-preservation gate.
 #
 # SSAVerify is a TRUST pass — it decides whether lowered SSA is well-formed. Any
@@ -18,6 +17,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
@@ -30,9 +30,11 @@ emit(){ printf '%s\n' "$2" > "$TMPDIR/$1.con"; }
 
 # accepts_val <label> <name> <expected>: verify ACCEPTS the SSA, and interp ==
 # compiled == <expected> (verdict = accept, and codegen stays correct).
+# Compiled side runs the self-printing wrapper (MAIN_EXIT_MODEL stage 2).
 accepts_val(){ local label="$1" F="$TMPDIR/$2.con" want="$3" I C
   I="$("$COMPILER" "$F" --interp 2>&1)"
-  if "$COMPILER" "$F" -o "$F.bin" >/dev/null 2>&1; then C="$("$F.bin" 2>&1)"; else C="<verify-rejected-or-compile-fail>"; fi
+  gate_selfprint_wrap "$F" "$F.w.con"
+  if "$COMPILER" "$F.w.con" -o "$F.bin" >/dev/null 2>&1; then C="$("$F.bin" 2>&1)"; else C="<verify-rejected-or-compile-fail>"; fi
   if [ "$I" = "$want" ] && [ "$C" = "$want" ]; then ok "$label (accept, => $want)"
   else no "$label (want $want; interp=$(printf '%s' "$I"|head -1) compiled=$(printf '%s' "$C"|head -1))"; fi; }
 

@@ -14,7 +14,12 @@ unset CONCRETE_ECHO_RESULT
 # the legacy echo's full-i64 rendering).
 gate_selfprint_wrap() {
   local src="$1" dst="$2"
-  local mainline='fn main() with(Console) -> Int { print_int((gate_wrapped_main()) as Int); print_char(10); return 0; }'
+  # The printing main needs Console PLUS whatever the wrapped main declares
+  # (a `with(Alloc)` fixture main is uncallable from a Console-only wrapper).
+  local caps orig_caps
+  orig_caps=$(grep -o 'fn main([^)]*)[[:space:]]*with(\([^)]*\))' "$src" | head -1 | sed 's/.*with(\(.*\))/\1/')
+  if [ -n "$orig_caps" ]; then caps="Console, $orig_caps"; else caps="Console"; fi
+  local mainline="fn main() with($caps) -> Int { print_int((gate_wrapped_main()) as Int); print_char(10); return 0; }"
   if grep -q '^\s*mod ' "$src"; then
     sed 's/fn main(/fn gate_wrapped_main(/' "$src" \
       | perl -0pe "s/\\}\\s*\\z/\n    $mainline\n}\n/" > "$dst"

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result mode until fixtures migrate (stage 2 deletes this)
 # Phase 6D #6: the surface-simplification validation artifact.
 #
 # Proves the phase reduced syntax WITHOUT weakening Phase 6B semantics:
@@ -13,6 +12,7 @@ export CONCRETE_ECHO_RESULT=1  # MAIN_EXIT_MODEL stage 1: legacy echoed-result m
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first" >&2; exit 2; }
@@ -33,7 +33,7 @@ rejects "#3 postfix -> removed + hint"       tests/programs/error_arrow_not_heap
 
 echo "=== migrated forms behave (loop results + heap dot corpus) ==="
 run "loop-control gate (stmt-form results)"  bash scripts/tests/check_loop_control.sh
-p(){ "$COMPILER" "$1" -o /tmp/6d.bin >/dev/null 2>&1 && /tmp/6d.bin; }
+p(){ gate_selfprint_wrap "$1" /tmp/6d_w.con && "$COMPILER" /tmp/6d_w.con -o /tmp/6d.bin >/dev/null 2>&1 && /tmp/6d.bin; }
 [ "$(p tests/programs/loop_break_result_basic.con)" = "5" ]  && { echo "  ok   loop_break_result_basic => 5"; PASS=$((PASS+1)); } || { echo "  FAIL loop_break_result_basic"; FAIL=$((FAIL+1)); }
 [ "$(p tests/programs/heap_dot_access.con)" = "1" ]          && { echo "  ok   heap_dot_access => 1"; PASS=$((PASS+1)); } || { echo "  FAIL heap_dot_access"; FAIL=$((FAIL+1)); }
 [ "$(p tests/programs/heap_arrow.con)" = "20" ]              && { echo "  ok   heap corpus (migrated) => 20"; PASS=$((PASS+1)); } || { echo "  FAIL heap corpus"; FAIL=$((FAIL+1)); }
