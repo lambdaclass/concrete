@@ -18,11 +18,17 @@ jobs:
           fetch-depth: 0
 
       - name: Install Zola
+        # PINNED version + fail-fast curl. The old form asked the GitHub API
+        # for the latest tag UNAUTHENTICATED — Actions runners share API rate
+        # limits, so the call returned a rate-limit page, jq produced garbage,
+        # and the 404 HTML was piped into tar ("not in gzip format",
+        # lambdaclass/concrete run #145). Pinning removes both the rate limit
+        # and latest-asset drift; -f makes any HTTP error fail the step loudly.
         run: |
-          tag=$(curl -sSL 'https://api.github.com/repos/getzola/zola/releases/latest' | jq -r '.tag_name')
+          tag="v0.19.2"
           url="https://github.com/getzola/zola/releases/download/${tag}/zola-${tag}-x86_64-unknown-linux-gnu.tar.gz"
           mkdir zola
-          curl -sSL "$url" | tar -xz --directory=./zola
+          curl -fsSL "$url" | tar -xz --directory=./zola
           echo "$(pwd)/zola" >> "$GITHUB_PATH"
 
       - name: Build Site
