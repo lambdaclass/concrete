@@ -2666,6 +2666,36 @@ replayable; and every boundary after that slice remains explicitly trusted.
    stubs, symbol names, calling conventions, ownership transfer, capability
    labels, and trust assumptions must round-trip through at least one C
    harness and one Concrete caller.
+7a. Add outbound FFI / embeddability as a first-class backend/ABI contract.
+    Concrete's most likely early adoption path is not replacing a whole
+    process; it is exporting a small verified parser, protocol checker,
+    constant-time helper, or evidence-bearing subsystem into an existing
+    C/C++/Rust/Zig/Go host. Today the FFI story is mostly inbound
+    (Concrete calling libc or trusted host functions). The roadmap must also
+    cover Concrete code callable from outside.
+
+    V1 deliverables:
+    - `#[export]` or equivalent stable export annotation with explicit symbol
+      naming / no-mangle policy;
+    - `staticlib` and/or `sharedlib` output mode, with the supported target
+      triples named;
+    - generated C header for the exported ABI subset;
+    - exported-function ABI classification: scalar, pointer, small/large
+      aggregate, enum/result, string/bytes/path, ownership transfer, and
+      unsupported forms;
+    - generated boundary docs that expose capabilities, allocation authority,
+      failure mode, trusted/Unsafe dependencies, and evidence class for each
+      export;
+    - evidence bundle next to the library artifact, so a host build can audit
+      what the embedded Concrete component claims.
+
+    Hard rule: exported functions must not hide Concrete's thesis at the C
+    boundary. If an export allocates, needs a capability, can fail, depends on a
+    trusted wrapper, or has only tested/runtime-checked evidence, the generated
+    header/docs/report must say so. Gate: one C harness calls a pure exported
+    parser/checker, one harness calls an exported fallible API, and one negative
+    fixture proves an unsupported export shape fails with a diagnostic rather
+    than silently choosing an ABI.
 8. Add a C ABI classification suite, inspired by QBE's explicit ABI contract:
    scalar parameters and returns, small and large structs, arrays, nested
    aggregates, alignment/padding, by-value versus by-reference lowering,
@@ -2858,6 +2888,13 @@ replayable; and every boundary after that slice remains explicitly trusted.
       store into a `uN` field is rejected or wraps per the declared width, not
       silently. (SOA containers and `std.bigint` are stdlib-level, pulled the same
       way; nested patterns is tracked in `docs/NESTED_PATTERNS.md`.)
+22. Keep inbound FFI, outbound FFI, and unsafe-profile work connected but
+    distinct. Inbound FFI says how Concrete safely calls host code; outbound FFI
+    says how host code safely calls Concrete exports; Phase 15.5 says how the
+    trusted/raw-pointer implementation islands remain auditable. Release-facing
+    docs must not collapse these into a vague "FFI supported" claim. Each side
+    needs its own examples, ABI restrictions, ownership-transfer rules,
+    capability/evidence report, and red-team negatives.
 
 ## Phase 15.5: Unsafe Concrete And Trusted Systems Profile
 
@@ -3110,6 +3147,23 @@ audience):**
     report, and the five evidence classes. The tutorial must use runnable
     snippets covered by the doc-snippet gate and must not claim proof where the
     compiler reports only testing, runtime checking, assumption, or trust.
+1b. Publish a versioned authoritative language reference before any public
+    release claim. The tutorial/book is not the reference. The current
+    normative material is scattered across grammar, value-flow, execution,
+    invariants, and evidence docs; release users need one versioned document
+    whose sections define the language surface, not merely explain it.
+
+    Deliverable: `docs/LANGUAGE_REFERENCE_V0.md` (or generated equivalent)
+    covering syntax, lexical forms, type/value model, Copy vs linear values,
+    explicit destroy/defer, capabilities, references and borrow blocks,
+    statements/expressions, modules/imports/visibility, generics/monomorphization,
+    trusted/unsafe/raw pointers, runtime checks/traps, main/exit semantics,
+    stdlib boundary expectations, and evidence taxonomy. Every section links to
+    its machine-checked gate, diagnostic, or "not yet supported" rejection.
+    Gate: `scripts/tests/check_language_reference.sh` verifies every construct
+    named in the grammar has a reference section, every anti-feature/rejected
+    construct has a diagnostic or policy citation, and README/site/book links
+    point to this reference as the normative source.
 2. Publish a public claim matrix: what Concrete proves, enforces, reports,
    assumes, and trusts.
 3. Add release claim freeze: README, `CLAIMS_TODAY.md`, roadmap, showcase
@@ -3141,9 +3195,16 @@ audience):**
      privately, response-time commitment, advisory format, and severity
      classes — a soundness bug that lets a false claim go green
      (checker hole, extraction bug, stale-evidence upgrade) is treated as
-     highest severity even when nothing crashes. Advisories enumerate
-     affected claims by reading the obligation ledger of affected releases,
-     not by prose recollection.
+     highest severity even when nothing crashes. The policy must name scope:
+     compiler crashes on valid input, silent miscompiles, verifier/proof
+     unsoundness, stale-proof upgrades, hidden capability/allocation/trusted
+     boundaries, package-evidence forgery, and stdlib/runtime safety holes are
+     all security-relevant for Concrete. Advisories enumerate affected claims by
+     reading the obligation ledger of affected releases, not by prose
+     recollection. Gate: `scripts/tests/check_security_policy.sh` verifies
+     `SECURITY.md` exists, is linked from README/site/release bundle docs, and
+     names the supported versions/reporting channel before any public release
+     target can pass.
    - 9b. Define the proof-revocation procedure BEFORE the first release that
      carries proof claims: when a shipped theorem/evidence class is
      invalidated (proof bug, axiom-inventory violation, solver unsoundness,
@@ -3172,6 +3233,27 @@ audience):**
    inspect one audit bundle without repo-local assumptions.
 12. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
    `reported` / `assumed` / `trusted`.
+12a. Resolve string interpolation / formatting as an explicit release-facing
+     decision, not an orphaned gap. V1 rejects string interpolation syntax,
+     format macros, and trait-object-style `Display` because they hide
+     allocation, dispatch, and formatting authority. The supported path is
+     `std.fmt` over `std.io.Writer`, with any string-returning helper carrying
+     `with(Alloc)` and any future convenience helper pulled by workloads.
+
+     Required cleanup: remove or close the stale `LANGUAGE_GAPS.md` and
+     `docs/bugs/README.md` entries that call interpolation a blocker unless a
+     concrete workload reopens the decision. If a future workload proves the
+     Writer path insufficient, add a new design note that preserves the same
+     evidence: visible allocation, no macros, no hidden dynamic dispatch, and a
+     gate proving fixed-buffer formatting remains allocation-free.
+12b. Refresh or archive stale gap/backlog documents before release. Documents
+     such as `docs/LANGUAGE_GAPS.md`, root-level idea piles, and old stdlib
+     reviews may be useful historically, but they cannot sit next to the
+     roadmap making claims that contradict closed known holes or current
+     semantics. Gate: `scripts/tests/check_gap_docs_current.sh` rejects stale
+     "true blocker" / "largest gap" claims unless they map to an open roadmap
+     item or known-hole id; otherwise the material moves to CHANGELOG/archive
+     with a date and status.
 13. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Hylo,
    Cogent, Dafny, F*, Why3.
 14. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
@@ -3306,10 +3388,15 @@ audience):**
     tests, docs, roadmap/changelog, claims, and release-bundle impacts. Publish
     a public platform-support statement (`docs/PLATFORM_SUPPORT.md`) naming
     Tier 1/Tier 2/unsupported hosts and targets, including Linux/macOS
-    x86_64/aarch64 and Windows status. Add performance-claim discipline:
-    public copy may not imply "fast systems language" unless `concrete bench`
-    and release performance gates publish replayable numbers; otherwise docs
-    must say performance claims are not made yet.
+    x86_64/aarch64 and Windows status. Windows must not remain ambient: either
+    it is a named supported target with CI and hosted-capability semantics, or
+    it is explicitly "not v1" with a pull trigger (external adopter, workload,
+    or release requirement) and a list of blocked surfaces: paths, process,
+    env, console, file locking, line endings, and toolchain/LLVM availability.
+    Add performance-claim discipline: public copy may not imply "fast systems
+    language" unless `concrete bench` and release performance gates publish
+    replayable numbers; otherwise docs must say performance claims are not made
+    yet.
 19. Ship the first narrow public release only after the above are green.
 20. [relocated from closed Phase 4] Artifact and docs stability hardening:
     schema-version rejection gates (refuse to silently misread an artifact whose
@@ -3720,6 +3807,11 @@ forcing example, explicitly deferred, or rejected.
    atomics, synchronization, shared mutable state, data-race freedom,
    capability-gated thread authority, and proof/evidence classes for concurrent
    code all remain research-gated until a formal model and pressure tests exist.
+   Async syntax remains rejected for v1 per `docs/ANTI_FEATURES.md`; the
+   positive research direction lives here and in `docs/EXECUTION_MODEL.md`:
+   explicit concurrency primitives, visible effects, linear handles, and
+   bounded scheduling/failure evidence rather than hidden async lowering or a
+   second control-flow semantics.
 2. Build concurrency pressure-test sketches and expected reports before
    implementation.
 3. Mechanize the v1 concurrency formal model before claiming safety.
