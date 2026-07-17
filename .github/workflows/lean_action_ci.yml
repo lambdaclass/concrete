@@ -122,7 +122,9 @@ jobs:
     # Fresh checkout with no build caches: rebuild everything and re-run the
     # proof/theorem gates so a stale cache can never produce a false green.
     # Guarded to the WEEKLY cron so the nightly fuzz cron does not trigger it.
-    if: (github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') || github.event_name == 'workflow_dispatch'
+    # Crons run ONLY on the canonical public repo (lambdaclass/concrete) —
+    # the working repo mirrors the tree, doubling nightly compute for nothing.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') && github.repository == 'lambdaclass/concrete') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +152,7 @@ jobs:
 
   fuzz-campaign:
     name: Nightly differential fuzz (rotating seed)
-    if: (github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') || github.event_name == 'workflow_dispatch'
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
