@@ -63,7 +63,8 @@ declare -A SKIP_BUGS=(
   [034]="FIXED -- regress_034_shortcircuit_borrow_promotion.con (run_ok 133) guards the shape; LOAD-BEARING regression = check_cli_helpers.sh two-positionals leg (pre-fix compiler aborts 134, verified); Lower &&/|| prePromoteAddrTaken"
   [035]="FIXED -- enum_generic_payload_layout/src/main.con (project test, exit 0); lowerModule now receives program-wide struct/enum/newtype defs (own-module priority, additive fill)"
   [036]="FIXED -- import_closure_metadata/src/main.con (project test, exit 0); resolveImports closes over public types reachable through imported signatures"
-  [037]="OPEN -- repr(align(N>8)) declared-type gap; filed from review, no failing program yet; candidate fix (fail-closed rejection) brings its own E-code fixture"
+  [037]="FIXED -- error_repr_align_exceeds_natural.con (run_err E0585); repr_align.con moved to the legal no-op case (run_ok 8); CoreCheck reprAlignExceedsNatural"
+  [038]="FIXED -- regress_038_if_merge_promoted_aggregate.con (run_ok qm); Lower merge loops skip ANY promoted var (aggregate included); extended fuzzer is the class gate"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

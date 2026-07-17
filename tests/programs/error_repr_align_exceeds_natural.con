@@ -1,0 +1,12 @@
+// Bug 037: repr(align(N)) with N greater than the struct's natural alignment
+// is rejected (E0585) — the declared LLVM type is rendered from the fields
+// alone and cannot carry the alignment, so Layout and codegen would silently
+// disagree about every alloca, containing-struct offset, and enum payload.
+#[repr(align(16))]
+struct Aligned {
+    x: i32,
+}
+
+fn main() -> Int {
+    return 0;
+}

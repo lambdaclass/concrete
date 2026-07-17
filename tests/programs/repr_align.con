@@ -1,11 +1,13 @@
-// Test repr(align(N)) — minimum alignment override
-#[repr(C, align(16))]
+// Test repr(align(N)) — alignment override up to the natural alignment is a
+// legal no-op (over-alignment is rejected with E0585, see
+// error_repr_align_exceeds_natural.con).
+#[repr(C, align(8))]
 struct Aligned {
-    x: i32,
+    x: i64,
 }
 
 fn main() -> Int {
-    // align(16): size should be rounded up to 16
+    // natural alignment is already 8; sizeof stays 8
     let sz: Uint = sizeof::<Aligned>();
     return sz as Int;
 }

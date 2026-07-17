@@ -90,6 +90,7 @@ inductive CoreCheckError where
   | externFnReturnNotFFISafe (fnName retTy : String)
   | reprPackedAndAlignConflict (structName : String)
   | reprAlignNotPowerOfTwo (structName : String) (n : Nat)
+  | reprAlignExceedsNatural (structName : String) (n : Nat) (natural : Nat)
   | reservedFnName (name : String)
   | builtinTraitRedeclared
   | unknownTrait (traitName : String)
@@ -136,6 +137,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .externFnReturnNotFFISafe fnName retTy => s!"extern fn '{fnName}' has non-FFI-safe return type {retTy}"
   | .reprPackedAndAlignConflict structName => s!"struct '{structName}' cannot have both #[repr(packed)] and #[repr(align(...))]"
   | .reprAlignNotPowerOfTwo structName n => s!"#[repr(align({n}))] on struct '{structName}' must be a power of two"
+  | .reprAlignExceedsNatural structName n natural => s!"#[repr(align({n}))] on struct '{structName}' exceeds its natural alignment ({natural}) — over-aligned structs are not yet supported in codegen (bug 037)"
   | .reservedFnName name => s!"'{name}' is a reserved identifier"
   | .builtinTraitRedeclared => "'Destroy' is a built-in trait"
   | .unknownTrait traitName => s!"unknown trait '{traitName}'"
@@ -214,6 +216,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .externFnReturnNotFFISafe _ _ => "E0575"
   | .reprPackedAndAlignConflict _ => "E0576"
   | .reprAlignNotPowerOfTwo _ _ => "E0577"
+  | .reprAlignExceedsNatural _ _ _ => "E0585"
   | .reservedFnName _ => "E0578"
   | .builtinTraitRedeclared => "E0579"
   | .unknownTrait _ => "E0580"
@@ -843,6 +846,17 @@ def ccCheckModuleDecls (m : CModule)
     | some n =>
       if n == 0 || (n &&& (n - 1)) != 0 then
         errors := errors ++ [mkDeclDiag (.reprAlignNotPowerOfTwo sd.name n) sd.declSpan]
+      else if sd.typeParams.isEmpty then
+        -- Bug 037: over-alignment is rejected. The declared LLVM struct type
+        -- is rendered from the fields alone and cannot carry alignment beyond
+        -- the natural one, so Layout (which honors reprAlign) and codegen
+        -- would disagree about every alloca, containing-struct offset, and
+        -- enum payload of this type. Fail closed until declarations carry
+        -- explicit alignment. (Generic structs: instantiated alignment is
+        -- checked per monomorphization — not reachable here.)
+        let natural := sd.fields.foldl (fun maxA (_, fty) => Nat.max maxA (Layout.tyAlign lctx fty)) 1
+        if n > natural then
+          errors := errors ++ [mkDeclDiag (.reprAlignExceedsNatural sd.name n natural) sd.declSpan]
     | none => ()
   -- 5. Extern fn FFI safety
   for (efName, efParams, efRetTy, _) in m.externFns do

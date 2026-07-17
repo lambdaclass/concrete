@@ -46,5 +46,18 @@ agree "out-of-range (=> -1, not 0)" "$TMPDIR/oob.con"
 emit neg 'mod m { fn main() with(Console) { let s: String = "abc"; print_int(string_char_at(&s, 0 - 1)); drop_string(s); } }'
 agree "negative index (=> -1, not first char)" "$TMPDIR/neg.con"
 
+# Same drift family (fixed with the above): string_length must be the BYTE
+# length (backend len field), not codepoints — "é" is 2 bytes, 1 char.
+emit lennonascii 'mod m { fn main() with(Console) { let s: String = "éb"; print_int(string_length(&s)); drop_string(s); } }'
+agree "non-ASCII length (=> 3 bytes, not 2 chars)" "$TMPDIR/lennonascii.con"
+
+# In-place mutation through &mut (interp gained string_push_char/string_append
+# for the fuzzer grammar): push two ASCII bytes and append, then observe.
+emit push 'mod m { fn main() with(Console) { let mut s: String = "a"; string_push_char(&mut s, 98); print_int(string_length(&s)); drop_string(s); } }'
+agree "push_char then length (=> 2)" "$TMPDIR/push.con"
+
+emit appnd 'mod m { fn main() with(Console) { let mut s: String = "ab"; let t: String = "cd"; string_append(&mut s, &t); print_int(string_char_at(&s, 3)); drop_string(t); drop_string(s); } }'
+agree "append then char_at 3 (=> 100)" "$TMPDIR/appnd.con"
+
 echo "STRING-CHAR-AT: PASS=$PASS DIVERGE=$DIV"
 [ "$DIV" -eq 0 ]

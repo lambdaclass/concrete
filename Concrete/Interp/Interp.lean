@@ -489,7 +489,34 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
             | .string s => .ok s
             | _ => .error "interp: string_length: ref does not point to a string"
           | _ => .error "interp: string_length: argument is not a string")
-        return (env, .val (.int (Int.ofNat s.length) .int))
+        -- Byte length, matching the backend's len field (audit 2026-07-16:
+        -- String.length is CODEPOINTS and drifted from compiled output on
+        -- any non-ASCII string).
+        return (env, .val (.int (Int.ofNat s.utf8ByteSize) .int))
+      | "string_push_char", [sv, cv] => do
+        match sv, ← autoDeref env cv with
+        | .ref p, .int c _ =>
+          match ← lookupPath env p with
+          | .string s =>
+            -- Backend truncates the code to ONE byte (EmitBuiltins): exact
+            -- for ASCII. For c >= 128 the backend appends a lone byte that
+            -- is invalid UTF-8, which a Lean String cannot hold — Char.ofNat
+            -- encodes it as the 2-byte UTF-8 of U+0080..U+00FF instead
+            -- (named residual; the differential corpus stays in ASCII,
+            -- where the model is exact).
+            let env' ← updatePath env p (.string (s.push (Char.ofNat (c.toNat % 256))))
+            return (env', .val .unit)
+          | _ => .error "interp: string_push_char: receiver is not a string"
+        | _, _ => .error "interp: string_push_char: bad arguments"
+      | "string_append", [sv, ov] => do
+        match sv, ← autoDeref env ov with
+        | .ref p, .string o =>
+          match ← lookupPath env p with
+          | .string s =>
+            let env' ← updatePath env p (.string (s ++ o))
+            return (env', .val .unit)
+          | _ => .error "interp: string_append: receiver is not a string"
+        | _, _ => .error "interp: string_append: bad arguments"
       -- Pure string library (matches EmitBuiltins runtime; extends the oracle so
       -- string programs are differential-testable instead of PENDING).
       | "string_eq", [a, b] => do

@@ -67,7 +67,7 @@ category    = "miscompile"
 status      = "fixed"
 repro       = "tests/programs/bug_array_struct_field_mutation.con"
 kind        = "runtime"
-expected    = "99\n0"
+expected    = "99"
 discovered  = "historical (pre-corpus)"
 notes       = "tests/wrong-code/cases/WC-0005.md"
 

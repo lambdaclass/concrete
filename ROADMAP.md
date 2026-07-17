@@ -306,14 +306,16 @@ batteries-included breadth. Completed foundation work lives in
      structured internal-error diagnostics — bug 035's fix made them
      unreachable for well-formed programs, which is exactly when a panic
      should become a diagnostic.
-   - Lower branch-site consolidation (structured-builder slice 2): four
-     branch-creating sites (statement-if, if-expr, match, `&&`/`||`) each
-     hand-maintain the same invariants (bug-031 pre-promotion, bug-033
-     aggregate-merge alloca path, result slots, live-var reconciliation);
-     bugs 029/031/033/034 are all one-site-missed-an-invariant. Extract a
-     shared branch prologue + merge/reconcile used by all four so the
-     fifth such bug is structurally impossible. Incremental, bug-pulled —
-     no big-bang rewrite.
+   - DONE: Lower branch-site consolidation (structured-builder slice 2): the
+     three merge loops (statement-if, if-expr, match) now call ONE
+     `reconcileBranchVars`; the four residual semantic differences
+     (statement-if void rule, array-address rebind — the match loop still
+     binds loads, unit-phi guard, single-incoming rebind) are explicit
+     fields of `BranchMergeRules`, documented as deliberate and not to be
+     "simplified" without a full battery. No behavior change (byte-identical
+     IR by construction; 1680/0 + 531/0 + fuzz seeds green). The &&/|| site
+     keeps its own minimal shape. The fifth merge bug is now one function's
+     problem instead of four sites'.
    - Stale stdlib docs refresh: STRING_TEXT_CONTRACT.md (argv/string
      validation claims), BYTE_VIEW.md (`Text::from_raw` vs the shipped
      `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md
@@ -353,16 +355,22 @@ batteries-included breadth. Completed foundation work lives in
      overflow="wrapping" (language traps); files corrected and
      check_assumptions.sh now reads/enforces the arithmetic section
      against --report arithmetic; ASSUMPTION_FILES.md template fixed.
-   - PARTIAL: CI — run_ci_gates_local extraction fixed (bare ./scripts
+   - DONE: CI — run_ci_gates_local extraction fixed (bare ./scripts
      invocations + arguments preserved, tree-mutating mutation gate
-     excluded); retry loops emit ::warning on failed attempts. STILL
-     OPEN: wire catches/showcase/wrong-code/reducer/release-bundle into
-     CI or delete the Makefile targets.
+     excluded); retry loops emit ::warning on failed attempts; dark gates
+     wired (extra-gates CI job: catches/showcase/wrong-code/reducer/
+     release-bundle + the three audit gates) — test_wrong_code was
+     already silently red when wired (WC-0005 stale expectation, fixed).
    - DONE: phantom `concrete new` scrubbed from the Resolve hint and the
      book/site project pages (now document Concrete.toml + src/main.con);
      ideas.org carries a SUPERSEDED banner (12b's gate will police).
-   - Fuzzer grammar extension: aggregates + borrows-in-branches +
-     strings/non-Copy (the classes that actually bit in 029-034).
+   - DONE: fuzzer grammar extension landed — aggregate value-ifs, &mut-self
+     method borrows in both branch arms, non-Copy String ops. Its first
+     campaign found bug 038 (merge clobbered promoted-aggregate writes —
+     all three merge loops now skip ANY promoted var) plus interp drift:
+     string_length was codepoints not bytes; push_char/append added.
+   - Fuzzer residual: heap/alloc/IO remain compiled-only (interp limits);
+     trap CLASS not compared.
    Deliberately NOT queued: std.cli abstraction polish (one more workload
    first), ByteCursor/ByteWriter renames (no signal), vec_get/vec_len
    builtin cleanup (deeper than a pass), roadmap compaction (collides with

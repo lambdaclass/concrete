@@ -1,6 +1,15 @@
 # Bug 037: repr(align(N>8)) changes Layout but not the declared LLVM type
 
-**Status:** Open
+**Status:** Fixed (2026-07-16) — fail-closed rejection (E0585)
+**Fixed in:** `Concrete/Check/CoreCheck.lean` repr(align) validation —
+`reprAlignExceedsNatural` rejects `#[repr(align(N))]` with N greater than the
+struct's natural field alignment, with the field span. Over-aligned structs
+stay unimplementable until declarations carry explicit alignment (the
+enum-union fix's `align 8` alloca mechanism); the no-op case (N ≤ natural)
+remains legal.
+**Regression test:** `tests/programs/error_repr_align_exceeds_natural.con`
+(run_err "exceeds its natural alignment"); `tests/programs/repr_align.con`
+moved to the legal no-op case (align(8) on an i64 field, run_ok 8).
 **Discovered:** 2026-07-16, during the audit-3/3 enum-union fix
 (`Concrete/Backend/EmitSSA.lean` canonical-union work).
 
