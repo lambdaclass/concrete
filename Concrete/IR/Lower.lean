@@ -67,6 +67,11 @@ structure LowerState where
   newtypes : List NewtypeDef := []
   loopStack : List LoopInfo
   constants : List (String × Ty × CExpr) := []
+  /-- Names of user/Core-defined functions in the program. A call to a
+      DEFINED function is never an intrinsic — intrinsic identity is
+      by-resolution, not by raw name (audit 2026-07-16: user fns named
+      sizeof/alloc/... were hijacked at this pass too). -/
+  definedFns : List String := []
   /-- Allocas that must be hoisted to the function entry block.
       Prevents unbounded stack growth when &mut borrows occur in loops. -/
   entryAllocas : List SInst := []
@@ -668,7 +673,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .reg dst ty
 
   | .call fn _typeArgs args ty =>
-    let intrinsic := resolveIntrinsic fn
+    -- Intrinsic identity is by-resolution: a DEFINED function is never
+    -- intercepted, whatever it is named (mirrors Check/Elab guards).
+    let st ← getState
+    let intrinsic := if st.definedFns.contains fn then none else resolveIntrinsic fn
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants
     if intrinsic == some .sizeof then
       let argTy := match _typeArgs with | t :: _ => t | [] => Ty.int
@@ -2132,7 +2140,8 @@ end
 
 def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDef)
     (constants : List (String × Ty × CExpr) := [])
-    (newtypes : List NewtypeDef := []) : Except Diagnostics (SFnDef × List (String × String)) :=
+    (newtypes : List NewtypeDef := [])
+    (definedFns : List String := []) : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
     blocks := []
     currentLabel := "entry"
@@ -2146,6 +2155,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     newtypes := newtypes
     loopStack := []
     constants := constants
+    definedFns := definedFns
     scopeStack := [{ kind := .function }]
   }
   let result := (do
@@ -2274,8 +2284,9 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   -- Skip generic functions (non-empty typeParams); only their monomorphized
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty
+  let definedFnNames := allFunctionsWithPath.map fun (f, _) => f.name
   let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
-    match lowerFn f allStructs allEnums allConstants allNewtypes with
+    match lowerFn f allStructs allEnums allConstants allNewtypes definedFnNames with
     | .ok (sfn, lits) => .ok (acc ++ [({ sfn with modulePath := path }, lits)])
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
   -- Build deduplicated globals list (by string value)

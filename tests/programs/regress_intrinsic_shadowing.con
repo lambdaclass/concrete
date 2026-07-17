@@ -1,0 +1,12 @@
+// Intrinsic identity regression (audit 2026-07-16): user functions named
+// like intrinsics must BE user functions at every pass. Pre-fix, Elab
+// hijacked them by raw name: user sizeof(1) had its argument list dropped
+// (E0522 downstream), and user wrapping_add(2,3) silently became the
+// 5-valued builtin binop regardless of the body. Expected: 8 + 23 = 31.
+mod m {
+    fn sizeof(x: Int) -> Int { return x + 7; }
+    fn wrapping_add(a: Int, b: Int) -> Int { return a * 10 + b; }
+    fn main() -> Int {
+        return sizeof(1) + wrapping_add(2, 3);
+    }
+}

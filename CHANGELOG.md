@@ -10,6 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Intrinsic identity threaded to call sites — name-hijack class closed (2026-07-16)
+
+Audit item #2: Elab and Lower intercepted intrinsics by RAW NAME, so a
+user function named `wrapping_add` silently evaluated as the builtin
+(verified: user body `a*1000+b` returned 5, not 2003) and a user `sizeof`
+had its argument list dropped (nonsense E0522 downstream). Check already
+guarded with userFnNames (Check.lean:302); Elab and Lower now apply the
+same identity-by-resolution rule — Elab consults `lookupFnSig` before
+`resolveIntrinsic` (the vestigial `_sizeof` suffix hijack is user-guarded
+too), and Lower carries the program's defined-fn names in LowerState and
+never intercepts a defined function. No Core-name churn: unshadowed
+programs elaborate identically (proof fingerprints stable, purecore
+32/32). Regression: `tests/programs/regress_intrinsic_shadowing.con`
+(run_ok 31). Residual noted: Check-side divergence/capability
+CLASSIFIERS (exprIsAbort, .free checks) still match raw Core names — a
+user fn named `abort` can be misclassified as diverging (conservative
+direction); folds into the #13b typing-truth work.
+
 ### Workload 4: tar_list — ustar lister, tar-differential (2026-07-16)
 
 `examples/tar_list` lists ustar archives byte-identical to `tar -tf`

@@ -6710,6 +6710,9 @@ run_ok "$TESTDIR/regress_033_discard_live_string.con" "live-across"
 # Bug 034: &&/|| RHS borrow skipped lazy-promotion pre-store (031 class, 3rd
 # site). Shape guard; the LOAD-BEARING regression is check_cli_helpers.sh.
 run_ok "$TESTDIR/regress_034_shortcircuit_borrow_promotion.con" 133
+# Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
+# are USER fns at every pass — never name-hijacked.
+run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31
 run_err "$TESTDIR/error_030_nonmut_array_write.con" "cannot assign to immutable"
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42

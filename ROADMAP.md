@@ -329,9 +329,10 @@ batteries-included breadth. Completed foundation work lives in
      pass-level Lean tests were vacuously green for months).
    - DONE: proof-status proved entries carry an explicit trust line
      ("linked + fingerprint-fresh — kernel replay via check-proofs").
-   - Intrinsic identity threaded to CALL SITES (Elab/Lower intercept by
-     raw name; user fns named sizeof/_sizeof/wrapping_add get hijacked —
-     the IntrinsicId tagging exists for declarations, finish the thread).
+   - DONE: intrinsic identity threaded to call sites (Elab lookupFnSig
+     guard + Lower definedFns guard; regress_intrinsic_shadowing.con).
+     Residual: Check-side divergence/capability classifiers still match
+     raw Core names (conservative misclassification only) — #13b.
    - Option/Result canonical-enum sizing must respect ALIGNMENT, not just
      max tySize (repr(align(N)) payload can overflow the chosen alloca).
    - Interp/backend builtin drift (string_char_at OOB 0-vs--1, codepoint

@@ -802,7 +802,14 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
 partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
     (hint : Option Ty) (span : Option Span := none) : ElabM CExpr := do
   let typeArgs ← typeArgs.mapM resolveTypeE
-  let intrinsic := resolveIntrinsic fnName
+  -- Intrinsic IDENTITY, not raw name (audit 2026-07-16): a name that
+  -- resolves to a USER function is never an intrinsic — mirrors Check's
+  -- userFnNames guard (Check.lean:302). Without this, user fns named
+  -- sizeof/wrapping_add/... were silently hijacked at elaboration
+  -- (sizeof dropped its args; wrapping_add(2,3) became the 5-valued
+  -- binop regardless of the user body).
+  let userSig ← lookupFnSig fnName
+  let intrinsic := if userSig.isSome then none else resolveIntrinsic fnName
   -- Intercept abort()
   if intrinsic == some .abort then
     return .call "abort" [] [] .never
@@ -884,7 +891,8 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
       | _                   => BinOp.wrappingAdd
     return .binOp bop cA cB cA.ty
   -- Intercept sizeof/alignof
-  if intrinsic == some .sizeof || intrinsic == some .alignof || fnName.endsWith sizeofSuffix then
+  if intrinsic == some .sizeof || intrinsic == some .alignof
+     || (userSig.isNone && fnName.endsWith sizeofSuffix) then
     return .call fnName typeArgs [] .uint
   -- Intercept vec_new::<T>()
   if intrinsic == some .vecNew then
