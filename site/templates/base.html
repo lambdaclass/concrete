@@ -5,9 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if page and page.title and page.title != config.title %}{{ page.title }} | {% elif section and section.title and section.title != config.title %}{{ section.title }} | {% endif %}{{ config.title }}</title>
   <meta name="description" content="{{ config.description }}">
-  <link rel="stylesheet" href="{{ get_url(path='site.css') }}?v=hare-docs1">
+  <meta property="og:title" content="{% if page and page.title and page.title != config.title %}{{ page.title }} | {{ config.title }}{% elif section and section.title and section.title != config.title %}{{ section.title }} | {{ config.title }}{% else %}{{ config.title }}{% endif %}">
+  <meta property="og:description" content="{{ config.description }}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ config.base_url }}">
+  <meta property="og:image" content="{{ get_url(path='logo.png') }}">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" type="image/png" href="{{ get_url(path='logo.png') }}">
+  <link rel="stylesheet" href="{{ get_url(path='site.css') }}">
 </head>
 <body>
+  <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
     <div class="wrap header-bar">
       <a class="brand" href="{{ get_url(path='@/_index.md') }}">
@@ -15,7 +23,7 @@
       </a>
       <div class="header-main">
         <div class="header-title">
-          <h1><a href="{{ get_url(path='@/_index.md') }}">Concrete</a></h1>
+          <div class="site-name"><a href="{{ get_url(path='@/_index.md') }}">Concrete</a></div>
         </div>
         <nav class="main-nav">
         <a href="{{ get_url(path='@/_index.md') }}">Home</a>
@@ -29,8 +37,18 @@
       </div>
     </div>
   </header>
-  <main class="wrap page-shell">
+  <main class="wrap page-shell" id="content">
     {% block content %}{% endblock content %}
   </main>
+  <footer class="site-footer">
+    <div class="wrap footer-bar">
+      <span>Concrete is experimental. Apache-2.0.</span>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="{{ get_url(path='@/guide/status.md') }}">Status</a>
+        <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="{{ config.extra.repo_url }}">Repository</a>
+      </nav>
+    </div>
+  </footer>
 </body>
 </html>

@@ -87,10 +87,11 @@ pre code {
   display: block;
 }
 
-.header-title h1 {
+.header-title .site-name {
   margin: 0;
   color: var(--ink);
   font-size: 1.15rem;
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -113,6 +114,51 @@ pre code {
 
 .page-shell {
   padding: 1.45rem 0 3rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--bg);
+  color: var(--accent);
+  padding: 0.4rem 0.8rem;
+  z-index: 10;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.footer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.85rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.footer-nav {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.footer-nav a {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sample-note {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .home,
@@ -154,10 +200,40 @@ pre code {
 }
 
 .eyebrow,
-.hero-actions,
 .hero-facts,
 .terminal-title {
   display: none;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+
+.hero-actions a {
+  display: inline-block;
+  border: 1px solid var(--line-strong);
+  padding: 0.3rem 0.8rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.hero-actions a.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.hero-actions a:hover {
+  border-color: var(--accent);
+  color: #4f1c0d;
+}
+
+.hero-actions a.primary:hover {
+  color: var(--bg);
 }
 
 h1,

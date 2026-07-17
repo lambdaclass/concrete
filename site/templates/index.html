@@ -17,19 +17,25 @@
         in function types. Proofs, runtime checks, oracle tests, assumptions,
         and trusted boundaries are reported as separate evidence classes.
       </p>
+      <div class="hero-actions">
+        <a class="primary" href="{{ get_url(path='@/guide/getting_started.md') }}">Get started</a>
+        <a href="{{ get_url(path='@/guide/landing.md') }}">Why Concrete?</a>
+      </div>
     </div>
 
     <div class="terminal-card" aria-label="Concrete code sample">
       <pre><code>fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
+    if off &lt; 0 || off + 2 &gt; len { return -1; }
     let hi: i32 = packet[off] as i32;
     let lo: i32 = packet[off + 1] as i32;
     return hi * 256 + lo;
 }
 
 fn report(result: i32) with(Console) {
-    if result == 0 { println("ok"); }
-    else { println("fail"); }
+    if result &lt; 0 { println("out of range"); }
+    else { println("ok"); }
 }</code></pre>
+      <p class="sample-note">Compiles as-is with <code>concrete main.con</code>; the report below is its real output.</p>
     </div>
   </section>
 
@@ -38,7 +44,11 @@ fn report(result: i32) with(Console) {
       <h2 id="try-title">Getting started</h2>
       <p>
         Concrete is experimental. The most honest first contact is to build it,
-        run the gates, and inspect the reports.
+        run the gates, and inspect the reports. You need Lean 4, lake, and
+        clang; the <code>make</code> targets wrap the build in the repository's
+        Nix flake. See the
+        <a href="{{ get_url(path='@/guide/installation.md') }}">installation guide</a>
+        for the plain <code>lake build</code> path.
       </p>
     </div>
     <pre><code>$ make build
@@ -90,24 +100,28 @@ $ .lake/build/bin/concrete examples/png_chunks/src/main.con --emit-trace-json</c
       <p>
         Reports are meant to answer ordinary review questions: what authority
         does this code have, what can fail, what allocates, what is linear, and
-        which claims are proved or merely checked?
+        which claims are proved or merely checked? Every construct is accounted
+        as one of: proved, enforced, reported, assumed, or trusted.
+      </p>
+      <p>
+        Trimmed <code>--report audit</code> output for the program above:
       </p>
     </div>
-    <pre><code>function report
-  caps              Console
-  alloc             no
-  unsafe            none
+    <pre><code>$ concrete main.con --report audit
+--- Authority ---
+      read_u16_be : (pure)
+      report      : Console
+      main        : Console
 
-function read_u16_be
-  caps              none
-  array bounds      runtime_checked
-  overflow          obligation
+--- Effects ---
+      read_u16_be
+    caps: (pure)   alloc: none  ffi: no  trusted: no  evidence: enforced
+      report
+    caps: Console  alloc: none  ffi: no  trusted: no  evidence: enforced
 
-evidence
-  proved_by_lean              linked where present
-  proved_by_kernel_decision   closed obligations
-  runtime_checked             checks remain in code
-  trusted                     named boundary, not hidden</code></pre>
+Totals: 3 functions, 1 pure, 0 allocating, 0 cross FFI, 0 trusted
+Evidence: 0 proved, 3 enforced, 0 trusted-assumption, 0 reported</code></pre>
+    <p class="sample-note">Full output and the other report modes are described in <a href="{{ get_url(path='@/guide/reports.md') }}">Reports</a>.</p>
   </section>
 
   <section id="model" class="model-section" aria-labelledby="model-title">

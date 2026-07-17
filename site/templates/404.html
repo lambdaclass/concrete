@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="doc-page">
+  <header class="section-head">
+    <h1>Page not found</h1>
+  </header>
+  <div class="doc-body">
+    <p>
+      Nothing lives at this address. Try the
+      <a href="{{ get_url(path='@/_index.md') }}">home page</a>,
+      the <a href="{{ get_url(path='@/guide/_index.md') }}">guide</a>, or the
+      <a href="{{ get_url(path='@/reference/_index.md') }}">reference</a>.
+    </p>
+  </div>
+</article>
+{% endblock content %}

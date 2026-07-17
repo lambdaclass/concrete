@@ -1,22 +1,10 @@
 +++
-title = "Landing"
+title = "Why Concrete"
 +++
-
-<section class="hero">
-  <h1>Concrete</h1>
-  <p>Auditable low-level programming with explicit authority and trust boundaries, on top of a small, honest, proof-friendly language and compiler.</p>
-  <div class="hero-actions">
-    <a class="primary" href="./getting_started.md">Get Started</a>
-    <a href="../../IDENTITY.md">Read the Identity</a>
-    <a href="../../../ROADMAP.md">See the Roadmap</a>
-  </div>
-</section>
 
 Concrete is not trying to win by having the most features. Its intended strength is that important low-level properties stay explicit enough to inspect, report, audit, and eventually prove.
 
-<div class="positioning-note">
-Concrete should be strongest where many systems languages are not explicitly centered: auditability, explicit authority/trust boundaries, and proof-friendly compiler structure.
-</div>
+> Concrete should be strongest where many systems languages are not explicitly centered: auditability, explicit authority/trust boundaries, and proof-friendly compiler structure.
 
 Concrete is also aiming at something broader than "a working compiler": a compiler that can explain itself, surface audit-relevant facts directly, and eventually produce inspectable and reproducible outputs that users can trust.
 
@@ -35,25 +23,26 @@ Example implementation:
 ```con
 fn unwrap_or_zero(x: Option<Int>) -> Int {
     match x {
-        Option#Some { value } => return value,
-        Option#None => return 0,
+        Option::Some { value } => return value,
+        Option::None => return 0,
     }
 }
 ```
 
-Example report shape:
+Compiling that file and running `concrete main.con --report caps` gives:
 
 ```text
-caps:
-  unwrap_or_zero
-    direct: {}
-    transitive: {}
+=== Capability Summary ===
 
-unsafe:
-  Totals: 0 unsafe-related signatures
+module main:
+      unwrap_or_zero : (pure)
+
+Totals: 1 functions (1 pure), 0 externs
 ```
 
-Example proof shape:
+and `--report unsafe` answers `No unsafe signatures found.`
+
+The proof direction, in sketch form, is a Lean 4 meaning for the same function:
 
 ```lean
 def unwrap_or_zero_core : ProofCoreFn := ...
@@ -84,24 +73,21 @@ The point is not only speed or control. The point is to keep low-level power whi
 
 ## What Makes It Different
 
-<div class="feature-grid">
-  <div class="feature-card">
-    <h3>Auditability</h3>
-    <p>Concrete is trying to show where authority enters, where allocation and cleanup happen, what layout/ABI a type really has, and what monomorphized code actually exists.</p>
-  </div>
-  <div class="feature-card">
-    <h3>Explicit Trust</h3>
-    <p>Capabilities, <code>Unsafe</code>, <code>trusted fn</code>, <code>trusted impl</code>, and <code>trusted extern fn</code> are explicit surfaces, not hidden implementation accidents.</p>
-  </div>
-  <div class="feature-card">
-    <h3>Small Semantic Surface</h3>
-    <p>Ordinary names should stay ordinary, compiler magic should stay narrow, and the trusted computing base should remain easier to reason about.</p>
-  </div>
-  <div class="feature-card">
-    <h3>Proof-Friendly Structure</h3>
-    <p>The compiler is being shaped around clear Core semantics, SSA as a real backend boundary, explicit pass structure, and formalization targets that match the architecture.</p>
-  </div>
-</div>
+### Auditability
+
+Concrete is trying to show where authority enters, where allocation and cleanup happen, what layout/ABI a type really has, and what monomorphized code actually exists.
+
+### Explicit Trust
+
+Capabilities, `Unsafe`, `trusted fn`, `trusted impl`, and `trusted extern fn` are explicit surfaces, not hidden implementation accidents.
+
+### Small Semantic Surface
+
+Ordinary names should stay ordinary, compiler magic should stay narrow, and the trusted computing base should remain easier to reason about.
+
+### Proof-Friendly Structure
+
+The compiler is being shaped around clear Core semantics, SSA as a real backend boundary, explicit pass structure, and formalization targets that match the architecture.
 
 ## Two Lean Goals
 
@@ -129,18 +115,15 @@ Compared to Lean, Concrete is the low-level language and Lean 4 is the proof env
 
 ## Start Here
 
-<div class="quick-links">
-  <a href="../../../README.md">Repository README</a>
-  <a href="../../IDENTITY.md">Project Identity</a>
-  <a href="./why_lean4.md">Why Lean 4?</a>
-  <a href="./high_integrity.md">High-Integrity Concrete</a>
-  <a href="./use_cases.md">Use Cases</a>
-  <a href="./status.md">Status</a>
-  <a href="../../../ROADMAP.md">Roadmap</a>
-  <a href="../../../CHANGELOG.md">Changelog</a>
-  <a href="./stdlib.md">Standard Library</a>
-  <a href="./testing.md">Testing</a>
-  <a href="./architecture.md">Architecture</a>
-  <a href="./reference.md">Reference Docs</a>
-  <a href="./internal/index.md">Internal Details</a>
-</div>
+- [Getting started](@/guide/getting_started.md)
+- [Project identity](@/reference/IDENTITY.md)
+- [High-integrity Concrete](@/guide/high_integrity.md)
+- [Use cases](@/guide/use_cases.md)
+- [Status](@/guide/status.md)
+- [Standard library](@/guide/stdlib.md)
+- [Testing](@/guide/testing.md)
+- [Architecture](@/guide/architecture.md)
+- [Reference](@/reference/_index.md)
+- [Internal details](@/guide/internal/_index.md)
+- [Roadmap](https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md)
+- [Changelog](https://github.com/unbalancedparentheses/concrete2/blob/main/CHANGELOG.md)
