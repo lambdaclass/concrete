@@ -6,6 +6,13 @@ on:
       - main
   workflow_dispatch:
 
+# Pages allows ONE in-flight deployment; back-to-back pushes raced and the
+# second 400'd ("in progress deployment", lambdaclass run on 499f6420).
+# Queue instead: newest deploy wins, older pending ones are cancelled.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
