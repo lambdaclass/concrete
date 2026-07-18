@@ -1,0 +1,3 @@
+[package]
+name = "regress_044_renamed_generic_import"
+version = "0.1.0"

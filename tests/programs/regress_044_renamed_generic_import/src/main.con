@@ -1,0 +1,20 @@
+// Bug 044 regression: a RENAMED import of a GENERIC fn must monomorphize.
+// Mono resolved `dd` through a first-match alias list whose entry pointed
+// at the module-qualified name while fnMap keys are bare — lookup missed,
+// the call stayed generic, and EmitSSA emitted a call to the never-defined
+// bare @dealloc. Exit 0 = the specialization ran (write + read through the
+// renamed alloc pair).
+mod main {
+    import std.alloc.{grow as galloc, dealloc as dd};
+
+    trusted fn go() with(Alloc) -> u8 {
+        let p: *mut u64 = galloc::<u64>(0 as *mut u64, 2);
+        *p = 44;
+        let ok: bool = *p == 44;
+        dd::<u64>(p);
+        if ok { return 0; }
+        return 1;
+    }
+
+    fn main() with(Std) -> u8 { return go(); }
+}

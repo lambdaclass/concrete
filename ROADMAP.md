@@ -346,14 +346,10 @@ batteries-included breadth. Completed foundation work lives in
      gap, converts to a fixture when a workload pulls one).
    - Known-defects queue (2026-07-18, priority-ordered; each is a defect,
      not a deferral — take top-down, own slice + battery each):
-     1. Renamed GENERIC import miscompiles (found dogfooding bug 043):
-        `import std.alloc.{dealloc as dd}` + `dd::<u8>(p)` emits a call to
-        bare `@dealloc` (undefined; only mono specializations exist).
-        Non-generic renames work. Mono resolves the alias to the generic's
-        bare name instead of monomorphizing under it. No std/user code
-        renames a generic today (all std renames are extern fns), so no
-        active breakage — wrong-code class regardless. Fix in Mono +
-        regress fixture (repro preserved in this entry).
+     1. FIXED (2026-07-18, bug 044): renamed GENERIC import failed to
+        monomorphize (undefined @dealloc at link) — Mono lookupFn now
+        tries all alias orientations and specializes under the resolved
+        def's canonical name; regress_044_renamed_generic_import pins it.
      2. `env::get` returns unvalidated Strings: an environment value with
         invalid UTF-8 arrives as a `String`, violating the String=UTF-8
         contract (STRING_TEXT_CONTRACT target policy). `args::get` already

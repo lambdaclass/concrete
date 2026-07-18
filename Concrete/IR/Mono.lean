@@ -344,10 +344,28 @@ private def lookupFn (name : String) : MonoM (Option CFnDef) := do
   match st.fnMap.get? name with
   | some f => return some f
   | none =>
-    -- Try resolving through linker aliases (e.g., HashMap_contains → map_HashMap_contains)
-    match st.linkerAliases.lookup name with
-    | some resolvedName => return st.fnMap.get? resolvedName
-    | none => return none
+    -- Resolve through linker aliases (e.g., HashMap_contains →
+    -- map_HashMap_contains). The flat alias list can carry SEVERAL entries
+    -- for one local name in different orientations — a renamed import
+    -- `dealloc as dd` contributes both ("dd","dealloc") and
+    -- ("dd","alloc_dealloc") while fnMap is keyed by bare def names — so
+    -- try every target (one more alias hop each) and take the first that
+    -- resolves to a real def. First-match-only here left renamed GENERIC
+    -- calls un-monomorphized (emitted as a call to the never-defined bare
+    -- generic symbol).
+    let targets := st.linkerAliases.filterMap fun (l, t) =>
+      if l == name then some t else none
+    for t in targets do
+      match st.fnMap.get? t with
+      | some f => return some f
+      | none =>
+        match st.linkerAliases.lookup t with
+        | some t2 =>
+          match st.fnMap.get? t2 with
+          | some f => return some f
+          | none => pure ()
+        | none => pure ()
+    return none
 
 /-- Get names of all generic functions (non-empty typeParams). -/
 private def getGenericFnNames : MonoM (List String) := do
@@ -385,9 +403,12 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
           if inferredArgs.isEmpty then
             return .call fn [] args' ty  -- couldn't infer, leave as-is
           else
-            -- Re-process as a generic call with inferred type args
+            -- Re-process as a generic call with inferred type args.
+            -- Specialize under the RESOLVED def's canonical name, not the
+            -- call-site spelling: a renamed import (`dealloc as dd`) must
+            -- share the same specialization as direct calls.
             let genericNames ← getGenericFnNames
-            let name := monoNameFor fn inferredArgs
+            let name := monoNameFor fnDef.name inferredArgs
             let mapping := fnDef.typeParams.zip inferredArgs
             let sub := substTy fnDef.typeParams mapping
             let callNameMap := mapping.filterMap fun (paramName, ty) =>
@@ -438,7 +459,8 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
       if fnDef.typeParams.isEmpty then
         return .call fn typeArgs args' ty  -- not actually generic
       let genericNames ← getGenericFnNames
-      let name := monoNameFor fn typeArgs
+      -- Canonical-name specialization (see the inferred-args branch above).
+      let name := monoNameFor fnDef.name typeArgs
       let mapping := fnDef.typeParams.zip typeArgs
       let sub := substTy fnDef.typeParams mapping
       -- Build a name map for rewriting trait method calls like T_describe → Point_describe

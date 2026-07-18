@@ -70,6 +70,7 @@ declare -A SKIP_BUGS=(
   [041]="FIXED -- regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)"
   [042]="FIXED -- regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases"
   [043]="FIXED -- check_envcfg.sh env-override leg + std-compiled-coverage env/fs/io/net legs (Linux CI is the discriminating platform); String::to_cstr + all C-string FFI sites converted"
+  [044]="FIXED -- regress_044_renamed_generic_import/src/main.con (project test, exit 0); Mono lookupFn tries all alias orientations + specializes under the resolved def's canonical name"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="
