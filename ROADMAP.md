@@ -633,6 +633,84 @@ explicitness, Rust-style `Option`/`Result` and layering where useful, Ada/SPARK
 evidence discipline, Go-style `Reader`/`Writer` simplicity, and Odin-style
 pragmatic breadth only after workload pressure.
 
+## Long-Term Architecture Disposition (2026-07-18 external review)
+
+An 18-item long-term architecture review, triaged and approved. The unifying
+rule: **`pub` is the ONLY visibility keyword — everything is module-private by
+default, `pub` exports a declaration/field/variant, and exporting a type does
+NOT export its representation.** No `private`/`sealed`/`opaque`/`transparent`.
+Disposition (each item has a concrete home; no open decisions remain):
+
+**Phase 7 exit / near-term hardening**
+1. Representation visibility — struct fields private-by-default, `pub` opt-in;
+   external literal needs every referenced field `pub`. → 0b slice 2 (in flight).
+2. Construction rights — newtype construction private (DONE, 0b slice 1, E0296).
+   Enum-variant privacy is a SEPARATE scheduled slice (D1): it must define
+   construction, matching, imports, exhaustiveness with inaccessible variants,
+   and migration diagnostics. Syntax (D2): keep `pub newtype N = u32` (NO
+   parentheses); variant marker is `pub Ok { value: T }`. `pub` stays the only
+   visibility word.
+7. Separate borrow vs ownership — split `BytesRaw` into `Slice<u8>` (borrow) and
+   `BytesParts` (ownership transfer); a borrowed view and owned allocation parts
+   must not share an ambiguous destruction contract. NEAR-TERM (D4): inventory
+   producers/consumers first, then split with destruction-counter tests.
+9. One IO spine — Files/streams/sockets/buffers on shared Reader/Writer;
+   keep parser-oriented `read_all -> Bytes`, ADD `read_to_end -> Result<Bytes,_>`
+   for error-preserving completion. Migrate vertically through workloads.
+10. Boundary validation — validate UTF-8 ONLY where an API promises text
+    (CORRECTION: network/process expose `Bytes` by DEFAULT; validate only in
+    explicit text adapters). args/env already validated.
+11. Checked C-string boundary — `to_cstr -> Result<CString, CStringError>`;
+    interior NUL must not silently truncate. NEAR-TERM (D5), vertical slices:
+    add checked conversion + CStringError, keep a narrow internal `_unchecked`,
+    migrate all FFI sites, test interior-NUL/empty/alloc-fail/exactly-once,
+    then remove/privatize the infallible public conversion.
+12. Hosted adapters absorb unsafe — callers request domain caps, not `Unsafe`;
+    raw-pointer APIs stay private/explicitly-unsafe. Unblocked now that manifest
+    facts are truthful (0a). This is the raw-ptr⇒Unsafe gate (review item 5).
+
+**Already holds — but still needs a PERMANENT regression fixture (not just "holds")**
+5. Centralized linear conservation — one checker enforces exactly-once across
+   branches/matches/returns/loops/callbacks/destructuring; consuming
+   Option/Result combinators (0c) use THIS machinery, no special-case rules
+   (verified). Add an assertion fixture.
+6. Trusted ≠ implicit linear copy — verified E0205 fires in `trusted`; add a
+   permanent regression fixture pinning it.
+
+**Phase 7.5 (opening order fixed by D6)**
+15. Backend-neutral LayoutFacts (size/align/offsets/tags/ABI/legal scalar),
+    separate from LLVM spelling — the opening slice; QBE is the forcing consumer.
+16. Typed emitter fragments (structured defs/blocks/instrs/terminators, rendered
+    once); LLVM and QBE share rendering + neutral facts, NOT instruction
+    selection. CORRECTION: this does NOT fix bug 027 in the LLVM emitter — that
+    happens only if LLVM later adopts the fragment model (profile/pull-gated).
+17. Structured-diagnostics-only (panics→diagnostics) — the Layout panic
+    conversion, reordered BEHIND the item-15 split (do the split once).
+    Phase 7.5 order: LayoutFacts → QBE fragment model → QBE backend → Layout
+    panic-to-diagnostic → optional LLVM fragment migration (only when pulled).
+
+**Phase 8 architecture track (each an INDEPENDENTLY-runnable migration, never a
+compiler-wide rewrite; the compiler stays runnable+tested after every slice)**
+3. Stable semantic IDs — CORRECTION: NOT the root fix for 039–045 (045's
+   alpha-renaming already closed the demonstrated binder-identity defect);
+   stable IDs are long-term PREVENTION against future name-based identity
+   mistakes.
+4. Compiler-derived interface facts — supersede the (repaired) manifest scanner.
+   D3: keep the scanner until Phase 8; the compiler artifact becomes
+   authoritative, compared against the scanner during migration before deletion.
+13. Typed pass boundaries (ParsedProgram → … → VerifiedSSAProgram).
+14. Immutable indexed program facts (modules/defs/layouts/builtin identities/
+    target) consumed by passes instead of re-scanning / first-match lookup.
+18. Self-enforcing coverage matrix from compiler facts (depends on #4).
+
+**Phase 8 track ORDER:** stable IDs → immutable indexed facts → typed pass
+boundaries → compiler-derived interfaces → generated coverage matrix.
+
+**stdlib pull-gated**
+8. Slices as the safe buffer interface (`&Slice<u8>`/`&mut MutSlice<u8>` on
+   hosted read/write; raw-pointer forms private) — the `&Bytes` net-I/O pull
+   (currently 2nd ask).
+
 ## Phase 7: Standard Library And Core APIs
 
 Goal: build the small standard library people need before real workloads,
