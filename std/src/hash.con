@@ -10,7 +10,7 @@ mod hash {
         let prime: u64 = 0x100000001b3;
 
         let mut i: u64 = 0;
-        while i < data.len {
+        while i < data.len() {
             let byte: u8 = data.get_unchecked(i);
             hash = hash ^ (byte as u64);
             hash = wrapping_mul(hash, prime);  // FNV-1a is mod-2^64 — explicit wrapping
@@ -25,7 +25,7 @@ mod hash {
         let prime: u64 = 0x100000001b3;
 
         let mut i: u64 = 0;
-        while i < data.len {
+        while i < data.len() {
             let byte: u8 = data.get_unchecked(i) as u8;
             hash = hash ^ (byte as u64);
             hash = wrapping_mul(hash, prime);  // FNV-1a is mod-2^64 — explicit wrapping
@@ -77,11 +77,11 @@ mod hash {
     }
 
     pub fn eq_string(a: &String, b: &String) -> bool {
-        if a.len != b.len {
+        if a.len() != b.len() {
             return false;
         }
         let mut i: u64 = 0;
-        while i < a.len {
+        while i < a.len() {
             if a.get_unchecked(i) != b.get_unchecked(i) {
                 return false;
             }

@@ -39,8 +39,8 @@ mod ordered_set {
             // delegate through the inner map, ignoring the u8 payload
             let mut acc: A = init;
             let mut i: u64 = 0;
-            while i < self.inner.len {
-                let kp: *mut K = self.inner.keys + i;
+            while i < self.inner.len() {
+                let kp: *mut K = self.inner.keys_ptr() + i;
                 acc = f(acc, kp as &K);
                 i = i + 1;
             }
@@ -50,8 +50,8 @@ mod ordered_set {
         /// In-order visit over set members (ascending order).
         pub fn for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
             let mut i: u64 = 0;
-            while i < self.inner.len {
-                let kp: *mut K = self.inner.keys + i;
+            while i < self.inner.len() {
+                let kp: *mut K = self.inner.keys_ptr() + i;
                 f(kp as &K);
                 i = i + 1;
             }

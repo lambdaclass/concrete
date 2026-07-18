@@ -86,6 +86,12 @@ mod vec {
             return self.len;
         }
 
+        /// Read-only backing pointer (0b: fields private; audited read
+        /// accessor used to build borrowed Slice views).
+        pub fn raw_ptr(&self) -> *mut T {
+            return self.ptr;
+        }
+
         pub fn cap(&self) -> u64 {
             return self.cap;
         }

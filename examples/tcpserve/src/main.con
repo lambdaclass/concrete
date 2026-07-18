@@ -102,7 +102,7 @@ mod tcpserve {
             out.push(b as u8);
             b = b + 1;
         }
-        let sent: bool = stream.write_all(out.ptr as *const u8, out.len());
+        let sent: bool = stream.write_all(out.raw_ptr() as *const u8, out.len());
         out.drop();
         return sent;
     }

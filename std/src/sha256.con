@@ -228,7 +228,7 @@ mod sha256 {
     /// Compute SHA-256 hash of a string.
     /// Returns a Vec<u32> of 8 words (the 256-bit hash).
     pub trusted fn hash_string(s: &String) with(Alloc) -> Vec<u32> {
-        return hash_raw(s.ptr, s.len);
+        return hash_raw(s.raw_ptr(), s.len());
     }
 
     import std.hex.{encode_u32_vec};

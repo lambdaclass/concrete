@@ -12,9 +12,9 @@ mod bytes {
     // The raw parts of a `Bytes`, handed out by `into_raw_parts`. `Copy` and
     // owns nothing — it is just a view onto a buffer the caller now owns.
     pub struct Copy BytesRaw {
-        ptr: *mut u8,
-        len: u64,
-        cap: u64,
+        pub ptr: *mut u8,
+        pub len: u64,
+        pub cap: u64,
     }
 
     trusted impl Bytes {
@@ -43,10 +43,10 @@ mod bytes {
         /// hand-writing this loop. The reverse crossing stays checked
         /// (`to_string` -> Option) per UNICODE_POLICY.
         pub fn from_string(s: &String) with(Alloc) -> Bytes {
-            let mut b: Bytes = Bytes::with_capacity(s.len);
+            let mut b: Bytes = Bytes::with_capacity(s.len());
             let mut i: u64 = 0;
-            while i < s.len {
-                let p: *mut u8 = s.ptr + i;
+            while i < s.len() {
+                let p: *mut u8 = s.raw_ptr() + i;
                 b.push(*p);
                 i = i + 1;
             }
@@ -96,6 +96,20 @@ mod bytes {
 
         pub fn cap(&self) -> u64 {
             return self.cap;
+        }
+
+        /// Read-only access to the backing pointer (0b: fields are private;
+        /// this is the audited read accessor — it cannot forge or mutate the
+        /// Bytes, so the len/cap invariant is preserved).
+        pub fn raw_ptr(&self) -> *mut u8 {
+            return self.ptr;
+        }
+
+        /// Audited length set after a RAW fill (e.g. `fread` into `raw_ptr()`):
+        /// the caller PROVES `n <= cap` bytes were written. 0b: the only way
+        /// to set len from another module — scoped mutation, not field access.
+        pub fn set_len_unchecked(&mut self, n: u64) {
+            self.len = n;
         }
 
         pub fn is_empty(&self) -> bool {
@@ -190,7 +204,7 @@ mod bytes {
                 dealloc::<u8>(ptr);
                 return Option::<String>::None;
             }
-            let s: String = String { ptr: ptr, len: len, cap: cap };
+            let s: String = String::from_raw_unchecked(ptr, len, cap);
             return Option::<String>::Some { value: s };
         }
 
@@ -199,7 +213,7 @@ mod bytes {
         /// downstream text ops assume validity).
         pub fn to_string_unchecked(self) -> String {
             let Bytes { ptr, len, cap } = self;
-            let s: String = String { ptr: ptr, len: len, cap: cap };
+            let s: String = String::from_raw_unchecked(ptr, len, cap);
             return s;
         }
 

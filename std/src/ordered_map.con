@@ -149,6 +149,12 @@ mod ordered_map {
 
         // min_key/max_key value readers live in the `K: Copy` impl below.
 
+        /// Read-only pointer to the in-order key array (0b: fields private;
+        /// audited read accessor used by the wrapping OrderedSet's iteration).
+        pub fn keys_ptr(&self) -> *mut K {
+            return self.keys;
+        }
+
         pub fn len(&self) -> u64 {
             return self.len;
         }

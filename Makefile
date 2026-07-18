@@ -375,6 +375,9 @@ test-envcfg: build ## P7 workload 5: envcfg env-override matrix (hermetic via en
 test-std-compiled-coverage: build ## Bug-039 class closure: one compiled+run behavioral fixture per public std module, fail-closed inventory
 	$(NIX_DEVELOP) bash ./scripts/tests/check_std_compiled_coverage.sh
 
+test-construction-rights: build ## 0b: representation private-by-default across modules (newtype construct + struct field read/write/literal rejected; pub escape + accessors work)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_construction_rights.sh
+
 test-wordfreq: build ## P7 workload 6: wordfreq byte-identical to C-locale tr|sort|uniq -c (real text + 200k scale + edges) + 13t exit codes
 	$(NIX_DEVELOP) bash ./scripts/tests/check_wordfreq_differential.sh
 

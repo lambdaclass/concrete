@@ -48,7 +48,7 @@ mod io {
         }
 
         pub fn write(&self, data: &String) with(File, Unsafe) {
-            fwrite(data.ptr as *const u8, 1, data.len, self.ptr);
+            fwrite(data.raw_ptr() as *const u8, 1, data.len(), self.ptr);
         }
 
         pub fn read_byte(&self) with(File, Unsafe) -> i32 {
@@ -104,7 +104,7 @@ mod io {
 
         /// Write the bytes of a `String`.
         pub fn write_str(&self, data: &String) -> Result<u64, IoError> {
-            return self.write_raw(data.ptr as *const u8, data.len);
+            return self.write_raw(data.raw_ptr() as *const u8, data.len());
         }
 
         pub fn flush(&self) -> Result<u64, IoError> {
@@ -183,9 +183,9 @@ mod io {
     // ctx points at a caller-owned FixedSinkState. Overflow is BufferFull —
     // a recoverable Result, per docs/ERROR_CONVENTIONS.md (the caller sized it).
     pub struct Copy FixedSinkState {
-        buf: *mut u8,
-        cap: u64,
-        len: u64,
+        pub buf: *mut u8,
+        pub cap: u64,
+        pub len: u64,
     }
     trusted fn fixed_write(ctx: *mut u8, data: *const u8, len: u64) -> Result<u64, IoError> {
         let st: *mut FixedSinkState = ctx as *mut FixedSinkState;
@@ -269,14 +269,14 @@ mod io {
         let chunk: Bytes = Bytes::with_capacity(1024);
         let mut done: bool = false;
         while !done {
-            let res: Result<u64, IoError> = r.read(chunk.ptr, 1024);
+            let res: Result<u64, IoError> = r.read(chunk.raw_ptr(), 1024);
             let n: u64 = res.unwrap_or(0);
             if n == 0 {
                 done = true;
             } else {
                 let mut i: u64 = 0;
                 while i < n {
-                    out.push(*(chunk.ptr + i));
+                    out.push(*(chunk.raw_ptr() + i));
                     i = i + 1;
                 }
             }
@@ -314,35 +314,35 @@ mod io {
 
     /// Write a string to stdout without a trailing newline.
     pub trusted fn print(value: &String) with(Console) {
-        if value.len > 0 {
-            libc_write(1, value.ptr as *const u8, value.len);
+        if value.len() > 0 {
+            libc_write(1, value.raw_ptr() as *const u8, value.len());
         }
     }
 
     /// Write a string to stdout followed by a newline.
     pub trusted fn println(value: &String) with(Console) {
-        if value.len > 0 {
-            libc_write(1, value.ptr as *const u8, value.len);
+        if value.len() > 0 {
+            libc_write(1, value.raw_ptr() as *const u8, value.len());
         }
         let nl: String = "\n";
-        libc_write(1, nl.ptr as *const u8, 1);
+        libc_write(1, nl.raw_ptr() as *const u8, 1);
         nl.drop();
     }
 
     /// Write a string to stderr without a trailing newline.
     pub trusted fn eprint(value: &String) with(Console) {
-        if value.len > 0 {
-            libc_write(2, value.ptr as *const u8, value.len);
+        if value.len() > 0 {
+            libc_write(2, value.raw_ptr() as *const u8, value.len());
         }
     }
 
     /// Write a string to stderr followed by a newline.
     pub trusted fn eprintln(value: &String) with(Console) {
-        if value.len > 0 {
-            libc_write(2, value.ptr as *const u8, value.len);
+        if value.len() > 0 {
+            libc_write(2, value.raw_ptr() as *const u8, value.len());
         }
         let nl: String = "\n";
-        libc_write(2, nl.ptr as *const u8, 1);
+        libc_write(2, nl.raw_ptr() as *const u8, 1);
         nl.drop();
     }
 

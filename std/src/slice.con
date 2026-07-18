@@ -90,7 +90,7 @@ mod slice {
         v.push(10);
         v.push(20);
         v.push(30);
-        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+        let s: Slice<i32> = Slice::<i32> { ptr: v.raw_ptr() as *const i32, len: v.len() };
         if !assert_eq::<u64>(s.len(), 3, "slice len should be 3") { v.drop(); return 1; }
         if !assert_true(!(s.is_empty()), "slice should not be empty") { v.drop(); return 1; }
         v.drop();
@@ -103,7 +103,7 @@ mod slice {
         v.push(10);
         v.push(20);
         v.push(30);
-        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+        let s: Slice<i32> = Slice::<i32> { ptr: v.raw_ptr() as *const i32, len: v.len() };
         let first: i32 = s.get_unchecked(0);
         if !assert_eq::<i32>(first, 10, "first should be 10") { v.drop(); return 1; }
         let last: i32 = s.get_unchecked(2);
@@ -126,7 +126,7 @@ mod slice {
         v.push(0);
         v.push(0);
         v.push(0);
-        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.raw_ptr(), len: v.len() };
         ms.set_unchecked(0, 100);
         ms.set_unchecked(1, 200);
         ms.set_unchecked(2, 300);
@@ -144,7 +144,7 @@ mod slice {
         v.push(10);
         v.push(20);
         v.push(30);
-        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+        let s: Slice<i32> = Slice::<i32> { ptr: v.raw_ptr() as *const i32, len: v.len() };
 
         // In-bounds access should return Some
         let r0: Option<i32> = s.get(0);
@@ -183,7 +183,7 @@ mod slice {
         let mut v: Vec<i32> = Vec::<i32>::new();
         v.push(42);
         v.push(43);
-        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.raw_ptr(), len: v.len() };
 
         // In-bounds get
         let r0: Option<i32> = ms.get(0);
@@ -210,7 +210,7 @@ mod slice {
         let mut v: Vec<i32> = Vec::<i32>::new();
         v.push(0);
         v.push(0);
-        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.raw_ptr(), len: v.len() };
 
         // In-bounds set should succeed
         let ok1: bool = ms.set(0, 77);

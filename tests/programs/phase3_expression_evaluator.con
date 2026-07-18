@@ -149,9 +149,9 @@ mod Format {
     }
 
     pub struct Copy EvalResult {
-        node_count: i32,
-        final_value: i32,
-        max_depth: i32,
+        pub node_count: i32,
+        pub final_value: i32,
+        pub max_depth: i32,
     }
 
     impl Displayable for EvalResult {

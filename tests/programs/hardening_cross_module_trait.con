@@ -7,12 +7,12 @@
 
 mod Geometry {
     pub struct Copy Box {
-        width: i32,
-        height: i32,
+        pub width: i32,
+        pub height: i32,
     }
 
     pub struct Copy Circle {
-        radius: i32,
+        pub radius: i32,
     }
 
     trait Measurable {

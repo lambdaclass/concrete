@@ -95,9 +95,9 @@ mod Aggregate {
     }
 
     pub struct Copy Stats {
-        total: i32,
-        avg: i32,
-        range: i32,
+        pub total: i32,
+        pub avg: i32,
+        pub range: i32,
     }
 
     impl Summarizable for Stats {

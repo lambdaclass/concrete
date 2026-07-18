@@ -1,6 +1,6 @@
 // Test: transitive type visibility — A defines struct, B uses it, Main imports from B
 mod A {
-    pub struct Copy Pair { x: Int, y: Int }
+    pub struct Copy Pair { pub x: Int, pub y: Int }
 }
 
 mod B {

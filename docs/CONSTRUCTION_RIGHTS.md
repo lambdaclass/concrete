@@ -1,7 +1,10 @@
 # Construction Rights & Representation Privacy
 
 **Status:** authoritative design (defect-queue 0b). Slice 1 (newtype
-construction rights) implemented; slice 2 (struct field privacy) staged.
+construction rights) AND slice 2 (struct field privacy: cross-module
+literal/read/write rejected — E0297/E0298; `pub` fields opt in; std migrated
+to accessors/from_raw_unchecked) implemented. Enum-variant visibility +
+newtype `.0` unwrap privacy remain the scheduled follow-on slice.
 
 ## Why
 

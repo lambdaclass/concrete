@@ -75,9 +75,9 @@ mod cli {
         fn declare(&mut self, name: String, kind: u64, default: u64) with(Alloc) -> u64 {
             let f: u64 = self.offs.len();
             self.offs.push(self.names.len());
-            self.lens.push(name.len);
+            self.lens.push(name.len());
             let mut k: u64 = 0;
-            while k < name.len {
+            while k < name.len() {
                 self.names.push(name.get_unchecked(k) as u8);
                 k = k + 1;
             }
@@ -101,7 +101,7 @@ mod cli {
         fn matches(&self, a: &String, f: u64) -> bool {
             let off: u64 = self.offs.get_unchecked(f);
             let len: u64 = self.lens.get_unchecked(f);
-            if a.len != len { return false; }
+            if a.len() != len { return false; }
             let mut k: u64 = 0;
             while k < len {
                 if (a.get_unchecked(k) as u64) != (self.names.get_unchecked(off + k) as u64) {
@@ -155,7 +155,7 @@ mod cli {
             let mut i: Int = 1;
             while i < count() {
                 let a: String = get(i);
-                let is_flag: bool = a.len >= 2 && a.get_unchecked(0) == '-';
+                let is_flag: bool = a.len() >= 2 && a.get_unchecked(0) == '-';
                 if is_flag {
                     match self.find(&a) {
                         Option::None => { err = 1; },

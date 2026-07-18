@@ -82,9 +82,10 @@ mod fs {
         let buf: Bytes = Bytes::with_capacity(size as u64);
 
         // Read into the buffer's backing memory
-        let n: u64 = fread(buf.ptr, 1, size as u64, handle);
-        // Set the length to what was actually read
-        buf.len = n;
+        let mut buf: Bytes = buf;
+        let n: u64 = fread(buf.raw_ptr(), 1, size as u64, handle);
+        // Set the length to what was actually read (audited raw-fill setter)
+        buf.set_len_unchecked(n);
 
         fclose(handle);
         return Result::<Bytes, FsError>::Ok { value: buf };
@@ -99,7 +100,7 @@ mod fs {
             return Result::<u64, FsError>::Err { error: FsError::OpenFailed };
         }
 
-        let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
+        let written: u64 = fwrite(data.raw_ptr() as *const u8, 1, data.len(), handle);
         fclose(handle);
         return Result::<u64, FsError>::Ok { value: written };
     }
@@ -113,7 +114,7 @@ mod fs {
             return Result::<u64, FsError>::Err { error: FsError::OpenFailed };
         }
 
-        let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
+        let written: u64 = fwrite(data.raw_ptr() as *const u8, 1, data.len(), handle);
         fclose(handle);
         return Result::<u64, FsError>::Ok { value: written };
     }
@@ -143,19 +144,19 @@ mod fs {
         let size: i64 = ftell(handle);
         fseek(handle, 0, 0); // SEEK_SET = 0
 
-        let s: String = String::new();
-        if size > 0 {
-            s.ptr = grow::<u8>(s.ptr, (size as u64) + 1);
-            s.cap = (size as u64) + 1;
-            let n: u64 = fread(s.ptr, 1, size as u64, handle);
-            s.len = n;
-            // Null-terminate for C compatibility
-            let term: *mut u8 = s.ptr + n;
-            *term = 0;
+        // 0b: build the String through the audited raw-parts constructor
+        // instead of poking another module's private fields.
+        if size <= 0 {
+            fclose(handle);
+            return Result::<String, FsError>::Ok { value: String::new() };
         }
-
+        let cap: u64 = (size as u64) + 1;
+        let buf: *mut u8 = grow::<u8>(0 as *mut u8, cap);
+        let n: u64 = fread(buf, 1, size as u64, handle);
+        let term: *mut u8 = buf + n;
+        *term = 0;   // NUL-terminate for C compatibility
         fclose(handle);
-        return Result::<String, FsError>::Ok { value: s };
+        return Result::<String, FsError>::Ok { value: String::from_raw_unchecked(buf, n, cap) };
     }
 
     // Test helpers: unwrap write/append to bool to avoid match-binding type conflicts
@@ -206,7 +207,7 @@ mod fs {
                 path.drop();
                 match rr {
                     Result::Ok { value } => {
-                        if value.len != 2 {
+                        if value.len() != 2 {
                             value.drop();
                             return 1;
                         }
@@ -295,7 +296,7 @@ mod fs {
             Result::Ok { value } => {
                 // Writing to a read-only file should return 0 bytes written
                 let data: String = "hello";
-                let n: u64 = value.write_bytes(data.ptr as *const u8, data.len);
+                let n: u64 = value.write_bytes(data.raw_ptr() as *const u8, data.len());
                 data.drop();
                 value.close();
                 if n == 0 {
@@ -338,7 +339,7 @@ mod fs {
         path.drop();
         match rr {
             Result::Ok { value } => {
-                if value.len != 0 { value.drop(); return 1; }
+                if value.len() != 0 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },
@@ -366,7 +367,7 @@ mod fs {
         path.drop();
         match rr {
             Result::Ok { value } => {
-                if value.len != 4 { value.drop(); return 1; }
+                if value.len() != 4 { value.drop(); return 1; }
                 if value.get_unchecked(0) != 65 { value.drop(); return 1; }
                 if value.get_unchecked(1) != 66 { value.drop(); return 1; }
                 if value.get_unchecked(2) != 67 { value.drop(); return 1; }
@@ -432,7 +433,7 @@ mod fs {
         path.drop();
         match rr {
             Result::Ok { value } => {
-                if value.len != 2 { value.drop(); return 1; }
+                if value.len() != 2 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },
@@ -469,7 +470,7 @@ mod fs {
         let check: Result<Bytes, FsError> = read_file(&path);
         match check {
             Result::Ok { value } => {
-                if value.len != 3 { value.drop(); path.drop(); return 1; }
+                if value.len() != 3 { value.drop(); path.drop(); return 1; }
                 value.drop();
             },
             Result::Err { error } => { path.drop(); return 1; }
@@ -541,7 +542,7 @@ mod fs {
         path.drop();
         match rr {
             Result::Ok { value } => {
-                if value.len != 0 { value.drop(); return 1; }
+                if value.len() != 0 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },

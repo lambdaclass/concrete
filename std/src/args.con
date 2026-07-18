@@ -31,7 +31,7 @@ mod args {
         memcpy(buf, raw, n);
         let end: *mut u8 = buf + n;
         *end = 0;
-        let s: String = String { ptr: buf, len: n, cap: n + 1 };
+        let s: String = String::from_raw_unchecked(buf, n, n + 1);
         return s;
     }
 }

@@ -273,7 +273,7 @@ mod net {
                     match stream_result {
                         Result::Ok { value } => {
                             let msg: String = "Hi";
-                            value.write(msg.ptr as *const u8, msg.len);
+                            value.write(msg.raw_ptr() as *const u8, msg.len());
                             msg.drop();
                             value.close();
                         },
@@ -489,7 +489,7 @@ mod net {
         if fd < 0 { return 1; }
         // send on an unconnected socket should return -1
         let msg: String = "hello";
-        let n: i64 = send(fd, msg.ptr as *const u8, msg.len, 0);
+        let n: i64 = send(fd, msg.raw_ptr() as *const u8, msg.len(), 0);
         msg.drop();
         close(fd);
         if n < 0 {

@@ -26,16 +26,16 @@ mod path {
         }
 
         pub fn from_string(s: &String) with(Alloc) -> PathBuf {
-            let cap: u64 = max::<u64>(s.len, 4) * 2;
+            let cap: u64 = max::<u64>(s.len(), 4) * 2;
             let p: PathBuf = PathBuf {
                 ptr: grow::<u8>(0 as *mut u8, cap),
-                len: s.len,
+                len: s.len(),
                 cap: cap,
             };
 
             let mut i: u64 = 0;
-            while i < s.len {
-                let src: *mut u8 = s.ptr + i;
+            while i < s.len() {
+                let src: *mut u8 = s.raw_ptr() + i;
                 let dst: *mut u8 = p.ptr + i;
                 *dst = *src;
                 i = i + 1;
@@ -70,8 +70,8 @@ mod path {
             }
 
             let mut i: u64 = 0;
-            while i < segment.len {
-                let src: *mut u8 = segment.ptr + i;
+            while i < segment.len() {
+                let src: *mut u8 = segment.raw_ptr() + i;
                 self.push_byte(*src);
                 i = i + 1;
             }
@@ -109,7 +109,7 @@ mod path {
                 *((buf as u64 + i) as *mut u8) = *((self.ptr as u64 + i) as *const u8);
                 i = i + 1;
             }
-            let s: String = String { ptr: buf, len: self.len, cap: max::<u64>(self.len, 1) };
+            let s: String = String::from_raw_unchecked(buf, self.len, max::<u64>(self.len, 1));
             return Option::<String>::Some { value: s };
         }
 
@@ -135,9 +135,9 @@ mod path {
 
     pub trusted fn path_join(base: &Path, segment: &String) with(Alloc) -> PathBuf {
         let result: PathBuf = PathBuf {
-            ptr: grow::<u8>(0 as *mut u8, base.len + segment.len + 1),
+            ptr: grow::<u8>(0 as *mut u8, base.len + segment.len() + 1),
             len: 0,
-            cap: base.len + segment.len + 1,
+            cap: base.len + segment.len() + 1,
         };
 
         // Copy base
@@ -158,8 +158,8 @@ mod path {
 
         // Copy segment
         i = 0;
-        while i < segment.len {
-            let src: *mut u8 = segment.ptr + i;
+        while i < segment.len() {
+            let src: *mut u8 = segment.raw_ptr() + i;
             result.push_byte(*src);
             i = i + 1;
         }

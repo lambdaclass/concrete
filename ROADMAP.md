@@ -643,7 +643,11 @@ Disposition (each item has a concrete home; no open decisions remain):
 
 **Phase 7 exit / near-term hardening**
 1. Representation visibility — struct fields private-by-default, `pub` opt-in;
-   external literal needs every referenced field `pub`. → 0b slice 2 (in flight).
+   external literal needs every referenced field `pub`. → 0b slice 2 DONE
+   (E0297 literal / E0298 field read+write across modules; std migrated to
+   accessors + from_raw_unchecked; raw-parts types BytesRaw/FixedSinkState
+   have pub fields; check_construction_rights.sh gate). Enum-variant
+   visibility + newtype `.0` unwrap privacy = scheduled follow-on.
 2. Construction rights — newtype construction private (DONE, 0b slice 1, E0296).
    Enum-variant privacy is a SEPARATE scheduled slice (D1): it must define
    construction, matching, imports, exhaustiveness with inaccessible variants,

@@ -37,6 +37,12 @@ mod string {
             return self.cap;
         }
 
+        /// Read-only access to the backing pointer (0b: fields private; audited
+        /// read accessor — cannot forge or mutate, invariant preserved).
+        pub fn raw_ptr(&self) -> *mut u8 {
+            return self.ptr;
+        }
+
         pub fn is_empty(&self) -> bool {
             return self.len == 0;
         }

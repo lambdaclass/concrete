@@ -1,0 +1,12 @@
+// 0b slice 2 NEGATIVE: a std struct's private fields cannot be read from
+// another module (E0298). Must FAIL to build. (write/literal variants
+// covered by the check_construction_rights gate.)
+mod main {
+    import std.bytes.{Bytes};
+    fn main() with(Std) -> u8 {
+        let mut b: Bytes = Bytes::new(); b.push(7);
+        let n: u64 = b.len;   // private field read -> E0298
+        discard(n); b.drop();
+        return 0;
+    }
+}

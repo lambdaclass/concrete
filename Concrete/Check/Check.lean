@@ -716,6 +716,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
+      -- 0b slice 2: a struct literal on a NON-local struct is allowed only
+      -- if every field is `pub` (a private field can't be initialized from
+      -- another module, so its representation can't be forged).
+      if !(← getEnv).localStructNames.contains name then
+        match sd.fields.find? (fun sf => !sf.isPublic) with
+        | some priv => throwCheck (.structLiteralPrivateField name priv.name) (some e.getSpan)
+        | none => pure ()
       -- Build type substitution from struct type params + provided type args
       let mapping := sd.typeParams.zip typeArgs
       let structTy := if typeArgs.isEmpty then Ty.named name else .generic name typeArgs
@@ -800,6 +807,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       | some sd =>
         match sd.fields.find? fun f => f.name == field with
         | some f =>
+          -- 0b slice 2: reading a PRIVATE field of a non-local struct is
+          -- rejected (the `b.len` cross-module leak). Same-module reads and
+          -- `pub` fields are fine.
+          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+            throwCheck (.fieldAccessPrivate structName field) (some e.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           let fieldTy ← resolveType (substTy mapping f.ty)
           -- H11: a by-value read of a non-Copy field duplicates it (the struct
@@ -1645,6 +1657,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | some sd =>
         match sd.fields.find? fun f => f.name == field with
         | some f =>
+          -- 0b slice 2: WRITING a private field of a non-local struct is
+          -- rejected (the `b.len = 999` cross-module forge).
+          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+            throwCheck (.fieldAccessPrivate structName field) (some stmt.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           let fieldTy ← resolveType (substTy mapping f.ty)
           -- Overwriting a non-Copy field would leak the old linear value AND cannot
@@ -2123,11 +2139,17 @@ def checkModule (m : Module) (summary : FileSummary)
   let localNewtypeDefs := m.newtypes
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
   let localNewtypeNamesList := localNewtypeDefs.map (fun nt => nt.name)
+  -- 0b slice 2: structs defined HERE (module + submodules). Field privacy
+  -- is enforced against non-local structs.
+  let localStructDefs := m.structs
+                     ++ m.submodules.foldl (fun acc sub => acc ++ sub.structs) []
+  let localStructNamesList := localStructDefs.map (fun sd => sd.name)
   let initEnv : TypeEnv :=
     { vars := [], structs := allStructs, enums := allEnums, functions := allSigs,
       fnNames := allNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, allFnSummarys := fnSigPairs, newtypes := allNewtypes,
-      userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList }
+      userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
+      localStructNames := localStructNamesList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.
   -- Reserved name check stays here because reserved names conflict with builtins in Check.
   let reservedNameCheck := m.functions.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc f =>

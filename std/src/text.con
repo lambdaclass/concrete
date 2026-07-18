@@ -13,10 +13,10 @@ mod text {
 
     trusted impl AsciiText {
         pub fn try_new(s: String) with(Alloc) -> Option<AsciiText> {
-            let n: u64 = s.len;
+            let n: u64 = s.len();
             let mut i: u64 = 0;
             while i < n {
-                let pb: *const u8 = s.ptr as *const u8 + i;
+                let pb: *const u8 = s.raw_ptr() as *const u8 + i;
                 let b: u8 = *(pb as *mut u8);
                 if b > (127 as u8) {
                     s.drop();
@@ -40,8 +40,8 @@ mod text {
     trusted impl Text {
         pub fn from_string(s: &String) -> Text {
             let t: Text = Text {
-                ptr: s.ptr as *const u8,
-                len: s.len,
+                ptr: s.raw_ptr() as *const u8,
+                len: s.len(),
             };
             return t;
         }
@@ -221,7 +221,7 @@ mod text {
             Option::Some { value } => {
                 // `.0` is a move-out (no partial moves): unwrap ONCE, then use.
                 let inner: String = value.0;
-                if !assert_eq::<u64>(inner.len, 5, "AsciiText wraps String of len 5") {
+                if !assert_eq::<u64>(inner.len(), 5, "AsciiText wraps String of len 5") {
                     inner.drop();
                     return 1;
                 }

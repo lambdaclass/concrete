@@ -181,7 +181,7 @@ mod process {
     fn test_spawn_bad_command() with(Unsafe, Process, Alloc) -> i32 {
         // Spawn a nonexistent command — child should exec-fail and exit 127
         let cmd: String = "/nonexistent/binary/that/does/not/exist";
-        let args: [*const u8; 2] = [cmd.ptr as *const u8, 0 as *const u8];
+        let args: [*const u8; 2] = [cmd.raw_ptr() as *const u8, 0 as *const u8];
         let result: Result<Child, ProcessError> = spawn(&cmd, &args as *const *const u8);
         cmd.drop();
         match result {

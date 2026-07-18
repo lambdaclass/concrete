@@ -4322,6 +4322,8 @@ def diagnosticCodesReport : String :=
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     entry "E0296" "check" "error" "newtype constructed outside its defining module (construction rights, 0b)",
+    entry "E0297" "check" "error" "struct literal touches a field private to its defining module (0b)",
+    entry "E0298" "check" "error" "read/write of a struct field private to its defining module (0b)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

@@ -2,13 +2,13 @@ mod parse {
     import std.string.{digit_to_int};
 
     pub fn parse_uint(s: &String) -> Option<u64> {
-        if s.len == 0 {
+        if s.len() == 0 {
             return Option::<u64>::None;
         }
 
         let mut result: u64 = 0;
         let mut i: u64 = 0;
-        while i < s.len {
+        while i < s.len() {
             let c: char = s.get_unchecked(i);
             if c < '0' {
                 return Option::<u64>::None;
@@ -29,7 +29,7 @@ mod parse {
     }
 
     pub fn parse_int(s: &String) -> Option<i64> {
-        if s.len == 0 {
+        if s.len() == 0 {
             return Option::<i64>::None;
         }
 
@@ -39,14 +39,14 @@ mod parse {
         if first == '-' {
             negative = true;
             start = 1;
-            if s.len == 1 {
+            if s.len() == 1 {
                 return Option::<i64>::None;
             }
         }
 
         let mut result: i64 = 0;
         let mut i: u64 = start;
-        while i < s.len {
+        while i < s.len() {
             let c: char = s.get_unchecked(i);
             if c < '0' {
                 return Option::<i64>::None;
@@ -97,13 +97,13 @@ mod parse {
     // coverage. A distinct trusted/partial-refinement link class (#[model_refined_by])
     // is the recorded follow-up (docs/PURE_CORE_PROOF_ARC.md).
     pub fn parse_hex(s: &String) -> Option<u64> {
-        if s.len == 0 {
+        if s.len() == 0 {
             return Option::<u64>::None;
         }
 
         let mut start: u64 = 0;
         // Skip optional 0x prefix
-        if s.len >= 2 {
+        if s.len() >= 2 {
             if s.get_unchecked(0) == '0' {
                 let second: char = s.get_unchecked(1);
                 if second == 'x' {
@@ -115,13 +115,13 @@ mod parse {
             }
         }
 
-        if start >= s.len {
+        if start >= s.len() {
             return Option::<u64>::None;
         }
 
         let mut result: u64 = 0;
         let mut i: u64 = start;
-        while i < s.len {
+        while i < s.len() {
             let val: i64 = hex_char_value(s.get_unchecked(i));
             if val < 0 {
                 return Option::<u64>::None;
@@ -138,13 +138,13 @@ mod parse {
     }
 
     pub fn parse_bin(s: &String) -> Option<u64> {
-        if s.len == 0 {
+        if s.len() == 0 {
             return Option::<u64>::None;
         }
 
         let mut start: u64 = 0;
         // Skip optional 0b prefix
-        if s.len >= 2 {
+        if s.len() >= 2 {
             if s.get_unchecked(0) == '0' {
                 let second: char = s.get_unchecked(1);
                 if second == 'b' {
@@ -156,13 +156,13 @@ mod parse {
             }
         }
 
-        if start >= s.len {
+        if start >= s.len() {
             return Option::<u64>::None;
         }
 
         let mut result: u64 = 0;
         let mut i: u64 = start;
-        while i < s.len {
+        while i < s.len() {
             let c: char = s.get_unchecked(i);
             // H1: overflow -> None (u64::MAX >> 1), never a wrap — guarded
             // at the loop head so BOTH bit branches are covered.
@@ -184,13 +184,13 @@ mod parse {
     }
 
     pub fn parse_oct(s: &String) -> Option<u64> {
-        if s.len == 0 {
+        if s.len() == 0 {
             return Option::<u64>::None;
         }
 
         let mut start: u64 = 0;
         // Skip optional 0o prefix
-        if s.len >= 2 {
+        if s.len() >= 2 {
             if s.get_unchecked(0) == '0' {
                 let second: char = s.get_unchecked(1);
                 if second == 'o' {
@@ -202,13 +202,13 @@ mod parse {
             }
         }
 
-        if start >= s.len {
+        if start >= s.len() {
             return Option::<u64>::None;
         }
 
         let mut result: u64 = 0;
         let mut i: u64 = start;
-        while i < s.len {
+        while i < s.len() {
             let c: char = s.get_unchecked(i);
             if c < '0' {
                 return Option::<u64>::None;
@@ -227,7 +227,7 @@ mod parse {
     }
 
     pub fn parse_bool(s: &String) -> Option<bool> {
-        if s.len == 4 {
+        if s.len() == 4 {
             if s.get_unchecked(0) == 't' {
                 if s.get_unchecked(1) == 'r' {
                     if s.get_unchecked(2) == 'u' {
@@ -238,7 +238,7 @@ mod parse {
                 }
             }
         }
-        if s.len == 5 {
+        if s.len() == 5 {
             if s.get_unchecked(0) == 'f' {
                 if s.get_unchecked(1) == 'a' {
                     if s.get_unchecked(2) == 'l' {
@@ -264,8 +264,8 @@ mod parse {
     trusted impl Cursor {
         pub fn new(s: &String) -> Cursor {
             let c: Cursor = Cursor {
-                data: s.ptr as *const u8,
-                len: s.len,
+                data: s.raw_ptr() as *const u8,
+                len: s.len(),
                 pos: 0,
             };
             return c;

@@ -1,0 +1,12 @@
+// 0b POSITIVE: a `pub` field is cross-module constructible + readable;
+// a private field stays module-internal. Exit 7.
+mod geom {
+    pub struct Copy Point { pub x: Int, pub y: Int }
+}
+mod main {
+    import geom.{Point};
+    fn main() -> Int {
+        let p: Point = Point { x: 3, y: 4 };   // pub fields: external literal OK
+        return p.x + p.y;                       // pub fields: external read OK
+    }
+}

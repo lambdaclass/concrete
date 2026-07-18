@@ -3,7 +3,7 @@
 // Expected: 42
 
 mod Types {
-    pub struct Copy Pair { x: Int, y: Int }
+    pub struct Copy Pair { pub x: Int, pub y: Int }
 }
 
 mod Logic {

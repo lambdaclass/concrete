@@ -74,7 +74,7 @@ mod httpget {
             Result::Ok { value } => {
                 let raw: Bytes = Bytes::from_string(&req);
                 req.drop();
-                let sent: bool = value.write_all(raw.ptr as *const u8, raw.len());
+                let sent: bool = value.write_all(raw.raw_ptr() as *const u8, raw.len());
                 raw.drop();
                 if !sent {
                     value.close();

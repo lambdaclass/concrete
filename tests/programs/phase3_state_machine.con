@@ -38,8 +38,8 @@ mod Protocol {
     }
 
     pub struct Copy TransResult {
-        new_state: State,
-        action: Action,
+        pub new_state: State,
+        pub action: Action,
     }
 
     pub fn state_code(s: &State) -> i32 {
@@ -186,7 +186,7 @@ mod Protocol {
 
 mod Counter {
     pub struct Copy RawCounter {
-        value: i32,
+        pub value: i32,
     }
 
     pub fn counter_new() -> RawCounter {

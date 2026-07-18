@@ -360,7 +360,7 @@ def fmtStructDef (s : StructDef) (ind : Nat) : String :=
     | some n => reprParts ++ [s!"align({n})"]
     | none => reprParts
   let reprStr := if reprParts.isEmpty then "" else s!"{pfx}#[repr({", ".intercalate reprParts})]\n"
-  let fields := s.fields.map fun f => s!"{fpfx}{f.name}: {fmtTy f.ty},"
+  let fields := s.fields.map fun f => s!"{fpfx}{if f.isPublic then "pub " else ""}{f.name}: {fmtTy f.ty},"
   s!"{reprStr}{pfx}{pubStr}{unionStr}{copyStr}{s.name}{tparamsStr} \{\n{"\n".intercalate fields}\n{pfx}}"
 
 def fmtEnumDef (e : EnumDef) (ind : Nat) : String :=
@@ -372,7 +372,7 @@ def fmtEnumDef (e : EnumDef) (ind : Nat) : String :=
     if v.fields.isEmpty then s!"{vpfx}{v.name},"
     else
       let fpfx := indent (ind + 2)
-      let fs := v.fields.map fun f => s!"{fpfx}{f.name}: {fmtTy f.ty},"
+      let fs := v.fields.map fun f => s!"{fpfx}{if f.isPublic then "pub " else ""}{f.name}: {fmtTy f.ty},"
       s!"{vpfx}{v.name} \{\n{"\n".intercalate fs}\n{vpfx}},"
   s!"{pfx}{pubStr}enum {e.name}{tparamsStr} \{\n{"\n".intercalate variants}\n{pfx}}"
 

@@ -90,7 +90,7 @@ mod numeric {
 
         /// Create a cursor from a borrowed Bytes buffer.
         pub fn from_bytes(b: &Bytes) -> ByteCursor {
-            return ByteCursor { ptr: b.ptr as *const u8, len: b.len, pos: 0 };
+            return ByteCursor { ptr: b.raw_ptr() as *const u8, len: b.len(), pos: 0 };
         }
 
         // ---- Position queries ----
@@ -321,7 +321,7 @@ mod numeric {
             if !self.describes(buf) {
                 return Option::<ByteCursor>::None;
             }
-            let base: *const u8 = (buf.ptr as *const u8) + self.off;
+            let base: *const u8 = (buf.raw_ptr() as *const u8) + self.off;
             return Option::<ByteCursor>::Some { value: ByteCursor::from_raw(base, self.len) };
         }
 
@@ -345,7 +345,7 @@ mod numeric {
             if !self.describes(buf) {
                 return Option::<Text>::None;
             }
-            let base: *const u8 = (buf.ptr as *const u8) + self.off;
+            let base: *const u8 = (buf.raw_ptr() as *const u8) + self.off;
             return Text::try_from_raw(base, self.len);
         }
     }
