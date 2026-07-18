@@ -203,6 +203,34 @@ gated; the frontier goes back to workloads and API ergonomics. New proofs
 are added one at a time when an API becomes foundational AND stable —
 never as a breadth sweep over the manifest.
 
+## Slice 3 (2026-07-18): `Bytes::index_of` / `Bytes::slice`
+
+Triggered exactly by the pause rule above: both APIs were workload-pulled
+(envcfg's `=` split, httpget's and tcpserve's terminator scans, three
+slice→to_string extraction sites) and survived three workloads unchanged.
+Both live in a trusted raw-pointer impl, so this is the `bytes.view`
+MODEL-REFINEMENT class — kernel theorems + source comments, never
+registry links:
+
+- `bytes_slice_guard_correct` (vs `Concrete.Proof.bytesSliceExpr`): for
+  ALL total/start/end, `None` exactly when `start > end ∨ end > total`,
+  else an owned `Bytes` with `len = cap = end - start`. Copy CONTENT is
+  not modeled (recorded scope limit); instead
+  `slice_copy_step_in_bounds` bounds every per-step `get_unchecked`
+  load: `0 ≤ start ∧ end ≤ total ∧ 0 ≤ k < end - start →
+  0 ≤ start + k < total`.
+- `bytes_index_of_step_correct` (vs
+  `Concrete.Proof.bytesIndexOfStepExpr`): the scan loop BODY's three-way
+  decision — past-the-end terminates, a matching byte hits AT the
+  cursor, otherwise continue at `i + 1`. Whole-loop induction is NOT
+  claimed (the hex guard-step precedent); the bound-invariant step is
+  `index_of_scan_step_preserves_bounds` and the Hit-geometry glue
+  (`from ≤ i < total` for a returned index) is `index_of_hit_in_range`.
+
+Gate: `check_purecore_proofs.sh` section 6 pins the five theorems, the
+source comments, and (via the existing section-4 pin) that bytes.con
+still carries NO `#[proof_by]` — the trusted-boundary honesty rule.
+
 ## Where proofs live (layout rule)
 
 Source APIs carry the proof metadata

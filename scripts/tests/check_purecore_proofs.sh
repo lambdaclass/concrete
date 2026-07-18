@@ -108,6 +108,23 @@ grep -q "hex_guard_step_preserves_u64" std/src/parse.con \
   && ok "parse_hex source comment references the lemma" \
   || no "parse_hex source comment missing lemma reference"
 
+# 6. PureCore slice 3 — Bytes::index_of / Bytes::slice (workloads 5/7/8):
+#    model-refinement class like bytes.view — kernel theorems + source
+#    comments, NEVER registry links (both are trusted raw-pointer impls).
+for thm in bytes_slice_guard_correct bytes_index_of_step_correct \
+           index_of_scan_step_preserves_bounds index_of_hit_in_range \
+           slice_copy_step_in_bounds; do
+  grep -q "$thm" proofs/Examples/PureCore/Proofs.lean \
+    && ok "slice-3 theorem present: $thm" \
+    || no "slice-3 theorem missing: $thm"
+done
+grep -q "bytes_index_of_step_correct" std/src/bytes.con \
+  && ok "index_of source comment references its model theorem" \
+  || no "index_of source comment missing"
+grep -q "bytes_slice_guard_correct" std/src/bytes.con \
+  && ok "slice source comment references its model theorem" \
+  || no "slice source comment missing"
+
 # 6. the alphabet ROUNDTRIP corollary (encode-then-decode identity) is
 #    kernel-present and referenced from the base64 source.
 grep -q "base64_alphabet_roundtrip" proofs/Examples/PureCore/Proofs.lean \

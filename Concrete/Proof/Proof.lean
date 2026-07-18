@@ -2110,6 +2110,39 @@ def bytesViewExpr : PExpr :=
           , ("len", .var "vlen")
           , ("cap", .var "vlen") ])]))
 
+/-- Model for `bytes.slice` (std/src/bytes.con) — PureCore slice 3, pulled
+    by workloads 5/7/8. Guard: `start > end ∨ end > total` rejects
+    (half-open [start,end) with `total` the buffer length); otherwise the
+    result is an OWNED copy whose geometry is `len = cap = end - start`.
+    The copy loop's CONTENT is not modeled (recorded scope limit —
+    `slice_copy_step_in_bounds` covers the per-step load bound instead);
+    the fresh allocation is the abstract `alloc`. `||` as nested if, the
+    short-circuit shape the front end lowers. -/
+def bytesSliceExpr : PExpr :=
+  .ifThenElse (.binOp .gt (.var "start") (.var "end"))
+    (.enumLit "Option" "None" [])
+    (.ifThenElse (.binOp .gt (.var "end") (.var "total"))
+      (.enumLit "Option" "None" [])
+      (.enumLit "Option" "Some"
+        [("value", .structLit "Bytes"
+          [ ("ptr", .var "alloc")
+          , ("len", .binOp .sub (.var "end") (.var "start"))
+          , ("cap", .binOp .sub (.var "end") (.var "start")) ])]))
+
+/-- Model for ONE STEP of `bytes.index_of`'s scan loop (PureCore slice 3).
+    `i` is the cursor, `total` the length, `byte_i` the abstract byte
+    loaded at `i`, `needle` the target: past-the-end terminates with no
+    hit; a matching byte is a hit AT `i`; otherwise the scan continues at
+    `i + 1`. The whole-loop induction is NOT claimed (same recorded scope
+    limit as the H1 hex guard-step fact) — this kernel-checks the loop
+    BODY's three-way decision, which is where an off-by-one would live. -/
+def bytesIndexOfStepExpr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "i") (.var "total"))
+    (.enumLit "Scan" "Done" [])
+    (.ifThenElse (.binOp .eq (.var "byte_i") (.var "needle"))
+      (.enumLit "Scan" "Hit" [("at", .var "i")])
+      (.enumLit "Scan" "Next" [("at", .binOp .add (.var "i") (.lit (.int 1)))]))
+
 /-- Extracted spec for `option.unwrap_or` (std/src/option.con): the payload
     if Some, the default if None. -/
 def optionUnwrapOrExpr : PExpr :=

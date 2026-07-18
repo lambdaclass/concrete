@@ -311,4 +311,89 @@ theorem hex_guard_step_preserves_u64 (acc val : Int)
     (hguard : acc ≤ 1152921504606846975) (hval : 0 ≤ val ∧ val ≤ 15) :
     acc * 16 + val ≤ 18446744073709551615 := by omega
 
+/-! ## PureCore slice 3: `Bytes::index_of` / `Bytes::slice`
+    (workload-pulled by envcfg/httpget/tcpserve; both live in a trusted
+    impl, so — like `bytes.view` — these are MODEL refinements with kernel
+    theorems and source comments, never registry links). -/
+
+set_option linter.unusedSimpArgs false in
+/-- `bytes.slice` guard + geometry against the abstract model: for ALL
+    total/start/end/alloc, the result is `None` exactly when the guard
+    rejects (`start > end ∨ end > total`, the half-open [start,end) bound
+    check), and otherwise an owned `Bytes` whose `len = cap = end - start`
+    over the fresh abstract allocation. Copy CONTENT is out of scope
+    (recorded; `slice_copy_step_in_bounds` bounds each copy-step load). -/
+theorem bytes_slice_guard_correct (total start end_ alloc : Int) (fuel : Nat) :
+    eval pureCoreFns
+      (((Env.empty.bind "total" (.int total)).bind "start" (.int start)).bind
+        "end" (.int end_) |>.bind "alloc" (.int alloc))
+      (fuel + 6) bytesSliceExpr
+    = some (if start > end_ ∨ end_ > total
+            then .enum_ "Option" "None" []
+            else .enum_ "Option" "Some"
+              [("value", .struct_ "Bytes"
+                [ ("ptr", .int alloc)
+                , ("len", .int (end_ - start))
+                , ("cap", .int (end_ - start)) ])]) := by
+  by_cases h1 : start > end_
+  · have hd1 : decide (end_ < start) = true := decide_eq_true h1
+    simp [bytesSliceExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, h1]
+  · have hd1 : decide (end_ < start) = false := decide_eq_false (by omega)
+    by_cases h2 : end_ > total
+    · have hd2 : decide (total < end_) = true := decide_eq_true h2
+      simp [bytesSliceExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, hd2, h1, h2]
+    · have hd2 : decide (total < end_) = false := decide_eq_false (by omega)
+      simp [bytesSliceExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, hd2, h1, h2]
+
+set_option linter.unusedSimpArgs false in
+/-- ONE STEP of `bytes.index_of`'s scan against the abstract model: past
+    the end terminates with no hit; a matching byte hits AT the cursor;
+    otherwise the scan continues at `i + 1`. Kernel-checks the loop BODY's
+    three-way decision (where an off-by-one would live); the whole-loop
+    induction is NOT claimed — same recorded scope limit as
+    `hex_guard_step_preserves_u64`. -/
+theorem bytes_index_of_step_correct (i total byte_i needle : Int) (fuel : Nat) :
+    eval pureCoreFns
+      (((Env.empty.bind "i" (.int i)).bind "total" (.int total)).bind
+        "byte_i" (.int byte_i) |>.bind "needle" (.int needle))
+      (fuel + 6) bytesIndexOfStepExpr
+    = some (if i ≥ total
+            then .enum_ "Scan" "Done" []
+            else if byte_i = needle
+            then .enum_ "Scan" "Hit" [("at", .int i)]
+            else .enum_ "Scan" "Next" [("at", .int (i + 1))]) := by
+  by_cases h1 : i ≥ total
+  · have hd1 : decide (i ≥ total) = true := decide_eq_true h1
+    simp [bytesIndexOfStepExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, h1]
+  · have hd1 : decide (i ≥ total) = false := decide_eq_false h1
+    by_cases h2 : byte_i = needle
+    · have hd2 : (byte_i == needle) = true := by simp [h2]
+      simp [bytesIndexOfStepExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, hd2, h1, h2]
+    · have hd2 : (byte_i == needle) = false := by simp [h2]
+      simp [bytesIndexOfStepExpr, eval, eval.evalFields, Env.bind, evalBinOp, hd1, hd2, h1, h2]
+
+/-- Scan-loop bound invariant STEP: a continuing scan keeps the cursor in
+    `[from, total]`. With `bytes_index_of_step_correct` this is the
+    inductive step of "a returned index is the FIRST hit in range". -/
+theorem index_of_scan_step_preserves_bounds (from_ i total : Int)
+    (h : from_ ≤ i ∧ i < total) : from_ ≤ i + 1 ∧ i + 1 ≤ total := by omega
+
+/-- A Hit is in `[from, total)`: the glue between the loop invariant
+    (`from ≤ i ≤ total`) and the step model's Hit branch (which requires
+    `¬ i ≥ total`) — the geometry callers (envcfg's `=` split,
+    httpget/tcpserve's terminator scans) rely on when they slice at the
+    returned index. -/
+theorem index_of_hit_in_range (from_ i total : Int)
+    (hinv : from_ ≤ i ∧ i ≤ total) (hnotdone : ¬ i ≥ total) :
+    from_ ≤ i ∧ i < total := by omega
+
+/-- `bytes.slice` copy-loop STEP bound: every per-step load
+    `get_unchecked(start + k)` is in-bounds — `k` ranges over the output
+    (`k < end - start`) and the guard admitted `end ≤ total`. This is the
+    justification for each unchecked read the trusted body performs. -/
+theorem slice_copy_step_in_bounds (start end_ total k : Int)
+    (hstart : 0 ≤ start) (hguard : end_ ≤ total)
+    (hk : 0 ≤ k ∧ k < end_ - start) :
+    0 ≤ start + k ∧ start + k < total := by omega
+
 end Examples.PureCore.Proofs
