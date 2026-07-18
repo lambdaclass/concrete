@@ -346,13 +346,16 @@ private def bindParams (env : Env) (params : List (String × Ty)) (args : List I
   | (name, _) :: ps, v :: vs => bindParams (envBind env name v) ps vs
 
 private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal)) : Env :=
-  match bindings with
-  | [] => env
-  | (name, _) :: rest =>
-    let val := match fields.find? (fun (n, _) => n == name) with
-      | some (_, v) => v
-      | none => .unit
-    bindEnumFields (envBind env name val) rest fields
+  -- POSITIONAL, matching Core/Lower semantics: Elab zips arm bindings with
+  -- the variant's fields in declaration order, and (bug 045) binders are
+  -- alpha-renamed (`v` → `v.b0`) so a by-name field lookup can no longer
+  -- work — it only ever agreed because binder names used to equal field
+  -- names. (Verified: compiled `P::Mk { b, a }` binds positionally.)
+  match bindings, fields with
+  | [], _ => env
+  | _, [] => env
+  | (name, _) :: rest, (_, v) :: fRest =>
+    bindEnumFields (envBind env name v) rest fRest
 
 private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
   match scrutinee, lit with

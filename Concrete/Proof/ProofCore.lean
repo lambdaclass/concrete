@@ -474,13 +474,24 @@ def classifyLoops (body : List CStmt) : String :=
 -- Body fingerprinting
 -- ============================================================
 
+/-- Bug 045: Elab alpha-renames match binders (`value` → `value.b7`).
+    Fingerprints and extracted proof expressions must be INVARIANT under
+    that renaming — otherwise editing an unrelated earlier match shifts
+    the indices of later binders and falsely staleness-marks every proof
+    link and spec downstream. Surface identifiers cannot contain '.', so
+    stripping at the first '.' recovers the surface name exactly. -/
+def stripAlpha (n : String) : String :=
+  match n.splitOn "." with
+  | base :: _ => base
+  | [] => n
+
 private partial def fingerprintExpr : CExpr → String
   | .intLit v _ => s!"(int {v})"
   | .floatLit v _ => s!"(float {v})"
   | .boolLit v => s!"(bool {v})"
   | .strLit v => s!"(str {repr v})"
   | .charLit v => s!"(char {repr v})"
-  | .ident name _ => s!"(var {name})"
+  | .ident name _ => s!"(var {stripAlpha name})"
   | .binOp op lhs rhs _ => s!"(binop {repr op} {fingerprintExpr lhs} {fingerprintExpr rhs})"
   | .unaryOp op inner _ => s!"(unary {repr op} {fingerprintExpr inner})"
   | .call fn _ args _ => s!"(call {fn} {fingerprintExprs args})"
@@ -508,13 +519,13 @@ where
   fingerprintExprs (es : List CExpr) : String :=
     " ".intercalate (es.map fingerprintExpr)
   fingerprintArm : CMatchArm → String
-    | .enumArm en v binds guard body => s!"(arm {en}::{v} [{" ".intercalate (binds.map Prod.fst)}]{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .enumArm en v binds guard body => s!"(arm {en}::{v} [{" ".intercalate (binds.map fun b => stripAlpha b.fst)}]{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
     | .litArm val guard body => s!"(lit {fingerprintExpr val}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
-    | .varArm b _ guard body => s!"(var {b}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .varArm b _ guard body => s!"(var {stripAlpha b}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
     | .rangeArm lo hi incl guard body => s!"(range {fingerprintExpr lo} {fingerprintExpr hi} {incl}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
   fingerprintStmt : CStmt → String
-    | .letDecl name _ _ val => s!"(let {name} {fingerprintExpr val})"
-    | .assign name val => s!"(set {name} {fingerprintExpr val})"
+    | .letDecl name _ _ val => s!"(let {stripAlpha name} {fingerprintExpr val})"
+    | .assign name val => s!"(set {stripAlpha name} {fingerprintExpr val})"
     | .return_ (some val) _ => s!"(ret {fingerprintExpr val})"
     | .return_ none _ => "(ret)"
     | .expr e _ => fingerprintExpr e
@@ -601,7 +612,12 @@ private def isCommutative : Proof.PBinOp → Bool
     5. Commutative ordering:  add/mul/eq/ne operands sorted by (kind, name/value) -/
 partial def normalizePExpr : Proof.PExpr → Proof.PExpr
   | .lit v => .lit v
-  | .var n => .var n
+  -- Bug 045: comparison is ALPHA-INVARIANT — Elab renames match binders
+  -- (`value` → `value.b7`); committed specs/theorems use surface names.
+  -- The kernel-facing extraction stays verbatim (R-03 pins it); only this
+  -- normalizer, which both sides of the drift comparison run through,
+  -- strips the suffix. Surface names cannot contain '.'.
+  | .var n => .var (stripAlpha n)
   | .binOp op lhs rhs =>
     let l := normalizePExpr lhs
     let r := normalizePExpr rhs
@@ -651,7 +667,12 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     .arrayIndex (normalizePExpr arr) (normalizePExpr idx)
   | .match_ scrutinee arms =>
     .match_ (normalizePExpr scrutinee)
-      (arms.map fun (pat, body) => (pat, normalizePExpr body))
+      (arms.map fun (pat, body) =>
+        let pat' := match pat with
+          | .enumPat en v binds => .enumPat en v (binds.map stripAlpha)
+          | .varPat b => .varPat (stripAlpha b)
+          | other => other
+        (pat', normalizePExpr body))
   | .cast inner => .cast (normalizePExpr inner)
   | .arrayLit elems => .arrayLit (elems.map normalizePExpr)
   | .arraySet arr idx val =>

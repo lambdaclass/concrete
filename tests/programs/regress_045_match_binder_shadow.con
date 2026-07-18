@@ -1,0 +1,37 @@
+// Bug 045 regression: nested same-named match binders must SHADOW, not
+// share a slot. Pre-fix, reading the outer `value` after an inner
+// same-named match returned the INNER value on BOTH backends (silent;
+// differential-blind). Also covers the sequential case (two matches after
+// one another) whose Core names must stay distinct in Lower's flat slot
+// table. Exit 42 = every read saw the right binder.
+mod m {
+    fn five() -> Option<u64> { return Option::<u64>::Some { value: 5 }; }
+    fn seven() -> Option<u64> { return Option::<u64>::Some { value: 7 }; }
+    fn thirty() -> Option<u64> { return Option::<u64>::Some { value: 30 }; }
+
+    fn main() -> Int {
+        let mut acc: u64 = 0;
+        match five() {
+            Option::None => { return 1; },
+            Option::Some { value } => {
+                match seven() {
+                    Option::None => { return 2; },
+                    Option::Some { value } => {
+                        if value != 7 { return 3; }   // inner shadows
+                        acc = acc + value;            // +7
+                    },
+                }
+                if value != 5 { return 4; }           // outer restored
+                acc = acc + value;                    // +5
+            },
+        }
+        match thirty() {
+            Option::None => { return 5; },
+            Option::Some { value } => {
+                if value != 30 { return 6; }          // sequential match
+                acc = acc + value;                    // +30
+            },
+        }
+        return acc as Int;                            // 42
+    }
+}

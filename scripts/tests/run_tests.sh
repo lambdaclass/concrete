@@ -6725,6 +6725,9 @@ run_ok "$TESTDIR/regress_040_match_binder_types.con" 42
 # linear binder accepted; negative: a real leak in the same shape still fails.
 run_ok "$TESTDIR/regress_041_match_binder_states.con" 42
 run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
+# Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
+# Elab); pre-fix the outer binder read the inner's value on BOTH backends.
+run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
 # are USER fns at every pass — never name-hijacked.
 run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31
