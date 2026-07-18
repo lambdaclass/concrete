@@ -151,11 +151,13 @@ trusted/Unsafe escape hatch when low-level code must return an address.
 ### Compiler Pipeline Spine
 
 Phase 6B established semantic truth and validation records; Phase 6C made the
-pipeline observable/replayable; Phase 8 validates the bet with real examples;
-Phase 8.5 turns the shadow graph into a persistent incremental driver only after
-that validation. Later proof/backend/tooling work must not bypass this order:
-semantic facts first, observability second, external validation third,
-incremental reuse fourth, independently checked evidence after that.
+pipeline observable/replayable; Phase 7.5 adds an independent QBE differential
+oracle without upgrading evidence claims; Phase 8 validates the bet with real
+examples; Phase 8.5 turns the shadow graph into a persistent incremental driver
+only after that validation. Later proof/backend/tooling work must not bypass
+this order: semantic facts first, observability second, independent executable
+cross-checking third, external validation fourth, incremental reuse fifth, and
+independently checked evidence after that.
 
 ### Incremental / Certificate Trust Split
 
@@ -918,6 +920,245 @@ logging/progress).
     checksums, sanitizer/runtime-instrumentation hooks where available, and
     `std.test`. CI must build, run, test, audit authority/allocation/evidence
     classes, and compare interpreter-vs-compiled behavior.
+
+## Phase 7.5: Independent Backend Oracle (QBE)
+
+Goal: add a genuinely independent native code-generation path early enough to
+find shared lowering, interpreter, ABI/layout, and LLVM-emission bugs before the
+Phase 8 flagship workloads deepen the public claims. This is a validation
+backend first, not an LLVM replacement and not proof that native execution
+preserves source semantics.
+
+Done when: a QBE backend consumes verified/cleaned Concrete SSA directly,
+supports the declared validation subset with no silent LLVM fallback, and CI
+classifies interpreter/LLVM/QBE disagreements over an edge-heavy corpus by
+stdout, stderr, exit status, and failure class. The audit/evidence surface must
+label QBE results `tested` or `backend_trusted`; this phase cannot upgrade a
+source/Core proof to native-code evidence. Production backend contracts,
+translation certificates, debug information, complete target policy, and
+release support remain owned by Phase 15.
+
+### Architecture And Independence Rules
+
+1. Preserve one frontend and one lowering spine:
+   `source -> Core -> Mono -> ValidatedSSA -> SSACleanup`, followed by sibling
+   LLVM and QBE emitters. QBE must consume `SModule` / `SInst` (or a minimal
+   target-neutral view over them) and must never translate emitted LLVM IR or
+   reuse LLVM instruction-selection text. Share semantic facts such as integer
+   width/signedness, size/alignment, symbol identity, builtin identity, and
+   entry-point policy; keep instruction selection, aggregate materialization,
+   ABI spelling, wrappers, globals, and runtime-helper emission independent.
+2. Add an explicit backend selection surface:
+   `--backend llvm|qbe`, `--emit-qbe`, and the corresponding project-build
+   setting. LLVM remains the default throughout Phase 7.5. Reject an unknown or
+   unavailable backend with a structured diagnostic that names the missing
+   tool/target; never fall back to LLVM after the user selects QBE.
+3. Add `Concrete/Backend/QBE.lean` for a small typed QBE IL AST,
+   `EmitQBE.lean` for the pure text printer, and an SSA-to-QBE translation
+   module separate from `EmitSSA.lean`. Do not build QBE text through ad-hoc
+   concatenation inside CLI code. Pin the supported QBE release/tool identity
+   in CI and record it in debug/audit output.
+4. Keep layout facts backend-neutral. Split LLVM spelling out of
+   `Concrete/Check/Layout.lean` where necessary, but do not create a second
+   size/alignment calculator. Add a gate proving LLVM and QBE consume the same
+   Concrete layout decisions while independently realizing them.
+
+### Staged Implementation
+
+5. Land a scalar smoke slice first: integer and boolean constants, arithmetic,
+   comparisons, casts, direct calls, returns, blocks, branches, phi/copy
+   lowering, stack slots, loads/stores, globals, string data, and the stage-2
+   main wrapper. Map Concrete `i8`/`i16`/`i32`/`bool` temporaries deliberately
+   onto QBE word operations with explicit truncation and signed/unsigned
+   extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
+   Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
+   and exit-code edge cases rather than accepting scalar happy paths alone.
+6. Add memory and aggregate support: fixed arrays, structs, packed/explicitly
+   aligned layouts, enums, canonical `Option`/`Result`, strings, vectors, nested
+   places, byte-union payloads, aggregate copies, and small/large aggregate
+   calls/returns. QBE aggregates are memory/ABI objects rather than general SSA
+   temporaries, so make materialization explicit and test tag/payload offsets,
+   padding, alignment, and partially initialized payload storage.
+7. Add calls and platform boundaries: indirect calls, externs, variadics used
+   by the runtime, argc/argv accessors, symbol visibility, linker aliases, C ABI
+   scalar/aggregate classification, and Linux/macOS target selection for the
+   architectures QBE and Concrete both declare supported. Unsupported target,
+   calling convention, TLS, or ABI shapes must fail before emission with a
+   stable diagnostic.
+8. Port the compiler-emitted builtin/runtime surface needed by the validation
+   corpus. Prefer a small shared C runtime for allocation, IO, traps, and other
+   platform services when that keeps semantics explicit; keep pure scalar
+   builtins in the emitter when independence is more valuable. Extend the
+   builtin-semantics inventory so every builtin is one of `qbe_equal`,
+   `qbe_runtime_helper`, or `qbe_pending`; adding a builtin without an explicit
+   class fails CI.
+9. Add QBE test-mode entry generation so `concrete test` can execute the same
+   discovered tests and module filter under both native backends. Preserve the
+   test runner's result accounting and output exactly; do not special-case a
+   smaller, silently different QBE test semantics.
+
+### Differential Oracle And Failure Localization
+
+10. Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver
+    that runs each fixture through the source interpreter, LLVM, and QBE and
+    compares a structured observation:
+    `{compile_class, stdout_bytes, stderr_bytes, exit_status, runtime_class}`.
+    Normalize only declared platform noise; never normalize program output,
+    trap kind, or exit status merely to make paths agree.
+11. Classify every mismatch rather than printing a generic wrong-code failure:
+    - interpreter == QBE != LLVM: `llvm_backend_mismatch`;
+    - interpreter == LLVM != QBE: `qbe_backend_mismatch`;
+    - LLVM == QBE != interpreter: `interpreter_or_shared_lowering_mismatch`;
+    - all three differ: `semantic_split`;
+    - both compiled paths agree with an external/hand oracle but the
+      interpreter differs: `interpreter_mismatch`;
+    - both compiled paths agree with each other and disagree with the external/
+      hand oracle: `shared_lowering_or_spec_mismatch`.
+    Save sources, Core, cleaned SSA, LLVM IR, QBE IL, tool versions, commands,
+    observations, and classification in the wrong-code/debug bundle.
+12. Require an independent expected result for cases capable of exposing a
+    shared lowering error: a hand-authored expectation, checked-in reference
+    model, system-tool/Python oracle, or metamorphic property. Two backends
+    agreeing is corroboration, not correctness, because both consume the same
+    lowered SSA.
+13. Build the validation corpus by semantic family, not file count: every
+    `SInst`, terminator, scalar width, signedness-sensitive operation,
+    aggregate/layout class, direct/indirect call shape, builtin class, trap,
+    and main/test wrapper path needs a manifest row. Seed it with the existing
+    arithmetic, cast, enum-union-layout, nested-place, callable-value, fuzz,
+    workload, wrong-code, and exit-model corpora. Add mutation checks proving
+    the oracle notices at least one injected fault in lowering, LLVM emission,
+    QBE emission, interpreter semantics, layout, and builtin behavior.
+14. Run a deterministic quick QBE matrix on every CI change and a larger
+    rotating fuzz/differential matrix on schedule. QBE-unavailable CI is a hard
+    configuration failure for the QBE job, not a skip. Keep LLVM-only release
+    jobs intact until Phase 15 graduates QBE; report QBE flakes separately and
+    retain their artifacts.
+
+### Phase Boundary And Graduation
+
+15. Phase 7.5 may close with a declared subset, but that subset must be honest:
+    `concrete agent features --json`, help, audit output, and documentation list
+    supported targets/features and `qbe_pending` cases. A program outside the
+    subset receives a diagnostic; per-function or per-instruction fallback to
+    LLVM is forbidden.
+16. Exercise the completed subset immediately in Phase 8: every new flagship
+    workload that stays inside it runs interpreter/LLVM/QBE differential checks;
+    exclusions require a named missing feature and roadmap owner. Record bugs
+    found by the oracle in the bug corpus with the disagreement classification
+    that exposed them.
+17. Graduation to a supported release backend occurs only in Phase 15: migrate
+    QBE from the direct validation path onto `ValidatedBackendIR`, pass the full
+    target/toolchain and C ABI matrices, integrate debug/source maps and
+    incremental artifacts, attach translation-validation status, define
+    optimization/tool-version policy, and pass release/platform soak gates.
+    Until then `--backend qbe` is explicitly experimental and its native result
+    remains backend-trusted/test evidence.
+18. After the QBE oracle is stable, evaluate—but do not automatically adopt—a
+    second complementary target. Prefer WebAssembly when portability, sandboxed
+    memory, or structured-control-flow pressure is the goal; prefer Cranelift
+    when fast native/JIT compilation or a broader production backend is forced.
+    C emission, libgccjit, MLIR, and direct machine code remain comparison
+    options, not parallel commitments. No fourth execution path starts without
+    a bug class or workload that QBE plus LLVM cannot pressure effectively.
+19. Define and gate QBE-IL legality independently of execution. Add a pure
+    verifier for Concrete's typed QBE AST (definition-before-use where QBE
+    requires it, unique temporaries/blocks/symbols, legal base/extended type
+    positions, phi predecessor agreement, terminator completeness, entry-block
+    restrictions, call/return ABI agreement, aggregate definitions before use,
+    alignment validity, and escaped identifier/string syntax), then run the
+    pinned `qbe` parser as a second validation layer. An emitter failure must be
+    a structured Concrete diagnostic with the `.qbe` artifact retained; raw
+    QBE/assembler/linker errors must not be the first user-facing diagnosis for
+    a compiler-owned invalid artifact.
+20. Write a QBE semantic-gap ledger before broad coverage. For every Concrete
+    SSA operation, record the QBE instruction sequence and the assumptions that
+    make it equivalent: signed division overflow and divide-by-zero, shift
+    counts, float-to-int out-of-range behavior, NaNs and signed zero, sub-word
+    truncation/extension, uninitialized bytes, invalid pointers, alignment,
+    aliasing, aggregate padding, unreachable paths, traps, and integer/pointer
+    conversions. Where LLVM uses poison/undef, flags, or intrinsics that have no
+    direct QBE analogue, lower to explicit checks/helpers or mark the operation
+    pending; never inherit accidental host behavior as Concrete semantics.
+21. Make symbol and module composition a first-class gate. Test duplicate
+    basenames, import aliases, colliding private names, generic
+    specializations, extern/defined-symbol collisions, linker aliases, string
+    and type-name escaping, multi-module declaration deduplication, visibility,
+    and deterministic ordering. Compile both one combined QBE unit and, once
+    supported, separate units linked together; their observations and exported
+    symbol sets must agree.
+22. Add deterministic-emission and reproducibility checks: identical cleaned
+    SSA plus an identical target/toolchain configuration must produce
+    byte-identical QBE IL, assembly where the pinned toolchain permits it, link
+    manifests, and backend observation records. Debug paths, temporary paths,
+    hash-map order, host locale, parallel test scheduling, and environment
+    variables must not perturb semantic artifacts. Record the QBE version,
+    target, assembler, C compiler/linker, runtime-helper hash, and flags in the
+    build/debug bundle and cache key.
+23. Provision QBE as an explicit toolchain dependency. Pin a supported release
+    and checksum in Nix/CI, verify the installed binary rather than accepting an
+    arbitrary `PATH` match, document source/bootstrap and system-package paths,
+    and make local discovery available through `concrete doctor` / agent
+    feature JSON. Tool download is never an implicit compilation side effect.
+    CI must cover a clean checkout and reject an unsupported QBE version with a
+    clear diagnostic; updating the pin requires the quick matrix plus scheduled
+    corpus and an attached toolchain-diff record.
+24. Add optimization-sensitive triangulation. For every eligible fixture,
+    compare interpreter, LLVM at the supported debug/release optimization
+    levels, and QBE followed by the supported assembler/linker configurations.
+    Classify within-backend disagreement separately as
+    `llvm_optimization_mismatch` or `qbe_toolchain_mismatch`; retain pre/post
+    optimization artifacts where available. Include sanitizer/instrumented LLVM
+    runs as corroborating evidence, while keeping sanitizer output out of the
+    program-output comparison channel.
+25. Extend fuzzing and reduction for the new path. Add backend-aware predicates
+    for QBE compile crash/rejection, QBE runtime mismatch, three-way semantic
+    split, LLVM-only mismatch, shared-compiled mismatch, optimization mismatch,
+    and nondeterministic QBE emission. Reducers must preserve the mismatch
+    classification and relevant target/tool versions, save the smallest
+    reproducer plus replay command, and prove by mutation tests that a reduced
+    case is not accepted merely because one backend stopped compiling.
+26. Separate compiler defects from toolchain defects operationally. The bundle
+    and CI report must identify the first failing boundary:
+    `ssa_to_qbe`, `qbe_verify`, `qbe_codegen`, `assemble`, `link`, `runtime`, or
+    `observation_compare`; capture exit code/signal/timeout/resource-limit and a
+    bounded stderr excerpt for each external process. Add time, output-size,
+    memory, and recursion limits so malformed generated IL or fuzz cases cannot
+    hang the suite, and distinguish timeout/OOM/tool crash from semantic
+    disagreement.
+27. Establish performance guardrails without making QBE win benchmarks. Track
+    compiler wall time, peak memory where available, emitted IL/assembly/object
+    size, final binary size, and runtime for a small stable corpus against LLVM.
+    Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
+    QBE-versus-LLVM speed ratio. Performance results are benchmark facts only;
+    they cannot choose a backend silently or weaken semantic/evidence gates.
+28. Define runtime-helper ownership and versioning. Shared C helpers must have a
+    narrow, documented ABI; checked-in source; deterministic build; symbol
+    namespace; target/feature manifest; sanitizer tests; and interpreter/LLVM/
+    QBE semantic vectors. Decide explicitly which helpers are common semantic
+    infrastructure and which remain independently emitted oracle logic. A
+    helper change invalidates both backend cache keys and reruns every builtin/
+    ABI consumer; sharing a helper must be disclosed when it reduces oracle
+    independence.
+29. Add release-surface and compatibility discipline even while experimental:
+    reserve backend names and project-manifest schema, define `.qbe` artifact
+    naming without colliding with Concrete's own SSA dumps, keep LLVM as the
+    stable default, and snapshot help/JSON/diagnostic output. Removing or
+    changing the experimental backend requires a roadmap/changelog decision,
+    but no package may claim generic native support from a QBE-only test. Audit
+    bundles must state the exact backend used; examples and documentation must
+    not show QBE-derived native evidence as LLVM-derived or backend-independent.
+30. Add a Phase 7.5 capstone artifact:
+    `examples/qbe_oracle_validation/` plus
+    `scripts/tests/check_phase7_5_qbe.sh`. It must exercise every supported
+    semantic-family manifest row; demonstrate each disagreement classifier
+    with controlled mutations; validate deterministic emission, clean-checkout
+    tool discovery, reducer replay, debug-bundle completeness, unsupported-
+    feature diagnostics, no-fallback behavior, target/ABI facts, and quick-CI
+    wiring; and publish a machine-readable coverage/pending inventory. Closure
+    requires zero unexplained mismatches and either a recorded real defect found
+    by the oracle or successful injected-fault detection for every owned fault
+    class. All pending rows need an owner and Phase 8/15 disposition.
 
 ## Phase 8: Flagship Depth And Examples
 
@@ -2787,13 +3028,18 @@ replayable; and every boundary after that slice remains explicitly trusted.
     allocation, proof assumptions, or runtime-error obligations.
 16. Evaluate a normalized mid-level IR only when traceability/backend-contract
     reports expose a concrete gap.
-17. Keep QBE/WASM/second backend deferred until evidence attachment,
-    optimization policy, backend IR verification, and backend trust boundaries
-    are trustworthy. A QBE-style backend experiment is allowed only as a
-    measured research branch: it must consume the same backend IR contract,
-    emit the same source maps and target assumptions, pass the C ABI matrix for
-    its supported subset, and report exactly which claims become backend/
-    target-trusted.
+17. Graduate the Phase 7.5 QBE differential oracle only after evidence
+    attachment, optimization policy, backend-IR verification, and backend trust
+    boundaries are trustworthy. Phase 7.5 deliberately emits directly from
+    validated/cleaned SSA to maximize independence and find bugs early; that is
+    an experimental validation path, not the release architecture. Production
+    QBE support must consume `ValidatedBackendIR`, emit the same source maps and
+    target assumptions as other supported backends, pass the full C ABI and
+    target/toolchain matrices for its declared subset, integrate Phase 8.5
+    incremental artifacts, and report exactly which claims are translation-
+    validated versus backend/target-trusted. Keep WASM, Cranelift, and any
+    additional backend deferred until a forcing workload or uncovered bug class
+    justifies another independent path.
 18. Add translation validation for codegen as the path out of a fully trusted
     backend. V1 should validate a narrow `ValidatedSSA -> BackendIR ->
     ValidatedBackendIR` subset per compile:
