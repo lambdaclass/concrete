@@ -151,10 +151,12 @@ When receiving bytes from C code (file reads, network reads, environment variabl
   2026-07): it validates UTF-8 and returns `""` for an invalid argument
   (replace-with-empty, strategy 2) — argv can no longer smuggle invalid
   bytes into `String`.
-- `env::get` returns `Option<String>`. Still does NOT validate — an
-  environment value with invalid UTF-8 arrives as a `String` that violates
-  the contract. Open; same fix shape as `args::get` (validate in the
-  trusted body, `None` or empty on invalid).
+- `env::get` returns `Option<String>`. RESOLVED (2026-07-18): validates
+  UTF-8 in the trusted body and returns `None` for an invalid value
+  (reject, strategy 1 — `None` is honest for an `Option` return where
+  `args::get`'s bare-`String` return had to use replace-with-empty).
+  Gate: check_envcfg.sh invalid-UTF-8-override leg (env value with
+  `\xff\xfe` is rejected, file value wins).
 
 **Handling strategies (pick one per API before freeze):**
 

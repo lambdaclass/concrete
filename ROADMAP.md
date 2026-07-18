@@ -344,14 +344,42 @@ batteries-included breadth. Completed foundation work lives in
      newtypes had zero cross-module consumers). Recorded exemptions: lib
      (umbrella), libc (no pub surface), slice (NO public constructor — std
      gap, converts to a fixture when a workload pulls one).
-   - PROBE (2026-07-18, found dogfooding bug 043): a RENAMED import of a
-     GENERIC fn miscompiles — `import std.alloc.{dealloc as dd}` +
-     `dd::<u8>(p)` emits a call to bare `@dealloc` (undefined; only mono
-     specializations exist). Non-generic renames work. Mono resolves the
-     alias to the generic's bare name instead of monomorphizing under it.
-     No std/user code renames a generic today (all std renames are extern
-     fns), so no active breakage — fix when touched, with a
-     regress fixture (repro preserved in this entry).
+   - Known-defects queue (2026-07-18, priority-ordered; each is a defect,
+     not a deferral — take top-down, own slice + battery each):
+     1. Renamed GENERIC import miscompiles (found dogfooding bug 043):
+        `import std.alloc.{dealloc as dd}` + `dd::<u8>(p)` emits a call to
+        bare `@dealloc` (undefined; only mono specializations exist).
+        Non-generic renames work. Mono resolves the alias to the generic's
+        bare name instead of monomorphizing under it. No std/user code
+        renames a generic today (all std renames are extern fns), so no
+        active breakage — wrong-code class regardless. Fix in Mono +
+        regress fixture (repro preserved in this entry).
+     2. `env::get` returns unvalidated Strings: an environment value with
+        invalid UTF-8 arrives as a `String`, violating the String=UTF-8
+        contract (STRING_TEXT_CONTRACT target policy). `args::get` already
+        got the fix (validate in the trusted body, empty on invalid);
+        apply the same shape to env — small, the bug-043 to_cstr work
+        already put a trusted copy in the path.
+     3. H12 project-mode checking gap, concretely demonstrated 2026-07-18:
+        `concrete build` of a std-importing project did NOT catch an E0220
+        type error in `std/src/fs.con` (owned `mode` passed where &String
+        expected) that `concrete std/src/lib.con --test` DID catch — a
+        wrong-typed std edit compiled. Find why project mode skips those
+        bodies and close the gap (this is the std burn-down residual with
+        a fresh, minimal witness).
+     4. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
+        module importing different same-named fns still share a flat
+        alias list (collectAllLinkerAliases). Pull-gated: fix when a
+        workload or fixture hits it.
+     5. `std.slice` has no public constructor — user code cannot obtain a
+        `Slice` at all (coverage-gate exemption records it). First
+        workload needing one pulls a constructor (e.g. Vec::as_slice) and
+        converts the exemption into a fixture.
+     6. Bug 027 (EmitSSA O(n^2) rendering) — open perf item, not
+        correctness; profile-driven fix when compile times matter.
+     7. Differential fuzzer/oracle residuals: heap/alloc/IO shapes still
+        compiled-only, trap class not compared interp-vs-compiled, no
+        float support in interp comparisons.
    - DONE (2026-07-17): stale stdlib docs refresh — STRING_TEXT_CONTRACT
      (args::get now validates argv UTF-8, resolved; env::get still doesn't,
      left open), BYTE_VIEW (`Text::from_raw` → shipped
