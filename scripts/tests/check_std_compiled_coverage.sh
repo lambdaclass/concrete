@@ -755,6 +755,66 @@ mod main {
 }
 EOF
 
+echo "=== bug 046: collection extraction is Copy-bounded (two-owners defect) ==="
+# keys()/values()/elements() copied LINEAR payloads out while the map kept
+# ownership — checker-accepted double-free. Pin the rejection and the
+# Copy-typed positives.
+mkdir -p "$TMP/b046/src"
+printf '[package]\nname = "b046"\nversion = "0.1.0"\n' > "$TMP/b046/Concrete.toml"
+cat > "$TMP/b046/src/main.con" <<'EOF'
+mod main {
+    import std.map.{HashMap};
+    import std.hash.{hash_u64, eq_u64};
+    import std.vec.{Vec};
+    fn main() with(Std) -> u8 {
+        let mut m: HashMap<u64, String> = HashMap::<u64, String>::new(hash_u64, eq_u64);
+        let s: String = "x";
+        let o: Option<String> = m.insert(1, s);
+        match o { Option::Some { value } => { value.drop(); }, Option::None => { }, }
+        let vs: Vec<String> = m.values();
+        vs.drop(); m.drop();
+        return 0;
+    }
+}
+EOF
+if ( cd "$TMP/b046" && "$C" build ) > "$TMP/b046.log" 2>&1; then
+  no "values() over linear payloads COMPILED (two-owners defect is back)"
+else
+  grep -q "E0241" "$TMP/b046.log" \
+    && ok "values() over linear payloads rejected (E0241 Copy bound)" \
+    || no "rejected but not with E0241: $(grep -m1 error "$TMP/b046.log")"
+fi
+cat > "$TMP/b046/src/main.con" <<'EOF'
+mod main {
+    import std.map.{HashMap};
+    import std.set.{HashSet};
+    import std.hash.{hash_u64, eq_u64};
+    import std.vec.{Vec};
+    fn main() with(Std) -> u8 {
+        let mut m: HashMap<u64, u64> = HashMap::<u64, u64>::new(hash_u64, eq_u64);
+        discard(m.insert(1, 10).is_none());
+        discard(m.insert(2, 20).is_none());
+        let ks: Vec<u64> = m.keys();
+        let vs: Vec<u64> = m.values();
+        let count_ok: bool = ks.len() == 2 && vs.len() == 2;
+        ks.drop(); vs.drop(); m.drop();
+        if !count_ok { return 1; }
+        let mut st: HashSet<u64> = HashSet::<u64>::new(hash_u64, eq_u64);
+        discard(st.insert(7));
+        let es: Vec<u64> = st.elements();
+        let e_ok: bool = es.len() == 1 && es.get_unchecked(0) == 7;
+        es.drop(); st.drop();
+        if e_ok { return 0; }
+        return 1;
+    }
+}
+EOF
+if ( cd "$TMP/b046" && "$C" build ) > "$TMP/b046.log" 2>&1 && "$TMP/b046/b046"; then
+  ok "Copy-typed keys()/values()/elements() still work (positive)"
+else
+  no "Copy-typed extraction broke (rc or compile)"
+fi
+
 echo "=== dependencies are CHECKED in project mode (defect-queue item 3) ==="
 # The H12-era filter excluded dep modules from front-end Check; a
 # wrong-typed std edit compiled fine in project mode. Pin the closure: a

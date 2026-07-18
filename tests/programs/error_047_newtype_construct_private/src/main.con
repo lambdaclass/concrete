@@ -1,0 +1,12 @@
+// 0b construction rights NEGATIVE: NonZeroU32's direct constructor is
+// private to its defining module (std.numeric). Constructing NonZeroU32(0)
+// here bypasses try_new's zero-rejection — must be E0296. (This is a
+// must-FAIL project fixture; run_tests treats error_* projects as such.)
+mod main {
+    import std.numeric.{NonZeroU32};
+    fn main() with(Std) -> u8 {
+        let z: NonZeroU32 = NonZeroU32(0);
+        discard(z);
+        return 0;
+    }
+}

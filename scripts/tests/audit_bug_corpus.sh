@@ -82,6 +82,8 @@ declare -A SKIP_BUGS=(
   [042]="FIXED -- regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases"
   [043]="FIXED -- check_envcfg.sh env-override leg + std-compiled-coverage env/fs/io/net legs (Linux CI is the discriminating platform); String::to_cstr + all C-string FFI sites converted"
   [044]="FIXED -- regress_044_renamed_generic_import/src/main.con (project test, exit 0); Mono lookupFn tries all alias orientations + specializes under the resolved def's canonical name"
+  [045]="FIXED -- regress_045_match_binder_shadow.con (run_ok 42); Elab alpha-renames match binders (value -> value.bN), retiring the name-scoping class below Elab"
+  [046]="FIXED -- error_046_map_values_linear/src/main.con (negative project fixture, must FAIL) + std-compiled-coverage bug-046 legs (E0241 + Copy positive); keys/values/elements Copy-bounded"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

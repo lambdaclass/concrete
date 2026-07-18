@@ -24,11 +24,11 @@ fn safe_div(a: Int, b: Int) -> MyResult {
 fn main() -> Int {
   let r: MyResult = safe_div(10, 2);
   match r {
-  MyResult::Ok { value: Int } -> {
-      return value;
+  MyResult::Ok { value.b0: Int } -> {
+      return value.b0;
   }
-  MyResult::Err { error: Int } -> {
-      return error;
+  MyResult::Err { error.b1: Int } -> {
+      return error.b1;
   }
 };
 }

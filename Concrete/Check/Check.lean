@@ -283,6 +283,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
     | some nt =>
+      -- 0b construction rights: a newtype's direct constructor is private
+      -- to its defining module. External callers use its public
+      -- constructor fn (e.g. try_new) — this is what makes smart-constructor
+      -- invariants (NonZeroU32's non-zero property) load-bearing rather
+      -- than advisory.
+      if !(← getEnv).localNewtypeNames.contains fnName then
+        throwCheck (.newtypeConstructPrivate fnName) (some e.getSpan)
       if args.length != 1 then throwCheckMsg s!"newtype '{fnName}' constructor takes exactly 1 argument"
       if !typeArgs.isEmpty then throwCheckMsg s!"newtype '{fnName}' constructor does not take type arguments"
       -- For generic newtypes, infer type args from hint
@@ -2110,11 +2117,17 @@ def checkModule (m : Module) (summary : FileSummary)
   -- across module boundaries) and reach Layout via the elaborated CModule.
   let allNewtypes := m.newtypes ++ imports.newtypes
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
+  -- 0b construction rights: newtypes DEFINED here (module + submodules),
+  -- NOT the imported ones — direct `N(v)` construction is private to the
+  -- defining module.
+  let localNewtypeDefs := m.newtypes
+                     ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
+  let localNewtypeNamesList := localNewtypeDefs.map (fun nt => nt.name)
   let initEnv : TypeEnv :=
     { vars := [], structs := allStructs, enums := allEnums, functions := allSigs,
       fnNames := allNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, allFnSummarys := fnSigPairs, newtypes := allNewtypes,
-      userFnNames := userFnNamesList }
+      userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.
   -- Reserved name check stays here because reserved names conflict with builtins in Check.
   let reservedNameCheck := m.functions.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc f =>

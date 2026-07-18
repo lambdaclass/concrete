@@ -706,6 +706,38 @@ batteries-included breadth. The ranked build order is:
      with the full battery as backstop. Dedicated fresh session.
    - Known-defects queue (priority-ordered; each owns a slice and battery when
      its stated trigger fires):
+     0a. DONE (2026-07-18): manifest generator rewritten from the single
+         regex to a balanced scanner (comments/strings blanked, brace-depth
+         impl tracking, balanced parens + generic angles, [trusted] extern
+         forms, enclosing-trusted-impl inheritance). Fixed 39 truncated
+         fn-pointer-param rows + missing extern forms + trust misclassed by
+         fn-level-only; the committed TSV grew 426->434 rows and reclassed
+         many impl methods to trusted-boundary (now correct). Parser
+         self-test fixture (manifest_selftest.con + golden) pins every
+         previously-misparsed shape and is mutation-verified. Manifest-
+         based safety rules (raw-pointer-implies-Unsafe, item 5) may now
+         build on truthful facts.
+     0b. Construction rights (private-by-default representation, chosen
+         2026-07-18; docs/CONSTRUCTION_RIGHTS.md). SLICE 1 DONE: newtype
+         direct construction `N(v)` is private to its defining module —
+         E0296, closing the verified `NonZeroU32(0)` bypass; external code
+         uses the public constructor fn (try_new). SLICE 2 (open): struct
+         fields private-by-default with explicit `pub` opt-in — enforce
+         literal/access/write/update/destructure across modules in
+         Resolve/Check + migrate the 25 std cross-module field-poke sites
+         (mostly String/Bytes -> from_raw_unchecked, which exists) + newtype
+         `.0` unwrap privacy + enum payload rules + manifest visibility
+         fields. Pointer-bearing forgery is only INCIDENTALLY blocked today
+         (the int->ptr cast needs Unsafe); field r/w (`b.len`, `b.len=999`)
+         is wide open until slice 2.
+     0c. Linear Option/Result consuming combinators (workload-pulled
+         ergonomics, NOT soundness): map/and_then should consume a linear
+         T; unwrap_or needs explicit destruction of the unused side. Do
+         NOT lift the Copy bounds until the checker proves arm-wise linear
+         conservation; slice ships with destructor-counter fixtures,
+         exactly-once destruction on every arm, interp/LLVM agreement,
+         updated proof fingerprints, and leak/double-consume negatives.
+         After 0a/0b.
      1. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
         module importing different same-named fns still share a flat
         alias list (collectAllLinkerAliases). Pull-gated: fix when a

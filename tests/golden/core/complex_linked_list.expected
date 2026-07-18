@@ -19,8 +19,8 @@ fn value(l: IntList) -> Int {
   IntList::Nil -> {
       return 0;
   }
-  IntList::Cons { head: Int } -> {
-      return head;
+  IntList::Cons { head.b0: Int } -> {
+      return head.b0;
   }
 };
 }

@@ -16,11 +16,11 @@ enum Shape {
 
 fn area(s: Shape) -> Int {
   match s {
-  Shape::Circle { radius: Int } -> {
-      return (radius * radius);
+  Shape::Circle { radius.b0: Int } -> {
+      return (radius.b0 * radius.b0);
   }
-  Shape::Rect { w: Int, h: Int } -> {
-      return (w * h);
+  Shape::Rect { w.b1: Int, h.b2: Int } -> {
+      return (w.b1 * h.b2);
   }
 };
 }

@@ -1,0 +1,166 @@
+// httpget — WORKLOAD 7 (P7: the Network boundary at workload scale).
+// Usage: httpget <host> <port> <path>
+// HTTP/1.0 GET; on a 200 response the body bytes go to stdout verbatim
+// (binary-safe), so the gate can byte-diff against the served file and
+// against curl. First compiled consumer of TcpStream's write_all/read_all
+// loops (the coverage fixture only proved bind/connect setup). 13t exit
+// codes: 0 = 200 with body printed, 1 = connect/protocol/non-200 error,
+// 2 = usage.
+mod httpget {
+    import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    import std.parse.{parse_uint};
+    import std.net.{TcpStream, NetError};
+    import std.io.{eprintln};
+
+    fn fail(msg: String) with(Console, Alloc) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    // find "\r\n\r\n"; FRICTION: Bytes::index_of is single-byte, so the
+    // multi-byte needle is a manual resume loop (2nd ask for a
+    // sequence-find after workload 5's single-byte pull).
+    fn header_end(resp: &Bytes) -> Option<u64> {
+        let mut from: u64 = 0;
+        while true {
+            match resp.index_of(13, from) {
+                Option::None => { return Option::<u64>::None; },
+                Option::Some { value } => {
+                    let at: u64 = value;
+                    if at + 3 >= resp.len() { return Option::<u64>::None; }
+                    if resp.get_unchecked(at + 1) == 10
+                        && resp.get_unchecked(at + 2) == 13
+                        && resp.get_unchecked(at + 3) == 10 {
+                        return Option::<u64>::Some { value: at + 4 };
+                    }
+                    from = at + 1;
+                },
+            }
+        }
+        return Option::<u64>::None;
+    }
+
+    // status code from "HTTP/1.x NNN ..." — bytes 9..12
+    fn status_code(resp: &Bytes) -> u64 {
+        if resp.len() < 12 { return 0; }
+        let h: u64 = resp.get_unchecked(9) as u64;
+        let t: u64 = resp.get_unchecked(10) as u64;
+        let o: u64 = resp.get_unchecked(11) as u64;
+        if h < 48 || h > 57 || t < 48 || t > 57 || o < 48 || o > 57 { return 0; }
+        return (h - 48) * 100 + (t - 48) * 10 + (o - 48);
+    }
+
+    trusted fn fetch(host: &String, port: u16, path: &String) with(Network, Alloc, Console) -> u8 {
+        let mut req: String = "GET ";
+        req.append(path);
+        let mid: String = " HTTP/1.0\r\nHost: ";
+        req.append(&mid);
+        mid.drop();
+        req.append(host);
+        let tail: String = "\r\nConnection: close\r\n\r\n";
+        req.append(&tail);
+        tail.drop();
+
+        match TcpStream::connect(host, port) {
+            Result::Err { error } => {
+                discard(error);
+                req.drop();
+                let m: String = "httpget: connect failed";
+                return fail(m);
+            },
+            Result::Ok { value } => {
+                let raw: Bytes = Bytes::from_string(&req);
+                req.drop();
+                let sent: bool = value.write_all(raw.ptr as *const u8, raw.len());
+                raw.drop();
+                if !sent {
+                    value.close();
+                    let m: String = "httpget: send failed";
+                    return fail(m);
+                }
+                let mut resp: Bytes = Bytes::new();
+                discard(value.read_all(&mut resp));
+                value.close();
+                let code: u64 = status_code(&resp);
+                if code != 200 {
+                    resp.drop();
+                    let m: String = "httpget: non-200 response";
+                    return fail(m);
+                }
+                match header_end(&resp) {
+                    Option::None => {
+                        resp.drop();
+                        let m: String = "httpget: malformed response (no header terminator)";
+                        return fail(m);
+                    },
+                    Option::Some { value } => {
+                        let mut i: u64 = value;
+                        let total: u64 = resp.len();
+                        while i < total {
+                            print_char(resp.get_unchecked(i) as Int);
+                            i = i + 1;
+                        }
+                        resp.drop();
+                        return 0;
+                    },
+                }
+            },
+        }
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        match cli.parse(3, 3) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: httpget <host> <port> <path>";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                // pop order is reverse: path, port, host. FRICTION: no
+                // pattern rename ({ value: x }), so each pop is a match
+                // that immediately rebinds `value` into a named local.
+                let path: String = match ps.pop() {
+                    Option::None => { ps.drop(); return 2; },
+                    Option::Some { value } => { value },
+                };
+                let port_s: String = match ps.pop() {
+                    Option::None => { ps.drop(); path.drop(); return 2; },
+                    Option::Some { value } => { value },
+                };
+                let host: String = match ps.pop() {
+                    Option::None => { ps.drop(); path.drop(); port_s.drop(); return 2; },
+                    Option::Some { value } => { value },
+                };
+                ps.drop();
+                let port_n: Option<u64> = parse_uint(&port_s);
+                port_s.drop();
+                match port_n {
+                    Option::None => {
+                        path.drop(); host.drop();
+                        let u: String = "usage: httpget <host> <port> <path>";
+                        eprintln(&u);
+                        u.drop();
+                        return 2;
+                    },
+                    Option::Some { value } => {
+                        if value == 0 || value > 65535 {
+                            path.drop(); host.drop();
+                            return 2;
+                        }
+                        let rc: u8 = fetch(&host, value as u16, &path);
+                        path.drop(); host.drop();
+                        return rc;
+                    },
+                }
+            },
+        }
+    }
+}

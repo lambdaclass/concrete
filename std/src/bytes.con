@@ -130,6 +130,14 @@ mod bytes {
         /// Pulled at third ask (elf_header NUL scan, tar_list NUL-padded
         /// fields, envcfg newline/`=` search) — every byte-format workload
         /// re-rolled this loop.
+        // Model-refined (PURE_CORE_PROOF_ARC.md slice 3): the scan STEP's
+        // three-way decision is kernel-checked as
+        // `Examples.PureCore.Proofs.bytes_index_of_step_correct` (against
+        // `Concrete.Proof.bytesIndexOfStepExpr`), with the bound-invariant
+        // step `index_of_scan_step_preserves_bounds` and Hit-geometry glue
+        // `index_of_hit_in_range`. Whole-loop induction NOT claimed
+        // (recorded scope limit); trusted raw-pointer body stays outside
+        // registry links, same rule as `view`.
         pub fn index_of(&self, byte: u8, from: u64) -> Option<u64> {
             let mut i: u64 = from;
             while i < self.len {
@@ -145,6 +153,11 @@ mod bytes {
         /// inverted bounds -> None (domain outcome). Unlike `view` this is
         /// an independent buffer, so it composes with the validated
         /// `to_string` crossing for byte-region -> text extraction.
+        // Model-refined (PURE_CORE_PROOF_ARC.md slice 3): guard + output
+        // geometry kernel-checked as
+        // `Examples.PureCore.Proofs.bytes_slice_guard_correct` (against
+        // `Concrete.Proof.bytesSliceExpr`); every copy-step load bounded by
+        // `slice_copy_step_in_bounds`. Copy CONTENT not modeled (recorded).
         pub fn slice(&self, start: u64, end: u64) with(Alloc) -> Option<Bytes> {
             if start > end || end > self.len {
                 return Option::<Bytes>::None;

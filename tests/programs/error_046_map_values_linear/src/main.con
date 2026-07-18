@@ -1,0 +1,21 @@
+// Bug 046 NEGATIVE: values() over a linear (non-Copy) payload must be
+// rejected (E0241) — pre-fix it compiled and double-freed at runtime
+// (two owners of one String allocation; malloc abort rc=133).
+// NOTE: this project is expected to FAIL to build; the coverage gate's
+// project auto-discovery skips error_* projects and the std-compiled
+// coverage gate has a dedicated leg asserting the rejection.
+mod main {
+    import std.map.{HashMap};
+    import std.hash.{hash_u64, eq_u64};
+    import std.vec.{Vec};
+    fn main() with(Std) -> u8 {
+        let mut m: HashMap<u64, String> = HashMap::<u64, String>::new(hash_u64, eq_u64);
+        let s: String = "linear-heap-value";
+        let o: Option<String> = m.insert(1, s);
+        match o { Option::Some { value } => { value.drop(); }, Option::None => { }, }
+        let vs: Vec<String> = m.values();
+        vs.drop();
+        m.drop();
+        return 0;
+    }
+}

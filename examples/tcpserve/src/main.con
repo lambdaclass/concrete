@@ -1,0 +1,195 @@
+// tcpserve — WORKLOAD 8 (P7: server side of the socket).
+// Usage: tcpserve <port>
+// Binds 127.0.0.1:<port> (IPv4 only — std.net sockaddr is AF_INET; IPv6
+// is explicitly OUT OF SCOPE, not accidentally tested), prints "READY"
+// only after listen succeeds, accepts EXACTLY ONE connection, reads the
+// request with a tiny buffer (forcing partial reads) until the "\r\n\r\n"
+// terminator, responds with a fixed 256-byte binary body (every byte
+// value once) behind minimal HTTP headers, closes both sockets, prints
+// "DONE", exits 0. First compiled consumer of TcpListener::accept.
+// 13t exit codes: 0 = served one request; 1 = bind/accept/protocol
+// failure (each with its own stderr line, no DONE); 2 = usage.
+mod tcpserve {
+    import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    import std.parse.{parse_uint};
+    import std.net.{TcpListener, TcpStream, NetError};
+    import std.io.{println, eprintln};
+
+    fn fail(msg: String) with(Console, Alloc) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    // Find "\r\n\r\n" in the accumulated buffer. FRICTION (recorded
+    // precisely): this is a BUFFERED SUBSEQUENCE SEARCH over Bytes — the
+    // same reusable shape as httpget's header_end (2nd independent ask
+    // for Bytes::find). It is NOT a streaming state machine (that would
+    // be workload-specific and would not count toward the pull), and it
+    // is NOT tar_list's fixed-offset equality check (separate `eq_at`
+    // candidate, one ask).
+    fn find_terminator(resp: &Bytes, start: u64) -> Option<u64> {
+        let mut from: u64 = start;
+        while true {
+            match resp.index_of(13, from) {
+                Option::None => { return Option::<u64>::None; },
+                Option::Some { value } => {
+                    let at: u64 = value;
+                    if at + 3 >= resp.len() { return Option::<u64>::None; }
+                    if resp.get_unchecked(at + 1) == 10
+                        && resp.get_unchecked(at + 2) == 13
+                        && resp.get_unchecked(at + 3) == 10 {
+                        return Option::<u64>::Some { value: at + 4 };
+                    }
+                    from = at + 1;
+                },
+            }
+        }
+        return Option::<u64>::None;
+    }
+
+    // Read with a TINY buffer until the terminator arrives (partial reads
+    // by construction: an 8-byte buffer cannot hold a curl request).
+    // Returns true when the terminator was seen; false = peer EOF first.
+    trusted fn read_request(stream: &TcpStream) with(Network, Alloc) -> bool {
+        let mut req: Bytes = Bytes::new();
+        let tmp: [u8; 8] = [0; 8];
+        // Rescan bound (reviewer note): resume the terminator scan from
+        // old_len - (needle_len - 1), never rescanning settled bytes —
+        // linear total work without prematurely introducing Bytes::find.
+        let mut scan_from: u64 = 0;
+        while true {
+            match find_terminator(&req, scan_from) {
+                Option::Some { value } => {
+                    discard(value);
+                    req.drop();
+                    return true;
+                },
+                Option::None => { },
+            }
+            let len: u64 = req.len();
+            if len >= 3 { scan_from = len - 3; }
+            let n: i64 = stream.read(&tmp as *mut u8, 8);
+            if n <= 0 {
+                req.drop();
+                return false;               // orderly peer close / error: EOF before terminator
+            }
+            let mut i: i64 = 0;
+            while i < n {
+                let p: *const u8 = (&tmp as *const u8) + (i as u64);
+                req.push(*(p as *mut u8));
+                i = i + 1;
+            }
+        }
+        req.drop();
+        return false;
+    }
+
+    // Response: minimal HTTP/1.0 headers + a 256-byte binary body holding
+    // every byte value exactly once (zero bytes and invalid UTF-8
+    // included — the body is bytes, never text).
+    trusted fn send_response(stream: &TcpStream) with(Network, Alloc) -> bool {
+        let mut out: Bytes = Bytes::new();
+        let hdr: String = "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 256\r\nConnection: close\r\n\r\n";
+        let hb: Bytes = Bytes::from_string(&hdr);
+        hdr.drop();
+        out.append_bytes(&hb);
+        hb.drop();
+        let mut b: u64 = 0;
+        while b < 256 {
+            out.push(b as u8);
+            b = b + 1;
+        }
+        let sent: bool = stream.write_all(out.ptr as *const u8, out.len());
+        out.drop();
+        return sent;
+    }
+
+    trusted fn serve(port: u16) with(Network, Alloc, Console) -> u8 {
+        let addr: String = "127.0.0.1";
+        match TcpListener::bind(&addr, port) {
+            Result::Err { error } => {
+                discard(error);
+                addr.drop();
+                let m: String = "tcpserve: bind failed";
+                return fail(m);
+            },
+            Result::Ok { value } => {
+                addr.drop();
+                let listener: TcpListener = value;
+                // READY strictly AFTER listen succeeded (bind() runs
+                // socket+bind+listen; Ok here means listening).
+                let r: String = "READY";
+                println(&r);
+                r.drop();
+                match listener.accept() {
+                    Result::Err { error } => {
+                        discard(error);
+                        listener.close();
+                        let m: String = "tcpserve: accept failed";
+                        return fail(m);
+                    },
+                    Result::Ok { value } => {
+                        let stream: TcpStream = value;
+                        if !read_request(&stream) {
+                            stream.close();
+                            listener.close();
+                            let m: String = "tcpserve: peer closed before request terminator";
+                            return fail(m);
+                        }
+                        if !send_response(&stream) {
+                            stream.close();
+                            listener.close();
+                            let m: String = "tcpserve: send failed";
+                            return fail(m);
+                        }
+                        stream.close();
+                        listener.close();
+                        let d: String = "DONE";
+                        println(&d);
+                        d.drop();
+                        return 0;
+                    },
+                }
+            },
+        }
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        match cli.parse(1, 1) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: tcpserve <port>";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let port_s: String = match ps.pop() {
+                    Option::None => { ps.drop(); return 2; },
+                    Option::Some { value } => { value },
+                };
+                ps.drop();
+                let port_n: Option<u64> = parse_uint(&port_s);
+                port_s.drop();
+                match port_n {
+                    Option::None => {
+                        let u: String = "usage: tcpserve <port>";
+                        eprintln(&u);
+                        u.drop();
+                        return 2;
+                    },
+                    Option::Some { value } => {
+                        if value == 0 || value > 65535 { return 2; }
+                        return serve(value as u16);
+                    },
+                }
+            },
+        }
+    }
+}

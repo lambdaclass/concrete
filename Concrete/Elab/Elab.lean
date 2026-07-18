@@ -39,6 +39,17 @@ structure ElabEnv where
   -- nothing — we report it as a ghost-in-runtime leak rather than a generic
   -- undeclared variable.
   ghostVars : List String := []
+  -- Bug 045: match payload binders are ALPHA-RENAMED to unique Core names
+  -- (`value` → `value.b7`). Surface identifiers cannot contain '.', so the
+  -- fresh names never collide with user names. Without this, every stage
+  -- below Elab (Interp, Lower, CoreCheck) keyed bindings by the bare
+  -- surface name in a function-flat table: a nested same-named binder
+  -- silently CLOBBERED the outer one on both backends (rc=4 shadow probe),
+  -- invisible to differential testing because interp and compiled agreed.
+  -- `renames` maps surface name → current Core name (prepend = shadow);
+  -- both this list and `vars` are snapshot-restored around each arm.
+  renames : List (String × String) := []
+  freshBinder : Nat := 0
 
 abbrev ElabM := ExceptT Diagnostics (StateM ElabEnv)
 
@@ -246,6 +257,34 @@ private def addVar (name : String) (ty : Ty) : ElabM Unit := do
   let env ← getEnv
   setEnv { env with vars := (name, ty) :: env.vars }
 
+/-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core
+    name. Registers the type under the surface name (ident type lookup is
+    surface-keyed) and pushes surface→fresh into `renames` (prepend =
+    innermost shadows). Returns the Core name to put in the arm's binding
+    list. `_` stays `_`. -/
+private def bindArmVar (binding : String) (ty : Ty) : ElabM String := do
+  if binding == "_" then return binding
+  let env ← getEnv
+  let fresh := s!"{binding}.b{env.freshBinder}"
+  setEnv { env with
+    vars := (binding, ty) :: env.vars
+    renames := (binding, fresh) :: env.renames
+    freshBinder := env.freshBinder + 1 }
+  return fresh
+
+/-- Current Core name for a surface identifier (identity unless an
+    enclosing match arm renamed it). -/
+private def coreNameOf (name : String) : ElabM String := do
+  let env ← getEnv
+  return (env.renames.lookup name).getD name
+
+/-- Scope restore that keeps `freshBinder` MONOTONE: sibling and
+    sequential arms must never mint the same Core name (Lower's slot table
+    is function-flat, which is the whole reason bug 045 existed). -/
+private def restoreScope (saved : ElabEnv) : ElabM Unit := do
+  let cur ← getEnv
+  setEnv { saved with freshBinder := cur.freshBinder }
+
 private def addGhostVar (name : String) : ElabM Unit := do
   let env ← getEnv
   setEnv { env with ghostVars := name :: env.ghostVars }
@@ -320,7 +359,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     | some ty => return .ident name ty
     | none =>
     match env.vars.lookup name with
-    | some ty => return .ident name ty
+    | some ty => return .ident (← coreNameOf name) ty
     | none =>
       match ← lookupFnSig name with
       | some sig =>
@@ -523,7 +562,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
       | some ed =>
         let envBefore ← getEnv
         for arm in arms do
-          setEnv envBefore
+          restoreScope envBefore
           match arm with
           | .mk _ _armEnum armVariant bindings guard body =>
             let ev := (ed.variants.find? fun v => v.name == armVariant).getD
@@ -534,8 +573,9 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
               let bty := substTy typeMapping sf.ty
               -- Keep `_` in the binding list (positional field mapping) but do not
               -- bind it in scope — it is a wildcard, not a readable variable.
-              typedBindings := typedBindings ++ [(binding, bty)]
-              if binding != "_" then addVar binding bty
+              -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
+              let coreBinding ← bindArmVar binding bty
+              typedBindings := typedBindings ++ [(coreBinding, bty)]
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.enumArm enumName armVariant typedBindings cGuard cBody]
@@ -545,21 +585,21 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm _ binding guard body =>
-            if binding != "_" then addVar binding innerTyR
+            let coreBinding ← bindArmVar binding innerTyR
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
-            cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
           | .rangeArm _ lo hi incl guard body =>
             let cLo ← elabExpr lo (some innerTyR)
             let cHi ← elabExpr hi (some innerTyR)
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
-        setEnv envBefore
+        restoreScope envBefore
       | none =>
         let envBefore ← getEnv
         for arm in arms do
-          setEnv envBefore
+          restoreScope envBefore
           match arm with
           | .litArm _ val guard body =>
             let cVal ← elabExpr val
@@ -567,10 +607,10 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm _ binding guard body =>
-            if binding != "_" then addVar binding innerTyR
+            let coreBinding ← bindArmVar binding innerTyR
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
-            cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
           | .mk _ en v _ guard body =>
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
@@ -581,11 +621,11 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body (valueHint := hint)
             cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
-        setEnv envBefore
+        restoreScope envBefore
     else
       let envBefore ← getEnv
       for arm in arms do
-        setEnv envBefore
+        restoreScope envBefore
         match arm with
         | .litArm _ val guard body =>
           let cVal ← elabExpr val (some innerTyR)
@@ -593,10 +633,10 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.litArm cVal cGuard cBody]
         | .varArm _ binding guard body =>
-          if binding != "_" then addVar binding innerTyR
+          let coreBinding ← bindArmVar binding innerTyR
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body (valueHint := hint)
-          cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+          cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
         | .mk _ en v _ guard body =>
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body (valueHint := hint)
@@ -607,7 +647,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body (valueHint := hint)
           cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
-      setEnv envBefore
+      restoreScope envBefore
     -- Result type: prefer the caller's hint; otherwise infer it from the arm
     -- bodies' trailing value expressions. A nested match used as a statement
     -- expression (e.g. another match's arm body) is elaborated with no hint, and
@@ -1082,7 +1122,7 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
     match ← lookupVar name with
     | some varTy =>
       let cVal ← elabExpr value (some varTy)
-      return [.assign name cVal]
+      return [.assign (← coreNameOf name) cVal]
     | none => throwElab (.assignToUndeclaredVariable name) (some stmt.getSpan)
 
   | .return_ _ (some value) =>

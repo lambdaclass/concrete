@@ -124,6 +124,8 @@ examples/hexdump/hexdump
 examples/tar_list/tar_list
 examples/envcfg/envcfg
 examples/wordfreq/wordfreq
+examples/httpget/httpget
+examples/tcpserve/tcpserve
 examples/smt/policy_allow/src/main
 examples/cli_tool/cli_tool
 tests/programs/adversarial_policy_deny_pass/adversarial_policy_deny_pass

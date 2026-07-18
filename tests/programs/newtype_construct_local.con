@@ -1,0 +1,11 @@
+// 0b construction rights POSITIVE: a module constructs its OWN newtype
+// directly (Meters(n)) and unwraps via .0; only CROSS-module construction
+// is private (slice 1). Exit 5.
+mod m {
+    newtype Meters = u64;
+    fn make(n: u64) -> Meters { return Meters(n); }
+    fn main() -> Int {
+        let d: Meters = make(5);
+        return d.0 as Int;
+    }
+}

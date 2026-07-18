@@ -87,6 +87,7 @@ examples/ghost_state/catches/ghost_runtime_use.con expected-error
 examples/ghost_state/src/main.con compile
 examples/grep/src/main.con project-build
 examples/hexdump/src/main.con project-build
+examples/httpget/src/main.con project-build
 examples/hmac_sha256/catches/01_alloc_in_compression_core.con expected-error
 examples/hmac_sha256/catches/02_ambient_key_read.con expected-error
 examples/hmac_sha256/src/main.con compile
@@ -206,6 +207,7 @@ examples/snippets/while_loop.con compile
 examples/source_maps/capability_at_line.con expected-error
 examples/source_maps/obligation_located.con compile
 examples/tar_list/src/main.con project-build
+examples/tcpserve/src/main.con project-build
 examples/wordfreq/src/main.con project-build
 examples/thesis_demo/src/main.con compile
 examples/thesis_demo/src/main_drifted.con compile
