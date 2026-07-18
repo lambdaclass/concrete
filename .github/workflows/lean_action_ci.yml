@@ -36,9 +36,6 @@ jobs:
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
 
-      - name: Constructor-coverage gate (every walker handles every constructor)
-        run: bash scripts/tests/check_constructor_coverage.sh
-
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 
@@ -445,8 +442,11 @@ jobs:
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Module/import/visibility gate (Phase 5 #1)
-        run: bash scripts/tests/check_module_visibility.sh
+      - name: "Fast fail-closed surface gates (R-0022 — the single local/CI checklist; prints the exact failing constituent)"
+        run: bash scripts/tests/run_fast_surface_gates.sh
+
+      - name: "Fast-surface gate-the-gate (R-0022 — removing a representative inventory row turns the aggregate RED)"
+        run: bash scripts/tests/run_fast_surface_gates.sh --mutate
 
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
         run: bash scripts/tests/check_project_model.sh
@@ -514,9 +514,6 @@ jobs:
       - name: "Compiler complexity guard (Phase 6C #2 — no super-linear pass on scaling corpus)"
         run: bash scripts/tests/check_compiler_complexity.sh
 
-      - name: "O(n^2) append ratchet (no new `xs ++ [x]` in hot pipeline files)"
-        run: bash scripts/tests/check_no_quadratic_append.sh
-
       - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
         run: bash scripts/tests/check_trace_pipeline.sh
 
@@ -531,9 +528,6 @@ jobs:
 
       - name: "Doc snippets compile (13r — con/concrete fences compile, reject as declared, or marked pseudocode)"
         run: bash scripts/tests/check_doc_snippets.sh
-
-      - name: "Stdlib five-fact manifest (P7 2a — complete, no blanks, signature-agreeing; 2b method-canonical)"
-        run: bash scripts/tests/check_stdlib_manifest.sh
 
       - name: "IO Writer spine (P7 14a — fn-ptr handle; acquisition authority; no-Alloc fixed sink; one shape)"
         run: bash scripts/tests/check_io_writer.sh
@@ -576,9 +570,6 @@ jobs:
 
       - name: "std compiled coverage: one compiled behavioral fixture per std module (fail-closed inventory)"
         run: bash scripts/tests/check_std_compiled_coverage.sh
-
-      - name: "0b construction rights (newtype construct + struct field privacy across modules)"
-        run: bash scripts/tests/check_construction_rights.sh
 
       - name: "Workload 6: wordfreq differential vs C-locale sort|uniq -c + exit codes"
         run: bash scripts/tests/check_wordfreq_differential.sh
@@ -634,9 +625,6 @@ jobs:
       - name: Pipeline-contracts gate (Phase 6.5 #3 — each boundary violation caught at the first responsible pass, no leak)
         run: bash scripts/tests/check_pipeline_contracts.sh
 
-      - name: Capability-facts gate (Phase 6.5 #5 — checker verdict and report rendering read one capability-fact source)
-        run: bash scripts/tests/check_capability_facts.sh
-
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
 
@@ -645,12 +633,6 @@ jobs:
 
       - name: Linear-conservation gate (every value-flow site moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/match; no duplication)
         run: bash scripts/tests/check_linear_conservation.sh
-
-      - name: Value-flow spec coverage gate (ROADMAP 13c — every AST constructor must have a value-flow row in docs/VALUE_FLOW_SPEC.md)
-        run: bash scripts/tests/check_value_flow_spec.sh
-
-      - name: Diagnostic-code ledger completeness (ROADMAP 13m — every emittable E-code has a --report diagnostic-codes entry)
-        run: bash scripts/tests/check_diagnostic_codes_complete.sh
 
       - name: Linearity fuzz smoke (deterministic seed — consume-once compiles, leak/dup/shadow/param-sink reject)
         run: python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706
@@ -715,9 +697,6 @@ jobs:
       - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
         run: bash scripts/tests/check_compiler_ledger.sh
 
-      - name: Docs-drift gate (Phase 4 #44 — present-tense docs reference only real artifacts)
-        run: bash scripts/tests/check_docs_drift.sh
-
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
@@ -768,12 +747,6 @@ jobs:
 
       - name: CLI-contract gate (Phase 4 #15 — golden command behavior matrix)
         run: bash scripts/tests/check_cli_contract.sh
-
-      - name: API-boundary gate (Phase 4 #16 — consumers use the boundary, not internals)
-        run: bash scripts/tests/check_compiler_api_boundary.sh
-
-      - name: Backend-contract gate (Phase 4 #17a — codegen guarantees, no drift)
-        run: bash scripts/tests/check_backend_contracts.sh
 
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
