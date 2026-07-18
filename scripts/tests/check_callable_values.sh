@@ -94,13 +94,13 @@ fi
 echo "=== capability-polymorphic METHODS infer cap + type vars without turbofish ==="
 # Prerequisite for scoped collection callbacks (with_value): a `cap C` method
 # must infer C (and its own type params) from the callback argument.
-run method_cap_infer 'mod m { pub struct Copy H { v: i64 }
+run method_cap_infer 'mod m { pub struct Copy H { pub v: i64 }
   impl H { pub fn run<cap C>(&self, f: fn(i64) with(C) -> i64) with(C) -> i64 { return f(self.v); } } }
 import m.{H};
 fn pure_inc(x: i64) -> i64 { return x + 1; }
 fn main() -> i64 { let h: H = H { v: 41 }; return h.run(pure_inc); }' 42
 
-run method_ret_infer 'mod m { pub struct Copy H { v: i64 }
+run method_ret_infer 'mod m { pub struct Copy H { pub v: i64 }
   impl H { pub fn run<R>(&self, f: fn(i64) -> R) -> R { return f(self.v); } } }
 import m.{H};
 fn to_i(x: i64) -> i64 { return x + 2; }
@@ -109,7 +109,7 @@ fn main() -> i64 { let h: H = H { v: 40 }; return h.run(to_i); }' 42
 # A cap-polymorphic method must require the callback's caps at the call site:
 # a caller lacking them is rejected with the capability error (E0240), NOT a
 # spurious type mismatch.
-printf '%s' 'mod m { pub struct Copy H { v: i64 }
+printf '%s' 'mod m { pub struct Copy H { pub v: i64 }
   impl H { pub fn run<cap C>(&self, f: fn(i64) with(C) -> i64) with(C) -> i64 { return f(self.v); } } }
 import m.{H};
 fn nf(x: i64) with(File) -> i64 { return x; }
@@ -136,7 +136,7 @@ else
   ok "fn(&T) -> &T function-pointer type is rejected"
 fi
 # (2) the with_value backdoor: a callback that returns its borrowed &V (R=&V).
-printf '%s' 'mod m { pub struct Copy H { v: i64 }
+printf '%s' 'mod m { pub struct Copy H { pub v: i64 }
   trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
 import m.{H};
 fn ret_ref(x: &i64) -> &i64 { return x; }
@@ -156,7 +156,7 @@ else
   ok "generic R=&T in return position is rejected (no Option<&T> backdoor)"
 fi
 # (4) a value-returning callback (R = a value) still works — the sound case.
-run wv_value_ok 'mod m { pub struct Copy H { v: i64 }
+run wv_value_ok 'mod m { pub struct Copy H { pub v: i64 }
   trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
 import m.{H};
 fn rd(x: &i64) -> i64 { return *x; }
@@ -176,12 +176,12 @@ fn main() -> Int { let mut x: X = X { v: 0 }; two(&mut x, &mut x); let X { v } =
 reject_e0293 neg_shared_plus_mut_borrow 'struct X { v: i32 }
 fn mix(a: &X, b: &mut X) -> i32 { b.v = 2; return a.v; }
 fn main() -> Int { let mut x: X = X { v: 0 }; let r: i32 = mix(&x, &mut x); let X { v } = x; return (r + v) as Int; }'
-reject_e0293 neg_receiver_ctx_alias 'mod m { pub struct C { n: i64 }
+reject_e0293 neg_receiver_ctx_alias 'mod m { pub struct C { pub n: i64 }
   trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
 fn main() -> Int { let mut c: C = C { n: 1 }; c.scoped(&mut c, cb); let C { n } = c; return n as Int; }'
-reject_e0293 neg_alias_through_binding 'mod m { pub struct C { n: i64 }
+reject_e0293 neg_alias_through_binding 'mod m { pub struct C { pub n: i64 }
   trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }

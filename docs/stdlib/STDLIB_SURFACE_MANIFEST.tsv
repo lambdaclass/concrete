@@ -37,6 +37,8 @@ bytes	set	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, byt
 bytes	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, byte: u8)
 bytes	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
 bytes	cap	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
+bytes	raw_ptr	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> *mut u8
+bytes	set_len_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, n: u64)
 bytes	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool
 bytes	clear	no	mut	infallible	none	trusted-boundary	gated	(&mut self)
 bytes	eq	no	borrows	infallible	none	trusted-boundary	gated	(&self, other: &Bytes) -> bool
@@ -253,6 +255,7 @@ ordered_map	with_value_mut	no	mut	option	C	trusted-boundary	gated	<Ctx, R, cap C
 ordered_map	modify	no	mut	infallible	C	trusted-boundary	gated	<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool
 ordered_map	update	no	mut	infallible	none	trusted-boundary	gated	(&mut self, key: &K, f: fn(V) -> V) -> bool
 ordered_map	contains	no	borrows	infallible	none	trusted-boundary	gated	(&self, key: &K) -> bool
+ordered_map	keys_ptr	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> *mut K
 ordered_map	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
 ordered_map	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool
 ordered_map	fold	no	borrows	infallible	C	trusted-boundary	gated	<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A
@@ -355,6 +358,7 @@ string	new	no	constructs	infallible	none	trusted-boundary	gated	() -> String
 string	from_raw_unchecked	no	constructs	infallible	none	trusted-boundary	gated	(ptr: *mut u8, len: u64, cap: u64) -> String
 string	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
 string	cap	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
+string	raw_ptr	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> *mut u8
 string	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool
 string	get	no	borrows	option	none	trusted-boundary	gated	(&self, at: u64) -> Option<char>
 string	get_unchecked	no	borrows	infallible	none	trusted-boundary	gated	(&self, at: u64) -> char
@@ -415,6 +419,7 @@ vec	swap_remove	no	mut	option	none	trusted-boundary	gated	(&mut self, at: u64) -
 vec	get_mut	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64) -> *mut T
 vec	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T)
 vec	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
+vec	raw_ptr	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> *mut T
 vec	cap	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
 vec	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool
 vec	replace	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T) -> T

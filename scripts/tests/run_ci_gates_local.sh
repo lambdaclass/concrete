@@ -31,23 +31,51 @@ FILTER="${1:-}"
 # commands reference "$SEED", which would trip `set -u` here. Mirror CI.
 SEED="${SEED:-$(date -u +%Y%m%d)}"
 
-PASS=0; FAIL=0; FAILED=""
-while read -r cmd; do
-  # normalize ./ prefix after an explicit interpreter
-  cmd="${cmd/bash .\//bash }"
-  if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
-  if eval "$cmd" >/dev/null 2>&1; then
-    PASS=$((PASS+1))
-  else
-    FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"
-    echo "  FAIL $cmd"
-  fi
-done < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$WORKFLOW" \
+# Gates are independent processes (each uses its own mktemp -d), so they
+# parallelize cleanly. Set JOBS>1 to run a bounded concurrent pool — on a
+# multicore box this cuts a full pass from ~20min to a few. Default stays
+# sequential (JOBS=1) for deterministic streaming output.
+JOBS="${JOBS:-1}"
+export SEED
+
+# Extract the gate command list once (same filter as before).
+mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$WORKFLOW" \
          | grep -v 'check_gate_mutation_coverage\.sh' \
          | sed 's/[[:space:]]*$//' \
          | sort -u)
 
+PASS=0; FAIL=0; FAILED=""
+
+if [ "$JOBS" -le 1 ]; then
+  for cmd in "${CMDS[@]}"; do
+    cmd="${cmd/bash .\//bash }"
+    if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
+    if eval "$cmd" >/dev/null 2>&1; then PASS=$((PASS+1))
+    else FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"; echo "  FAIL $cmd"; fi
+  done
+else
+  # Parallel pool: each gate writes "OK"/"FAIL <cmd>" to its own result file.
+  RES=$(mktemp -d); trap 'rm -rf "$RES"' EXIT
+  idx=0
+  for cmd in "${CMDS[@]}"; do
+    cmd="${cmd/bash .\//bash }"
+    if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
+    # throttle to JOBS concurrent
+    while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
+    idx=$((idx+1))
+    ( if eval "$cmd" >/dev/null 2>&1; then echo "OK" > "$RES/$idx"
+      else echo "FAIL $cmd" > "$RES/$idx"; fi ) &
+  done
+  wait
+  for f in "$RES"/*; do
+    [ -f "$f" ] || continue
+    if grep -q '^OK$' "$f"; then PASS=$((PASS+1))
+    else FAIL=$((FAIL+1)); line=$(cat "$f"); FAILED="$FAILED\n  $line"; echo "  $line"; fi
+  done
+fi
+
 echo
-echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL"
+echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 [ -n "$FAILED" ] && echo -e "Failures:$FAILED"
+[ "$FAIL" -eq 0 ]
 [ "$FAIL" -eq 0 ]
