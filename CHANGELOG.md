@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Completed Task R-0022
+
+_Fast fail-closed surface-gate unification. Shipped 2026-07-18 (tip b31c103b): one executable checklist (`scripts/tests/run_fast_surface_gates.sh` / `make test-fast-surface-gates`) run identically by the pre-push routine and CI's Language-surface job; prints the exact failing constituent; mutation self-test (`--mutate`) proves the aggregate goes red when a representative inventory row is removed. Original objective below._
+
+
+**Objective:** Unify every fast fail-closed surface gate locally and in CI Add one documented target, `make test-fast-surface-gates`, used unchanged by the pre-push routine and CI's Language-surface job. It owns diagnostic-code completeness, quadratic-append baselines, public API/interface inventory, capability/trust/ownership manifest truth, construction and consumer coverage, generated-file drift, import firewalls, and visibility/construction fixtures.
+
+
+Adding an E-code, public item, IR constructor, manifest fact, generated file, or
+counted append pattern must fail locally exactly as it fails remotely. The
+target prints the exact constituent command on failure; CI may not maintain a
+hidden second checklist. Gate the gate by removing one representative row from
+each inventory family and proving the aggregate target fails for the intended
+reason.
+
 ### Roadmap stable task identity (2026-07-18)
 
 The active roadmap now has one file-ordered sequence with immutable `R-NNNN`

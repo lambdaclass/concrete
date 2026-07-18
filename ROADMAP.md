@@ -835,18 +835,6 @@ reducer, plus a four-part proof-freshness class. The surface-gate task comes
 first because it protects those fixes; the defects immediately follow it in the
 one global file-order sequence.
 
-### Task R-0022
-
-**Objective:** Unify every fast fail-closed surface gate locally and in CI Add one documented target, `make test-fast-surface-gates`, used unchanged by the pre-push routine and CI's Language-surface job. It owns diagnostic-code completeness, quadratic-append baselines, public API/interface inventory, capability/trust/ownership manifest truth, construction and consumer coverage, generated-file drift, import firewalls, and visibility/construction fixtures.
-
-
-Adding an E-code, public item, IR constructor, manifest fact, generated file, or
-counted append pattern must fail locally exactly as it fails remotely. The
-target prints the exact constituent command on failure; CI may not maintain a
-hidden second checklist. Gate the gate by removing one representative row from
-each inventory family and proving the aggregate target fails for the intended
-reason.
-
 ### Task R-0001
 
 **Objective:** Fix bug 051 — user generic-enum memory corruption User-defined generic enums retain one name/declaration while Lower uses instantiation-specific payload offsets, so mixed layouts can write beyond the emitted aggregate.
