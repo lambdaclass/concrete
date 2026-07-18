@@ -356,10 +356,13 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       return Except.error 1
     | .ok resolvedProg =>
     let depNames := depModules.map (·.name)
-    let projectResolved : List ResolvedModule :=
-      resolvedProg.modules.filter fun rm => !depNames.contains rm.module.name
-    let projectResolvedProg : ResolvedProgram := { modules := projectResolved }
-    match Pipeline.check projectResolvedProg summary with
+    -- Check EVERYTHING, dependencies included. The dep filter here was the
+    -- H12-era exemption (std couldn't pass full front-end check yet); H12
+    -- closed (std at 0 violations), and the filter had become a blind spot:
+    -- a wrong-typed std edit (owned mode passed where &String expected,
+    -- bug-043 fallout) compiled fine in project mode while
+    -- `concrete std/src/lib.con --test` rejected it — defect-queue item 3.
+    match Pipeline.check resolvedProg summary with
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := allSrcMap))
       return Except.error 1

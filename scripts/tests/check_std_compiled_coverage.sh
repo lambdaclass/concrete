@@ -755,6 +755,39 @@ mod main {
 }
 EOF
 
+echo "=== dependencies are CHECKED in project mode (defect-queue item 3) ==="
+# The H12-era filter excluded dep modules from front-end Check; a
+# wrong-typed std edit compiled fine in project mode. Pin the closure: a
+# local dependency with a type error must FAIL the consumer's build.
+mkdir -p "$TMP/badlib/src" "$TMP/depcheck/src"
+printf '[package]\nname = "badlib"\nversion = "0.1.0"\n' > "$TMP/badlib/Concrete.toml"
+cat > "$TMP/badlib/src/lib.con" <<'EOF'
+mod badlib {
+    fn wants_ref(x: &String) -> u64 {
+        return x.len();
+    }
+    pub fn broken() with(Alloc) -> u64 {
+        let s: String = "x";
+        let n: u64 = wants_ref(s);   // owned where &String expected: E0220
+        s.drop();
+        return n;
+    }
+}
+EOF
+printf '[package]\nname = "depcheck"\nversion = "0.1.0"\n\n[dependencies]\nbadlib = { path = "%s" }\n' "$TMP/badlib" > "$TMP/depcheck/Concrete.toml"
+cat > "$TMP/depcheck/src/main.con" <<'EOF'
+mod main {
+    fn main() with(Std) -> u8 { return 0; }
+}
+EOF
+if ( cd "$TMP/depcheck" && "$C" build ) > "$TMP/depcheck.log" 2>&1; then
+  no "type-broken dependency compiled (dep modules skipped Check again?)"
+else
+  grep -q "E0220" "$TMP/depcheck.log" \
+    && ok "type-broken dependency fails the consumer build with E0220" \
+    || no "dep build failed but not with the expected E0220: $(grep -m1 error "$TMP/depcheck.log")"
+fi
+
 echo "=== fail-closed inventory (derived from std/src) ==="
 derived=$(ls std/src/*.con | xargs -n1 basename | sed 's/\.con$//' | sort)
 accounted=$(printf '%s %s' "$COVERED" "$EXEMPT" | tr ' ' '\n' | sed '/^$/d' | sort)

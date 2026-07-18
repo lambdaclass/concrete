@@ -356,13 +356,13 @@ batteries-included breadth. Completed foundation work lives in
         got the fix (validate in the trusted body, empty on invalid);
         apply the same shape to env — small, the bug-043 to_cstr work
         already put a trusted copy in the path.
-     3. H12 project-mode checking gap, concretely demonstrated 2026-07-18:
-        `concrete build` of a std-importing project did NOT catch an E0220
-        type error in `std/src/fs.con` (owned `mode` passed where &String
-        expected) that `concrete std/src/lib.con --test` DID catch — a
-        wrong-typed std edit compiled. Find why project mode skips those
-        bodies and close the gap (this is the std burn-down residual with
-        a fresh, minimal witness).
+     3. FIXED (2026-07-18): project mode now front-end checks DEPENDENCY
+        modules too — Project.lean filtered dep modules out of
+        Pipeline.check (the H12-era exemption, obsolete since std reached
+        0 violations), so a wrong-typed std edit compiled in project mode
+        while `lib.con --test` rejected it. Pinned by the
+        check_std_compiled_coverage.sh dep-check leg (type-broken local
+        dependency must fail the consumer's build with E0220).
      4. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
         module importing different same-named fns still share a flat
         alias list (collectAllLinkerAliases). Pull-gated: fix when a
