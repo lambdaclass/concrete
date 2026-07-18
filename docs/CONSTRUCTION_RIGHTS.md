@@ -25,9 +25,9 @@ cannot silently claim representation authority over another module's type.
 ## Model: private-by-default representation, explicit public exposure
 
 `pub` on a type exports the **type name**, not its representation. A
-module keeps construction/field authority over its own types unless it
-explicitly opts fields (or, later, whole newtypes) into the public
-contract.
+module keeps construction/field/variant authority over its own types unless it
+marks that exact surface `pub`. `pub` is the only visibility word: there is no
+second `private`, `sealed`, `opaque`, `transparent`, or friend-module tier.
 
 ## Visibility matrix
 
@@ -41,9 +41,9 @@ contract.
 | **Record update** `T { ..x, f: … }`         | ✓           | only if every named/required field is `pub` |
 | **Pattern / destructure** `let T { f } = x` | ✓           | only if every bound field is `pub` |
 | **Newtype construct** `N(v)`                | ✓           | ✗ (private; use the module's constructor fn) |
-| **Newtype unwrap to inner**                 | ✓           | ✗ (use an accessor fn) |
-| Enum: match variant NAME                    | ✓           | ✓ |
-| Enum: bind a variant PAYLOAD field          | ✓           | only if that payload field is `pub`/representation-public |
+| **Newtype unwrap to inner**                 | ✓           | target: ✗ (scheduled follow-on; use an accessor fn) |
+| Enum: construct/match a variant             | ✓           | only when the variant is `pub` (scheduled follow-on; currently names remain temporarily matchable) |
+| Enum: bind a variant payload                | ✓           | follows the variant's visibility as one unit in v1 |
 
 Rules that hold across the matrix:
 
@@ -66,35 +66,41 @@ pub fn try_new(v: u32) -> Option<NonZeroU32>   // the public constructor
 pub fn get(&self) -> u32                        // the public accessor
 ```
 
-`NonZeroU32(v)` and unwrapping to `u32` are private to `numeric.con`.
-External code goes through `try_new`/`get`. An intentionally transparent
-wrapper would need a future explicit `pub transparent newtype` — NOT the
-default (public newtypes are opaque in representation by default).
+`NonZeroU32(v)` construction is private to `numeric.con`; raw payload
+projection/unwrap privacy is the scheduled follow-on. Ordinary external code
+goes through `try_new`/`get`. If a wrapper is intentionally transparent, its
+defining module exposes explicit public construction/access operations;
+Concrete does not add a second `transparent` visibility word.
 
-## Enums (slice 2)
+## Enums (scheduled follow-on)
 
-Public enum and variant *names* stay matchable across modules (they are
-the type's interface). A variant's payload *fields* follow the same field
-visibility rules: a variant carrying private representation data cannot be
-fabricated or destructured around that data from another module.
+`pub enum T` exports the type name. A variant becomes externally constructible
+and matchable only when the variant itself is marked `pub`, for example
+`pub Ok { value: T }`. The marker governs the whole payload in v1; there is no
+second payload-field visibility dimension. Until this migration lands, variant
+names retain the documented temporary always-matchable behavior. External
+matches that cannot see every variant will require a wildcard, and imports,
+re-exports, exhaustiveness, diagnostics, and interface hashes must preserve the
+defining module's visibility decision.
 
 ## Non-goals / recorded limits
 
 - Not secrecy, not a capability, not proof evidence (restated above).
 - Visibility is MODULE-granular (Concrete's unit of encapsulation), not
   type- or function-granular.
-- `pub transparent newtype` is deferred until a workload needs a
-  representation-transparent public wrapper.
+- Representation-transparent wrappers use explicit public operations; another
+  visibility keyword is not reserved or deferred.
 
 ## Implementation order (user-directed)
 
-1. This doc + matrix. ✓
-2. Negative fixtures (external construct/read/write/update/destructure). — slice-scoped
-3. Positive fixtures (pub-field records, module-owned constructors).
-4. Pin `NonZeroU32(0)` rejection specifically. ✓ (slice 1)
-5. Enforce in Resolve/Check/Elab, project mode, interp, compiled.
-6. Migrate std cross-module field pokes to APIs (no blanket exemption). — slice 2 (25 sites)
-7. Manifest fields: type visibility / construction visibility / field
-   visibility / representation class.
-8. Mutation-test every enforcement point.
-9. This doc's privacy-≠-secrecy note. ✓
+1. Direct newtype construction privacy and the `NonZeroU32(0)` regression: done.
+2. Cross-module struct literal/read/write enforcement (E0297/E0298), public
+   positive fixture, and stdlib accessor/raw-adapter migration: done.
+3. Record update/destructure, external-impl non-privilege, transitive
+   private-type leakage, re-export preservation, and generated-operation/API
+   snapshot closure gates: active roadmap work.
+4. Private-by-default enum variants, raw newtype payload projection,
+   exhaustiveness/import migration, and interpreter/backend parity: active
+   roadmap work.
+5. Manifest/compiler-interface facts and mutation tests for every remaining
+   enforcement path: land with the corresponding active slices.
