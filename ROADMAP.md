@@ -49,12 +49,12 @@ or public API forces it.
 ### Current Frontier
 
 The current frontier is **Phase 7: Standard Library And Core APIs**. Phases 1-6E
-are closed as active phases; completed Phase 7 foundations and workloads 1–6
+are closed as active phases; completed Phase 7 foundations and workloads 1–8
 live in [CHANGELOG.md](CHANGELOG.md). The active frontier is the remaining
-stdlib/API surface, unsafe/trusted wrappers and trap/debug UX, the shipped
-pure-core proof arc, the Layout panic-to-diagnostic slice, and pull-gated
-breadth or defect tails with a named forcing workload. Phase 7.5's QBE backend
-is fully specified but has not started.
+soundness/evidence defects and Phase 7A boundary corrections listed immediately
+below. Trap/debug UX, Layout panic conversion, and pull-gated breadth wait their
+turn in that list. Phase 7.5's QBE backend is fully specified but has not
+started.
 
 ## Pull-Gated Tails From Earlier Phases
 
@@ -128,9 +128,11 @@ trusted/Unsafe escape hatch when low-level code must return an address.
 ### Compiler Pipeline Spine
 
 Phase 6B established semantic truth and validation records; Phase 6C made the
-pipeline observable/replayable; Phase 7.5 adds an independent QBE differential
-oracle without upgrading evidence claims; Phase 8 validates the bet with real
-examples; Phase 8.5 turns the shadow graph into a persistent incremental driver
+pipeline observable/replayable; Phase 7.5 adds a real user-selectable QBE
+backend whose required duties include independent differential validation
+without upgrading evidence claims; Phase 8 validates the bet with real
+examples and performs the scheduled architecture migrations; Phase 8.5 turns
+the shadow graph into a persistent incremental driver
 only after that validation. Later proof/backend/tooling work must not bypass
 this order: semantic facts first, observability second, independent executable
 cross-checking third, external validation fourth, incremental reuse fifth, and
@@ -527,18 +529,30 @@ the same inventory.
 
 #### Migration Order And Definition Of Done
 
-Implement in this order, each as a separately green slice:
+The long-term contract is scheduled, but it is not one prerequisite chain and
+must not delay the Phase 7 exit. Implement each item as a separately green,
+runnable slice in these phase-owned sequences:
 
-1. thin typed wrappers for `LoweredSSA -> ValidatedSSA -> CleanedSSA`;
-2. immutable stable-identity program facts required by current LLVM emission;
-3. one unified backend-neutral compile driver with LLVM byte/behavior parity;
-4. Phase 7.5 `CodegenInput` plus the first QBE `main -> 42` vertical slice;
-5. generated constructor/consumer capability matrix;
-6. view-only reports/debug bundles over canonical pass artifacts;
-7. source/semantic identity carried into runtime checks and backend bundles;
-8. one-at-a-time SSA cleanup rule extraction;
-9. remaining panic-to-internal-diagnostic boundary slices;
-10. Phase 15 translation validation and only then any target MIR/native backend.
+1. **Phase 7.5 backend sequence:** extract target-neutral `LayoutFacts`; define
+   the typed deterministic QBE fragment model; establish the minimal immutable
+   `CodegenInput`/backend-neutral driver required by the first `main -> 42`
+   vertical slice; then grow the real QBE backend and generated capability
+   matrix. Convert Layout panics after the ownership split. An LLVM fragment
+   migration is optional and remains bug-027 profile/pull-gated—building typed
+   QBE fragments does not itself fix LLVM's concatenation cost.
+2. **Phase 8 architecture sequence:** introduce stable semantic identities;
+   build immutable indexed program facts; add thin typed pass-boundary wrappers;
+   replace the temporary manifest scanner with compiler-derived interface
+   facts under a comparison gate; then generate the complete consumer/coverage
+   matrix from those facts. Alpha-renaming remains the completed fix for bug
+   045; IDs prevent future name-as-identity failures rather than relabeling that
+   fix as temporary.
+3. **Incremental consumers:** move reports/debug bundles to canonical pass
+   artifacts, carry source/semantic identity into runtime checks and backend
+   bundles, extract SSA cleanup rules one at a time, and finish remaining
+   panic-to-internal-diagnostic boundaries as their owning facts stabilize.
+4. **Phase 15:** add translation validation and only then consider owning a
+   target MIR/native encoder beyond the real QBE backend.
 
 For every refactor slice:
 
@@ -557,7 +571,8 @@ typed ladder and unified driver; semantic lookup uses stable identity; canonical
 facts feed every view/backend; every constructor has fail-closed consumer
 coverage; cleanup rules are named and mutation-sensitive; compiler-owned
 invariant failures are structured diagnostics; LLVM remains green; and the QBE
-oracle consumes the same immutable codegen input without importing LLVM logic.
+backend consumes the same immutable codegen input without importing LLVM logic
+while retaining its independent-oracle test duty.
 
 Explicit non-goals: no wholesale rewrite, no universal pass monad, no dynamic
 backend plugin framework, no new source language, no duplicate ZIR/AIR layer,
@@ -642,14 +657,8 @@ NOT export its representation.** No `private`/`sealed`/`opaque`/`transparent`.
 Disposition (each item has a concrete home; no open decisions remain):
 
 **Phase 7 exit / near-term hardening**
-1. Representation visibility — struct fields private-by-default, `pub` opt-in;
-   external literal needs every referenced field `pub`. → 0b slice 2 DONE
-   (E0297 literal / E0298 field read+write across modules; std migrated to
-   accessors + from_raw_unchecked; raw-parts types BytesRaw/FixedSinkState
-   have pub fields; check_construction_rights.sh gate). Enum-variant
-   visibility + newtype `.0` unwrap privacy = scheduled follow-on.
-2. Construction rights — newtype construction private (DONE, 0b slice 1, E0296).
-   Enum-variant privacy is a SEPARATE scheduled slice (D1): it must define
+2. Construction rights — enum-variant privacy is a separate scheduled slice:
+   it must define
    construction, matching, imports, exhaustiveness with inaccessible variants,
    and migration diagnostics. Syntax (D2): keep `pub newtype N = u32` (NO
    parentheses); variant marker is `pub Ok { value: T }`. `pub` stays the only
@@ -673,13 +682,17 @@ Disposition (each item has a concrete home; no open decisions remain):
     raw-pointer APIs stay private/explicitly-unsafe. Unblocked now that manifest
     facts are truthful (0a). This is the raw-ptr⇒Unsafe gate (review item 5).
 
-**Already holds — but still needs a PERMANENT regression fixture (not just "holds")**
+**Partly holds — permanent regression and remaining checker work required**
 5. Centralized linear conservation — one checker enforces exactly-once across
    branches/matches/returns/loops/callbacks/destructuring; consuming
    Option/Result combinators (0c) use THIS machinery, no special-case rules
    (verified). Add an assertion fixture.
-6. Trusted ≠ implicit linear copy — verified E0205 fires in `trusted`; add a
-   permanent regression fixture pinning it.
+6. Trusted ≠ implicit linear copy — local/binding copies are rejected (verified
+   E0205; pin permanently), but raw-pointer dereference can still duplicate a
+   non-Copy owned value: bug 046's `*(p : *mut K)` shape compiles today. Schedule
+   a checker slice that rejects dereference-as-owned-duplication unless code uses
+   an explicit audited ownership-transfer primitive such as `read_owned`; test
+   both paths rather than claiming trusted linearity already holds generally.
 
 **Phase 7.5 (opening order fixed by D6)**
 15. Backend-neutral LayoutFacts (size/align/offsets/tags/ABI/legal scalar),
@@ -698,7 +711,11 @@ compiler-wide rewrite; the compiler stays runnable+tested after every slice)**
 3. Stable semantic IDs — CORRECTION: NOT the root fix for 039–045 (045's
    alpha-renaming already closed the demonstrated binder-identity defect);
    stable IDs are long-term PREVENTION against future name-based identity
-   mistakes.
+   mistakes. Bug 054 is the second forcing witness: forgeable/non-injective
+   monomorphized text names collide with user types and first-match layout
+   lookup silently selects the wrong representation. Its immediate collision/
+   layout fix lands in Active Queue item 7; Phase 8 retires semantic identity-by-name
+   across the pipeline.
 4. Compiler-derived interface facts — supersede the (repaired) manifest scanner.
    D3: keep the scanner until Phase 8; the compiler artifact becomes
    authoritative, compared against the scanner during migration before deletion.
@@ -714,6 +731,17 @@ boundaries → compiler-derived interfaces → generated coverage matrix.
 8. Slices as the safe buffer interface (`&Slice<u8>`/`&mut MutSlice<u8>` on
    hosted read/write; raw-pointer forms private) — the `&Bytes` net-I/O pull
    (currently 2nd ask).
+
+**One local/CI fast-surface gate.** Add a single documented target (for example
+`make test-fast-surface-gates`) used unchanged by the pre-push routine and CI's
+Language-surface job. It owns every fast fail-closed inventory/ratchet that a
+normal `run_tests` battery can miss: diagnostic-code completeness, quadratic-
+append baselines, public API/interface inventory, capability/trust/ownership
+manifest truth, constructor/consumer coverage, generated-file drift, import
+firewalls, and visibility/construction fixtures. Adding an E-code, public item,
+IR constructor, manifest fact, or counted append pattern must fail locally in
+the same way it fails remotely. The target prints the exact constituent command
+on failure; CI must not maintain a hidden extra copy of the checklist.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -767,16 +795,741 @@ broad crypto/compression/networking/threading and framework-style APIs — until
 the four properties hold and a workload pulls it; the pure core is the priority,
 not the periphery.
 
-Phase 7 priority order is deliberately narrower than the comparison languages:
-make Concrete's small core pleasant and auditable before copying broad
-batteries-included breadth. The ranked build order is:
+### Phase 7A: Confirmed Stdlib Boundary Corrections
 
-0. Entry-point tails, deliberately decoupled from the completed exit-model
-   migration: retire Int-main in a later surface pass by narrowing the entry
-   signature to `fn main() -> u8 | Unit`; workload-gate any
-   `main -> Result<Unit, E>` form and nominal error rendering to stderr.
-1. Compiler hygiene and known-defect tails, evidence-ranked; each item lands as
-   its own slice with the battery:
+This is a specification set for verified drift in the
+stdlib that already exists. It is not a coordinated parity migration and does
+not block unrelated workload-pulled Phase 7 slices. Only confirmed contract
+violations and the narrow infrastructure needed to prevent their recurrence
+are immediate; broader API shapes below remain owned by the workload that
+demonstrates the need.
+
+Canonical rule:
+
+> A public ordinary stdlib API exposes typed values, ownership, its exact
+> domain capability, allocation, and recoverable failure. Raw pointers,
+> platform sentinels, C strings, ABI structs, and `Unsafe` stop at a narrow
+> trusted adapter boundary. Explicitly raw modules and `_unchecked` functions
+> are the visible exception.
+
+Execution rule: land each confirmed correction as its own green vertical slice
+with a discriminating fixture, mutation check, manifest/API-snapshot update,
+and migrated consumers. Do not build Command/Rng/SystemTime/digest abstractions,
+unify every handle, or redesign every error type merely for symmetry. Deferred
+notes become work only when their named workload or failing gate pulls them.
+
+### Phase 7 Tasks
+
+Three implementation audits on 2026-07-18 reproduced nine numbered defects in
+previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
+reducer, plus a four-part proof-freshness class. They are the first tasks in
+Phase 7 and are written here in execution order with their acceptance evidence.
+
+#### 1. Fix bug 051 — user generic-enum memory corruption
+
+User-defined generic
+   enums retain one name/declaration while Lower uses instantiation-specific
+   payload offsets, so mixed layouts can write beyond the emitted aggregate.
+   Immediate containment: reject every unsupported user generic-enum
+   instantiation before Lower/codegen with a stable diagnostic. Root fix:
+   monomorphize enums injectively per canonical type arguments (preferred), or
+   prove one program-wide union representation sound for every instantiation.
+   Gate at least two differently sized/aligned payload instantiations, nested
+   enums, arrays/structs, cross-module use, interpreter/LLVM/QBE where supported,
+   layout write-within-declaration verification, and a mutation removing the
+   containment/layout check.
+#### 2. Fix bug 050 — indirect function-pointer call hijack
+
+A local callable value
+   whose text matches a generic/global function is rewritten by Mono into a
+   direct specialization. Add a distinct resolved Core/Mono call form whose
+   callee is a value identity, never a string looked up in the global fn/alias
+   maps; preserve it through Lower, SSA, interpreter, LLVM, QBE, reports, and
+   source identities. Gate the `pick` 42-vs-21 wrong-code witness, std.io local
+   callback names such as `f`, generic/non-generic collisions, renamed imports,
+   and a mutation that routes indirect calls through direct-name resolution.
+#### 3. Fix bugs 047 + 048 — one HashMap probe/occupancy invariant slice
+
+Insertion
+   must remember the first tombstone but continue to a live equal key or a
+   bounded chain end; lookup must inspect at most `cap` slots; load policy tracks
+   occupied slots (`live + tombstones`) and rehashes/cleans tombstones before no
+   empty slot can wedge a miss. Maintain explicit `len`, tombstone/occupied, and
+   capacity invariants through insert/remove/clear/grow. Gate constant-hash
+   overwrite-after-tombstone (`len == 2`, one remove eliminates the key), the
+   zero-empty missing lookup under a watchdog, 10k+ churn, full-table misses,
+   grow/clear/reuse, Copy and linear key/value destruction, interpreter/native
+   agreement, a reference-map oracle, and independent mutations of remembered-
+   tombstone, bounded-probe, and occupancy accounting logic.
+#### 4. Fix proof-subject freshness and fail closed
+
+Before preserving any `proved` claim, treat the following as one evidence-
+integrity defect class and file
+   individually numbered ledger entries/reproducers before implementation:
+   - a source `#[proof_by]` without `#[proof_fingerprint]` currently compares a
+     synthesized current fingerprint with itself and can remain proved forever;
+   - `bodyFingerprint` hashes statements but omits parameters, return type,
+     generics/bounds, capabilities, and other signature facts;
+   - `#[requires]`/`#[ensures]` and selected spec/proof identity are outside the
+     body hash; and
+   - stale dependency propagation considers direct callees rather than the
+     transitive proof dependency closure.
+
+   Immediate containment: an in-source proof link without a stored, validated
+   proof-subject digest is `missing`/`unbound` (or `needs_recheck`), never
+   `proved`; release/verified profiles fail closed. Replace body-only freshness
+   with a versioned canonical `ProofSubjectDigest` covering qualified semantic
+   identity, full typed signature and generic constraints, capabilities,
+   normalized body, requires/ensures/invariants, selected spec and theorem
+   identity, extraction/schema version, and dependency root. Compute dependency
+   freshness transitively using a deterministic SCC/Merkle root so recursion is
+   finite and a deep callee edit stales every dependent claim without making
+   source location/alpha-renaming noise semantic. Gate each omitted component,
+   missing/malformed digest, false postcondition, `i32 -> u32` signature edit,
+   capability/generic edit, theorem/spec swap, direct and multi-hop dependency
+   drift, recursive SCCs, comments/formatting/alpha-renaming stability, and a
+   mutation proving no old body-only path can emit `proved`.
+#### 5. Fix bug 053 — DCE deletes checked integer negation
+
+Centralize a generated
+   operation-semantics/trap inventory consumed by folding, DCE, interpreter,
+   LLVM, QBE, fuzz generation, and the capability matrix. Until then, mark
+   integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
+   float neg remains pure. Gate discarded MIN negation for every fixed/native
+   signed width, non-MIN removal where valid, optimized/unoptimized/interpreter
+   agreement, and mutations omitting every trapping unary/binary constructor.
+Bug 048's observable hang is closed only by task 3; a timeout merely detects the
+defect and is not the fix. Keep its denial-of-service/watchdog observation
+separate from bug 047's corruption observation inside the shared gate.
+
+#### 6. Fix bug 052 — array element destruction becomes a no-op
+
+Immediate
+   containment: reject `T: Destroy` for arrays/unnamed element types whose drop
+   glue cannot be resolved; never synthesize an empty destroy function from
+   “name lookup missed.” Root fix: structural, type-directed drop-glue identity
+   for arrays and nested aggregates, independent of `tyName`. Gate destructor
+   counters for arrays of linear values in Vec/Deque/heap containers, nesting,
+   partial construction/failure, clear/remove/drop, exactly-once behavior, and
+   a mutation replacing structural glue with the old no-op fallback.
+#### 7. Fix bug 054 — non-injective monomorphized names
+
+First fail closed on every
+   generated/user symbol or type-name collision. Then separate semantic
+   `TypeId`/`FunctionId` from link/display symbols and use an injective,
+   versioned mangling encoding that user identifiers cannot forge. Layout lookup
+   is by identity and missing fields diagnose instead of returning a past-end
+   offset. Gate ambiguous type-argument boundaries, user names resembling
+   specializations, module/basename pressure, deterministic symbols, and
+   collision mutations.
+#### 8. Fix bug 055 — sibling renamed import emits an undefined callee
+
+Resolve an
+   import once to canonical definition identity and carry that identity through
+   Mono/codegen; do not repair only one alias-string orientation. Gate plain and
+   generic sibling imports, qualified/unqualified and renamed forms, duplicate
+   basenames, module-order permutations, and undefined-symbol failure
+   injection. This is a rejected-valid-program bug unless a wrong-code witness
+   appears.
+#### 9. Fix bug 049 — vacuous `reduce --predicate crash`
+
+Remove the predicate from
+    help/CLI immediately unless the same slice evaluates candidates in an
+    isolated subprocess with bounded time/memory/output and preserves the
+    original crash boundary/class. Parse success is never a crash predicate.
+    The reducer must verify the final candidate still satisfies the predicate,
+    report stage/error-class drift, and say explicitly when a multi-module
+    input has no supported reductions. Gate a healthy program (must not reduce
+    as crash), signal/tool/compiler/runtime crash classes, timeout, changed
+    failure class, empty candidate, and reducer self-failure.
+
+#### 10. Make the bug-corpus truth gate honest
+
+Replace the current skip-based audit summary with an
+explicit per-bug state:
+
+```text
+fixed_with_regression
+open_with_reproducer
+documented_no_fixture
+missing
+```
+
+Only `fixed_with_regression` contributes to “regression coverage.” An open bug
+requires a checked-in minimal reproducer plus exact expected bad observation,
+watchdog/resource limits where needed, owner/priority/containment, and replay
+command; it remains red or explicitly quarantined and can never be summarized
+as covered/fixed. Mutation-sensitive class gates replace individual reproducers
+when the fix lands. The reverse inventory fails on undocumented `bug_*.con`
+files and on numbered bug docs absent from the state table.
+
+**Publication discipline.** A milestone is not “pushed everywhere” until the
+same intended tip and bug/roadmap artifacts are present on every declared
+remote and required CI conclusions are recorded. Remote parity is process
+state, not a compiler bug; report it separately and do not let a green origin
+implicitly describe a lagging mirror.
+
+#### 11. Enforce representation and construction rights with one visibility word
+
+Cross-module reproductions proved that ordinary safe clients can forge
+invariant-bearing values and read/write private-intended fields (for example an
+invalid `NonZeroU32` or a `Bytes` length/capacity combination). This evidence
+supersedes the first-release all-fields-visible decision in
+`docs/VISIBILITY_AND_MODULE_HYGIENE.md`.
+
+Concrete has exactly one visibility keyword: `pub`. There is no `private`,
+`sealed`, `opaque`, or `transparent` modifier.
+
+- Every declaration, struct field, and (after A2b) enum variant is module-
+  private by default. `pub` exports precisely the item it marks.
+- `pub struct T` exports the type name but does not export its representation.
+  A field is externally readable, writable, constructible, destructurable, and
+  usable in record update only when that field is individually `pub`.
+- An external struct literal must name only public fields and must be able to
+  initialize every required field. A record with any required private field is
+  therefore constructed externally only through public functions supplied by
+  its defining module.
+- Keep existing newtype spelling (`pub newtype NonZeroU32 = u32`). Exporting the
+  type does not export its direct constructor; modules expose checked `new`,
+  `try_new`, or audited `from_raw` functions. Do not add parenthesized newtype
+  syntax merely for this feature.
+- Transparent data remains simple: mark its intended fields `pub`, as in
+  `pub struct Point { pub x: i64, pub y: i64 }`. Invariant-bearing types such
+  as String, Bytes, collections, handles, validated text, and ownership-transfer
+  records keep representation fields private and expose checked/scoped APIs.
+- Representation privilege belongs to the defining module, not to the spelling
+  or location of an `impl`. An impl declared in another module gains no access
+  to private fields/constructors merely because it names the type, and
+  `trusted`/`Unsafe` does not bypass visibility. Raw implementation authority
+  and source-level representation access are separate checks.
+- “Defining module” means the exact module that declares the item. Parent,
+  child, sibling, file-neighbor, importer, and re-exporting modules receive no
+  inherited representation privilege; they use `pub` APIs like every other
+  client. This avoids an implicit family/friend visibility tier.
+- Public interfaces may not leak a private type. Every type reachable through
+  a `pub` function parameter/result, field, enum variant, type alias, extern,
+  capability signature, callback, generic argument/bound, or nested composite
+  must itself be public at that boundary. Check this transitively (for example
+  `pub fn f() -> Vec<Hidden>` is a leak even though `Vec` is public) and report
+  the first private component with its declaration span.
+- Re-export preserves rather than widens visibility. Direct, renamed, wildcard,
+  submodule, and umbrella-module re-exports may expose an already-public type or
+  member, but may not make private declarations, fields, constructors, or
+  variants accessible. The defining module remains the authority source after
+  any number of re-export hops.
+- ABI/layout knowledge is not source visibility. `repr(C)`, extern use, layout
+  reports, backend lowering, and known size/alignment do not make fields or
+  constructors accessible to ordinary Concrete code. FFI crosses the boundary
+  through defining-module constructors/accessors or explicitly audited raw
+  adapters.
+- Compiler-generated operations may inspect private representation only as
+  defining-module/compiler-owned implementations. Generated Copy/Destroy,
+  equality, formatting, serialization, layout, manifests, debug views, and
+  backend glue must not synthesize a public accessor or leak private field names
+  as callable API. A `pub` change updates the canonical interface hash, API
+  snapshot, manifest, dependency invalidation facts, and documentation diff.
+- Enforce the same access result in Resolve, Check, Elab, project builds,
+  interpreter, LLVM, and QBE-facing artifacts. There is no stdlib exemption.
+  Migrate legitimate cross-module field access through public accessors,
+  checked constructors, scoped operations, or audited raw-parts handoff.
+- Extend compiler/interface facts and the temporary manifest with declaration
+  and field visibility plus construction/destructuring rights. A trusted
+  boundary may be claimed only after ordinary clients cannot bypass it.
+- Gate positive public-record construction/matching/update and negative private
+  read/write/literal/destructure/update cases across direct and renamed imports.
+  Include invariant-forging regressions, stable diagnostic codes/spans, project
+  mode, interpreter/compiled parity, and mutations that accidentally make a
+  private field public or skip one enforcement path.
+- Include explicit migration fixtures for the closure rules:
+
+  ```concrete
+  -- Must fail: an external impl has no representation privilege.
+  impl String {
+      pub fn forge() -> String {
+          String { ptr: bad, len: 999, cap: 0 }
+      }
+  }
+
+  -- Must fail: a public interface transitively leaks a private type.
+  struct Hidden { value: u64 }
+  pub fn expose() -> Hidden
+
+  -- Must not widen String's fields/constructor after re-export.
+  pub import strings.{String}
+  ```
+
+  Add sibling positive fixtures proving a defining-module impl may access its
+  own private representation, public transparent records still construct and
+  match externally, public APIs may use fully public nested types, and an FFI
+  adapter can consume a private-layout value without exporting its fields.
+
+**Follow-up within task 11: enum variants.** Apply the same `pub` model in a
+separate compatibility slice. Until this slice lands, variant names retain the documented temporary
+always-matchable behavior; this is staging, not the final visibility model.
+
+- `pub enum T` exports the type name. A variant becomes externally constructible
+  and matchable only when marked `pub`, for example
+  `pub Ok { value: T }`. Initially the variant marker governs its payload as a
+  unit; do not add a second payload-field visibility dimension.
+- Define imports/renames and exhaustiveness before migration. An external match
+  that cannot see every variant must include a wildcard; inaccessible variants
+  must never be revealed through diagnostics or synthesized patterns.
+- Mechanically mark all currently intended public stdlib variants, then audit
+  invariant/state-machine enums instead of exporting them reflexively. Gate
+  public/private construction and matching, wildcard exhaustiveness, renamed
+  imports, diagnostics, manifest/interface facts, interpreter, LLVM, and QBE.
+- This slice follows struct-field enforcement because field forging is the
+  demonstrated soundness bypass; its broader migration may not delay A2.
+
+#### 12. Generalize workload-pulled Option/Result combinators for linear payloads
+
+This is an ergonomics/ownership blocker, not a current soundness
+defect, but workloads already pay the manual-match tax. Do not merely delete
+Copy bounds: prove arm-wise conservation and explicitly dispose of every unused
+owned default/error.
+
+- Reuse the checker's existing branch-join, divergence, return-path, and linear-
+  conservation machinery. Combinators are ordinary functions and must not gain
+  callback- or Option/Result-specific ownership exceptions.
+
+- Support at least `Option<String>.map/and_then` and
+  `Result<String,E>.map/and_then/map_err` where each present payload is consumed
+  or passed through exactly once.
+- Design `unwrap_or`, `ok`, `err`, and `ok_or` separately because the unused
+  default or opposite payload may require `Destroy`; do not hide disposal
+  behind Clone, leaks, or broad Copy bounds.
+- Gate transformed, passed-through, short-circuit, callback-failure where
+  expressible, and unused-payload paths with destructor counters; add negative
+  fixtures for leak/double-consume callbacks and open match arms.
+- Require interpreter/LLVM agreement, proof fingerprint/spec updates, and
+  representative kernel proofs to remain alpha-invariant after generalization.
+
+#### 13. Close confirmed boundary correctness holes
+
+1. Validate UTF-8 in `std.fs.read_to_string`, just as `env::get`, argv, and
+   `Bytes::to_string` do. Prefer `Result<String, ReadTextError>` with distinct
+   filesystem and `InvalidUtf8` cases. A file containing invalid bytes must
+   remain available through `read_file -> Bytes` and must never become a
+   contract-violating `String`.
+2. Replace unchecked public C-string conversion at hosted boundaries with an
+   owning checked `CStr`/`CString` adapter that rejects interior NUL and always
+   terminates. Translate `InteriorNul` into `FsError`, `EnvError`, `NetError`,
+   or `ProcessError` at the owning boundary. Keep raw conversion private or
+   explicitly `_unchecked`. Gate all 13 C-string FFI consumers with empty,
+   exact-capacity, embedded-NUL, invalid-UTF-8 where relevant, and normal cases.
+3. Audit every external return value before constructing a typed success, but
+   promote a site only with a concrete failure witness or a normative contract
+   that already requires propagation:
+   `fseek`/`ftell`/`fread`/`fwrite`/`fclose`/`fflush`, `clock_gettime`,
+   `nanosleep`, socket operations, environment mutation, and process calls.
+   Negative sizes must never cast to huge allocation sizes; zeroed FFI storage
+   must never be returned as a fabricated `Instant` or address after failure.
+4. Correct two already-ratified hosted contracts: `env.set`/`env.unset` return a
+   typed environmental failure instead of unconditional Unit, and `args::get`
+   no longer maps both out-of-range and invalid OS bytes to the valid empty
+   String. Preserve a simple UTF-8 accessor; add a raw-bytes argv API only when
+   a workload actually needs non-UTF-8 arguments.
+5. Make `random_range(lo, hi)` enforce its documented half-open-range
+   precondition by trapping when `lo >= hi`; the current `hi == lo -> lo`
+   special case contradicts the bucket-2 invariant policy. Pin equality,
+   reversed bounds, ordinary ranges, and overflow edges. A recoverable
+   `checked_range`/`try_range` remains a separate workload-pulled API, as does
+   any explicit Rng/system-entropy redesign.
+
+Gate: `scripts/tests/check_stdlib_boundary_correctness.sh`, mutation-tested at
+each discarded-error/unchecked-conversion site. Add a source inventory that
+fails when a hosted module introduces unchecked `String` construction from
+external bytes or an ignored classified FFI result without an explicit
+justification row.
+
+Boundary rule: validate UTF-8 only when an API promises text. File, process,
+environment, argument, and network byte surfaces preserve `Bytes`; explicit
+String/Text adapters validate and return the declared absence/error shape.
+Never force arbitrary process output, argv bytes, paths, or network payloads
+through UTF-8 merely to make adjacent APIs symmetric.
+
+`std.io.read_all` is explicitly not a confirmed hole. Its workload-2 parser
+contract intentionally ends the drain on a Reader error and returns partial
+bytes so the parser reports a short/invalid payload. Preserve that behavior and
+its documentation. Revisit only when a socket-to-Reader workload demonstrates
+that EOF, partial data, and mid-stream transport failure need a different API;
+then choose an explicit split such as fallible `read_to_end` versus a named
+partial-read result rather than retroactively calling the existing contract a
+bug.
+
+#### 14. Put Unsafe behind domain-capability wrappers and close trusted dereference duplication
+
+Split hosted modules into ordinary public wrappers and private trusted/raw
+adapters:
+
+```text
+public typed API: with(File | Env | Time | Network | Process | Console | Random)
+        -> private trusted adapter: with(Unsafe), pointers, ABI/platform values
+        -> std.libc/raw platform declarations
+```
+
+Ordinary `File::open`, `env::get`, `Instant::now`, `TcpStream::connect`,
+`TcpListener::accept`, `Child::wait`, and random acquisition must not require
+callers to add `Unsafe`. Allocation remains visible when the returned operation
+allocates. Keep `std.alloc`, `std.ptr`, raw buffer constructors, FFI helpers,
+and explicitly named `_raw`/`_unchecked` operations capability-visible and out
+of the ordinary prelude.
+
+After A1 repairs derivation, extend the stdlib manifest with
+`public_safety = safe | raw | unchecked`
+and an owning trusted-boundary id. Start by migrating `std.net`, where compiled
+workloads already exercise the boundary and `std.io`/`std.fmt` demonstrate that
+trusted adapters can absorb `Unsafe` today. Ratchet the remaining reviewed
+legacy rows with an owner and workload trigger; fail CI on any new ordinary
+hosted API that exposes `Unsafe`, a raw pointer, or a platform sentinel. Raw
+allowlist entries require a narrow purpose and no safer claimed surface. Audit
+output shows both the public domain capability and the underlying trusted
+assumption.
+
+`trusted` may authorize raw implementation operations, but it is not intended
+to suspend linearity. The implemented guarantee is currently narrower: E0205
+(or its stable successor) rejects ordinary local/binding duplication inside
+trusted functions/impls, while bug 046 proved that dereferencing
+`*(p : *mut K)` can still duplicate a non-Copy owned value. Pin the working
+local-copy path, and schedule a checker slice for the dereference path. Its
+negative fixture must include the bug-046 shape; taking ownership through a raw
+pointer is accepted only through an explicit audited primitive such as
+`read_owned` whose contract consumes/invalidates the source ownership. Add
+mutations for both local-copy and dereference paths. Until that slice lands,
+reports describe trusted pointer ownership as an open assumption rather than an
+enforced linearity property.
+
+The post-A1 raw-pointer rule is semantic, not decorative: a public operation
+that accepts caller-controlled memory must take a provenance-safe Slice, be
+private, or be explicitly raw/`_unchecked` with `Unsafe`. Inventory and migrate
+`Vec::get_mut`, String/Text raw constructors, numeric cursor/writer `from_raw`,
+IO `read`/`write_raw`, test sink pointers, and similar signatures. Conversely,
+do not make callers request `Unsafe` merely because HashMap/HashSet or another
+trusted implementation manipulates its own private storage; normalize the
+current set/map capability mismatch according to public authority.
+
+#### 15. Converge File and Reader/Writer when its recorded trigger fires
+
+Direction only; not a Phase 7A closure condition. Pull this when a real socket,
+file, or buffered-IO workload otherwise needs a second implementation of
+short-read/write, close, or ownership behavior.
+
+Workload 8 executed the public listener/stream path but left borrowed net-buffer
+overloads at two independent asks, so it does not by itself authorize a full
+socket Reader/Writer adapter or File/TextFile migration. Preserve the existing
+parser-oriented `read_all` contract; a future socket adapter must state whether
+mid-stream transport failure needs fallible `read_to_end`, an explicit partial
+result, or a distinct operation.
+
+Remove the overlapping `std.fs.File` versus `std.io.TextFile` split. Choose one
+linear `File` handle and adapt it into the existing `Reader`/`Writer` contracts:
+
+```concrete
+File::open(path: &Path, options: OpenOptions) with(File)
+  -> Result<File, FsError>
+File::reader(self) -> Reader
+File::writer(self) -> Writer
+read_file(path: &Path) with(File, Alloc) -> Result<Bytes, FsError>
+read_to_string(path: &Path) with(File, Alloc) -> Result<String, ReadTextError>
+write_file(path: &Path, data: Slice<u8>) with(File) -> Result<Unit, FsError>
+```
+
+All reads distinguish `Ok(0)` EOF from `Err`; writes expose short writes;
+flush/seek/tell/close return typed results. Define `SeekFrom` rather than public
+integer `whence`, and never encode EOF/error as `-1`. Formatting, files,
+console, fixed buffers, tests, and sockets reuse the same read-all/write-all and
+fault-simulation logic. When a bidirectional resource creates adapters, use
+borrowed adapters or one explicit ownership split so two independently owned
+handles cannot close the same resource.
+
+Gate: `scripts/tests/check_io_spine.sh` inventories exactly one public File,
+Reader, and Writer contract; runs file/fixed-buffer/console/socket adapters
+through identical short-read, short-write, EOF, flush-failure, close-failure,
+and exactly-once-close schedules; and forbids a new public sink/source loop.
+The forcing inventory must retain the specific legacy discrepancies rather
+than hiding them under “unify IO”: TextFile write/flush/close discard
+`fwrite`/`fflush`/`fclose` results; `read_byte` uses `-1` for EOF or failure;
+`read_line` cannot distinguish EOF from an empty line; and console stdout/stderr
+writers do not apply the same external-write result policy. Fix each when its
+vertical consumer moves to the common spine.
+
+#### 16. Add provenance-safe scoped Slice access
+
+Promote the currently exempt `std.slice` surface because existing public raw
+accessors already need a safe counterpart and the compiled-coverage exemption
+is concrete evidence. V1 deliberately uses scoped access rather than escapable
+slice returns:
+
+```concrete
+Vec::with_slice<R, cap C>(&self, f: fn(&Slice<T>) with(C) -> R) with(C) -> R
+Vec::with_mut_slice<R, cap C>(&mut self, f: fn(&mut MutSlice<T>) with(C) -> R) with(C) -> R
+Bytes::with_slice<R, cap C>(&self, f: fn(&Slice<u8>) with(C) -> R) with(C) -> R
+Bytes::with_mut_slice<R, cap C>(&mut self, f: fn(&mut MutSlice<u8>) with(C) -> R) with(C) -> R
+```
+
+`Slice`/`MutSlice` are private-field, non-Copy view tokens; the callback receives
+only a second-class reference to the token, not an owned pointer pair it can
+return. This adds no user-visible lifetime or region syntax. The callback scope
+is the lifetime: the existing reference-escape rules keep the view inside the
+call while the owner remains borrowed. Explicit non-goal:
+do not add Rust-style lifetime annotations, escapable borrows, or a region
+language for this slice.
+
+An ordinary `as_slice(&self) -> Slice<T>`/`as_mut_slice` return remains private,
+trusted-internal, or explicitly `_unchecked` until a workload demonstrates that
+scoped callbacks are insufficient. A non-Copy linear Slice alone is not a
+solution: exactly-once consumption does not stop the owner from being dropped
+while the view exists without a checkout/give-back protocol. A future escapable
+slice therefore requires a separately reviewed owner/region mechanism or an
+explicitly documented unsafe/hazard contract; it is not smuggled into S3.
+
+Convert `Vec::get_mut -> *mut T` into the existing scoped `with_at_mut` ordinary
+path; if the pointer escape remains for trusted internals, name it
+`get_mut_ptr_unchecked`. Raw pointer+length Slice constructors remain private or
+`from_raw_unchecked`. Preserve owner provenance through the existing scoped-
+reference rules—do not make slices forgeable or escapable Copy pointer pairs
+without an owning borrow contract. Reader/Writer/File/TcpStream/numeric/crypto
+migration is workload-pulled after these scoped constructors exist, not an all-
+at-once mandate.
+
+Gate: convert the compiled-coverage `std.slice` exemption into positive and
+negative fixtures; prove the scoped callback cannot return/store/capture the
+slice, the owner cannot be freed/reallocated/mutated incompatibly during the
+callback, checked access rejects OOB, mutation is visible only through
+`MutSlice`, and the ordinary Vec/Bytes access path no longer returns a raw
+pointer or escapable Slice. Track remaining pointer-length hosted signatures in
+the manifest rather than forcing an unpulled whole-stdlib migration in this
+slice.
+
+#### 17. Normalize hosted failure shapes as their recorded triggers fire
+
+The normative direction below follows `ERROR_CONVENTIONS.md`, but each signature
+change is pulled by a workload or a failing manifest leg. It is not a demand to
+migrate every hosted module in one campaign.
+
+Converge domain surfaces on explicit errors:
+
+- `net`: `read/write/write_all/read_all/close -> Result`; `Ok(0)` alone means
+  EOF; add at least `ListenFailed`, `ReadFailed`, `WriteFailed`, and
+  `CloseFailed`; retain portable categories while optionally attaching reviewed
+  platform detail.
+- `fs/io`: eliminate raw counts/status sentinels and discarded flush/close
+  failures; distinguish open, metadata/seek, read, write, flush, close, invalid
+  path/C-string, and invalid text boundaries where a caller can react.
+- `env`: `set`/`unset -> Result<Unit, EnvError>`; provide a representation that
+  distinguishes absent from malformed. Keep invalid-value fallback policy in
+  the workload, not irreversibly inside the only stdlib accessor.
+- `args`: stop mapping both out-of-range and invalid OS bytes to `""`. Make the
+  UTF-8 accessor optional/fallible and add a raw-bytes accessor only when a
+  workload needs non-UTF-8 argv.
+- `time`: `Instant::now`, `sleep`, and wall-clock acquisition surface platform
+  failure; validate normalized nonnegative Duration values; keep monotonic
+  `Instant` distinct from wall-clock `SystemTime`.
+- `process`: typed spawn/wait/kill/close outcomes; do not expose argv pointer
+  arrays or raw errno/signal conventions as the primary portable API.
+- `rand`: define `random_range(lo, hi)` over the half-open range `[lo, hi)` and
+  trap when `lo >= hi`, because invalid bounds are a bucket-2 caller-invariant
+  failure under `ERROR_CONVENTIONS.md`. If a workload needs recoverable range
+  validation, add a separately named `checked_range`/`try_range` returning
+  `Result`/`Option`; never soften the existing API with a mode flag. Separately,
+  distinguish deterministic generator state from hosted OS entropy and
+  document modulo-bias policy when those shapes are pulled.
+
+Use `Option` only for ordinary absence, `Result` for recoverable malformed or
+environmental failure, and trap for documented invariants/OOM. Add
+`scripts/tests/check_stdlib_error_contracts.sh` with one success, absence/EOF,
+recoverable error, cleanup error, and invalid-input leg per hosted module.
+
+#### 18. Stabilize boundary type roles under pull discipline
+
+Freeze and gate these roles:
+
+```text
+Bytes / Slice<u8>       owned / borrowed arbitrary bytes
+String / Text           owned / borrowed valid UTF-8
+PathBuf / Path          owned / borrowed OS path bytes
+CString / CStr          owned / borrowed checked FFI string
+```
+
+Filesystem APIs accept `Path`, not UTF-8 `String`; display conversion is
+fallible. Keep operations semantically distinct and do not inflate pull counts:
+`index_of(byte, from)`, future `find_subslice(needle, from)`, and future
+`starts_with_at(offset, expected)` are different APIs. If a workload needs
+recoverable endian bounds, add checked readers and name trapping forms
+`_unchecked`; do not churn them without that consumer. `fmt::write_char` is
+correct under Concrete's current byte-sized `char` contract and is not a stdlib
+defect. Revisit its name/encoding only if the language character model changes.
+Raw views and ownership-taking raw-parts APIs remain explicitly trusted and
+document their lifetime/allocation handoff.
+
+`BytesRaw` currently names both a non-owning result of `raw_view` and the
+ownership handoff from `into_raw_parts`; audit this immediately because borrowed
+and owning values cannot share an ambiguous destruction contract. Split the
+owning form into `BytesParts` (pointer/length/capacity plus explicit allocator/
+handoff rules) and keep the borrowed form provenance-bound, unless a narrower
+design proves the same distinction. Do not collapse Slice, Text, ByteView,
+ByteCursor, and the text parser Cursor merely to reduce the type count: record
+their owner, validation, mutability, position, and destruction roles, then let
+parser workloads decide whether ByteView is a refined Slice and whether cursors
+share implementation. Move binary cursor APIs out of `numeric` only with that
+consumer-backed module decision.
+
+Gate: a generated conversion matrix covers valid/invalid UTF-8, arbitrary path
+bytes, embedded NUL, empty buffers, multibyte scalars, split code points, and
+owned/borrowed round trips. The API snapshot fails if a checked boundary loses
+its fallibility or an unchecked operation loses the suffix.
+
+#### 19. Add collection ergonomics as recorded workloads pull them
+
+Preserve the strong existing decisions: scoped callback access instead of
+escaping references, `Destroy` for live non-Copy contents, capability-
+polymorphic traversal, and ascending traversal only for ordered containers.
+Then:
+
+- expose slice views first; remove ordinary raw element pointers;
+- make allocation timing consistent or documented (`HashMap::new` currently
+  allocates while `OrderedMap::new` is lazy);
+- keep HashMap/HashSet storage unsafety internal, so callers need `Alloc` but
+  not `Unsafe`;
+- gate tombstone/full-table probing, duplicate replacement, non-Copy key/value
+  destruction, clear/reuse, and growth under adversarial hashes;
+- define BitSet's logical-length versus capacity contract for set/unset/test,
+  union/intersection, out-of-range bits, and clear/reuse; keep storage `Unsafe`
+  internal and make allocation the only ordinary caller-visible effect;
+- add `Vec` insert/stable-remove/retain/sort/search and an ownership-aware map
+  entry/upsert API only when independent workloads reach the pull threshold;
+- keep unordered traversal explicitly unspecified and ordered traversal
+  ascending; do not promise insertion order accidentally; and
+- do not add iterator traits, lazy adapters, or reference-returning entry APIs
+  until the reference model can enforce them.
+
+Keep a semantic naming/coherence ledger rather than a mechanical rename sweep:
+process name stuttering; duplicate BitSet verbs (`set/unset/test` versus
+`insert/remove/contains`); BitSet logical length versus population count;
+unchecked endian readers; empty `with()`; bool versus three-way comparator
+contracts; and insert return shapes. Rename only after documenting whether the
+difference carries ownership, ordering, replacement, or failure information—
+for example HashMap returning a displaced value is not equivalent to Set
+reporting whether membership changed.
+
+#### 20. Add remaining module shapes as recorded workloads pull them
+
+The following are design candidates, not scheduled Phase 7A migrations. Each
+requires independent workload evidence or a confirmed contract failure before
+implementation.
+
+1. Replace public `spawn(cmd, *const *const u8)` with a typed `Command` builder
+   over `Path`/owned arguments. Put fork and Unix signals in an explicitly Unix
+   or raw module; generic `std.process` must not imply portability it lacks.
+2. Store Duration canonically and define overflow/negative policy. Remove
+   hard-coded clock ids from generic code; target facts choose the platform
+   implementation. Add deterministic clock/failure adapters for tests.
+3. If a workload pulls it, introduce explicit deterministic `Rng` state and
+   reserve `with(Random)` for hosted entropy. Gate reproducibility, range
+   bounds, invariant-trap behavior for `lo >= hi`, any separately named
+   recoverable range API, and bias claims. Never describe libc `rand` as
+   cryptographic.
+4. Keep scalar parsing's `Option` surface; use positional `ParseError` results
+   when cursor/structured-parser workloads need diagnostics. Do not create an
+   implicit conversion web between module errors.
+5. Keep Writer-first formatting and allocation-visible String wrappers. Test
+   all Writer failures; do not use `unwrap_or` to erase a formatting sink error.
+6. Make test assertion messages borrowed/static where possible, add typed
+   byte/String/path assertions, and keep exit status/stdout/stderr distinct.
+7. Replace `sha256::hash_raw(*mut u8) -> Vec<u32>` with a borrowed byte input
+   and nominal/fixed 32-byte digest once fixed-array ergonomics support it; input
+   is not mutable. Apply the same Slice input policy to checksum/base64/hex.
+   Streaming crypto/encoding remains workload-pulled.
+8. Replace `std.cli`'s untyped `u64` flag ids and unchecked lookups with nominal
+   declaration handles, reject duplicate declarations, keep unknown/missing/
+   malformed/arity errors distinct, and define repeated-flag policy. Argument
+   acquisition must carry its authority consistently (`count` and `get` may not
+   disagree), while pure token parsing remains capability-free.
+9. A3 owns the already-pulled Option/Result consuming-combinator slice. Any
+   additional convenience combinator remains pull-gated; extend `std.test`
+   helpers alongside A3 so linear Option/Result values can be asserted without
+   becoming unconsumable.
+10. Audit pure scalar modules (`ascii`, `math`, `parse`, `numeric`, `hash`) for
+    totality and naming: invalid clamp/range bounds, `abs(MIN)`, float domain/
+    NaN behavior, cursor bounds, integer overflow, endian width, and hash
+    stability must be documented as checked result, trap, or defined value and
+    pinned by edge vectors. Avoid generic APIs whose ordering/arithmetic
+    constraints are only implicit in the body.
+11. Keep the remaining workload-gap ledger evidence-counted: `String::cmp` at
+    its recorded ask count; `Vec::with_capacity`; SHA/hex borrowed-Bytes input;
+    stdin Reader; and safe process argv construction. Promote only at the pull
+    threshold or on a confirmed contract defect. Do not combine them into a
+    polish release merely because neighboring modules already have symmetric
+    names.
+
+#### 21. Complete the mechanical manifest and fail-closed coverage gate
+
+Extend `concrete std snapshot --json` and the compiled-coverage inventory so
+every public symbol records: canonical signature, safety class, capabilities,
+allocation, ownership/consumption, success/absence/error/trap behavior,
+platform availability, evidence class, examples, and trusted-boundary id.
+Generate rather than hand-count the inventory.
+
+The inventory is fail-closed over every `std/src/*.con` module, including the
+low-level `alloc`, `ptr`, and `libc` modules and umbrella `lib`. A module may be
+classified pure, alloc-backed, hosted, raw/unsafe, umbrella, or intentionally
+surface-less, but none may disappear because the focused migration examples do
+not mention it. Adding a module or public symbol without a compiled behavioral
+fixture or reasoned exemption, API snapshot entry, and evidence/authority/
+failure classification fails CI. This extends the existing five-fact manifest
+and compiled-coverage machinery; do not create a parallel review database.
+
+### Phase 7 Completion Contract
+
+The final Phase 7 task may close only when:
+
+- ordered Phase 7 tasks 1–10 are fixed with committed
+  load-bearing regression/class gate, the bug-corpus report distinguishes open
+  reproducers from fixed coverage, and declared remotes contain the intended
+  milestone artifacts before publication is claimed;
+- A0's Copy bounds and destruction regressions eliminate collection extraction
+  owner duplication;
+- A1's corrected derivation and mutation corpus make every manifest row
+  truthful before any new safety rule relies on it;
+- A2 enforces private-by-default struct fields with `pub` as the sole opt-in,
+  migrates invariant-bearing stdlib types without an exemption, and pins every
+  construction/access/destructuring path; A2b separately records and delivers
+  private-by-default enum variants without delaying the demonstrated field-
+  forging fix;
+- A3 supports the workload-pulled linear combinators with exactly-once
+  conservation and updated proof evidence;
+- `fs::read_to_string` rejects invalid UTF-8 without losing the Bytes path;
+- every current String-to-C consumer rejects interior NUL through one checked
+  adapter and the unchecked primitive is explicitly named/private;
+- the public-safety rule is documented and mechanically gated, `std.net` no
+  longer makes ordinary callers request `Unsafe`, and every remaining legacy
+  exception is a ratcheted manifest row rather than an invisible exemption;
+- Vec/Bytes expose provenance-preserving Slice/MutSlice constructors,
+  `Vec::get_mut` is scoped or explicitly `_unchecked`, and the compiled
+  `std.slice` exemption is gone;
+- the API snapshot, compiled behavioral inventory, docs/examples, authority/
+  allocation/failure manifest, and evidence report agree;
+- borrowed Bytes views and owning raw-parts handoff are different typed
+  contracts with mutation-tested destruction/provenance behavior; and
+- the documented `io::read_all` partial-parser contract remains pinned rather
+  than being silently changed under the cleanup.
+
+S2 and S4–S7 are trigger ledgers, not Phase 7A closure criteria. Promote an
+entry into the ordered Phase 7 list only with its named workload, failing gate, or
+already-ratified contract violation. Do not wait for broad File/process/time/
+random/crypto redesign or JSON/DNS/compression/threading breadth to close this
+correction slice.
+
+#### 22. Retire the remaining entry-point tails
+
+Deliberately decoupled from the completed exit-model migration: retire Int-main
+in a later surface pass by narrowing the entry signature to
+`fn main() -> u8 | Unit`; workload-gate any `main -> Result<Unit, E>` form and
+nominal error rendering to stderr.
+
+#### 23. Finish compiler hygiene and known-defect tails
+
+Each item lands as its own evidence-ranked slice with the battery:
    - Layout panic hygiene: convert `Concrete/Check/Layout.lean` `panic!`
      paths (unknown struct/named type in fieldOffset/tySize) into
      structured internal-error diagnostics — bug 035's fix made them
@@ -786,48 +1539,21 @@ batteries-included breadth. The ranked build order is:
      incl. EmitSSA), all cascading through pure code — no small slice;
      it is an Except-threading grind that must land green in ONE piece,
      with the full battery as backstop. Dedicated fresh session.
-   - Known-defects queue (priority-ordered; each owns a slice and battery when
-     its stated trigger fires):
-     0a. DONE (2026-07-18): manifest generator rewritten from the single
-         regex to a balanced scanner (comments/strings blanked, brace-depth
-         impl tracking, balanced parens + generic angles, [trusted] extern
-         forms, enclosing-trusted-impl inheritance). Fixed 39 truncated
-         fn-pointer-param rows + missing extern forms + trust misclassed by
-         fn-level-only; the committed TSV grew 426->434 rows and reclassed
-         many impl methods to trusted-boundary (now correct). Parser
-         self-test fixture (manifest_selftest.con + golden) pins every
-         previously-misparsed shape and is mutation-verified. Manifest-
-         based safety rules (raw-pointer-implies-Unsafe, item 5) may now
-         build on truthful facts.
-     0b. Construction rights (private-by-default representation, chosen
-         2026-07-18; docs/CONSTRUCTION_RIGHTS.md). SLICE 1 DONE: newtype
-         direct construction `N(v)` is private to its defining module —
-         E0296, closing the verified `NonZeroU32(0)` bypass; external code
-         uses the public constructor fn (try_new). SLICE 2 (open): struct
-         fields private-by-default with explicit `pub` opt-in — enforce
-         literal/access/write/update/destructure across modules in
-         Resolve/Check + migrate the 25 std cross-module field-poke sites
-         (mostly String/Bytes -> from_raw_unchecked, which exists) + newtype
-         `.0` unwrap privacy + enum payload rules + manifest visibility
-         fields. Pointer-bearing forgery is only INCIDENTALLY blocked today
-         (the int->ptr cast needs Unsafe); field r/w (`b.len`, `b.len=999`)
-         is wide open until slice 2.
-     0c. Linear Option/Result consuming combinators (workload-pulled
-         ergonomics, NOT soundness): map/and_then should consume a linear
-         T; unwrap_or needs explicit destruction of the unused side. Do
-         NOT lift the Copy bounds until the checker proves arm-wise linear
-         conservation; slice ships with destructor-counter fixtures,
-         exactly-once destruction on every arm, interp/LLVM agreement,
-         updated proof fingerprints, and leak/double-consume negatives.
-         After 0a/0b.
+   - Known-defects ledger (each owns a slice and battery when its stated trigger
+     fires):
+     These are historical/pull-gated tails inside this task, not another source
+     of priority; do not select one while an earlier Phase 7 task lacks
+     containment.
      1. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
         module importing different same-named fns still share a flat
         alias list (collectAllLinkerAliases). Pull-gated: fix when a
         workload or fixture hits it.
      2. `std.slice` has no public constructor — user code cannot obtain a
-        `Slice` at all (coverage-gate exemption records it). First
-        workload needing one pulls a constructor (e.g. Vec::as_slice) and
-        converts the exemption into a fixture.
+        provenance-backed `Slice` at all (coverage-gate exemption records it).
+        Phase 7A S3 owns the narrow fix because existing Vec/Bytes raw access
+        already needs a safe counterpart; convert the exemption into positive
+        and negative compiled fixtures. Migration of IO/fs/net/numeric
+        signatures remains workload-pulled after the constructor exists.
      3. Bug 027 (EmitSSA O(n^2) rendering) — open perf item, not
         correctness; profile-driven fix when compile times matter.
      4. Differential fuzzer/oracle residuals: heap/alloc/IO shapes still
@@ -859,15 +1585,15 @@ batteries-included breadth. The ranked build order is:
      9. printf|grep -q pipefail flake class (10b9a776 fixed 123 sites, 43
         files): add a grep-lint to gate-hygiene so the pattern cannot be
         reintroduced.
-2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
-3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
+24. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
+25. Finish trap/debug UX and verified-profile/
    proof-obligation UX.
-4. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
+26. Shipped pure-core proof arc: prove the actual `Option`/`Result`,
     `Bytes`/slice, numeric checked helpers, and checked text/path conversions
     against their documented contracts.
-5. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
+27. Proof-facing formal stdlib models (`formal_vec`, `formal_map`,
     `formal_set`, `bigint`, lemma helpers) once contracts need them.
-6. Broad compression/crypto/networking/threading only after workload demand.
+28. Broad compression/crypto/networking/threading only after workload demand.
 
 The comparison-language bias for remaining breadth is deliberate: copy module
 categories from Hare/Zig/Odin/Go, not their API volume. The near-term systems
@@ -884,7 +1610,7 @@ the **stdlib** side: APIs that Concrete programs use to parse their own command
 lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
-1a. Deterministic capability-fault simulation (pull-gated; the *dynamic*
+29. Deterministic capability-fault simulation (pull-gated; the *dynamic*
      complement to H3). H3's manifest gate proves an IO error *can* be surfaced
      (static shape); this proves it *is* surfaced under real failure (dynamic).
      Because every effect flows through an explicit capability/handle value — e.g.
@@ -907,7 +1633,7 @@ Do not duplicate compiler-command cleanup here.
      `docs/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
      replays a fixed fault schedule and asserts each effect-boundary property.
 
-1. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
+30. Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
    `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets,
    buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs
@@ -1011,7 +1737,7 @@ Do not duplicate compiler-command cleanup here.
      item should move ahead of allocator-heavy collection stabilization if the
      validation project needs arenas, test allocators, reload-safe allocation,
      or freestanding pools.
-2. Build internal-iteration and builder APIs in proposed `std.iter` and
+31. Build internal-iteration and builder APIs in proposed `std.iter` and
    `std.builder` after the collection shape is known. This is NOT Rust's
    external-iterator / adapter-tower model: `research/stdlib/iterators.md`
    resolved the v1 design as per-container internal traversal (`for_each`,
@@ -1023,89 +1749,89 @@ Do not duplicate compiler-command cleanup here.
    plus byte/text builders and tree/buffer builders inspired by Gleam's
    `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
-2a. Complete the Hare/Zig-shaped IO adapter layer on top of the one
+32. Complete the Hare/Zig-shaped IO adapter layer on top of the one
     `std.io.Reader` / `std.io.Writer` spine: buffered reader/writer helpers
     (`bufio` shape), fixed-memory readers/writers (`memio` shape), byte-counting
     and tee/discard adapters, and small copy/drain helpers. These are adapters,
     not a second IO abstraction. Every adapter must preserve the underlying
     capability story, keep allocation explicit (`with(Alloc)` or caller-provided
     buffers), and be covered by `std.test` sink/source oracles.
-3. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
+33. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
    checked/wrapping/saturating arithmetic helpers,
    narrowing/conversion helpers, endian conversions, byte/word packing, and
    evidence classes for each helper.
-4. Build sorting and searching primitives in proposed `std.sort` and
+34. Build sorting and searching primitives in proposed `std.sort` and
     `std.search`: comparison conventions, stable/unstable sort decision,
     binary search, min/max helpers, and evidence/oracle tests over edge cases.
-5. Build hashing, checksums, and deterministic random helpers in `std.hash`,
+35. Build hashing, checksums, and deterministic random helpers in `std.hash`,
     proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets,
     non-cryptographic checksums, seeded deterministic RNG for tests/oracles,
     and a clear split from cryptographic randomness. Any OS entropy source is
     hosted-only and capability-visible.
-6. Build constant-time helper APIs in proposed `std.ct` only for narrow,
+36. Build constant-time helper APIs in proposed `std.ct` only for narrow,
     auditable cases: equality/compare over fixed-size bytes, no secret-dependent
     branches or early exits, source-shape audit evidence, and clear
     machine-level timing assumptions. This belongs to the narrow security
     surface, not broad crypto.
-7. Build time and duration helpers in `std.time`: monotonic versus wall-clock
+37. Build time and duration helpers in `std.time`: monotonic versus wall-clock
     distinction,
     timestamp formatting/parsing if admitted, timeout helpers, and explicit
     hosted authority for reading the clock.
-8. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
+38. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
     integer/text formatting, simple
     scanners, structured parse results, error-set reports, and oracle-friendly
     output conventions.
-9. Build a reusable scanner/parser core in `std.parse` over
+39. Build a reusable scanner/parser core in `std.parse` over
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-10. Extend `std.base64` only when a workload pulls streaming encode/decode;
+40. Extend `std.base64` only when a workload pulls streaming encode/decode;
     preserve canonical padding-bit strictness and the
     args -> bytes/text -> parse/errors -> Writer oracle path.
-11. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
+41. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
-12. Add `std.json` as the first structured data module: tokenization,
+42. Add `std.json` as the first structured data module: tokenization,
     string/number handling, error spans, bounded recursion policy, optional
     DOM-like representation only if the allocation story is explicit, and
     oracle tests against a reference implementation.
-13. Add a small typed decoding layer in proposed `std.decode` after
+43. Add a small typed decoding layer in proposed `std.decode` after
     `std.json`: dynamic value decoding, field access, error paths, and examples
     comparable to Gleam's `dynamic/decode`, without broad reflection or hidden
     runtime typing.
-14. Add binary serialization helpers in proposed `std.bin`: endian-aware
+44. Add binary serialization helpers in proposed `std.bin`: endian-aware
     reading/writing, fixed-width integers, length-prefixed fields only with
     explicit bounds, byte-span diagnostics, and no hidden allocation.
-15. Add semantic-version and config-format helpers in proposed `std.semver`
+45. Add semantic-version and config-format helpers in proposed `std.semver`
     and `std.config` if package/build work starts depending on them:
     `SemVer`, INI/TOML-style scanner, and manifest parsing support. Prefer a
     small Hare-like `format/ini`-class module before any broad configuration
     framework; keep TOML/YAML/package manifests workload-gated. These are
     stdlib/package-boundary helpers, not general metaprogramming.
-16. Add command-line parser helpers in proposed `std.cli`: flags, positional
+46. Add command-line parser helpers in proposed `std.cli`: flags, positional
     arguments, usage text, typed parse errors, no ambient environment access
     except through `std.args`, and examples that keep authority visible. This is
     for user programs. The `concrete` compiler's own command taxonomy and help
     behavior are Phase 6E, and `std.cli` should learn from that surface without
     coupling to compiler internals.
-16a. Add narrow shell/path helper modules only as tool workloads demand them:
+47. Add narrow shell/path helper modules only as tool workloads demand them:
      `std.shlex` for shell-word splitting/quoting, `std.glob` / `std.fnmatch`
      for file-pattern matching, and no `wordexp`-style command/variable
      expansion in the core. These APIs are byte/path aware, carry no hidden
      filesystem authority, and must keep expansion separate from matching so a
      pure parser cannot accidentally become a hosted operation.
-17. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
+48. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
     writers, formatting
     integration, capability requirements, and policy for release builds. Keep
     this small; it is not a tracing framework.
-18. Add progress/status output helpers for CLI tools in proposed
+49. Add progress/status output helpers for CLI tools in proposed
     `std.progress` only after `examples/daily/word_count` and
     `examples/base64_cli` need visible progress output. V1
     surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`,
     `finish`, terminal detection through an explicit console handle, and no
     ambient terminal authority. Wire
     `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
-19. Build capability-scoped console, file, network, process, and time APIs in
+50. Build capability-scoped console, file, network, process, and time APIs in
     `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`,
     `std.net`, and `std.time`. Authority must be visible in function types and
     audit reports; no API may smuggle ambient authority through a convenience
@@ -1125,24 +1851,24 @@ Do not duplicate compiler-command cleanup here.
     the public safe wrapper surface has narrower authority than the underlying
     trusted/extern implementation and that the audit transcript shows both
     sides of the boundary.
-20. Build handle-relative filesystem APIs in `std.fs` as the preferred
+51. Build handle-relative filesystem APIs in `std.fs` as the preferred
     file/path shape: directory/file handles carry authority; operations are
     relative to handles for `open`, `create`, `read`, `write`, `metadata`,
     `remove`, `rename`, and `list`. Ambient absolute-path helpers must be
     hosted-only convenience wrappers with explicit authority. Temp-file,
     symlink, path-normalization, and TOCTOU behavior must appear in
     `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
-20a. Add small `std.temp` and `std.dirs` helpers after the handle-relative
+52. Add small `std.temp` and `std.dirs` helpers after the handle-relative
      filesystem shape is gated. `std.temp` owns temporary files/directories with
      explicit cleanup (`drop`/`defer`, no implicit scope-end delete) and visible
      `with(File)` authority; `std.dirs` exposes only conservative hosted
      directory discovery needed by tools. Do not add XDG/platform policy sprawl
      until package/build workloads pull it.
-21. Build handle-based network surface in `std.net` only as far as the
+53. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
     package/workload evidence demands it.
-22. Build stdlib test/oracle helpers in `std.test`: expected failures,
+54. Build stdlib test/oracle helpers in `std.test`: expected failures,
     capability-scoped fixtures, temp directories, oracle vector runners,
     interpreter-vs-compiled helpers, and report snapshots. Stdlib tests must
     also serve as runnable API documentation: every public stdlib type/function
@@ -1154,7 +1880,7 @@ Do not duplicate compiler-command cleanup here.
     example, when a referenced example no longer compiles, or when a doc claims
     an evidence class/capability/allocation behavior that the test/report does
     not produce.
-22a. Add a public stdlib API snapshot/diff immediately after the first real
+55. Add a public stdlib API snapshot/diff immediately after the first real
      workload (`base64_cli`) and before broad URI/JSON/CLI/log/progress breadth.
 
      Deliverable: `concrete std snapshot --json` (or an equivalent test helper)
@@ -1170,7 +1896,7 @@ Do not duplicate compiler-command cleanup here.
      stdlib-local version of Phase 10's proof/capability diff and Phase 18's
      package API artifacts; it prevents accidental drift while the library is
      still small.
-23. Define stdlib error-handling conventions: when APIs return `Result`,
+56. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported. Split
     recoverable domain/environment failures from fatal invariant failures:
@@ -1185,7 +1911,7 @@ Do not duplicate compiler-command cleanup here.
     small wrapping variant named at the call site, not an implicit trait
     conversion. State the pattern once so error-heavy code does not each invent
     its own.
-23a. Define the canonical **consume / destroy / handoff** conventions for
+57. Define the canonical **consume / destroy / handoff** conventions for
     linear code. The guide must distinguish explicit cleanup (`destroy(x)` or
     the type's consuming `.drop()`/Destroy verb), ownership transfer by
     by-value call, ownership transfer by return, destructuring into owned
@@ -1201,10 +1927,10 @@ Do not duplicate compiler-command cleanup here.
     This guide is the user-facing explanation of the conditional-`Copy` and
     mode-based-checker refactors; it should be validated by small runnable
     examples and linked from README/site docs.
-24. Define stdlib evidence classes per public API: `proved`, `enforced`,
+58. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
-24a. Add proof-facing formal stdlib models only when a proof or contract
+59. Add proof-facing formal stdlib models only when a proof or contract
     workload pulls them. These are not runtime containers: `std.formal_vec`,
     `std.formal_map`, and `std.formal_set` model mathematical sequences, maps,
     and sets for contracts, loop invariants, and Lean obligations; `std.bigint`
@@ -1213,7 +1939,7 @@ Do not duplicate compiler-command cleanup here.
     specs need it. Each formal module must state its erasure/runtime story, its
     evidence class, the Lean artifact it lowers to, and the refinement relation
     to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
-24b. Add a **selective shipped pure-core stdlib proof arc**, distinct from the
+60. Add a **selective shipped pure-core stdlib proof arc**, distinct from the
     pull-gated formal-container work in 24a. This proves stable stdlib code
     users actually call, not separate mathematical containers, and it is not a
     mandate to prove all 414+ public API rows before the API surface has been
@@ -1237,20 +1963,20 @@ Do not duplicate compiler-command cleanup here.
     deferred behind breadth modules such as JSON, CLI, or networking, but also
     do not turn it into an exhaustive stdlib-proof sweep before API ergonomics
     have been validated.
-25. Add stdlib authority/allocation/runtime-obligation gates so core helpers
+61. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
-26. Add sanitizer/runtime-instrumentation hooks as debug and validation
+62. Add sanitizer/runtime-instrumentation hooks as debug and validation
     surfaces, not proof evidence. Inspired by Odin's sanitizer-facing base
     surface, Concrete should expose named hooks for bounds, overflow,
     use-after-free-like trusted/FFI probes where applicable, allocator checks,
     and generated-code validation. Audit output must classify this as
     `runtime_checked`, `tested`, or `instrumented`, never `proved`.
-27. Split hosted versus freestanding-ready stdlib modules at the API level:
+63. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
     The freestanding target implementation still lands in Phase 16.
-28. Record deliberately deferred stdlib families so they do not disappear from
+64. Record deliberately deferred stdlib families so they do not disappear from
     planning: compression/archive formats, broad crypto beyond the narrow
     hash/HMAC/constant-time story, PEM/ASN.1/X509, MIME helpers beyond the first
     workload, full HTTP client/server, DNS/Unix-socket breadth, dynamic
@@ -1259,7 +1985,7 @@ Do not duplicate compiler-command cleanup here.
     stays package-later,
     backend-later, freestanding-later, or research-later until a workload
     forces it.
-29. Add stdlib docs and examples for C/Rust users:
+65. Add stdlib docs and examples for C/Rust users:
     `docs/stdlib/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
     `path_fs`, `result_errors`, `vec_map`, `parser_cursor`, `json_scan`,
     `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
@@ -1284,7 +2010,7 @@ Do not duplicate compiler-command cleanup here.
     functions are fine for cross-type operations or functions whose capability
     story would be clearer outside a receiver. Add examples that teach the
     chosen style instead of preserving accidental historical names.
-30. Add a stdlib compatibility/oracle corpus under
+66. Add a stdlib compatibility/oracle corpus under
     `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
     `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
     `json_vectors`, `semver_vectors`, `sort_search_vectors`,
@@ -1292,7 +2018,7 @@ Do not duplicate compiler-command cleanup here.
     `scripts/tests/check_stdlib_compat.sh`; every vector must declare exactly
     one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`,
     `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
-31. Add real stdlib workload checks before Phase 8 relies on the library.
+67. Add real stdlib workload checks before Phase 8 relies on the library.
     Start with `examples/base64_cli`; it is the first
     workload, not just one item in the set. Then broaden to
     `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
@@ -1306,7 +2032,7 @@ Do not duplicate compiler-command cleanup here.
     `http_headers` against checked-in vectors, `path_normalizer` against
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
-32. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
+68. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
     checked-arithmetic flip exposed syscall/sentinel-style code that relied on
     silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,
     bit-packed flags, checksum/hash arithmetic). Add
@@ -1319,7 +2045,7 @@ Do not duplicate compiler-command cleanup here.
     arithmetic workload path (text/path/UTF-8, fs/process/env capabilities,
     maps/iterators, formatter/parser round-trip, or proof/report views) so the
     post-arithmetic validation does not overfit to numeric examples.
-33. Add the Phase 7 validation project:
+69. Add the Phase 7 validation project:
     `examples/stdlib_client/` plus `scripts/tests/check_phase6_stdlib.sh`.
     The client must use `std.option`, `std.result`, `std.bytes`, `std.text`,
     `std.path`, `std.vec`, `std.map`, `std.fs`, `std.io`, `std.fmt`,
@@ -1327,6 +2053,10 @@ Do not duplicate compiler-command cleanup here.
     checksums, sanitizer/runtime-instrumentation hooks where available, and
     `std.test`. CI must build, run, test, audit authority/allocation/evidence
     classes, and compare interpreter-vs-compiled behavior.
+
+70. Close Phase 7 against the Phase 7 Completion Contract, move every fully
+    completed task body to CHANGELOG, leave only future-relevant invariants in
+    this document, and then continue directly with Phase 7.5 task 1.
 
 ## Phase 7.5: Usable QBE Backend And Independent Validation
 
@@ -1374,6 +2104,15 @@ These are enabling refactors, not a new optimizer or a premature second middle
 end. Zig's useful lesson is the stable analyzed input shared by every backend;
 Concrete already has that candidate in verified/cleaned SSA. Make the boundary
 explicit before duplicating LLVM-era assumptions in QBE.
+
+Opening dependency order: provision and pin the QBE toolchain on eligible CI
+hosts; extract backend-neutral `LayoutFacts`; define the typed QBE IL/fragment
+model; introduce only the `CodegenInput` and driver surface needed to run the
+first vertical slice; then expand QBE coverage. The numbered preflight inventory
+below records all obligations, not permission to complete every abstraction
+before `main -> 42`. Layout panic-to-diagnostic conversion follows the layout
+split. Existing LLVM emission moves to fragments only when a shared consumer or
+profiled bug 027 justifies it.
 
 The correspondence is architectural, not literal:
 
@@ -1424,7 +2163,21 @@ undesirable, the slice must state the exact textual change, prove equal native
 observations in debug/release modes, run LLVM validation, and add a regression
 for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
-0a. Introduce an immutable `CodegenInput` wrapper around cleaned
+1. Provision QBE as an explicit toolchain dependency. Pin a supported release
+   and checksum in Nix/CI, verify the installed binary rather than accepting an
+   arbitrary `PATH` match, document source/bootstrap and system-package paths,
+   and make local discovery available through `concrete doctor` / agent
+   feature JSON. Tool download is never an implicit compilation side effect.
+   CI must cover a clean checkout and reject an unsupported QBE version with a
+   clear diagnostic; updating the pin requires the quick matrix plus scheduled
+   corpus and an attached toolchain-diff record. Check in a host/target
+   capability matrix discovered from the pinned binary and verified by compile/
+   assemble/link probes, including `x86_64-linux -> amd64_sysv` and each macOS
+   runner's real Apple target. Cross targets may be emit/assemble-only when no
+   declared runner exists; executable rows require a named host or emulator.
+   Do not infer support from an OS or CPU-family label alone.
+
+2. Introduce an immutable `CodegenInput` wrapper around cleaned
     `ValidatedSSA`, plus `CodegenFacts` derived once per program: target-neutral
     type/layout facts, function signatures, symbol identities, module-local
     aliases, entry/test metadata, string/global inventory, builtin identities,
@@ -1433,21 +2186,21 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     value; a hash of its canonical form appears in backend artifacts and
     differential bundles. Eliminate emitter-owned rescans that can disagree by
     program/module order (the bug-039 class).
-0b. Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched
+3. Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched
     backend driver returning a structured `CodegenArtifact`:
     `{backend, target, codegen_input_hash, primary_text, auxiliary_files,
     runtime_helpers, link_inputs, diagnostics, toolchain_facts}`. Use a closed
     `BackendKind` sum (`llvm | qbe`) and ordinary Lean functions, not a dynamic
     plugin system or effectful callback framework. Keep pure emission separate
     from external validation, assembly, and linking.
-0c. Consolidate the duplicated file/build/test compilation paths in `Main.lean`
+4. Consolidate the duplicated file/build/test compilation paths in `Main.lean`
     behind one backend-neutral driver:
     `prepare -> emit -> verify -> assemble/codegen -> link`. Backend-specific
     code supplies artifact extension, verifier/tool invocation, target flags,
     and link inputs; CLI code owns diagnostics, artifact retention, and process
     policy once. Add failure-injection tests at every boundary so a QBE error
     cannot take a less structured path than an LLVM error.
-0d. Split target-neutral layout computation from LLVM rendering. Rename or move
+5. Split target-neutral layout computation from LLVM rendering. Rename or move
     `tyToLLVM`, LLVM type-definition construction, target triple/data-layout
     text, and LLVM ABI spellings out of `Concrete/Check/Layout.lean`; retain one
     checked `LayoutFacts` source for size, alignment, field offsets, enum
@@ -1459,14 +2212,14 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     target-neutral `LayoutFacts` owner and LLVM-specific renderer where they
     actually remain. Gate the split with byte-identical LLVM IR first so the
     hygiene slice does not move and rewrite the same functions twice.
-0e. Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from
+6. Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from
     `EmitSSA.lean`: symbol names, signatures, ownership/capability class,
     failure/trap behavior, required helper, and backend support status. Keep
     builtin semantic behavior detection in the existing interpreter/compiled
     gate; this manifest owns codegen availability and linkage, not a second
     signature or semantic truth source. A new builtin must fail closed until
     both backend rows are classified.
-0f. Make backend emission function-local and deterministic where possible.
+7. Make backend emission function-local and deterministic where possible.
     Each function job receives immutable `CodegenInput`/target facts and returns
     a function fragment plus declarations/helper requirements; it may not
     mutate program-wide alias, type, string, or symbol state. Merge fragments in
@@ -1474,7 +2227,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     keys. Start sequentially, add a serial-versus-parallel byte-identity gate,
     and only then allow parallel codegen. This follows Zig's successful isolated
     codegen-job shape without pulling in its linker architecture.
-0g. Define a legalization responsibility table before QBE instruction coverage:
+8. Define a legalization responsibility table before QBE instruction coverage:
     for every `SInst`/terminator, state whether Concrete SSA already expresses
     the exact semantics, a shared target-neutral expansion is required, or the
     backend must select an independent sequence. Shared legalization is allowed
@@ -1483,13 +2236,13 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     instruction selection and target realization remain independent so the
     oracle does not correlate backend bugs. Every legalization carries source
     span and semantic-family identity into emitted artifacts.
-0h. Add a generated backend capability matrix keyed by the constructors of
+9. Add a generated backend capability matrix keyed by the constructors of
     `SInst`, `STerm`, `Ty`, ABI shape, builtin, target, and mode
     (normal/test/debug/release). Coverage derives from compiler constructors,
     not a hand-maintained prose list, so adding an IR operation makes the gate
     fail until LLVM/QBE support is declared and tested. Expose the matrix in
     `concrete agent features --json`, debug bundles, and the Phase 7.5 capstone.
-0i. Preserve oracle independence with a review/firewall gate. QBE modules may
+10. Preserve oracle independence with a review/firewall gate. QBE modules may
     import SSA, target-neutral layout/codegen facts, diagnostics, and semantic
     identities, but not LLVM AST/printer/emitter modules. LLVM and QBE may share
     runtime helpers only when the manifest discloses the correlation. Add an
@@ -1498,7 +2251,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
 ### Architecture And Independence Rules
 
-1. Preserve one frontend and one lowering spine:
+11. Preserve one frontend and one lowering spine:
    `source -> Core -> Mono -> ValidatedSSA -> SSACleanup`, followed by sibling
    LLVM and QBE emitters. QBE must consume `SModule` / `SInst` (or a minimal
    target-neutral view over them) and must never translate emitted LLVM IR or
@@ -1506,24 +2259,24 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    width/signedness, size/alignment, symbol identity, builtin identity, and
    entry-point policy; keep instruction selection, aggregate materialization,
    ABI spelling, wrappers, globals, and runtime-helper emission independent.
-2. Add an explicit backend selection surface:
+12. Add an explicit backend selection surface:
    `--backend llvm|qbe`, `--emit-qbe`, and the corresponding project-build
    setting. LLVM remains the default throughout Phase 7.5. Reject an unknown or
    unavailable backend with a structured diagnostic that names the missing
    tool/target; never fall back to LLVM after the user selects QBE.
-3. Add `Concrete/Backend/QBE.lean` for a small typed QBE IL AST,
+13. Add `Concrete/Backend/QBE.lean` for a small typed QBE IL AST,
    `EmitQBE.lean` for the pure text printer, and an SSA-to-QBE translation
    module separate from `EmitSSA.lean`. Do not build QBE text through ad-hoc
    concatenation inside CLI code. Pin the supported QBE release/tool identity
    in CI and record it in debug/audit output.
-4. Keep layout facts backend-neutral. Split LLVM spelling out of
+14. Keep layout facts backend-neutral. Split LLVM spelling out of
    `Concrete/Check/Layout.lean` where necessary, but do not create a second
    size/alignment calculator. Add a gate proving LLVM and QBE consume the same
    Concrete layout decisions while independently realizing them.
 
 ### Staged Implementation
 
-5. Land a scalar smoke slice first: integer and boolean constants, arithmetic,
+15. Land a scalar smoke slice first: integer and boolean constants, arithmetic,
    comparisons, casts, direct calls, returns, blocks, branches, phi/copy
    lowering, stack slots, loads/stores, globals, string data, and the stage-2
    main wrapper. Map Concrete `i8`/`i16`/`i32`/`bool` temporaries deliberately
@@ -1531,7 +2284,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
    Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
    and exit-code edge cases rather than accepting scalar happy paths alone.
-5a. Give floating point its own executable slice rather than treating the
+16. Give floating point its own executable slice rather than treating the
     `f32`/`f64` type mapping as coverage. Add arithmetic; ordered/unordered
     comparisons; NaN, infinity, signed-zero, subnormal, and precision-change
     vectors; int-to-float conversions; and checked float-to-int conversions.
@@ -1540,13 +2293,13 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     `stoui`, `dtosi`, or `dtoui` behavior is not Concrete's checked-cast
     semantics. Until this slice lands, every float family is an explicit
     `qbe_pending` capability row rather than silently absent from the subset.
-6. Add memory and aggregate support: fixed arrays, structs, packed/explicitly
+17. Add memory and aggregate support: fixed arrays, structs, packed/explicitly
    aligned layouts, enums, canonical `Option`/`Result`, strings, vectors, nested
    places, byte-union payloads, aggregate copies, and small/large aggregate
    calls/returns. QBE aggregates are memory/ABI objects rather than general SSA
    temporaries, so make materialization explicit and test tag/payload offsets,
    padding, alignment, and partially initialized payload storage.
-7. Add calls and platform boundaries: indirect calls, externs, variadics used
+18. Add calls and platform boundaries: indirect calls, externs, variadics used
    by the runtime, argc/argv accessors, symbol visibility, linker aliases, C ABI
    scalar/aggregate classification, and Linux/macOS target selection for the
    architectures QBE and Concrete both declare supported. Unsupported target,
@@ -1559,27 +2312,27 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    “greater than 16 bytes is unsupported” rule: QBE's supported ABI paths must
    be tested; only a shape that the pinned target/toolchain actually cannot
    realize receives a named `qbe_pending` row or runtime-mediated boundary.
-8. Port the compiler-emitted builtin/runtime surface needed by the validation
+19. Port the compiler-emitted builtin/runtime surface needed by the validation
    corpus. Prefer a small shared C runtime for allocation, IO, traps, and other
    platform services when that keeps semantics explicit; keep pure scalar
    builtins in the emitter when independence is more valuable. Extend the
    builtin-semantics inventory so every builtin is one of `qbe_equal`,
    `qbe_runtime_helper`, or `qbe_pending`; adding a builtin without an explicit
    class fails CI.
-9. Add QBE test-mode entry generation so `concrete test` can execute the same
+20. Add QBE test-mode entry generation so `concrete test` can execute the same
    discovered tests and module filter under both native backends. Preserve the
    test runner's result accounting and output exactly; do not special-case a
    smaller, silently different QBE test semantics.
 
 ### Differential Validation And Failure Localization
 
-10. Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver
+21. Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver
     that runs each fixture through the source interpreter, LLVM, and QBE and
     compares a structured observation:
     `{compile_class, stdout_bytes, stderr_bytes, exit_status, runtime_class}`.
     Normalize only declared platform noise; never normalize program output,
     trap kind, or exit status merely to make paths agree.
-11. Classify every mismatch rather than printing a generic wrong-code failure:
+22. Classify every mismatch rather than printing a generic wrong-code failure:
     - interpreter == QBE != LLVM: `llvm_backend_mismatch`;
     - interpreter == LLVM != QBE: `qbe_backend_mismatch`;
     - LLVM == QBE != interpreter: `interpreter_or_shared_lowering_mismatch`;
@@ -1590,12 +2343,12 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
       hand oracle: `shared_lowering_or_spec_mismatch`.
     Save sources, Core, cleaned SSA, LLVM IR, QBE IL, tool versions, commands,
     observations, and classification in the wrong-code/debug bundle.
-12. Require an independent expected result for cases capable of exposing a
+23. Require an independent expected result for cases capable of exposing a
     shared lowering error: a hand-authored expectation, checked-in reference
     model, system-tool/Python oracle, or metamorphic property. Two backends
     agreeing is corroboration, not correctness, because both consume the same
     lowered SSA.
-13. Build the validation corpus by semantic family, not file count: every
+24. Build the validation corpus by semantic family, not file count: every
     `SInst`, terminator, scalar width, signedness-sensitive operation,
     aggregate/layout class, direct/indirect call shape, builtin class, trap,
     and main/test wrapper path needs a manifest row. Seed it with the existing
@@ -1603,7 +2356,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     workload, wrong-code, and exit-model corpora. Add mutation checks proving
     the differential suite notices at least one injected fault in lowering, LLVM emission,
     QBE emission, interpreter semantics, layout, and builtin behavior.
-14. Run a deterministic quick QBE matrix on every CI change and a larger
+25. Run a deterministic quick QBE matrix on every CI change and a larger
     rotating fuzz/differential matrix on schedule. QBE-unavailable CI is a hard
     configuration failure for the QBE job, not a skip. Keep LLVM-only release
     jobs intact until Phase 15 graduates QBE; report QBE flakes separately and
@@ -1611,31 +2364,33 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
 ### Phase Boundary And Graduation
 
-15. Phase 7.5 may close with a declared subset, but that subset must be honest:
+26. Phase 7.5 may close with a declared subset, but that subset must be honest:
     `concrete agent features --json`, help, audit output, and documentation list
     supported targets/features and `qbe_pending` cases. A program outside the
     subset receives a diagnostic; per-function or per-instruction fallback to
     LLVM is forbidden.
-16. Exercise the completed subset immediately in Phase 8: every new flagship
+27. Exercise the completed subset immediately in Phase 8: every new flagship
     workload that stays inside it runs interpreter/LLVM/QBE differential checks;
     exclusions require a named missing feature and roadmap owner. Record bugs
     found by the backend/differential suite in the bug corpus with the disagreement classification
     that exposed them.
-17. Graduation to a supported release backend occurs only in Phase 15: migrate
+28. Graduation to a supported release backend occurs only in Phase 15: migrate
     QBE from the direct validation path onto `ValidatedBackendIR`, pass the full
     target/toolchain and C ABI matrices, integrate debug/source maps and
     incremental artifacts, attach translation-validation status, define
     optimization/tool-version policy, and pass release/platform soak gates.
     Until then `--backend qbe` is explicitly experimental and its native result
     remains backend-trusted/test evidence.
-18. After the QBE backend is stable, evaluate—but do not automatically adopt—a
-    second complementary target. Prefer WebAssembly when portability, sandboxed
-    memory, or structured-control-flow pressure is the goal; prefer Cranelift
-    when fast native/JIT compilation or a broader production backend is forced.
-    C emission, libgccjit, MLIR, and direct machine code remain comparison
-    options, not parallel commitments. No fourth execution path starts without
-    a bug class or workload that QBE plus LLVM cannot pressure effectively.
-19. Define and gate QBE-IL legality independently of execution. Add a pure
+29. After the QBE backend is stable, evaluate a complementary target rather
+    than starting one in parallel. WebAssembly is the provisional next backend,
+    governed by Phase 15.25's entrance criteria and narrow Wasm32/WASI scope.
+    This is not an implementation commitment until those criteria pass.
+    Cranelift remains the alternative if a forcing workload instead requires
+    fast native/JIT compilation or a broader production backend. C emission,
+    libgccjit, MLIR, and direct machine code remain comparison options, not
+    parallel commitments. No additional execution path starts without a bug
+    class or workload that LLVM plus QBE cannot pressure effectively.
+30. Define and gate QBE-IL legality independently of execution. Add a pure
     verifier for Concrete's typed QBE AST (definition-before-use where QBE
     requires it, unique temporaries/blocks/symbols, legal base/extended type
     positions, phi predecessor agreement, terminator completeness, entry-block
@@ -1645,7 +2400,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     a structured Concrete diagnostic with the `.qbe` artifact retained; raw
     QBE/assembler/linker errors must not be the first user-facing diagnosis for
     a compiler-owned invalid artifact.
-20. Write a QBE semantic-gap ledger before broad coverage. For every Concrete
+31. Write a QBE semantic-gap ledger before broad coverage. For every Concrete
     SSA operation, record the QBE instruction sequence and the assumptions that
     make it equivalent: signed division overflow and divide-by-zero, shift
     counts, float-to-int out-of-range behavior, NaNs and signed zero, sub-word
@@ -1654,14 +2409,14 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     conversions. Where LLVM uses poison/undef, flags, or intrinsics that have no
     direct QBE analogue, lower to explicit checks/helpers or mark the operation
     pending; never inherit accidental host behavior as Concrete semantics.
-21. Make symbol and module composition a first-class gate. Test duplicate
+32. Make symbol and module composition a first-class gate. Test duplicate
     basenames, import aliases, colliding private names, generic
     specializations, extern/defined-symbol collisions, linker aliases, string
     and type-name escaping, multi-module declaration deduplication, visibility,
     and deterministic ordering. Compile both one combined QBE unit and, once
     supported, separate units linked together; their observations and exported
     symbol sets must agree.
-22. Add deterministic-emission and reproducibility checks: identical cleaned
+33. Add deterministic-emission and reproducibility checks: identical cleaned
     SSA plus an identical target/toolchain configuration must produce
     byte-identical QBE IL, assembly where the pinned toolchain permits it, link
     manifests, and backend observation records. Debug paths, temporary paths,
@@ -1669,24 +2424,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     variables must not perturb semantic artifacts. Record the QBE version,
     target, assembler, C compiler/linker, runtime-helper hash, and flags in the
     build/debug bundle and cache key.
-23. Provision QBE as an explicit toolchain dependency. Pin a supported release
-    and checksum in Nix/CI, verify the installed binary rather than accepting an
-    arbitrary `PATH` match, document source/bootstrap and system-package paths,
-    and make local discovery available through `concrete doctor` / agent
-    feature JSON. Tool download is never an implicit compilation side effect.
-    CI must cover a clean checkout and reject an unsupported QBE version with a
-    clear diagnostic; updating the pin requires the quick matrix plus scheduled
-    corpus and an attached toolchain-diff record.
-    Make provisioning the first operational slice, before emitter work assumes
-    a CI topology. Check in a host/target capability matrix discovered from the
-    pinned binary and verified by compile/assemble/link probes, including at
-    least `x86_64-linux -> amd64_sysv` and every available macOS runner's real
-    Apple target (`amd64_apple` and/or `arm64_apple`). Cross targets may be
-    emit/assemble-only when no declared runner exists; executable-oracle rows
-    require a host or emulator explicitly named in the matrix. Do not infer
-    support from “macOS” or CPU family alone, and do not skip a required row
-    merely because a hosted runner changed architecture.
-24. Add optimization-sensitive triangulation. For every eligible fixture,
+34. Add optimization-sensitive triangulation. For every eligible fixture,
     compare interpreter, LLVM at the supported debug/release optimization
     levels, and QBE followed by the supported assembler/linker configurations.
     Classify within-backend disagreement separately as
@@ -1694,14 +2432,14 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     optimization artifacts where available. Include sanitizer/instrumented LLVM
     runs as corroborating evidence, while keeping sanitizer output out of the
     program-output comparison channel.
-25. Extend fuzzing and reduction for the new path. Add backend-aware predicates
+35. Extend fuzzing and reduction for the new path. Add backend-aware predicates
     for QBE compile crash/rejection, QBE runtime mismatch, three-way semantic
     split, LLVM-only mismatch, shared-compiled mismatch, optimization mismatch,
     and nondeterministic QBE emission. Reducers must preserve the mismatch
     classification and relevant target/tool versions, save the smallest
     reproducer plus replay command, and prove by mutation tests that a reduced
     case is not accepted merely because one backend stopped compiling.
-26. Separate compiler defects from toolchain defects operationally. The bundle
+36. Separate compiler defects from toolchain defects operationally. The bundle
     and CI report must identify the first failing boundary:
     `ssa_to_qbe`, `qbe_verify`, `qbe_codegen`, `assemble`, `link`, `runtime`, or
     `observation_compare`; capture exit code/signal/timeout/resource-limit and a
@@ -1709,13 +2447,13 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     memory, and recursion limits so malformed generated IL or fuzz cases cannot
     hang the suite, and distinguish timeout/OOM/tool crash from semantic
     disagreement.
-27. Establish performance guardrails without making QBE win benchmarks. Track
+37. Establish performance guardrails without making QBE win benchmarks. Track
     compiler wall time, peak memory where available, emitted IL/assembly/object
     size, final binary size, and runtime for a small stable corpus against LLVM.
     Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
     QBE-versus-LLVM speed ratio. Performance results are benchmark facts only;
     they cannot choose a backend silently or weaken semantic/evidence gates.
-28. Define runtime-helper ownership and versioning. Shared C helpers must have a
+38. Define runtime-helper ownership and versioning. Shared C helpers must have a
     narrow, documented ABI; checked-in source; deterministic build; symbol
     namespace; target/feature manifest; sanitizer tests; and interpreter/LLVM/
     QBE semantic vectors. Decide explicitly which helpers are common semantic
@@ -1723,7 +2461,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     helper change invalidates both backend cache keys and reruns every builtin/
     ABI consumer; sharing a helper must be disclosed when it reduces oracle
     independence.
-29. Add release-surface and compatibility discipline even while experimental:
+39. Add release-surface and compatibility discipline even while experimental:
     reserve backend names and project-manifest schema, define `.qbe` artifact
     naming without colliding with Concrete's own SSA dumps, keep LLVM as the
     stable default, and snapshot help/JSON/diagnostic output. Removing or
@@ -1731,7 +2469,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     but no package may claim generic native support from a QBE-only test. Audit
     bundles must state the exact backend used; examples and documentation must
     not show QBE-derived native evidence as LLVM-derived or backend-independent.
-30. Add a Phase 7.5 capstone artifact:
+40. Add a Phase 7.5 capstone artifact:
     `examples/qbe_backend_validation/` plus
     `scripts/tests/check_phase7_5_qbe.sh`. It must exercise every supported
     semantic-family manifest row; demonstrate each disagreement classifier
@@ -1743,14 +2481,14 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     use on the declared subset, and either a recorded real defect found by the
     differential suite or successful injected-fault detection for every owned
     fault class. All pending rows need an owner and Phase 8/15 disposition.
-31. Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the
+41. Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the
     structured backend driver, and the extracted layout/runtime facts with
     byte/behavior parity, delete the old direct `Pipeline.emit -> String` path,
     duplicated CLI compile/link branches, and emitter-local program-wide fact
     discovery. Do not carry two LLVM pipelines through the QBE implementation;
     the compatibility window must have a named removal commit and mutation-
     sensitive parity gate.
-32. Keep a Phase 7.5 decision log tied to implementation evidence. For every
+42. Keep a Phase 7.5 decision log tied to implementation evidence. For every
     vertical slice record: the supported semantic families, newly shared facts,
     deliberately independent logic, LLVM textual changes (if any), three-way
     result counts, mutations caught, performance deltas, and remaining blocker.
@@ -1775,6 +2513,17 @@ pipeline: Phase 6B's `diff-caps` artifact gives the first narrow reviewable
 delta, and this phase turns that style of replayable evidence into a non-author
 example or workload transcript before the larger package/release machinery
 depends on it.
+
+### Incremental Architecture Track
+
+Execute the approved long-term items in this order alongside, not ahead of,
+the flagship work: stable semantic identities; immutable indexed program
+facts; thin typed pass-boundary wrappers; compiler-derived interface facts
+compared against and then replacing the repaired manifest scanner; and a
+generated self-enforcing consumer/coverage matrix. Each slice must leave every
+production entry point runnable, preserve LLVM behavior by default, name its
+forcing consumer or bug class, and delete or ratchet the superseded path. This
+is not authorization for a flag-day pipeline rewrite.
 
 1. Maintain the five graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
@@ -3775,6 +4524,69 @@ replayable; and every boundary after that slice remains explicitly trusted.
     docs must not collapse these into a vague "FFI supported" claim. Each side
     needs its own examples, ABI restrictions, ownership-transfer rules,
     capability/evidence report, and red-team negatives.
+
+## Provisional Phase 15.25: WebAssembly Portability And Sandbox Backend
+
+Status: provisional. This phase records the preferred backend after QBE; it
+does not authorize WebAssembly implementation in parallel with Phase 7.5 or
+before the entrance criteria below pass.
+
+Goal: add an independently lowered, portable, sandbox-oriented backend that
+pressures Concrete's memory, control-flow, capability, layout, and trap
+semantics differently from the native LLVM and QBE paths.
+
+Entrance criteria:
+
+- QBE's documented subset works through ordinary `build`, `run`, and `test`
+  workflows and its backend boundary, `CodegenInput`, capability matrix,
+  diagnostics, and artifact/replay model are stable.
+- Phase 15 has established `ValidatedBackendIR`, translation-validation status,
+  and explicit target/toolchain/runtime contracts that WebAssembly can consume
+  without inventing a parallel middle end.
+- At least one named portability, sandboxing, deployment, or validation
+  workload demonstrates value that LLVM plus QBE do not provide.
+- A short design record confirms Wasm remains preferable to Cranelift for that
+  workload. If fast native/JIT compilation is the actual requirement, schedule
+  Cranelift instead and leave this phase provisional.
+
+Initial scope:
+
+1. Target Wasm32 with a pinned WebAssembly toolchain and one documented WASI
+   profile. Browser integration, the component model, Wasm GC, Wasm64, threads,
+   SIMD, and exception handling are explicitly later work unless a forcing
+   workload promotes one of them.
+2. Lower `ValidatedBackendIR` into a small typed Concrete WebAssembly AST, run
+   a pure Concrete verifier, emit deterministic `.wasm`, and validate it with
+   the pinned external validator. Do not emit ad-hoc WAT from CLI code and do
+   not route WebAssembly through LLVM.
+3. Reuse canonical semantic, layout, builtin, trap, source-identity, and
+   capability facts, while keeping WebAssembly instruction selection and
+   control-flow restructuring independent from LLVM and QBE lowering.
+4. Deliver thin vertical slices in this order: `main -> 42`; direct calls and
+   returns; branches/loops; integer operations and checked traps; linear-memory
+   loads/stores; basic aggregates; runtime imports. Each slice ends in an
+   executable differential fixture.
+5. Map external authority deliberately onto an explicit WASI import manifest.
+   Missing capabilities and unsupported operations fail before partial code
+   generation with stable `wasm_pending` diagnostics; there is no LLVM/QBE or
+   per-function fallback.
+6. Integrate `--backend wasm`, `--emit-wasm`, projects, retained artifacts,
+   debug bundles, replay commands, caching, `doctor`, feature JSON, audit
+   output, and ordinary `run`/`test` workflows through the backend-neutral
+   driver.
+7. Compare interpreter, LLVM, QBE, and WebAssembly observations for every
+   eligible fixture: stdout, stderr, exit status, and normalized trap/failure
+   class. Add Wasm-specific cases for structured control flow, linear-memory
+   bounds, alignment, integer-width conversion, imports, and deterministic
+   module composition.
+
+Done when: the declared Wasm32/WASI subset builds and runs at least one Phase
+8-class workload through normal user workflows; its capability matrix is
+complete and fail-closed; emitted modules and manifests are deterministic and
+independently validated; the four-way differential suite covers the supported
+subset; and audit/evidence output labels WebAssembly results honestly as
+`tested` or `backend_trusted`, never as proof that native or source semantics
+are preserved.
 
 ## Phase 15.5: Unsafe Concrete And Trusted Systems Profile
 
