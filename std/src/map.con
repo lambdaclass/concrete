@@ -327,38 +327,6 @@ mod map {
             }
         }
 
-        /// Collect all keys into a Vec.
-        pub fn keys(&self) with(Alloc) -> Vec<K> {
-            let mut result: Vec<K> = vec_new::<K>();
-            let mut i: u64 = 0;
-            while i < self.cap {
-                let flag_ptr: *mut u8 = self.flags + i;
-                let flag: u8 = *flag_ptr;
-                if flag == 1 {
-                    let key_ptr: *mut K = self.keys + i;
-                    vec_push::<K>(&mut result, *key_ptr);
-                }
-                i = i + 1;
-            }
-            return result;
-        }
-
-        /// Collect all values into a Vec.
-        pub fn values(&self) with(Alloc) -> Vec<V> {
-            let mut result: Vec<V> = vec_new::<V>();
-            let mut i: u64 = 0;
-            while i < self.cap {
-                let flag_ptr: *mut u8 = self.flags + i;
-                let flag: u8 = *flag_ptr;
-                if flag == 1 {
-                    let val_ptr: *mut V = self.values + i;
-                    vec_push::<V>(&mut result, *val_ptr);
-                }
-                i = i + 1;
-            }
-            return result;
-        }
-
         fn insert_for_grow(&mut self, key: K, value: V) {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(&key);
@@ -386,7 +354,48 @@ mod map {
     // `V: Copy` bound is enforced (a non-Copy map cannot call `get`; use
     // `with_value` to borrow or `remove` to move out). Copying a Copy value out
     // is a real copy, so no owner is duplicated.
+    // Bug 046: `keys`/`values` copied linear payloads out by pointer deref
+    // while the map retained ownership — TWO owners of one allocation
+    // (checker-accepted double-free, runtime malloc abort). Collecting
+    // copies is only sound for Copy element types; linear keys/values keep
+    // the scoped/borrowing APIs (keys_for_each, folds, with_value). An
+    // owning extraction would be a CONSUMING into_keys(self) that also
+    // destroys the unreturned side — pull-gated, not built speculatively.
+    trusted impl<K: Copy, V> HashMap<K, V> {
+        /// Collect all keys into a Vec (Copy keys only — see bug 046).
+        pub fn keys(&self) with(Alloc) -> Vec<K> {
+            let mut result: Vec<K> = vec_new::<K>();
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    vec_push::<K>(&mut result, *key_ptr);
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+    }
+
     trusted impl<K, V: Copy> HashMap<K, V> {
+        /// Collect all values into a Vec (Copy values only — see bug 046).
+        pub fn values(&self) with(Alloc) -> Vec<V> {
+            let mut result: Vec<V> = vec_new::<V>();
+            let mut i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let val_ptr: *mut V = self.values + i;
+                    vec_push::<V>(&mut result, *val_ptr);
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+
         pub fn get(&self, key: &K) -> Option<V> {
             let idx: u64 = self.find_slot(key);
             let flag_ptr: *mut u8 = self.flags + idx;

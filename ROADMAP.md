@@ -706,6 +706,35 @@ batteries-included breadth. The ranked build order is:
      with the full battery as backstop. Dedicated fresh session.
    - Known-defects queue (priority-ordered; each owns a slice and battery when
      its stated trigger fires):
+     0a. Manifest generator derives facts from ONE REGEX
+         (scripts/tests/lib/stdlib_manifest.py:66) — verified defects:
+         params truncate at the first nested `)` (fn-pointer params corrupt
+         the row), `pub trusted extern fn` unrecognized, and trust
+         classification misses the ENCLOSING `trusted impl` context. The
+         diff gate proves only "committed wrong facts == freshly derived
+         wrong facts". Fix derivation BEFORE any new manifest-based rule
+         (raw-pointer-implies-Unsafe etc.): compiler-derived interface
+         facts preferred; else a balanced scanner (comments/strings,
+         nested parens/generics, extern, impl context, multiline
+         attributes) + negative fixtures per misparsed shape + mutation
+         tests per fact column. ACTIVE — next slice after bug 046.
+     0b. Safe cross-module code constructs `NonZeroU32(0)`, bypassing
+         `try_new` (verified 2026-07-18): smart-constructor invariants —
+         including the kernel-proved ones — are advisory without struct/
+         newtype construction rights. Pointer-bearing forgery is NOT
+         possible in safe code (Unsafe-gated casts held under repro);
+         trusted-code forgery is the documented trusted contract. Decide
+         pre-freeze: private-by-default fields / explicit pub / opaque
+         exports / module-owned construction. LANGUAGE item, above API
+         polish.
+     0c. Linear Option/Result consuming combinators (workload-pulled
+         ergonomics, NOT soundness): map/and_then should consume a linear
+         T; unwrap_or needs explicit destruction of the unused side. Do
+         NOT lift the Copy bounds until the checker proves arm-wise linear
+         conservation; slice ships with destructor-counter fixtures,
+         exactly-once destruction on every arm, interp/LLVM agreement,
+         updated proof fingerprints, and leak/double-consume negatives.
+         After 0a/0b.
      1. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
         module importing different same-named fns still share a flat
         alias list (collectAllLinkerAliases). Pull-gated: fix when a

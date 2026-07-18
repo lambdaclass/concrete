@@ -10571,6 +10571,19 @@ for projdir in "$TESTDIR"/*/; do
         projname=$(basename "$projdir")
         # Skip adversarial policy projects — they are tested in the policy section
         case "$projname" in adversarial_policy_*) continue ;; esac
+        # error_* projects are NEGATIVE fixtures: they must FAIL to build.
+        case "$projname" in
+        error_*)
+            if ( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_proj_"$projname" ) >/dev/null 2>&1; then
+                echo "  FAIL $projname — negative project fixture COMPILED"
+                FAIL=$((FAIL + 1))
+            else
+                echo "  ok  $projname (rejected as required)"
+                PASS=$((PASS + 1))
+            fi
+            rm -f /tmp/test_proj_"$projname"
+            continue ;;
+        esac
         output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_proj_"$projname" 2>&1 ) && build_ok=true || build_ok=false
         if $build_ok; then
             run_result=$(/tmp/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
