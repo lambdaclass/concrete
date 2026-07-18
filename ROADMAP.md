@@ -938,6 +938,99 @@ source/Core proof to native-code evidence. Production backend contracts,
 translation certificates, debug information, complete target policy, and
 release support remain owned by Phase 15.
 
+### Preflight Refactors: Make The Backend Boundary Real
+
+These are enabling refactors, not a new optimizer or a premature second middle
+end. Zig's useful lesson is the stable analyzed input shared by every backend;
+Concrete already has that candidate in verified/cleaned SSA. Make the boundary
+explicit before duplicating LLVM-era assumptions in QBE.
+
+The correspondence is architectural, not literal:
+
+| Zig role | Concrete role in Phase 7.5 |
+| --- | --- |
+| AST / ZIR | parsed syntax / checked Core |
+| AIR | verified and cleaned Concrete SSA |
+| isolated codegen-job input | immutable `CodegenInput` + `CodegenFacts` |
+| LLVM backend | structured LLVM emitter + existing toolchain |
+| self-hosted native backend | QBE emitter + pinned QBE toolchain |
+| target MIR / encoder | deliberately delegated to QBE; not built in Phase 7.5 |
+| linker job | backend-neutral Concrete driver invoking the declared linker |
+
+Hard boundary: do not rename Concrete IRs to imitate Zig, introduce ZIR/AIR as
+extra layers, or build target MIR/register allocation/object writers merely for
+architectural symmetry. Copy the separation of responsibilities, immutable
+job shape, coverage discipline, and gradual backend enablement. QBE exists to
+buy independent code generation before Concrete can justify owning those lower
+layers itself.
+
+0a. Introduce an immutable `CodegenInput` wrapper around cleaned
+    `ValidatedSSA`, plus `CodegenFacts` derived once per program: target-neutral
+    type/layout facts, function signatures, symbol identities, module-local
+    aliases, entry/test metadata, string/global inventory, builtin identities,
+    runtime-helper requirements, and source-span mappings. This is not a new IR
+    and must not rewrite instructions. Both LLVM and QBE consume the identical
+    value; a hash of its canonical form appears in backend artifacts and
+    differential bundles. Eliminate emitter-owned rescans that can disagree by
+    program/module order (the bug-039 class).
+0b. Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched
+    backend driver returning a structured `CodegenArtifact`:
+    `{backend, target, codegen_input_hash, primary_text, auxiliary_files,
+    runtime_helpers, link_inputs, diagnostics, toolchain_facts}`. Use a closed
+    `BackendKind` sum (`llvm | qbe`) and ordinary Lean functions, not a dynamic
+    plugin system or effectful callback framework. Keep pure emission separate
+    from external validation, assembly, and linking.
+0c. Consolidate the duplicated file/build/test compilation paths in `Main.lean`
+    behind one backend-neutral driver:
+    `prepare -> emit -> verify -> assemble/codegen -> link`. Backend-specific
+    code supplies artifact extension, verifier/tool invocation, target flags,
+    and link inputs; CLI code owns diagnostics, artifact retention, and process
+    policy once. Add failure-injection tests at every boundary so a QBE error
+    cannot take a less structured path than an LLVM error.
+0d. Split target-neutral layout computation from LLVM rendering. Rename or move
+    `tyToLLVM`, LLVM type-definition construction, target triple/data-layout
+    text, and LLVM ABI spellings out of `Concrete/Check/Layout.lean`; retain one
+    checked `LayoutFacts` source for size, alignment, field offsets, enum
+    tag/payload placement, pass-by-pointer decisions, and canonical builtin
+    aggregates. LLVM and QBE render those facts independently. No emitter may
+    recompute layout from syntax or host assumptions.
+0e. Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from
+    `EmitSSA.lean`: symbol names, signatures, ownership/capability class,
+    failure/trap behavior, required helper, and backend support status. Keep
+    builtin semantic behavior detection in the existing interpreter/compiled
+    gate; this manifest owns codegen availability and linkage, not a second
+    signature or semantic truth source. A new builtin must fail closed until
+    both backend rows are classified.
+0f. Make backend emission function-local and deterministic where possible.
+    Each function job receives immutable `CodegenInput`/target facts and returns
+    a function fragment plus declarations/helper requirements; it may not
+    mutate program-wide alias, type, string, or symbol state. Merge fragments in
+    canonical symbol/module order and deduplicate declarations through typed
+    keys. Start sequentially, add a serial-versus-parallel byte-identity gate,
+    and only then allow parallel codegen. This follows Zig's successful isolated
+    codegen-job shape without pulling in its linker architecture.
+0g. Define a legalization responsibility table before QBE instruction coverage:
+    for every `SInst`/terminator, state whether Concrete SSA already expresses
+    the exact semantics, a shared target-neutral expansion is required, or the
+    backend must select an independent sequence. Shared legalization is allowed
+    only for language semantics that must be identical (checked arithmetic,
+    normalized shift counts, trap classification, aggregate copy intent);
+    instruction selection and target realization remain independent so the
+    oracle does not correlate backend bugs. Every legalization carries source
+    span and semantic-family identity into emitted artifacts.
+0h. Add a generated backend capability matrix keyed by the constructors of
+    `SInst`, `STerm`, `Ty`, ABI shape, builtin, target, and mode
+    (normal/test/debug/release). Coverage derives from compiler constructors,
+    not a hand-maintained prose list, so adding an IR operation makes the gate
+    fail until LLVM/QBE support is declared and tested. Expose the matrix in
+    `concrete agent features --json`, debug bundles, and the Phase 7.5 capstone.
+0i. Preserve oracle independence with a review/firewall gate. QBE modules may
+    import SSA, target-neutral layout/codegen facts, diagnostics, and semantic
+    identities, but not LLVM AST/printer/emitter modules. LLVM and QBE may share
+    runtime helpers only when the manifest discloses the correlation. Add an
+    import-direction test and a source scan preventing calls from one emitter
+    into the other.
+
 ### Architecture And Independence Rules
 
 1. Preserve one frontend and one lowering spine:
@@ -1159,6 +1252,13 @@ release support remain owned by Phase 15.
     requires zero unexplained mismatches and either a recorded real defect found
     by the oracle or successful injected-fault detection for every owned fault
     class. All pending rows need an owner and Phase 8/15 disposition.
+31. Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the
+    structured backend driver, and the extracted layout/runtime facts with
+    byte/behavior parity, delete the old direct `Pipeline.emit -> String` path,
+    duplicated CLI compile/link branches, and emitter-local program-wide fact
+    discovery. Do not carry two LLVM pipelines through the QBE implementation;
+    the compatibility window must have a named removal commit and mutation-
+    sensitive parity gate.
 
 ## Phase 8: Flagship Depth And Examples
 
@@ -3040,6 +3140,23 @@ replayable; and every boundary after that slice remains explicitly trusted.
     validated versus backend/target-trusted. Keep WASM, Cranelift, and any
     additional backend deferred until a forcing workload or uncovered bug class
     justifies another independent path.
+17a. Introduce target-specific MIR only for a direct native backend forced after
+     QBE, never as a prerequisite for QBE itself. The staged shape is
+     `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR
+     owning instruction selection, physical-register constraints, calling-
+     convention realization, relocations, and debug locations. Reuse the Phase
+     7.5 immutable per-function job/deterministic merge contract, but keep MIR
+     architecture-specific rather than creating a lowest-common-denominator
+     universal machine IR. Require behavior coverage and target/ABI matrices
+     comparable to the LLVM/QBE gates before any native backend becomes a
+     default for any build mode.
+17b. Define backend-default policy explicitly if multiple production backends
+     graduate: defaults are a versioned `(target, build_mode) -> backend`
+     table, visible in help/audit/build receipts and overridable by an explicit
+     flag. Changing a default requires clean-build/incremental equivalence,
+     behavior and optimization matrices, performance data, a rollback switch,
+     and release notes. Backend availability must never change source-language
+     semantics, proof status, diagnostics before codegen, or package resolution.
 18. Add translation validation for codegen as the path out of a fully trusted
     backend. V1 should validate a narrow `ValidatedSSA -> BackendIR ->
     ValidatedBackendIR` subset per compile:
