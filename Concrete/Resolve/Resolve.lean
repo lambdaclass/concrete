@@ -588,13 +588,15 @@ def resolveShallow (moduleSummaries : List FileSummary)
               -- resolveImports already carried them; Resolve silently dropped
               -- them, so `import std.numeric.{NonZeroU32}` hit E0108 at the
               -- first use — found by the std compiled-coverage gate).
+              -- Prepend (imported names are distinct, order is immaterial):
+              -- the append-single shape is ratcheted by check_no_quadratic_append.
               match ms.newtypes.find? fun nt => nt.isPublic && nt.name == sym.name with
               | some nt =>
-                (errs, syms ++ [(localName, SymKind.newtype nt)], tys ++ [localName])
+                (errs, (localName, SymKind.newtype nt) :: syms, localName :: tys)
               | none =>
               match ms.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name with
               | some ta =>
-                (errs, syms ++ [(localName, SymKind.typeAlias ta.targetTy)], tys ++ [localName])
+                (errs, (localName, SymKind.typeAlias ta.targetTy) :: syms, localName :: tys)
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
           else (errs ++ [mkResolveDiag (.notPublicInModule sym.name imp.moduleName) (some imp.span)], syms, tys)
