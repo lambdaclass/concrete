@@ -33,7 +33,7 @@ leaks=$(grep -rn "String { ptr" std/src/*.con | grep -vE "std/src/(string|bytes|
   || no "stray String{ptr} construction: $leaks"
 
 # 3b-pre. path validates before its String construction
-grep -B16 "String { ptr: buf" std/src/path.con | grep -q "validate_utf8" \
+grep -B16 "from_raw_unchecked(buf" std/src/path.con | grep -q "validate_utf8" \
   && ok "path.to_string validates before String construction" \
   || no "path builds String without validation"
 
