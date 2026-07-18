@@ -65,6 +65,17 @@ Those belong in:
 ## Open Numbered Bugs
 
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
+- [047_hashmap_insert_duplicate_past_tombstone.md](047_hashmap_insert_duplicate_past_tombstone.md) — insert writes a second entry past a tombstone instead of overwriting (stdlib audit 2026-07-18)
+- [048_hashmap_find_slot_hang_no_empty_slots.md](048_hashmap_find_slot_hang_no_empty_slots.md) — lookups hang once the table has zero empty slots; grow ignores tombstones (stdlib audit 2026-07-18)
+- [049_reduce_crash_predicate_vacuous.md](049_reduce_crash_predicate_vacuous.md) — `concrete reduce --predicate crash` reduces anything to an empty program (reducer audit 2026-07-18)
+- [050_mono_indirect_call_hijack.md](050_mono_indirect_call_hijack.md) — fn-ptr local named like a generic fn is silently rewritten to a direct call of the generic (middle-end audit 2026-07-18)
+- [051_generic_enums_not_monomorphized.md](051_generic_enums_not_monomorphized.md) — mixed instantiations of a user generic enum corrupt memory (middle-end audit 2026-07-18)
+- [052_array_element_destroy_noop.md](052_array_element_destroy_noop.md) — Vec<[T; N]>.drop() skips element destruction via synthesized no-op T_destroy (middle-end audit 2026-07-18)
+- [053_dce_deletes_checked_negation.md](053_dce_deletes_checked_negation.md) — discard(-x) at MIN loses the documented trap (middle-end audit 2026-07-18)
+- [054_struct_mono_name_collision.md](054_struct_mono_name_collision.md) — user types shadow generated specializations (middle-end audit 2026-07-18)
+- [055_sibling_import_alias_unusable.md](055_sibling_import_alias_unusable.md) — project sibling `import a.{x as y}` emits undefined callee (middle-end audit 2026-07-18)
+
+(045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 
 ## Still Open, But Not Numbered Bugs
 
