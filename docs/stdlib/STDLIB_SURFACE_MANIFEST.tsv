@@ -77,8 +77,8 @@ deque	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)
 deque	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
 deque	destroy	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc)
 env	get	yes	constructs	option	Alloc,Env,Unsafe	trusted-boundary	gated	(name: &String) with(Env,Unsafe,Alloc) -> Option<String>
-env	set	no	constructs	infallible	Env,Unsafe	trusted-boundary	gated	(name: &String, value: &String) with(Env,Unsafe)
-env	unset	no	constructs	infallible	Env,Unsafe	trusted-boundary	gated	(name: &String) with(Env,Unsafe)
+env	set	yes	constructs	infallible	Alloc,Env,Unsafe	trusted-boundary	gated	(name: &String, value: &String) with(Env,Unsafe,Alloc)
+env	unset	yes	constructs	infallible	Alloc,Env,Unsafe	trusted-boundary	gated	(name: &String) with(Env,Unsafe,Alloc)
 fmt	write_to	no	borrows	result	none	deterministic	gated	(&self, w: &Writer) -> Result<u64, IoError> // called only where the type is statically known. // ================================================================ // Digit emission is SCALAR (no stack array): the magnitude is reversed // arithmetically, then digits stream high-to-low one byte per write. This // keeps std free of unproven bounds obligations (the array-index analyzer // only accepts constants / #[requires]-bounded indices) and avoids the // bug-029 array-merge shape entirely. Sinks see <= 20 one-byte writes
 fmt	write_int	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: i64) -> Result<u64, IoError>
 fmt	write_uint	no	constructs	result	none	trusted-boundary	gated	(w: &Writer, value: u64) -> Result<u64, IoError>
@@ -131,7 +131,7 @@ hex	encode_u32	yes	constructs	infallible	Alloc	hosted-effect	gated	(val: u32, ou
 hex	encode_u32_vec	yes	constructs	infallible	Alloc	hosted-effect	gated	(words: &Vec<u32>) with(Alloc) -> String
 hex	decode	yes	constructs	option	Alloc	hosted-effect	gated	(s: &String) with(Alloc) -> Option<Vec<u8>>
 io	create	yes	constructs	result	Alloc,File,Unsafe	hosted-effect	gated	(path: &String) with(File,Unsafe,Alloc) -> Result<TextFile, IoError>
-io	open	no	constructs	result	File,Unsafe	hosted-effect	gated	(path: &String, mode: &String) with(File,Unsafe) -> Result<TextFile, IoError>
+io	open	yes	constructs	result	Alloc,File,Unsafe	hosted-effect	gated	(path: &String, mode: &String) with(File,Unsafe,Alloc) -> Result<TextFile, IoError>
 io	write	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self, data: &String) with(File,Unsafe)
 io	read_byte	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self) with(File,Unsafe) -> i32
 io	flush	no	borrows	infallible	File,Unsafe	hosted-effect	gated	(&self) with(File,Unsafe)
@@ -305,7 +305,7 @@ process	process_kill	no	constructs	result	Process,Unsafe	hosted-effect	gated	(pi
 process	new	no	constructs	infallible	none	deterministic	gated	(pid: i32) -> Child
 process	pid	no	borrows	infallible	none	deterministic	gated	(&self) -> i32
 process	wait	no	consumes	result	Process,Unsafe	hosted-effect	gated	(self) with(Unsafe,Process) -> Result<ExitStatus, ProcessError>
-process	spawn	no	constructs	result	Process,Unsafe	hosted-effect	gated	(cmd: &String, args: *const *const u8) with(Unsafe,Process) -> Result<Child, ProcessError>
+process	spawn	yes	constructs	result	Alloc,Process,Unsafe	hosted-effect	gated	(cmd: &String, args: *const *const u8) with(Unsafe,Process,Alloc) -> Result<Child, ProcessError>
 ptr	offset	no	constructs	infallible	none	trusted-boundary	gated	<T>(ptr: *mut T, offset: u64) -> *mut T
 rand	seed	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	(s: u32) with(Unsafe,Random)
 rand	random_int	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	() with(Unsafe,Random) -> i32
@@ -356,6 +356,7 @@ string	append_int	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, n: In
 string	clear	no	mut	infallible	none	deterministic	gated	(&mut self)
 string	eq	no	borrows	infallible	none	deterministic	gated	(&self, other: &String) -> bool
 string	clone	yes	borrows	infallible	Alloc	hosted-effect	gated	(&self) with(Alloc) -> String
+string	to_cstr	yes	borrows	infallible	Alloc,Unsafe	hosted-effect	gated	(&self) with(Alloc,Unsafe) -> *mut u8
 string	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)
 string	starts_with	no	borrows	infallible	none	deterministic	gated	(&self, prefix: &String) -> bool
 string	ends_with	no	borrows	infallible	none	deterministic	gated	(&self, suffix: &String) -> bool

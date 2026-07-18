@@ -88,19 +88,24 @@ mod process {
         }
     }
 
-    pub fn spawn(cmd: &String, args: *const *const u8) with(Unsafe, Process) -> Result<Child, ProcessError> {
+    pub fn spawn(cmd: &String, args: *const *const u8) with(Unsafe, Process, Alloc) -> Result<Child, ProcessError> {
+        // Bug 043: NUL-terminate before exec; child image replaces us so the
+        // copy is never freed on the exec path (freed on fork-parent path).
+        let ccmd: *mut u8 = cmd.to_cstr();
         let pid: i32 = libc_fork();
         if pid < 0 {
+            dealloc::<u8>(ccmd);
             return Result::<Child, ProcessError>::Err { error: ProcessError::SpawnFailed };
         }
         if pid == 0 {
             // Child process: exec
-            libc_execvp(cmd.ptr as *const u8, args);
+            libc_execvp(ccmd as *const u8, args);
             // If execvp returns, it failed
             libc_exit(127);
             // unreachable
             return Result::<Child, ProcessError>::Err { error: ProcessError::SpawnFailed };
         }
+        dealloc::<u8>(ccmd);
         let c: Child = Child { pid: pid };
         return Result::<Child, ProcessError>::Ok { value: c };
     }

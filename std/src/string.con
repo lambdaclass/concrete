@@ -118,6 +118,19 @@ mod string {
             return String::from_raw_unchecked(new_ptr, self.len, self.len);
         }
 
+        /// NUL-terminated copy of this string for C FFI (bug 043). A
+        /// `String` buffer is NOT NUL-terminated -- passing `.ptr` to
+        /// getenv/fopen/execvp reads past the buffer until a lucky zero
+        /// byte (worked on macOS allocation slack, failed on Linux CI).
+        /// Caller owns the returned buffer: `dealloc::<u8>` after the call.
+        pub fn to_cstr(&self) with(Alloc, Unsafe) -> *mut u8 {
+            let buf: *mut u8 = grow::<u8>(0 as *mut u8, self.len + 1);
+            memcpy(buf, self.ptr as *const u8, self.len);
+            let end: *mut u8 = buf + self.len;
+            *end = 0;
+            return buf;
+        }
+
         /// TODO: drop should be a trait, and isn't really called yet automatically.
         pub fn drop(self) with(Alloc) {
             let String { ptr, len, cap } = self;

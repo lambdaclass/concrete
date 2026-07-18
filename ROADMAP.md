@@ -344,6 +344,14 @@ batteries-included breadth. Completed foundation work lives in
      newtypes had zero cross-module consumers). Recorded exemptions: lib
      (umbrella), libc (no pub surface), slice (NO public constructor — std
      gap, converts to a fixture when a workload pulls one).
+   - PROBE (2026-07-18, found dogfooding bug 043): a RENAMED import of a
+     GENERIC fn miscompiles — `import std.alloc.{dealloc as dd}` +
+     `dd::<u8>(p)` emits a call to bare `@dealloc` (undefined; only mono
+     specializations exist). Non-generic renames work. Mono resolves the
+     alias to the generic's bare name instead of monomorphizing under it.
+     No std/user code renames a generic today (all std renames are extern
+     fns), so no active breakage — fix when touched, with a
+     regress fixture (repro preserved in this entry).
    - DONE (2026-07-17): stale stdlib docs refresh — STRING_TEXT_CONTRACT
      (args::get now validates argv UTF-8, resolved; env::get still doesn't,
      left open), BYTE_VIEW (`Text::from_raw` → shipped

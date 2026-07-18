@@ -69,6 +69,7 @@ declare -A SKIP_BUGS=(
   [040]="FIXED -- regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)"
   [041]="FIXED -- regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)"
   [042]="FIXED -- regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases"
+  [043]="FIXED -- check_envcfg.sh env-override leg + std-compiled-coverage env/fs/io/net legs (Linux CI is the discriminating platform); String::to_cstr + all C-string FFI sites converted"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="

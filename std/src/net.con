@@ -63,7 +63,10 @@ mod net {
 
         // sin_addr at offset 4 (inet_pton returns 1 on success) — same on both
         let addr_dst: *mut u8 = sa + 4;
-        let pton_ret: i32 = inet_pton(2, addr.ptr as *const u8, addr_dst);
+        // Bug 043: NUL-terminated copy (String is not C-string).
+        let caddr: *mut u8 = addr.to_cstr();
+        let pton_ret: i32 = inet_pton(2, caddr as *const u8, addr_dst);
+        dealloc::<u8>(caddr);
         return pton_ret;
     }
 

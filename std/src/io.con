@@ -1,5 +1,16 @@
 mod io {
     import std.libc.{fopen, fclose, fwrite, fread, fflush, ferror, write as libc_write, read as libc_read};
+    import std.alloc.{dealloc};
+
+    // Bug 043: NUL-terminated copies for fopen (String is not C-string).
+    trusted fn fopen_cstr_io(path: &String, mode: &String) with(File, Unsafe, Alloc) -> *const u8 {
+        let cpath: *mut u8 = path.to_cstr();
+        let cmode: *mut u8 = mode.to_cstr();
+        let h: *const u8 = fopen(cpath, cmode);
+        dealloc::<u8>(cpath);
+        dealloc::<u8>(cmode);
+        return h;
+    }
     import std.bytes.{Bytes};
 
     pub enum Copy IoError {
@@ -18,7 +29,7 @@ mod io {
     trusted impl TextFile {
         pub fn create(path: &String) with(File, Unsafe, Alloc) -> Result<TextFile, IoError> {
             let mode: String = "w";
-            let h: *const u8 = fopen(path.ptr, mode.ptr);
+            let h: *const u8 = fopen_cstr_io(path, &mode);
             mode.drop();
             if h == (0 as *const u8) {
                 return Result::<TextFile, IoError>::Err { error: IoError::OpenFailed };
@@ -27,8 +38,8 @@ mod io {
             return Result::<TextFile, IoError>::Ok { value: handle };
         }
 
-        pub fn open(path: &String, mode: &String) with(File, Unsafe) -> Result<TextFile, IoError> {
-            let h: *const u8 = fopen(path.ptr, mode.ptr);
+        pub fn open(path: &String, mode: &String) with(File, Unsafe, Alloc) -> Result<TextFile, IoError> {
+            let h: *const u8 = fopen_cstr_io(path, mode);
             if h == (0 as *const u8) {
                 return Result::<TextFile, IoError>::Err { error: IoError::OpenFailed };
             }
