@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Roadmap stable task identity (2026-07-18)
+
+The active roadmap now has one file-ordered sequence with immutable `R-NNNN`
+task identities. IDs no longer encode priority and are never renumbered or
+reused; urgent work receives the next unused ID and moves to its honest file
+position. The first application moved the existing fast-surface-gate task
+`R-0022` ahead of the defect fixes without changing any other task's identity.
+`check_roadmap_linear.sh`, included in the docs-drift gate, rejects duplicate or
+dangling IDs, legacy positional task references, malformed headings, and
+parallel queue/task-list headings.
+
 ### Phase 7 ownership/manifest/construction hardening (2026-07-18)
 
 Three pre-freeze boundary corrections landed before the remaining Phase 7

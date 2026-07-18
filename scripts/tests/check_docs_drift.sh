@@ -15,8 +15,8 @@
 #      Phase 3 audit made.)
 #   2. Every `--report <kind>` names a real report kind (extracted from the CLI
 #      dispatch in Main.lean, so the check tracks the source of truth).
-#   3. ROADMAP has one gap-free global Task sequence and no parallel queue/task
-#      headings.
+#   3. ROADMAP has one stable-ID Task sequence, no dangling/duplicate IDs, and
+#      no parallel queue/task headings.
 #
 # DELIBERATELY NOT attempted (these are not mechanically robust and would make the
 # gate a false-positive generator — verified during design):
@@ -79,9 +79,9 @@ for f in "${REPORT_DOCS[@]}"; do
 done
 [ "$bad" -eq 0 ] && ok "every --report kind in present-tense docs is a real CLI report"
 
-echo "=== 3. roadmap has one globally numbered task sequence ==="
+echo "=== 3. roadmap has one stable-ID task sequence ==="
 if bash scripts/tests/check_roadmap_linear.sh; then
-  ok "ROADMAP task numbering is global, gap-free, and queue-free"
+  ok "ROADMAP task IDs are stable, unique, reference-safe, and queue-free"
 else
   no "ROADMAP linear-task structure"
 fi

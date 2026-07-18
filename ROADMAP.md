@@ -48,17 +48,19 @@ or public API forces it.
 
 ### Where Execution Starts
 
-Execution starts at **Task 1** and advances by global task number. There are no
-phase-local queues, priority overlays, or separate stop-the-line lists. A newly
-confirmed urgent defect is inserted at the first honest execution position and
-every later task is renumbered. Phase headings are milestone labels only.
+Execution starts at the first `Task R-NNNN` heading and advances by file
+position. The `R-NNNN` value is immutable identity, not priority: existing IDs
+are never renumbered or reused, and a newly confirmed urgent defect receives the
+next unused ID before being inserted at its first honest execution position.
+There are no phase-local queues, priority overlays, or separate stop-the-line
+lists. Phase headings are milestone labels only.
 Phases 1–6E and completed Phase 7 foundations/workloads 1–8 are historical and
 live in [CHANGELOG.md](CHANGELOG.md). Phase 7.5's QBE backend is specified but
 has not started.
 
 ## Inherited Scheduling Constraints From Earlier Phases
 
-These are not a second task queue. They constrain the globally numbered task
+These are not a second task queue. They constrain the stable-ID task
 that owns each trigger; they remain here so moving completed phase bodies to the
 changelog does not erase a still-relevant condition:
 
@@ -82,12 +84,14 @@ changelog does not erase a still-relevant condition:
 
 ### Global Sequence And Evidence Discipline
 
-The roadmap has one authoritative sequence: headings named `Task N`, numbered
-globally from 1 without restarting at phase boundaries. Phase headings are
-milestone labels, while specifications, contracts, and decision indexes are
-non-executable context. There are no parallel tracks. Completed work moves to
-[CHANGELOG.md](CHANGELOG.md); conditional work occupies the global position
-where its trigger can first make it executable.
+The roadmap has one authoritative sequence: headings named `Task R-NNNN`, read
+in file order without restarting at phase boundaries. Stable IDs identify work;
+they do not encode position. Phase headings are milestone labels, while
+specifications, contracts, and decision indexes are non-executable context.
+There are no parallel tracks. Completed work moves to
+[CHANGELOG.md](CHANGELOG.md) under a `### Completed Task R-NNNN` heading so the
+gate reserves that identity permanently; conditional work occupies the file
+position where its trigger can first make it executable.
 
 Every user-facing claim should have a replay command, checked report, gate, or
 proof. Unsupported cases must fail closed and loud. A feature that passes only
@@ -656,7 +660,7 @@ pragmatic breadth only after workload pressure.
 
 This preserves the conclusions of the 2026-07-18 18-item architecture review.
 It is not a task list and does not define execution order; every open conclusion
-is implemented by one of the globally numbered tasks below. The unifying
+is implemented by one of the stable-ID tasks below. The unifying
 rule: **`pub` is the ONLY visibility keyword — everything is module-private by
 default, `pub` exports a declaration/field/variant, and exporting a type does
 NOT export its representation.** No `private`/`sealed`/`opaque`/`transparent`.
@@ -693,7 +697,7 @@ create ordering or an alternate queue.
 ### Linearity Decisions
 - **Centralized linear conservation:** one checker enforces exactly-once across
    branches/matches/returns/loops/callbacks/destructuring; consuming
-   Option/Result combinators in Task 12 use this machinery, with no special-case rules
+   Option/Result combinators in Task R-0012 use this machinery, with no special-case rules
    (verified). Add an assertion fixture.
 - **Trusted is not implicit linear copy:** local/binding copies are rejected (verified
    E0205; pin permanently), but raw-pointer dereference can still duplicate a
@@ -718,23 +722,24 @@ create ordering or an alternate queue.
 
 Each migration is independently runnable, never a compiler-wide rewrite; the
 compiler stays runnable and tested after every slice.
-- **Stable semantic IDs:** not the root fix for 039–045 (045's
-   alpha-renaming already closed the demonstrated binder-identity defect);
-   stable IDs are long-term PREVENTION against future name-based identity
-   mistakes. Bug 054 is the second forcing witness: forgeable/non-injective
-   monomorphized text names collide with user types and first-match layout
-   lookup silently selects the wrong representation. Its immediate collision/
-   layout fix lands in Task 7; Phase 8 retires semantic identity-by-name
-   across the pipeline.
+- **Stable semantic IDs:** alpha-renaming remains the demonstrated binder fix,
+   while the larger 039–055 audit family justifies retiring name-as-identity:
+   import/alias capture (039, 044, 055), binder/type/import tables keyed by text
+   or first-match position (040–042, 045), indirect-call hijacking (050),
+   generic-enum declaration/layout identity failure (051), and non-injective
+   monomorphized names/layout lookup (054). Their narrow fixes remain necessary;
+   stable IDs prevent the family from recurring at the next boundary. Bug 054's
+   immediate collision/layout fix lands in Task R-0007; Phase 8 retires semantic
+   identity-by-name across the pipeline.
 - **Compiler-derived interface facts:** supersede the repaired manifest scanner.
-   Keep the scanner until Task 117; the compiler artifact becomes
+   Keep the scanner until Task R-0117; the compiler artifact becomes
    authoritative, compared against the scanner during migration before deletion.
 - **Typed pass boundaries:** ParsedProgram → … → VerifiedSSAProgram.
 - **Immutable indexed program facts:** modules/defs/layouts/builtin identities/
     target) consumed by passes instead of re-scanning / first-match lookup.
 - **Self-enforcing coverage matrix:** derive it from compiler facts.
 
-Their execution order is expressed only by Tasks 114–118: stable IDs → immutable
+Their execution order is expressed only by Tasks R-0114–R-0118: stable IDs → immutable
 indexed facts → typed pass boundaries → compiler-derived interfaces → generated
 coverage matrix.
 
@@ -744,7 +749,7 @@ coverage matrix.
    (currently 2nd ask).
 
 
-The corresponding local/CI gate work is scheduled as a globally numbered task
+The corresponding local/CI gate work is scheduled as a stable-ID task
 below; this index carries no executable work.
 
 ## Phase 7: Standard Library And Core APIs
@@ -826,10 +831,23 @@ notes become work only when their named workload or failing gate pulls them.
 
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
-reducer, plus a four-part proof-freshness class. They occupy the first positions
-in the one global sequence; every later milestone continues the same numbering.
+reducer, plus a four-part proof-freshness class. The surface-gate task comes
+first because it protects those fixes; the defects immediately follow it in the
+one global file-order sequence.
 
-### Task 1
+### Task R-0022
+
+**Objective:** Unify every fast fail-closed surface gate locally and in CI Add one documented target, `make test-fast-surface-gates`, used unchanged by the pre-push routine and CI's Language-surface job. It owns diagnostic-code completeness, quadratic-append baselines, public API/interface inventory, capability/trust/ownership manifest truth, construction and consumer coverage, generated-file drift, import firewalls, and visibility/construction fixtures.
+
+
+Adding an E-code, public item, IR constructor, manifest fact, generated file, or
+counted append pattern must fail locally exactly as it fails remotely. The
+target prints the exact constituent command on failure; CI may not maintain a
+hidden second checklist. Gate the gate by removing one representative row from
+each inventory family and proving the aggregate target fails for the intended
+reason.
+
+### Task R-0001
 
 **Objective:** Fix bug 051 — user generic-enum memory corruption User-defined generic enums retain one name/declaration while Lower uses instantiation-specific payload offsets, so mixed layouts can write beyond the emitted aggregate.
 
@@ -841,18 +859,18 @@ in the one global sequence; every later milestone continues the same numbering.
    enums, arrays/structs, cross-module use, interpreter/LLVM/QBE where supported,
    layout write-within-declaration verification, and a mutation removing the
    containment/layout check.
-### Task 2
+### Task R-0002
 
 **Objective:** Fix bug 050 — indirect function-pointer call hijack A local callable value whose text matches a generic/global function is rewritten by Mono into a direct specialization. Add a distinct resolved Core/Mono call form whose callee is a value identity, never a string looked up in the global fn/alias maps; preserve it through Lower, SSA, interpreter, LLVM, QBE, reports, and source identities. Gate the `pick` 42-vs-21 wrong-code witness, std.io local callback names such as `f`, generic/non-generic collisions, renamed imports, and a mutation that routes indirect calls through direct-name resolution.
 
-### Task 3
+### Task R-0003
 
 **Objective:** Fix bugs 047 + 048 — one HashMap probe/occupancy invariant slice Insertion must remember the first tombstone but continue to a live equal key or a bounded chain end; lookup must inspect at most `cap` slots; load policy tracks occupied slots (`live + tombstones`) and rehashes/cleans tombstones before no empty slot can wedge a miss. Maintain explicit `len`, tombstone/occupied, and capacity invariants through insert/remove/clear/grow. Gate constant-hash overwrite-after-tombstone (`len == 2`, one remove eliminates the key), the zero-empty missing lookup under a watchdog, 10k+ churn, full-table misses,
 
    grow/clear/reuse, Copy and linear key/value destruction, interpreter/native
    agreement, a reference-map oracle, and independent mutations of remembered-
    tombstone, bounded-probe, and occupancy accounting logic.
-### Task 4
+### Task R-0004
 
 **Objective:** Fix proof-subject freshness and fail closed Before preserving any `proved` claim, treat the following as one evidence- integrity defect class and file individually numbered ledger entries/reproducers before implementation:
 
@@ -879,7 +897,7 @@ in the one global sequence; every later milestone continues the same numbering.
    capability/generic edit, theorem/spec swap, direct and multi-hop dependency
    drift, recursive SCCs, comments/formatting/alpha-renaming stability, and a
    mutation proving no old body-only path can emit `proved`.
-### Task 5
+### Task R-0005
 
 **Objective:** Fix bug 053 — DCE deletes checked integer negation Centralize a generated operation-semantics/trap inventory consumed by folding, DCE, interpreter, LLVM, QBE, fuzz generation, and the capability matrix. Until then, mark integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
 
@@ -890,19 +908,19 @@ Bug 048's observable hang is closed only by task 3; a timeout merely detects the
 defect and is not the fix. Keep its denial-of-service/watchdog observation
 separate from bug 047's corruption observation inside the shared gate.
 
-### Task 6
+### Task R-0006
 
 **Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
 
-### Task 7
+### Task R-0007
 
 **Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
 
-### Task 8
+### Task R-0008
 
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
 
-### Task 9
+### Task R-0009
 
 **Objective:** Fix bug 049 — vacuous `reduce --predicate crash` Remove the predicate from help/CLI immediately unless the same slice evaluates candidates in an isolated subprocess with bounded time/memory/output and preserves the original crash boundary/class. Parse success is never a crash predicate.
 
@@ -912,7 +930,7 @@ separate from bug 047's corruption observation inside the shared gate.
     as crash), signal/tool/compiler/runtime crash classes, timeout, changed
     failure class, empty candidate, and reducer self-failure.
 
-### Task 10
+### Task R-0010
 
 **Objective:** Make the bug-corpus truth gate honest Replace the current skip-based audit summary with an explicit per-bug state:
 
@@ -938,7 +956,7 @@ remote and required CI conclusions are recorded. Remote parity is process
 state, not a compiler bug; report it separately and do not let a green origin
 implicitly describe a lagging mirror.
 
-### Task 11
+### Task R-0011
 
 **Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
 
@@ -975,7 +993,7 @@ impl and `trusted` non-bypass tests; interface-leak tests; interpreter/compiled
 parity; API/manifest snapshots; and mutations that accidentally export a
 variant or omit one enforcement path.
 
-### Task 12
+### Task R-0012
 
 **Objective:** Generalize workload-pulled Option/Result combinators for linear payloads This is an ergonomics/ownership blocker, not a current soundness defect, but workloads already pay the manual-match tax. Do not merely delete Copy bounds: prove arm-wise conservation and explicitly dispose of every unused owned default/error.
 
@@ -996,7 +1014,7 @@ variant or omit one enforcement path.
 - Require interpreter/LLVM agreement, proof fingerprint/spec updates, and
   representative kernel proofs to remain alpha-invariant after generalization.
 
-### Task 13
+### Task R-0013
 
 **Objective:** Close confirmed boundary correctness holes
 
@@ -1051,7 +1069,7 @@ then choose an explicit split such as fallible `read_to_end` versus a named
 partial-read result rather than retroactively calling the existing contract a
 bug.
 
-### Task 14
+### Task R-0014
 
 **Objective:** Put Unsafe behind domain-capability wrappers and close trusted dereference duplication Split hosted modules into ordinary public wrappers and private trusted/raw adapters:
 
@@ -1102,7 +1120,7 @@ do not make callers request `Unsafe` merely because HashMap/HashSet or another
 trusted implementation manipulates its own private storage; normalize the
 current set/map capability mismatch according to public authority.
 
-### Task 15
+### Task R-0015
 
 **Objective:** Converge File and Reader/Writer when its recorded trigger fires Direction only; not a Phase 7A closure condition. Pull this when a real socket, file, or buffered-IO workload otherwise needs a second implementation of short-read/write, close, or ownership behavior.
 
@@ -1146,7 +1164,7 @@ than hiding them under “unify IO”: TextFile write/flush/close discard
 writers do not apply the same external-write result policy. Fix each when its
 vertical consumer moves to the common spine.
 
-### Task 16
+### Task R-0016
 
 **Objective:** Add provenance-safe scoped Slice access Promote the currently exempt `std.slice` surface because existing public raw accessors already need a safe counterpart and the compiled-coverage exemption is concrete evidence. V1 deliberately uses scoped access rather than escapable slice returns:
 
@@ -1192,7 +1210,7 @@ pointer or escapable Slice. Track remaining pointer-length hosted signatures in
 the manifest rather than forcing an unpulled whole-stdlib migration in this
 slice.
 
-### Task 17
+### Task R-0017
 
 **Objective:** Normalize hosted failure shapes as their recorded triggers fire The normative direction below follows `ERROR_CONVENTIONS.md`, but each signature change is pulled by a workload or a failing manifest leg. It is not a demand to migrate every hosted module in one campaign.
 
@@ -1230,7 +1248,7 @@ environmental failure, and trap for documented invariants/OOM. Add
 `scripts/tests/check_stdlib_error_contracts.sh` with one success, absence/EOF,
 recoverable error, cleanup error, and invalid-input leg per hosted module.
 
-### Task 18
+### Task R-0018
 
 **Objective:** Stabilize boundary type roles under pull discipline Freeze and gate these roles:
 
@@ -1270,7 +1288,7 @@ bytes, embedded NUL, empty buffers, multibyte scalars, split code points, and
 owned/borrowed round trips. The API snapshot fails if a checked boundary loses
 its fallibility or an unchecked operation loses the suffix.
 
-### Task 19
+### Task R-0019
 
 **Objective:** Add collection ergonomics as recorded workloads pull them Preserve the strong existing decisions: scoped callback access instead of escaping references, `Destroy` for live non-Copy contents, capability- polymorphic traversal, and ascending traversal only for ordered containers.
 
@@ -1302,7 +1320,7 @@ difference carries ownership, ordering, replacement, or failure information—
 for example HashMap returning a displaced value is not equivalent to Set
 reporting whether membership changed.
 
-### Task 20
+### Task R-0020
 
 **Objective:** Add remaining module shapes as recorded workloads pull them The following are design candidates, not scheduled Phase 7A migrations. Each requires independent workload evidence or a confirmed contract failure before implementation.
 
@@ -1351,7 +1369,7 @@ reporting whether membership changed.
     polish release merely because neighboring modules already have symmetric
     names.
 
-### Task 21
+### Task R-0021
 
 **Objective:** Complete the mechanical manifest and fail-closed coverage gate Extend `concrete std snapshot --json` and the compiled-coverage inventory so every public symbol records: canonical signature, safety class, capabilities, allocation, ownership/consumption, success/absence/error/trap behavior, platform availability, evidence class, examples, and trusted-boundary id.
 
@@ -1366,23 +1384,11 @@ fixture or reasoned exemption, API snapshot entry, and evidence/authority/
 failure classification fails CI. This extends the existing five-fact manifest
 and compiled-coverage machinery; do not create a parallel review database.
 
-### Task 22
-
-**Objective:** Unify every fast fail-closed surface gate locally and in CI Add one documented target, `make test-fast-surface-gates`, used unchanged by the pre-push routine and CI's Language-surface job. It owns diagnostic-code completeness, quadratic-append baselines, public API/interface inventory, capability/trust/ownership manifest truth, construction and consumer coverage, generated-file drift, import firewalls, and visibility/construction fixtures.
-
-
-Adding an E-code, public item, IR constructor, manifest fact, generated file, or
-counted append pattern must fail locally exactly as it fails remotely. The
-target prints the exact constituent command on failure; CI may not maintain a
-hidden second checklist. Gate the gate by removing one representative row from
-each inventory family and proving the aggregate target fails for the intended
-reason.
-
 ### Phase 7 Completion Contract
 
 The final Phase 7 task may close only when:
 
-- Tasks 1–10 are fixed with committed
+- Tasks R-0001–R-0010 are fixed with committed
   load-bearing regression/class gate, the bug-corpus report distinguishes open
   reproducers from fixed coverage, and declared remotes contain the intended
   milestone artifacts before publication is claimed;
@@ -1412,12 +1418,12 @@ failing gate, or already-ratified contract violation. Do not wait for broad File
 random/crypto redesign or JSON/DNS/compression/threading breadth to close this
 correction slice.
 
-### Task 23
+### Task R-0023
 
 **Objective:** Retire the remaining entry-point tails Deliberately decoupled from the completed exit-model migration: retire Int-main in a later surface pass by narrowing the entry signature to `fn main() -> u8 | Unit`; workload-gate any `main -> Result<Unit, E>` form and nominal error rendering to stderr.
 
 
-### Task 24
+### Task R-0024
 
 **Objective:** Finish compiler hygiene and known-defect tails Each item lands as its own evidence-ranked slice with the battery:
 
@@ -1452,7 +1458,7 @@ correction slice.
         float support in interp comparisons.
      5. Check-side divergence/capability classifiers still match raw Core names
         after intrinsic identity was fixed in Elab/Lower. The remaining
-        direction is conservative misclassification only; pull with Task 274's
+        direction is conservative misclassification only; pull with Task R-0274's
         typing-truth work or a failing user-shadowing fixture.
      6. Non-finite float literals leak an external tool error (audit
         2026-07-16): a literal with a ≥309-digit integer part lexes to +inf,
@@ -1476,23 +1482,23 @@ correction slice.
      9. printf|grep -q pipefail flake class (10b9a776 fixed 123 sites, 43
         files): add a grep-lint to gate-hygiene so the pattern cannot be
         reintroduced.
-### Task 25
+### Task R-0025
 
 **Objective:** CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 
-### Task 26
+### Task R-0026
 
 **Objective:** Finish trap/debug UX and verified-profile/ proof-obligation UX.
 
-### Task 27
+### Task R-0027
 
 **Objective:** Extend the shipped pure-core proof arc over actual `Option`/`Result`, `Bytes`/slice, numeric checked helpers, and checked text/path conversions against their documented contracts.
 
-### Task 28
+### Task R-0028
 
 **Objective:** Proof-facing formal stdlib models (`formal_vec`, `formal_map`, `formal_set`, `bigint`, lemma helpers) once contracts need them.
 
-### Task 29
+### Task R-0029
 
 **Objective:** Broad compression/crypto/networking/threading only after workload demand.
 
@@ -1511,7 +1517,7 @@ the **stdlib** side: APIs that Concrete programs use to parse their own command
 lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
-### Task 30
+### Task R-0030
 
 **Objective:** Deterministic capability-fault simulation (pull-gated; the *dynamic* complement to H3). H3's manifest gate proves an IO error *can* be surfaced (static shape); this proves it *is* surfaced under real failure (dynamic).
 
@@ -1535,7 +1541,7 @@ Do not duplicate compiler-command cleanup here.
   `docs/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
   replays a fixed fault schedule and asserts each effect-boundary property.
 
-### Task 31
+### Task R-0031
 
 **Objective:** Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`, `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`, `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets, buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs C/Rust users expect: `contains`, `remove`, `iter` for maps and sets;
 
@@ -1638,74 +1644,74 @@ tracking to the hash collections.
   item should move ahead of allocator-heavy collection stabilization if the
   validation project needs arenas, test allocators, reload-safe allocation,
   or freestanding pools.
-### Task 32
+### Task R-0032
 
 **Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend `docs/ITERATION_PROTOCOL.md` when these land),
 
 plus byte/text builders and tree/buffer builders inspired by Gleam's
 `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
 `with(Alloc)` or operate over fixed buffers.
-### Task 33
+### Task R-0033
 
 **Objective:** Complete the Hare/Zig-shaped IO adapter layer on top of the one `std.io.Reader` / `std.io.Writer` spine: buffered reader/writer helpers (`bufio` shape), fixed-memory readers/writers (`memio` shape), byte-counting and tee/discard adapters, and small copy/drain helpers. These are adapters, not a second IO abstraction. Every adapter must preserve the underlying capability story, keep allocation explicit (`with(Alloc)` or caller-provided buffers), and be covered by `std.test` sink/source oracles.
 
-### Task 34
+### Task R-0034
 
 **Objective:** Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
 
 checked/wrapping/saturating arithmetic helpers,
 narrowing/conversion helpers, endian conversions, byte/word packing, and
 evidence classes for each helper.
-### Task 35
+### Task R-0035
 
 **Objective:** Build sorting and searching primitives in proposed `std.sort` and `std.search`: comparison conventions, stable/unstable sort decision, binary search, min/max helpers, and evidence/oracle tests over edge cases.
 
-### Task 36
+### Task R-0036
 
 **Objective:** Build hashing, checksums, and deterministic random helpers in `std.hash`, proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets, non-cryptographic checksums, seeded deterministic RNG for tests/oracles, and a clear split from cryptographic randomness. Any OS entropy source is hosted-only and capability-visible.
 
-### Task 37
+### Task R-0037
 
 **Objective:** Build constant-time helper APIs in proposed `std.ct` only for narrow, auditable cases: equality/compare over fixed-size bytes, no secret-dependent branches or early exits, source-shape audit evidence, and clear machine-level timing assumptions. This belongs to the narrow security surface, not broad crypto.
 
-### Task 38
+### Task R-0038
 
 **Objective:** Build time and duration helpers in `std.time`: monotonic versus wall-clock distinction, timestamp formatting/parsing if admitted, timeout helpers, and explicit hosted authority for reading the clock.
 
-### Task 39
+### Task R-0039
 
 **Objective:** Build formatting and parsing helpers in `std.fmt` and `std.parse`:
 
  integer/text formatting, simple
  scanners, structured parse results, error-set reports, and oracle-friendly
  output conventions.
-### Task 40
+### Task R-0040
 
 **Objective:** Build a reusable scanner/parser core in `std.parse` over `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`, `consume`, span/position tracking, error reporting, and no hidden allocation unless the API carries `with(Alloc)`.
 
-### Task 41
+### Task R-0041
 
 **Objective:** Extend `std.base64` only when a workload pulls streaming encode/decode; preserve canonical padding-bit strictness and the args -> bytes/text -> parse/errors -> Writer oracle path.
 
-### Task 42
+### Task R-0042
 
 **Objective:** Add `std.uri` parsing/formatting after the byte/text/path split is stable:
 
  component accessors, percent encoding/decoding, normalization policy, and
  clear distinction between syntax validation and network authority.
-### Task 43
+### Task R-0043
 
 **Objective:** Add `std.json` as the first structured data module: tokenization, string/number handling, error spans, bounded recursion policy, optional DOM-like representation only if the allocation story is explicit, and oracle tests against a reference implementation.
 
-### Task 44
+### Task R-0044
 
 **Objective:** Add a small typed decoding layer in proposed `std.decode` after `std.json`: dynamic value decoding, field access, error paths, and examples comparable to Gleam's `dynamic/decode`, without broad reflection or hidden runtime typing.
 
-### Task 45
+### Task R-0045
 
 **Objective:** Add binary serialization helpers in proposed `std.bin`: endian-aware reading/writing, fixed-width integers, length-prefixed fields only with explicit bounds, byte-span diagnostics, and no hidden allocation.
 
-### Task 46
+### Task R-0046
 
 **Objective:** Add semantic-version and config-format helpers in proposed `std.semver` and `std.config` if package/build work starts depending on them:
 
@@ -1713,11 +1719,11 @@ evidence classes for each helper.
  small Hare-like `format/ini`-class module before any broad configuration
  framework; keep TOML/YAML/package manifests workload-gated. These are
  stdlib/package-boundary helpers, not general metaprogramming.
-### Task 47
+### Task R-0047
 
 **Objective:** Add command-line parser helpers in proposed `std.cli`: flags, positional arguments, usage text, typed parse errors, no ambient environment access except through `std.args`, and examples that keep authority visible. This is for user programs. The `concrete` compiler's own command taxonomy and help behavior are Phase 6E, and `std.cli` should learn from that surface without coupling to compiler internals.
 
-### Task 48
+### Task R-0048
 
 **Objective:** Add narrow shell/path helper modules only as tool workloads demand them:
 
@@ -1726,15 +1732,15 @@ evidence classes for each helper.
   expansion in the core. These APIs are byte/path aware, carry no hidden
   filesystem authority, and must keep expansion separate from matching so a
   pure parser cannot accidentally become a hosted operation.
-### Task 49
+### Task R-0049
 
 **Objective:** Add simple logging/diagnostic output APIs in proposed `std.log`: levels, writers, formatting integration, capability requirements, and policy for release builds. Keep this small; it is not a tracing framework.
 
-### Task 50
+### Task R-0050
 
 **Objective:** Add progress/status output helpers for CLI tools in proposed `std.progress` only after `examples/daily/word_count` and `examples/base64_cli` need visible progress output. V1 surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`, `finish`, terminal detection through an explicit console handle, and no ambient terminal authority. Wire `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
 
-### Task 51
+### Task R-0051
 
 **Objective:** Build capability-scoped console, file, network, process, and time APIs in `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`, `std.net`, and `std.time`. Authority must be visible in function types and audit reports; no API may smuggle ambient authority through a convenience wrapper. New output/input APIs target the `std.io.Reader` / `std.io.Writer` spine; a separate public `std.writer` sink surface must not reappear.
 
@@ -1752,26 +1758,26 @@ evidence classes for each helper.
  the public safe wrapper surface has narrower authority than the underlying
  trusted/extern implementation and that the audit transcript shows both
  sides of the boundary.
-### Task 52
+### Task R-0052
 
 **Objective:** Build handle-relative filesystem APIs in `std.fs` as the preferred file/path shape: directory/file handles carry authority; operations are relative to handles for `open`, `create`, `read`, `write`, `metadata`, `remove`, `rename`, and `list`. Ambient absolute-path helpers must be hosted-only convenience wrappers with explicit authority. Temp-file, symlink, path-normalization, and TOCTOU behavior must appear in `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
 
-### Task 53
+### Task R-0053
 
 **Objective:** Add small `std.temp` and `std.dirs` helpers after the handle-relative filesystem shape is gated. `std.temp` owns temporary files/directories with explicit cleanup (`drop`/`defer`, no implicit scope-end delete) and visible `with(File)` authority; `std.dirs` exposes only conservative hosted directory discovery needed by tools. Do not add XDG/platform policy sprawl until package/build workloads pull it.
 
-### Task 54
+### Task R-0054
 
 **Objective:** Build handle-based network surface in `std.net` only as far as the validation workloads require: address parsing, socket handle wrappers, HTTP header parsing as a pure parser first, and no full HTTP client/server until package/workload evidence demands it.
 
-### Task 55
+### Task R-0055
 
 **Objective:** Build stdlib test/oracle helpers in `std.test`: expected failures, capability-scoped fixtures, temp directories, oracle vector runners, interpreter-vs-compiled helpers, and report snapshots. Stdlib tests must also serve as runnable API documentation: every public stdlib type/function gets a tiny positive usage test and, where meaningful, a negative or edge case. Public docs should link to or quote those tests rather than carrying stale hand-written examples. This is the Zig stdlib lesson adapted to Concrete: usage examples should be executable fixtures, not prose that can rot. Add a gate that fails when a new public stdlib symbol lacks a test/doc
 
  example, when a referenced example no longer compiles, or when a doc claims
  an evidence class/capability/allocation behavior that the test/report does
  not produce.
-### Task 56
+### Task R-0056
 
 **Objective:** Add a public stdlib API snapshot/diff immediately after the first real workload (`base64_cli`) and before broad URI/JSON/CLI/log/progress breadth.
 
@@ -1789,7 +1795,7 @@ evidence classes for each helper.
   stdlib-local version of Phase 10's proof/capability diff and Phase 18's
   package API artifacts; it prevents accidental drift while the library is
   still small.
-### Task 57
+### Task R-0057
 
 **Objective:** Define stdlib error-handling conventions: when APIs return `Result`, `Option`, panic/abort, or require a policy gate; how ignored-result diagnostics apply; and how accumulating error sets are reported. Split recoverable domain/environment failures from fatal invariant failures:
 
@@ -1804,7 +1810,7 @@ evidence classes for each helper.
  small wrapping variant named at the call site, not an implicit trait
  conversion. State the pattern once so error-heavy code does not each invent
  its own.
-### Task 58
+### Task R-0058
 
 **Objective:** Define the canonical **consume / destroy / handoff** conventions for linear code. The guide must distinguish explicit cleanup (`destroy(x)` or the type's consuming `.drop()`/Destroy verb), ownership transfer by by-value call, ownership transfer by return, destructuring into owned fields, `defer` as explicit scheduled cleanup, and the forbidden cases (bare non-`Copy` statement, `_` over non-`Copy`, `let _`, non-`Copy` sub-place projection by value). This is documentation plus examples and diagnostics, not automatic `Drop`: no hidden cleanup and no hidden control flow. Include a short **Copy and Linear Values** guide: when to mark a type
 
@@ -1815,15 +1821,15 @@ evidence classes for each helper.
  This guide is the user-facing explanation of the conditional-`Copy` and
  mode-based-checker refactors; it should be validated by small runnable
  examples and linked from README/site docs.
-### Task 59
+### Task R-0059
 
 **Objective:** Define stdlib evidence classes per public API: `proved`, `enforced`, `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class must appear in docs and audit artifacts, not just implementation comments.
 
-### Task 60
+### Task R-0060
 
 **Objective:** Add proof-facing formal stdlib models only when a proof or contract workload pulls them. These are not runtime containers: `std.formal_vec`, `std.formal_map`, and `std.formal_set` model mathematical sequences, maps, and sets for contracts, loop invariants, and Lean obligations; `std.bigint` models unbounded mathematical integers for specs before any runtime big-number API exists; `std.rational` stays deferred until exact-ratio specs need it. Each formal module must state its erasure/runtime story, its evidence class, the Lean artifact it lowers to, and the refinement relation to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
 
-### Task 61
+### Task R-0061
 
 **Objective:** Add a **selective shipped pure-core stdlib proof arc**, distinct from the pull-gated formal-container work in 24a. This proves stable stdlib code users actually call, not separate mathematical containers, and it is not a mandate to prove all 414+ public API rows before the API surface has been validated by workloads. Scope v1 narrowly:
 
@@ -1846,26 +1852,26 @@ evidence classes for each helper.
  deferred behind breadth modules such as JSON, CLI, or networking, but also
  do not turn it into an exhaustive stdlib-proof sweep before API ergonomics
  have been validated.
-### Task 62
+### Task R-0062
 
 **Objective:** Add stdlib authority/allocation/runtime-obligation gates so core helpers cannot silently widen capabilities, allocation behavior, trusted assumptions, or runtime-risk obligations.
 
-### Task 63
+### Task R-0063
 
 **Objective:** Add sanitizer/runtime-instrumentation hooks as debug and validation surfaces, not proof evidence. Inspired by Odin's sanitizer-facing base surface, Concrete should expose named hooks for bounds, overflow, use-after-free-like trusted/FFI probes where applicable, allocator checks, and generated-code validation. Audit output must classify this as `runtime_checked`, `tested`, or `instrumented`, never `proved`.
 
-### Task 64
+### Task R-0064
 
 **Objective:** Split hosted versus freestanding-ready stdlib modules at the API level:
 
  no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
  and modules that are explicitly unavailable under freestanding profiles.
  The freestanding target implementation still lands in Phase 16.
-### Task 65
+### Task R-0065
 
 **Objective:** Record deliberately deferred stdlib families so they do not disappear from planning: compression/archive formats, broad crypto beyond the narrow hash/HMAC/constant-time story, PEM/ASN.1/X509, MIME helpers beyond the first workload, full HTTP client/server, DNS/Unix-socket breadth, dynamic libraries, OS debug formats (`ELF`, DWARF, image parsing), atomics, threads, SIMD, target/ABI databases, and platform-specific C/POSIX wrappers. Each stays package-later, backend-later, freestanding-later, or research-later until a workload forces it.
 
-### Task 66
+### Task R-0066
 
 **Objective:** Add stdlib docs and examples for C/Rust users:
 
@@ -1893,11 +1899,11 @@ evidence classes for each helper.
  functions are fine for cross-type operations or functions whose capability
  story would be clearer outside a receiver. Add examples that teach the
  chosen style instead of preserving accidental historical names.
-### Task 67
+### Task R-0067
 
 **Objective:** Add a stdlib compatibility/oracle corpus under `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`, `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`, `json_vectors`, `semver_vectors`, `sort_search_vectors`, `checksum_vectors`, `rand_vectors`, and `cli_io_vectors`. Wire it with `scripts/tests/check_stdlib_compat.sh`; every vector must declare exactly one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`, `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
 
-### Task 68
+### Task R-0068
 
 **Objective:** Add real stdlib workload checks before Phase 8 relies on the library.
 
@@ -1914,7 +1920,7 @@ evidence classes for each helper.
  `http_headers` against checked-in vectors, `path_normalizer` against
  checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
  a checked-in reference model.
-### Task 69
+### Task R-0069
 
 **Objective:** Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The checked-arithmetic flip exposed syscall/sentinel-style code that relied on silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels, bit-packed flags, checksum/hash arithmetic). Add `scripts/tests/check_stdlib_sentinel_arithmetic.sh` or fold the checks into `check_stdlib_workloads.sh`: every intentional modular/sentinel operation in `std.fs`, `std.process`, `std.net`, `std.io`, hash/checksum code, and binary parsers must use explicit `wrapping_*`/bit operations with a comment or a report-visible classification; every non-intentional trap must be fixed as a
 
@@ -1922,7 +1928,7 @@ evidence classes for each helper.
  arithmetic workload path (text/path/UTF-8, fs/process/env capabilities,
  maps/iterators, formatter/parser round-trip, or proof/report views) so the
  post-arithmetic validation does not overfit to numeric examples.
-### Task 70
+### Task R-0070
 
 **Objective:** Add the Phase 7 validation project:
 
@@ -1934,9 +1940,9 @@ evidence classes for each helper.
  `std.test`. CI must build, run, test, audit authority/allocation/evidence
  classes, and compare interpreter-vs-compiled behavior.
 
-### Task 71
+### Task R-0071
 
-**Objective:** Close Phase 7 against the Phase 7 Completion Contract, move every fully completed task body to CHANGELOG, leave only future-relevant invariants in this document, and then continue directly with Task 72.
+**Objective:** Close Phase 7 against the Phase 7 Completion Contract, move every fully completed task body to CHANGELOG, leave only future-relevant invariants in this document, and then continue directly with Task R-0072.
 
 
 ## Phase 7.5: Usable QBE Backend And Independent Validation
@@ -2044,7 +2050,7 @@ undesirable, the slice must state the exact textual change, prove equal native
 observations in debug/release modes, run LLVM validation, and add a regression
 for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
-### Task 72
+### Task R-0072
 
 **Objective:** Provision QBE as an explicit toolchain dependency. Pin a supported release and checksum in Nix/CI, verify the installed binary rather than accepting an arbitrary `PATH` match, document source/bootstrap and system-package paths, and make local discovery available through `concrete doctor` / agent feature JSON. Tool download is never an implicit compilation side effect.
 
@@ -2057,11 +2063,11 @@ runner's real Apple target. Cross targets may be emit/assemble-only when no
 declared runner exists; executable rows require a named host or emulator.
 Do not infer support from an OS or CPU-family label alone.
 
-### Task 73
+### Task R-0073
 
 **Objective:** Introduce an immutable `CodegenInput` wrapper around cleaned `ValidatedSSA`, plus `CodegenFacts` derived once per program: target-neutral type/layout facts, function signatures, symbol identities, module-local aliases, entry/test metadata, string/global inventory, builtin identities, runtime-helper requirements, and source-span mappings. This is not a new IR and must not rewrite instructions. Both LLVM and QBE consume the identical value; a hash of its canonical form appears in backend artifacts and differential bundles. Eliminate emitter-owned rescans that can disagree by program/module order (the bug-039 class).
 
-### Task 74
+### Task R-0074
 
 **Objective:** Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched backend driver returning a structured `CodegenArtifact`:
 
@@ -2070,7 +2076,7 @@ Do not infer support from an OS or CPU-family label alone.
  `BackendKind` sum (`llvm | qbe`) and ordinary Lean functions, not a dynamic
  plugin system or effectful callback framework. Keep pure emission separate
  from external validation, assembly, and linking.
-### Task 75
+### Task R-0075
 
 **Objective:** Consolidate the duplicated file/build/test compilation paths in `Main.lean` behind one backend-neutral driver:
 
@@ -2079,7 +2085,7 @@ Do not infer support from an OS or CPU-family label alone.
  and link inputs; CLI code owns diagnostics, artifact retention, and process
  policy once. Add failure-injection tests at every boundary so a QBE error
  cannot take a less structured path than an LLVM error.
-### Task 76
+### Task R-0076
 
 **Objective:** Split target-neutral layout computation from LLVM rendering. Rename or move `tyToLLVM`, LLVM type-definition construction, target triple/data-layout text, and LLVM ABI spellings out of `Concrete/Check/Layout.lean`; retain one checked `LayoutFacts` source for size, alignment, field offsets, enum tag/payload placement, pass-by-pointer decisions, and canonical builtin aggregates. LLVM and QBE render those facts independently. No emitter may recompute layout from syntax or host assumptions.
 
@@ -2088,11 +2094,11 @@ Do not infer support from an OS or CPU-family label alone.
  target-neutral `LayoutFacts` owner and LLVM-specific renderer where they
  actually remain. Gate the split with byte-identical LLVM IR first so the
  hygiene slice does not move and rewrite the same functions twice.
-### Task 77
+### Task R-0077
 
 **Objective:** Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from `EmitSSA.lean`: symbol names, signatures, ownership/capability class, failure/trap behavior, required helper, and backend support status. Keep builtin semantic behavior detection in the existing interpreter/compiled gate; this manifest owns codegen availability and linkage, not a second signature or semantic truth source. A new builtin must fail closed until both backend rows are classified.
 
-### Task 78
+### Task R-0078
 
 **Objective:** Make backend emission function-local and deterministic where possible.
 
@@ -2103,7 +2109,7 @@ Do not infer support from an OS or CPU-family label alone.
  keys. Start sequentially, add a serial-versus-parallel byte-identity gate,
  and only then allow parallel codegen. This follows Zig's successful isolated
  codegen-job shape without pulling in its linker architecture.
-### Task 79
+### Task R-0079
 
 **Objective:** Define a legalization responsibility table before QBE instruction coverage:
 
@@ -2115,18 +2121,18 @@ Do not infer support from an OS or CPU-family label alone.
  instruction selection and target realization remain independent so the
  oracle does not correlate backend bugs. Every legalization carries source
  span and semantic-family identity into emitted artifacts.
-### Task 80
+### Task R-0080
 
 **Objective:** Add a generated backend capability matrix keyed by the constructors of `SInst`, `STerm`, `Ty`, ABI shape, builtin, target, and mode (normal/test/debug/release). Coverage derives from compiler constructors, not a hand-maintained prose list, so adding an IR operation makes the gate fail until LLVM/QBE support is declared and tested. Expose the matrix in `concrete agent features --json`, debug bundles, and the Phase 7.5 capstone.
 
-### Task 81
+### Task R-0081
 
 **Objective:** Preserve oracle independence with a review/firewall gate. QBE modules may import SSA, target-neutral layout/codegen facts, diagnostics, and semantic identities, but not LLVM AST/printer/emitter modules. LLVM and QBE may share runtime helpers only when the manifest discloses the correlation. Add an import-direction test and a source scan preventing calls from one emitter into the other.
 
 
 ### Architecture And Independence Rules
 
-### Task 82
+### Task R-0082
 
 **Objective:** Preserve one frontend and one lowering spine:
 
@@ -2137,7 +2143,7 @@ reuse LLVM instruction-selection text. Share semantic facts such as integer
 width/signedness, size/alignment, symbol identity, builtin identity, and
 entry-point policy; keep instruction selection, aggregate materialization,
 ABI spelling, wrappers, globals, and runtime-helper emission independent.
-### Task 83
+### Task R-0083
 
 **Objective:** Add an explicit backend selection surface:
 
@@ -2145,24 +2151,24 @@ ABI spelling, wrappers, globals, and runtime-helper emission independent.
 setting. LLVM remains the default throughout Phase 7.5. Reject an unknown or
 unavailable backend with a structured diagnostic that names the missing
 tool/target; never fall back to LLVM after the user selects QBE.
-### Task 84
+### Task R-0084
 
 **Objective:** Add `Concrete/Backend/QBE.lean` for a small typed QBE IL AST, `EmitQBE.lean` for the pure text printer, and an SSA-to-QBE translation module separate from `EmitSSA.lean`. Do not build QBE text through ad-hoc concatenation inside CLI code. Pin the supported QBE release/tool identity in CI and record it in debug/audit output.
 
-### Task 85
+### Task R-0085
 
 **Objective:** Keep layout facts backend-neutral. Split LLVM spelling out of `Concrete/Check/Layout.lean` where necessary, but do not create a second size/alignment calculator. Add a gate proving LLVM and QBE consume the same Concrete layout decisions while independently realizing them.
 
 
 ### Staged Implementation
 
-### Task 86
+### Task R-0086
 
 **Objective:** Land a scalar smoke slice first: integer and boolean constants, arithmetic, comparisons, casts, direct calls, returns, blocks, branches, phi/copy lowering, stack slots, loads/stores, globals, string data, and the stage-2 main wrapper. Map Concrete `i8`/`i16`/`i32`/`bool` temporaries deliberately onto QBE word operations with explicit truncation and signed/unsigned extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
 
 Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
 and exit-code edge cases rather than accepting scalar happy paths alone.
-### Task 87
+### Task R-0087
 
 **Objective:** Give floating point its own executable slice rather than treating the `f32`/`f64` type mapping as coverage. Add arithmetic; ordered/unordered comparisons; NaN, infinity, signed-zero, subnormal, and precision-change vectors; int-to-float conversions; and checked float-to-int conversions.
 
@@ -2171,11 +2177,11 @@ and exit-code edge cases rather than accepting scalar happy paths alone.
  `stoui`, `dtosi`, or `dtoui` behavior is not Concrete's checked-cast
  semantics. Until this slice lands, every float family is an explicit
  `qbe_pending` capability row rather than silently absent from the subset.
-### Task 88
+### Task R-0088
 
 **Objective:** Add memory and aggregate support: fixed arrays, structs, packed/explicitly aligned layouts, enums, canonical `Option`/`Result`, strings, vectors, nested places, byte-union payloads, aggregate copies, and small/large aggregate calls/returns. QBE aggregates are memory/ABI objects rather than general SSA temporaries, so make materialization explicit and test tag/payload offsets, padding, alignment, and partially initialized payload storage.
 
-### Task 89
+### Task R-0089
 
 **Objective:** Add calls and platform boundaries: indirect calls, externs, variadics used by the runtime, argc/argv accessors, symbol visibility, linker aliases, C ABI scalar/aggregate classification, and Linux/macOS target selection for the architectures QBE and Concrete both declare supported. Unsupported target, calling convention, TLS, or ABI shapes must fail before emission with a stable diagnostic.
 
@@ -2186,25 +2192,25 @@ and caller-provided storage for memory-class returns. Do not encode a false
 “greater than 16 bytes is unsupported” rule: QBE's supported ABI paths must
 be tested; only a shape that the pinned target/toolchain actually cannot
 realize receives a named `qbe_pending` row or runtime-mediated boundary.
-### Task 90
+### Task R-0090
 
 **Objective:** Port the compiler-emitted builtin/runtime surface needed by the validation corpus. Prefer a small shared C runtime for allocation, IO, traps, and other platform services when that keeps semantics explicit; keep pure scalar builtins in the emitter when independence is more valuable. Extend the builtin-semantics inventory so every builtin is one of `qbe_equal`, `qbe_runtime_helper`, or `qbe_pending`; adding a builtin without an explicit class fails CI.
 
-### Task 91
+### Task R-0091
 
 **Objective:** Add QBE test-mode entry generation so `concrete test` can execute the same discovered tests and module filter under both native backends. Preserve the test runner's result accounting and output exactly; do not special-case a smaller, silently different QBE test semantics.
 
 
 ### Differential Validation And Failure Localization
 
-### Task 92
+### Task R-0092
 
 **Objective:** Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver that runs each fixture through the source interpreter, LLVM, and QBE and compares a structured observation:
 
  `{compile_class, stdout_bytes, stderr_bytes, exit_status, runtime_class}`.
  Normalize only declared platform noise; never normalize program output,
  trap kind, or exit status merely to make paths agree.
-### Task 93
+### Task R-0093
 
 **Objective:** Classify every mismatch rather than printing a generic wrong-code failure:
 
@@ -2218,22 +2224,22 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
    hand oracle: `shared_lowering_or_spec_mismatch`.
  Save sources, Core, cleaned SSA, LLVM IR, QBE IL, tool versions, commands,
  observations, and classification in the wrong-code/debug bundle.
-### Task 94
+### Task R-0094
 
 **Objective:** Require an independent expected result for cases capable of exposing a shared lowering error: a hand-authored expectation, checked-in reference model, system-tool/Python oracle, or metamorphic property. Two backends agreeing is corroboration, not correctness, because both consume the same lowered SSA.
 
-### Task 95
+### Task R-0095
 
 **Objective:** Build the validation corpus by semantic family, not file count: every `SInst`, terminator, scalar width, signedness-sensitive operation, aggregate/layout class, direct/indirect call shape, builtin class, trap, and main/test wrapper path needs a manifest row. Seed it with the existing arithmetic, cast, enum-union-layout, nested-place, callable-value, fuzz, workload, wrong-code, and exit-model corpora. Add mutation checks proving the differential suite notices at least one injected fault in lowering, LLVM emission, QBE emission, interpreter semantics, layout, and builtin behavior.
 
-### Task 96
+### Task R-0096
 
 **Objective:** Run a deterministic quick QBE matrix on every CI change and a larger rotating fuzz/differential matrix on schedule. QBE-unavailable CI is a hard configuration failure for the QBE job, not a skip. Keep LLVM-only release jobs intact until Phase 15 graduates QBE; report QBE flakes separately and retain their artifacts.
 
 
 ### Phase Boundary And Graduation
 
-### Task 97
+### Task R-0097
 
 **Objective:** Phase 7.5 may close with a declared subset, but that subset must be honest:
 
@@ -2241,20 +2247,20 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  supported targets/features and `qbe_pending` cases. A program outside the
  subset receives a diagnostic; per-function or per-instruction fallback to
  LLVM is forbidden.
-### Task 98
+### Task R-0098
 
 **Objective:** Exercise the completed subset immediately in Phase 8: every new flagship workload that stays inside it runs interpreter/LLVM/QBE differential checks;
 
  exclusions require a named missing feature and roadmap owner. Record bugs
  found by the backend/differential suite in the bug corpus with the disagreement classification
  that exposed them.
-### Task 99
+### Task R-0099
 
 **Objective:** Graduation to a supported release backend occurs only in Phase 15: migrate QBE from the direct validation path onto `ValidatedBackendIR`, pass the full target/toolchain and C ABI matrices, integrate debug/source maps and incremental artifacts, attach translation-validation status, define optimization/tool-version policy, and pass release/platform soak gates.
 
  Until then `--backend qbe` is explicitly experimental and its native result
  remains backend-trusted/test evidence.
-### Task 100
+### Task R-0100
 
 **Objective:** After the QBE backend is stable, evaluate a complementary target rather than starting one in parallel. WebAssembly is the provisional next backend, governed by Phase 15.25's entrance criteria and narrow Wasm32/WASI scope.
 
@@ -2264,24 +2270,24 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  libgccjit, MLIR, and direct machine code remain comparison options, not
  parallel commitments. No additional execution path starts without a bug
  class or workload that LLVM plus QBE cannot pressure effectively.
-### Task 101
+### Task R-0101
 
 **Objective:** Define and gate QBE-IL legality independently of execution. Add a pure verifier for Concrete's typed QBE AST (definition-before-use where QBE requires it, unique temporaries/blocks/symbols, legal base/extended type positions, phi predecessor agreement, terminator completeness, entry-block restrictions, call/return ABI agreement, aggregate definitions before use, alignment validity, and escaped identifier/string syntax), then run the pinned `qbe` parser as a second validation layer. An emitter failure must be a structured Concrete diagnostic with the `.qbe` artifact retained; raw QBE/assembler/linker errors must not be the first user-facing diagnosis for
 
  a compiler-owned invalid artifact.
-### Task 102
+### Task R-0102
 
 **Objective:** Write a QBE semantic-gap ledger before broad coverage. For every Concrete SSA operation, record the QBE instruction sequence and the assumptions that make it equivalent: signed division overflow and divide-by-zero, shift counts, float-to-int out-of-range behavior, NaNs and signed zero, sub-word truncation/extension, uninitialized bytes, invalid pointers, alignment, aliasing, aggregate padding, unreachable paths, traps, and integer/pointer conversions. Where LLVM uses poison/undef, flags, or intrinsics that have no direct QBE analogue, lower to explicit checks/helpers or mark the operation pending; never inherit accidental host behavior as Concrete semantics.
 
-### Task 103
+### Task R-0103
 
 **Objective:** Make symbol and module composition a first-class gate. Test duplicate basenames, import aliases, colliding private names, generic specializations, extern/defined-symbol collisions, linker aliases, string and type-name escaping, multi-module declaration deduplication, visibility, and deterministic ordering. Compile both one combined QBE unit and, once supported, separate units linked together; their observations and exported symbol sets must agree.
 
-### Task 104
+### Task R-0104
 
 **Objective:** Add deterministic-emission and reproducibility checks: identical cleaned SSA plus an identical target/toolchain configuration must produce byte-identical QBE IL, assembly where the pinned toolchain permits it, link manifests, and backend observation records. Debug paths, temporary paths, hash-map order, host locale, parallel test scheduling, and environment variables must not perturb semantic artifacts. Record the QBE version, target, assembler, C compiler/linker, runtime-helper hash, and flags in the build/debug bundle and cache key.
 
-### Task 105
+### Task R-0105
 
 **Objective:** Add optimization-sensitive triangulation. For every eligible fixture, compare interpreter, LLVM at the supported debug/release optimization levels, and QBE followed by the supported assembler/linker configurations.
 
@@ -2290,11 +2296,11 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  optimization artifacts where available. Include sanitizer/instrumented LLVM
  runs as corroborating evidence, while keeping sanitizer output out of the
  program-output comparison channel.
-### Task 106
+### Task R-0106
 
 **Objective:** Extend fuzzing and reduction for the new path. Add backend-aware predicates for QBE compile crash/rejection, QBE runtime mismatch, three-way semantic split, LLVM-only mismatch, shared-compiled mismatch, optimization mismatch, and nondeterministic QBE emission. Reducers must preserve the mismatch classification and relevant target/tool versions, save the smallest reproducer plus replay command, and prove by mutation tests that a reduced case is not accepted merely because one backend stopped compiling.
 
-### Task 107
+### Task R-0107
 
 **Objective:** Separate compiler defects from toolchain defects operationally. The bundle and CI report must identify the first failing boundary:
 
@@ -2304,18 +2310,18 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  memory, and recursion limits so malformed generated IL or fuzz cases cannot
  hang the suite, and distinguish timeout/OOM/tool crash from semantic
  disagreement.
-### Task 108
+### Task R-0108
 
 **Objective:** Establish performance guardrails without making QBE win benchmarks. Track compiler wall time, peak memory where available, emitted IL/assembly/object size, final binary size, and runtime for a small stable corpus against LLVM.
 
  Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
  QBE-versus-LLVM speed ratio. Performance results are benchmark facts only;
  they cannot choose a backend silently or weaken semantic/evidence gates.
-### Task 109
+### Task R-0109
 
 **Objective:** Define runtime-helper ownership and versioning. Shared C helpers must have a narrow, documented ABI; checked-in source; deterministic build; symbol namespace; target/feature manifest; sanitizer tests; and interpreter/LLVM/ QBE semantic vectors. Decide explicitly which helpers are common semantic infrastructure and which remain independently emitted oracle logic. A helper change invalidates both backend cache keys and reruns every builtin/ ABI consumer; sharing a helper must be disclosed when it reduces oracle independence.
 
-### Task 110
+### Task R-0110
 
 **Objective:** Add release-surface and compatibility discipline even while experimental:
 
@@ -2326,7 +2332,7 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  but no package may claim generic native support from a QBE-only test. Audit
  bundles must state the exact backend used; examples and documentation must
  not show QBE-derived native evidence as LLVM-derived or backend-independent.
-### Task 111
+### Task R-0111
 
 **Objective:** Add a Phase 7.5 capstone artifact:
 
@@ -2341,13 +2347,13 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  use on the declared subset, and either a recorded real defect found by the
  differential suite or successful injected-fault detection for every owned
  fault class. All pending rows need an owner and Phase 8/15 disposition.
-### Task 112
+### Task R-0112
 
 **Objective:** Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the structured backend driver, and the extracted layout/runtime facts with byte/behavior parity, delete the old direct `Pipeline.emit -> String` path, duplicated CLI compile/link branches, and emitter-local program-wide fact discovery. Do not carry two LLVM pipelines through the QBE implementation;
 
  the compatibility window must have a named removal commit and mutation-
  sensitive parity gate.
-### Task 113
+### Task R-0113
 
 **Objective:** Keep a Phase 7.5 decision log tied to implementation evidence. For every vertical slice record: the supported semantic families, newly shared facts, deliberately independent logic, LLVM textual changes (if any), three-way result counts, mutations caught, performance deltas, and remaining blocker.
 
@@ -2380,9 +2386,17 @@ consumers. Each is an independently green vertical slice, never a compiler-wide
 rewrite; production entry points remain runnable and LLVM output is byte-stable
 unless the task records and gates an intentional delta.
 
-### Task 114
+### Task R-0114
 
-**Objective:** Introduce stable semantic identities at definition boundaries Give modules, definitions, fields, variants, binders, monomorphized instances, blocks, values, runtime checks, and proof subjects stable typed identities where text names or list position still act as identity. Alpha-renaming remains the completed fix for bug 045; this task prevents the next name-as-identity class and incorporates bug 054's monomorphized-name witness.
+**Objective:** Introduce stable semantic identities at definition boundaries.
+Give modules, definitions, fields, variants, binders, monomorphized instances,
+blocks, values, runtime checks, and proof subjects stable typed identities where
+text names or list position still act as identity. Treat bugs 039–045 and
+050/051/054/055 as the forcing family: alias capture, first-match binder/type
+tables, indirect-call hijacking, generic-enum layout identity, non-injective
+monomorphized names, and renamed-import callee identity. Alpha-renaming remains
+the completed local fix for bug 045; this task eliminates the recurring
+architectural precondition without relabeling narrow fixes as temporary.
 
 
 Acceptance: IDs originate once at the owning boundary, survive rename/re-export
@@ -2391,7 +2405,7 @@ changes, appear in diagnostics/debug/proof artifacts, and are mutation-tested
 against first-match/name-collision regressions. Migrate one consumer at a time
 and delete each superseded text-keyed lookup in the same slice.
 
-### Task 115
+### Task R-0115
 
 **Objective:** Build one immutable indexed ProgramFacts store Derive module/definition indexes, signatures, layouts, builtin identities, aliases, target/runtime facts, call relationships, and source/semantic identity once per program. Passes query typed keys rather than rescanning lists or building private first-match tables. Facts are immutable within a compilation;
 
@@ -2402,7 +2416,7 @@ fail on duplicate/missing keys, record deterministic hashes and construction
 cost, demonstrate linear-time builders, and gate that two consumers cannot
 derive conflicting values for the same fact.
 
-### Task 116
+### Task R-0116
 
 **Objective:** Make successful compiler pass boundaries type-safe Introduce thin opaque results such as `ParsedProgram`, `ResolvedProgram`, `CheckedProgram`, `ElaboratedCore`, `CanonicalCore`, `MonomorphizedCore`, `LoweredSSA`, `ValidatedSSA`, `CleanedSSA`, and `CodegenInput`. Constructors live with the pass that earns each invariant; reports, backends, tests, and projects cannot call a later consumer with an earlier-stage value.
 
@@ -2412,7 +2426,7 @@ and artifacts, add compile-time negative fixtures for illegal handoffs, expose
 no unwrap/backdoor constructor, and delete the parallel raw-list entry point as
 each boundary lands. Do not introduce a universal pass monad.
 
-### Task 117
+### Task R-0117
 
 **Objective:** Replace the temporary stdlib scanner with compiler-derived interface facts Emit canonical public symbol/signature, visibility/construction rights, capabilities, allocation, ownership, failure, trust, platform, and evidence facts from the compiler's resolved/checked interface artifact. Compare them against the repaired balanced scanner until every row agrees, then delete the scanner rather than retaining two authorities.
 
@@ -2423,7 +2437,7 @@ public std modules are covered; mutations of each fact class fail closed; API
 snapshots, docs, audit output, incremental keys, and backend manifests consume
 the same artifact.
 
-### Task 118
+### Task R-0118
 
 **Objective:** Generate a self-enforcing IR/pass/consumer coverage matrix Generate, from compiler constructors and interface facts, the matrix spanning Check, CoreCheck, Interp, Lower, Verify, Cleanup, LLVM, QBE, reports, source identity, obligations/proofs, and tests. Every constructor is explicitly classified as implemented, intentionally no-op, rejected-before-here, runtime-helper, pending, or not-applicable; catch-all matches do not count.
 
@@ -2434,65 +2448,65 @@ the matrix is published through debug/agent artifacts; and the former manual
 inventories are deleted or reduced to generated snapshots.
 
 
-### Task 119
+### Task R-0119
 
 **Objective:** Maintain the five graduated flagships and keep their evidence bundles green:
 
 `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
 and `hmac_sha256`.
-### Task 120
+### Task R-0120
 
 **Objective:** Add stretch theorem for `fixed_capacity`: multi-iteration ring invariant or stronger push/search property.
 
-### Task 121
+### Task R-0121
 
 **Objective:** Add stretch theorem for `parse_validate`: success-path / failure-completeness theorem once proof ergonomics support it.
 
-### Task 122
+### Task R-0122
 
 **Objective:** Audit the next stronger real-crypto candidate only if it forces a new public claim: Ed25519 verification subset, AEAD, or a post-quantum primitive.
 
-### Task 123
+### Task R-0123
 
 **Objective:** Add only the ProofCore surface that candidate forces: shifts, bitand, u32 compound loops, rotations, byte-to-word packing, and multi-round invariants.
 
-### Task 124
+### Task R-0124
 
 **Objective:** Keep `hmac_sha256` as the regression anchor for exact-extraction, spec-drift-tied refinement: source perturbations must make the registered proof stale, and ProofKit refactors must keep the 11 proof checks green.
 
-### Task 125
+### Task R-0125
 
 **Objective:** Keep the paper, website, README, and showcase manifest aligned with HMAC's actual claim: exact extracted source refines an independent SHA-256/HMAC spec under named assumptions and trusted backend boundaries.
 
-### Task 126
+### Task R-0126
 
 **Objective:** Use HMAC-derived proof patterns only after they move into ProofKit or an explicit example guide; do not let future flagships copy private `Sha256Refine` scaffolding as hidden infrastructure.
 
-### Task 127
+### Task R-0127
 
 **Objective:** Graduate one runtime-error-obligation flagship: parser/protocol example with no OOB/div-zero/overflow obligations discharged.
 
-### Task 128
+### Task R-0128
 
 **Objective:** Graduate one authority/capability flagship: a privilege-separated tool whose trusted core cannot touch files/network/processes except through named wrappers.
 
-### Task 129
+### Task R-0129
 
 **Objective:** Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core, explicit assumptions, layout/ABI evidence.
 
-### Task 130
+### Task R-0130
 
 **Objective:** Graduate one ownership-heavy resource flagship: explicit cleanup, borrow-heavy APIs, no leaks/double-use, and evidence explaining why.
 
-### Task 131
+### Task R-0131
 
 **Objective:** Keep the curated showcase balanced: parser/protocol, bounded state, crypto/security, authority, FFI/trust, ownership-heavy.
 
-### Task 132
+### Task R-0132
 
 **Objective:** Add a Unix-tool/protocol compatibility flagship that demonstrates bugs memory safety alone does not catch: byte-preserving I/O, path/OS-string handling, handle-relative filesystem authority, exit-code compatibility, error behavior compatibility, ignored-result diagnostics, and oracle tests against a reference implementation.
 
-### Task 133
+### Task R-0133
 
 **Objective:** Add a thin end-to-end credibility slice before the larger workload ladder, so skeptical users can replay one compelling artifact before the full Phase 5/6/12/13 surface is complete. Target:
 
@@ -2519,7 +2533,7 @@ and `hmac_sha256`.
  explicitly deferred with examples: the historical Phase 6 array-literal
  element-inference item, match guards / OR patterns / match-on-reference item,
  and `defer`/cleanup item if the chosen slice owns resources.
-### Task 134
+### Task R-0134
 
 **Objective:** Add a graduated real-workload ladder. The goal is to make sure Concrete builds real things that can be checked against references, not only tiny proof demos. Each workload must name the surface or public claim it forces;
 
@@ -2595,7 +2609,7 @@ and `hmac_sha256`.
  interpreter-vs-compiled differential tests, runtime-obligation audit, and
  explicit evidence/trust classification for what is proved, tested, assumed,
  or trusted.
-### Task 135
+### Task R-0135
 
 **Objective:** Do not run broad examples cleanup/polish sweeps. Clean examples opportunistically when a roadmap task touches them. Improve examples only when they serve proof-link migration, `concrete prove` authoring, external validation, or a release-facing tutorial. Add an example-refresh checkpoint at every phase closure, and after every two substantial Phase-6/7 usability increments. The checkpoint is not a broad rewrite; it is a small, gate-backed audit that asks whether graduated examples and release-facing docs still teach the current language. It must remove stale "deferred" language for newly landed features; update examples that should
 
@@ -2608,7 +2622,7 @@ and `hmac_sha256`.
  name the examples/docs it checked and why no refresh was needed. The goal is
  to prevent tutorial/showcase drift without turning every feature into a
  repo-wide churn pass.
-### Task 136
+### Task R-0136
 
 **Objective:** Upgrade the constant-time flagship from `reported` to `enforced` with a secret-dependent-flow checker. Today `constant_time_tag` reports a constant-time source shape and leaves machine timing `assumed`; add a source/IR information-flow pass that rejects secret-tagged values reaching branch conditions, loop bounds, or array indices, so the discipline becomes a compiler-enforced structural property, not a reported shape. This needs no hardware/timing model and must not claim machine-level timing: it produces `enforced` for the source-flow property only, with machine timing still named `assumed`. Mark secrets with an explicit annotation (e.g. `#[secret]`); the
 
@@ -2618,13 +2632,13 @@ and `hmac_sha256`.
  loop bound. Wire `scripts/tests/check_secret_flow.sh`; the gate must reject
  every negative and must never present source-flow enforcement as timing
  proof.
-### Task 137
+### Task R-0137
 
 **Objective:** Add the Phase 8 validation artifact: a showcase/workload dashboard that proves every flagship and graduated workload has a check story, evidence bundle, oracle or reference when appropriate, interpreter-vs-compiled coverage, property-test/counterexample-regression coverage where relevant, runtime-obligation audit, trust/assumption classification, and release-CI replay. The first external-user workload in this dashboard is the external-validation-gate trial. Also publish representative cold pipeline timings and Phase 6C shadow invalidation traces for no-op, private-body, public-interface, proof/contract, policy, and target edits; those traces are
 
  the workload-derived input to Phase 8.5, not a cache implementation here.
  If the external-validation trial finds manual proof authoring too costly,
- this artifact must also run the exact narrow Task 167 synthesis probe
+ this artifact must also run the exact narrow Task R-0167 synthesis probe
  selected by the gate, preserve its transcript and review-cost measurements,
  and record the final GO/NO decision consumed by the Phase 8.5 trigger. It
  may not silently broaden that probe into the general synthesis roadmap.
@@ -2678,7 +2692,7 @@ batch/eager pipeline into queries is accepted as part of this build, post-GO.
 Do not re-open a "do the seam early" debate: the seam's only payoff is avoiding
 that conversion, and that payoff exists only if the bet validates.
 
-### Task 138
+### Task R-0138
 
 **Objective:** Freeze every build revision into an immutable `ProjectInputSnapshot` before evaluating queries.
 
@@ -2701,7 +2715,7 @@ output always depends on the exact revision. Gate changed environment/std
 path, SDK/sysroot/tool binary, symlink/case alias, add/delete/rename, and
 edit-during-build snapshots.
 
-### Task 139
+### Task R-0139
 
 **Objective:** Define one typed query/artifact contract and one `CompilerSession` driver.
 
@@ -2755,7 +2769,7 @@ declared input/query APIs. Dynamic dependency recording cannot see ambient
 inputs read behind the query engine, so bypassing the firewall is a cache
 correctness bug and fails a mutation gate.
 
-### Task 140
+### Task R-0140
 
 **Objective:** Add deterministic indexed compiler data and linear-time builders before persisting today's hot whole-program scans.
 
@@ -2779,7 +2793,7 @@ and index-finalization verifiers, plus mutations that reintroduce a
 quadratic builder and that swap two incompatible typed IDs; both must fail
 their gates.
 
-### Task 141
+### Task R-0141
 
 **Objective:** Make reusable frontend artifact boundaries operational.
 
@@ -2807,7 +2821,7 @@ codegen, proof, policy, package, or release queries. Introduce only boundaries
 demonstrated useful by the workload; `CheckedModule` is a candidate name,
 not permission to add a redundant typed tree.
 
-### Task 142
+### Task R-0142
 
 **Objective:** Implement the serial in-memory query engine and conservative reverse-dependency invalidation.
 
@@ -2824,7 +2838,7 @@ declared inputs; it cannot detect an omitted semantic dependency. Missing a
 reuse opportunity is acceptable; stale reuse is not. Narrow an envelope only
 after a gate or theorem demonstrates completeness for that query family.
 
-### Task 143
+### Task R-0143
 
 **Objective:** Define deterministic internal codecs before persisting an artifact family.
 
@@ -2835,7 +2849,7 @@ after a gate or theorem demonstrates completeness for that query family.
  format. Internal codecs may invalidate wholesale across compiler versions;
  Phase 18 separately owns stable public package encodings.
 
-### Task 144
+### Task R-0144
 
 **Objective:** Add an opaque compiler-versioned local content-addressed store under `.build/concrete-cache/` (or an equivalent project-local path).
 
@@ -2873,7 +2887,7 @@ manifest, and internal hashes is outside the local-cache threat model until
 an authenticated expected action/root exists; tests must not misdescribe
 internal consistency checks as detecting it.
 
-### Task 145
+### Task R-0145
 
 **Objective:** Turn proof, obligation, and report work into queries rather than cached rendered strings.
 
@@ -2895,14 +2909,14 @@ kernel before emitting the current strong status unless a separately
 authenticated replay receipt is explicitly admitted by policy and named in
 the TCB. Solver/LLM results retain their weaker class and replay provenance.
 
-Phase 8.5 supplies the query namespace and store; Task 155 owns the
+Phase 8.5 supplies the query namespace and store; Task R-0155 owns the
 shared proof-artifact schema and activation of reusable Lean/solver verdicts,
 rather than creating a second `.build/concrete-proof-cache/` database. Cache
 only successful strict non-verdict artifacts first. Negative/tolerant
 diagnostics, filesystem discovery, environment-dependent operations, solver
 results, and cancelled work need explicit cache contracts before reuse.
 
-### Task 146
+### Task R-0146
 
 **Objective:** Add stable codegen units, an object cache, and deterministic relinking.
 
@@ -2939,7 +2953,7 @@ BackendIR relation checking. Before a native/object validator, an object hit
 remains backend/compiler-trusted and its hash proves identity only relative
 to the trusted local action mapping—not that LLVM produced correct code.
 
-### Task 147
+### Task R-0147
 
 **Objective:** Add a long-lived service/watch surface over the same session, then deterministic independent-query scheduling.
 
@@ -2954,7 +2968,7 @@ is otherwise scheduling-dependent. The internal service exists to preserve a
 session across CLI or scripted edits; Phase 19's LSP must wrap this exact
 session rather than a batch `runFrontend` or editor-only cache.
 
-### Task 148
+### Task R-0148
 
 **Objective:** Add cache/query observability and a conservative rollout.
 
@@ -2967,7 +2981,7 @@ compares canonical results; any false hit disables that query family and
 persists a minimized regression. Audit/why/diff output may explain reuse but
 may not cite reuse as correctness evidence.
 
-### Task 149
+### Task R-0149
 
 **Objective:** Add the Phase 8.5 validation artifact.
 
@@ -3015,11 +3029,11 @@ proof discipline scales, measure manual proof effort on real flagships, then
 measure review effort for the LLM-guided synthesis loop if manual authoring is
 too expensive.
 
-### Task 150
+### Task R-0150
 
 **Objective:** Instrument the flagships with PROOF-EFFORT TELEMETRY before investing in automation, so the external-validation gate's "was the proof discipline worth the cost?" question has data instead of anecdotes: per proved function, record Lean proof lines, tactic depth, solver/`bv_decide` time, and the source complexity it covers (loops, branches, width casts). Publish a small baseline table for hmac_sha256/constant_time_tag and refresh it per flagship. Cheap to collect now; impossible to reconstruct later.
 
-### Task 151
+### Task R-0151
 
 **Objective:** Move example Lean proofs physically next to their Concrete examples. Target layout:
 
@@ -3035,7 +3049,7 @@ reject new example proof modules under `Concrete/Examples/`. Pilot on one
 small example, then migrate all current example proof modules. Keep registered
 spec PExprs in `Concrete.Proof` until the later `ProofCore` /
 `SpecRegistry` split.
-### Task 152
+### Task R-0152
 
 **Objective:** Add proof minimization: `concrete prove --minimize <obligation_id>` emits the smallest source / ProofCore / Lean slice needed to reproduce a failed obligation. Output directory:
 
@@ -3045,7 +3059,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  postcondition, one stale proof, and one SMT counterexample. The minimized
  artifact must reproduce the same status and stable id without unrelated
  functions.
-### Task 153
+### Task R-0153
 
 **Objective:** Define and document stable theorem naming conventions in tool output:
 
@@ -3053,11 +3067,11 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `<fn>_loop_<name>_preserves`, and
  `<fn>_call_<callee>_discharges_requires`. `concrete prove` should suggest
  these names instead of leaving agents to invent them.
-### Task 154
+### Task R-0154
 
 **Objective:** Add CI gates for the agent-facing proof surfaces: snapshot representative `--json` output, validate schema versioning, ensure generated Lean stubs parse/check up to the intended placeholder boundary, assert replay JSON reports the same statuses as human replay, and assert proof-check JSON maps a failing Lean proof back to the intended obligation id.
 
-### Task 155
+### Task R-0155
 
 **Objective:** Define one proof artifact schema shared by obligations, minimization, `--why`, generated stubs, synthesis attempts, repair plans, stale-proof reports, proof-cache entries, and replay bundles.
 
@@ -3072,7 +3086,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `--repair-plan`, proof-cache status, and stale-proof reports all emit this
  shared envelope, and a gate fails if any command invents a private JSON
  dialect.
-### Task 156
+### Task R-0156
 
 **Objective:** Add human docs only after the binary path exists:
 
@@ -3080,7 +3094,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  should summarize the binary workflow and point to the ProofKit guide, but
  they must not be the source of truth for agents using only an installed
  binary.
-### Task 157
+### Task R-0157
 
 **Objective:** Keep AI/agent assurance guidance aligned with the implemented proof surface.
 
@@ -3091,41 +3105,41 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  ghost/spec code, or package evidence land, update this guide in the same
  commit as the feature and add at least one agent-facing example of the
  intended suggestion pattern.
-### Task 158
+### Task R-0158
 
 **Objective:** Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP server should wrap the binary rather than duplicate logic, exposing resources such as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and `concrete://examples/evidence-classes`, plus tools for `prove_json`, `show_obligation`, `emit_lean`, `check`, `replay`, and `check_proofs`.
 
-### Task 159
+### Task R-0159
 
 **Objective:** Build reusable proof lemmas for arrays: lookup, update, length, in-bounds, OOB stuck behavior.
 
-### Task 160
+### Task R-0160
 
 **Objective:** Build reusable lemmas for loop-carried state and `while_step`.
 
-### Task 161
+### Task R-0161
 
 **Objective:** Build reusable lemmas for BitVec operations used by flagships.
 
-### Task 162
+### Task R-0162
 
 **Objective:** Build reusable lemmas for structs, fields, enum construction, match, Result, Option, and bounded-buffer invariants.
 
-### Task 163
+### Task R-0163
 
 **Objective:** Upgrade generated proof stubs for real shapes: arrays, structs, enums, fixed buffers, Result/Option, loops, source contracts, and refinement composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton, expected theorem statement, common imports/tactics, and TODO blocks for loop invariants. These items enrich what `--emit-lean` produces; they do not introduce a second stub generator. Provide a friendly alias such as `concrete prove <file> <fn> --stub` only if it is the same artifact path and schema as `--emit-lean`, not a second proof surface.
 
-### Task 164
+### Task R-0164
 
 **Objective:** Add generated composition scaffolds: FnTable entries, call lemmas, callee refinement dependencies, and composed theorem skeletons.
 
-### Task 165
+### Task R-0165
 
 **Objective:** Add generated loop-invariant templates for common proof shapes:
 
  counter loop over array writes, copy loop, fold loop, multi-store loop,
  offset loop, and block-processing loop.
-### Task 166
+### Task R-0166
 
 **Objective:** Improve failed-proof diagnostics after `--json`, failed artifacts, and `--minimize` exist: classify common failures into actionable categories such as missing callee theorem, stale source link, missing table entry, failed arithmetic bridge, insufficient frame fact, and spec/extraction mismatch. Add `concrete prove <file> <fn> --why <obligation_id>` (or an equivalent `--show-obligation --why` form) to explain why the obligation exists, which source span generated it, which facts are in scope, what evidence classes are allowed, and why automation did not close it.
 
@@ -3137,7 +3151,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  feel like debugging a minimized program, not reading a wall of theorem-state
  text. The fixture is evidence of failure only; it must never upgrade a claim
  to proof.
-### Task 167
+### Task R-0167
 
 **Objective:** Add **LLM-guided proof synthesis, kernel-verified** as a first-class proof-authoring workflow, not as prose-only AI help. Command shape:
 
@@ -3185,7 +3199,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  be reachable through any later MCP server, but the CLI/JSON catalog is the
  source of truth so agents can discover the workflow without reading the
  repository docs.
-### Task 168
+### Task R-0168
 
 **Objective:** Add proof-result caching once proof artifacts and fingerprints are stable.
 
@@ -3206,7 +3220,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  mask stale source, stale theorem names, changed policies, or changed solver
  trust settings, and that `--incremental=off|on|verify` produces identical
  proof statuses and replay artifacts.
-### Task 169
+### Task R-0169
 
 **Objective:** Add simple auto-discharge for structural obligations that do not need human proof search. V1 shapes: reflexive field projection, tuple/struct constructor-destructor round trips, enum tag preservation, fixed-array literal length, direct call wrapper, and source-contract metadata erasure.
 
@@ -3215,7 +3229,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `scripts/tests/check_structural_auto_discharge.sh`; auto-discharge may only
  emit `proved_by_kernel_decision` or a linked Lean theorem when the kernel
  actually checks the generated proof.
-### Task 170
+### Task R-0170
 
 **Objective:** Add operational VC auto-discharge as the next automation tier after structural auto-discharge. Today `linear` and `bitvector` obligations route to `omega` / `bv_decide`, while `operational` and `refinement` obligations route to Lean proof links; that leaves ordinary `#[ensures]` bodies and loop operational-preservation steps dependent on hand-written bridge theorems.
 
@@ -3234,7 +3248,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  compression rounds, message schedules, heap/alias-heavy code, effectful code,
  and induction-heavy specs until separate evidence shows they fit. Design
  note: `research/proof-evidence/operational-vc-auto-discharge.md`.
-### Task 171
+### Task R-0171
 
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
 
@@ -3249,7 +3263,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  first version into the structural and operational auto-discharge gates, then
  extend it to proof-result caching, agent-facing proof suggestions, and any
  external solver path.
-### Task 172
+### Task R-0172
 
 **Objective:** Add a small verified/spec-checked standard proof library for common predicates and formal stdlib models: sorted, bounded, no-duplicates, fixed-length, prefix, checksum, constant-time source shape, `formal_vec`, `formal_map`, `formal_set`, spec-only `bigint`, and the first reusable lemma families over those models. Treat these as **formal shadow models** for real containers: user proofs reason about the mathematical model, while collection implementations prove refinement facts from `Vec`, `HashMap`, `OrderedMap`, and `HashSet` to the corresponding formal model.
 
@@ -3263,7 +3277,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  refinement evidence class, and a deliberately false refinement is rejected by
  the checker/kernel. This is the tractability unlock for proving real
  programs that use containers.
-### Task 173
+### Task R-0173
 
 **Objective:** Add bounded quantified specs for collections, not arbitrary open-ended logic. V1 syntax should cover only finite, source-visible domains:
 
@@ -3280,7 +3294,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `scripts/tests/check_quantified_specs.sh`; the gate must prove quantified
  claims are never erased into a vague postcondition and never reported as
  proved unless the generated finite theorem actually checks.
-### Task 174
+### Task R-0174
 
 **Objective:** Add AI-assisted proof repair only after artifacts, statuses, and replay are stable enough to validate suggestions mechanically. The binary surface is `concrete prove --repair-plan <obligation_id> --json`; it emits no edited source, only candidate next actions with required checks. Required JSON fields: `obligation_id`, `failure_class`, `minimal_artifact`, `suggested_lemma`, `suggested_imports`, `candidate_tactic`, `validation_command`, and `risk`. Wire `scripts/tests/check_proof_repair_plan.sh` with missing theorem, stale proof, missing frame fact, arithmetic bridge failure, and spec mismatch.
 
@@ -3289,7 +3303,7 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `concrete prove <file> <fn> --repair` may exist only as an alias for the
  same repair-plan artifact; it must not edit source by default and must never
  upgrade evidence without replay.
-### Task 175
+### Task R-0175
 
 **Objective:** **Frame inference (the proof-scaling cliff).** Every loop/state proof must establish not just what an iteration *changes* but what it *preserves* — the frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
 
@@ -3309,7 +3323,7 @@ clause that auto-derives preservation) so frame conditions never become the
 majority of proof work. Gate: do not build it until a second update shape
 actually forces it (per the operating rules) — the current functional-list
 model gets framing for free.
-### Task 176
+### Task R-0176
 
 **Objective:** Deferred architecture refactor: split the current `Concrete.Proof` layering so registered example specs can move without a cycle, but do not let this block the active frontier unless spec ownership or proof authoring starts depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns the spec-drift table and imports whichever example spec modules it registers;
 
@@ -3323,7 +3337,7 @@ proof theorems and example spec PExprs live under the example namespace,
 example-owned theorem/spec definitions, `check-proofs` can reach moved
 modules through the umbrella import, and changing a moved example body still
 reports stale/spec-drift rather than silently accepting the old proof.
-### Task 177
+### Task R-0177
 
 **Objective:** Add the Phase 9 validation artifact: a proof-authoring project that exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked proof attachment across straight-line, array update, loop copy, fold, composition, bounded quantified specs, ghost, stale, missing, partial, and repair cases. The gate must typecheck generated stubs, reject any `proof-registry.json`, and verify that failing Lean proofs map back to stable obligation ids. If Phase 8.5 completed, it must also exercise proof-query memory/disk hits, stale dependency invalidation, proof-tool/policy drift,
 
@@ -3339,7 +3353,7 @@ assumed, and what changed?" without reading compiler internals.
 Done when: `concrete audit`, semantic diff, and an artifact viewer cover the
 five graduated flagships and one package-scale example.
 
-### Task 178
+### Task R-0178
 
 **Objective:** Stabilize machine-readable fact schemas for proof status, obligations, effects, capabilities, assumptions, policies, snapshots, showcase metadata, runtime traps, synthesis attempts, stdlib evidence, and package evidence.
 
@@ -3357,19 +3371,19 @@ in separate shared dimensions from that evidence-class enum. In particular,
 `compiler_validated`, `certificate_structurally_checked`, a named checked
 relation, and `kernel_replayed` answer different questions and may not be
 collapsed into or used to upgrade a proof/evidence class.
-### Task 179
+### Task R-0179
 
 **Objective:** Add `concrete audit`: one human-readable plus machine-readable bundle covering authority, trust, allocation, proof status, obligations, assumptions, policy, snapshots, backend/target assumptions, replay, and the proof-story matrix specialized to the audited program.
 
-### Task 180
+### Task R-0180
 
 **Objective:** Add `concrete explain <function>`: capabilities, proof status, assumptions, obligations, trusted callees, evidence level, and why each status is what it is.
 
-### Task 181
+### Task R-0181
 
 **Objective:** Add `concrete why <capability>`: explain why a function needs `File`, `Network`, `Alloc`, `Unsafe`, etc., including transitive call chains.
 
-### Task 182
+### Task R-0182
 
 **Objective:** Add `concrete diff old new`: authority/proof/trust/runtime-obligation diff.
 
@@ -3388,11 +3402,11 @@ changelog: `+ File capability`, `+ trusted function`, `- Unsafe removed`,
 `verify_packet proof became stale`, `bounds obligation discharged`,
 `dependency evidence downgraded`. It must preserve separate evidence classes
 and must not collapse the review into one green badge.
-### Task 183
+### Task R-0183
 
 **Objective:** Add semantic trust diff gates: capability widening, allocation change, trusted boundary addition, stale proof, weakened/missing obligation, assumption widening, runtime-obligation change, and stdlib evidence-class drift. Add a red-team fixture proving the diff cannot emit a false-clean summary when a capability/trust/proof fact changed.
 
-### Task 184
+### Task R-0184
 
 **Objective:** Add early **capability budget files** before full package facts exist.
 
@@ -3406,11 +3420,11 @@ and must not collapse the review into one green badge.
  widening, and reuses the same fact vocabulary as Phase 18 import fact
  constraints so the policy graduates cleanly to dependency/package
  boundaries.
-### Task 185
+### Task R-0185
 
 **Objective:** Add `concrete audit --json`: machine-readable audit output for CI, dashboards, editor tooling, and release bundles.
 
-### Task 186
+### Task R-0186
 
 **Objective:** Add a **verified profile** command/policy surface that makes "formally verifiable code" operational without overclaiming. Candidate spellings:
 
@@ -3425,11 +3439,11 @@ and must not collapse the review into one green badge.
  Lean, and runtime checks remain runtime checks. Add a gate with one clean
  verified fixture and negatives for stale proof, assumption, SMT-only claim,
  unchecked unsafe, and unresolved runtime obligation.
-### Task 187
+### Task R-0187
 
 **Objective:** Add an artifact viewer CLI/TUI over facts, obligations, proofs, assumptions, release bundles, and diffs. It may show a compact dashboard, but it must never collapse different evidence classes into one fake green badge: `proved`, `runtime_checked`, `tested_by_oracle`, `assumed`, and `trusted` stay distinct on screen and in JSON.
 
-### Task 188
+### Task R-0188
 
 **Objective:** Ensure every release bundle includes an evidence replay command.
 
@@ -3442,7 +3456,7 @@ without network access, without an LLM, and without private source paths.
 Done when the replay gate covers: clean bundle replays green, stale proof
 fails, missing gate fails, changed source fails, schema mismatch fails, and
 an LLM-generated proof bundle replays using only checked artifacts.
-### Task 189
+### Task R-0189
 
 **Objective:** Make `tested_by_oracle` evidence structured and diffable:
 
@@ -3457,7 +3471,7 @@ an LLM-generated proof bundle replays using only checked artifacts.
  - support metamorphic tests where no complete reference exists;
  - flag oracle evidence weakening in `concrete diff` when cases, seeds,
    reference, comparison mode, or boundary coverage shrink.
-### Task 190
+### Task R-0190
 
 **Objective:** Add property-based contract testing as a cheap counterexample finder, not proof. Command surface: `concrete test --contracts --property --json` generates inputs satisfying `#[requires]`, executes the function, checks `#[ensures]`, runtime obligations, and selected `assert` facts, then shrinks failures to a minimal source-level witness. Evidence class:
 
@@ -3470,7 +3484,7 @@ an LLM-generated proof bundle replays using only checked artifacts.
  false postcondition. Wire `scripts/tests/check_property_contracts.sh`; the
  gate must prove property testing finds and shrinks the false claim without
  ever producing a `proved_*` status.
-### Task 191
+### Task R-0191
 
 **Objective:** Add counterexample-to-regression persistence for obligation witnesses from SMT, property tests, oracle failures, fuzzers, differential mismatches, runtime traps, proof failures, and future fuzzed contracts. Command surface: `concrete counterexample save <obligation_id> --out tests/counterexamples/<name>.con` plus JSON mode. The saved fixture must include source inputs, expected failing obligation id, expected status (`counterexample`, `tested_by_property_failure`, `oracle_failure`, etc.), replay command, and the original tool provenance. Wire `scripts/tests/check_counterexample_regressions.sh` with one SMT overflow
 
@@ -3479,7 +3493,7 @@ an LLM-generated proof bundle replays using only checked artifacts.
  failure/minimized obligation witness. The
  gate must fail if a future refactor turns the same counterexample into
  `proved_*` without changing the checked fixture expectation.
-### Task 192
+### Task R-0192
 
 **Objective:** Add **observed contract inference from tests** as an explicit non-proof on-ramp to specs.
 
@@ -3496,35 +3510,35 @@ an LLM-generated proof bundle replays using only checked artifacts.
   mutated implementation can invalidate the observed claim; and ensure no
   inferred contract upgrades evidence without a separate proof or
   policy-approved assumption.
-### Task 193
+### Task R-0193
 
 **Objective:** Add spec provenance and adequacy facts to audit/release bundles: spec name, source standard or paper, independent reference if any, test-vector set, reviewer, review date, assumptions, and evidence class (`spec_trusted`, `spec_reviewed`, `tested_by_oracle`, or future `spec_refines_standard`). Do not let a source-to-spec proof imply the spec itself is adequate.
 
-### Task 194
+### Task R-0194
 
 **Objective:** Add evidence-level monotonicity checks to audit/diff output.
 
-### Task 195
+### Task R-0195
 
 **Objective:** Add one AI-audit demo where an agent answers authority/proof/trust questions using compiler facts rather than source guesses.
 
-### Task 196
+### Task R-0196
 
 **Objective:** Add review checklists generated from facts: what changed, what widened, what became trusted, what lost proof, what gained assumptions, and which obligations remain open.
 
-### Task 197
+### Task R-0197
 
 **Objective:** Add artifact redaction/stability rules so release bundles can be shared publicly without leaking local paths, secrets, or machine-specific noise.
 
-### Task 198
+### Task R-0198
 
 **Objective:** Keep audit, contracts, obligations, assumptions, policies, manifests, and proof-status output on one shared vocabulary. Do not let each artifact grow its own mini-language for the same evidence classes.
 
-### Task 199
+### Task R-0199
 
 **Objective:** Keep public-facing docs and website copy grounded in the same evidence vocabulary. Use `docs/WHY_CONCRETE.md` as the source for a C/Rust-oriented "why this exists" page: small systems code, explicit authority, visible evidence classes, spec-drift-tied proofs, named trust boundaries, and what Concrete deliberately avoids. The website should show the end goal and the current honest status, not catchy slogans or one-badge proof claims.
 
-### Task 200
+### Task R-0200
 
 **Objective:** [historical origin: closed Phase 4 item 42] Add compiler self-audit: `concrete audit
 
@@ -3535,7 +3549,7 @@ an LLM-generated proof bundle replays using only checked artifacts.
  provenance separately from evidence. Otherwise it consumes the eager shared
  pipeline facts. Neither branch may recompute a private audit-only compiler
  model, create a private cache, or present a cache hit as validation.
-### Task 201
+### Task R-0201
 
 **Objective:** Add the Phase 10 validation artifact: one package-scale audit bundle fixture with human and JSON output, semantic diff before/after a change, artifact viewer smoke test, oracle manifest, property-test manifest, persisted counterexample regression, spec-provenance facts, redaction check, replay command, and a README showing how a reviewer answers authority, proof, trust, assumption, and runtime-obligation questions without reading compiler internals. When Phase 8.5 exists, cold, warm, and cache-off audit/diff/why output must be identical after normalizing timing/cache-observability fields, and corrupt/stale query artifacts must recompute or fail closed; otherwise
 
@@ -3551,43 +3565,43 @@ FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
 
-### Task 202
+### Task R-0202
 
 **Objective:** Add transitive FnTable completeness: walk registered spec call graphs, not only direct call sites, and fail or flag missing callees before theorem authors hit confusing `none` evaluations.
 
-### Task 203
+### Task R-0203
 
 **Objective:** Add proof dependency tracking: if proof/spec for `f` depends on `g`, drift in `g` must affect `f`'s proof/evidence status or surface an explicit dependency warning.
 
-### Task 204
+### Task R-0204
 
 **Objective:** Add per-obligation proof/evidence status. Function-level status is only a summary; padding, block fold, digest serialization, final composition, contract clauses, runtime obligations, oracle checks, and assumptions each carry their own evidence class.
 
-### Task 205
+### Task R-0205
 
 **Objective:** Keep oracle-tested evidence separate from Lean/spec refinement. Oracles are implementation sanity and regression evidence, not proof completion.
 
-### Task 206
+### Task R-0206
 
 **Objective:** Add proof debugging output for failed/stale proofs: extracted spec, current fingerprint, registered fingerprint, expected theorem shape, missing callee facts, likely missing lemma class.
 
-### Task 207
+### Task R-0207
 
 **Objective:** Add evidence provenance to proof/evidence facts: source file/span, compiler commit, theorem name, spec name, policy file, assumption file, tool version, and replay command where available.
 
-### Task 208
+### Task R-0208
 
 **Objective:** Add tool-version drift checks: proof/evidence facts record the Lean version, Concrete compiler commit, ProofKit hash, extraction version, decision procedure version, and solver version where relevant. A toolchain bump marks affected evidence `needs_recheck` until replayed; old green badges are never silently reused across a proof-tool upgrade.
 
-### Task 209
+### Task R-0209
 
 **Objective:** Add evidence monotonicity checks: a refactor cannot silently present a weaker claim as if it were still stronger (`proved` cannot degrade to `reported` while retaining the same badge/summary).
 
-### Task 210
+### Task R-0210
 
 **Objective:** Add assumption lifecycle checks: every assumption has an owner, scope, rationale, review date, affected claims, and a diff gate when it widens.
 
-### Task 211
+### Task R-0211
 
 **Objective:** Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern, backend, runtime, and target assumptions in one machine-readable list.
 
@@ -3599,15 +3613,15 @@ claims depend on it. This is an honest report, not an auto-refactorer.
 A later "trusted-boundary shrinker" may suggest wrappers or proof targets,
 but suggestions must be advisory until a replayed proof/audit diff validates
 the smaller boundary.
-### Task 212
+### Task R-0212
 
 **Objective:** Add spec-adequacy gates: release policy can require reviewed spec provenance for selected claims, forbid unreviewed specs in graduated flagships, and show when a theorem is `proved_by_lean` against a `spec_trusted` or unreviewed spec.
 
-### Task 213
+### Task R-0213
 
 **Objective:** Add vacuity gates to proof status: `proved` summaries must be downgraded or blocked when the proof depends on an unsatisfiable precondition, contradictory assumptions, unreachable code path, or invariant `false`.
 
-### Task 214
+### Task R-0214
 
 **Objective:** Add solver portfolio and cross-solver agreement as a strictly separate evidence class, never as kernel evidence. External SMT V1 may start with Z3 only, but the trust-gate roadmap must define how to run `z3`, `cvc5`, and `bitwuzla` where the fragment applies. Result classes:
 
@@ -3624,7 +3638,7 @@ the smaller boundary.
  `scripts/tests/check_solver_portfolio.sh`; the gate must prove no external
  solver result can overwrite kernel evidence and that disagreement blocks
  release claims unless explicitly assumed.
-### Task 215
+### Task R-0215
 
 **Objective:** Add spec/proof mutation testing to prove evidence is load-bearing. Command surface: `concrete mutate-evidence --target <example> --json` creates controlled mutants: change a function body under a proof link, weaken or delete an `#[ensures]` clause, strengthen an impossible `#[requires]`, remove a loop invariant, alter a spec PExpr/table entry, change a theorem name, and perturb a trusted assumption. Expected outcomes must be explicit:
 
@@ -3635,7 +3649,7 @@ the smaller boundary.
  The gate must fail if a mutated proof/spec still reports the original green
  evidence class without an allowed explanation. This is evidence about the
  evidence: proofs must constrain the implementation, not merely decorate it.
-### Task 216
+### Task R-0216
 
 **Objective:** Add proof-corpus migration across toolchain upgrades, the active half of the §7 drift story. Detection marks evidence `needs_recheck`; migration must turn a bumped corpus green again without hand-walking every obligation. Command surface: `concrete prove --recheck-corpus [--json]` re-runs every linked proof/evidence check under the current toolchain and triages each into `still_proved`, `replayed_clean`, `broke_needs_repair`, or `unavailable_dependency`; `concrete prove --recheck <obligation_id>` does one.
 
@@ -3648,7 +3662,7 @@ the smaller boundary.
  toolchain bump, that a removed/renamed pinned lemma surfaces as
  `unavailable_dependency`, and that no `needs_recheck` obligation can reach a
  green badge without an actual kernel re-check.
-### Task 217
+### Task R-0217
 
 **Objective:** Add an axiom-inventory and clean-checkout proof replay gate. Every `proved_by_lean` / `proved_by_kernel_decision` fact must record the Lean axioms its theorem transitively depends on (the `#print axioms` walk):
 
@@ -3669,11 +3683,11 @@ the smaller boundary.
  stale proof result, wrong dependency root, truncated entry, and valid entry
  from another compiler/toolchain; clean-checkout replay must reject/recompute
  all four before any evidence becomes green.
-### Task 218
+### Task R-0218
 
 **Objective:** [historical origin: closed Phase 3 items 15/16] Convert `--report proof-status` and `concrete prove`'s obligation facts from consistency-gated recompute to literal `ObligationCore`-ledger views — the last Phase 3 surfaces that recompute (sound today because consistency-gated). They are the proof-status / trust surfaces, so they belong in this phase.
 
-### Task 219
+### Task R-0219
 
 **Objective:** Add the Phase 11 validation artifact: a trust-gate pressure project that includes transitive proof dependencies, stale dependency propagation, tool-version drift, proof-corpus migration across a simulated toolchain bump, assumption widening, spec-adequacy policy, vacuity downgrade, solver portfolio / disagreement handling, evidence mutation testing, axiom inventory and clean-checkout replay, weaker-evidence monotonicity, and a release gate proving each status cannot be silently presented as stronger evidence. Include cache-off/on/verify parity and stale/corrupt-cache negatives so the trust gates cover the operational path
 
@@ -3688,16 +3702,16 @@ Done when: the subset family has public names, allowed constructs, rejected
 constructs, arithmetic-site policy, runtime-error policy, and compatibility
 promises.
 
-### Task 220
+### Task R-0220
 
 **Objective:** Define `PredictableV1`: no allocation unless bounded, no FFI unless trusted and assumed, no unbounded loops/recursion, explicit failure-path policy.
 
-### Task 221
+### Task R-0221
 
 **Objective:** Freeze arithmetic-site semantics for subset claims. This task is reconciled with historical Phase 6 item 10 and `docs/ARITHMETIC_POLICY.md`: build/profile names are policy bundles, not arithmetic modes, and the same source expression must not mean wrap in one profile and checked in another. Ordinary `+ - *` are checked in every profile; intentional modular arithmetic is written as `wrapping_*`; intentional clamping is written as `saturating_*`. Subset reports must classify arithmetic sites as `checked`, `proved`, `runtime- checked`, `explicit-wrapping`, or `explicit-saturating`; they must never infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or
 
 `proof`.
-### Task 222
+### Task R-0222
 
 **Objective:** Carry arithmetic-site facts into diagnostics, reports, assumptions, proof obligations, release bundles, and backend contracts. A theorem about checked arithmetic is not a theorem about modular arithmetic; a function using `wrapping_*` is either proved against the proof model's explicit modular operator (today only `wrapping_add@u32 → addw 32`, as SHA-256 uses) or, for the not-yet-modeled forms (`wrapping_sub`/`wrapping_mul`, other widths, saturating), outside the default proof subset. Add `docs/ARITHMETIC_SITE_EVIDENCE.md`, `examples/arithmetic_site_evidence/{checked,wrapping,saturating,profile_invariant}/`,
 
@@ -3706,30 +3720,30 @@ profile-invariance (the same expression has the same semantics under
 different build profiles), explicit classification of every arithmetic site,
 and rejection/downgrade of proof claims that confuse checked and wrapping
 semantics.
-### Task 223
+### Task R-0223
 
 **Objective:** Define a first runtime failure model: abort, assertion failure, OOM, stack overflow, `defer`/cleanup, impossible branches, and what each does to proof/resource claims.
 
-### Task 224
+### Task R-0224
 
 **Objective:** Define source-level stack-depth versus backend/target stack claims.
 
-### Task 225
+### Task R-0225
 
 **Objective:** Define source-level constant-time profile v1:
 
 no secret-dependent branch, no secret-dependent memory index, fixed loop
 bounds, explicit backend timing assumptions.
-### Task 226
+### Task R-0226
 
 **Objective:** Define secret/data-sensitivity labels for future security work:
 
 `public`, `secret`, `timing-sensitive`.
-### Task 227
+### Task R-0227
 
 **Objective:** Define source-level memory-safety claims precisely: what linearity, borrows, cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
 
-### Task 228
+### Task R-0228
 
 **Objective:** Define the **Unsafe island** rule for unchecked operations. Any operation that bypasses a safe runtime check, borrow/linearity rule, raw-pointer restriction, layout proof, or FFI ownership boundary must be exposed through a deliberately small surface requiring `with(Unsafe)` or an explicitly named `trusted` boundary. Examples include future `get_unchecked`, raw pointer place writes, unchecked casts/conversions, inline asm, and unchecked FFI wrappers. There is no global unsafe mode and no silent trusted wrapper that hides authority: audit output must show the safe wrapper, the underlying trusted/Unsafe operation, and the assumption being
 
@@ -3741,23 +3755,23 @@ bounds, explicit backend timing assumptions.
  reach the unchecked operation without the capability or trusted boundary,
  and proving audit output shows both the safe wrapper and the underlying
  trusted/Unsafe operation.
-### Task 229
+### Task R-0229
 
 **Objective:** Decide the proof class for references and borrows. A function using `&` or `&mut` must be classified as one of: value-only/borrow-free, proved over read-only references, proved over mutable references with explicit frame/modifies obligations, or enforced-only and outside `ProvableV1`. Do not let borrow-using code appear proof-eligible through a value-only ProofCore model.
 
-### Task 230
+### Task R-0230
 
 **Objective:** Define the v1 threat model: adversary, trusted base, proof scope, backend scope, side-channel scope, dependency scope, and what remains out of model.
 
-### Task 231
+### Task R-0231
 
 **Objective:** Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
 
-### Task 232
+### Task R-0232
 
 **Objective:** Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use the frozen subset names consistently.
 
-### Task 233
+### Task R-0233
 
 **Objective:** Close the unprofiled-float proof hole before any float proof claim:
 
@@ -3765,36 +3779,36 @@ bounds, explicit backend timing assumptions.
  extraction unless an explicit float profile is active. Audit output must
  say `float semantics: unprofiled` and `proof eligibility: excluded` rather
  than reporting a float operation as extracted through integer `PBinOp.add`.
-### Task 234
+### Task R-0234
 
 **Objective:** Define `ProvableFloatV1` as a separate, narrow proof profile:
 
  IEEE-754 binary32/binary64, round-to-nearest-even, no fast-math, no
  reassociation, no implicit FMA contraction, no ambient rounding-mode
  mutation, and explicit NaN/infinity/subnormal/signed-zero policy.
-### Task 235
+### Task R-0235
 
-**Objective:** Add ProofCore support for profiled floats only after Task 233 is closed:
+**Objective:** Add ProofCore support for profiled floats only after Task R-0233 is closed:
 
  `PVal.float32/64`, float `PBinOp` cases carrying width and rounding
  (`fadd`/`fsub`/`fmul`/`fdiv`/`feq`/`flt`/`fle`), interpreter agreement,
  and backend/audit checks that prove/report `fast_math: forbidden`.
-### Task 236
+### Task R-0236
 
 **Objective:** Classify the first float semantics layer honestly. Until Concrete imports or proves a checked IEEE-754 semantics library, primitive float operations are `float_semantics_trusted`; proofs over profiled float code are refinements to an explicit bit-level IEEE spec under that named trusted primitive layer, not `proved_by_lean` from first principles.
 
-### Task 237
+### Task R-0237
 
 **Objective:** Add one small `ProvableFloatV1` flagship only after the profile exists:
 
  a fixed-order `f32`/`f64` kernel such as clamp/normalize, tiny FIR/IIR, PID,
  or dot product. Prove exact IEEE behavior first; real-valued epsilon-bound
  refinement is a later layer.
-### Task 238
+### Task R-0238
 
 **Objective:** Add the Phase 12 validation artifact: a profile matrix project covering `PredictableV1`, `ProvableV1`, unprofiled-float exclusion, profiled-float admission, borrow/reference proof-class decisions, constant-time source shape, stack/runtime-failure assumptions, and negative examples for every exclusion. The gate must prove reports never call excluded code proof eligible.
 
-### Task 239
+### Task R-0239
 
 **Objective:** Define the SPARK-class contract layer in Concrete's vocabulary, not Ada's:
 
@@ -3808,7 +3822,7 @@ bounds, explicit backend timing assumptions.
  `docs/SPARK_CLASS_ASSURANCE.md` updates, examples with one parser/buffer
  loop and one policy/data-flow function, and a gate proving facts are
  reported as proved/enforced/reported/assumed/trusted rather than prose-only.
-### Task 240
+### Task R-0240
 
 **Objective:** Define a development-only expectation policy, borrowing Roc's useful lightweight `expect` idea but fitting Concrete's evidence model. The goal is a clear place for "this should hold during tests/dev" that cannot be mistaken for proof, runtime-safety evidence, or a release assumption.
 
@@ -3841,33 +3855,33 @@ lesson to keep is the framing: runtime safety is not just "the program probably
 doesn't crash"; it is a set of named obligations with source spans, replay
 commands, and visible proof/enforcement status.
 
-### Task 241
+### Task R-0241
 
 **Objective:** Define stable obligation schema v1: id, kind, source span, function, expression, dependencies, evidence status, discharging theorem/check/ assumption, and replay command.
 
-### Task 242
+### Task R-0242
 
 **Objective:** Define the user-level error model: `Result`, `Option`, assertion failure, abort/panic, recoverable errors, test failures, and how error flow interacts with capabilities, proofs, runtime obligations, and audit output.
 
-### Task 243
+### Task R-0243
 
 **Objective:** Generate narrowing/invalid-cast obligations.
 
-### Task 244
+### Task R-0244
 
 **Objective:** Generate loop bound and variant obligations for bounded loops.
 
-### Task 245
+### Task R-0245
 
 **Objective:** Define policy gates for `#[overflow_checked]`: release profiles may require overflow obligations for selected functions/packages, while ordinary examples remain quiet unless they opt in. Reports must distinguish `overflow_checked`, `overflow checking not requested`, and explicit wrapping or saturating arithmetic.
 
-### Task 246
+### Task R-0246
 
 **Objective:** Generate obligations for panic/abort/assert-as-denial-of-service risks:
 
 unchecked indexing, unwrap-like operations, explicit abort paths, failed
 assertions, and profile-dependent panic behavior.
-### Task 247
+### Task R-0247
 
 **Objective:** Generate byte/text/path boundary obligations: invalid UTF-8, lossy conversion, OS-string conversion, path normalization assumptions, and rejected implicit conversions.
 
@@ -3886,39 +3900,39 @@ assertions, and profile-dependent panic behavior.
   `examples/enum_discriminants/{protocol_ops,duplicate_rejected}/` and a
   gate proving values are honored at the repr boundary and duplicates are
   rejected.
-### Task 248
+### Task R-0248
 
 **Objective:** Generate stack/recursion obligations where the profile claims boundedness.
 
-### Task 249
+### Task R-0249
 
 **Objective:** Report runtime-error obligations in human and JSON forms.
 
-### Task 250
+### Task R-0250
 
 **Objective:** Add policy gates that can require selected runtime-error obligations to be proved/enforced before graduation.
 
-### Task 251
+### Task R-0251
 
 **Objective:** Add a runtime-error regression corpus: invalid cast, loop-bound violation, lossy byte/text conversion, ignored fallible result, unwrap-like failure, panic/abort profile mismatch, and release-policy rejection for missing `#[overflow_checked]` evidence where required.
 
-### Task 252
+### Task R-0252
 
 **Objective:** Add a runtime-error-obligation flagship requirement: one graduated example must demonstrate no OOB/div-zero/overflow under a named profile.
 
-### Task 253
+### Task R-0253
 
 **Objective:** Add high-quality diagnostics for obligation failures: violated obligation, source expression, required evidence, current status, and next action.
 
-### Task 254
+### Task R-0254
 
 **Objective:** Add obligation suppression only through explicit assumptions or policy waivers, never comments or hidden allowlists.
 
-### Task 255
+### Task R-0255
 
 **Objective:** Prove or validate obligation-generation soundness for the first obligation kinds through the compiler soundness bridge.
 
-### Task 256
+### Task R-0256
 
 **Objective:** Add automatic invariant inference / abstract interpretation as an annotation-reduction pass, not as trusted proof. V1 analysis is finite and auditable: interval facts, simple relational facts (`i <= n`, `i < len`, `0 <= i`), monotone loop counters, constant loop bounds, simple affine equalities/inequalities, and fixed-array length facts. It may synthesize candidate loop invariants and scoped facts for bounds, div/mod-zero, overflow, cast, and loop-variant obligations. Every inferred fact must be emitted in the obligation ledger with source span, analysis name, abstract domain, dependencies, and a replay command, then independently discharged
 
@@ -3931,7 +3945,7 @@ assertions, and profile-dependent panic behavior.
  widened bounds. Wire `scripts/tests/check_invariant_inference.sh`; the gate
  must prove inferred facts reduce required user annotations without creating
  false green obligations.
-### Task 257
+### Task R-0257
 
 **Objective:** Connect runtime-safety obligations to loop, frame, and dependency facts.
 
@@ -3940,7 +3954,7 @@ assertions, and profile-dependent panic behavior.
  `modifies` facts without duplicating the ledger. The report must show which
  invariant or frame fact discharged each obligation, and missing facts must
  produce actionable diagnostics rather than generic "unproven" output.
-### Task 258
+### Task R-0258
 
 **Objective:** Add newtype/type invariants as scoped obligation hypotheses after they are checked at construction boundaries. This connects validated wrappers to the proof/runtime-safety pipeline: a type such as `#[invariant(self.0 > 0 && self.0 < 65536)] newtype Port = u16` must have the invariant proved/enforced at every constructor or `try_new` admission point, then injected as a named hypothesis for obligations in any function receiving a `Port`. No invariant may enter scope from a raw cast, trusted constructor, FFI boundary, stale proof, or unchecked assumption without a ledger entry saying so. Add `docs/NEWTYPE_INVARIANT_OBLIGATIONS.md`,
 
@@ -3949,7 +3963,7 @@ assertions, and profile-dependent panic behavior.
  prove constructor checks create reusable hypotheses, invalid constructors
  are rejected or return `Result`, raw/trusted paths do not silently inject
  facts, and obligation reports name the type invariant source.
-### Task 259
+### Task R-0259
 
 **Objective:** Add the Phase 13 validation artifact: a runtime-safety corpus covering bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path boundaries, stack/recursion, inferred invariant candidates, newtype invariant hypotheses, arithmetic-site evidence mismatches, and obligation suppression. Each case must show one of `proved`, `enforced`, `assumed`, `missing`, or `blocked`, include a negative variant, and run through policy gates plus human/JSON reports.
 
@@ -3975,7 +3989,7 @@ trusting producer summaries; and the remaining trusted base is machine-readable.
 
 **Endgame (north star): the compiler becomes a mechanically-verified artifact,
 out of the trusted base.** The per-rule discharge below (R-01..R-21), the
-`CoreCertificateV1` independent checker, and Task 299 translation validation
+`CoreCertificateV1` independent checker, and Task R-0299 translation validation
 are not the finish line — they are the incremental ladder toward proving each
 pass semantics-preserving in Lean against the interpreter reference, so the
 compiler leaves the TCB entirely. Concrete is uniquely positioned for this: it
@@ -3987,37 +4001,37 @@ is a clean function over committed facts with a reference semantics to prove
 against, so passes should be built PROVABLE-FIRST, not merely consistent. This
 names the endpoint so intermediate design choices bend toward it; it does not
 schedule a multi-year proof now, and it must not starve the near-term or the
-external trial. The complementary rewrite-passes-in-Concrete route is Task 413; the shorter path is proving the existing Lean-hosted passes here.
+external trial. The complementary rewrite-passes-in-Concrete route is Task R-0413; the shorter path is proving the existing Lean-hosted passes here.
 
-### Task 260
+### Task R-0260
 
 **Objective:** Add a compiler-soundness rule-status dashboard over R-01..R-21:
 
 `shape-preserved`, `eval-preserved`, `source-preserved`, `trusted`, or
 `blocked`, with theorem names and source links for each status.
-### Task 261
+### Task R-0261
 
 **Objective:** Build source semantics for the provable subset as needed by rule discharge, not as a speculative full-language semantics.
 
-### Task 262
+### Task R-0262
 
 **Objective:** Upgrade extraction-only rules to three-view preservation where practical:
 
 source Core evaluation, extracted PExpr evaluation, and extraction theorem
 agree.
-### Task 263
+### Task R-0263
 
 **Objective:** Prioritize the hard eval/source rules in dependency order: direct calls, structs/fields, enums/match, arrays, casts, arraySet, flat bounded `while`, and `while_step`.
 
-### Task 264
+### Task R-0264
 
 **Objective:** Prove selected proof-report facts agree with compiler state: `proved`, `stale`, `blocked`, `missing`, `ineligible`, `trusted`.
 
-### Task 265
+### Task R-0265
 
 **Objective:** Prove or mechanically validate trust-gate correctness: body fingerprint determinism, spec-drift completeness, proof attachment lookup, FnTable completeness, eligibility classification.
 
-### Task 266
+### Task R-0266
 
 **Objective:** Record a machine-readable trusted computing base for proof/evidence claims:
 
@@ -4027,27 +4041,27 @@ cites (Lean stdlib / Batteries / Mathlib lemmas and tactics). Kernel-checked
 library lemmas do not widen the trusted base, but they are a pinned
 version/availability dependency (see Phase 11 proof-corpus migration); the TCB
 record must name them so a proof's replay surface stays reproducible.
-### Task 267
+### Task R-0267
 
 **Objective:** Prove selected checker/report agreement for authority and purity facts used by proof eligibility, so a function cannot be called proof-eligible while secretly requiring capabilities.
 
-### Task 268
+### Task R-0268
 
 **Objective:** Decide whether deeper source-semantics proofs require a normalized Core layer. Add the layer only if the direct rule proofs show repeated semantic duplication across at least two forcing examples.
 
-### Task 269
+### Task R-0269
 
 **Objective:** Automate dependency-ordered spec/table generation. Function specs and PExpr bodies should be collected/generated in dependency order together with FnTable completeness and call dependencies, so proof authors do not hand-relocate definitions above tables like `shaFns`.
 
-### Task 270
+### Task R-0270
 
 **Objective:** Prove or mechanically validate spec/ghost totality reporting: every contract-referenced `spec fn` or ghost computation is either backed by Lean termination, accepted by a Concrete totality check, or rejected with a `totality_obligation_missing` status. A contract may not depend on a partial or non-terminating spec expression silently.
 
-### Task 271
+### Task R-0271
 
 **Objective:** Define proof preservation across monomorphization and capability-polymorphic instantiation. The compiler must report whether a theorem proves a specific generated instance (`proved_for_instance`) or a generic body (`proved_generic`), and it must prevent one instance proof from being presented as proof for every future instantiation.
 
-### Task 272
+### Task R-0272
 
 **Objective:** [historical origin: Phase 4 items 44f/44g] Finish the remaining compiler-correctness hardening:
 
@@ -4061,7 +4075,7 @@ record must name them so a proof's replay surface stays reproducible.
    extra load. This path is unreachable from source while reference returns
    are rejected, so its regression fixtures must separately preserve the
    accepted trusted raw-pointer (`*const`/`*mut`) return cases.
-### Task 273
+### Task R-0273
 
 **Objective:** Add a semantic-darkness audit and red-team gate. The goal is to catch the checked-arithmetic class of bug before it repeats: a construct looks ordinary in source, but its real behavior depends on width, profile, target, allocation, authority, runtime checks, or an outdated proof/interpreter model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the Phase 14 validation artifact. The audit must cover:
 
@@ -4094,7 +4108,7 @@ record must name them so a proof's replay surface stays reproducible.
  source-semantics and proof/evidence pipelines, and Alive2 for backend IR
  equivalence checking. See
  `research/compiler/pipeline-lessons-2026-07.md`.
-### Task 274
+### Task R-0274
 
 **Objective:** **Preserve the one source of typing truth through proofs.** Every 2026-07 front-end bug was two passes holding different opinions about the same program: Check typed literals from the hint while Elab typed them from the sibling operand;
 
@@ -4150,7 +4164,7 @@ record must name them so a proof's replay surface stays reproducible.
  capability/type-drift classes cannot be expressed through the typed
  boundary. Later identity/DB refinement remains available for edge facts, but it
  is not on the critical path for type drift.
-### Task 275
+### Task R-0275
 
 **Objective:** Add an independent Core-certificate checker for a narrow, explicit validated-Core predicate.
 
@@ -4226,7 +4240,7 @@ record must name them so a proof's replay surface stays reproducible.
  layout/fingerprint helper and prove the checker still rejects the bad
  artifact without importing that helper. Wire
  `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
-### Task 276
+### Task R-0276
 
 **Objective:** Reduce ProofCore partial-def opacity only where proof preservation needs it.
 
@@ -4238,7 +4252,7 @@ record must name them so a proof's replay surface stays reproducible.
  theorem that would fail if the wrapper still delegated to an opaque
  partial-def shape.
 
-### Task 277
+### Task R-0277
 
 **Objective:** Add the Phase 14 validation artifact: a compiler-soundness dashboard with one witness program per shipped ProofCore construct, one status per R-rule, replay commands for proved/mechanically-validated facts, and regressions proving report facts (`proved`, `stale`, `blocked`, `missing`, `ineligible`, `trusted`) agree with compiler state. Include the `CoreCertificateV1` predicate/rule-set version, checker binary/source hash, soundness theorem names, independent receipt per artifact, mutation corpus, cache-off/on receipt parity, and a machine-readable list of every boundary V1 still leaves producer/compiler-trusted.
 
@@ -4253,31 +4267,31 @@ and Phase 8.5 incremental build contracts are explicit enough for release
 evidence; the supported SSA-to-BackendIR translation slice is independently
 replayable; and every boundary after that slice remains explicitly trusted.
 
-### Task 278
+### Task R-0278
 
 **Objective:** Stabilize SSA as the only backend contract.
 
-### Task 279
+### Task R-0279
 
 **Objective:** Document target/toolchain model: triple, data layout, linker, runtime/startup, libc expectation, clang/llc boundary, sanitizer/coverage hooks.
 
-### Task 280
+### Task R-0280
 
 **Objective:** Define optimization policy: allowed optimizations, evidence preservation, debug/release behavior, report/codegen validation. Follow the QBE-style "small auditable backend contract first" principle: prefer a stable, inspectable subset with explicit assumptions over early attempts to match LLVM-level optimization coverage.
 
-### Task 281
+### Task R-0281
 
 **Objective:** Add native compiled-program debugging support: DWARF/source-map emission, source-mapped backtraces for runtime failures, debug-vs-release behavior, optimized-code caveats, and diagnostics that distinguish source-level runtime checks from trusted backend/OS crashes. Runtime traps inserted by Concrete (bounds, arithmetic, cast/profile checks, failed runtime obligations) should carry enough source span and check-class information that a real application can debug them without reverse-engineering the abort site. This is not proof evidence; it is usability for enforced/runtime- checked facts.
 
-### Task 282
+### Task R-0282
 
 **Objective:** Extend Phase 8.5 clean-build versus incremental-build equivalence across backend variants: facts, obligations, diagnostics, reports, BackendIR, codegen units/objects, link manifests, and native behavior must agree under target, ABI/layout, optimization, sanitizer, debug, and toolchain changes.
 
-### Task 283
+### Task R-0283
 
 **Objective:** Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment, calling conventions.
 
-### Task 284
+### Task R-0284
 
 **Objective:** Design and, if pulled by a workload, implement first-class alignment facts.
 
@@ -4292,11 +4306,11 @@ prove stronger alignment satisfies weaker requirements, offset/field/slice
 projections conservatively weaken facts, runtime checked refinement records the
 fact, unchecked assumptions are `unsafe`/trusted and reported, and backend IR
 alignment metadata is emitted only from Concrete facts.
-### Task 285
+### Task R-0285
 
 **Objective:** Add C/ABI glue validation: generated headers, imported declarations, host stubs, symbol names, calling conventions, ownership transfer, capability labels, and trust assumptions must round-trip through at least one C harness and one Concrete caller.
 
-### Task 286
+### Task R-0286
 
 **Objective:** Add outbound FFI / embeddability as a first-class backend/ABI contract.
 
@@ -4329,7 +4343,7 @@ alignment metadata is emitted only from Concrete facts.
  parser/checker, one harness calls an exported fallible API, and one negative
  fixture proves an unsupported export shape fails with a diagnostic rather
  than silently choosing an ABI.
-### Task 287
+### Task R-0287
 
 **Objective:** Add a C ABI classification suite, inspired by QBE's explicit ABI contract:
 
@@ -4338,7 +4352,7 @@ aggregates, alignment/padding, by-value versus by-reference lowering,
 varargs policy, calling convention labels, symbol names, and ownership/
 capability/trust annotations. Wire `scripts/tests/check_c_abi_matrix.sh`
 with both generated C callers and Concrete callers.
-### Task 288
+### Task R-0288
 
 **Objective:** Add `BackendIR` as a structured backend contract between `ValidatedSSA` and LLVM/native emission. This is useful even if Concrete never ships its own native backend: it gives the compiler a typed, inspectable place to preserve runtime checks, trap/source-span facts, layout/ABI decisions, target constants, trusted/runtime helper calls, and capability/trust labels before they disappear into LLVM text or target code. The intended ladder is `ValidatedSSA -> BackendIR -> ValidatedBackendIR -> EmitLLVM` first; later emitters (native, C, WASM, QBE-style) may consume the same `ValidatedBackendIR` only after the contract is stable.
 
@@ -4352,24 +4366,24 @@ constants, runtime checks, and capability/trust labels survive lowering.
 Gate old path vs BackendIR-mediated LLVM where both exist:
 `interp == old compiled == BackendIR->LLVM compiled`, then retire the old
 direct SSA->LLVM path once parity is established.
-### Task 289
+### Task R-0289
 
 **Objective:** Add sanitizer-backed generated-code validation for trusted/FFI/layout/ pointer-heavy examples, plus the stdlib sanitizer/runtime hooks from Phase
 
  11. Sanitizer findings are `runtime_checked` / `tested` evidence, not proof.
-### Task 290
+### Task R-0290
 
 **Objective:** Add backend/codegen differential validation where executable oracles exist.
 
-### Task 291
+### Task R-0291
 
 **Objective:** Add compiler self-leak/resource soak harness for long-running workflows.
 
-### Task 292
+### Task R-0292
 
 **Objective:** Harden stdlib stability and evidence policy from Phase 7: which stdlib functions are trusted, proved, enforced, allocation-free, capability-free, or assumption carriers.
 
-### Task 293
+### Task R-0293
 
 **Objective:** Define stdlib contracts for allocators, I/O handles, directory/file/path handles, byte/text/path conversion APIs, and fallible return discipline.
 
@@ -4379,15 +4393,15 @@ direct SSA->LLVM path once parity is established.
  narrow authority, but reports must still show the underlying trusted,
  extern, raw-pointer, or `with(Unsafe)` operation and the assumption it
  depends on.
-### Task 294
+### Task R-0294
 
 **Objective:** Add stdlib evidence gates so core helpers cannot silently widen authority, allocation, proof assumptions, or runtime-error obligations.
 
-### Task 295
+### Task R-0295
 
 **Objective:** Evaluate a normalized mid-level IR only when traceability/backend-contract reports expose a concrete gap.
 
-### Task 296
+### Task R-0296
 
 **Objective:** Graduate the Phase 7.5 QBE backend from experimental to release-supported only after evidence attachment, optimization policy, backend-IR verification, and backend trust boundaries are trustworthy. Phase 7.5 deliberately emits directly from validated/cleaned SSA to maximize independence and find bugs early; that is the initial usable backend architecture, not yet the release architecture.
 
@@ -4398,7 +4412,7 @@ direct SSA->LLVM path once parity is established.
  validated versus backend/target-trusted. Keep WASM, Cranelift, and any
  additional backend deferred until a forcing workload or uncovered bug class
  justifies another independent path.
-### Task 297
+### Task R-0297
 
 **Objective:** Introduce target-specific MIR only for a direct native backend forced after QBE, never as a prerequisite for QBE itself. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. Reuse the Phase
 
@@ -4407,11 +4421,11 @@ direct SSA->LLVM path once parity is established.
   universal machine IR. Require behavior coverage and target/ABI matrices
   comparable to the LLVM/QBE gates before any native backend becomes a
   default for any build mode.
-### Task 298
+### Task R-0298
 
 **Objective:** Define backend-default policy explicitly if multiple production backends graduate: defaults are a versioned `(target, build_mode) -> backend` table, visible in help/audit/build receipts and overridable by an explicit flag. Changing a default requires clean-build/incremental equivalence, behavior and optimization matrices, performance data, a rollback switch, and release notes. Backend availability must never change source-language semantics, proof status, diagnostics before codegen, or package resolution.
 
-### Task 299
+### Task R-0299
 
 **Objective:** Add translation validation for codegen as the path out of a fully trusted backend. V1 should validate a narrow `ValidatedSSA -> BackendIR -> ValidatedBackendIR` subset per compile:
 
@@ -4437,7 +4451,7 @@ direct SSA->LLVM path once parity is established.
  Lean-proved/Core-level claim cannot be presented as native-code evidence
  unless the backend artifact is either translation-validated or explicitly
  backend-trusted in the audit bundle.
-### Task 300
+### Task R-0300
 
 **Objective:** Make the Phase 15 translation-validation slice independently replayable.
 
@@ -4455,7 +4469,7 @@ direct SSA->LLVM path once parity is established.
  calls and signatures, returns, branches, fixed-layout structs/arrays,
  required arithmetic/bounds/runtime traps, layout/target constants,
  source-map identities, helper/intrinsic calls, and capability/trust labels
- for the subset admitted by Task 299. V1 admission is whole-function: if an
+ for the subset admitted by Task R-0299. V1 admission is whole-function: if an
  unsupported operation can influence control flow, memory, calls/arguments,
  or the return value, that entire function is `translation_trusted` or
  `translation_blocked`. Region-level validation is forbidden until explicit
@@ -4483,18 +4497,18 @@ direct SSA->LLVM path once parity is established.
  the absence of an externally expected root the checker must report an
  unvalidated backend edge, not claim semantic mismatch detection. Wire
  `scripts/tests/check_backend_translation_certificates.sh`.
-### Task 301
+### Task R-0301
 
-**Objective:** Add the Phase 15 validation artifact: a backend/std-lib contract project with ABI/layout C round trips, C/ABI glue generation/import checks, the C ABI classification matrix, alignment-fact fixtures if Task 284 is pulled into implementation, backend-IR emission/verifier checks, producer translation-validation checks, independent `BackendTranslationCertificateV1` replay and mutations, sanitizer runs, compiled-oracle differential tests, native debug/source-map smoke tests, clean-vs-incremental fact equivalence, cached-object substitution negatives, and stdlib
+**Objective:** Add the Phase 15 validation artifact: a backend/std-lib contract project with ABI/layout C round trips, C/ABI glue generation/import checks, the C ABI classification matrix, alignment-fact fixtures if Task R-0284 is pulled into implementation, backend-IR emission/verifier checks, producer translation-validation checks, independent `BackendTranslationCertificateV1` replay and mutations, sanitizer runs, compiled-oracle differential tests, native debug/source-map smoke tests, clean-vs-incremental fact equivalence, cached-object substitution negatives, and stdlib
 
  authority/allocation/evidence gates. The artifact must show the exact point
  at which independent checking stops and backend/toolchain trust begins.
-### Task 302
+### Task R-0302
 
 **Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
 
  declared supported. This is the cheap control that turns the moving boundary into
- a fixed one; the structured `BackendIR` contract (Task 288) and a future hand-written
+ a fixed one; the structured `BackendIR` contract (Task R-0288) and a future hand-written
  LLVM bitcode emitter (the Zig/Roc decoupling technique) are the heavier long-term
  options, pulled only if version pinning proves insufficient. Wire the check into
  `scripts/tests/check_backend_contracts.sh`: the compiler refuses or warns on an
@@ -4513,18 +4527,18 @@ direct SSA->LLVM path once parity is established.
    that coupling and enable `clang`-free, bit-identical cross-host emission.
    *Why an item and not a phase, and why deferred:* (1) it is a sub-component of the
    backend contract that gates nothing downstream; (2) it is *less* proof-relevant
-   than translation validation (Task 299) — it buys decoupling/reproducibility,
-   not correctness — so elevating it above Task 299 would invert priorities for
-   a proof-carrying compiler; (3) the cheap version pin (Task 302) already fixes the moving
+   than translation validation (Task R-0299) — it buys decoupling/reproducibility,
+   not correctness — so elevating it above Task R-0299 would invert priorities for
+   a proof-carrying compiler; (3) the cheap version pin (Task R-0302) already fixes the moving
    trusted boundary, and LLVM churn has not been shown intolerable (one migration
    eaten so far), so a phase-sized commitment now would be speculative scheduling.
    *Pull-trigger* — promote to scheduled work when EITHER a freestanding / no-`clang`
    target is pursued (Phase 16), where self-contained emission stops being optional,
-   OR LLVM version churn recurs intolerably despite Task 302's pin. Same ladder as
-   `BackendIR` (Task 288): `ValidatedSSA → BackendIR → ValidatedBackendIR → EmitLLVM`
+   OR LLVM version churn recurs intolerably despite Task R-0302's pin. Same ladder as
+   `BackendIR` (Task R-0288): `ValidatedSSA → BackendIR → ValidatedBackendIR → EmitLLVM`
    today; bitcode / own-backend later. Prior art: Zig (hand-written bitcode writer,
    self-hosted backend), Roc (reused it in the Zig rewrite).
-### Task 303
+### Task R-0303
 
 **Objective:** Compiler-writing / verified-self-host language prerequisites (pull-gated research). Features a future proof-preserving self-host (CakeML-style, Phase 14) or a compiler-in-Concrete workload would need, surfaced by what makes ML/OCaml and Zig good compiler hosts. None is scheduled; each is pulled by a real workload and must preserve the linear / no-GC / visible-layout thesis — the OCaml GC path is deliberately not taken; this task's non-GC arena and typed-index subitems plus the layout path are.
 
@@ -4542,7 +4556,7 @@ direct SSA->LLVM path once parity is established.
    store into a `uN` field is rejected or wraps per the declared width, not
    silently. (SOA containers and `std.bigint` are stdlib-level, pulled the same
    way; nested patterns is tracked in `docs/NESTED_PATTERNS.md`.)
-### Task 304
+### Task R-0304
 
 **Objective:** Keep inbound FFI, outbound FFI, and unsafe-profile work connected but distinct. Inbound FFI says how Concrete safely calls host code; outbound FFI says how host code safely calls Concrete exports; Phase 15.5 says how the trusted/raw-pointer implementation islands remain auditable. Release-facing docs must not collapse these into a vague "FFI supported" claim. Each side needs its own examples, ABI restrictions, ownership-transfer rules, capability/evidence report, and red-team negatives.
 
@@ -4573,34 +4587,34 @@ Entrance criteria:
 
 Initial scope:
 
-### Task 305
+### Task R-0305
 
 **Objective:** Target Wasm32 with a pinned WebAssembly toolchain and one documented WASI profile. Browser integration, the component model, Wasm GC, Wasm64, threads, SIMD, and exception handling are explicitly later work unless a forcing workload promotes one of them.
 
-### Task 306
+### Task R-0306
 
 **Objective:** Lower `ValidatedBackendIR` into a small typed Concrete WebAssembly AST, run a pure Concrete verifier, emit deterministic `.wasm`, and validate it with the pinned external validator. Do not emit ad-hoc WAT from CLI code and do not route WebAssembly through LLVM.
 
-### Task 307
+### Task R-0307
 
 **Objective:** Reuse canonical semantic, layout, builtin, trap, source-identity, and capability facts, while keeping WebAssembly instruction selection and control-flow restructuring independent from LLVM and QBE lowering.
 
-### Task 308
+### Task R-0308
 
 **Objective:** Deliver thin vertical slices in this order: `main -> 42`; direct calls and returns; branches/loops; integer operations and checked traps; linear-memory loads/stores; basic aggregates; runtime imports. Each slice ends in an executable differential fixture.
 
-### Task 309
+### Task R-0309
 
 **Objective:** Map external authority deliberately onto an explicit WASI import manifest.
 
 Missing capabilities and unsupported operations fail before partial code
 generation with stable `wasm_pending` diagnostics; there is no LLVM/QBE or
 per-function fallback.
-### Task 310
+### Task R-0310
 
 **Objective:** Integrate `--backend wasm`, `--emit-wasm`, projects, retained artifacts, debug bundles, replay commands, caching, `doctor`, feature JSON, audit output, and ordinary `run`/`test` workflows through the backend-neutral driver.
 
-### Task 311
+### Task R-0311
 
 **Objective:** Compare interpreter, LLVM, QBE, and WebAssembly observations for every eligible fixture: stdout, stderr, exit status, and normalized trap/failure class. Add Wasm-specific cases for structured control flow, linear-memory bounds, alignment, integer-width conversion, imports, and deterministic module composition.
 
@@ -4666,7 +4680,7 @@ sanitizers, and runtime checks are `runtime_checked` / `tested` evidence, never
 proof. Unsafe ergonomics are allowed only when they make the trusted assumption
 more legible in source and reports.
 
-### Task 312
+### Task R-0312
 
 **Objective:** Freeze the unsafe-surface taxonomy:
 
@@ -4683,11 +4697,11 @@ The design note must include a comparison table mapping Zig's `*T`, `[*]T`,
 and Odin pointers/slices onto Concrete's chosen surface. Every row must name
 whether bounds/null/alignment/provenance are statically known, runtime-
 checked, trusted, or unavailable.
-### Task 313
+### Task R-0313
 
 **Objective:** Add safe-wrapper recipes for the common unsafe shapes: checked slice from raw pointer + length, bounds-checked indexed access, non-null construction, alignment-refined pointer construction, FFI-owned handle wrappers, allocator-backed buffers, and raw-place writes. Each recipe must show the public safe wrapper, the private trusted/Unsafe operation, the accepted assumption, and the report line that exposes it.
 
-### Task 314
+### Task R-0314
 
 **Objective:** Add a debug allocator / checked allocator profile inspired by Zig's development allocators: allocation/free stack identity where available, double-free detection, use-after-free-like sentinel checks where applicable, leak reporting for tests, red-zone or canary checks where practical, and allocator-name reporting in audit output. This is `runtime_checked`, not proof evidence. It must work with Concrete's allocator-as-value direction:
 
@@ -4696,14 +4710,14 @@ Include the Odin tracking-allocator lesson, but reject Odin's implicit
 `context` as hidden authority: Concrete allocator identity is an explicit
 value or report fact, and allocation permission remains visible as
 `with(Alloc)`.
-### Task 315
+### Task R-0315
 
 **Objective:** Add pointer/slice runtime-instrumentation hooks for unsafe code: null checks, bounds checks for trusted slice views, alignment checks, provenance/trust labels, lifetime/owner debugging where the runtime can track it, and explicit opt-out for trusted performance paths. A checked profile may trap; a release profile may erase checks only when reports still say which checks became assumptions.
 
 Include sanitizer opt-out attributes only as named unsafe/trusted facts
 (`no_sanitize_address`-style behavior must appear in audit output), never as
 comments or unreported compiler flags.
-### Task 316
+### Task R-0316
 
 **Objective:** Add an unsafe-aliasing policy that avoids Rust's hidden reference-UB trap:
 
@@ -4712,11 +4726,11 @@ do not silently become safe references. Any operation that temporarily
 upgrades raw memory to a safe borrow must state its exclusivity, lifetime, and
 frame assumptions in the wrapper contract/report. No "trust me, this raw
 pointer is an ordinary `&mut` now" shortcut.
-### Task 317
+### Task R-0317
 
 **Objective:** Add allocator-strategy examples: global allocator, arena/bump allocator, fixed-buffer allocator, debug allocator, and test allocator. Every example must show allocation authority, allocator identity, cleanup path, and failure behavior. Do not add ambient allocation.
 
-### Task 318
+### Task R-0318
 
 **Objective:** Add VM/interpreter-style pressure test as the validation workload:
 
@@ -4731,20 +4745,20 @@ or upvalue-like indirection, allocator-triggered collection/checking, and a
 path where a safe-index/handle version is simpler but measurably different
 from the unsafe pointer version. The output is not a performance claim; it is
 an ergonomics/evidence stress test.
-### Task 319
+### Task R-0319
 
 **Objective:** Add FFI/trusted-boundary red-team tests: wrong length, stale pointer, null pointer, alignment mismatch, double free, missing capability, hidden allocation, and wrapper that forgets to report the underlying trusted call.
 
 Safe code must fail to reach the operation; unsafe code must appear in
 `concrete audit --trust-boundaries`.
-### Task 320
+### Task R-0320
 
 **Objective:** Add syntax/ergonomics only after the taxonomy and gates exist. Candidate sugar may include pointer-field access or checked slice construction helpers, but it must not reintroduce removed `->` syntax as a general language form and must not blur raw pointers with safe references. Ergonomics serve audit, not the other way around.
 
 Candidate ergonomics must be rejected if they make a raw pointer look like a
 safe reference, hide a bounds/null/alignment assumption, or make an unchecked
 operation harder to grep.
-### Task 321
+### Task R-0321
 
 **Objective:** Add the Phase 15.5 validation artifact:
 
@@ -4773,49 +4787,49 @@ Done when: a freestanding Concrete program can build under a named target
 profile, with no ambient hosted stdlib assumptions, explicit allocator/startup
 choices, and an audit report naming every remaining target/runtime assumption.
 
-### Task 322
+### Task R-0322
 
 **Objective:** Define `hosted` versus `freestanding` target profiles: libc, startup, allocator, panic/abort behavior, stack assumptions, I/O availability, floating-point assumptions, and supported capabilities.
 
-### Task 323
+### Task R-0323
 
 **Objective:** Split stdlib modules by target profile: core no-alloc/no-OS modules, allocator-backed modules, hosted OS modules, and explicitly unavailable modules.
 
-### Task 324
+### Task R-0324
 
 **Objective:** Define freestanding capability policy: no ambient `File`, `Network`, `Console`, or `Process`; target-specific capabilities must be declared and audited.
 
-### Task 325
+### Task R-0325
 
 **Objective:** Define hardware-access primitives and evidence classes before device-driver examples: `volatile`/MMIO operations require explicit `with(Mmio)` or `with(Device)` capability, inline assembly is `trusted` and requires `with(Unsafe)`, and interrupt handlers are an effectful/trusted boundary with explicit target assumptions.
 
-### Task 326
+### Task R-0326
 
 **Objective:** Add explicit allocator/runtime hooks for freestanding builds, including ownership of allocation failure behavior and cleanup expectations.
 
-### Task 327
+### Task R-0327
 
 **Objective:** Add linker/startup configuration: entry symbol, no-main mode, target triple, data layout, linker script hooks, and section/layout assumptions.
 
-### Task 328
+### Task R-0328
 
 **Objective:** Add freestanding diagnostics: reject hosted APIs, hidden allocation, libc calls, unsupported target features, and unavailable capabilities.
 
-### Task 329
+### Task R-0329
 
 **Objective:** Add one freestanding example: bounded parser, small checksum/hash kernel, or fixed-capacity state machine with no allocation and no hosted I/O.
 
-### Task 330
+### Task R-0330
 
 **Objective:** Add one embedded-style audit bundle naming all remaining target assumptions:
 
 stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
 backend/toolchain boundary.
-### Task 331
+### Task R-0331
 
 **Objective:** Keep production freestanding WASM, QBE, and additional backend targets deferred until freestanding profiles prove the current LLVM path is not enough. This does not defer Phase 7.5's hosted experimental QBE differential oracle: that path validates cleaned SSA/codegen under hosted toolchains and carries only `tested`/`backend_trusted` evidence. Any QBE freestanding target, runtime/startup contract, or release claim still graduates here and through Phase 15's backend/target contract.
 
-### Task 332
+### Task R-0332
 
 **Objective:** Add the Phase 16 validation artifact: one freestanding demo project plus an MMIO/device-profile mock audit bundle. The demo must build with no hosted APIs, name allocator/startup/linker assumptions, reject hidden libc or allocation, and report `with(Device)`/`with(Mmio)`/`with(Unsafe)` evidence classes without pretending hardware behavior is proved.
 
@@ -4873,15 +4887,15 @@ audience):**
 - At least one external user completes the first-user tutorial and a useful
   audit/proof workflow without compiler-author intervention.
 
-### Task 333
+### Task R-0333
 
 **Objective:** Define first public release criteria: supported subset, required examples, required diagnostics, proof workflow, stdlib/project UX, evidence/policy/ tooling story.
 
-### Task 334
+### Task R-0334
 
 **Objective:** Add the first-user teaching path as a release-bar artifact, not marketing copy. Deliverable: `docs/LEARN_CONCRETE.md` plus a checked tutorial transcript that covers install/build/run/test, `Copy` vs linear values, consume/destroy/handoff, capabilities in function headers, `Result` / ignored-result diagnostics, stdlib basics, one runtime trap, one audit report, and the five evidence classes. The tutorial must use runnable snippets covered by the doc-snippet gate and must not claim proof where the compiler reports only testing, runtime checking, assumption, or trust.
 
-### Task 335
+### Task R-0335
 
 **Objective:** Publish a versioned authoritative language reference before any public release claim. The tutorial/book is not the reference. The current normative material is scattered across grammar, value-flow, execution, invariants, and evidence docs; release users need one versioned document whose sections define the language surface, not merely explain it.
 
@@ -4897,26 +4911,26 @@ audience):**
  named in the grammar has a reference section, every anti-feature/rejected
  construct has a diagnostic or policy citation, and README/site/book links
  point to this reference as the normative source.
-### Task 336
+### Task R-0336
 
 **Objective:** Publish a public claim matrix: what Concrete proves, enforces, reports, assumes, and trusts.
 
-### Task 337
+### Task R-0337
 
 **Objective:** Add release claim freeze: README, `CLAIMS_TODAY.md`, roadmap, showcase manifest, and release bundles must agree.
 
-### Task 338
+### Task R-0338
 
 **Objective:** Add compatibility policy for proof artifacts and fact schemas.
 
-### Task 339
+### Task R-0339
 
 **Objective:** Add compatibility policy for generated contract/VC obligation IDs:
 
 obligation IDs should stay stable across harmless formatting and local
 refactors, and any unavoidable churn should be reported as artifact churn,
 not hidden under ordinary proof drift.
-### Task 340
+### Task R-0340
 
 **Objective:** Add public API compatibility checking before release:
 
@@ -4925,7 +4939,7 @@ signatures, capabilities, allocation behavior, evidence classes, stdlib API,
 package interface artifacts, and generated docs. This is the Swift
 API-digester lesson adapted to Concrete: API drift is a reportable fact,
 not a release-note afterthought.
-### Task 341
+### Task R-0341
 
 **Objective:** Define release/showcase evidence policy by class:
 
@@ -4934,11 +4948,11 @@ not a release-note afterthought.
 `solver_trusted` require explicit policy approval; `open` and unreviewed
 `assumed` are forbidden for release claims. The policy must be executable by
 the Phase 10 verified-profile command, not just written in prose.
-### Task 342
+### Task R-0342
 
 **Objective:** Add public examples policy: public-facing examples, website copy, README snippets, paper examples, and showcase manifests must not outclaim their proof status. Active candidates can be shown as active work, but cannot be presented as proved or graduated until their bars land.
 
-### Task 343
+### Task R-0343
 
 **Objective:** Add public security/soundness disclosure policy: compiler/proof pipeline bugs are security-relevant.
 
@@ -4968,28 +4982,28 @@ the Phase 10 verified-profile command, not just written in prose.
   flagship theorem (e.g. remove it from the axiom-inventory allowlist or
   break its fingerprint) and must show the release bundle flips to
   failing with the downgraded claim named — no false green on a revoked
-  proof. Task 353's independent verifier must reject the old evidence
+  proof. Task R-0353's independent verifier must reject the old evidence
   root and any cached receipt that still names the revoked theorem.
-### Task 344
+### Task R-0344
 
 **Objective:** Add a certification-style assurance bundle profile before any SPARK-class comparison claim. The bundle must include the claim matrix, authority/capability report, obligation ledger, proof status, runtime-safety status, assumptions, trusted boundaries, package/dependency evidence, toolchain versions, replay commands, and any SPARK-class flow/frame facts.
 
  It must also include an agent-readable summary naming which annotations were
  checked and which were only suggested or future-only. This is a release
  artifact over existing facts, not a second evidence system.
-### Task 345
+### Task R-0345
 
 **Objective:** Publish `THREAT_MODEL.md` and keep it linked from README, release bundles, showcase manifests, and assumptions docs.
 
-### Task 346
+### Task R-0346
 
 **Objective:** Add first-user workflow CI: install compiler, create/run one example, inspect one audit bundle without repo-local assumptions.
 
-### Task 347
+### Task R-0347
 
 **Objective:** Improve onboarding, tutorial, and docs around `proved` / `enforced` / `reported` / `assumed` / `trusted`.
 
-### Task 348
+### Task R-0348
 
 **Objective:** Resolve string interpolation / formatting as an explicit release-facing decision, not an orphaned gap. V1 rejects string interpolation syntax, format macros, and trait-object-style `Display` because they hide allocation, dispatch, and formatting authority. The supported path is `std.fmt` over `std.io.Writer`, with any string-returning helper carrying `with(Alloc)` and any future convenience helper pulled by workloads.
 
@@ -5000,23 +5014,23 @@ the Phase 10 verified-profile command, not just written in prose.
   Writer path insufficient, add a new design note that preserves the same
   evidence: visible allocation, no macros, no hidden dynamic dispatch, and a
   gate proving fixed-buffer formatting remains allocation-free.
-### Task 349
+### Task R-0349
 
 **Objective:** Refresh or archive stale gap/backlog documents before release. Documents such as `docs/LANGUAGE_GAPS.md`, root-level idea piles, and old stdlib reviews may be useful historically, but they cannot sit next to the roadmap making claims that contradict closed known holes or current semantics. Gate: `scripts/tests/check_gap_docs_current.sh` rejects stale "true blocker" / "largest gap" claims unless they map to an open roadmap item or known-hole id; otherwise the material moves to CHANGELOG/archive with a date and status.
 
-### Task 350
+### Task R-0350
 
 **Objective:** Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Hylo, Cogent, Dafny, F*, Why3.
 
-### Task 351
+### Task R-0351
 
 **Objective:** Add migration/adoption playbook: what C/Rust/Zig code moves first, how to wrap libraries honestly, what stays outside Concrete.
 
-### Task 352
+### Task R-0352
 
 **Objective:** Add release/install distribution matrix: host triples, checksums/signing, install paths, supported/deferred channels.
 
-### Task 353
+### Task R-0353
 
 **Objective:** Define the canonical release-evidence DAG and offline independent bundle verifier before packaging or benchmarking it.
 
@@ -5026,7 +5040,7 @@ the Phase 10 verified-profile command, not just written in prose.
  obligations/proof bundles, SSA/BackendIR artifacts and Phase 15 receipts,
  codegen-unit/object/link manifests, binary identity, policy/profile,
  assumptions/trust facts, checker/toolchain identities, and proof replay
- payloads. Task 381 later wraps these in package interface/body formats;
+ payloads. Task R-0381 later wraps these in package interface/body formats;
  it does not first define encoders required by this release gate.
 
  Every edge declares its relation and status (`identity_bound_only`,
@@ -5070,7 +5084,7 @@ the Phase 10 verified-profile command, not just written in prose.
  different root and fail against the pinned expected root (or lose accepted
  authentication), not necessarily fail internal-consistency parsing. Wire
  `scripts/tests/check_verify_bundle.sh`.
-### Task 354
+### Task R-0354
 
 **Objective:** Add concrete distribution UX:
 
@@ -5083,11 +5097,11 @@ the Phase 10 verified-profile command, not just written in prose.
  `concrete-cert` verifier, expose `concrete-cert --version --json`, record its
  source/binary/rule-set hashes separately from the producer compiler, and let
  `verify-bundle` run without repository state or network access. It must also
- ship Task 353's pinned proof-replay runtime/payload dependencies—or report
+ ship Task R-0353's pinned proof-replay runtime/payload dependencies—or report
  `proof_replay=unavailable` and fail any release profile that requires offline
  kernel replay. Include every shipped Lean/ProofKit/runtime component in
  checksums, the supply-chain lock, and `THIRD_PARTY.md`.
-### Task 355
+### Task R-0355
 
 **Objective:** Add release performance budgets:
 
@@ -5098,7 +5112,7 @@ the Phase 10 verified-profile command, not just written in prose.
  independent bundle-verification latency against
  `release/perf-baseline.json`. Done when
  release CI blocks unexplained regressions and prints the regressed command.
-### Task 356
+### Task R-0356
 
 **Objective:** Add reproducible release artifact hashes:
 
@@ -5111,7 +5125,7 @@ the Phase 10 verified-profile command, not just written in prose.
  mismatches fail loudly with a regeneration command. Wire
  `scripts/tests/check_reproducible_release_hash.sh`; the gate must build the
  same release artifact twice from a clean tree and compare all hashes.
-### Task 357
+### Task R-0357
 
 **Objective:** Add a toolchain/dependency supply-chain lock and license inventory before any release claim:
 
@@ -5119,9 +5133,9 @@ the Phase 10 verified-profile command, not just written in prose.
    (`lake-manifest.json` pinned revisions), the SMT solver binary
    (name + version + hash, per the SMT replay metadata), and clang/LLVM
    versions are part of the evidence chain — a claim is only as
-   trustworthy as the unpinned link. Task 356's release manifest must
+   trustworthy as the unpinned link. Task R-0356's release manifest must
    record all of them; drift between the lock and the build environment
-   fails the release gate, mirroring the Task 216
+   fails the release gate, mirroring the Task R-0216
    `proofs/lean-deps.lock` recheck trigger.
  - Publish `docs/THIRD_PARTY.md`: every shipped dependency (Lean
    toolchain, Lake packages, solver, runtime libs linked into emitted
@@ -5132,14 +5146,14 @@ the Phase 10 verified-profile command, not just written in prose.
    disagree on any pinned revision, (b) a dependency is present in the
    build but absent from `THIRD_PARTY.md`, or (c) the solver version
    recorded in replay metadata differs from the one in the lock.
-### Task 358
+### Task R-0358
 
-**Objective:** Add the language/stdlib/artifact deprecation policy (moved up from Phase 18 — users of a released language need the policy BEFORE the release, not after): what stability the first release promises for syntax, stdlib API, proof/fact schemas, and obligation ids; how deprecations are announced (diagnostic with a replacement, minimum deprecation window measured in releases); and what may never break silently (anything that would flip an evidence class without `needs_recheck`). The Phase 19 migration tooling (`concrete migrate`) implements this policy; the policy itself is a release-bar document. Gate: Task 340's `concrete api-diff` must classify every
+**Objective:** Add the language/stdlib/artifact deprecation policy (moved up from Phase 18 — users of a released language need the policy BEFORE the release, not after): what stability the first release promises for syntax, stdlib API, proof/fact schemas, and obligation ids; how deprecations are announced (diagnostic with a replacement, minimum deprecation window measured in releases); and what may never break silently (anything that would flip an evidence class without `needs_recheck`). The Phase 19 migration tooling (`concrete migrate`) implements this policy; the policy itself is a release-bar document. Gate: Task R-0340's `concrete api-diff` must classify every
 
  public-surface change as `compatible`, `deprecated(window)`, or
  `breaking`, and the release gate fails on `breaking` without a recorded
  policy exception.
-### Task 359
+### Task R-0359
 
 **Objective:** Add the external-contributor and public-platform surface before release.
 
@@ -5164,11 +5178,11 @@ the Phase 10 verified-profile command, not just written in prose.
  language" unless `concrete bench` and release performance gates publish
  replayable numbers; otherwise docs must say performance claims are not made
  yet.
-### Task 360
+### Task R-0360
 
 **Objective:** Ship the first narrow public release only after the above are green.
 
-### Task 361
+### Task R-0361
 
 **Objective:** [relocated from closed Phase 4] Artifact and docs stability hardening:
 
@@ -5179,7 +5193,7 @@ the Phase 10 verified-profile command, not just written in prose.
  (`check_docs_drift.sh`) — e.g. `Status:`/`Verified:` metadata and stale-claim
  marker detection. (Found not mechanically robust as a default during historical item 44
  work; they belong here, gated for the release bar.)
-### Task 362
+### Task R-0362
 
 **Objective:** Add the Phase 17 validation artifact:
 
@@ -5190,12 +5204,12 @@ the Phase 10 verified-profile command, not just written in prose.
  `concrete api-diff` against the previous public interface snapshot, and
  confirms the bundle contains the claim matrix, threat model, public
  examples policy, replay commands, schemas, assumptions/trust reports,
- Task 343's `SECURITY.md`, the supply-chain lock and `THIRD_PARTY.md` from
- Task 357, the deprecation policy and clean `api-diff` classification from
- Task 358, and
+ Task R-0343's `SECURITY.md`, the supply-chain lock and `THIRD_PARTY.md` from
+ Task R-0357, the deprecation policy and clean `api-diff` classification from
+ Task R-0358, and
  the tutorial transcript from someone who did not build the compiler. It
- must also run Task 343's proof-revocation drill against the candidate
- bundle, verify the evidence DAG offline through Task 353 from the installed
+ must also run Task R-0343's proof-revocation drill against the candidate
+ bundle, verify the evidence DAG offline through Task R-0353 from the installed
  independent checker, and run tamper cases for source/Core/proof/BackendIR/
  object/binary/dependency-edge substitution. The report must distinguish
  Core/proof or SSA/BackendIR relation failures from object/binary failures
@@ -5217,7 +5231,7 @@ Prerequisite: Phase 8.5 completed. If it was rejected/deferred, Phase 18 may
 start only after an explicit roadmap amendment replaces these artifact/query
 dependencies; package work may not grow a private cache/driver as a workaround.
 
-### Task 363
+### Task R-0363
 
 **Objective:** Expand package artifacts only after reports, policies, assumptions, interface artifacts, and CI gates prove what packages must carry. The first package artifact refactor must define exact files:
 
@@ -5236,23 +5250,23 @@ This phase is the main 20k+ LOC scale boundary: large Concrete programs need
 package/workspace boundaries, import hygiene, visibility/API stability,
 versioning, generated docs, and evidence summaries before the language can
 claim to support multi-team codebases rather than only single-repo examples.
-### Task 364
+### Task R-0364
 
 **Objective:** Design and parse package manifest.
 
-### Task 365
+### Task R-0365
 
 **Objective:** Add version constraints, dependency resolution, and lockfile.
 
-### Task 366
+### Task R-0366
 
 **Objective:** Add workspace and multi-package support.
 
-### Task 367
+### Task R-0367
 
 **Objective:** Add package-aware test selection.
 
-### Task 368
+### Task R-0368
 
 **Objective:** Split interface artifacts from body artifacts at package/workspace scale.
 
@@ -5266,7 +5280,7 @@ proof links, emitted IR hashes, and private diagnostics. A dependent package
 may compile against interface artifacts without seeing private bodies, but
 audit/release bundles must still show when a public claim depends on a
 private body proof, trusted boundary, or assumption.
-### Task 369
+### Task R-0369
 
 **Objective:** Define the public package codecs and `PackageInterfaceCertificateV1` before consuming certificates.
 
@@ -5291,7 +5305,7 @@ private body proof, trusted boundary, or assumption.
  coordinated tamper that changes interface summary + matching certificate
  while retaining the old body root. Wire
  `scripts/tests/check_package_interface_certificate_schema.sh`.
-### Task 370
+### Task R-0370
 
 **Objective:** Add proof-aware package artifacts: facts, obligations, proof status, trusted assumptions, policy declarations, package-boundary evidence summaries.
 
@@ -5300,11 +5314,11 @@ Required statuses: `proved_by_lean`, `proved_by_kernel_decision`,
 `partial`, `stale`, `vacuous`, `missing`, and `ineligible`. The artifact
 must record whether evidence is package-local, inherited from a dependency,
 or trusted through a boundary.
-### Task 371
+### Task R-0371
 
 **Objective:** Verify dependency interface certificates before consuming package facts or reusable artifacts.
 
- A content hash establishes identity, not semantic validity. Run Task 369's
+ A content hash establishes identity, not semantic validity. Run Task R-0369's
  dedicated package-interface checker and, only over embedded canonical
  verifier inputs of the right type, the Phase 14 Core / applicable Phase 15
  translation checker. Cache the independent receipt by package root +
@@ -5324,7 +5338,7 @@ or trusted through a boundary.
  root, changed public interface, old checker version, withheld verifier input,
  unsupported predicate, proof revocation, and source-rebuild fallback. Wire
  `scripts/tests/check_package_certificates.sh`.
-### Task 372
+### Task R-0372
 
 **Objective:** Add module/package authority budgets after package graphs are real, and make imports fact-checked boundaries. Imports do not grant capabilities; they declare and constrain facts about the imported interface. The first concrete fact class is authority: support source-level or manifest-level constraints such as `import std.parse requires(no File, no Network, no Unsafe)` and package-wide budgets such as `allowed = ["Alloc"]`. A dependency capability widening must be a build/audit diff and, when constrained, a build failure until explicitly accepted. The design must leave room for the same import mechanism to constrain allocation (`no Alloc` / bounded allocation), trust
 
@@ -5345,7 +5359,7 @@ than it used to do, the importer must be able to fail closed. Examples:
 `import hmac.compute requires(proved_by_lean, no Unsafe)`; package-wide
 `allowed_caps = ["Alloc"]`; or `requires(freestanding, deterministic,
 license = "MIT OR Apache-2.0")`. The checked fact set—read through item
-Task 371's independently-checked-or-explicitly-trusted boundary—must include at
+Task R-0371's independently-checked-or-explicitly-trusted boundary—must include at
 least:
 public capability set, allocation authority/profile, `trusted`/extern/FFI/
 `Unsafe` use, assumption set, evidence class floor, proof staleness/vacuity,
@@ -5368,23 +5382,23 @@ The first report view should be deliberately small and agent-readable:
 `minimum evidence`, `platform`, `license`, and `source hash` in a stable
 table. This report is the thing an AI assistant, reviewer, or CI policy reads
 before accepting a dependency update.
-### Task 373
+### Task R-0373
 
 **Objective:** Add dependency trust policy: trust widening across boundaries, review and inheritance.
 
-### Task 374
+### Task R-0374
 
 **Objective:** Add package-level assumption inheritance: dependency assumptions must be visible to dependents and release bundles.
 
-### Task 375
+### Task R-0375
 
 **Objective:** Add package provenance and publishing model.
 
-### Task 376
+### Task R-0376
 
 **Objective:** Add package registry server protocol and trust model.
 
-### Task 377
+### Task R-0377
 
 **Objective:** Add API docs publishing for packages and stdlib:
 
@@ -5394,11 +5408,11 @@ before accepting a dependency update.
  module path, capabilities, allocation behavior, evidence class,
  deprecation status, and source links where available. Published docs must
  be reproducible from the package artifact.
-### Task 378
+### Task R-0378
 
 **Objective:** Add package documentation hosting/export format only after `concrete doc` and package artifacts are stable: static HTML, JSON docs, versioned stdlib docs, package docs, release-note links, and `scripts/tests/check_docs_publish.sh` to prove generated docs are reproducible.
 
-### Task 379
+### Task R-0379
 
 **Objective:** Design evidence-typed imports before the package fact schema freezes. A dependent package should be able to demand an evidence floor at the import boundary, for example `import hmac.compute requires(proved_by_lean)` or a manifest-level equivalent for all imports from a dependency. The compiler must check the requirement against the dependency's interface/evidence artifacts and fail the import if the evidence is missing, stale, vacuous, downgraded, inherited only through an unaccepted assumption, or weaker than the importing package's policy. This is a package-boundary trust-chain feature, not a local proof feature: it must define how evidence classes are
 
@@ -5407,17 +5421,17 @@ before accepting a dependency update.
  how release bundles explain the imported requirement. Write
  `research/packages/evidence-typed-imports.md` before implementing the
  surface, and keep it consistent with import authority constraints from
- Task 372 (e.g. `import hmac.compute requires(proved_by_lean, no Unsafe)`).
+ Task R-0372 (e.g. `import hmac.compute requires(proved_by_lean, no Unsafe)`).
  Then add `docs/EVIDENCE_TYPED_IMPORTS.md`,
  `examples/package_evidence_imports/{requires_lean,allows_solver_trusted,rejects_stale,rejects_vacuous}/`,
  and `scripts/tests/check_evidence_typed_imports.sh`; the gate must prove
  dependency evidence is read from package artifacts, not source-private side
  channels, and that an evidence downgrade breaks the importing package.
-### Task 380
+### Task R-0380
 
 **Objective:** Add package-level SPARK-class assurance summaries once frame/dependency contracts exist. Interface artifacts should expose public contract facts, read/write/modifies summaries, dependency-flow summaries, ghost/spec assumptions, capability requirements, trusted boundaries, and evidence class per public function. Package consumers and agents must be able to ask "what may this dependency read, write, depend on, assume, trust, or prove?" without inspecting private bodies.
 
-### Task 381
+### Task R-0381
 
 **Objective:** Extend content-addressing beyond proof fingerprints for package/evidence artifacts.
 
@@ -5426,7 +5440,7 @@ before accepting a dependency update.
  **public package** encodings rather than implementing a second hashing/cache
  system. Reuse the canonical typed-Core, obligation/proof, BackendIR,
  certificate, and release-node encoders already required by Phases 9/14/15
- and Task 353. This item owns package interface/body/evidence/docs
+ and Task R-0353. This item owns package interface/body/evidence/docs
  wrappers, public schema compatibility, and package-root composition—not the
  first encoding of common verifier inputs.
 
@@ -5443,7 +5457,7 @@ before accepting a dependency update.
  content hashes identically across repeated runs; a deliberately
  nondeterministic wrapper is caught by a gate; and package cache/dependency
  keys use these roots instead of source paths or human names.
-### Task 382
+### Task R-0382
 
 **Objective:** Add optional shared/remote artifact reuse only after the local Phase 8.5 store and independent package verification are mature.
 
@@ -5476,9 +5490,9 @@ before accepting a dependency update.
  hash consistently; it must still fail without an independently authorized
  expected digest. Record CI/team speedups, but keep correctness independent
  of network/cache availability.
-### Task 383
+### Task R-0383
 
-**Objective:** Add the Phase 18 validation artifact: a multi-package workspace project with dependency resolution, lockfile, package-aware tests, interface/body artifact split, dependency trust policy, assumption inheritance, authority budgets, provenance, independently checked dependency certificates, evidence-typed imports, published docs, downstream reuse after a dependency private-body edit, invalidation after a public-interface edit, and release-bundle evidence for every dependency. Include remote-cache hostile input/offline fallback if Task 382 is implemented. Wire it as `examples/package_workspace/` plus
+**Objective:** Add the Phase 18 validation artifact: a multi-package workspace project with dependency resolution, lockfile, package-aware tests, interface/body artifact split, dependency trust policy, assumption inheritance, authority budgets, provenance, independently checked dependency certificates, evidence-typed imports, published docs, downstream reuse after a dependency private-body edit, invalidation after a public-interface edit, and release-bundle evidence for every dependency. Include remote-cache hostile input/offline fallback if Task R-0382 is implemented. Wire it as `examples/package_workspace/` plus
 
  `scripts/tests/check_phase18_packages.sh`.
 
@@ -5494,15 +5508,15 @@ Prerequisite: Phase 8.5 completed. If it was rejected/deferred, Phase 19 needs a
 recorded replacement architecture before starting; an editor-only fact database
 or cache remains forbidden.
 
-### Task 384
+### Task R-0384
 
 **Objective:** Add artifact viewer integration for proof/evidence facts.
 
-### Task 385
+### Task R-0385
 
 **Objective:** Add compiler-as-service / LSP entrypoints after diagnostics and facts are structured. The service must host the Phase 8.5 `CompilerSession`; it may not wrap batch `runFrontend` as its normal edit path.
 
-### Task 386
+### Task R-0386
 
 **Objective:** Reuse the incremental query/certificate graph as the only editor fact engine.
 
@@ -5520,35 +5534,35 @@ or cache remains forbidden.
  dependency-certificate changes. Assert the bounded Phase 8.5 query execution
  set as well as CLI/LSP fact equality; an editor-only database, stale hover,
  or batch whole-project rebuild for a private leaf edit fails the gate.
-### Task 387
+### Task R-0387
 
 **Objective:** Add hover/type info for capability status, proof status, predictable status, assumptions, obligations, and trusted boundaries.
 
-### Task 388
+### Task R-0388
 
 **Objective:** Add obligation navigation: jump from source contract/index/mod/loop to the generated obligation and discharging theorem.
 
-### Task 389
+### Task R-0389
 
 **Objective:** Add refactor support that preserves or updates facts/proofs where possible.
 
-### Task 390
+### Task R-0390
 
 **Objective:** Add dependency audit UI for capability, allocation, FFI, trust, evidence, predictability, proof-obligation drift.
 
-The UI must expose the same boundary facts as Task 372, not a prose
+The UI must expose the same boundary facts as Task R-0372, not a prose
 summary: public capabilities, allocation authority, trusted/Unsafe/extern
 use, assumptions, evidence floor, platform, license, and source hash. This
 is explicitly for humans and AI agents reviewing imports: an editor hover or
 command palette action should answer "what can this dependency do, what does
 it assume, and what evidence does it carry?" without reading private bodies.
-### Task 391
+### Task R-0391
 
 **Objective:** Add backwards-compatibility regression corpus once public users exist.
 
-### Task 392
+### Task R-0392
 
-**Objective:** Add migration/deprecation tooling after the policy exists (Task 358):
+**Objective:** Add migration/deprecation tooling after the policy exists (Task R-0358):
 
 `concrete migrate --check`, `concrete migrate --apply`, diagnostics for
 deprecated syntax/APIs, suggested replacements, edition/version notes where
@@ -5556,27 +5570,27 @@ needed, and mechanical rewrites only for transformations that preserve
 evidence facts or explicitly mark them `needs_recheck`. The tool must read
 `concrete api-diff --json`, `concrete doc --format json`, and the final
 obligation ledger rather than scraping text.
-### Task 393
+### Task R-0393
 
 **Objective:** Add API-docs/editor integration: LSP go-to-docs for stdlib/package APIs, evidence/capability/deprecation badges in hover, and diagnostic links to `concrete doc` output. The LSP payload must reuse the same doc/evidence JSON as the CLI.
 
-### Task 394
+### Task R-0394
 
 **Objective:** Add a playground or local web runner only after the release subset is stable: `concrete playground --local` or a static hosted runner with preloaded examples, no hidden claims, visible evidence class, audit output, and clear sandbox/timeout/resource assumptions. This is a teaching surface, not a second compiler pipeline.
 
-### Task 395
+### Task R-0395
 
 **Objective:** [historical origin: closed Phase 4 item 11 tail] Route obligation / proof / policy facts into the structured `Diagnostic` record / `--diagnostics-json` channel so LSP/editor and CI-JSON consumers see them (array-bounds, solver-policy, vacuous-contract, stale-proof, …) — without duplicating the `ObligationCore`/report model. Includes interpreter structured diagnostics (historical Phase 4 item 18a). Pull when a real consumer (LSP / CI JSON parser) needs machine-readable obligation diagnostics; see LANGUAGE_GAPS for the frontend-vs-obligation diagnostic split.
 
-### Task 396
+### Task R-0396
 
 **Objective:** Add editor and agent diagnostics for SPARK-class assurance facts after the facts exist: failed loop invariants, weak variants, missing frame facts, over-broad `writes`, unsatisfied `depends`, ghost/spec partiality, package evidence downgrades, and runtime-safety obligations that need a frame or invariant. The LSP/JSON payload must reuse the obligation/evidence ledger and point agents to the validation command; no editor-only proof status.
 
- Also surface development-only expectations from Task 240 as
+ Also surface development-only expectations from Task R-0240 as
  `dev_checked` / `tested` facts, never as proof. Editor and agent prompts
  should suggest "promote this to a contract/obligation" when release or
  high-integrity policy requires stronger evidence.
-### Task 397
+### Task R-0397
 
 **Objective:** Add installed-binary feature discovery for agents and editor tooling.
 
@@ -5592,7 +5606,7 @@ obligation ledger rather than scraping text.
   Done when golden JSON snapshots exist and one agent workflow discovers
   proof synthesis, replay, capability diffs, and counterexample saving from
   the installed binary alone.
-### Task 398
+### Task R-0398
 
 **Objective:** Add the Phase 19 validation artifact:
 
@@ -5613,7 +5627,7 @@ can contain them honestly.
 Done when: each research idea is either pulled into an earlier phase by a
 forcing example, explicitly deferred, or rejected.
 
-### Task 399
+### Task R-0399
 
 **Objective:** Keep concurrency design-only until the v1 surface is frozen:
 
@@ -5628,55 +5642,55 @@ positive research direction lives here and in `docs/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a
 second control-flow semantics.
-### Task 400
+### Task R-0400
 
 **Objective:** Build concurrency pressure-test sketches and expected reports before implementation.
 
-### Task 401
+### Task R-0401
 
 **Objective:** Mechanize the v1 concurrency formal model before claiming safety.
 
-### Task 402
+### Task R-0402
 
 **Objective:** Implement OS threads/scopes/channels only after the model and reports are stable.
 
-### Task 403
+### Task R-0403
 
 **Objective:** Research typestate only if a current state-machine/protocol example needs it.
 
-### Task 404
+### Task R-0404
 
 **Objective:** Research arena allocation after bounded-capacity/allocation-profile work exposes a concrete gap.
 
-### Task 405
+### Task R-0405
 
 **Objective:** Research exact WCET/cache/pipeline behavior only with a target/hardware model.
 
-### Task 406
+### Task R-0406
 
 **Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate.
 
-### Task 407
+### Task R-0407
 
 **Objective:** Research hardware capability mapping after source-level capabilities and package policies are stable.
 
-### Task 408
+### Task R-0408
 
 **Objective:** Broaden the proof-relevant interpreter toward Miri-style UB checking only if the proof-subset interpreter proves valuable.
 
-### Task 409
+### Task R-0409
 
 **Objective:** Investigate a sized/indexed ProofCore evaluator only if the current fuel-indexed evaluator remains repeated proof debt after HMAC and at least one other substantial loop/composition proof. This is ProofCore v2 research, not a migration commitment; see [research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md).
 
-### Task 410
+### Task R-0410
 
 **Objective:** Research persistent equality/rewrite state after backend contracts, semantic diff, and proof/evidence pipeline are stronger.
 
-### Task 411
+### Task R-0411
 
 **Objective:** Do not adopt row effects for v1. The default design stays object-capability and audit-visible: authority should be obvious in source, not hidden behind abstract effect inference. Revisit only as a research note if explicit capabilities create a proven, repeated blocker in real programs after the stdlib and concurrency pressure tests exist.
 
-### Task 412
+### Task R-0412
 
 **Objective:** Research a generational-reference-style dynamic fallback only if a forcing workload proves static linearity plus second-class references are too restrictive. The target use case is not ordinary ownership; it is a narrow escape for liveness/provenance facts around observers, back-references, callback-heavy object graphs, or host/FFI handles that Concrete cannot prove statically without unacceptable surface complexity. If adopted, the runtime check discharges an obligation as `checked_dynamically`, never as `proved`, and audit/report output must distinguish it from static ownership proof.
 
@@ -5686,7 +5700,7 @@ second control-flow semantics.
  region/frozen-scope ideas, explicitly reject any vague "zero-cost safety"
  claim, and prove the fallback does not become a hidden borrow checker,
  hidden GC, implicit Drop, or a way to weaken the linear default.
-### Task 413
+### Task R-0413
 
 **Objective:** Research dogfooding Concrete's evidence model onto the compiler's own TCB.
 
@@ -5712,7 +5726,7 @@ second control-flow semantics.
  decision record states whether the approach actually shrinks the TCB, merely
  duplicates it, or creates a second source of truth. Pull forward only if a
  real pass can be checked without weakening the no-second-truth-source rule.
-### Task 414
+### Task R-0414
 
 **Objective:** Research a Datalog-style / stratified relational **rule layer** only when the shipped Phase 8.5 `CompilerDB` has real relational consumers that typed queries/maps cannot express cleanly.
 
@@ -5740,6 +5754,6 @@ second control-flow semantics.
  an acyclicity/stratification story, shows replayable derived-fact output,
  and rejects a cyclic or stale derived fact. Until then, this remains a
  future rule-layer reference, not unfinished incremental-compiler work.
-### Task 415
+### Task R-0415
 
 **Objective:** Add the Phase 20 validation artifact: one pressure-test sketch, expected report, and decision record for every research-gated extension (concurrency, atomics/memory model, typestate, arena allocation, WCET, binary-format DSLs, hardware capability mapping, Miri-style interpreter, sized evaluator, persistent rewrite state, row effects, generational dynamic fallback, compiler self-verification, and Datalog-style relational facts). No research item graduates unless its forcing example, report shape, evidence class, and rejection or pull-forward criteria are recorded.
