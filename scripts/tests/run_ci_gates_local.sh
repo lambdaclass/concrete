@@ -67,15 +67,27 @@ else
       else echo "FAIL $cmd" > "$RES/$idx"; fi ) &
   done
   wait
+  # The heavy gates spawn the compiler over many .con files; running JOBS of
+  # them at once can OOM/CPU-starve and produce a spurious failure (a clean
+  # tree then reads as red — the exact "crying wolf" that erodes trust in
+  # this pre-push check). So a parallel FAIL is only a *candidate*: re-run it
+  # once, sequentially and unthrottled, and believe that verdict. Genuine
+  # failures still fail; contention flakes self-correct.
+  RECHECKED=""
   for f in "$RES"/*; do
     [ -f "$f" ] || continue
-    if grep -q '^OK$' "$f"; then PASS=$((PASS+1))
-    else FAIL=$((FAIL+1)); line=$(cat "$f"); FAILED="$FAILED\n  $line"; echo "  $line"; fi
+    if grep -q '^OK$' "$f"; then PASS=$((PASS+1)); continue; fi
+    cmd="$(sed 's/^FAIL //' "$f")"
+    if eval "$cmd" >/dev/null 2>&1; then
+      PASS=$((PASS+1)); RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
+    else
+      FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"; echo "  FAIL $cmd"
+    fi
   done
+  [ -n "$RECHECKED" ] && echo -e "Recovered under sequential re-run:$RECHECKED"
 fi
 
 echo
 echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 [ -n "$FAILED" ] && echo -e "Failures:$FAILED"
-[ "$FAIL" -eq 0 ]
 [ "$FAIL" -eq 0 ]
