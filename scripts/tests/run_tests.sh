@@ -995,7 +995,7 @@ run_ok "$TESTDIR/adversarial_lower_nested_struct_access.con" 42
 run_ok "$TESTDIR/adversarial_lower_struct_in_loop.con" 42
 
 # Adversarial monomorphization tests
-run_ok "$TESTDIR/adversarial_mono_generic_enum.con" 42
+run_err "$TESTDIR/adversarial_mono_generic_enum.con" "generic enum"  # R-0001 containment: rejected E0808 until per-instantiation enum mono lands (was run_ok 42; different-size instantiations are the bug-051 corrupting class)
 run_ok "$TESTDIR/adversarial_mono_generic_return_struct.con" 42
 run_ok "$TESTDIR/adversarial_mono_many_instantiations.con" 42
 run_ok "$TESTDIR/adversarial_mono_nested_generics.con" 42

@@ -35,6 +35,37 @@ Lower computes per-instantiation payload offsets — the same class as the
 builtin-enum canonical bug, minus the builtin's program-wide canonical
 union.
 
+## Root fix (R-0001 slice 2) — DIRECTION FIXED: per-instantiation monomorphization
+
+Per-instantiation enum monomorphization (NOT a program-wide oversized union):
+each canonical instantiation gets its own injective mangled name and exact
+layout, mirroring the struct-mono pass — no permanent oversized
+representations, and it fixes the name/layout-identity failure directly.
+
+Reuse: `monoStructName` (mangling), `collectGenericTyInstances` /
+`collectFnInstances` (instance collection), `rewriteTy` / `rewriteFnTys`
+(type rewriting). New: a `substEnumTypeArgs` (parallel to
+`substStructTypeArgs`) + `monoEnumsInProgram` (parallel to
+`monoStructsInProgram`). KEY subtlety: the struct pass rewrites function types
+and adds struct defs but does NOT rewrite enum-def payloads, so struct+enum
+mono must share one instance mapping and run in an order that resolves nested
+generics (generic struct in an enum payload, generic enum in a struct/array).
+
+### Acceptance criteria (binding, per review 2026-07-18)
+
+1. Two instantiations differing in BOTH size and alignment.
+2. Nested generic enums and enum-in-array / enum-in-struct cases.
+3. Cross-module and renamed-import use.
+4. Canonical, INJECTIVE generated identities (no two distinct instantiations
+   collide to one mangled name; no accidental sharing).
+5. Interpreter/LLVM differential agreement on every case.
+6. Linear payloads destroyed exactly once (drop-glue through the mangled enum).
+7. Verifier check: every payload write fits its emitted aggregate
+   (SSAVerify/layout-consistency; the class gate the bug's own note asked for).
+8. Remove E0808 ONLY for newly-supported cases.
+9. E0808 RETAINED fail-closed for any genuinely unsupported residual
+   (e.g. instantiations the pass cannot resolve).
+
 ## Candidate fix
 
 Either monomorphize generic enums per instantiation (mirroring the struct

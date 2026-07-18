@@ -1,6 +1,9 @@
-// Adversarial monomorphization: generic enum with 3 type instantiations.
-// Stresses enum specialization in Mono.lean.
-// Expected: 42
+// Adversarial monomorphization: generic enum with 3 type instantiations
+// (Maybe<Int> is 8 bytes, Maybe<i32> is 4 — the bug-051 corrupting class).
+// TEMPORARILY REJECTED with E0808 (R-0001 containment): user generic enums
+// are not yet monomorphized, so this is refused fail-closed rather than
+// compiled with a corrupt single-type layout. When per-instantiation enum
+// monomorphization lands (R-0001 root fix), restore this to `run_ok 42`.
 
 enum Copy Maybe<T> {
     Just { val: T },
