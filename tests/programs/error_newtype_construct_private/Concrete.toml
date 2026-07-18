@@ -1,0 +1,3 @@
+[package]
+name = "error_newtype_construct_private"
+version = "0.1.0"
