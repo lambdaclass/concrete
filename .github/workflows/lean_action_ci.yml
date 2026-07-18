@@ -509,6 +509,9 @@ jobs:
       - name: "Workload 6: wordfreq differential vs C-locale sort|uniq -c + exit codes"
         run: bash scripts/tests/check_wordfreq_differential.sh
 
+      - name: "Workload 7: httpget loopback TCP differential (text+binary+curl) + exit codes"
+        run: bash scripts/tests/check_httpget_differential.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 
