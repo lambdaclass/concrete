@@ -126,6 +126,38 @@ mod bytes {
             return true;
         }
 
+        /// First occurrence of `byte` at or after `from`, else None.
+        /// Pulled at third ask (elf_header NUL scan, tar_list NUL-padded
+        /// fields, envcfg newline/`=` search) — every byte-format workload
+        /// re-rolled this loop.
+        pub fn index_of(&self, byte: u8, from: u64) -> Option<u64> {
+            let mut i: u64 = from;
+            while i < self.len {
+                if self.get_unchecked(i) == byte {
+                    return Option::<u64>::Some { value: i };
+                }
+                i = i + 1;
+            }
+            return Option::<u64>::None;
+        }
+
+        /// Owned copy of the half-open range [start, end). Out-of-range or
+        /// inverted bounds -> None (domain outcome). Unlike `view` this is
+        /// an independent buffer, so it composes with the validated
+        /// `to_string` crossing for byte-region -> text extraction.
+        pub fn slice(&self, start: u64, end: u64) with(Alloc) -> Option<Bytes> {
+            if start > end || end > self.len {
+                return Option::<Bytes>::None;
+            }
+            let mut out: Bytes = Bytes::with_capacity(end - start);
+            let mut i: u64 = start;
+            while i < end {
+                out.push(self.get_unchecked(i));
+                i = i + 1;
+            }
+            return Option::<Bytes>::Some { value: out };
+        }
+
         pub fn append_bytes(&mut self, other: &Bytes) with(Alloc) {
             let mut i: u64 = 0;
             while i < other.len {
@@ -257,6 +289,53 @@ mod bytes {
         pub fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
+    }
+
+    #[test]
+    fn test_bytes_index_of_and_slice() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::with_capacity(6);
+        b.push(10); b.push(61); b.push(20); b.push(61); b.push(30); b.push(0);
+        // first hit, from-offset resume, absent byte, from past end
+        let first: Option<u64> = b.index_of(61, 0);
+        match first { Option::Some { value } => { if value != 1 { b.drop(); return 1; } }, Option::None => { b.drop(); return 1; } }
+        let second: Option<u64> = b.index_of(61, 2);
+        match second { Option::Some { value } => { if value != 3 { b.drop(); return 1; } }, Option::None => { b.drop(); return 1; } }
+        let absent: Option<u64> = b.index_of(99, 0);
+        if !expect_none::<u64>(&absent) { b.drop(); return 1; }
+        let past: Option<u64> = b.index_of(10, 6);
+        if !expect_none::<u64>(&past) { b.drop(); return 1; }
+        // slice: interior copy, empty range, inverted/out-of-range -> None
+        let mid: Option<Bytes> = b.slice(2, 5);
+        match mid {
+            Option::None => { b.drop(); return 1; },
+            Option::Some { value } => {
+                let ok: bool = value.len() == 3 && value.get_unchecked(0) == 20
+                            && value.get_unchecked(2) == 30;
+                value.drop();
+                if !ok { b.drop(); return 1; }
+            },
+        }
+        let empty: Option<Bytes> = b.slice(4, 4);
+        match empty {
+            Option::None => { b.drop(); return 1; },
+            Option::Some { value } => {
+                let ok: bool = value.is_empty();
+                value.drop();
+                if !ok { b.drop(); return 1; }
+            },
+        }
+        let inverted: Option<Bytes> = b.slice(3, 2);
+        match inverted {
+            Option::Some { value } => { value.drop(); b.drop(); return 1; },
+            Option::None => { },
+        }
+        let oob: Option<Bytes> = b.slice(0, 7);
+        match oob {
+            Option::Some { value } => { value.drop(); b.drop(); return 1; },
+            Option::None => { },
+        }
+        b.drop();
+        return 0;
     }
 
     #[test]

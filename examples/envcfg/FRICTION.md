@@ -18,16 +18,19 @@ first line-oriented text parser. Gate:
   module was this workload — module-level "works in tests" said nothing
   about the backend path.
 
-## Pull candidates (workload evidence for std)
+## Pulls (workload evidence for std)
 
-1. **Bytes: find/split until delimiter** — THIRD ask (elf_header re-rolled
-   NUL-scan, tar_list re-rolled NUL-padded-field extraction, envcfg
-   re-rolls newline splitting + `=` search + region trim). A
-   `Bytes::index_of(byte, from) -> Option<u64>` plus a way to make a
-   String from a byte region would delete ~half this program. This is now
-   over the pull threshold; strongest std candidate from workloads so far.
-2. **String.split / find** — same gap one level up; `starts_with` exists
-   but nothing locates a character.
+1. **PULLED (same stack): `Bytes::index_of(byte, from)` + `Bytes::slice(start, end)`**
+   — third ask (elf_header re-rolled NUL-scan, tar_list re-rolled
+   NUL-padded-field extraction, envcfg re-rolled newline splitting + `=`
+   search). envcfg switched over as proof-of-pull: the `=` search and both
+   region→String extractions now go through std, and `slice` +
+   checked `to_string` means invalid UTF-8 in a config region is a domain
+   outcome (malformed, exit 1) instead of silently mangled text — the
+   hand-rolled push_char loop couldn't say that. Switching over surfaced
+   bug 040 (CoreCheck false E0500 on same-named scalar match binders).
+2. **String.push_str was a false gap** — `String.append(&String)` already
+   exists; envcfg now uses it. Withdrawn.
 3. **Multi-value return** — `trim_region` wants to return (start, end);
    packed both into one u64 (high/low 32 bits) because tuples are
    workload-gated. Second ask after png_chunks' similar packing. Ugly but
@@ -39,9 +42,6 @@ first line-oriented text parser. Gate:
 - Linear Strings: every temporary needs an explicit `.drop()`; match arms
   that consume payloads must drop in every arm. Verbose but caught two
   real leaks while writing (E0208 did its job).
-- No string interpolation/fmt beyond push_char loops — `out` assembly is
-  manual. std.fmt push_hex exists for hex; a `String.push_str(&String)`
-  would cover most of the remaining loops (cheap pull candidate).
 
 ## Notes
 

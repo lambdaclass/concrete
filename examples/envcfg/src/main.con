@@ -14,17 +14,15 @@ mod envcfg {
     import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
                    println, eprintln};
 
-    // Byte-region -> String (same shape tar_list re-rolled for NUL-padded
-    // fields; here it is newline-delimited — the bytes-until-DELIM pull is
-    // now at its THIRD ask counting elf_header, tar_list, and this).
-    fn region_string(data: &Bytes, start: u64, end: u64) with(Alloc) -> String {
-        let mut s: String = String::new();
-        let mut k: u64 = start;
-        while k < end {
-            s.push_char(data.get_unchecked(k) as char);
-            k = k + 1;
+    // Byte-region -> String via the pulled std pair: Bytes::slice (owned
+    // copy) + the CHECKED to_string crossing. Invalid UTF-8 in a config
+    // region is a domain outcome (None -> malformed), which the old
+    // hand-rolled push_char loop silently mangled.
+    fn region_string(data: &Bytes, start: u64, end: u64) with(Alloc) -> Option<String> {
+        match data.slice(start, end) {
+            Option::None => { return Option::<String>::None; },
+            Option::Some { value } => { return value.to_string(); },
         }
-        return s;
     }
 
     fn is_space(b: u8) -> bool {
@@ -49,14 +47,12 @@ mod envcfg {
         let e: u64 = packed % 4294967296;
         if s >= e { return 0; }                                  // blank
         if data.get_unchecked(s) == 35 { return 0; }             // # comment
-        // find '=' inside [s,e)
-        let mut eq: u64 = s;
-        let mut found: bool = false;
-        while eq < e {
-            if data.get_unchecked(eq) == 61 { found = true; break; }
-            eq = eq + 1;
-        }
-        if !found { return 1; }                                  // malformed
+        // find '=' inside [s,e)  (pulled: Bytes::index_of, 3rd-ask API)
+        let eq: u64 = match data.index_of(61, s) {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },                       // malformed
+        };
+        if eq >= e { return 1; }                                 // '=' past this line
         if eq == s { return 1; }                                 // empty key
         let kpacked: u64 = trim_region(data, s, eq);
         let ks: u64 = kpacked / 4294967296;
@@ -65,29 +61,29 @@ mod envcfg {
         let vpacked: u64 = trim_region(data, eq + 1, e);
         let vs: u64 = vpacked / 4294967296;
         let ve: u64 = vpacked % 4294967296;
-        let key: String = region_string(data, ks, ke);
+        let key: String = match region_string(data, ks, ke) {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },                       // invalid UTF-8 key
+        };
         // env override wins; fall back to the file value
-        let mut out: String = String::new();
-        let mut k: u64 = 0;
-        while k < key.len() {
-            out.push_char(key.get_unchecked(k));
-            k = k + 1;
-        }
+        let mut out: String = key.clone();
         out.push_char('=');
         match get(&key) {
             Option::Some { value } => {
-                let mut j: u64 = 0;
-                while j < value.len() {
-                    out.push_char(value.get_unchecked(j));
-                    j = j + 1;
-                }
+                out.append(&value);
                 value.drop();
             },
             Option::None => {
-                let mut j: u64 = vs;
-                while j < ve {
-                    out.push_char(data.get_unchecked(j) as char);
-                    j = j + 1;
+                match region_string(data, vs, ve) {
+                    Option::Some { value } => {
+                        out.append(&value);
+                        value.drop();
+                    },
+                    Option::None => {                            // invalid UTF-8 value
+                        key.drop();
+                        out.drop();
+                        return 1;
+                    },
                 }
             },
         }

@@ -40,6 +40,8 @@ bytes	cap	no	borrows	infallible	none	pure-core	gated	(&self) -> u64
 bytes	is_empty	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
 bytes	clear	no	mut	infallible	none	pure-core	gated	(&mut self)
 bytes	eq	no	borrows	infallible	none	pure-core	gated	(&self, other: &Bytes) -> bool
+bytes	index_of	no	borrows	option	none	pure-core	gated	(&self, byte: u8, from: u64) -> Option<u64>
+bytes	slice	yes	borrows	option	Alloc	hosted-effect	gated	(&self, start: u64, end: u64) with(Alloc) -> Option<Bytes>
 bytes	append_bytes	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, other: &Bytes) with(Alloc)
 bytes	to_string	yes	consumes	option	Alloc	hosted-effect	gated	(self) with(Alloc) -> Option<String>
 bytes	to_string_unchecked	no	consumes	infallible	none	pure-core	gated	(self) -> String

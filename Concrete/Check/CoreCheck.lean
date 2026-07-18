@@ -253,7 +253,11 @@ private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
 
 private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
-  setEnv { env with vars := env.vars ++ [(name, ty)] }
+  -- Prepend so a rebinding SHADOWS (lookup is first-match). Appending made
+  -- the first `value` binder in a function win forever: two match arms
+  -- binding same-named payloads of different scalar types (Option<u64> then
+  -- Option<bool>) raised a false E0500 on the second arm's uses.
+  setEnv { env with vars := (name, ty) :: env.vars }
 
 private def lookupVar (name : String) : StateM CoreCheckEnv (Option Ty) := do
   let env ← getEnv
@@ -610,20 +614,29 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     for s in else_ do ccCheckStmt s
 
 partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
+  -- Arm binders are arm-scoped: restore the var table afterwards so a
+  -- payload binding cannot shadow (or type-collide with) names used after
+  -- the match.
   match arm with
   | .enumArm _ _ bindings guard body =>
+    let saved := (← getEnv).vars
     for (bname, bty) in bindings do
       addVar bname bty
     match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
+    let env ← getEnv
+    setEnv { env with vars := saved }
   | .litArm value guard body =>
     ccCheckExpr value
     match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
   | .varArm binding bindTy guard body =>
+    let saved := (← getEnv).vars
     addVar binding bindTy
     match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
+    let env ← getEnv
+    setEnv { env with vars := saved }
   | .rangeArm lo hi _ guard body =>
     ccCheckExpr lo
     ccCheckExpr hi

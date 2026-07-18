@@ -6716,6 +6716,10 @@ run_ok "$TESTDIR/regress_034_shortcircuit_borrow_promotion.con" 133
 # Bug 038: promoted aggregate (String) mutated via &mut in an if-arm had the
 # mutation clobbered by the merge's stale snapshot (031 family, 4th site).
 run_ok "$TESTDIR/regress_038_if_merge_promoted_aggregate.con" "qm"
+# Bug 040: same-named match binders of different scalar types in one fn
+# (Option<u64> then Option<bool>, both binding `value`) — CoreCheck's
+# first-match var table raised a false E0500; binders are arm-scoped now.
+run_ok "$TESTDIR/regress_040_match_binder_types.con" 42
 # Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
 # are USER fns at every pass — never name-hijacked.
 run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31

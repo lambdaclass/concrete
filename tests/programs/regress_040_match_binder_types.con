@@ -1,0 +1,24 @@
+// Bug 040 regression: two match arms binding same-named payloads of
+// DIFFERENT scalar types in one function. CoreCheck's append-only,
+// first-match var table let the first `value` (u64) type-collide with the
+// second (bool) — false E0500 on a program Check.lean accepts. Both Lower
+// and the interpreter execute this correctly; exit 42 proves the values
+// flow through the right slots.
+mod m {
+    fn main() -> Int {
+        let a: Option<u64> = Option::<u64>::Some { value: 40 };
+        let mut n: u64 = 0;
+        match a {
+            Option::Some { value } => { n = value; },
+            Option::None => { return 1; },
+        }
+        let c: Option<bool> = Option::<bool>::Some { value: true };
+        let mut t: bool = false;
+        match c {
+            Option::Some { value } => { t = value; },
+            Option::None => { return 2; },
+        }
+        if !t { return 3; }
+        return (n as Int) + 2;
+    }
+}
