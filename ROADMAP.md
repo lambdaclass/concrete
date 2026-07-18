@@ -14,8 +14,9 @@ constraints, and deferred tails with a real pull trigger.
 - **Historical record:** completed Phase 1-6 item bodies, implementation notes,
   and detailed gate transcripts live in [CHANGELOG.md](CHANGELOG.md) and the
   linked design docs.
-- **Done items:** do not remain here as full task text. At most, this roadmap
-  keeps a short closed marker or a dependency note.
+- **Done items:** do not remain here as task text. Keep only a dependency or
+  invariant that still constrains future work; put the completion record in
+  the changelog.
 
 ### Definition Of Done
 
@@ -48,38 +49,14 @@ or public API forces it.
 ### Current Frontier
 
 The current frontier is **Phase 7: Standard Library And Core APIs**. Phases 1-6E
-are closed as active phases. Phase 7's foundation work has landed: the public
-stdlib manifest/API facts, `Option`/`Result` helpers, Reader/Writer IO spine,
-bytes/text/path boundaries, std.test basics, ordered traversal, base64 workload,
-H18 owned-resource collection drop glue, and the first real CLI workload are in
-the historical record. The active frontier is the remaining Phase 7 surface:
-MAIN_EXIT_MODEL stage 2, stdlib CLI/env/process helpers, unsafe/trusted wrappers
-and trap/debug UX, the shipped pure-core proof arc, and pull-gated breadth after
-workloads ask for it.
+are closed as active phases; completed Phase 7 foundations and workloads 1–6
+live in [CHANGELOG.md](CHANGELOG.md). The active frontier is the remaining
+stdlib/API surface, unsafe/trusted wrappers and trap/debug UX, the shipped
+pure-core proof arc, the Layout panic-to-diagnostic slice, and pull-gated
+breadth or defect tails with a named forcing workload. Phase 7.5's QBE backend
+is fully specified but has not started.
 
-## Closed Foundations: Phases 1-6
-
-### Summary
-
-Phases 1-6 built the proof/evidence core, ordinary compiler pipeline, language
-core, daily workflow, compiler-pipeline hardening, observability, grammar cleanup,
-and CLI coherence needed before stdlib expansion. Their detailed task bodies have
-been moved to [CHANGELOG.md](CHANGELOG.md).
-
-### Historical Record
-
-- Phase 1-2 proof/evidence foundations: see [CHANGELOG.md](CHANGELOG.md).
-- Phase 3 obligation/core audit: see
-  [docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md).
-- Phase 4 compiler ledger audit: see
-  [docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md).
-- Phase 5 language/core slab and Phase 6/6B/6C/6D/6E completion records: see
-  [CHANGELOG.md](CHANGELOG.md).
-- Known holes index: [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Its open
-  section is currently empty; remaining work below is hardening, usability, or
-  pull-gated extension work rather than known open soundness debt.
-
-### Remaining Pull-Gated Tails From Phases 1-6
+## Pull-Gated Tails From Earlier Phases
 
 Keep these visible because they can affect future phases:
 
@@ -158,6 +135,435 @@ only after that validation. Later proof/backend/tooling work must not bypass
 this order: semantic facts first, observability second, independent executable
 cross-checking third, external validation fourth, incremental reuse fifth, and
 independently checked evidence after that.
+
+### Future Compiler-Pipeline Refactor Contract
+
+The pipeline works, but several bug classes came from boundaries represented by
+convention rather than types: raw module lists reused after different validation
+stages, ordered first-match lookup tables standing in for scoped identity,
+reports rescanning artifacts, duplicated CLI compile/link paths, and backend
+emitters rediscovering program facts. Refactor these incrementally as real
+consumers pull them—Phase 7.5 is the first forcing consumer—not as a flag-day
+rewrite.
+
+#### A. Make Successful Phase Boundaries Type-Safe
+
+Introduce thin opaque wrappers whose constructors live with the pass that earns
+the invariant. The intended ladder is:
+
+```text
+SourceInputs
+  -> ParsedProgram
+  -> ResolvedProgram
+  -> CheckedProgram
+  -> ElaboratedCore
+  -> CanonicalCore
+  -> MonomorphizedCore
+  -> LoweredSSA
+  -> ValidatedSSA
+  -> CleanedSSA
+  -> CodegenInput
+```
+
+Lean-like API sketch (the implementation should enforce opacity with module
+boundaries/private constructors or an equivalent Lean mechanism; names may
+adapt to the existing pipeline, but invariant ownership must not):
+
+```lean
+structure LoweredSSA where
+  modules : List SModule
+
+structure ValidatedSSA where
+  modules : List SModule
+
+structure CleanedSSA where
+  modules : List SModule
+
+def lower (mono : MonomorphizedCore) : Except Diagnostics LoweredSSA
+def verifySSA (ssa : LoweredSSA) : Except Diagnostics ValidatedSSA
+def cleanupSSA (ssa : ValidatedSSA) : Except Diagnostics CleanedSSA
+def prepareCodegen (ssa : CleanedSSA) : Except Diagnostics CodegenInput
+```
+
+The wrappers are not proof theater: APIs that require verified SSA accept only
+`ValidatedSSA`; emitters accept only `CodegenInput`; test helpers that
+deliberately inspect invalid/raw SSA name that escape hatch explicitly. Do not add
+`unsafeCastValidated`, public constructors, or ubiquitous `.modules` extraction
+that immediately erases the boundary.
+
+Example failure prevented: a new CLI path may no longer call cleanup/emission
+on raw `SModule` output while silently skipping `SSAVerify`. The code should
+fail to typecheck before a runtime gate is needed.
+
+Gate: `scripts/tests/check_pipeline_types.sh` scans public signatures and runs
+negative compile fixtures proving raw/lowered SSA cannot reach cleanup or
+codegen, cleaned SSA cannot be fabricated outside its owning module, and the
+normal file/build/test/debug paths traverse the complete typed ladder.
+
+#### B. Give Passes One Observable Contract
+
+Keep `Except Diagnostics` for fail-fast transformations where appropriate, but
+standardize the metadata every pass can publish instead of rebuilding it in
+CLI/report/debug code:
+
+```lean
+structure PassTrace where
+  passName       : String
+  inputHash      : String
+  outputHash     : String
+  elapsedMicros  : Nat
+  counters       : List (String × Nat)
+  changed        : Bool
+
+structure PassFacts where
+  schemaVersion  : Nat
+  invariantNames : List String
+  artifactKind   : String
+
+structure PassSuccess (α : Type) where
+  output : α
+  facts  : PassFacts
+  trace  : PassTrace
+```
+
+This does not require every pass to accumulate recoverable diagnostics or use
+one giant generic monad. The contract is the observable success envelope:
+diagnostics remain structured on failure; output, facts, trace, counters, and
+fingerprints come from the pass once on success.
+
+Before/after example:
+
+```text
+BEFORE: `--report verify`, debug-bundle, and `--trace-pipeline` each infer
+        whether SSA verification ran by inspecting different output.
+AFTER:  `verifySSA` publishes one `PassSuccess ValidatedSSA`; all three views
+        render its versioned facts/trace without rerunning verification.
+```
+
+Gate: snapshot the pass sequence, schema versions, input/output hash chaining,
+and counters for one success and one failure at every phase. Mutation tests must
+make the trace/report/debug views fail together when a pass is skipped or its
+artifact hash is swapped.
+
+#### C. Derive Program Facts Once, With Stable Identity
+
+Add one immutable, typed program-fact index before codegen. It should include:
+
+```lean
+structure FunctionId where
+  moduleId : ModuleId
+  localId  : Nat
+
+structure CodegenFacts where
+  functions       : Std.HashMap FunctionId FunctionFacts
+  symbolOwners    : Std.HashMap LinkSymbol FunctionId
+  moduleAliases   : Std.HashMap ModuleId AliasScope
+  layouts         : Std.HashMap TypeId LayoutFacts
+  strings         : Std.HashMap StringId StringFacts
+  builtins        : Std.HashMap BuiltinId BuiltinCodegenFacts
+  entryPoint      : Option FunctionId
+  testEntries     : Array FunctionId
+```
+
+Use stable IDs for semantic identity and strings only for display/link symbols.
+Ordered lists may preserve deterministic presentation order, but semantic lookup
+must not mean “first equal bare name in program order.” Module-local aliases are
+resolved in their owning scope before any program-wide fallback.
+
+Bug-class examples this closes:
+
+- bug 039: `std.env.get` cannot be rebound to `std.args.get` because both have
+  distinct `FunctionId`s and aliases are keyed by importing `ModuleId`;
+- duplicate basenames cannot collide merely because their generated strings
+  match before qualification;
+- builtin recognition uses `BuiltinId`, not a raw function name that user code
+  can shadow;
+- entry/test discovery is computed once and cannot differ between LLVM, QBE,
+  `concrete test`, reports, and debug bundles.
+
+Gate: generated programs permute module order, repeat local names/import aliases,
+and create basename/link-symbol pressure. All permutations must produce the
+same fact index hash, semantic observations, and deterministic emitted symbol
+set. Inject duplicate semantic IDs and duplicate link symbols to prove the
+builder rejects them with a diagnostic rather than selecting one.
+
+#### D. Transform Once; Render Many Views
+
+Compiler transformations own canonical artifacts and facts. Reports, audit,
+queries, LSP, agent JSON, and debug bundles are views over those artifacts—not
+partial compiler passes hidden behind output commands.
+
+```text
+canonical pass artifact
+  + versioned facts
+  + stable source identities
+        |- diagnostics renderer
+        |- `--report ...`
+        |- audit JSON
+        |- query API
+        |- debug bundle
+        `- LSP/agent views
+```
+
+Concrete example: layout is computed once into `LayoutFacts { size, alignment,
+fieldOffsets, enumTag, payloadOffset, passMode }`. LLVM prints LLVM types from
+it, QBE prints QBE aggregate declarations from it, `--report layout` renders it,
+and the ABI gate serializes it. None independently walks `Ty` to rediscover
+offsets.
+
+Another example: proof/obligation status is read from the canonical obligation
+ledger; `audit`, reports, diagnostics JSON, and editor output must not derive a
+second status by scanning proof files.
+
+Gate: an import-firewall/source-scan rejects report/query modules importing
+transformation internals that are not declared artifact APIs. For selected
+facts, mutate the canonical artifact and prove every view changes together;
+mutate a renderer and prove compiler semantics do not change.
+
+#### E. Centralize Semantic Legalization Ownership
+
+Add a machine-readable table covering every Core/SSA operation and answering:
+
+1. Where are source types and failure semantics fixed?
+2. Where is the operation canonicalized?
+3. Does SSA already express exact runtime semantics?
+4. Is target-neutral legalization required?
+5. What remains backend-specific instruction selection?
+6. Which interpreter/external/mutation oracle covers it?
+
+Example rows:
+
+| Family | Exact semantics owned by | Shared legalization | Backend responsibility |
+| --- | --- | --- | --- |
+| checked `i32` add | integer-semantics facts | overflow result + trap edge | LLVM intrinsic/CFG; QBE explicit CFG/helper |
+| signed right shift | typed Core/SSA signedness | normalized count policy | LLVM `ashr`; QBE signed word/long sequence |
+| float-to-int cast | cast policy | finite/range guard + trap class | target conversion after guard |
+| enum payload copy | layout + SSA copy intent | size/alignment/payload facts | independent LLVM/QBE memory operations |
+| indirect call | resolved function type/caps | canonical signature/callee identity | target ABI call sequence |
+
+Do not “single-source” backend instruction sequences: that would correlate LLVM
+and QBE failures and weaken the oracle. Single-source language semantics and
+facts; independently realize them in each backend.
+
+Gate: generate the table from `SInst`, terminator, `Ty`, builtin, and trap
+constructors. A new constructor fails CI until it names its semantic owner,
+legalization class, interpreter status, LLVM/QBE status, and at least one test.
+
+#### F. Finish Panic-To-Diagnostic Hygiene By Boundary
+
+Sequence note: land 0d's split (LLVM spellings out of `Concrete/Check/Layout.lean`
+into a backend-neutral `LayoutFacts` home) BEFORE converting the Layout panics —
+converting them in the old location churns the same functions twice (review
+2026-07-18).
+
+The Layout conversion is the first slice, not the whole audit. Inventory and
+remove compiler-owned panics/unreachable assumptions in:
+
+- resolver and symbol/alias lookup;
+- monomorphization specialization lookup/merge;
+- Core canonicalization and CoreCheck environment lookup;
+- lowering place/type/function lookup;
+- SSA verification and cleanup rewrite assumptions;
+- layout and aggregate field/tag/payload lookup;
+- LLVM/QBE emission and builtin/runtime manifests;
+- report/query handling of unknown/new constructors.
+
+Internal invariant failures should report:
+
+```text
+error[internal:E9xxx]: codegen requested layout for unknown TypeId 41
+  phase: prepare-codegen
+  invariant: CODEGEN-TYPE-KNOWN
+  function: app.parse_config
+  source: src/main.con:27:14
+  artifact: <debug-bundle path>
+```
+
+Do not turn impossible states into ordinary user errors. Classify them as
+internal diagnostics, retain relevant artifacts, fail the command, and keep CI
+leak gates rejecting `panic`, raw Lean exceptions, LLVM/QBE parser errors, or
+host stack traces as the first diagnosis.
+
+Gate: one controlled invariant-break fixture per boundary plus a static panic
+inventory with an allowlist containing only process-fatal bootstrap/runtime
+cases justified by owner and removal condition.
+
+#### G. Make SSA Cleanup A Named, Testable Rule Pipeline
+
+Replace opaque fixpoint behavior with an ordered registry of small rules while
+preserving the existing semantics:
+
+```lean
+structure CleanupRule where
+  name       : String
+  apply      : SFunction -> CleanupResult
+  invariants : List String
+
+structure CleanupResult where
+  function : SFunction
+  changed  : Bool
+  rewrites : Nat
+```
+
+Example rule sequence (adapt to the actual implementation): trivial-copy
+forwarding, dead pure instruction removal, constant branch simplification,
+unreachable-block removal, phi simplification, block merge, strength reduction.
+Rules that require a fixpoint declare it; the driver records iteration and
+rewrite counts and enforces a termination/fuel bound as an internal diagnostic.
+
+Each rule needs:
+
+- a minimal positive before/after golden;
+- a negative fixture where it must not fire;
+- verifier-before/verifier-after checks;
+- interpreter/native observation preservation where executable;
+- a mutation demonstrating the gate catches an unsound rewrite;
+- deterministic output under block/function/module order perturbation.
+
+Do not begin by rewriting all of `SSACleanup.lean`. Extract one existing rule at
+a time with byte-identical cleaned SSA over the full corpus, then delete the old
+branch in the same slice.
+
+#### H. Unify All Compilation Entry Points
+
+File compile, project build, `concrete run`, `concrete test`, emit-only modes,
+and debug-bundle capture should configure one driver:
+
+```text
+prepare inputs
+  -> frontend
+  -> canonical Core
+  -> monomorphize
+  -> lower
+  -> verify SSA
+  -> cleanup SSA
+  -> prepare codegen
+  -> emit selected backend
+  -> validate backend artifact
+  -> assemble/codegen
+  -> link
+  -> optionally execute
+```
+
+Illustrative configuration:
+
+```lean
+structure CompileRequest where
+  mode          : CompileMode       -- file | project | test | run | emitOnly
+  backend       : BackendKind       -- llvm | qbe
+  target        : TargetSpec
+  optimization  : OptimizationMode
+  retain        : ArtifactPolicy
+  testFilter    : Option TestFilter
+```
+
+Modes may stop at a named boundary or substitute the test entry wrapper; they
+must not reproduce the passes. `--emit-ssa` stops after cleaned SSA,
+`--emit-qbe` stops after QBE validation, normal build links, and `run` executes
+the linked artifact. Debug-bundle capture subscribes to artifacts already
+produced by the driver rather than rerunning the pipeline.
+
+Gate: a matrix covers file/project × normal/test/run/emit × LLVM/QBE-supported
+subset. It verifies identical frontend/SSA hashes for equivalent inputs,
+consistent diagnostics, artifact retention on each injected boundary failure,
+and absence of duplicated direct emitter/tool invocations outside the driver.
+
+#### I. Preserve Stable Source And Transformation Identity
+
+Carry identity needed for diagnostics/evidence without attaching large source
+objects to every instruction:
+
+```lean
+structure OriginId where
+  sourceFile : SourceFileId
+  nodeId     : SyntaxNodeId
+
+structure TransformOrigin where
+  primary    : OriginId
+  family     : SemanticFamilyId
+  parents    : SmallArray OriginId
+```
+
+Core/SSA operations that can trap, create obligations, cross capabilities,
+materialize memory, or become backend calls retain an origin. Cleanup rewrites
+preserve the primary origin and record combined parents where necessary. LLVM
+and QBE runtime checks/debug bundles report the same source construct and
+semantic family.
+
+Example: a checked addition lowered into compare + branch + trap must keep one
+`checked_add` family ID and source span through cleanup and both backends; a QBE
+mismatch bundle should not point only to a generated temporary or `.qbe` line.
+
+Gate: source-span/identity goldens for direct instructions, inlined helpers,
+phi/block merges, aggregate copies, generated runtime checks, and
+monomorphized functions. Moving a source file must not change semantic IDs that
+are defined as position-independent; editing the owning construct must change
+its freshness/fingerprint where required.
+
+#### J. Generate Consumer Coverage From IR Constructors
+
+Maintain a compiler-generated matrix, not a manually curated checklist:
+
+```text
+constructor | Check | CoreCheck | Interp | Lower | Verify | Cleanup
+            | LLVM | QBE | reports | source identity | tests
+```
+
+“Handled” must distinguish `implemented`, `intentionally_noop`,
+`rejected_before_here`, `runtime_helper`, `pending`, and `not_applicable`.
+Catch-all pattern matches do not count as coverage unless the constructor is
+explicitly classified.
+
+Example: adding a new `SInst.atomicRmw` in the future should immediately fail
+the matrix because interpreter semantics, capability/memory-model facts,
+cleanup side-effect classification, LLVM, QBE, reports, and tests have no rows.
+It must not silently inherit `_ => unchanged` in cleanup and `_ => panic` in an
+emitter.
+
+Gate: constructor extraction is fail-closed and mutation-tested by adding a
+synthetic constructor in a fixture copy or removing one coverage row. Publish
+the matrix through agent features/debug bundles so CI and external tooling use
+the same inventory.
+
+#### Migration Order And Definition Of Done
+
+Implement in this order, each as a separately green slice:
+
+1. thin typed wrappers for `LoweredSSA -> ValidatedSSA -> CleanedSSA`;
+2. immutable stable-identity program facts required by current LLVM emission;
+3. one unified backend-neutral compile driver with LLVM byte/behavior parity;
+4. Phase 7.5 `CodegenInput` plus the first QBE `main -> 42` vertical slice;
+5. generated constructor/consumer capability matrix;
+6. view-only reports/debug bundles over canonical pass artifacts;
+7. source/semantic identity carried into runtime checks and backend bundles;
+8. one-at-a-time SSA cleanup rule extraction;
+9. remaining panic-to-internal-diagnostic boundary slices;
+10. Phase 15 translation validation and only then any target MIR/native backend.
+
+For every refactor slice:
+
+- name the bug class or immediate consumer;
+- preserve byte-identical LLVM/Core/SSA artifacts by default;
+- if bytes change, explain the exact delta and prove behavior/evidence parity;
+- run verifier-before/after and the relevant full/differential/fuzz gates;
+- add a mutation or negative fixture that fails without the new invariant;
+- delete the superseded path in the same slice or give it a dated retirement
+  gate;
+- record compile-time/memory impact and reject unbounded regressions;
+- keep unrelated feature work out of the refactor commit.
+
+The refactor program is complete when all production entry points traverse the
+typed ladder and unified driver; semantic lookup uses stable identity; canonical
+facts feed every view/backend; every constructor has fail-closed consumer
+coverage; cleanup rules are named and mutation-sensitive; compiler-owned
+invariant failures are structured diagnostics; LLVM remains green; and the QBE
+oracle consumes the same immutable codegen input without importing LLVM logic.
+
+Explicit non-goals: no wholesale rewrite, no universal pass monad, no dynamic
+backend plugin framework, no new source language, no duplicate ZIR/AIR layer,
+no target MIR/register allocator/object writer before a direct-native forcing
+case, no report-specific compiler pipeline, and no claim that typed wrappers or
+backend agreement constitute a proof of compiler correctness.
 
 ### Incremental / Certificate Trust Split
 
@@ -281,22 +687,14 @@ not the periphery.
 
 Phase 7 priority order is deliberately narrower than the comparison languages:
 make Concrete's small core pleasant and auditable before copying broad
-batteries-included breadth. Completed foundation work lives in
-[CHANGELOG.md](CHANGELOG.md); the remaining ranked build order is:
+batteries-included breadth. The ranked build order is:
 
-0. Stdlib hardening pass H1-H5 — before all remaining breadth. This is
-   foundation repair, not new surface; details live below, ahead of the
-   collection-API build-out.
-1. MAIN_EXIT_MODEL stage 2 (`docs/MAIN_EXIT_MODEL.md`): COMPLETE
-   2026-07-17 — the `CONCRETE_ECHO_RESULT` knob is deleted (compiler +
-   every harness consumer; check_exit_codes.sh pins the env var IGNORED).
-   Remaining tail, deliberately decoupled: retire Int-main (a later
-   surface pass narrows the entry signature to `fn main() -> u8 | Unit`)
-   and, workload-gated, `main -> Result<Unit, E>` printing the error
-   variant name to stderr (Zig-style nominal rendering, no display
-   traits).
-1a. Refactor queue (review 2026-07-16, evidence-ranked; each item lands as
-   its own slice with the battery):
+0. Entry-point tails, deliberately decoupled from the completed exit-model
+   migration: retire Int-main in a later surface pass by narrowing the entry
+   signature to `fn main() -> u8 | Unit`; workload-gate any
+   `main -> Result<Unit, E>` form and nominal error rendering to stderr.
+1. Compiler hygiene and known-defect tails, evidence-ranked; each item lands as
+   its own slice with the battery:
    - Layout panic hygiene: convert `Concrete/Check/Layout.lean` `panic!`
      paths (unknown struct/named type in fieldOffset/tySize) into
      structured internal-error diagnostics — bug 035's fix made them
@@ -306,143 +704,47 @@ batteries-included breadth. Completed foundation work lives in
      incl. EmitSSA), all cascading through pure code — no small slice;
      it is an Except-threading grind that must land green in ONE piece,
      with the full battery as backstop. Dedicated fresh session.
-   - RESOLVED as inert (2026-07-17 probe): the match-loop array
-     load-binding divergence documented in the merge-loop unification.
-     All four post-029 shapes verified correct (post-match &arr borrow,
-     in-place element write, by-value call — IR materializes the
-     aggregate correctly): every downstream site re-materializes an
-     address from the value, so the divergence miscompiles nothing
-     reachable. Leave as the BranchMergeRules comment documents; do NOT
-     blind-flip without a failing repro (IR churn for no proven gain).
-   - DONE: Lower branch-site consolidation (structured-builder slice 2): the
-     three merge loops (statement-if, if-expr, match) now call ONE
-     `reconcileBranchVars`; the four residual semantic differences
-     (statement-if void rule, array-address rebind — the match loop still
-     binds loads, unit-phi guard, single-incoming rebind) are explicit
-     fields of `BranchMergeRules`, documented as deliberate and not to be
-     "simplified" without a full battery. No behavior change (byte-identical
-     IR by construction; 1680/0 + 531/0 + fuzz seeds green). The &&/|| site
-     keeps its own minimal shape. The fifth merge bug is now one function's
-     problem instead of four sites'.
-   - DONE (2026-07-17, workload 5): bug 039 — imported bare fn name rebound
-     to another module's colliding import (program-wide first-match alias
-     pool; `import std.env.{get}` compiled to args_get, segfault). Fixed in
-     emitSModule (module-local import aliases shadow the pool);
-     regress_039_import_alias_collision project test + check_envcfg.sh
-     env-override legs pin it. Residual (pull-gated, in the bug doc): the
-     submodule-granularity variant inside ONE top-level module shares a
-     flat alias list.
-   - DONE (2026-07-17): std compiled-coverage gate
-     (check_std_compiled_coverage.sh) — one compiled+run behavioral fixture
-     per public std module, fail-closed inventory derived from std/src
-     (new module without a fixture or documented exemption = red). Closes
-     the bug-039 CLASS (interp-only-tested std modules have dark backend
-     paths). First run immediately found bugs 041 (Check post-match merge
-     kept arm binders; stale Copy `value` poisoned a later linear binder's
-     consumed state — false E0208) and 042 (Resolve silently dropped
-     imported newtypes/type-aliases — E0108 at first use; std.numeric's
-     newtypes had zero cross-module consumers). Recorded exemptions: lib
-     (umbrella), libc (no pub surface), slice (NO public constructor — std
-     gap, converts to a fixture when a workload pulls one).
-   - Known-defects queue (2026-07-18, priority-ordered; each is a defect,
-     not a deferral — take top-down, own slice + battery each):
-     1. FIXED (2026-07-18, bug 044): renamed GENERIC import failed to
-        monomorphize (undefined @dealloc at link) — Mono lookupFn now
-        tries all alias orientations and specializes under the resolved
-        def's canonical name; regress_044_renamed_generic_import pins it.
-     2. `env::get` returns unvalidated Strings: an environment value with
-        invalid UTF-8 arrives as a `String`, violating the String=UTF-8
-        contract (STRING_TEXT_CONTRACT target policy). `args::get` already
-        got the fix (validate in the trusted body, empty on invalid);
-        apply the same shape to env — small, the bug-043 to_cstr work
-        already put a trusted copy in the path.
-     3. FIXED (2026-07-18): project mode now front-end checks DEPENDENCY
-        modules too — Project.lean filtered dep modules out of
-        Pipeline.check (the H12-era exemption, obsolete since std reached
-        0 violations), so a wrong-typed std edit compiled in project mode
-        while `lib.con --test` rejected it. Pinned by the
-        check_std_compiled_coverage.sh dep-check leg (type-broken local
-        dependency must fail the consumer's build with E0220).
-     4. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
+   - Known-defects queue (priority-ordered; each owns a slice and battery when
+     its stated trigger fires):
+     1. Bug 039 residual (docs/bugs/039): two SUBMODULES of one top-level
         module importing different same-named fns still share a flat
         alias list (collectAllLinkerAliases). Pull-gated: fix when a
         workload or fixture hits it.
-     5. `std.slice` has no public constructor — user code cannot obtain a
+     2. `std.slice` has no public constructor — user code cannot obtain a
         `Slice` at all (coverage-gate exemption records it). First
         workload needing one pulls a constructor (e.g. Vec::as_slice) and
         converts the exemption into a fixture.
-     6. Bug 027 (EmitSSA O(n^2) rendering) — open perf item, not
+     3. Bug 027 (EmitSSA O(n^2) rendering) — open perf item, not
         correctness; profile-driven fix when compile times matter.
-     7. Differential fuzzer/oracle residuals: heap/alloc/IO shapes still
+     4. Differential fuzzer/oracle residuals: heap/alloc/IO shapes still
         compiled-only, trap class not compared interp-vs-compiled, no
         float support in interp comparisons.
-   - DONE (2026-07-17): stale stdlib docs refresh — STRING_TEXT_CONTRACT
-     (args::get now validates argv UTF-8, resolved; env::get still doesn't,
-     left open), BYTE_VIEW (`Text::from_raw` → shipped
-     `from_raw_unchecked`), STDLIB_API_REVIEW (writer merged into std.io,
-     2.3/3.1 marked resolved).
-   Audit additions (external audit 2026-07-16, spot-verified; first three
-   landed same-day — see CHANGELOG):
-   - DONE: float-literal lexing correctly rounded (Nat mantissa +
-     Float.ofScientific; the old per-digit 0.1 accumulation lexed `0.7`
-     one ulp off, invisible to the differential oracle because both sides
-     shared the lexer). COMPLETED 2026-07-16 second pass: ofScientific
-     itself keeps only ~11 guard bits (1-ulp errors on `16.3633343`,
-     `932183.9385014`) — final fix is `floatOfDecimalMantissa`, exact
-     big-Nat conversion, gated by check_float_literals.sh (8022 cases
-     against CPython float(), function + end-to-end lexer path).
-   - DONE: pipeline-test in defaultTargets + run_tests fail-closed (32
-     pass-level Lean tests were vacuously green for months). Unparseable
-     pipeline-test summary is now fail-closed too.
-   - DONE: proof-status proved entries carry an explicit trust line
-     ("linked + fingerprint-fresh — kernel replay via check-proofs").
-   - DONE: intrinsic identity threaded to call sites (Elab lookupFnSig
-     guard + Lower definedFns guard; regress_intrinsic_shadowing.con).
-     Residual: Check-side divergence/capability classifiers still match
-     raw Core names (conservative misclassification only) — #13b.
-   - DONE: Option/Result canonical-enum sizing is footprint-aware
-     (`alignUp 4 align + size`) and every enum alloca whose payload needs
-     8-byte alignment carries an explicit `align 8` (single emitAllocaTy
-     choke point; string_to_int shipped the 4-aligned-i64-store bug).
-     Byte-array storage kept deliberately: aggregate load/store of a
-     partially-initialized union is poison-safe only at byte granularity.
-     Gate: check_enum_union_layout.sh + regress_enum_canonical_align.con.
-   - DONE: interp/backend string_char_at drift (codepoint-vs-byte
-     indexing, OOB 0-vs--1) — interp matches the backend exactly;
-     check_string_char_at.sh. Residual CLOSED 2026-07-17: builtin
-     semantics single-sourced by DETECTION — signatures were already one
-     table (Resolve/BuiltinSigs.lean, Check+Elab);
-     check_builtin_semantics.sh pins interp == compiled byte-equal per
-     shared builtin (edge-heavy: empty/non-ASCII/OOB/negative/wide) and
-     pins the interp-PENDING inventory as an explicit 11-name list so
-     additions land on both sides or extend the pin deliberately. A
-     body-generation DSL (one spec emitting interp Lean + backend LLVM)
-     is recorded as NOT-now: high machinery cost, detection already
-     kills the drift class.
-   - DONE: evidence-doc drift — five examples/*/assumptions.toml said
-     overflow="wrapping" (language traps); files corrected and
-     check_assumptions.sh now reads/enforces the arithmetic section
-     against --report arithmetic; ASSUMPTION_FILES.md template fixed.
-   - DONE: CI — run_ci_gates_local extraction fixed (bare ./scripts
-     invocations + arguments preserved, tree-mutating mutation gate
-     excluded); retry loops emit ::warning on failed attempts; dark gates
-     wired (extra-gates CI job: catches/showcase/wrong-code/reducer/
-     release-bundle + the three audit gates) — test_wrong_code was
-     already silently red when wired (WC-0005 stale expectation, fixed).
-   - DONE: phantom `concrete new` scrubbed from the Resolve hint and the
-     book/site project pages (now document Concrete.toml + src/main.con);
-     ideas.org carries a SUPERSEDED banner (12b's gate will police).
-   - DONE: fuzzer grammar extension landed — aggregate value-ifs, &mut-self
-     method borrows in both branch arms, non-Copy String ops. Its first
-     campaign found bug 038 (merge clobbered promoted-aggregate writes —
-     all three merge loops now skip ANY promoted var) plus interp drift:
-     string_length was codepoints not bytes; push_char/append added.
-   - Fuzzer residual: heap/alloc/IO remain compiled-only (interp limits);
-     trap CLASS not compared.
-   Deliberately NOT queued: std.cli abstraction polish (one more workload
-   first), ByteCursor/ByteWriter renames (no signal), vec_get/vec_len
-   builtin cleanup (deeper than a pass), roadmap compaction (collides with
-   parallel work).
+     5. Check-side divergence/capability classifiers still match raw Core names
+        after intrinsic identity was fixed in Elab/Lower. The remaining
+        direction is conservative misclassification only; pull with #13b's
+        typing-truth work or a failing user-shadowing fixture.
+     6. Non-finite float literals leak an external tool error (audit
+        2026-07-16): a literal with a ≥309-digit integer part lexes to +inf,
+        and EmitLLVM prints `double inf`, which llvm-as rejects — an
+        external-tool diagnostic reaching the user instead of a compiler one.
+        Fix fail-closed: reject non-finite literals at lex time with a
+        spanned diagnostic (or emit the LLVM hex-float form); add a corpus
+        leg to check_float_literals.sh.
+     7. Silent defaults sweep (audit 2026-07-16; adjacent to §F's panic
+        inventory but distinct — these fabricate rather than crash):
+        `sizeof` with no type args defaults to `Ty.int` (Lower),
+        `vec_pop`'s element type defaults to `.placeholder` (Elab), an
+        unknown enum's payload offset defaults to 8 (Lower). Each becomes a
+        structured internal-error diagnostic with a sweep proving no current
+        program reaches them.
+     8. Bug-043 class rule is prose-only (docs/bugs/043): nothing stops a
+        new FFI site handing a raw `.ptr` to a NUL-delimited C API again.
+        Add a std-hardening-style grep/lint leg over trusted FFI sites
+        (no bare `.ptr` argument to a C string function; ptr+len sites
+        exempt).
+     9. printf|grep -q pipefail flake class (10b9a776 fixed 123 sites, 43
+        files): add a grep-lint to gate-hygiene so the pattern cannot be
+        reintroduced.
 2. CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 3. Unsafe/trusted boundary wrappers, trap/debug UX, and verified-profile/
    proof-obligation UX.
@@ -468,56 +770,7 @@ the **stdlib** side: APIs that Concrete programs use to parse their own command
 lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
-Foundation items already completed in Phase 7:
-stdlib gap matrix, module layout, five-fact manifest, method-canonical rule,
-Option/Result helpers, conditional Copy, bytes/slice, Unicode/text policy, path
-boundary, Reader/Writer, core value rendering, std.test basics, ordered
-traversal, BitSet aliases, H18 owned-resource collection drop glue, the base64
-workload, MAIN_EXIT_MODEL stage 1, and the 13t error-convention gate. See
-[CHANGELOG.md](CHANGELOG.md). H18's residual v1 fence is not scheduled work:
-lifting it is pulled by the first infallible non-`Alloc` destructor; raw
-`*_unchecked` overwrite escapes remain documented trusted escapes.
-
-**Stdlib hardening pass — do this before more breadth.** The review found the
-existing core has correctness gaps that any module built on top of it (URI, JSON,
-CLI helpers, logging) would inherit, so harden the foundation before growing it.
-No philosophy change; the API shape is good. Each item lands as a *class*-gate
-per the Definition Of Done, not a one-instance patch. Frontier order for this
-band: (1) this hardening pass → (2) item 22a API snapshot/diff gate current →
-(3) real workload 2 → (4) then broad modules (URI, JSON, CLI helpers,
-logging/progress).
-
-   - H1. Parser domain failures must not trap. `parse_hex` / `parse_bin` /
-     `parse_oct` return `None` on overflow, matching the already-guarded
-     `parse_int` (decimal). Gate: huge/overflowing inputs in *every* radix
-     return `None` with no trap — one fixture per radix, so the class cannot
-     regress to "decimal-only guarded" again.
-   - H2. Overflow-safe bounds / capacity arithmetic. Replace additive
-     `start + len > total`
-     guards (`io.con` `cur + len > cap`, `numeric.con` `off + len`, and the
-     `bytes` / path / base64 siblings) with non-overflowing forms
-     (`len > total - start` after an ordering check, or a checked add). Include
-     allocation-size calculations, not only access checks. Gate: a grep/lint
-     that fails if a std API returning `Option`/`Result` uses overflow-prone
-     additive guard arithmetic on a length.
-   - H3. IO honesty. Preferred answer: file/console read/write/flush/close
-     operations represent real OS errors (`ReadFailed`, `WriteFailed`,
-     `FlushFailed`, `CloseFailed`) rather than returning a decorative `Result`.
-     Only document an ignored error where the platform API genuinely gives no
-     recoverable signal or the sink is explicitly trusted. Gate: every hosted IO
-     op either surfaces the error in its `Result` or carries a documented
-     ignore-rationale the manifest checks.
-   - H4. Collection traversal for non-`Copy` values. Move `OrderedMap::fold` /
-     `for_each` out of `impl<K, V: Copy>` (`ordered_map.con`) so borrowed
-     traversal works for non-`Copy` values — the scoped-callback model already
-     passes `&V`, so the `Copy` bound is spurious and blocks the model we want.
-     Gate: a fixture folds / `for_each`-es an `OrderedMap` of a non-`Copy` value.
-   - H5. Docs / canonical cleanup. Fix the stale `Bytes::to_string` comment
-     (`bytes.con`). If base64 `decode` stays permissive on non-canonical pad
-     bits, document it as a deliberate sharp edge; otherwise add strict canonical
-     pad-bit checks with a reject fixture. (The `with_value_mut` / `modify`
-     "parked" drift is already fixed — see item 1d below.)
-   - H6. Deterministic capability-fault simulation (pull-gated; the *dynamic*
+1a. Deterministic capability-fault simulation (pull-gated; the *dynamic*
      complement to H3). H3's manifest gate proves an IO error *can* be surfaced
      (static shape); this proves it *is* surfaced under real failure (dynamic).
      Because every effect flows through an explicit capability/handle value — e.g.
@@ -550,17 +803,17 @@ logging/progress).
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
 
-   H18 / owned-resource collections is closed; keep the design pointer here
-   because every new collection API must preserve it. A collection owns its live
-   elements until they are explicitly moved out. `clear`, `drop`, overwrite,
+   Every new collection API must preserve the H18 ownership contract documented
+   in [CHANGELOG.md](CHANGELOG.md) and `docs/RUNTIME_COLLECTIONS.md`: a
+   collection owns its live elements until they are explicitly moved out.
+   `clear`, `drop`, overwrite,
    set/replacement, and compaction paths destroy displaced live elements;
    `pop`, `remove`, and `swap_remove` transfer ownership to the caller.
    Disposal stays forced-explicit (`x.drop()` / `defer x.drop()`), never silent
    scope-end auto-drop. `get -> Option<T>` remains `T: Copy`; non-`Copy` indexed
    access remains scoped callback / borrow / explicit move-out, with no returned
-   mutable references. Full H18 mechanism and gates live in CHANGELOG and
-   `docs/RUNTIME_COLLECTIONS.md`; only the pull-gated v1 fence remains:
-   associated destructor-capability machinery is pulled by the first infallible
+   mutable references. The remaining pull-gated v1 fence is associated
+   destructor-capability machinery, pulled by the first infallible
    non-`Alloc` destructor, and raw `*_unchecked` overwrite escapes remain
    documented trusted escapes.
 
@@ -612,8 +865,8 @@ logging/progress).
      and `scripts/tests/check_collection_coherence.sh`; the gate must show the
      chosen verdict for incompatible dictionaries and prove the API cannot
      silently combine them.
-   - 1d. `with_value_mut` / `modify` are part of the completed foundation (see
-     CHANGELOG). Future collection APIs must preserve their `E0293`
+   - 1d. Future collection APIs must preserve the `with_value_mut` / `modify`
+     `E0293`
      container-not-in-context guard: the callback's `&mut ctx` may not alias the
      `&mut self` container. Gated in `check_callable_values.sh`.
    - 1e. Keep scalar `from(param)` returned references deeply deferred and
@@ -622,8 +875,8 @@ logging/progress).
      wrappers. This is a research escape valve only if real workloads prove
      operation APIs, owned views, and scoped callbacks insufficient.
    - 1f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
-     need reusable capacities. `docs/CONST_GENERICS_V1.md` is the closed Phase 5
-     design record; implementation is deferred until a real Phase 7 consumer
+     need reusable capacities. Follow `docs/CONST_GENERICS_V1.md`; implementation
+     is deferred until a real Phase 7 consumer
      appears (`BoundedVec<T, N>`, `RingBuffer<T, N>`, `PacketBuf<N>`, fixed hash
      table, parser scratch buffer, freestanding reusable buffer, or a
      capacity-indexed proof API). When triggered, implement the staged V1 from
@@ -631,8 +884,7 @@ logging/progress).
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      comptime/reflection/runtime-bound forms are rejected.
-   - 1g. Research **allocator-as-value** after H18 is closed and before
-     allocator-backed collections,
+   - 1g. Research **allocator-as-value** before allocator-backed collections,
      arenas, or freestanding APIs harden. Keep the distinction sharp:
      `with(Alloc)` is permission to allocate; an allocator value names which
      allocator/arena/pool is used. Do not replace capabilities with allocator
@@ -693,12 +945,9 @@ logging/progress).
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-10. Keep `std.base64` as the first byte-format module's completed workload
-    precedent, not an open design task. V1 and `examples/base64_cli` have
-    landed; future work is only the explicit tail: decide and gate canonical
-    padding-bit strictness, add streaming encode/decode only when a workload
-    pulls it, and preserve the args -> bytes/text -> parse/errors -> Writer
-    oracle path as the model for the next byte-format module.
+10. Extend `std.base64` only when a workload pulls streaming encode/decode;
+    preserve canonical padding-bit strictness and the
+    args -> bytes/text -> parse/errors -> Writer oracle path.
 11. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
@@ -965,22 +1214,45 @@ logging/progress).
     `std.test`. CI must build, run, test, audit authority/allocation/evidence
     classes, and compare interpreter-vs-compiled behavior.
 
-## Phase 7.5: Independent Backend Oracle (QBE)
+## Phase 7.5: Usable QBE Backend And Independent Validation
 
-Goal: add a genuinely independent native code-generation path early enough to
-find shared lowering, interpreter, ABI/layout, and LLVM-emission bugs before the
-Phase 8 flagship workloads deepen the public claims. This is a validation
-backend first, not an LLVM replacement and not proof that native execution
-preserves source semantics.
+Goal: add QBE as a real, user-selectable native backend for ordinary Concrete
+programs and use its independent implementation to find shared lowering,
+interpreter, ABI/layout, and LLVM-emission bugs before the Phase 8 flagship
+workloads deepen the public claims. Differential validation is a required duty
+of the backend, not its sole purpose. QBE need not replace LLVM or prove that
+native execution preserves source semantics to be useful and genuinely usable.
 
 Done when: a QBE backend consumes verified/cleaned Concrete SSA directly,
-supports the declared validation subset with no silent LLVM fallback, and CI
-classifies interpreter/LLVM/QBE disagreements over an edge-heavy corpus by
-stdout, stderr, exit status, and failure class. The audit/evidence surface must
-label QBE results `tested` or `backend_trusted`; this phase cannot upgrade a
-source/Core proof to native-code evidence. Production backend contracts,
-translation certificates, debug information, complete target policy, and
-release support remain owned by Phase 15.
+supports a documented useful subset with no silent LLVM fallback, and works
+through the normal `build`, `run`, `test`, project, artifact-retention, and
+diagnostic workflows—not only a special differential-test harness. At least one
+Phase 8-class program must be buildable and runnable by a user with
+`--backend qbe`. CI must also classify interpreter/LLVM/QBE disagreements over
+an edge-heavy corpus by stdout, stderr, exit status, and failure class. The
+audit/evidence surface labels QBE results `tested` or `backend_trusted`; this
+phase cannot upgrade a source/Core proof to native-code evidence. Release-grade
+target breadth, translation certificates, full debug information, optimization
+policy, and long-running platform qualification remain owned by Phase 15.
+
+### Product Contract: A Backend, Not A Test Adapter
+
+- `--backend qbe` is accepted anywhere `--backend llvm` is accepted: single
+  file compilation, project builds, `run`, `test`, examples, retained
+  artifacts, debug bundles, and reproducible replay commands.
+- A successful QBE build produces a normal native executable with an explicit
+  target/toolchain/link manifest. Users do not need to invoke the differential
+  harness or understand QBE IL to run it.
+- Supported programs are defined by a generated capability matrix. Unsupported
+  operations, ABI shapes, targets, or builtins receive a stable diagnostic
+  before partial code generation; they never fall back to LLVM silently.
+- QBE owns real backend concerns: instruction selection, QBE IL legality,
+  runtime-helper selection, object/link inputs, entry and test wrappers,
+  platform ABI realization, artifact naming, diagnostics, and toolchain facts.
+- The backend ships initially as `experimental`, which describes compatibility
+  and release guarantees—not a toy implementation. Its documented supported
+  subset must work end to end and remain protected by ordinary user-workflow
+  tests in addition to differential tests.
 
 ### Preflight Refactors: Make The Backend Boundary Real
 
@@ -1004,9 +1276,9 @@ The correspondence is architectural, not literal:
 Hard boundary: do not rename Concrete IRs to imitate Zig, introduce ZIR/AIR as
 extra layers, or build target MIR/register allocation/object writers merely for
 architectural symmetry. Copy the separation of responsibilities, immutable
-job shape, coverage discipline, and gradual backend enablement. QBE exists to
-buy independent code generation before Concrete can justify owning those lower
-layers itself.
+job shape, coverage discipline, and gradual backend enablement. QBE provides a
+useful native compilation path while letting Concrete defer target MIR,
+register allocation, and object writing until owning those layers is justified.
 
 Execution discipline: build this phase as thin executable vertical slices, not
 as a backend-framework rewrite followed by a distant first program. Every slice
@@ -1024,11 +1296,12 @@ it, invoke the pinned QBE toolchain, assemble/link it, observe clean stdout and
 exit status 42, and compare that structured observation with interpreter and
 LLVM. `--emit-qbe`, `--backend qbe`, unavailable-tool diagnostics, no-fallback
 behavior, and a debug bundle containing source/Core/SSA/QBE IL/tool facts must
-all work for this one program. Then expand in this order unless a failing oracle
-forces a different dependency: branches/phi -> direct calls -> integer widths
-and casts -> checked arithmetic/traps -> stack memory -> globals/strings ->
-aggregates/enums -> indirect/extern calls -> builtins -> test mode. Each step
-must stay runnable; no "all operations implemented, testing later" batch.
+all work for this one program. Then expand in this order unless a failing
+backend or differential case forces a different dependency: branches/phi -> direct calls -> integer widths
+and casts -> checked arithmetic/traps -> stack memory -> f32/f64 arithmetic,
+comparisons, and checked conversions -> globals/strings -> aggregates/enums ->
+indirect/extern calls -> builtins -> test mode. Each step must stay runnable;
+no "all operations implemented, testing later" batch.
 
 LLVM-refactor rule: moving existing code behind `CodegenInput`, layout facts,
 the runtime manifest, or the backend driver must initially produce
@@ -1067,6 +1340,11 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     tag/payload placement, pass-by-pointer decisions, and canonical builtin
     aggregates. LLVM and QBE render those facts independently. No emitter may
     recompute layout from syntax or host assumptions.
+    Sequencing dependency: perform this ownership split before the queued
+    Layout panic-to-diagnostic conversion, then convert the panic paths in the
+    target-neutral `LayoutFacts` owner and LLVM-specific renderer where they
+    actually remain. Gate the split with byte-identical LLVM IR first so the
+    hygiene slice does not move and rewrite the same functions twice.
 0e. Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from
     `EmitSSA.lean`: symbol names, signatures, ownership/capability class,
     failure/trap behavior, required helper, and backend support status. Keep
@@ -1139,6 +1417,15 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
    Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
    and exit-code edge cases rather than accepting scalar happy paths alone.
+5a. Give floating point its own executable slice rather than treating the
+    `f32`/`f64` type mapping as coverage. Add arithmetic; ordered/unordered
+    comparisons; NaN, infinity, signed-zero, subnormal, and precision-change
+    vectors; int-to-float conversions; and checked float-to-int conversions.
+    Concrete's finite/range/trap policy must be emitted as explicit guards and
+    runtime trap edges before QBE conversion instructions—raw QBE `stosi`,
+    `stoui`, `dtosi`, or `dtoui` behavior is not Concrete's checked-cast
+    semantics. Until this slice lands, every float family is an explicit
+    `qbe_pending` capability row rather than silently absent from the subset.
 6. Add memory and aggregate support: fixed arrays, structs, packed/explicitly
    aligned layouts, enums, canonical `Option`/`Result`, strings, vectors, nested
    places, byte-union payloads, aggregate copies, and small/large aggregate
@@ -1151,6 +1438,13 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    architectures QBE and Concrete both declare supported. Unsupported target,
    calling convention, TLS, or ABI shapes must fail before emission with a
    stable diagnostic.
+   The ABI matrix must cover 1–8-byte and 9–16-byte aggregates, mixed
+   integer/float classes, register exhaustion with stack fallback, aggregates
+   larger than two eightbytes (`MEMORY` class), unaligned/opaque aggregates,
+   and caller-provided storage for memory-class returns. Do not encode a false
+   “greater than 16 bytes is unsupported” rule: QBE's supported ABI paths must
+   be tested; only a shape that the pinned target/toolchain actually cannot
+   realize receives a named `qbe_pending` row or runtime-mediated boundary.
 8. Port the compiler-emitted builtin/runtime surface needed by the validation
    corpus. Prefer a small shared C runtime for allocation, IO, traps, and other
    platform services when that keeps semantics explicit; keep pure scalar
@@ -1163,7 +1457,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
    test runner's result accounting and output exactly; do not special-case a
    smaller, silently different QBE test semantics.
 
-### Differential Oracle And Failure Localization
+### Differential Validation And Failure Localization
 
 10. Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver
     that runs each fixture through the source interpreter, LLVM, and QBE and
@@ -1193,7 +1487,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     and main/test wrapper path needs a manifest row. Seed it with the existing
     arithmetic, cast, enum-union-layout, nested-place, callable-value, fuzz,
     workload, wrong-code, and exit-model corpora. Add mutation checks proving
-    the oracle notices at least one injected fault in lowering, LLVM emission,
+    the differential suite notices at least one injected fault in lowering, LLVM emission,
     QBE emission, interpreter semantics, layout, and builtin behavior.
 14. Run a deterministic quick QBE matrix on every CI change and a larger
     rotating fuzz/differential matrix on schedule. QBE-unavailable CI is a hard
@@ -1211,7 +1505,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 16. Exercise the completed subset immediately in Phase 8: every new flagship
     workload that stays inside it runs interpreter/LLVM/QBE differential checks;
     exclusions require a named missing feature and roadmap owner. Record bugs
-    found by the oracle in the bug corpus with the disagreement classification
+    found by the backend/differential suite in the bug corpus with the disagreement classification
     that exposed them.
 17. Graduation to a supported release backend occurs only in Phase 15: migrate
     QBE from the direct validation path onto `ValidatedBackendIR`, pass the full
@@ -1220,7 +1514,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     optimization/tool-version policy, and pass release/platform soak gates.
     Until then `--backend qbe` is explicitly experimental and its native result
     remains backend-trusted/test evidence.
-18. After the QBE oracle is stable, evaluate—but do not automatically adopt—a
+18. After the QBE backend is stable, evaluate—but do not automatically adopt—a
     second complementary target. Prefer WebAssembly when portability, sandboxed
     memory, or structured-control-flow pressure is the goal; prefer Cranelift
     when fast native/JIT compilation or a broader production backend is forced.
@@ -1269,6 +1563,15 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     CI must cover a clean checkout and reject an unsupported QBE version with a
     clear diagnostic; updating the pin requires the quick matrix plus scheduled
     corpus and an attached toolchain-diff record.
+    Make provisioning the first operational slice, before emitter work assumes
+    a CI topology. Check in a host/target capability matrix discovered from the
+    pinned binary and verified by compile/assemble/link probes, including at
+    least `x86_64-linux -> amd64_sysv` and every available macOS runner's real
+    Apple target (`amd64_apple` and/or `arm64_apple`). Cross targets may be
+    emit/assemble-only when no declared runner exists; executable-oracle rows
+    require a host or emulator explicitly named in the matrix. Do not infer
+    support from “macOS” or CPU family alone, and do not skip a required row
+    merely because a hosted runner changed architecture.
 24. Add optimization-sensitive triangulation. For every eligible fixture,
     compare interpreter, LLVM at the supported debug/release optimization
     levels, and QBE followed by the supported assembler/linker configurations.
@@ -1315,16 +1618,17 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
     bundles must state the exact backend used; examples and documentation must
     not show QBE-derived native evidence as LLVM-derived or backend-independent.
 30. Add a Phase 7.5 capstone artifact:
-    `examples/qbe_oracle_validation/` plus
+    `examples/qbe_backend_validation/` plus
     `scripts/tests/check_phase7_5_qbe.sh`. It must exercise every supported
     semantic-family manifest row; demonstrate each disagreement classifier
     with controlled mutations; validate deterministic emission, clean-checkout
     tool discovery, reducer replay, debug-bundle completeness, unsupported-
     feature diagnostics, no-fallback behavior, target/ABI facts, and quick-CI
     wiring; and publish a machine-readable coverage/pending inventory. Closure
-    requires zero unexplained mismatches and either a recorded real defect found
-    by the oracle or successful injected-fault detection for every owned fault
-    class. All pending rows need an owner and Phase 8/15 disposition.
+    requires zero unexplained mismatches, successful normal `build`/`run`/`test`
+    use on the declared subset, and either a recorded real defect found by the
+    differential suite or successful injected-fault detection for every owned
+    fault class. All pending rows need an owner and Phase 8/15 disposition.
 31. Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the
     structured backend driver, and the extracted layout/runtime facts with
     byte/behavior parity, delete the old direct `Pipeline.emit -> String` path,
@@ -1349,10 +1653,8 @@ internally coherent.
 Done when: the showcase set includes a serious security/crypto or protocol
 example with proof/evidence strong enough to anchor the public pitch.
 
-HMAC and `constant_time_tag` are complete flagship baselines recorded in the
-changelog. This phase maintains the graduated showcase, deepens theorem
-coverage where it strengthens public claims, and adds new examples only when
-they force a named surface or public claim.
+Maintain the graduated showcase, deepen theorem coverage where it strengthens
+public claims, and add examples only when they force a named surface or claim.
 
 This phase is also the external-credibility probe for the compiler/evidence
 pipeline: Phase 6B's `diff-caps` artifact gives the first narrow reviewable
@@ -2088,19 +2390,11 @@ too expensive.
     loop operational-preservation steps dependent on hand-written bridge
     theorems.
 
-    **STATUS (2026-06-22): forcing probe RUN — verdict GO.** A fixed mechanical
-    tactic over six real hand-proof-shaped VCs closed 4/6 with no bespoke human
-    proof step: HMAC/SHA `ch` and `maj` bitvector refinements via `bv_decide`,
-    `count_up` loop invariant preservation via `omega`, and a branching
-    `validate_version` postcondition after mechanical guard splitting. The two
-    misses were crisp V1 engineering gaps, not research walls: `rotr` needs
-    generated `Int`/`Nat`/`BitVec` shift-amount cast-normalization side-goals
-    discharged by `omega` before the bitvector leaf reaches `bv_decide`, and the
-    failing parser case needs automatic guard splitting. The probe gate is
-    `scripts/tests/check_operational_vc_auto_discharge.sh` with fixtures under
-    `scripts/tests/fixtures/operational_vc_autodischarge/`; it must keep one
-    positive file that closes and one boundary file that fails for the expected
-    cast/guard gap until the real implementation lands.
+    The completed forcing probe and 4/6 result are recorded in
+    [CHANGELOG.md](CHANGELOG.md). The active V1 gaps are generated
+    `Int`/`Nat`/`BitVec` shift-amount normalization before `bv_decide` and
+    automatic guard splitting; keep one positive fixture and one expected
+    boundary failure until the implementation lands.
 
     V1 core: symbolically execute a narrow Core/ProofCore fragment, unfold the
     generated eval and named spec, split conjunctions and guards mechanically,
@@ -2695,17 +2989,6 @@ lesson to keep is the framing: runtime safety is not just "the program probably
 doesn't crash"; it is a set of named obligations with source spans, replay
 commands, and visible proof/enforcement status.
 
-0. PROVEN violations are hard errors by default in safe code (established
-   baseline; see CHANGELOG). The obligation engine already discharges some obligations to
-   `violation` (a compile-time PROOF the access is wrong); safe build/check
-   paths now reject those cases with E0900 instead of treating them like
-   `unproven`. Constant OOB (`a[5]` on `[i64; 3]`) and literal div-zero
-   (`10 / 0`) fail the build; `--report contracts` still renders the
-   underlying `VIOLATION` for review. `trusted` / `with(Unsafe)` remains an
-   explicit audit-responsibility escape hatch, and `unproven` obligations are
-   NOT swept into the hard-error path. Locked by
-   `scripts/tests/check_proven_violation_enforcement.sh`, which asserts both
-   hard errors, the trusted exemption, and the unproven-control case.
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
@@ -2881,26 +3164,18 @@ external trial. The complementary rewrite-passes-in-Concrete route is Phase 20
     theorem proves a specific generated instance (`proved_for_instance`) or a
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
-13. [relocated from closed Phase 4 — #44f tail / #44g] Compiler-correctness
-    hardening: (a) the random differential
-    generator exists (`scripts/tests/fuzz_differential.py`, Makefile
-    `test-fuzz-differential`), covers the through-reference / void-slot shapes,
-    value-bearing if/match nesting, loops, enum payloads, and (2026-07-01) the
-    full integer width lattice with explicit casts; its taxonomy treats any
-    E07xx/panic on a generated well-typed program as a compiler bug
-    (LANGUAGE_INVARIANTS #19). Remaining (a) tail: string/linear-value shapes,
-    seed rotation in CI (nightly campaign, not just two fixed seeds), and
-    auto-minimization of failures. The per-claim differential companion landed
-    2026-07-02: `check_cast_matrix.sh` pins every (source width x edge value) ->
-    every-width cast against the interpreter, mechanically covering the
-    ARITHMETIC_POLICY truncation/reinterpretation claims. And (b) the defense-in-depth
-    ref-return lowering fix — a reference-typed return materialized from a ref
-    identifier / `&place` emits a spurious extra load. (b) is unreachable from
-    source under Option A: reference returns are rejected at the type level for
-    *every* function, safe and trusted (H1; Check + `verifyNoReturnedRefs`/E0236),
-    so it is dead-path internal-lowering hardening; fixtures must distinguish
-    rejected reference returns (safe and trusted alike) from allowed trusted
-    raw-pointer (`*const`/`*mut`) returns, which are not reference types.
+13. [relocated from Phase 4 — #44f tail / #44g] Finish the remaining
+    compiler-correctness hardening:
+    - extend the differential generator with string, heap/allocation,
+      linear-value, and effectful-I/O shapes while preserving the rule that an
+      E07xx/panic on a generated well-typed program is a compiler bug;
+    - rotate seeds in a nightly CI campaign and automatically minimize
+      failures rather than relying only on the fixed presubmit seeds; and
+    - repair the dead-path ref-return lowering case where a reference-typed
+      return materialized from a ref identifier or `&place` emits a spurious
+      extra load. This path is unreachable from source while reference returns
+      are rejected, so its regression fixtures must separately preserve the
+      accepted trusted raw-pointer (`*const`/`*mut`) return cases.
 13a. Add a semantic-darkness audit and red-team gate. The goal is to catch the
     checked-arithmetic class of bug before it repeats: a construct looks
     ordinary in source, but its real behavior depends on width, profile, target,
@@ -3209,12 +3484,13 @@ replayable; and every boundary after that slice remains explicitly trusted.
     allocation, proof assumptions, or runtime-error obligations.
 16. Evaluate a normalized mid-level IR only when traceability/backend-contract
     reports expose a concrete gap.
-17. Graduate the Phase 7.5 QBE differential oracle only after evidence
-    attachment, optimization policy, backend-IR verification, and backend trust
+17. Graduate the Phase 7.5 QBE backend from experimental to release-supported
+    only after evidence attachment, optimization policy, backend-IR
+    verification, and backend trust
     boundaries are trustworthy. Phase 7.5 deliberately emits directly from
     validated/cleaned SSA to maximize independence and find bugs early; that is
-    an experimental validation path, not the release architecture. Production
-    QBE support must consume `ValidatedBackendIR`, emit the same source maps and
+    the initial usable backend architecture, not yet the release architecture.
+    Production QBE support must consume `ValidatedBackendIR`, emit the same source maps and
     target assumptions as other supported backends, pass the full C ABI and
     target/toolchain matrices for its declared subset, integrate Phase 8.5
     incremental artifacts, and report exactly which claims are translation-
@@ -3565,8 +3841,13 @@ choices, and an audit report naming every remaining target/runtime assumption.
 9. Add one embedded-style audit bundle naming all remaining target assumptions:
    stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
    backend/toolchain boundary.
-10. Keep WASM, QBE, and additional backends deferred until freestanding target
-    profiles prove the current LLVM path is not enough.
+10. Keep production freestanding WASM, QBE, and additional backend targets
+    deferred until freestanding profiles prove the current LLVM path is not
+    enough. This does not defer Phase 7.5's hosted experimental QBE differential
+    oracle: that path validates cleaned SSA/codegen under hosted toolchains and
+    carries only `tested`/`backend_trusted` evidence. Any QBE freestanding
+    target, runtime/startup contract, or release claim still graduates here and
+    through Phase 15's backend/target contract.
 11. Add the Phase 16 validation artifact: one freestanding demo project plus an
     MMIO/device-profile mock audit bundle. The demo must build with no hosted
     APIs, name allocator/startup/linker assumptions, reject hidden libc or

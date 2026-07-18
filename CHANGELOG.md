@@ -10,6 +10,76 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 7 workload/compiled-coverage arc — workloads 5–6 and bugs 039–044 (2026-07-17/18)
+
+Phase 7's fifth and sixth workloads, a fail-closed compiled stdlib inventory,
+and six compiler/runtime boundary defects landed as one evidence-driven arc.
+
+**Workload 5 — `envcfg`.** `examples/envcfg` parses `KEY=VALUE` configuration
+files with environment override and became the first real compiled consumer of
+`std.env`. Its first run found bug 039: a module's bare imported call name was
+resolved through a program-wide first-match alias pool, so
+`import std.env.{get}` could compile as `std.args.get` and segfault. EmitSSA now
+applies the importing module's aliases before the program-wide pool;
+`regress_039_import_alias_collision` and the environment-override legs pin the
+fix. The same workload pulled `Bytes::index_of`/`Bytes::slice` and exposed bug
+040, where CoreCheck's append-only function environment let same-named binders
+from different match arms reuse the wrong scalar type. Match binders are now
+arm-scoped and post-match merging rebuilds from the pre-match environment;
+Lower and the interpreter were already correct.
+
+**Compiled stdlib coverage.** `check_std_compiled_coverage.sh` derives the
+public-module inventory from `std/src/*.con` and requires one compiled-and-run
+behavioral fixture per module or a reasoned exemption. It landed with 37
+fixtures and now reports 39/39 after the dependency and import regressions.
+Exemptions are explicit: `lib` is the umbrella, `libc` has no public surface,
+and `slice` has no public constructor yet. Adding a module without coverage or
+an exemption fails CI. Its first runs found:
+
+- bug 041: Check's post-match merge kept arm binders alive, allowing a stale
+  Copy binder named `value` to poison a later linear binder's consumed state;
+- bug 042: Resolve dropped imported public newtypes and type aliases, producing
+  E0108 at first use;
+- bug 043: hosted C-string APIs received `String.ptr` even though Concrete
+  Strings are not NUL-terminated. Allocation slack hid the bug on macOS while
+  exact-capacity slices failed on glibc. `String::to_cstr` now owns the boundary
+  and all 13 environment/fs/io/process/net C-string sites use it; affected APIs
+  expose `Alloc` explicitly;
+- bug 044: renamed generic imports were not monomorphized. Mono now tries every
+  alias orientation and mints specializations under the resolved definition's
+  canonical name, so direct and renamed calls share one specialization;
+- project-mode dependency checking: Project filtered dependency modules out of
+  frontend Check after the old std exemption was obsolete. Dependencies and
+  user modules now traverse the same Check path; a type-broken local dependency
+  must fail its consumer with E0220.
+
+`std.env.get` also now validates copied environment bytes before constructing a
+`String`; invalid UTF-8 returns `None`. The envcfg gate injects an invalid
+`DB_HOST` byte sequence and proves the file value wins, with a mutation check
+showing the validation branch is load-bearing. STRING_TEXT_CONTRACT, BYTE_VIEW,
+and STDLIB_API_REVIEW were refreshed to match shipped argv/environment
+validation, `from_raw_unchecked`, and the merged `std.io.Writer` surface.
+
+**Workload 6 — `wordfreq`.** `examples/wordfreq` is the first collection
+workload at data scale: `OrderedMap<String,u64>` insertion/update and in-order
+traversal are byte-identical to a C-locale `tr | sort | uniq -c` oracle over
+real text (10,109 distinct words) and a 200k-word stress case. It found no
+collection correctness defect: H18 stored-key destruction, non-Copy String
+keys, and capability-threaded traversal held. Its friction log records
+`String::cmp` and ownership-aware upsert as first asks below the pull threshold.
+
+The arc also completed the Phase 7 H1–H5 hardening class gates: all radix
+parsers return `None` on overflow; additive bounds guards are linted out; IO
+surfaces read/write/flush/close failures; ordered traversal accepts borrowed
+non-Copy values; and base64 rejects non-canonical padding bits. The Makefile and
+CI carry the compiled-coverage, workload, hardening, and regression gates.
+
+Representative final local battery at `640e1716`: `run_tests` 1687/0,
+examples 139/0, compiled std coverage 39/39, differential 34/0, fuzz 1500/0,
+plus all workload gates. Detailed bug records live under `docs/bugs/039_*`
+through `docs/bugs/044_*`; workload friction and oracle details live with the
+examples.
+
 ### Merge loops unified — the 029/031/033/038 family is one function now (2026-07-16)
 
 ROADMAP 1a's Lower branch-site consolidation landed. The three branch merge
