@@ -87,6 +87,12 @@ structure TypeEnv where
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
   newtypes : List NewtypeDef := []         -- all newtype definitions
   userFnNames : List String := []          -- names of user-defined, imported, and extern functions (NOT builtins)
+  -- Construction rights (0b): newtypes DEFINED in the module being checked
+  -- (incl. its submodules). A newtype constructor `N(v)` and unwrap are
+  -- private to the defining module; external callers use the module's
+  -- public constructor fn (e.g. try_new). Everything in `newtypes` but not
+  -- here is imported → direct construction is rejected.
+  localNewtypeNames : List String := []
   deriving Repr
 
 abbrev CheckM := ExceptT Diagnostics (StateM TypeEnv)
@@ -140,6 +146,8 @@ inductive CheckError where
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
   | cannotInferCapVariable (cap : String) (fnName : String)
+  -- 0b construction rights
+  | newtypeConstructPrivate (name : String)
   -- Slice 5: Struct/enum/field + function calls
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
@@ -313,6 +321,7 @@ def CheckError.message : CheckError → String
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .discardedPureValue tyName => s!"pure value of type '{tyName}' is computed and then discarded — this is a dead computation with no effect"
+  | .newtypeConstructPrivate name => s!"newtype '{name}' cannot be constructed here: direct construction is private to its defining module"
   | .discardNonCopy tyName => s!"`discard(...)` only acknowledges discarding a Copy value; '{tyName}' is a non-Copy resource"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
@@ -345,6 +354,7 @@ def CheckError.hint : CheckError → Option String
   | .discardedLinear _ => some "consume it: bind and pass it on / return it / destroy() it, destructure it exhaustively, or `?` it"
   | .wildcardDiscardsNonCopy _ => some "bind the value/field (not `_`) and consume it — pass it on, return it, or destroy() it; `_` may ignore only Copy values"
   | .discardedPureValue _ => some "use its value, or wrap it in `discard(expr)` to acknowledge an intentional discard"
+  | .newtypeConstructPrivate name => some s!"use {name}'s public constructor function (e.g. `{name}::try_new(...)`); its representation is opaque across modules (docs/CONSTRUCTION_RIGHTS.md)"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
@@ -451,6 +461,7 @@ def CheckError.code : CheckError → String
   | .conflictingCallBorrows _ => "E0293"
   | .discardedPureValue _ => "E0294"
   | .discardNonCopy _ => "E0295"
+  | .newtypeConstructPrivate _ => "E0296"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=

@@ -717,15 +717,19 @@ batteries-included breadth. The ranked build order is:
          previously-misparsed shape and is mutation-verified. Manifest-
          based safety rules (raw-pointer-implies-Unsafe, item 5) may now
          build on truthful facts.
-     0b. Safe cross-module code constructs `NonZeroU32(0)`, bypassing
-         `try_new` (verified 2026-07-18): smart-constructor invariants —
-         including the kernel-proved ones — are advisory without struct/
-         newtype construction rights. Pointer-bearing forgery is NOT
-         possible in safe code (Unsafe-gated casts held under repro);
-         trusted-code forgery is the documented trusted contract. Decide
-         pre-freeze: private-by-default fields / explicit pub / opaque
-         exports / module-owned construction. LANGUAGE item, above API
-         polish.
+     0b. Construction rights (private-by-default representation, chosen
+         2026-07-18; docs/CONSTRUCTION_RIGHTS.md). SLICE 1 DONE: newtype
+         direct construction `N(v)` is private to its defining module —
+         E0296, closing the verified `NonZeroU32(0)` bypass; external code
+         uses the public constructor fn (try_new). SLICE 2 (open): struct
+         fields private-by-default with explicit `pub` opt-in — enforce
+         literal/access/write/update/destructure across modules in
+         Resolve/Check + migrate the 25 std cross-module field-poke sites
+         (mostly String/Bytes -> from_raw_unchecked, which exists) + newtype
+         `.0` unwrap privacy + enum payload rules + manifest visibility
+         fields. Pointer-bearing forgery is only INCIDENTALLY blocked today
+         (the int->ptr cast needs Unsafe); field r/w (`b.len`, `b.len=999`)
+         is wide open until slice 2.
      0c. Linear Option/Result consuming combinators (workload-pulled
          ergonomics, NOT soundness): map/and_then should consume a linear
          T; unwrap_or needs explicit destruction of the unused side. Do

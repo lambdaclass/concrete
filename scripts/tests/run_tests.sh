@@ -6728,6 +6728,9 @@ run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
+# 0b construction rights: a module constructs its OWN newtype directly;
+# cross-module construction is private (error_047 project fixture).
+run_ok "$TESTDIR/newtype_construct_local.con" 5
 # Intrinsic identity (audit 2026-07-16): user fns named sizeof/wrapping_add
 # are USER fns at every pass — never name-hijacked.
 run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31
