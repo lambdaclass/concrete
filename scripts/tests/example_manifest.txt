@@ -206,6 +206,7 @@ examples/snippets/while_loop.con compile
 examples/source_maps/capability_at_line.con expected-error
 examples/source_maps/obligation_located.con compile
 examples/tar_list/src/main.con project-build
+examples/wordfreq/src/main.con project-build
 examples/thesis_demo/src/main.con compile
 examples/thesis_demo/src/main_drifted.con compile
 examples/toml/src/main.con project-build

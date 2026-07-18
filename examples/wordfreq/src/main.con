@@ -1,0 +1,132 @@
+// wordfreq — WORKLOAD 6 (P7: map pressure + deterministic traversal).
+// Usage: wordfreq <file>
+// Counts whitespace-separated words and prints "word count" per line in
+// ascending byte-lexicographic order. First workload driving a collection
+// at data scale: OrderedMap<String,u64> insertion, lookup, in-place
+// update, and DEFINED-order traversal — differentially testable against
+// `LC_ALL=C sort | uniq -c`. 13t exit codes: 0 clean, 1 bad file or
+// non-UTF-8 word, 2 usage.
+mod wordfreq {
+    import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    import std.ordered_map.{OrderedMap};
+    import std.io.{Reader, TextFile, reader_from_file, read_all, IoError, eprintln};
+
+    // FRICTION: no String::cmp in std (Bytes has cmp, String does not) —
+    // hand-rolled byte-lexicographic compare for the OrderedMap.
+    fn str_cmp(a: &String, b: &String) -> i32 {
+        let mut i: u64 = 0;
+        let la: u64 = a.len();
+        let lb: u64 = b.len();
+        while i < la && i < lb {
+            let ca: u64 = a.get_unchecked(i) as u64;
+            let cb: u64 = b.get_unchecked(i) as u64;
+            if ca < cb { return 0 - 1; }
+            if ca > cb { return 1; }
+            i = i + 1;
+        }
+        if la < lb { return 0 - 1; }
+        if la > lb { return 1; }
+        return 0;
+    }
+
+    fn inc(v: u64) -> u64 {
+        return v + 1;
+    }
+
+    fn is_space(b: u8) -> bool {
+        return b == 32 || b == 9 || b == 10 || b == 13 || b == 11 || b == 12;
+    }
+
+    fn print_entry(word: &String, count: &u64) with(Console) {
+        print_string(word);
+        print_char(32);
+        print_int(*count as Int);
+        print_char(10);
+    }
+
+    // Count all words; returns 0 ok, 1 invalid-UTF-8 word.
+    fn run(data: &Bytes) with(Std) -> u8 {
+        let mut counts: OrderedMap<String, u64> = OrderedMap::<String, u64>::new(str_cmp);
+        let total: u64 = data.len();
+        let mut i: u64 = 0;
+        while i < total {
+            // skip whitespace
+            while i < total && is_space(data.get_unchecked(i)) { i = i + 1; }
+            if i >= total { break; }
+            let start: u64 = i;
+            while i < total && !is_space(data.get_unchecked(i)) { i = i + 1; }
+            // word = [start, i): owned copy through the CHECKED text crossing
+            let word: String = match data.slice(start, i) {
+                Option::None => { counts.drop(); return 1; },
+                Option::Some { value } => {
+                    match value.to_string() {
+                        Option::None => { counts.drop(); return 1; },   // invalid UTF-8
+                        Option::Some { value } => { value },
+                    }
+                },
+            };
+            if counts.contains(&word) {
+                discard(counts.update(&word, inc));
+                word.drop();
+            } else {
+                discard(counts.insert(word, 1));
+            }
+        }
+        counts.for_each(print_entry);
+        counts.drop();
+        return 0;
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        match cli.parse(1, 1) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: wordfreq <file>";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let maybe_path: Option<String> = ps.pop();
+                ps.drop();
+                match maybe_path {
+                    Option::None => { return 2; },
+                    Option::Some { value } => {
+                        let mode: String = "rb";
+                        let opened: Result<TextFile, IoError> = TextFile::open(&value, &mode);
+                        mode.drop();
+                        value.drop();
+                        match opened {
+                            Result::Err { error } => {
+                                discard(error);
+                                let m: String = "wordfreq: cannot open file";
+                                eprintln(&m);
+                                m.drop();
+                                return 1;
+                            },
+                            Result::Ok { value } => {
+                                let r: Reader = reader_from_file(value);
+                                let data: Bytes = read_all(&r);
+                                let rc: Result<u64, IoError> = r.close();
+                                discard(rc.is_ok());
+                                let status: u8 = run(&data);
+                                data.drop();
+                                if status != 0 {
+                                    let m: String = "wordfreq: invalid UTF-8 in input";
+                                    eprintln(&m);
+                                    m.drop();
+                                }
+                                return status;
+                            },
+                        }
+                    },
+                }
+            },
+        }
+    }
+}

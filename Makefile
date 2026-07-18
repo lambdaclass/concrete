@@ -375,6 +375,9 @@ test-envcfg: build ## P7 workload 5: envcfg env-override matrix (hermetic via en
 test-std-compiled-coverage: build ## Bug-039 class closure: one compiled+run behavioral fixture per public std module, fail-closed inventory
 	$(NIX_DEVELOP) bash ./scripts/tests/check_std_compiled_coverage.sh
 
+test-wordfreq: build ## P7 workload 6: wordfreq byte-identical to C-locale tr|sort|uniq -c (real text + 200k scale + edges) + 13t exit codes
+	$(NIX_DEVELOP) bash ./scripts/tests/check_wordfreq_differential.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 
