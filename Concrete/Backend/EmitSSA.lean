@@ -1434,8 +1434,16 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       acc ++ [(bareDef, qualCall)]
     else acc
   ) ([] : List (String × String))
+  -- Bug 039: this module's OWN bare→qualified import aliases must shadow the
+  -- accumulated program-wide pool. s.linkerAliases is a flat first-match list
+  -- over ALL modules, so once std.cli contributed ("get","args_get"), a later
+  -- module's `import std.env.{get}` also resolved to args_get (String pointer
+  -- passed as argv index → segfault). Which definition a bare name means is a
+  -- fact of the CALLING module's imports, not of program order.
+  let ownImportAliases := m.linkerAliases.filter fun (_, target) =>
+    s.definedFnNames.contains target
   -- Local aliases: import aliases take priority (they specify which module was imported)
-  let s := { s with localAliases := importQualAliases ++ selfQualAliases }
+  let s := { s with localAliases := ownImportAliases ++ importQualAliases ++ selfQualAliases }
   let hasMain := m.functions.any fun f => f.isEntryPoint
   let s := m.functions.foldl (fun s f =>
     emitSFnDef s f f.isEntryPoint

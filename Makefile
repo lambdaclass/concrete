@@ -369,6 +369,9 @@ test-tar-list: build ## P7 workload 4: tar_list byte-identical to tar -tf (size 
 test-builtin-semantics: build ## Builtin behavior single-sourced by detection: interp == compiled byte-equal per builtin + interp-PENDING inventory pin
 	$(NIX_DEVELOP) bash ./scripts/tests/check_builtin_semantics.sh
 
+test-envcfg: build ## P7 workload 5: envcfg env-override matrix (hermetic via env -u) + 13t exit codes + bug-039 leg
+	$(NIX_DEVELOP) bash ./scripts/tests/check_envcfg.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 

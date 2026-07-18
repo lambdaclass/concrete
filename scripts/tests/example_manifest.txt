@@ -68,6 +68,7 @@ examples/diagnostics_rich/unknown_name.con expected-error
 examples/diagnostics_rich/use_after_move.con expected-error
 examples/elf_header/src/main.con compile
 examples/elf_header/src/main_drifted.con compile
+examples/envcfg/src/main.con project-build
 examples/error_conventions/src/main.con compile
 examples/evidence_classes/assumed_boundary/src/main.con compile
 examples/evidence_classes/partial_contract/src/main.con compile

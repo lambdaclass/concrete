@@ -500,6 +500,9 @@ jobs:
       - name: "Builtin semantics: interp == compiled per builtin + inventory pin"
         run: bash scripts/tests/check_builtin_semantics.sh
 
+      - name: "Workload 5: envcfg env-override matrix + exit codes + bug-039 leg"
+        run: bash scripts/tests/check_envcfg.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

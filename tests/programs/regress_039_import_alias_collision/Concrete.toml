@@ -1,0 +1,3 @@
+[package]
+name = "regress_039_import_alias_collision"
+version = "0.1.0"

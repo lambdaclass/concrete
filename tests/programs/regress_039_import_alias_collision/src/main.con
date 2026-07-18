@@ -1,0 +1,31 @@
+// Bug 039 regression: `import std.env.{get}` must call env's get, not the
+// first `get` any std module happened to alias (std.cli imports
+// std.args.{get}, and the program-wide first-match alias pool rebound this
+// module's bare `get` to args_get — String pointer read as an argv index →
+// segfault). Which definition a bare imported name means is a fact of THIS
+// module's imports. set/get roundtrip proves the right callee runs.
+mod main {
+    import std.env.{get, set, unset};
+
+    fn main() with(Std) -> u8 {
+        let key: String = "CONCRETE_REGRESS_039";
+        let val: String = "env-get-not-args-get";
+        set(&key, &val);
+        let fetched: Option<String> = get(&key);
+        unset(&key);
+        key.drop();
+        match fetched {
+            Option::None => {
+                val.drop();
+                return 1;
+            },
+            Option::Some { value } => {
+                let same: bool = string_eq(&value, &val);
+                value.drop();
+                val.drop();
+                if same { return 0; }
+                return 2;
+            },
+        }
+    }
+}

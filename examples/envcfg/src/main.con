@@ -1,0 +1,169 @@
+// envcfg — WORKLOAD 5 (P7: env boundary + line-oriented text parsing).
+// Usage: envcfg <file.conf>
+// Reads KEY=VALUE lines (# comments and blank lines skipped), resolves
+// each key against the process ENVIRONMENT (env wins over file), prints
+// "KEY=VALUE" per entry in file order. First workload touching std.env
+// (the Env-capability boundary) and the first to parse line-oriented
+// text from bytes. 13t exit codes: 0 clean, 1 bad file/malformed line,
+// 2 usage.
+mod envcfg {
+    import std.bytes.{Bytes};
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+    import std.env.{get};
+    import std.io.{Reader, TextFile, reader_from_file, read_all, IoError,
+                   println, eprintln};
+
+    // Byte-region -> String (same shape tar_list re-rolled for NUL-padded
+    // fields; here it is newline-delimited — the bytes-until-DELIM pull is
+    // now at its THIRD ask counting elf_header, tar_list, and this).
+    fn region_string(data: &Bytes, start: u64, end: u64) with(Alloc) -> String {
+        let mut s: String = String::new();
+        let mut k: u64 = start;
+        while k < end {
+            s.push_char(data.get_unchecked(k) as char);
+            k = k + 1;
+        }
+        return s;
+    }
+
+    fn is_space(b: u8) -> bool {
+        return b == 32 || b == 9 || b == 13;
+    }
+
+    // Trim a [start,end) byte region in place (indices, no allocation).
+    fn trim_region(data: &Bytes, start: u64, end: u64) -> u64 {
+        let mut s: u64 = start;
+        let mut e: u64 = end;
+        while s < e && is_space(data.get_unchecked(s)) { s = s + 1; }
+        while e > s && is_space(data.get_unchecked(e - 1)) { e = e - 1; }
+        // pack both into one u64: start in high 32, end in low 32
+        // FRICTION: no tuples — multi-return needs packing or a struct.
+        return s * 4294967296 + e;
+    }
+
+    // Process one [start,end) line. Returns 0 ok, 1 malformed.
+    fn handle_line(data: &Bytes, start: u64, end: u64) with(Std) -> u64 {
+        let packed: u64 = trim_region(data, start, end);
+        let s: u64 = packed / 4294967296;
+        let e: u64 = packed % 4294967296;
+        if s >= e { return 0; }                                  // blank
+        if data.get_unchecked(s) == 35 { return 0; }             // # comment
+        // find '=' inside [s,e)
+        let mut eq: u64 = s;
+        let mut found: bool = false;
+        while eq < e {
+            if data.get_unchecked(eq) == 61 { found = true; break; }
+            eq = eq + 1;
+        }
+        if !found { return 1; }                                  // malformed
+        if eq == s { return 1; }                                 // empty key
+        let kpacked: u64 = trim_region(data, s, eq);
+        let ks: u64 = kpacked / 4294967296;
+        let ke: u64 = kpacked % 4294967296;
+        if ks >= ke { return 1; }
+        let vpacked: u64 = trim_region(data, eq + 1, e);
+        let vs: u64 = vpacked / 4294967296;
+        let ve: u64 = vpacked % 4294967296;
+        let key: String = region_string(data, ks, ke);
+        // env override wins; fall back to the file value
+        let mut out: String = String::new();
+        let mut k: u64 = 0;
+        while k < key.len() {
+            out.push_char(key.get_unchecked(k));
+            k = k + 1;
+        }
+        out.push_char('=');
+        match get(&key) {
+            Option::Some { value } => {
+                let mut j: u64 = 0;
+                while j < value.len() {
+                    out.push_char(value.get_unchecked(j));
+                    j = j + 1;
+                }
+                value.drop();
+            },
+            Option::None => {
+                let mut j: u64 = vs;
+                while j < ve {
+                    out.push_char(data.get_unchecked(j) as char);
+                    j = j + 1;
+                }
+            },
+        }
+        key.drop();
+        println(&out);
+        out.drop();
+        return 0;
+    }
+
+    fn run(data: &Bytes) with(Std) -> u8 {
+        let total: u64 = data.len();
+        let mut start: u64 = 0;
+        let mut i: u64 = 0;
+        let mut bad: u64 = 0;
+        while i < total {
+            if data.get_unchecked(i) == 10 {
+                bad = bad + handle_line(data, start, i);
+                start = i + 1;
+            }
+            i = i + 1;
+        }
+        if start < total {
+            bad = bad + handle_line(data, start, total);   // last line, no \n
+        }
+        if bad > 0 {
+            let m: String = "envcfg: malformed line(s)";
+            eprintln(&m);
+            m.drop();
+            return 1;
+        }
+        return 0;
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        match cli.parse(1, 1) {
+            CliResult::Err { error } => {
+                discard(error);
+                let u: String = "usage: envcfg <file.conf>";
+                eprintln(&u);
+                u.drop();
+                return 2;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let mut ps: Vec<String> = positionals;
+                let maybe_path: Option<String> = ps.pop();
+                ps.drop();
+                match maybe_path {
+                    Option::None => { return 2; },
+                    Option::Some { value } => {
+                        let mode: String = "rb";
+                        let opened: Result<TextFile, IoError> = TextFile::open(&value, &mode);
+                        mode.drop();
+                        value.drop();
+                        match opened {
+                            Result::Err { error } => {
+                                discard(error);
+                                let m: String = "envcfg: cannot open file";
+                                eprintln(&m);
+                                m.drop();
+                                return 1;
+                            },
+                            Result::Ok { value } => {
+                                let r: Reader = reader_from_file(value);
+                                let data: Bytes = read_all(&r);
+                                let rc: Result<u64, IoError> = r.close();
+                                discard(rc.is_ok());
+                                let status: u8 = run(&data);
+                                data.drop();
+                                return status;
+                            },
+                        }
+                    },
+                }
+            },
+        }
+    }
+}

@@ -322,6 +322,14 @@ batteries-included breadth. Completed foundation work lives in
      IR by construction; 1680/0 + 531/0 + fuzz seeds green). The &&/|| site
      keeps its own minimal shape. The fifth merge bug is now one function's
      problem instead of four sites'.
+   - DONE (2026-07-17, workload 5): bug 039 — imported bare fn name rebound
+     to another module's colliding import (program-wide first-match alias
+     pool; `import std.env.{get}` compiled to args_get, segfault). Fixed in
+     emitSModule (module-local import aliases shadow the pool);
+     regress_039_import_alias_collision project test + check_envcfg.sh
+     env-override legs pin it. Residual (pull-gated, in the bug doc): the
+     submodule-granularity variant inside ONE top-level module shares a
+     flat alias list.
    - Stale stdlib docs refresh: STRING_TEXT_CONTRACT.md (argv/string
      validation claims), BYTE_VIEW.md (`Text::from_raw` vs the shipped
      `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md
