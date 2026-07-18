@@ -35,10 +35,20 @@ privacy and stdlib work:
   module's public checked constructor, closing the reproduced
   `NonZeroU32(0)` bypass. E0296 is registered in the diagnostic ledger and the
   cross-module negative fixture is gated (commits `da31a663`, `3a81b720`).
+- **Construction rights slice 2.** Struct fields are private to their defining
+  module unless individually marked `pub`. Cross-module private-field literals
+  report E0297; reads and writes report E0298. The stdlib and examples migrated
+  to public accessors or explicitly audited `from_raw_unchecked` constructors;
+  intentionally transparent/raw-parts records expose only their selected
+  fields. `check_construction_rights.sh` pins negative literal/read/write cases
+  and the positive public-record path, the diagnostics are registered, and the
+  local parallel surface runner includes the gate (commits `dde1aa0f`,
+  `0529a28e`, `4956a76e`). The complete one-keyword design and closure rules
+  remain documented in `docs/CONSTRUCTION_RIGHTS.md`.
 
-These completions do not close struct-field privacy, enum-variant visibility,
-or trusted raw-pointer dereference duplication; those remain ordered ROADMAP
-tasks.
+These completions do not close enum-variant visibility, raw newtype payload
+projection, or trusted raw-pointer dereference duplication; those remain
+globally ordered roadmap tasks.
 
 ### Phase 7 workload/compiled-coverage arc — workloads 5–6 and bugs 039–044 (2026-07-17/18)
 
