@@ -706,18 +706,17 @@ batteries-included breadth. The ranked build order is:
      with the full battery as backstop. Dedicated fresh session.
    - Known-defects queue (priority-ordered; each owns a slice and battery when
      its stated trigger fires):
-     0a. Manifest generator derives facts from ONE REGEX
-         (scripts/tests/lib/stdlib_manifest.py:66) — verified defects:
-         params truncate at the first nested `)` (fn-pointer params corrupt
-         the row), `pub trusted extern fn` unrecognized, and trust
-         classification misses the ENCLOSING `trusted impl` context. The
-         diff gate proves only "committed wrong facts == freshly derived
-         wrong facts". Fix derivation BEFORE any new manifest-based rule
-         (raw-pointer-implies-Unsafe etc.): compiler-derived interface
-         facts preferred; else a balanced scanner (comments/strings,
-         nested parens/generics, extern, impl context, multiline
-         attributes) + negative fixtures per misparsed shape + mutation
-         tests per fact column. ACTIVE — next slice after bug 046.
+     0a. DONE (2026-07-18): manifest generator rewritten from the single
+         regex to a balanced scanner (comments/strings blanked, brace-depth
+         impl tracking, balanced parens + generic angles, [trusted] extern
+         forms, enclosing-trusted-impl inheritance). Fixed 39 truncated
+         fn-pointer-param rows + missing extern forms + trust misclassed by
+         fn-level-only; the committed TSV grew 426->434 rows and reclassed
+         many impl methods to trusted-boundary (now correct). Parser
+         self-test fixture (manifest_selftest.con + golden) pins every
+         previously-misparsed shape and is mutation-verified. Manifest-
+         based safety rules (raw-pointer-implies-Unsafe, item 5) may now
+         build on truthful facts.
      0b. Safe cross-module code constructs `NonZeroU32(0)`, bypassing
          `try_new` (verified 2026-07-18): smart-constructor invariants —
          including the kernel-proved ones — are advisory without struct/

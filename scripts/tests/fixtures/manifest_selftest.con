@@ -1,0 +1,53 @@
+// Generator self-test fixture (defect-queue 0a): one declaration per
+// previously-misparsed shape. The gate runs the generator over THIS file
+// and diffs against the golden rows — a parser regression on any shape
+// (or a fact-column derivation change) fails closed.
+mod selftest {
+    // 1. fn-pointer parameter (nested parens — the 39-row truncation class)
+    pub fn takes_fn(cb: fn(&u64, &u64) -> bool, n: u64) -> u64 {
+        return n;
+    }
+
+    // 2. nested generics in params + return (angle balance)
+    pub fn nested_gen(x: Vec<Option<u64>>) -> Option<Vec<u64>> {
+        return Option::<Vec<u64>>::None;
+    }
+
+    // 3. trusted extern fn (unrecognized-form class)
+    pub trusted extern fn raw_hook(p: *const u8) -> i32;
+
+    // 4. plain extern fn
+    pub extern fn plain_hook(n: i32) -> i32;
+
+    // 5. trusted classification from the ENCLOSING impl
+    pub struct Thing { n: u64 }
+    trusted impl Thing {
+        pub fn inside_trusted(&self) -> u64 {
+            return self.n;
+        }
+    }
+    impl Thing {
+        pub fn inside_plain(&self) -> u64 {
+            return 7;
+        }
+    }
+
+    // 6. a ')' inside a comment must not terminate scanning: fn(a) -> b
+    // 7. a ')' inside a string must not either
+    pub fn tricky(s: &String) with(Alloc) -> String {
+        let t: String = "not a param )";
+        s.len();
+        return t;
+    }
+
+    // 8. capability HOF param with `with(C)` inside the parameter list
+    pub fn cap_hof<cap C>(f: fn(&u64) with(C) -> u64) with(C) -> u64 {
+        return f(&1);
+    }
+
+    // 9. consuming receiver + Result return (fails column)
+    pub fn consumes_self(self: Thing) -> Result<u64, u64> {
+        let Thing { n } = self;
+        return Result::<u64, u64>::Ok { value: n };
+    }
+}

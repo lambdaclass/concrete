@@ -1,0 +1,9 @@
+manifest_selftest	takes_fn	no	constructs	infallible	none	deterministic	gated	(cb: fn(&u64, &u64) -> bool, n: u64) -> u64
+manifest_selftest	nested_gen	no	constructs	option	none	deterministic	gated	(x: Vec<Option<u64>>) -> Option<Vec<u64>>
+manifest_selftest	raw_hook	no	constructs	infallible	none	trusted-boundary	gated	(p: *const u8) -> i32
+manifest_selftest	plain_hook	no	constructs	infallible	none	deterministic	gated	(n: i32) -> i32
+manifest_selftest	inside_trusted	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64
+manifest_selftest	inside_plain	no	borrows	infallible	none	deterministic	gated	(&self) -> u64
+manifest_selftest	tricky	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String) with(Alloc) -> String
+manifest_selftest	cap_hof	no	constructs	infallible	C	hosted-effect	gated	<cap C>(f: fn(&u64) with(C) -> u64) with(C) -> u64
+manifest_selftest	consumes_self	no	consumes	result	none	deterministic	gated	(self: Thing) -> Result<u64, u64>

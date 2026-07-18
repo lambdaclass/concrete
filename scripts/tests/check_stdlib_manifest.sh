@@ -86,5 +86,18 @@ ioleak=$(awk -F'	' '$1=="io" && $6 ~ /Unsafe/ && $6 !~ /File/ {print $2" ("$6")"
 [ -z "$ioleak" ] && ok "std.io Unsafe items carry File where they touch files (fixed_writer/fixed_reader exempt: raw memory, not fs)"   || no "std.io items with Unsafe but no File: $ioleak"
 
 echo
+# 0a: parser self-test — every previously-misparsed shape (fn-pointer
+# params, nested generics, [trusted] extern, enclosing trusted impl,
+# ')' in comments/strings, cap-HOF, consuming receiver) round-trips to a
+# golden. A single-regex regression corrupts these rows and fails here.
+STF=scripts/tests/fixtures/manifest_selftest.con
+STF_GOLD=scripts/tests/fixtures/manifest_selftest.expected.tsv
+if diff -q <(python3 scripts/tests/lib/stdlib_manifest.py "$STF") "$STF_GOLD" >/dev/null; then
+  ok "parser self-test: all previously-misparsed shapes round-trip"
+else
+  no "parser self-test drift:"; diff <(python3 scripts/tests/lib/stdlib_manifest.py "$STF") "$STF_GOLD" | head -8 | sed 's/^/       /'
+fi
+
+
 echo "STDLIB-MANIFEST: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
