@@ -299,7 +299,19 @@ batteries-included breadth. Completed foundation work lives in
      paths (unknown struct/named type in fieldOffset/tySize) into
      structured internal-error diagnostics — bug 035's fix made them
      unreachable for well-formed programs, which is exactly when a panic
-     should become a diagnostic.
+     should become a diagnostic. SCOPED (2026-07-17): ~69 call sites
+     (tyAlign 21, tySize 27, isPassByPtr 12, fieldOffset 8, tyToLLVM 2
+     incl. EmitSSA), all cascading through pure code — no small slice;
+     it is an Except-threading grind that must land green in ONE piece,
+     with the full battery as backstop. Dedicated fresh session.
+   - RESOLVED as inert (2026-07-17 probe): the match-loop array
+     load-binding divergence documented in the merge-loop unification.
+     All four post-029 shapes verified correct (post-match &arr borrow,
+     in-place element write, by-value call — IR materializes the
+     aggregate correctly): every downstream site re-materializes an
+     address from the value, so the divergence miscompiles nothing
+     reachable. Leave as the BranchMergeRules comment documents; do NOT
+     blind-flip without a failing repro (IR churn for no proven gain).
    - DONE: Lower branch-site consolidation (structured-builder slice 2): the
      three merge loops (statement-if, if-expr, match) now call ONE
      `reconcileBranchVars`; the four residual semantic differences
