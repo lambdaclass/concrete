@@ -28,39 +28,14 @@ mod result {
             }
         }
 
-    }
-
-    // Value-selecting helpers return one branch's owned value and drop the
-    // other's; both payloads must be freely droppable, so they live behind
-    // Copy bounds (same decision as std.math max/min — see
-    // docs/OWNERSHIP_MODEL.md control-flow rules). Non-Copy users write the
-    // explicit match; consuming variants are Phase 7 #3 work.
-    impl<T: Copy, E: Copy> Result<T, E> {
-        pub fn unwrap_or(self, default: T) -> T {
-            match self {
-                Result::Ok { value } => { return value; },
-                Result::Err { error } => { return default; },
-            }
-        }
-
-        pub fn ok(self) -> Option<T> {
-            match self {
-                Result::Ok { value } => { return Option::<T>::Some { value: value }; },
-                Result::Err { error } => { return Option::<T>::None; },
-            }
-        }
-
-        pub fn err(self) -> Option<E> {
-            match self {
-                Result::Ok { value } => { return Option::<E>::None; },
-                Result::Err { error } => { return Option::<E>::Some { value: error }; },
-            }
-        }
-
-        // Tier 2 (ERROR_HANDLING_DESIGN Part 2): fn-pointer-in-generic verified
-        // working, so map/map_err ship. The fn value transforms the SUCCESS
-        // payload only; the error passes through untouched (and vice versa) —
-        // per docs/ERROR_CONVENTIONS.md these never change a failure's bucket.
+        // Transform / chain (0c). These are NOT value-selecting: each arm moves
+        // its own payload onward — Ok's value into `f` or a fresh Ok, Err's
+        // error into `f` or a fresh Err — so there is no loser to drop and no
+        // Copy bound is needed; they work for non-Copy (linear) T and E.
+        // (`unwrap_or`/`ok`/`err` stay behind Copy: they drop the other arm's
+        // payload.) fn-pointer-in-generic verified working (ERROR_HANDLING_DESIGN
+        // Part 2); per docs/ERROR_CONVENTIONS.md these never change a failure's
+        // bucket.
         #[spec(Concrete.Proof.resultMapExpr)]
         #[proof_by(Examples.PureCore.Proofs.result_map_correct)]
         #[proof_coverage(representative)]
@@ -89,6 +64,34 @@ mod result {
             match self {
                 Result::Ok { value } => { return Result::<T, F>::Ok { value: value }; },
                 Result::Err { error } => { return Result::<T, F>::Err { error: f(error) }; },
+            }
+        }
+    }
+
+    // Value-selecting helpers return one branch's owned value and drop the
+    // other's, so both payloads must be freely droppable — hence Copy bounds
+    // (same decision as std.math max/min — see docs/OWNERSHIP_MODEL.md
+    // control-flow rules). Non-Copy callers use `unwrap_or_else` (lazy default,
+    // no loser) or an explicit match.
+    impl<T: Copy, E: Copy> Result<T, E> {
+        pub fn unwrap_or(self, default: T) -> T {
+            match self {
+                Result::Ok { value } => { return value; },
+                Result::Err { error } => { return default; },
+            }
+        }
+
+        pub fn ok(self) -> Option<T> {
+            match self {
+                Result::Ok { value } => { return Option::<T>::Some { value: value }; },
+                Result::Err { error } => { return Option::<T>::None; },
+            }
+        }
+
+        pub fn err(self) -> Option<E> {
+            match self {
+                Result::Ok { value } => { return Option::<E>::None; },
+                Result::Err { error } => { return Option::<E>::Some { value: error }; },
             }
         }
     }
@@ -186,6 +189,23 @@ mod result {
         pub fn destroy(&self) { }
     }
     fn rlin_to_code(e: RLin) -> i32 { let c: i32 = e.v; destroy(e); return c; }
+    fn rlin_from_code(e: i32) -> RLin { return RLin { v: e }; }
+    fn rlin_bump(x: RLin) -> RLin { let v: i32 = x.v; destroy(x); return RLin { v: v + 1 }; }
+    fn rlin_ok(x: RLin) -> Result<RLin, i32> { return Result::<RLin, i32>::Ok { value: x }; }
+
+    #[test]
+    fn test_result_map_and_then_linear() -> i32 {
+        // map and and_then now carry a non-Copy Ok payload (moved off the Copy
+        // bound in 0c). The checker enforces exactly-once flow through f.
+        let r: Result<RLin, i32> = Result::<RLin, i32>::Ok { value: RLin { v: 41 } };
+        let m: Result<RLin, i32> = r.map::<RLin>(rlin_bump);
+        let c: Result<RLin, i32> = m.and_then::<RLin>(rlin_ok);
+        let got: RLin = c.unwrap_or_else(rlin_from_code);
+        let v: i32 = got.v;
+        destroy(got);
+        if !assert_eq(v, 42, "map+and_then thread a linear ok payload") { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_result_unwrap_or_else_linear() -> i32 {

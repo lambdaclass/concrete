@@ -37,15 +37,13 @@ mod option {
                 Option::None => { return f(); },
             }
         }
-    }
 
-    // Value-selecting helpers return ONE of two owned values; the loser must
-    // be freely droppable, so they live behind `T: Copy` (same decision as
-    // std.math max/min — see docs/OWNERSHIP_MODEL.md control-flow rules).
-    // Non-Copy users write the explicit match; consuming variants are Phase 7
-    // #3 work.
-    impl<T: Copy> Option<T> {
-        // Tier 2: transform the payload; None passes through.
+        // Transform / chain the payload (0c). These are NOT value-selecting:
+        // there is no loser value to drop — Some feeds its payload to `f`
+        // (consumed exactly once) and None carries nothing — so they need no
+        // Copy bound and work for non-Copy (linear) T. (`unwrap_or`/`ok_or`
+        // stay behind Copy: they eagerly hold a fallback that the winning arm
+        // must drop.)
         #[spec(Concrete.Proof.optionMapExpr)]
         #[proof_by(Examples.PureCore.Proofs.option_map_correct)]
         #[proof_coverage(representative)]
@@ -64,7 +62,13 @@ mod option {
                 Option::None => { return Option::<U>::None; },
             }
         }
+    }
 
+    // Value-selecting helper: returns ONE of two owned values, so the loser
+    // must be freely droppable — hence `T: Copy` (same decision as std.math
+    // max/min — see docs/OWNERSHIP_MODEL.md control-flow rules). Non-Copy
+    // callers use `unwrap_or_else` (lazy default, no loser).
+    impl<T: Copy> Option<T> {
         #[spec(Concrete.Proof.optionUnwrapOrExpr)]
         #[proof_by(Examples.PureCore.Proofs.option_unwrap_or_correct)]
         #[proof_coverage(iff)]
@@ -151,6 +155,23 @@ mod option {
         pub fn destroy(&self) { }
     }
     fn lin_fallback() -> Lin { return Lin { v: 7 }; }
+    fn lin_bump(x: Lin) -> Lin { let v: i32 = x.v; destroy(x); return Lin { v: v + 1 }; }
+    fn lin_some(x: Lin) -> Option<Lin> { return Option::<Lin>::Some { value: x }; }
+
+    #[test]
+    fn test_option_map_and_then_linear() -> i32 {
+        // map and and_then now carry a non-Copy payload (moved off the Copy
+        // bound in 0c): the checker enforces the payload flows exactly once
+        // through f, so this compiling is the guarantee.
+        let o: Option<Lin> = Option::<Lin>::Some { value: Lin { v: 41 } };
+        let m: Option<Lin> = o.map::<Lin>(lin_bump);
+        let c: Option<Lin> = m.and_then::<Lin>(lin_some);
+        let got: Lin = c.unwrap_or_else(lin_fallback);
+        let v: i32 = got.v;
+        destroy(got);
+        if !assert_eq(v, 42, "map+and_then thread a linear payload") { return 1; }
+        return 0;
+    }
 
     #[test]
     fn test_option_unwrap_or_else_linear() -> i32 {
