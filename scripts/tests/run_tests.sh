@@ -1304,6 +1304,7 @@ echo ""
 flush_jobs
 if section_active negative; then
 echo "=== Negative tests (expected errors) ==="
+run_err "$TESTDIR/error_generic_enum_051.con"  "generic enum"
 run_err "$TESTDIR/error_unconsumed.con"        "was never consumed"
 run_err "$TESTDIR/error_use_after_move.con"    "used after move"
 run_err "$TESTDIR/error_branch_disagree.con"   "consumed in one branch"

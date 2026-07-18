@@ -922,7 +922,36 @@ def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
-  | .ok ms => .ok (monoStructsInProgram ms)
+  | .ok ms =>
+    let ms := monoStructsInProgram ms
+    -- R-0001 / bug 051 containment: user-defined generic enums are NOT yet
+    -- monomorphized (monoStructsInProgram handles only structs). EmitSSA emits
+    -- ONE LLVM type per enum name from the FIRST instantiation while Lower writes
+    -- each instantiation's real payload — so two instantiations of different
+    -- sizes (Wrap<[i64;3]> vs Wrap<[i32;4]>) silently corrupt the stack. Until
+    -- real per-instantiation enum mono lands, reject any generic user-enum
+    -- instantiation FAIL-CLOSED rather than emit corrupt code. Builtin
+    -- Option/Result are safe (EmitSSA gives them a program-wide alignment-aware
+    -- canonical union) and are excluded by name.
+    let genericEnumNames := (ms.foldl (fun acc m => acc ++ collectAllModuleEnums m) [])
+      |>.filterMap fun ed =>
+        if ed.typeParams.isEmpty || ed.name == "Option" || ed.name == "Result"
+        then none else some ed.name
+    if genericEnumNames.isEmpty then .ok ms
+    else
+      let insts := dedupInstances (ms.foldl (fun acc m =>
+        (collectAllModuleFns m).foldl (fun acc f =>
+          acc ++ collectFnInstances genericEnumNames f) acc) [])
+      match insts with
+      | [] => .ok ms
+      | (name, _) :: _ =>
+        .error [{
+          severity := .error
+          message := s!"generic enum '{name}' cannot be compiled yet — user-defined generic enums are not monomorphized, so instantiations of different sizes would silently corrupt memory (bug 051)"
+          pass := "mono"
+          span := none
+          hint := some "until per-instantiation enum monomorphization lands, use a non-generic enum (one concrete variant set) or wrap the payload in a struct; builtin Option/Result are unaffected. Tracking: docs/bugs/051_generic_enums_not_monomorphized.md"
+          code := "E0808" }]
   | .error e => .error e
 
 end Concrete

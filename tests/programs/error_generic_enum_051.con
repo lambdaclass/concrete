@@ -1,0 +1,17 @@
+// Bug 051 / R-0001 containment: user-defined generic enums are not yet
+// monomorphized. EmitSSA emits ONE LLVM type per enum name from the first
+// instantiation while Lower writes each instantiation's real payload, so two
+// instantiations of different sizes (Wrap<i64> vs Wrap<i32>) silently corrupt
+// the stack. Until per-instantiation enum monomorphization lands, this is
+// rejected fail-closed at Mono with E0808 rather than emitting corrupt code.
+mod b051 {
+    enum Wrap<T> { W { v: T }, N }
+    pub fn main() -> i64 {
+        let a: Wrap<i64> = Wrap::<i64>::W { v: 3 };
+        let b: Wrap<i32> = Wrap::<i32>::W { v: 40 };
+        let mut r: i64 = 0;
+        match a { Wrap::W { v } => { r = r + v; }, Wrap::N => {} }
+        match b { Wrap::W { v } => { r = r + (v as i64); }, Wrap::N => {} }
+        return r;
+    }
+}

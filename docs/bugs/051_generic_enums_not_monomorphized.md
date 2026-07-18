@@ -1,6 +1,13 @@
 # Bug 051: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory
 
-**Status:** Open
+**Status:** Contained (R-0001 slice 1, 2026-07-18) — user generic enums are
+rejected fail-closed at Mono with **E0808** rather than emitting corrupt code
+(`Concrete/IR/Mono.lean` monoProgram; gate
+`scripts/tests/check_generic_enum_containment.sh`; fixture
+`tests/programs/error_generic_enum_051.con`). Builtin Option/Result are
+unaffected (canonical union). REMAINING: real per-instantiation enum
+monomorphization (mirror the struct pass / union treatment) to lift the
+restriction — that is the rest of R-0001.
 **Discovered:** 2026-07-18, middle-end audit; independently re-verified
 (compiled prints garbage `-1640`, interp prints the correct values).
 
