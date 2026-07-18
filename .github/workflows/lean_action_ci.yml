@@ -14,6 +14,13 @@ on:
     # programs forever; every fuzzer-found bug came from a fresh seed.
     - cron: "23 3 * * *"
 
+# Cancel a superseded push/PR run when a newer commit arrives — faster
+# feedback and less runner contention. NEVER cancel scheduled (cron) runs:
+# the weekly proof replay and nightly fuzz campaign must always complete.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
 jobs:
   grammar:
     name: LL(1) grammar check
@@ -51,6 +58,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
         with:
@@ -74,6 +87,12 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -101,6 +120,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -157,6 +182,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
         with:
@@ -195,6 +226,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
         with:
@@ -210,8 +247,18 @@ jobs:
     name: Trust gate (correctness contracts)
     runs-on: ubuntu-latest
     needs: build
+    # A cap so a hung run releases the runner instead of burning the job's
+    # full budget (this job has flaked with a bare exit — see the log
+    # capture below).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -222,7 +269,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Run trust gate
-        run: ./scripts/tests/run_tests.sh --trust-gate
+        # Tee the full output so a flaky bare-exit failure leaves a diagnosable
+        # log (the raw step log has been truncated on past flakes).
+        run: |
+          set -o pipefail
+          ./scripts/tests/run_tests.sh --trust-gate 2>&1 | tee /tmp/trust-gate.log
+
+      - name: Upload trust-gate log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-gate-log
+          path: /tmp/trust-gate.log
+          if-no-files-found: ignore
 
   proof-gate:
     name: Proof evidence gate
@@ -230,6 +289,12 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -365,6 +430,12 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -627,6 +698,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
         with:
@@ -708,6 +785,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
         with:
@@ -743,6 +826,12 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
@@ -789,6 +878,12 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1
