@@ -964,6 +964,35 @@ job shape, coverage discipline, and gradual backend enablement. QBE exists to
 buy independent code generation before Concrete can justify owning those lower
 layers itself.
 
+Execution discipline: build this phase as thin executable vertical slices, not
+as a backend-framework rewrite followed by a distant first program. Every slice
+must end with an eligible fixture running through interpreter, LLVM, and QBE;
+the same commit adds its capability row, differential observation, negative or
+mutation case, and retained failure artifacts. A refactor-only slice is allowed
+only when an existing LLVM behavior/IR parity gate consumes it immediately and
+the next QBE slice names it as a prerequisite. Do not land unused interfaces,
+generic plugin machinery, speculative target abstractions, or a second
+representation merely because a future backend might need them.
+
+First executable milestone (before broad preflight completion): compile
+`fn main() -> Int { return 42; }` through cleaned SSA into typed QBE IL, validate
+it, invoke the pinned QBE toolchain, assemble/link it, observe clean stdout and
+exit status 42, and compare that structured observation with interpreter and
+LLVM. `--emit-qbe`, `--backend qbe`, unavailable-tool diagnostics, no-fallback
+behavior, and a debug bundle containing source/Core/SSA/QBE IL/tool facts must
+all work for this one program. Then expand in this order unless a failing oracle
+forces a different dependency: branches/phi -> direct calls -> integer widths
+and casts -> checked arithmetic/traps -> stack memory -> globals/strings ->
+aggregates/enums -> indirect/extern calls -> builtins -> test mode. Each step
+must stay runnable; no "all operations implemented, testing later" batch.
+
+LLVM-refactor rule: moving existing code behind `CodegenInput`, layout facts,
+the runtime manifest, or the backend driver must initially produce
+byte-identical LLVM IR for the gated corpus. If byte identity is impossible or
+undesirable, the slice must state the exact textual change, prove equal native
+observations in debug/release modes, run LLVM validation, and add a regression
+for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
+
 0a. Introduce an immutable `CodegenInput` wrapper around cleaned
     `ValidatedSSA`, plus `CodegenFacts` derived once per program: target-neutral
     type/layout facts, function signatures, symbol identities, module-local
@@ -1259,6 +1288,14 @@ layers itself.
     discovery. Do not carry two LLVM pipelines through the QBE implementation;
     the compatibility window must have a named removal commit and mutation-
     sensitive parity gate.
+32. Keep a Phase 7.5 decision log tied to implementation evidence. For every
+    vertical slice record: the supported semantic families, newly shared facts,
+    deliberately independent logic, LLVM textual changes (if any), three-way
+    result counts, mutations caught, performance deltas, and remaining blocker.
+    If the first three executable slices show that `CodegenInput`, the typed QBE
+    AST, or the driver boundary creates duplication without improving failure
+    localization, revise or delete that abstraction before expanding coverage;
+    the roadmap is a hypothesis, not permission to preserve a bad framework.
 
 ## Phase 8: Flagship Depth And Examples
 
