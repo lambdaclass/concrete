@@ -130,7 +130,7 @@ mod subcheck {
 EOF
 cat > "$TMPDIR/sib/src/shapes.con" <<'EOF'
 mod shapes {
-    pub struct Copy Rect { w: u32, h: u32 }
+    pub struct Copy Rect { pub w: u32, pub h: u32 }
 }
 EOF
 cat > "$TMPDIR/sib/src/helper.con" <<'EOF'
