@@ -1899,10 +1899,14 @@ partial def parseStructDef : ParseM StructDef := do
   let mut fields : List StructField := []
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
+    -- 0b slice 2: optional `pub` marks a field public (else private-to-module)
+    let fieldPub ← match tk with
+      | .pub_ => advance; pure true
+      | _ => pure false
     let fieldName ← expectIdent
     expect .colon
     let ty ← parseType
-    fields := fields ++ [{ name := fieldName, ty }]
+    fields := fields ++ [{ name := fieldName, ty, isPublic := fieldPub }]
     tk ← peek
     if tk == .comma then
       advance

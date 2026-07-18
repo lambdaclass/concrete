@@ -268,6 +268,10 @@ structure ImportDecl where
 structure StructField where
   name : String
   ty : Ty
+  -- Construction rights (0b slice 2): fields are PRIVATE to the defining
+  -- module by default; `pub name: Ty` opts a field into the public
+  -- representation contract (cross-module literal/read/write/destructure).
+  isPublic : Bool := false
   deriving Repr
 
 structure EnumVariant where
