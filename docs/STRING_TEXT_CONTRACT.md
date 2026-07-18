@@ -147,8 +147,14 @@ When receiving bytes from C code (file reads, network reads, environment variabl
 
 - `read_file` returns `Result<Bytes, FsError>`. The caller decides whether to interpret the bytes as text. This is correct.
 - `read_to_string` returns `Result<String, FsError>`. It should validate UTF-8 and return an error on invalid sequences. Currently it does not validate.
-- `get_args` returns heap-allocated strings from `argv`. It should validate or replace invalid sequences. Currently it does not validate.
-- `env::get` returns `Option<String>`. Same: should validate or reject.
+- `args::get` returns heap-allocated strings from `argv`. RESOLVED (P7 #4,
+  2026-07): it validates UTF-8 and returns `""` for an invalid argument
+  (replace-with-empty, strategy 2) — argv can no longer smuggle invalid
+  bytes into `String`.
+- `env::get` returns `Option<String>`. Still does NOT validate — an
+  environment value with invalid UTF-8 arrives as a `String` that violates
+  the contract. Open; same fix shape as `args::get` (validate in the
+  trusted body, `None` or empty on invalid).
 
 **Handling strategies (pick one per API before freeze):**
 

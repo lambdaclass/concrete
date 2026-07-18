@@ -964,10 +964,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         -- agree). If EVERY arm diverges, the code after the match is
         -- unreachable — apply the first (diverging) arm's state so values it
         -- consumed don't re-surface as spurious E0208 at function exit.
+        -- Rebuild from envBefore, NOT the last arm's env: arm binders are
+        -- arm-scoped, and keeping them let a stale Copy `value` from one
+        -- match poison a later match's same-named linear binder through the
+        -- by-name state patch (bug 041's false E0208).
         match firstArmVars.orElse (fun () => divergingArmVars) with
         | some vars =>
-          let env ← getEnv
-          let vars' := env.vars.map fun (n, vi) =>
+          let vars' := envBefore.vars.map fun (n, vi) =>
             match lookupOutermost vars n with
             | some info => (n, { vi with state := info.state })
             | none => (n, vi)
@@ -1078,10 +1081,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Apply the final state from the first FALL-THROUGH arm (they all
       -- agree); if EVERY arm diverges, fall back to the first diverging
       -- arm's state (code after the match is unreachable).
+      -- envBefore-based rebuild for the same reason as the enum path above
+      -- (bug 041: arm binders are arm-scoped and must not survive the match).
       match firstArmVars.orElse (fun () => divergingArmVars) with
       | some vars =>
-        let env ← getEnv
-        let vars' := env.vars.map fun (n, vi) =>
+        let vars' := envBefore.vars.map fun (n, vi) =>
           match lookupOutermost vars n with
           | some info => (n, { vi with state := info.state })
           | none => (n, vi)

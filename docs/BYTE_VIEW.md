@@ -97,7 +97,7 @@ stays bytes until validated, matching the Bytes/Text split. `try_text(&buf)`:
 
 returning `Some(Text)` only when both hold, else `None`. The returned `Text` is a
 non-owning view (`ptr + len`), so the buffer must outlive it — the same scoping
-rule as any view. std.text gained `Text::from_raw(ptr, len)` (trusted, unchecked)
+rule as any view. std.text gained `Text::from_raw_unchecked(ptr, len)` (trusted; the _unchecked suffix names the caller's UTF-8 obligation per the stdlib naming rule)
 and `Text::try_from_raw(ptr, len)` (validated) to support this; the previous
 ASCII-only `AsciiText::try_new` remains for the owned-ASCII-newtype case.
 
@@ -114,7 +114,7 @@ ASCII-only `AsciiText::try_new` remains for the owned-ASCII-newtype case.
 - `std.numeric` (alongside `ByteCursor`): the `ByteView` type + `new`/`of_cursor`/
   `cursor`/`byte`/`try_text`/`off`/`len`/`is_empty`, in a `trusted impl` whose
   boundary is documented.
-- `std.text`: `Text::from_raw(ptr, len)` (trusted, unchecked) and
+- `std.text`: `Text::from_raw_unchecked(ptr, len)` (trusted, obligation-named) and
   `Text::try_from_raw(ptr, len)` (validated) + the `validate_utf8` well-formedness
   checker.
 - `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,wrong_buffer}/`

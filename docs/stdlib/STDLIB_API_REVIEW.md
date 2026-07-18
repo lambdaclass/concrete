@@ -129,7 +129,12 @@ Recommendation: Remove `TextFile` from `std.io`. Consolidate file I/O in `std.fs
 
 ### 2.3 writer: Overlapping with io print functions
 
-**Current**: `std.writer.Writer` provides `str`, `char`, `int`, `bool`, `newline` methods. `std.io` provides `print`, `println`, `eprint`, `eprintln`.
+> **RESOLVED (P7 item 14a, 2026-07):** there is no `std.writer` module
+> anymore — `Writer` lives in `std.io` as the one narrow sink contract
+> (fn-pointer backend), exactly the "consider moving `Writer` into
+> `std.io`" recommendation below. Kept for the record.
+
+**Current (historical)**: `std.writer.Writer` provides `str`, `char`, `int`, `bool`, `newline` methods. `std.io` provides `print`, `println`, `eprint`, `eprintln`.
 
 **Problem**: Two ways to write to stdout/stderr. `Writer` is allocation-free for int formatting. `io.print` is the simple path. The overlap is not harmful yet, but the boundary should be documented.
 
@@ -214,6 +219,7 @@ Recommendation: Make `HashMap::new` return a zero-capacity map (null pointers, c
 **`io` and `writer`**: Both deal with console output. `Writer` is the structured, allocation-free path. `print`/`println` are the simple path. They share the domain (console I/O) and the capability (`Console`). Having them separate forces users to learn two import paths for the same task.
 
 Recommendation: Merge `Writer` into `std.io`. The module has one job: console I/O. File I/O stays in `std.fs`.
+**DONE (P7 item 14a, 2026-07)** — `Writer` is defined in `std.io`; the standalone module is gone.
 
 ### 3.2 Modules that should be split
 
@@ -266,8 +272,7 @@ mod ordered_set;
 mod bitset;
 
 // Hosted layer
-mod io;
-mod writer;
+mod io;      // includes Writer (merged per 2.3/3.1)
 mod fs;
 mod env;
 mod args;

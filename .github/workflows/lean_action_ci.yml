@@ -503,6 +503,9 @@ jobs:
       - name: "Workload 5: envcfg env-override matrix + exit codes + bug-039 leg"
         run: bash scripts/tests/check_envcfg.sh
 
+      - name: "std compiled coverage: one compiled behavioral fixture per std module (fail-closed inventory)"
+        run: bash scripts/tests/check_std_compiled_coverage.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

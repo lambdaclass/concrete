@@ -1,0 +1,15 @@
+// Bug 042 regression: an imported NEWTYPE is a usable type. Resolve's
+// import classifier silently dropped newtypes/type-aliases (E0108 at
+// first use); std.numeric's newtypes had zero cross-module consumers
+// until the compiled-coverage gate. Exit 0 = both try_new outcomes work.
+mod main {
+    import std.numeric.{NonZeroU32};
+
+    fn main() with(Std) -> u8 {
+        let z: Option<NonZeroU32> = NonZeroU32::try_new(0);
+        if z.is_some() { return 1; }
+        let n: Option<NonZeroU32> = NonZeroU32::try_new(5);
+        if n.is_none() { return 2; }
+        return 0;
+    }
+}

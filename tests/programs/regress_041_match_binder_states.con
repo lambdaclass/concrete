@@ -1,0 +1,33 @@
+// Bug 041 regression: two matches over direct-call scrutinees, first
+// binding a Copy `value`, second a linear `value` that IS consumed. The
+// old post-match merge kept the first arm's binder in the outer env and
+// the by-name state patch marked the second (consumed) binder unconsumed
+// — false E0208. Uses a local linear resource (no std) so it runs as a
+// single-file run_ok fixture; exit 42 proves the values flow correctly.
+mod m {
+    pub struct Wallet { cash: Int }
+
+    fn get_copy() -> Result<Int, Int> {
+        return Result::<Int, Int>::Ok { value: 40 };
+    }
+
+    fn get_wallet() -> Result<Wallet, Int> {
+        return Result::<Wallet, Int>::Ok { value: Wallet { cash: 2 } };
+    }
+
+    fn main() -> Int {
+        let mut acc: Int = 0;
+        match get_copy() {
+            Result::Err { error } => { discard(error); return 1; },
+            Result::Ok { value } => { acc = acc + value; },
+        }
+        match get_wallet() {
+            Result::Err { error } => { discard(error); return 2; },
+            Result::Ok { value } => {
+                let Wallet { cash } = value;   // destructure = consume
+                acc = acc + cash;
+            },
+        }
+        return acc;
+    }
+}

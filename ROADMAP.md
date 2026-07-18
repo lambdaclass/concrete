@@ -332,11 +332,23 @@ batteries-included breadth. Completed foundation work lives in
      env-override legs pin it. Residual (pull-gated, in the bug doc): the
      submodule-granularity variant inside ONE top-level module shares a
      flat alias list.
-   - Stale stdlib docs refresh: STRING_TEXT_CONTRACT.md (argv/string
-     validation claims), BYTE_VIEW.md (`Text::from_raw` vs the shipped
-     `try_from_raw`/`_unchecked` split), stdlib/STDLIB_API_REVIEW.md
-     (`std.writer` as a separate module; old args.get concerns) — design
-     clarity, not code risk.
+   - DONE (2026-07-17): std compiled-coverage gate
+     (check_std_compiled_coverage.sh) — one compiled+run behavioral fixture
+     per public std module, fail-closed inventory derived from std/src
+     (new module without a fixture or documented exemption = red). Closes
+     the bug-039 CLASS (interp-only-tested std modules have dark backend
+     paths). First run immediately found bugs 041 (Check post-match merge
+     kept arm binders; stale Copy `value` poisoned a later linear binder's
+     consumed state — false E0208) and 042 (Resolve silently dropped
+     imported newtypes/type-aliases — E0108 at first use; std.numeric's
+     newtypes had zero cross-module consumers). Recorded exemptions: lib
+     (umbrella), libc (no pub surface), slice (NO public constructor — std
+     gap, converts to a fixture when a workload pulls one).
+   - DONE (2026-07-17): stale stdlib docs refresh — STRING_TEXT_CONTRACT
+     (args::get now validates argv UTF-8, resolved; env::get still doesn't,
+     left open), BYTE_VIEW (`Text::from_raw` → shipped
+     `from_raw_unchecked`), STDLIB_API_REVIEW (writer merged into std.io,
+     2.3/3.1 marked resolved).
    Audit additions (external audit 2026-07-16, spot-verified; first three
    landed same-day — see CHANGELOG):
    - DONE: float-literal lexing correctly rounded (Nat mantissa +

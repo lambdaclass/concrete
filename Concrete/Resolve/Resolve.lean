@@ -583,6 +583,18 @@ def resolveShallow (moduleSummaries : List FileSummary)
               match ms.enums.find? fun e => e.name == sym.name with
               | some e =>
                 (errs, syms ++ [(localName, SymKind.enum e)], tys ++ [localName])
+              | none =>
+              -- Newtypes and type aliases are importable types too (Elab's
+              -- resolveImports already carried them; Resolve silently dropped
+              -- them, so `import std.numeric.{NonZeroU32}` hit E0108 at the
+              -- first use — found by the std compiled-coverage gate).
+              match ms.newtypes.find? fun nt => nt.isPublic && nt.name == sym.name with
+              | some nt =>
+                (errs, syms ++ [(localName, SymKind.newtype nt)], tys ++ [localName])
+              | none =>
+              match ms.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name with
+              | some ta =>
+                (errs, syms ++ [(localName, SymKind.typeAlias ta.targetTy)], tys ++ [localName])
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
           else (errs ++ [mkResolveDiag (.notPublicInModule sym.name imp.moduleName) (some imp.span)], syms, tys)

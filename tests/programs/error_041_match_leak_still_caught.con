@@ -1,0 +1,29 @@
+// Bug 041 negative: the merge fix (arm binders no longer survive the
+// match) must NOT weaken leak detection — a genuinely unconsumed linear
+// payload in the second same-named binder is still E0208.
+mod m {
+    pub struct Wallet { cash: Int }
+
+    fn get_copy() -> Result<Int, Int> {
+        return Result::<Int, Int>::Ok { value: 40 };
+    }
+
+    fn get_wallet() -> Result<Wallet, Int> {
+        return Result::<Wallet, Int>::Ok { value: Wallet { cash: 2 } };
+    }
+
+    fn main() -> Int {
+        let mut acc: Int = 0;
+        match get_copy() {
+            Result::Err { error } => { discard(error); return 1; },
+            Result::Ok { value } => { acc = acc + value; },
+        }
+        match get_wallet() {
+            Result::Err { error } => { discard(error); return 2; },
+            Result::Ok { value } => {
+                acc = acc + value.cash;   // read, but never consumed: leak
+            },
+        }
+        return acc;
+    }
+}

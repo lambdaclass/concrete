@@ -67,6 +67,8 @@ declare -A SKIP_BUGS=(
   [038]="FIXED -- regress_038_if_merge_promoted_aggregate.con (run_ok qm); Lower merge loops skip ANY promoted var (aggregate included); extended fuzzer is the class gate"
   [039]="FIXED -- regress_039_import_alias_collision/src/main.con (project test, exit 0); emitSModule puts the module's own bare->qualified import aliases ahead of the program-wide pool"
   [040]="FIXED -- regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)"
+  [041]="FIXED -- regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)"
+  [042]="FIXED -- regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases"
 )
 
 echo "=== Bug-to-Regression Corpus Audit ==="
