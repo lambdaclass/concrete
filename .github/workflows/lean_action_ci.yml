@@ -425,7 +425,7 @@ jobs:
         run: bash scripts/tests/check_obligation_redteam.sh
 
   language-gates:
-    name: Language-surface gates (Phase 5-6)
+    name: Language-surface gates (Phase 5-6) [1/3]
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -547,6 +547,27 @@ jobs:
       - name: "Bytes/Text boundary (P7 #4 — raw bytes vs validated UTF-8; checked or named-unchecked crossings only)"
         run: bash scripts/tests/check_bytes_text_boundary.sh
 
+  language-gates-2:
+    name: Language-surface gates (Phase 5-6) [2/3]
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
       - name: "Error conventions (13t — the three buckets report-visible: E0286 / trap_sites / caps)"
         run: bash scripts/tests/check_error_conventions.sh
 
@@ -597,6 +618,27 @@ jobs:
 
       - name: "Phase 6C observability capstone (#8 — telemetry, complexity, trace, reduction, mutation sample, hashes, shadow)"
         run: bash scripts/tests/check_phase6c_observability.sh
+
+  language-gates-3:
+    name: Language-surface gates (Phase 5-6) [3/3]
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Trailing-value gate (if/match as value-block trailing values)
         run: bash scripts/tests/check_trailing_value_blocks.sh
