@@ -246,9 +246,11 @@ numeric	write_u64_le	no	mut	result	none	trusted-boundary	gated	(&mut self, val: 
 option	is_some	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
 option	is_none	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
 option	ok_or	no	consumes	result	none	pure-core	gated	<E: Copy>(self, err: E) -> Result<T, E>
+option	unwrap_or_else	no	consumes	infallible	none	pure-core	gated	(self, f: fn() -> T) -> T
 option	map	no	consumes	option	none	pure-core	proved	<U>(self, f: fn(T) -> U) -> Option<U>
 option	and_then	no	consumes	option	none	pure-core	gated	<U>(self, f: fn(T) -> Option<U>) -> Option<U>
 option	unwrap_or	no	consumes	infallible	none	pure-core	proved	(self, default: T) -> T
+option	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)
 ordered_map	new	no	constructs	infallible	none	trusted-boundary	gated	(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V>
 ordered_map	with_value	no	borrows	option	C	trusted-boundary	gated	<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R>
 ordered_map	with_value_mut	no	mut	option	C	trusted-boundary	gated	<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R>
@@ -323,12 +325,14 @@ rand	random_int	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	() wi
 rand	random_range	no	constructs	infallible	Random,Unsafe	hosted-effect	gated	(lo: i32, hi: i32) with(Unsafe,Random) -> i32
 result	is_ok	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
 result	is_err	no	borrows	infallible	none	pure-core	gated	(&self) -> bool
+result	unwrap_or_else	no	consumes	infallible	none	pure-core	gated	(self, f: fn(E) -> T) -> T
 result	unwrap_or	no	consumes	infallible	none	pure-core	gated	(self, default: T) -> T
 result	ok	no	consumes	option	none	pure-core	gated	(self) -> Option<T>
 result	err	no	consumes	option	none	pure-core	gated	(self) -> Option<E>
 result	map	no	consumes	result	none	pure-core	proved	<U>(self, f: fn(T) -> U) -> Result<U, E>
 result	and_then	no	consumes	result	none	pure-core	gated	<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E>
 result	map_err	no	consumes	result	none	pure-core	proved	<F>(self, f: fn(E) -> F) -> Result<T, F>
+result	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)
 set	new	yes	constructs	infallible	Alloc,Unsafe	hosted-effect	gated	(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc,Unsafe) -> HashSet<K>
 set	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool
 set	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64

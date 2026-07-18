@@ -23,6 +23,20 @@ mod option {
                 Option::None => { return Result::<T, E>::Err { error: err }; },
             }
         }
+
+        // Lazy fallback (0c consuming combinator). Some returns its payload
+        // untouched; None computes the default via `f`. Unlike unwrap_or the
+        // default is only ever built on the None path, so there is no loser
+        // value to drop on either arm — this needs NO Copy bound and NO special
+        // conservation rule, and so works for non-Copy (linear) T. The existing
+        // conservation checker accepts it directly: `value`/`f()` each flow to
+        // the single return, consumed exactly once.
+        pub fn unwrap_or_else(self, f: fn() -> T) -> T {
+            match self {
+                Option::Some { value } => { return value; },
+                Option::None => { return f(); },
+            }
+        }
     }
 
     // Value-selecting helpers return ONE of two owned values; the loser must
@@ -125,6 +139,33 @@ mod option {
             },
             Option::None => { return 1; }
         }
+        return 0;
+    }
+
+    // 0c: a non-Copy (linear) payload must flow through unwrap_or_else exactly
+    // once. Lin has no Copy — the conservation checker rejects any leak/dup, so
+    // this test compiling at all is the guarantee; the empty destroy keeps it
+    // Alloc-free while still exercising terminal linear consumption.
+    struct Lin { v: i32 }
+    trusted impl Destroy for Lin {
+        pub fn destroy(&self) { }
+    }
+    fn lin_fallback() -> Lin { return Lin { v: 7 }; }
+
+    #[test]
+    fn test_option_unwrap_or_else_linear() -> i32 {
+        // Some: the stored payload is returned; lin_fallback is never built.
+        let o: Option<Lin> = Option::<Lin>::Some { value: Lin { v: 42 } };
+        let got: Lin = o.unwrap_or_else(lin_fallback);
+        let v: i32 = got.v;
+        destroy(got);
+        if !assert_eq(v, 42, "unwrap_or_else returns the Some payload") { return 1; }
+        // None: the fallback is built and returned; nothing leaks.
+        let n: Option<Lin> = Option::<Lin>::None;
+        let g2: Lin = n.unwrap_or_else(lin_fallback);
+        let v2: i32 = g2.v;
+        destroy(g2);
+        if !assert_eq(v2, 7, "unwrap_or_else builds the fallback on None") { return 1; }
         return 0;
     }
 }
