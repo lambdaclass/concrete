@@ -10,6 +10,36 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 7 ownership/manifest/construction hardening (2026-07-18)
+
+Three pre-freeze boundary corrections landed before the remaining Phase 7
+privacy and stdlib work:
+
+- **Bug 046 — collection extraction ownership.** `HashMap::keys`,
+  `HashMap::values`, and `HashSet::elements` previously copied unconstrained
+  non-Copy payloads out of trusted pointer storage while the collection retained
+  ownership, enabling double-free/use-after-free. The APIs are now gated by the
+  corresponding `Copy` bound; scoped folds/iteration remain available for
+  linear values. Negative linear-payload and positive Copy fixtures pin the
+  public surface (commit `25510e5e`).
+- **Truthful stdlib-manifest derivation.** The single-regex generator truncated
+  nested function-pointer signatures, missed trusted extern forms, and ignored
+  enclosing trusted impl context. A balanced scanner now blanks comments and
+  strings, tracks braces/impl trust, handles nested parameter/generic syntax,
+  and recognizes extern forms. Its self-test covers the formerly misparsed
+  shapes; the generated inventory grew from 426 to 434 truthful rows (commit
+  `8254bfa5`). Compiler-derived interface facts remain the planned permanent
+  replacement.
+- **Construction rights slice 1.** Direct newtype construction is private to
+  the defining module. External `N(v)` now reports E0296 and clients use the
+  module's public checked constructor, closing the reproduced
+  `NonZeroU32(0)` bypass. E0296 is registered in the diagnostic ledger and the
+  cross-module negative fixture is gated (commits `da31a663`, `3a81b720`).
+
+These completions do not close struct-field privacy, enum-variant visibility,
+or trusted raw-pointer dereference duplication; those remain ordered ROADMAP
+tasks.
+
 ### Phase 7 workload/compiled-coverage arc — workloads 5–6 and bugs 039–044 (2026-07-17/18)
 
 Phase 7's fifth and sixth workloads, a fail-closed compiled stdlib inventory,
