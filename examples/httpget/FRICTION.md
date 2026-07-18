@@ -22,9 +22,11 @@ Gate: `scripts/tests/check_httpget_differential.sh`.
 ## Pull candidates
 
 1. **Bytes sequence-find** — `header_end` hand-rolls a resume loop over
-   single-byte `index_of` to find `\r\n\r\n`. SECOND ask for a multi-byte
-   needle (tar_list magic check was the first shape). One more ask pulls
-   `Bytes::find(&needle, from)`.
+   single-byte `index_of` to find `\r\n\r\n`. CORRECTED (workload 8): this
+   is the FIRST true ask for a buffered subsequence search — tar_list's
+   magic check is a fixed-offset EQUALITY (`eq_at`), a different API
+   counted separately. tcpserve's cross-buffer terminator scan is the
+   second ask; one more pulls `Bytes::find(&needle, from)`.
 2. **net read/write take raw pointers** — `write_all(ptr, len)` forces
    `raw.ptr as *const u8` + a trusted caller. A `&Bytes`-taking overload
    (or Writer-style sink) would keep user code out of Unsafe. First ask.

@@ -512,6 +512,9 @@ jobs:
       - name: "Workload 7: httpget loopback TCP differential (text+binary+curl) + exit codes"
         run: bash scripts/tests/check_httpget_differential.sh
 
+      - name: "Workload 8: tcpserve single-connection server (accept path, failure classification)"
+        run: bash scripts/tests/check_tcpserve.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

@@ -381,6 +381,9 @@ test-wordfreq: build ## P7 workload 6: wordfreq byte-identical to C-locale tr|so
 test-httpget: build ## P7 workload 7: httpget over loopback TCP byte-identical to served file (text+binary) + curl cross-check + 13t exit codes
 	$(NIX_DEVELOP) bash ./scripts/tests/check_httpget_differential.sh
 
+test-tcpserve: build ## P7 workload 8: single-connection server (TcpListener::accept) — READY/DONE discipline, injected bind/EOF failures, dribbling client, watchdog
+	$(NIX_DEVELOP) bash ./scripts/tests/check_tcpserve.sh
+
 test-bytes-text-boundary: build ## P7 #4: Bytes=raw / String,Text=validated UTF-8; to_string checked (Option), _unchecked names its obligation, argv validated, no stray String{ptr} construction
 	$(NIX_DEVELOP) bash ./scripts/tests/check_bytes_text_boundary.sh
 
