@@ -139,12 +139,15 @@ Phase 6B established semantic truth and validation records; Phase 6C made the
 pipeline observable/replayable; Phase 7.5 adds a real user-selectable QBE
 backend whose required duties include independent differential validation
 without upgrading evidence claims; Phase 8 validates the bet with real
-examples and performs the scheduled architecture migrations; Phase 8.5 turns
+examples, seeds comparable generated-code performance measurements, and
+performs the scheduled architecture migrations; Phase 8.5 turns
 the shadow graph into a persistent incremental driver
 only after that validation. Later proof/backend/tooling work must not bypass
 this order: semantic facts first, observability second, independent executable
 cross-checking third, external validation fourth, incremental reuse fifth, and
-independently checked evidence after that.
+independently checked evidence after that. Phase 15.75 owns optimization and
+performance claims only after backend contracts and measurements exist; Phase
+17.5 owns release stewardship only after the first public release.
 
 ### Future Compiler-Pipeline Refactor Contract
 
@@ -2597,6 +2600,32 @@ and `hmac_sha256`.
  interpreter-vs-compiled differential tests, runtime-obligation audit, and
  explicit evidence/trust classification for what is proved, tested, assumed,
  or trusted.
+
+### Task R-0416
+
+**Objective:** Establish the first generated-code performance evidence corpus
+from Phase 8 flagships and workloads, before public comparison pressure turns
+informal speed impressions into claims.
+
+Select deterministic kernels and end-to-end programs from the workload ladder,
+pair each with a pinned C reference and, only where maintenance is affordable,
+a Rust/Zig reference implementing the same algorithm, allocation strategy,
+input validation, and I/O boundary. Record source/toolchain/profile/target,
+warmup and sample policy, input hashes, wall time distribution, peak memory,
+allocation count/bytes, output hash, binary size, and emitted-code size. Publish
+raw samples and replay commands; never collapse them into a single “fast” badge.
+
+Define the pull trigger for Phase 15.75 optimization work: a stable workload
+shows a material, reproduced generated-code gap against its comparable
+reference; a backend optimization level regresses beyond its noise budget; or a
+release-facing performance claim needs evidence. Until then, report
+`performance_not_claimed` rather than extrapolating from microbenchmarks.
+
+Acceptance: committed benchmark manifests and inputs, clean-host replay,
+calibrated noise/variance handling, debug/release and LLVM/QBE attribution,
+result-equivalence checks before timing, a deliberately slowed mutation that
+the comparison detects, and no gating threshold derived from a single sample.
+
 ### Task R-0135
 
 **Objective:** Do not run broad examples cleanup/polish sweeps. Clean examples opportunistically when a roadmap task touches them. Improve examples only when they serve proof-link migration, `concrete prove` authoring, external validation, or a release-facing tutorial. Add an example-refresh checkpoint at every phase closure, and after every two substantial Phase-6/7 usability increments. The checkpoint is not a broad rewrite; it is a small, gate-backed audit that asks whether graduated examples and release-facing docs still teach the current language. It must remove stale "deferred" language for newly landed features; update examples that should
@@ -4269,7 +4298,30 @@ replayable; and every boundary after that slice remains explicitly trusted.
 
 ### Task R-0281
 
-**Objective:** Add native compiled-program debugging support: DWARF/source-map emission, source-mapped backtraces for runtime failures, debug-vs-release behavior, optimized-code caveats, and diagnostics that distinguish source-level runtime checks from trusted backend/OS crashes. Runtime traps inserted by Concrete (bounds, arithmetic, cast/profile checks, failed runtime obligations) should carry enough source span and check-class information that a real application can debug them without reverse-engineering the abort site. This is not proof evidence; it is usability for enforced/runtime- checked facts.
+**Objective:** Add native compiled-program debugging and production-crash
+diagnosis: DWARF/source-map emission, source-mapped backtraces for runtime
+failures, debug-vs-release behavior, optimized-code caveats, and diagnostics
+that distinguish source-level runtime checks from trusted backend/OS crashes.
+Runtime traps inserted by Concrete (bounds, arithmetic, cast/profile checks,
+failed runtime obligations) should carry enough source span and check-class
+information that a real application can debug them without reverse-engineering
+the abort site. This is not proof evidence; it is usability for
+enforced/runtime-checked facts.
+
+Trigger the production half when the first Phase 8 flagship or external user
+needs to diagnose a deployed binary. Add deterministic symbolication from a
+release binary plus its exact debug/evidence bundle, stable build IDs, stripped
+binary plus separate-symbol support, stack traces through Concrete/runtime/FFI
+frames, core-dump or platform crash-report instructions, and a privacy-aware
+redaction mode. A crash report must identify target/toolchain/backend/profile,
+binary and source roots, trap/signal class, and whether each frame is exact,
+inlined/optimized, runtime helper, foreign, or unavailable.
+
+Gate a source-level trap, foreign crash, stripped release binary, mismatched
+symbol bundle, optimized/inlined frame, and missing source checkout. The
+mismatched bundle must fail loudly rather than symbolize against the wrong
+program; no stack trace upgrades a trusted crash into checked or proved
+evidence.
 
 ### Task R-0282
 
@@ -4757,6 +4809,125 @@ operation harder to grep.
  assumption, and include at least one mutation per unsafe class that the
  checked profile or audit gate catches.
 
+## Phase 15.75: Performance And Optimization Evidence
+
+Goal: make generated-code speed, size, memory, and optimization claims follow
+the same evidence discipline as correctness claims. This phase owns measured
+program performance; compiler throughput/caching remains primarily Phase 8.5,
+semantic equivalence remains the backend/differential gates, and release budgets
+consume rather than reinvent these facts.
+
+Trigger: start after Task R-0416 has a stable comparable corpus and at least one
+reproduced gap, regression, or release claim forces optimization work. If no
+performance claim is desired, execute the taxonomy and non-claim tasks and
+record `performance_not_claimed`; do not build speculative optimizers.
+
+Done when: every public performance claim names its workload/input, comparable
+reference, backend/target/profile/toolchain, metric and uncertainty, raw data,
+replay command, and evidence class; generated-code regressions are caught within
+calibrated noise; optimization work is pulled by measured gaps; and Phase 17's
+release budgets consume the same ledger.
+
+### Task R-0417
+
+**Objective:** Define performance evidence classes and claim grammar.
+
+Use `measured_replayable`, `measured_nonreplayable`, `estimated`,
+`complexity_guarded`, and `not_claimed`; never reuse `proved`, `enforced`, or
+`tested_by_oracle` as a speed claim. A measurement states machine/OS, CPU
+governor and load controls, toolchains, target, backend, optimization/profile,
+input, repetitions, estimator, dispersion, outlier policy, and comparison
+fairness. Complexity theorems or O(n²) ratchets describe growth, not wall-clock
+performance. Add `docs/PERFORMANCE_EVIDENCE.md` and machine-readable schema.
+
+### Task R-0418
+
+**Objective:** Turn the Phase 8 corpus into a reproducible benchmark harness and
+committed baseline ledger.
+
+Add `concrete bench --manifest ... --json` or an equally stable script surface;
+pin inputs and reference implementations; verify output/status before timing;
+retain raw samples; separate compilation, link, startup, steady-state runtime,
+and end-to-end measurements; and record cold/warm/cache state. Baselines are
+reviewed artifacts with provenance, not an uncommitted `tests/perf` file. A
+baseline update requires an explanatory diff and replay transcript.
+
+### Task R-0419
+
+**Objective:** Add statistically honest generated-code regression gates.
+
+Calibrate per-host noise from repeated controls; use minimum effect sizes plus
+confidence/dispersion rules rather than one fixed percentage; rerun suspected
+regressions on an isolated runner; distinguish flaky infrastructure from a
+confirmed regression; and retain both sample sets. Per-change CI runs a small
+deterministic sentinel set, scheduled CI runs the full corpus, and release CI
+replays the declared budgets. Inject CPU work, allocation, and code-size
+mutations to prove the corresponding gates are load-bearing.
+
+### Task R-0420
+
+**Objective:** Measure codegen quality directly, not only elapsed time.
+
+For selected hot paths record dynamic/static instruction counts where stable,
+branches, calls, stack usage, allocation count/bytes, bounds/runtime-check
+sites, helper calls, vectorization/inlining facts where observable, emitted IR
+and object/binary size. Add structural budgets for accidental allocation,
+duplicate checks, missed constant folding, helper-call explosions, and loop-body
+growth. These are target/backend-specific measured or reported facts, never
+source-semantics proof.
+
+### Task R-0421
+
+**Objective:** Define the optimization ownership and evidence-preservation
+contract across Concrete SSA, backend IR, LLVM, and QBE.
+
+Every optimization has a named owner, preconditions, affected operations and
+failure semantics, debug/source-identity policy, verifier before/after,
+interpreter/differential/mutation coverage, and performance witness. Prefer
+target-neutral canonicalization/legalization only when semantics require it;
+keep target instruction selection backend-specific. Do not add a pass because
+another compiler has it. Optimization levels select documented pass sets and
+must not change observable checked arithmetic, traps, capabilities, ownership,
+or evidence status.
+
+### Task R-0422
+
+**Objective:** Close measured compiler and emitter performance defects under one
+owned queue, beginning with bug 027's quadratic emission class.
+
+Profile before refactoring; retain adversarial scaling inputs; measure time and
+peak memory across increasing program sizes; require an explicit expected
+complexity envelope; and gate the class rather than one file. Typed emitter
+fragments may be adopted when the profile pulls them, but QBE's fragment model
+does not by itself prove LLVM emission fixed. Keep compiler-throughput facts
+separate from generated-program runtime facts in reports and release claims.
+
+### Task R-0423
+
+**Objective:** Publish fair comparative performance reports without turning
+benchmarks into marketing badges.
+
+Compare identical algorithms, validation, integer semantics, allocation/I/O
+boundaries, optimization intent, and outputs; disclose handwritten/reference
+advantages, excluded workloads, confidence intervals, and backend/toolchain
+trust. Report wins, losses, and inconclusive results. Ban geometric-mean or
+headline claims that cannot be reconstructed from published rows, and ban
+cross-language comparisons that silently omit safety/runtime checks present in
+only one implementation.
+
+### Task R-0424
+
+**Objective:** Add the Phase 15.75 validation artifact and graduate its facts
+into release budgets.
+
+Ship a pinned mixed corpus containing compute, allocation, parsing, collection,
+I/O, and binary-size workloads; replay LLVM and supported QBE rows on named
+hosts; demonstrate one caught runtime, allocation, code-size, and scaling
+regression; emit the performance evidence ledger and raw samples; and feed the
+same schema into Task R-0355 rather than creating a release-only benchmark
+database. The capstone states explicitly which performance claims are measured,
+estimated, complexity-only, or not made.
+
 ## Phase 16: Freestanding And Embedded Target
 
 Goal: make Concrete's hosted-vs-freestanding boundary explicit enough for
@@ -4899,6 +5070,35 @@ audience):**
  named in the grammar has a reference section, every anti-feature/rejected
  construct has a diagnostic or policy citation, and README/site/book links
  point to this reference as the normative source.
+### Task R-0425
+
+**Objective:** Publish a versioned language conformance suite derived from the
+normative language reference, runnable by every backend and any future
+independent implementation.
+
+Do not make the current compiler's output the expected answer. For each
+reference rule classify fixtures as required behavior, required rejection,
+implementation-defined behavior with a declared choice, target/profile-
+conditional behavior, or unsupported extension. Name the interpreter as the
+executable reference only for the subset whose interpreter semantics are
+specified and independently checked against normative expected observations;
+interpreter/backend agreement alone remains corroboration, not definition.
+
+Version the corpus with the language reference. Each case records source,
+reference-section/rule ID, expected stdout/stderr/exit/trap or stable diagnostic
+class, capabilities/profile/target, permitted variation, and minimum language
+version. Run it through interpreter, LLVM, QBE, WebAssembly when supported, and
+future backends without silent fallback. Backend-specific exclusions require a
+declared capability-matrix row and cannot make the language case disappear.
+
+Acceptance: coverage mapping from every normative construct and rejection rule
+to at least one positive/negative case or explicit untestable rationale;
+mutation tests for wrong value, missing trap, wrong rejection, backend drift,
+and stale reference links; an external runner with JSON results; deterministic
+fixtures independent of host locale/time/network unless those facts are the
+declared subject; and a release gate that refuses a claimed-supported backend or
+language version with an unexplained conformance failure.
+
 ### Task R-0336
 
 **Objective:** Publish a public claim matrix: what Concrete proves, enforces, reports, assumes, and trusts.
@@ -5205,6 +5405,114 @@ the Phase 10 verified-profile command, not just written in prose.
  explicitly backend-trusted. Release replay begins with a
  clean cache or `--incremental=off`; a local cache cannot be an undeclared
  release input.
+
+## Phase 17.5: Post-Release Operations And Stewardship
+
+Goal: keep Concrete's claims, users, artifacts, and dependency evidence
+trustworthy after the first release. This phase starts only after Task R-0360
+ships a public release; it is operational stewardship, not a pre-release
+community-building program.
+
+Done when: supported versions and response windows are public; releases can be
+reproduced, rolled back, revoked, and repaired; security and evidence incidents
+have rehearsed procedures; current/previous-version compatibility is gated;
+user failures become permanent corpus evidence; and ecosystem-health claims use
+opt-in or public data rather than hidden telemetry.
+
+### Task R-0426
+
+**Objective:** Define the supported-version, maintenance, and end-of-life
+policy.
+
+Name stable/preview channels, support windows, which release lines receive
+security versus correctness fixes, toolchain/platform support, evidence/schema
+compatibility, and the notice required before end of life. Publish a
+machine-readable support matrix consumed by installers, `doctor`, release
+bundles, package tooling, and documentation. Unsupported must mean no claim, not
+silent best effort.
+
+### Task R-0427
+
+**Objective:** Make release rebuild, hotfix, rollback, and revocation procedures
+replayable.
+
+From the source tag, locks, builder/toolchain identities, and evidence root,
+reproduce every supported artifact and compare declared hashes. Define signed
+hotfix provenance, rollback selection, mirror/CDN correction, compromised-key
+rotation, and how installers refuse a revoked release. Drill a bad binary, bad
+metadata, failed rollout, and lost build host; retain timings and manual steps.
+
+### Task R-0428
+
+**Objective:** Operate a security and soundness response process.
+
+Publish reporting channels, acknowledgement/triage/remediation targets,
+embargo and coordinated-disclosure rules, severity criteria for compiler wrong
+code, proof/evidence overclaim, stdlib memory safety, package compromise, and
+toolchain/supply-chain defects, plus advisory/CVE policy where applicable. A
+fix includes containment, minimized reproducer, affected-version matrix,
+revocation/recheck consequences, class-level gate, disclosure, and backport or
+explicit non-backport decision.
+
+### Task R-0429
+
+**Objective:** Gate cross-version language, stdlib, package, and evidence
+compatibility across the current and previous supported releases.
+
+Test new compiler/old source, old compiler/newly declared source rejection,
+old/new package interfaces, lockfiles, proof subjects, certificates, audit
+bundles, diagnostics/API snapshots, and migration tooling according to the
+published compatibility policy. Unknown future schemas fail loudly; migrations
+preserve provenance and downgrade to `needs_recheck` whenever evidence cannot
+be retained honestly.
+
+### Task R-0430
+
+**Objective:** Define package, dependency, proof, certificate, and claim
+revocation operations.
+
+Support package yanks without erasing history, compromised dependency notices,
+evidence-root/proof/certificate revocation, replacement releases, offline
+revocation snapshots, and audit output showing affected transitive dependents.
+Replaying an old bundle must report the historical result and current revocation
+status separately. Gate withheld-network/offline behavior, stale snapshots,
+key compromise, malicious replacement, and recovery to a clean dependency.
+
+### Task R-0431
+
+**Objective:** Turn every qualifying external failure into durable evidence.
+
+Provide an intake/reduction template that records affected version/target,
+minimal source/project, expected and observed behavior, failure boundary,
+replay command, privacy/license permission, and disposition. Wrong code, crash,
+hang, misleading evidence, compatibility break, diagnostic failure, and severe
+performance regression each enter the appropriate permanent corpus or a
+documented no-fixture state. Closure requires a class-level prevention gate and
+links the advisory/issue, fix, regression, and released versions.
+
+### Task R-0432
+
+**Objective:** Measure post-release ecosystem health without hidden telemetry.
+
+Use opt-in diagnostics bundles, explicit surveys, public issue data, CI from
+consenting ecosystem projects, reproducible installation probes, and published
+compatibility runs. Track install success, first-project completion, upgrade
+friction, diagnostic usefulness, real-project compatibility, proof replay,
+performance regressions, and time-to-resolution with collection bias and sample
+size disclosed. The compiler sends nothing by default; absence of telemetry is
+not evidence of success.
+
+### Task R-0433
+
+**Objective:** Add the Phase 17.5 operational validation drill.
+
+Rebuild a release from clean inputs; detect a substituted artifact; issue and
+consume a signed revocation; produce a hotfix and rollback; migrate a previous-
+version project/evidence bundle; process a simulated wrong-code or false-proof
+report through containment, regression, advisory, backport, and release; test
+offline behavior; and publish the postmortem with response-time and manual-step
+budgets. The drill must distinguish practiced automation from policy that has
+never been exercised.
 
 ## Phase 18: Packages And Dependency Evidence
 
