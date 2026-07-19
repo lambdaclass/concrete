@@ -24,11 +24,15 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 rejected_e0808() {
   local name="$1" src="$2" f="$TMP/$1.con"
   printf '%s\n' "$src" > "$f"
-  local out; out="$("$COMPILER" "$f" -o "$TMP/$1.out" 2>&1)"
-  if grep -q "E0808" <<<"$out" && grep -qi "generic enum" <<<"$out"; then
-    ok "$name rejected with E0808"
+  local out rc; out="$("$COMPILER" "$f" -o "$TMP/$1.out" 2>&1)"; rc=$?
+  # Require the E0808 mono diagnostic SPECIFICALLY — a parser/checker/linker
+  # error or a crash must NOT count as containment. Also require a clean
+  # non-zero rejection (not a segfault-class signal >128).
+  if grep -q "(E0808)" <<<"$out" && grep -qi "error\[mono\]" <<<"$out" \
+     && [ "$rc" -ne 0 ] && [ "$rc" -lt 128 ]; then
+    ok "$name rejected with E0808 (error[mono], rc=$rc)"
   else
-    no "$name NOT rejected with E0808 (would corrupt memory) — got: $(head -1 <<<"$out")"
+    no "$name NOT cleanly rejected with E0808 (rc=$rc) — got: $(head -1 <<<"$out")"
   fi
 }
 # accepted <name> <source>

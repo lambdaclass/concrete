@@ -451,6 +451,9 @@ jobs:
       - name: "Generic-enum containment (R-0001 / bug 051 — user generic enums rejected fail-closed E0808; builtins unaffected)"
         run: bash scripts/tests/check_generic_enum_containment.sh
 
+      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: E0808 containment or positive mono)"
+        run: bash scripts/tests/check_generic_enum_inventory.sh
+
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
         run: bash scripts/tests/check_project_model.sh
 

@@ -995,7 +995,7 @@ run_ok "$TESTDIR/adversarial_lower_nested_struct_access.con" 42
 run_ok "$TESTDIR/adversarial_lower_struct_in_loop.con" 42
 
 # Adversarial monomorphization tests
-run_err "$TESTDIR/adversarial_mono_generic_enum.con" "generic enum"  # R-0001 containment: rejected E0808 until per-instantiation enum mono lands (was run_ok 42; different-size instantiations are the bug-051 corrupting class)
+run_err "$TESTDIR/adversarial_mono_generic_enum.con" "(E0808)"  # R-0001 containment: must reject with E0808 SPECIFICALLY (not a parser/checker/linker/crash failure) until per-instantiation enum mono lands (was run_ok 42; different-size instantiations are the bug-051 corrupting class)
 run_ok "$TESTDIR/adversarial_mono_generic_return_struct.con" 42
 run_ok "$TESTDIR/adversarial_mono_many_instantiations.con" 42
 run_ok "$TESTDIR/adversarial_mono_nested_generics.con" 42
@@ -1304,7 +1304,7 @@ echo ""
 flush_jobs
 if section_active negative; then
 echo "=== Negative tests (expected errors) ==="
-run_err "$TESTDIR/error_generic_enum_051.con"  "generic enum"
+run_err "$TESTDIR/error_generic_enum_051.con"  "(E0808)"  # R-0001 containment: E0808 specifically
 run_err "$TESTDIR/error_unconsumed.con"        "was never consumed"
 run_err "$TESTDIR/error_use_after_move.con"    "used after move"
 run_err "$TESTDIR/error_branch_disagree.con"   "consumed in one branch"
