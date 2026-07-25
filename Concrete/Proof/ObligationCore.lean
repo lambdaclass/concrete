@@ -27,7 +27,11 @@ def statusVocabulary : List String :=
     "arithmetic_proved", "solver_trusted", "tested_by_oracle", "runtime_checked",
     "enforced", "assumed", "trusted", "partial", "stale", "vacuous", "missing",
     "unproven", "planned", "counterexample", "unknown", "timeout", "solver_error",
-    "ineligible" ]
+    "ineligible",
+    -- A proof link with no stored proof-subject digest: not `proved` (nothing
+    -- was checked), and not `stale` (no body change was observed — it was never
+    -- pinned). R-0004 / bug 058.
+    "unbound" ]
 
 /-- The canonical obligation kinds (Phase 3 #1). New obligation kinds are added
     here, not to a private report path. -/
@@ -38,7 +42,10 @@ def kindVocabulary : List String :=
     "variant_nonnegative", "variant_decreases", "invalid_contract_expression",
     "impure_contract_call", "source_proof_link", "proof_fingerprint", "spec_drift",
     "missing_theorem", "blocked_proof", "ineligible_construct", "smt_query",
-    "oracle_evidence", "runtime_enforced", "trusted_boundary" ]
+    "oracle_evidence", "runtime_enforced", "trusted_boundary",
+    -- Companion kind for the `unbound` status above; distinct from `spec_drift`
+    -- so a release gate can tell "the subject moved" from "there is no subject".
+    "unbound_proof_link" ]
 
 /-- ObligationCore schema — the one typed obligation record (Phase 3 #18d). It is
     now an `abbrev` of `Report.Obligation`: there is a SINGLE record type, hosted

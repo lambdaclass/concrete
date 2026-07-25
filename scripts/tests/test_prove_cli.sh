@@ -100,7 +100,15 @@ assert_json "capabilities prove_json"     'd["features"]["prove_json"] is True' 
 assert_json "schema required fields"      '"next_actions" in d["required"]' "$COMPILER" prove --schema
 
 echo "=== prove --json (structured proof context) ==="
+# A genuinely PROVED source link needs a stored proof-subject digest;
+# constant_time_tag's #[proof_by] carries no #[proof_fingerprint], so since
+# R-0004's containment it reports `unbound` — correctly, and this assertion was
+# reading that as a regression. loop_invariant.count_up is source-linked AND
+# fingerprinted, so it exercises the proved shape for real. Both states are
+# asserted: the CLI must distinguish them, which is the whole point of `unbound`.
 assert_json "json proved status"   'd["status"]=="proved" and d["proof_link"]["origin"]=="source_linked"' \
+  "$COMPILER" prove examples/loop_invariant/src/main.con loop_invariant.count_up --json
+assert_json "json unbound status"  'd["status"]=="unbound" and d["proof_link"]["origin"]=="source_linked"' \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --json
 assert_json "json next_actions"    'len(d["next_actions"])>=1 and all("kind" in a and "command" in a for a in d["next_actions"])' \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --json

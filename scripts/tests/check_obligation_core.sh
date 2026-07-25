@@ -32,10 +32,33 @@ ck "every obligation has all schema-v1 fields" "$HMAC" \
   "all(all(k in o for k in [$FIELDS]) for o in d['obligations'])"
 
 echo "=== single canonical vocabulary (Phase 3 #2) ==="
-ck "every status ∈ canonical statusVocabulary" "$HMAC" \
-  "set(o['status'] for o in d['obligations']) <= {'proved_by_lean','proved_by_kernel_decision','proved_by_lean_replay','arithmetic_proved','solver_trusted','tested_by_oracle','runtime_checked','enforced','assumed','trusted','partial','stale','vacuous','missing','unproven','planned','counterexample','unknown','timeout','solver_error','ineligible'}"
-ck "every kind ∈ canonical kindVocabulary" "$HMAC" \
-  "set(o['kind'] for o in d['obligations']) <= {'requires_at_entry','postcondition','precondition','array_bounds','div_nonzero','no_overflow','assert','assume','vacuity','loop_invariant_init','loop_invariant_preservation','loop_exit_implies_post','variant_nonnegative','variant_decreases','invalid_contract_expression','impure_contract_call','source_proof_link','proof_fingerprint','spec_drift','missing_theorem','blocked_proof','ineligible_construct','smt_query','oracle_evidence','runtime_enforced','trusted_boundary'}"
+# DERIVE both vocabularies from Concrete/Proof/ObligationCore.lean rather than
+# restating them here. This gate previously carried its own copy of each list,
+# which is the anti-pattern principle 12 names and bug 057 demonstrated: a check
+# that restates the thing it checks cannot notice the thing changing. Adding
+# `unbound`/`unbound_proof_link` to the Lean source left this copy behind and the
+# gate failed in CI for the wrong reason — not "an obligation used a
+# non-canonical status" but "the gate's private list is stale".
+VOCAB_SRC="Concrete/Proof/ObligationCore.lean"
+extract_vocab() { # <defName> -> python set literal
+  python3 - "$VOCAB_SRC" "$1" <<'PYX'
+import re,sys
+src, name = open(sys.argv[1]).read(), sys.argv[2]
+m = re.search(r'def\s+' + re.escape(name) + r'\s*:\s*List String\s*:=\s*\[(.*?)\]', src, re.S)
+assert m, "could not find " + name + " in " + sys.argv[1]
+body = re.sub(r'--[^\n]*', '', m.group(1))          # strip Lean comments
+items = re.findall(r'"([^"]+)"', body)
+assert items, "no entries parsed from " + name
+print("{" + ",".join("'%s'" % i for i in items) + "}")
+PYX
+}
+STATUS_SET="$(extract_vocab statusVocabulary)" || { echo "  FAIL could not derive statusVocabulary"; FAIL=$((FAIL+1)); STATUS_SET="set()"; }
+KIND_SET="$(extract_vocab kindVocabulary)"     || { echo "  FAIL could not derive kindVocabulary";   FAIL=$((FAIL+1)); KIND_SET="set()"; }
+
+ck "every status ∈ canonical statusVocabulary (derived from $VOCAB_SRC)" "$HMAC" \
+  "set(o['status'] for o in d['obligations']) <= $STATUS_SET"
+ck "every kind ∈ canonical kindVocabulary (derived from $VOCAB_SRC)" "$HMAC" \
+  "set(o['kind'] for o in d['obligations']) <= $KIND_SET"
 ck "allowed_engines come from the tier set" "$HMAC" \
   "all(set(o['allowed_engines']) <= {'constant_fold','omega','bv_decide','smt','lean'} for o in d['obligations'])"
 ck "kernel-decided obligations are owned by a kernel engine" "$HMAC" \
