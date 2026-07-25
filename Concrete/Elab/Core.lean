@@ -18,6 +18,56 @@ Surface forms removed:
 -- Core IR Types
 -- ============================================================
 
+/-- What a call's callee IS, decided where scope is known.
+
+    Bug 050: Elab emitted a call through a fn-typed LOCAL as `.call name args`,
+    the same shape as a direct call, discarding the one fact that distinguishes
+    them. Mono then resolved that name against the global fn map and linker
+    aliases; when a generic function shared the local's name, the indirect call
+    was rewritten into a direct call of the generic — silent wrong code, and an
+    unbuildable project whenever a generic was named `f` (std's io calls local
+    fn-pointers by that name).
+
+    Lower and Interp each re-derived indirectness from their own variable scope,
+    so the same question was answered in three places and only two of them
+    could answer it. Carrying it here makes the callee's identity travel with
+    the call: `indirect` is resolved against the local environment and MUST NOT
+    be looked up in any global fn/alias map.
+
+    A `Coe String Callee` keeps existing construction sites meaning `direct`,
+    which is what every one of them is. The migration's compile errors land
+    where code CONSUMES a callee as a name — exactly the hazard set. -/
+inductive Callee where
+  /-- A call of a statically known function, by canonical definition name. -/
+  | direct (name : String)
+  /-- A call through a fn-typed local/parameter, named by that binding. -/
+  | indirect (binding : String)
+deriving BEq, Repr, Inhabited, DecidableEq
+
+instance : Coe String Callee := ⟨Callee.direct⟩
+
+namespace Callee
+
+/-- The spelling of the callee: a definition name for `direct`, a binding name
+    for `indirect`. Use only for display/diagnostics or when the caller has
+    already established which case it is — never to resolve an `indirect`
+    callee against global definitions. -/
+def spelling : Callee → String
+  | .direct n => n
+  | .indirect b => b
+
+def isIndirect : Callee → Bool
+  | .direct _ => false
+  | .indirect _ => true
+
+/-- The definition name, when this call has one. `none` for indirect calls,
+    which have no global definition to name. -/
+def directName? : Callee → Option String
+  | .direct n => some n
+  | .indirect _ => none
+
+end Callee
+
 mutual
 inductive CExpr where
   | intLit (val : Int) (ty : Ty)
@@ -28,7 +78,7 @@ inductive CExpr where
   | ident (name : String) (ty : Ty)
   | binOp (op : BinOp) (lhs rhs : CExpr) (ty : Ty)
   | unaryOp (op : UnaryOp) (operand : CExpr) (ty : Ty)
-  | call (fn : String) (typeArgs : List Ty) (args : List CExpr) (ty : Ty)
+  | call (callee : Callee) (typeArgs : List Ty) (args : List CExpr) (ty : Ty)
   | structLit (name : String) (typeArgs : List Ty) (fields : List (String × CExpr)) (ty : Ty)
   | fieldAccess (obj : CExpr) (field : String) (ty : Ty)
   | enumLit (enumName variant : String) (typeArgs : List Ty)
@@ -247,9 +297,11 @@ partial def ppCExpr (e : CExpr) : String :=
   | .ident n _ => n
   | .binOp op l r _ => s!"({ppCExpr l} {binOpToStr op} {ppCExpr r})"
   | .unaryOp op e _ => s!"{unaryOpToStr op}{ppCExpr e}"
-  | .call fn targs args _ =>
+  | .call callee targs args _ =>
     let targsStr := if targs.isEmpty then "" else s!"<{", ".intercalate (targs.map tyToStr)}>"
-    s!"{fn}{targsStr}({", ".intercalate (args.map ppCExpr)})"
+    -- Both cases render as source: `f(x)` reads the same whether `f` names a
+    -- definition or a fn-typed local, which is also what the source said.
+    s!"{callee.spelling}{targsStr}({", ".intercalate (args.map ppCExpr)})"
   | .structLit n targs fields _ =>
     let targsStr := if targs.isEmpty then "" else s!"<{", ".intercalate (targs.map tyToStr)}>"
     let fs := fields.map fun (k, v) => s!"{k}: {ppCExpr v}"
