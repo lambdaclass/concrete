@@ -1732,6 +1732,13 @@ inductive RegistryIssue where
       proofs by string name without forcing the compiler's spec table
       to know about them. -/
   | specDrift (entry : ProofRegistryEntry)
+  /-- R-0004 containment (bug 058): an in-source `#[proof_by]` with no
+      `#[proof_fingerprint]` has no STORED digest to compare against. Its
+      `bodyFingerprint` was synthesized from the current body, so the freshness
+      check compares that body with itself and can never fire — the claim would
+      stay `proved` through any edit. A comparison whose two sides come from the
+      same input is not a check, and must not be reported as one. -/
+  | unboundProofSubject (entry : ProofRegistryEntry)
   deriving Repr
 
 /-- Registry issues that are errors (attachment integrity violations)
@@ -1747,6 +1754,7 @@ def RegistryIssue.isError : RegistryIssue → Bool
   | .emptySpecName _ => true
   | .extractionBlocked _ _ => true
   | .specDrift _ => true            -- drifted spec invalidates the proof
+  | .unboundProofSubject _ => true  -- an unfounded `proved` claim is an integrity violation
 
 /-- Two-digit lowercase hex of a byte. -/
 private def byteToHex (b : Sha256Spec.Byte) : String :=
@@ -1806,7 +1814,16 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
     | some (_, currentFp) =>
       match re.expectedHash with
       | some h => if shortHash currentFp != h then some (.staleFingerprint re currentFp) else none
-      | none   => if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp) else none
+      | none   =>
+        -- No stored short hash. What that means depends on where the entry came
+        -- from, and conflating the two is bug 058: a JSON entry carries a
+        -- bodyFingerprint READ FROM THE FILE, so the full-string compare below
+        -- is a real check; a source-linked entry had its bodyFingerprint
+        -- SYNTHESIZED from the body being checked, so the same compare is the
+        -- current body against itself and can never fail.
+        if re.sourceLinked then some (.unboundProofSubject re)
+        else if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp)
+        else none
     | none => none  -- already caught as unknown
   -- Check for entries targeting ineligible functions
   let ineligibles := registry.filterMap fun re =>
@@ -1855,6 +1872,8 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
 
 /-- Render a registry validation issue as a diagnostic string. -/
 def renderRegistryIssue : RegistryIssue → String
+  | .unboundProofSubject re =>
+    s!"error: proof link for '{re.function}' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint(\"...\")] after re-verifying"
   | .unknownFunction re =>
     s!"error: registry entry for unknown function '{re.function}' (function was removed or renamed — update or remove the registry entry)"
   | .renamedFunction re newName =>
@@ -1898,10 +1917,12 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
       | .emptySpecName _ => ["empty spec name"]
       | .extractionBlocked _ unsupported => unsupported
       | .specDrift _ => ["spec drift"]
+      | .unboundProofSubject _ => ["no stored proof subject"]
     let fn := match issue with
       | .unknownFunction re | .renamedFunction re _ | .staleFingerprint re _
       | .ineligibleFunction re _ | .emptyProofName re | .emptySpecName re
       | .extractionBlocked re _
+      | .unboundProofSubject re
       | .specDrift re => re.function
       | .duplicateEntry f _ | .conflictingEntry f _ => f
     let loc := (locMap.find? fun e => e.1 == fn).map (·.2)
@@ -1918,6 +1939,7 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
            | .emptySpecName _ => "Add a spec name to the registry entry."
            | .extractionBlocked _ _ => "Remove the registry entry or fix unsupported constructs."
            | .specDrift _ => "Update the Lean spec in Concrete/Proof.lean to match the source-extracted PExpr, or update the source to match the spec."
+           | .unboundProofSubject _ => "Re-verify the proof against the current body, then record the result with #[proof_fingerprint(\"...\")]. Without a stored subject there is nothing for the freshness check to compare against."
          , details := det
          , failureClass := failureClassOf .attachmentIntegrity
          , repairClass := repairClassOf .attachmentIntegrity
@@ -2074,8 +2096,20 @@ private def deriveObligationStatus
   -- against that hash; otherwise the full expected fingerprint is compared. This
   -- is what gives source-linked functions staleness detection (their expectedFp
   -- is recomputed from the current body, so the string compare can never fire).
+  -- R-0004 containment (bug 058). A `.registry` attachment is synthesized from
+  -- an in-source `#[proof_by]`, and when it carries no `#[proof_fingerprint]`
+  -- its `expectedFp` was computed FROM THE BODY BEING CHECKED. The comparison
+  -- below would then be the current body against itself: not a check, and it
+  -- kept such claims `proved` through any edit. With no stored subject there is
+  -- nothing to be fresh against, so the claim needs re-verification by
+  -- construction — never `proved`. (`.hardcoded` attachments come from
+  -- Proof.provedFunctions and carry a real expectedFp, so they keep the
+  -- string compare.)
+  let unbound := fun (a : SpecAttachment) =>
+    a.source == .registry && a.expectedHash.isNone
   let isStale := fun (a : SpecAttachment) =>
-    match a.expectedHash with
+    if unbound a then true
+    else match a.expectedHash with
     | some h => shortHash currentFp != h
     | none   => a.expectedFp != currentFp
   if isTrusted then .trusted
