@@ -1773,7 +1773,14 @@ def RegistryIssue.isError : RegistryIssue → Bool
   | .emptySpecName _ => true
   | .extractionBlocked _ _ => true
   | .specDrift _ => true            -- drifted spec invalidates the proof
-  | .unboundProofSubject _ => true  -- an unfounded `proved` claim is an integrity violation
+  -- Warning at the REGISTRY-ISSUE level, matching `staleFingerprint`. Both are
+  -- reported as errors in the proof-diagnostic stream (E0810 / E0800) and both
+  -- block a release through `[policy] require-proofs`; neither should make an
+  -- inspection command like `audit` refuse to run. Marking this an error made
+  -- `audit` exit 1 on a project with unbound links — strictly harsher than the
+  -- same command on a project with STALE proofs, which exits 0 — so you could
+  -- not audit a project precisely when its evidence needed auditing.
+  | .unboundProofSubject _ => false
 
 /-- Two-digit lowercase hex of a byte. -/
 private def byteToHex (b : Sha256Spec.Byte) : String :=

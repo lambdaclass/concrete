@@ -89,6 +89,7 @@ declare -A SKIP_BUGS=(
   [059]="OPEN -- bodyFingerprint drops declared types and never sees the signature: i32 -> u32 keeps a proof proved WITH a stored fingerprint (R-0004 defect 2)"
   [060]="OPEN -- #[requires]/#[ensures] are outside the fingerprint: changing a TRUE postcondition to a FALSE one still reports proved (R-0004 defect 3)"
   [061]="OPEN (latent, no reachable witness) -- PExpr.call spells a parameter application and a global call identically; filed under principle 12 because the proof model is where soundness claims live. The FINGERPRINT distinguishes them (call vs callptr)"
+  [062]="OPEN -- a stale proof does not invalidate dependents: `mid` depends DIRECTLY on a stale `leaf` and still reports proved, and `top` two hops up shows nothing. staleDeps is recorded but never consulted by deriveObligationStatus (R-0004 defect 4; broader than the roadmap description)"
   [039]="FIXED -- regress_039_import_alias_collision/src/main.con (project test, exit 0); emitSModule puts the module's own bare->qualified import aliases ahead of the program-wide pool"
   [040]="FIXED -- regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)"
   [041]="FIXED -- regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)"

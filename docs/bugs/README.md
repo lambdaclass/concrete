@@ -80,6 +80,7 @@ Those belong in:
 - [059_body_fingerprint_omits_signature_and_types.md](059_body_fingerprint_omits_signature_and_types.md) — the body hash drops declared types and never sees the signature; `i32 -> u32` keeps a proof `proved` (R-0004, 2026-07-25)
 - [060_contracts_outside_proof_fingerprint.md](060_contracts_outside_proof_fingerprint.md) — `#[ensures]` is outside the hash, so a FALSE postcondition still reports `proved` (R-0004, 2026-07-25)
 - [061_pexpr_conflates_param_application_with_global_call.md](061_pexpr_conflates_param_application_with_global_call.md) — the proof model spells a parameter application and a global call identically; latent, filed under principle 12 (2026-07-25)
+- [062_proof_dependency_staleness_does_not_propagate.md](062_proof_dependency_staleness_does_not_propagate.md) — a stale proof does not invalidate its dependents, not even one hop; `staleDeps` is recorded but never consulted (R-0004, 2026-07-25)
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 

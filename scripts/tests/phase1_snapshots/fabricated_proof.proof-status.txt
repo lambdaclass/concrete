@@ -15,5 +15,5 @@
 
   origin: source_linked
 
-Totals: 1 functions — 1 proved, 0 stale, 0 unproved, 0 blocked, 0 ineligible, 0 trusted
+Totals: 1 functions — 1 proved, 0 stale, 0 unbound, 0 unproved, 0 blocked, 0 ineligible, 0 trusted
 
