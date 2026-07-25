@@ -10,10 +10,17 @@ This document describes the test architecture, coverage matrix, determinism poli
 make setup-hooks     # one-time, per clone
 ```
 
-That points `core.hooksPath` at `.githooks`, whose `pre-push` builds and then
-runs **every gate the CI workflow runs**, in parallel (`~5 min` on a multicore
-box). `make pre-push` invokes the same thing by hand. Docs-only pushes take a
-short path: docs-drift plus the roadmap-linearity gate.
+That points `core.hooksPath` at `.githooks`. The hook builds, then runs the
+R-0022 fast surface-gate checklist plus the gates matching the areas the push
+touches. `make pre-push` invokes the same thing by hand; docs-only pushes take a
+short path (docs-drift + roadmap linearity).
+
+The hook deliberately does **not** run the full gate set. Measured on an 18-core
+box with `JOBS=12` and nothing else running, the full set takes **23+ minutes** —
+the runner's header claims "a few", which is not what it does. A 23-minute push
+gets bypassed by the second day, and a bypassed hook protects nothing, so the
+hook buys a check that actually runs at the cost of some coverage. The full set
+is `make pre-push-full`, and CI runs it on every push regardless.
 
 Deliberate bypass is `CONCRETE_SKIP_GATES=1 git push`, which prints a warning
 saying you own the CI result.

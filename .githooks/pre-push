@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# Pre-push gate: run what CI runs, before CI runs it.
+# Pre-push gate.
 #
 # `make test-full` is NOT sufficient and never was — it does not execute the
-# check_*.sh gate scripts at all. Both times this repository shipped a red main
-# (2026-06, 2026-07, and twice more on 2026-07-25) the local fast suite was
-# green and the gates had never been run. The ritual was documented in a
-# Makefile comment; a comment is not enforcement.
+# check_*.sh gate scripts at all. This repository has shipped a red `main` four
+# times on that substitution (2026-06, 2026-07, and twice on 2026-07-25).
 #
-# Docs-only pushes take the short path: a full gate pass for a typo would train
-# everyone to bypass, which is worse than not having the hook.
+# SCOPE. This hook deliberately does NOT run the full CI gate set. Measured on
+# an 18-core box with JOBS=12 and nothing else running, the full set takes 23+
+# minutes; the runner's own header claims "a few". A 23-minute push is bypassed
+# by the second day, and a bypassed hook protects nothing. So the hook runs:
+#
+#   1. the R-0022 fast surface-gate checklist — built precisely to be the fast
+#      pre-push check, and identical to CI's Language-surface constituent, and
+#   2. the gates matching the AREAS this push actually touches.
+#
+# The full set stays available as `make pre-push-full` and runs in CI. This
+# trades some coverage for a check that actually gets run — the alternative
+# proved to be no check at all.
 #
 # Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push
 set -uo pipefail
@@ -20,43 +28,60 @@ if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
   exit 0
 fi
 
-# What is actually being pushed: compare against the upstream tip when known.
 remote_sha="$(git rev-parse "@{upstream}" 2>/dev/null || echo "")"
 if [ -n "$remote_sha" ]; then
   changed="$(git diff --name-only "$remote_sha"..HEAD)"
 else
   changed="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")"
 fi
+[ -z "$changed" ] && { echo "pre-push: nothing to check"; exit 0; }
 
 docs_only=1
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  case "$f" in
-    docs/*|*.md) ;;                       # prose
-    *) docs_only=0; break ;;              # anything else needs the full pass
-  esac
+  case "$f" in docs/*|*.md) ;; *) docs_only=0; break ;; esac
 done <<< "$changed"
 
-# Gates need the compiler.
 echo "pre-push: building…"
 make build >/tmp/prepush-build.log 2>&1 || {
   echo "pre-push: BUILD FAILED — see /tmp/prepush-build.log" >&2; exit 1; }
 
-if [ "$docs_only" = "1" ] && [ -n "$changed" ]; then
-  echo "pre-push: docs-only change — running docs gates"
+if [ "$docs_only" = "1" ]; then
+  echo "pre-push: docs-only change — docs gates"
   bash scripts/tests/check_docs_drift.sh || exit 1
   bash scripts/tests/check_roadmap_linear.sh || exit 1
-  echo "pre-push: docs gates pass"
-  exit 0
+  echo "pre-push: docs gates pass"; exit 0
 fi
 
-# Parallel by default: gates are independent processes, and the runner
-# re-checks any failure sequentially before believing it. On a multicore box
-# this is ~5 minutes rather than ~40, which is the difference between a habit
-# and a thing people skip.
-CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
-JOBS_N=$(( CORES > 8 ? 8 : CORES ))
-echo "pre-push: running every CI gate locally (JOBS=$JOBS_N) — bypass with CONCRETE_SKIP_GATES=1"
-JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh || {
-  echo "pre-push: GATES FAILED — fix before pushing, or bypass deliberately." >&2; exit 1; }
-echo "pre-push: all CI gates pass"
+echo "pre-push: fast surface gates (R-0022)"
+bash scripts/tests/run_fast_surface_gates.sh || {
+  echo "pre-push: FAST SURFACE GATES FAILED" >&2; exit 1; }
+
+# Area filters: map touched paths to the gate-name substrings the runner
+# accepts. Deliberately generous — a superfluous gate costs seconds, a missed
+# one costs a red main and a CI round-trip.
+areas=""
+add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
+while IFS= read -r f; do
+  case "$f" in
+    Concrete/Proof/*|Concrete/Report/*|proofs/*)  add proof; add evidence; add contract ;;
+    Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa ;;
+    Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
+    std/*)                                        add collections; add stdlib; add proof ;;
+    examples/*)                                   add evidence; add examples ;;
+    scripts/tests/*|.github/workflows/*)          add hygiene ;;
+  esac
+done <<< "$changed"
+
+if [ -n "$areas" ]; then
+  CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
+  JOBS_N=$(( CORES > 8 ? 8 : CORES ))
+  for a in $areas; do
+    echo "pre-push: gates matching '$a'"
+    JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh "$a" || {
+      echo "pre-push: GATES FAILED for area '$a' — fix, or bypass deliberately." >&2; exit 1; }
+  done
+fi
+
+echo "pre-push: fast surface gates + touched-area gates pass"
+echo "pre-push: NOTE the full set was not run — 'make pre-push-full' or CI covers it."
