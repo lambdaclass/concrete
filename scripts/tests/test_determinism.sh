@@ -79,7 +79,7 @@ check_determinism() {
     else
         FAIL=$((FAIL + 1))
         echo "  FAIL: $desc"
-        diff "$file1" "$file2" | head -10
+        diff "$file1" "$file2" | awk "NR<=10"
     fi
 }
 

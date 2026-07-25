@@ -91,7 +91,7 @@ EOF
 fi
 
 echo "  Exit code: $EXIT_CODE"
-echo "  Error: $(echo "$ERROR_OUTPUT" | head -3)"
+echo "  Error: $(echo "$ERROR_OUTPUT" | awk "NR<=3")"
 
 # Step 2: Auto-detect predicate if not given
 if [[ -z "$PREDICATE" ]]; then
