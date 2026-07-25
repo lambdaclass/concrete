@@ -34,11 +34,14 @@ so swapping which theorem `#[proof_by]` names is equally invisible.
 
 ## Candidate fix
 
-Include requires/ensures/invariants and the selected spec/theorem identity in
-R-0004's `ProofSubjectDigest`. A proof is a proof OF a statement; changing the
-statement must invalidate it exactly as changing the code does.
+Include requires/ensures/invariants plus the normalized selected specification
+and claim scope/coverage in R-0004's `ProofSubjectDigest`. A proof is a proof OF
+a statement; changing the statement must invalidate the subject exactly as
+changing the code does. Bind theorem identity and theorem-artifact digest in the
+separate `ProofEvidenceReceipt`: changing the evidence requires replay against
+the same subject, but does not redefine the subject itself.
 
 Regression: the `28 -> 999` edit above stales; swapping the `#[proof_by]` theorem
-stales; swapping the `#[spec]` stales; reformatting a contract without changing
-its meaning does not. A mutation that omits contracts from the digest must be
-killed.
+invalidates the receipt and requires replay; swapping the `#[spec]` stales the
+subject; reformatting a contract without changing its meaning does not. A
+mutation that omits contracts from the digest must be killed.

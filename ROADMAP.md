@@ -853,48 +853,79 @@ Treat the following as one evidence-integrity defect class:
   generics/bounds, capabilities, and other signature facts (bug 059);
 - `#[requires]`/`#[ensures]` and selected spec/proof identity are outside the
   body hash (bug 060); and
-- stale dependency propagation considers direct callees rather than the
-  transitive proof dependency closure (number and file this leg only after its
-  multi-function witness exists).
+- dependency review does not affect the caller's verdict at any distance:
+  `staleDeps` is filled only after statuses are derived, is never consulted to
+  downgrade the caller, and is not propagated transitively. Check in the
+  reported multi-function witness and control (provisionally called bug 062);
+  the number becomes stable only when its document and executable control land.
 
-Land this task in five explicit slices:
+Land this task in seven explicit slices:
 
 1. **Executable witnesses first.** Bugs 058–060 have numbered documents with
    replay transcripts, but prose snippets are not permanent executable
    reproducers. Check in minimal fixtures plus a dedicated freshness gate that
-   demonstrates each current false verdict and its control. Build the
-   multi-function dependency chain, reproduce the fourth defect, then give it
-   its own number. Bug 061 is a separate ProofCore identity/model defect and is
-   owned by R-0442; it is not folded into freshness merely because the same CI
-   repair exposed it.
+   demonstrates each current false verdict and its control. Check in the
+   multi-function dependency chain for the provisional bug 062, including
+   direct and multi-hop controls, and file the numbered record in the same
+   slice. Bug 061 is a separate ProofCore identity/model defect and is owned by
+   R-0442; it is not folded into freshness merely because the same CI repair
+   exposed it.
 2. **Immediate containment.** An in-source proof link without a stored,
    validated proof-subject digest is `missing`/`unbound` (or
    `needs_recheck`), never `proved`; release/verified profiles fail closed.
-3. **Root digest.** Replace body-only freshness with a versioned canonical
-   `ProofSubjectDigest` covering qualified semantic identity, full typed
-   signature and generic constraints, capabilities, normalized typed body,
-   requires/ensures/invariants, selected spec and theorem identity, and
-   extraction/schema version.
-4. **Dependency root.** Compute freshness transitively using a deterministic
+   This containment has landed; preserve its executable controls.
+3. **Dependency containment.** Once the call/proof graph is available, a
+   reachable dependency that is stale, unbound, missing, failed, or otherwise
+   not current must prevent the caller from contributing `proved_by_lean`
+   evidence. Apply this conservatively over the reachable closure before the
+   final dependency-root design lands; `staleDeps` is not merely advisory.
+4. **Replay foundation and receipt envelope.** Make `--report check-proofs`
+   resolve the proof workspace from the input project/repository rather than
+   the process working directory. Define a versioned `ProofEvidenceReceipt`
+   envelope and deterministic workspace/import/toolchain identities. This
+   slice may establish replay and serialization plumbing, but it cannot upgrade
+   a legacy body hash to a complete proof claim.
+5. **Semantic subject digest.** Replace body-only freshness with a versioned
+   canonical `ProofSubjectDigest` covering qualified semantic identity, full
+   typed signature and generic constraints, capabilities, normalized typed
+   body, requires/ensures/invariants, the normalized selected specification and
+   claim scope/coverage, and extraction/schema version. The theorem and
+   toolchain are evidence about that subject; their identities belong in the
+   receipt, not in the semantic subject digest.
+6. **Dependency root.** Compute freshness transitively using a deterministic
    SCC/Merkle root so recursion is finite and a deep callee edit stales every
    dependent claim without making source location or alpha-renaming noise
    semantic.
-5. **Replay context.** Make `--report check-proofs` resolve the proof workspace
-   from the input project/repository rather than the process working directory.
-   The same HMAC input currently reports 11 verified / 0 failed from the
-   repository root but 0 / 11 `theorem_lookup` failures and `Toolchain: unknown`
-   from `examples/hmac_sha256/`. A replay command is not complete evidence until
-   its project root, proof modules, and toolchain resolve independently of the
-   caller's cwd.
+7. **Issue receipts and migrate honestly.** Only after the final subject digest
+   and dependency root exist may successful kernel replay issue a receipt. It
+   binds the subject digest and dependency root to theorem identity plus theorem
+   artifact digest, compiler/Lean/ProofKit and schema identities, workspace and
+   import closure, replay command, and result. A legacy fingerprint or receipt
+   schema becomes `needs_recheck`, not `stale`: the evidence format changed, not
+   necessarily the program. Backfill the repository corpus only from successful
+   kernel replay; never copy newly computed hashes into source as a substitute
+   for verification. R-0216 owns the general corpus-migration command after this
+   one-time R-0004 migration.
+
+Keep the axes explicit: subject freshness, dependency freshness, kernel replay,
+producer/toolchain identity, and coverage are separate facts under R-0440. A
+friendly `proved_by_lean` claim requires a current subject, a current dependency
+root, and a valid replay receipt; none of those facts alone upgrades the others.
+The same HMAC input currently reports 11 verified / 0 failed from the repository
+root but 0 / 11 `theorem_lookup` failures and `Toolchain: unknown` from
+`examples/hmac_sha256/`; the replay-foundation slice must eliminate that
+cwd-dependent verdict before any receipt is accepted.
 
 Gate each omitted component, missing/malformed digest, false postcondition,
-`i32 -> u32` signature edit, capability/generic edit, theorem/spec swap, direct
-and multi-hop dependency drift, recursive SCCs,
-comments/formatting/alpha-renaming stability, repository-root/project-root
-invocation parity, and a mutation proving no old body-only path can emit
-`proved`. Keep the R-0002 proof-extraction CI repair and its reverified std
-fingerprints in their already-landed commit; do not mix that repair with these
-new evidence gates.
+`i32 -> u32` signature edit, capability/generic edit, theorem/spec/receipt swap,
+direct and multi-hop dependency drift (including missing, unbound, and failed
+callees), recursive SCCs, comments/formatting/alpha-renaming stability,
+repository-root/project-root invocation parity, legacy-schema
+`needs_recheck`, theorem/toolchain/workspace receipt mismatch, and a mutation
+proving no old body-only or advisory-`staleDeps` path can emit
+`proved_by_lean`. Keep the R-0002 proof-extraction CI repair and its reverified
+std fingerprints in their already-landed commit; do not mix that repair with
+these new evidence gates.
 
 ### Task R-0435
 
@@ -1075,7 +1106,12 @@ from CI. An opt-out registry under that design becomes mandatory bookkeeping.
 
 1. **Pre-push, narrow:** only the branch being published. Dirty tracked state,
    commits that belong to the milestone but are not in the push, and the required
-   gate evidence for what is being published.
+   gate evidence for what is being published. This level must remain routinely
+   usable: target under five minutes. If measurement shows the full CI gate set
+   exceeds that budget or regularly hits the hook timeout, run
+   `make test-fast-surface-gates` plus path-matched load-bearing gates locally
+   and leave the exhaustive `make test-ci-gates` run mandatory in CI. Do not
+   preserve a predictably bypassed hook merely because it is stricter on paper.
 2. **Repository audit, explicit command:** report worktrees and branches with no
    upstream and no recorded parked status past an age threshold. This is where
    `worktree-h18-drop-glue` should surface — reported, not blocking.

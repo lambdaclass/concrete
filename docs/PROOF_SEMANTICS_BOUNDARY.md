@@ -126,7 +126,9 @@ That sentence has important boundaries:
    exists. A stored fingerprint still covers the extracted body rather than a
    versioned digest of the full proof subject: signatures, declared types,
    contracts, and transitive dependency roots remain open under bugs 059/060
-   and R-0004.
+   and R-0004. The target keeps the semantic subject distinct from its evidence:
+   theorem/toolchain/workspace identity and kernel replay live in a receipt
+   bound to the subject and dependency root.
 6. **Replay has an execution context.** `--report check-proofs` must resolve
    the same Lean workspace and theorem environment in every supported working
    directory. R-0004 owns the current context-sensitive lookup defect.

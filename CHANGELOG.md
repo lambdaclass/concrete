@@ -10,6 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof Subject And Replay-Evidence Design Split
+
+_Docs/roadmap only, 2026-07-25. No compiler or proof verdict changed in this
+slice._
+
+R-0004 now lands dependency containment before its structural migration and
+separates the versioned semantic `ProofSubjectDigest` from the
+`ProofEvidenceReceipt` that binds theorem, toolchain, workspace, and kernel
+replay to that subject. The final receipt also binds a deterministic transitive
+dependency root. Legacy schema/toolchain evidence becomes `needs_recheck`;
+semantic subject drift remains `stale`.
+
+The proof workflow now states the shipped defect precisely: `staleDeps` is an
+advisory direct-edge field filled after status derivation, so it neither
+downgrades a caller nor propagates through a dependency chain. R-0439 also
+gives the narrow pre-push gate a measured runtime budget while retaining the
+full gate set in CI.
+
 ### Whole-Program Evidence Direction And Proof Vocabulary Cleanup
 
 _Docs/roadmap only, 2026-07-25. No compiler or language behavior changed in

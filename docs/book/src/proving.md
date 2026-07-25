@@ -93,7 +93,7 @@ The canonical states are:
 
 | State | What it means |
 |-------|---------------|
-| **proved** | Has a proof link and matching stored body fingerprint; run `check-proofs` for the kernel receipt |
+| **proved** | Has a proof link and matching stored body fingerprint; run `check-proofs` for the current kernel verdict (R-0004 will bind it into a receipt) |
 | **unbound** | Has a proof link but no stored proof subject; never treated as proved |
 | **stale** | Has a proof, but the function body changed since the proof was written |
 | **no proof** (missing) | Eligible and extractable, but nobody wrote a proof yet |
@@ -326,7 +326,11 @@ main.validate_header [proved]
   → main.check_nonce (proved)
 ```
 
-If `check_nonce`'s proof goes stale, `validate_header`'s dependency graph shows it — fix the callee first.
+If the directly called `check_nonce` proof goes stale, `validate_header`'s
+dependency graph displays that edge—fix the callee first. This display is
+advisory today: it does not downgrade the caller's status or propagate through a
+multi-hop chain. R-0004 owns conservative closure containment and the final
+dependency root.
 
 ### Refactors
 
