@@ -69,6 +69,29 @@ proofs.
     - proved through Lean-backed artifacts
     - trusted at the source, backend, toolchain, or target boundary
 
+12. **Semantic entities have compiler-owned identity**
+    Source names and link symbols are *representations* of an entity, never the
+    entity itself. Every transformation either preserves an entity's identity or
+    creates a checked derivation from it. This covers type, function, module,
+    builtin, specialization, layout, and source-origin identity.
+
+    This principle is written from failures, not from theory. Bugs 039, 044, 045,
+    050, 051, 054, and 055 have one shared cause: a string used as identity and
+    re-interpreted by a later pass — an import alias resolved twice, a match
+    binder sharing a slot with its outer namesake, a local callable rewritten
+    into a direct call because its text matched a global, one enum declaration
+    serving instantiations of different sizes, a specialization name a user
+    program can spell. Each was found separately and fixed separately; the
+    principle is what makes the class visible in advance.
+
+    Corollary for evidence: a value-level test cannot establish an identity or
+    layout property. R-0001 showed why — under a mutation that removed
+    specialization, programs whose wider instantiation was emitted first still
+    returned correct results. Identity claims need structural assertions
+    (distinct declarations, distinct footprints, distinct symbols), and each
+    phase should earn its invariants through a validated artifact rather than by
+    convention.
+
 ## Short Positioning
 
 Concrete is a minimalist, no-GC, linear/resource-aware systems language

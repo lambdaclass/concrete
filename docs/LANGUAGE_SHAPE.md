@@ -44,7 +44,7 @@ Each concept does one thing. They do not overlap. See [SAFETY.md](SAFETY.md).
 
 ### Ownership model: linear by default
 
-All structs and enums are linear (must be consumed exactly once) unless marked `Copy`. Linear variables cannot be reassigned — one binding, one resource. Branches must agree on consumption. Loops cannot consume linear variables from outer scope. Resources have deterministic, explicit destruction: the compiler rejects an unconsumed live value instead of silently auto-dropping it at scope exit. Generated recursive drop glue is allowed only inside an explicit owner-consuming operation such as `x.drop()` / `defer x.drop()`.
+All structs and enums are linear (must be consumed exactly once) unless marked `Copy`. A linear variable cannot be *overwritten while still live* (E0219); reassigning one whose old value has already been consumed is legal and is the ordinary fold/accumulate pattern (`acc = f(acc, x)`, including inside loops — see [OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md) "Linear rebind"). Branches must agree on consumption. Loops cannot consume linear variables from outer scope. Resources have deterministic, explicit destruction: the compiler rejects an unconsumed live value instead of silently auto-dropping it at scope exit. Generated recursive drop glue is allowed only inside an explicit owner-consuming operation such as `x.drop()` / `defer x.drop()`.
 
 **Depends on:** Linearity checking in Check.
 **Enables:** Resource safety without GC, deterministic cleanup.

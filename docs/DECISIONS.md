@@ -68,6 +68,52 @@ All dispatch in Concrete is either statically resolved (monomorphization) or exp
 
 Concrete does not have type inference beyond local let-binding inference. No HM-style global inference, no implicit conversions, no implicit trait resolution beyond monomorphization. The cost: more type annotations. The benefit: every type is visible where it matters, diagnostics have clear ownership, and the compiler frontend stays phase-separated.
 
+### No shadowing ban — shadowing stays legal
+
+**Status:** Decided (2026-07-25)
+
+Variable shadowing is permitted. A `let` may reuse a name already bound in the
+same or an enclosing scope, and nested `match` binders may share a name with an
+outer binder. The two existing restrictions stay and are the whole rule:
+
+- shadowing a still-**live** non-`Copy` binding is rejected (H16,
+  `.shadowsLiveLinear`), because the older owner's obligation would vanish
+  behind the new binding;
+- borrow-block ref and region names may not shadow an existing name
+  (`.borrowRefShadows`).
+
+**Why not a ban.** Shadowing was never a soundness problem. Bug 045 — reading an
+outer `value` returned the inner binder's value on both backends — was a
+*name-resolution* defect: nested same-named binders shared one Lower slot. The
+root fix was Elab alpha-renaming, and the general form is now
+[PRINCIPLES.md](PRINCIPLES.md) #12: source names are representations, and the
+compiler owns identity. Once identity is compiler-owned, shadowing is
+unambiguous internally at no cost, and the source-level question is purely
+ergonomic. Banning the construct would encode a former compiler weakness as a
+permanent language restriction.
+
+It would also have cost real surface. Pattern fields bind by field name only
+(`binding_list = IDENT { ',' IDENT }`), and `Option`/`Result` both name their
+payload field `value`, so nested matching over two of them produces nested
+`value` binders by construction — 25 such sites in `std/` and `examples/`. A ban
+requires adding a binder-renaming form (`Variant { value: inner }`) just to keep
+nested matching expressible. That is a grammar addition bought by a restriction,
+not by a feature.
+
+**What Concrete does instead:** same-name evolution is ordinary and visible.
+`let s = transform(s);` has one live `s` at every point because the RHS consumed
+the old one, and `acc = f(acc, x)` is `let mut` assignment (linear rebind,
+[OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md), legal including inside loops). If
+accidental shadowing later proves to cost audit clarity in review, the answer is
+a lint in the vet/tooling layer — an opt-in `no_implicit_shadowing` rule — not a
+language restriction. A `rebind` keyword was considered and rejected: `mut` plus
+assignment already marks a changing binding, and the live/consumed distinction
+already expresses "no implicit shadowing of a live resource."
+
+**Retired:** ROADMAP Task R-0435 (see CHANGELOG). The binder-renaming form
+remains available as pull-gated ergonomics if a workload wants distinct inner
+binder names; it is no longer a prerequisite for anything.
+
 ### Trusted means pointer containment only
 
 **Status:** Decided (2026-03-15)

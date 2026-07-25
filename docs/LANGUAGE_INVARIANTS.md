@@ -42,27 +42,31 @@ Each phase that adds a new consumption form must update this list.
 - the execution point (scope exit) is deterministic and visible from the block structure
 - no implicit function dispatch occurs; the exact function being called is the one written in the `defer` statement
 
-## 4. No Variable Shadowing
+## 4. No Shadowing Of A Live Linear Binding
 
-**Target rule:** each variable name is unique within its scope — no binding may
-shadow a name live in an enclosing scope.
+Shadowing is legal. A `let` may reuse a name bound in the same or an enclosing
+scope, and nested `match` binders may share a name with an outer binder
+(`tests/programs/regress_045_match_binder_shadow.con` pins inner-shadows /
+outer-restored as intended behavior). The compiler owns identity, so the inner
+and outer binders are distinct entities regardless of sharing a spelling — see
+[PRINCIPLES.md](PRINCIPLES.md) #12.
 
-**Currently enforced (narrower):** `Check` rejects only a `let` that shadows a
-still-*live* non-`Copy` binding (H16, `.shadowsLiveLinear`), which permits
-`let s = transform(s);` after the old `s` is consumed, and permits nested
-same-named `match` binders (`tests/programs/regress_045_match_binder_shadow.con`
-pins inner-shadows/outer-restored as current behavior). Bug 045 was silent wrong
-code from that second shape; Elab alpha-renaming removed the miscompile, so the
-remaining exposure is readability and audit cost, not unsoundness.
+Two shadowing forms are rejected, and they are the whole rule:
 
-Closing the gap is ROADMAP Task R-0435, which must first add the pattern-binder
-renaming form (`Variant { value: inner }`) — without it, banning shadowing would
-make nested `Option`/`Result` matching unwritable, since both name their payload
-field `value`.
+- **A still-live non-`Copy` binding.** `Check` rejects a `let` that shadows an
+  unconsumed linear owner (H16, `.shadowsLiveLinear`), because scope exit
+  resolves locals by name and the older obligation would vanish behind the new
+  binding. `let s = transform(s);` is fine — the RHS consumed the old `s`.
+- **Borrow-block ref and region names.** `borrow x as xr in R` introduces `xr`
+  and `R`, and neither may shadow an existing name (`.borrowRefShadows`,
+  `tests/programs/error_borrow_shadow.con`).
 
-Region names in borrow blocks already follow the target rule — `borrow x as xr in R`
-introduces `xr` and `R`, and neither may shadow an existing name
-(`.borrowRefShadows`, `tests/programs/error_borrow_shadow.con`).
+A blanket shadowing ban was considered and rejected — see
+[DECISIONS.md](DECISIONS.md) "No shadowing ban". Bug 045 was a name-resolution
+defect fixed at the root in Elab, not a reason to restrict the source language.
+Same-name evolution is ordinary: `let s = transform(s);` for a consuming
+transform, `acc = f(acc, x)` for `let mut` linear rebind
+([OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md), legal including inside loops).
 
 ## 5. No Uninitialized Variables
 
