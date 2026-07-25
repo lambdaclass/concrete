@@ -1561,6 +1561,11 @@ inductive ProofDiagnosticKind where
   | attachmentIntegrity  -- registry entry is invalid (unknown function, duplicate, etc.)
   | theoremLookup        -- Lean proof name not found
   | leanCheckFailure     -- Lean kernel rejected the proof
+  /-- Link present, no stored proof-subject digest. Its own kind rather than
+      `staleProof`: the obligation status is `unbound`, and the consistency
+      invariant DIAG-STATUS requires the diagnostic to agree with it. Reusing
+      `staleProof` here is what that invariant caught. -/
+  | unboundProofLink
   deriving BEq, Repr
 
 /-- Canonical string for diagnostic kind. Maps to the ObligationStatus
@@ -1574,6 +1579,7 @@ def ProofDiagnosticKind.canonical : ProofDiagnosticKind → String
   | .attachmentIntegrity  => "attachment_integrity"
   | .theoremLookup        => "theorem_lookup"
   | .leanCheckFailure     => "lean_check_failure"
+  | .unboundProofLink     => "unbound"
 
 /-- Stable error code for proof diagnostic kinds. -/
 def ProofDiagnosticKind.code : ProofDiagnosticKind → String
@@ -1585,6 +1591,7 @@ def ProofDiagnosticKind.code : ProofDiagnosticKind → String
   | .attachmentIntegrity  => "E0805"
   | .theoremLookup        => "E0806"
   | .leanCheckFailure     => "E0807"
+  | .unboundProofLink     => "E0810"
 
 /-- Severity of a proof diagnostic. -/
 inductive ProofDiagnosticSeverity where
@@ -1630,6 +1637,7 @@ def failureClassOf (kind : ProofDiagnosticKind)
   | .attachmentIntegrity  => "attachment_integrity"
   | .theoremLookup        => "theorem_lookup"
   | .leanCheckFailure     => "lean_check_failure"
+  | .unboundProofLink     => "unbound_proof_link"
   | .ineligible           => (ineligCat.getD .structuralGate).failureClass
 
 /-- Repair class — what action resolves this failure. -/
@@ -1643,6 +1651,9 @@ def repairClassOf (kind : ProofDiagnosticKind)
   | .attachmentIntegrity  => "registry_update"
   | .theoremLookup        => "add_proof"
   | .leanCheckFailure     => "theorem_update"
+  -- Not `theorem_update`: the theorem may be fine. What is missing is the
+  -- recorded subject, and recording it requires re-verification first.
+  | .unboundProofLink     => "record_proof_subject"
   | .ineligible           => (ineligCat.getD .structuralGate).repairClass
 
 /-- A proof-pipeline diagnostic — the canonical format for proof failures,
@@ -2212,11 +2223,11 @@ private def generateDiagnostics
     let fp := o.functionId.fingerprint
     match o.status with
     | .unbound =>
-      some { kind := .staleProof, severity := .error, function := qn
+      some { kind := .unboundProofLink, severity := .error, function := qn
            , message := s!"proof link unbound: no stored proof-subject digest for `{qn}`."
            , hint := "Re-verify the proof against the current body and record the result as #[proof_fingerprint(\"...\")]. Until a subject is stored there is nothing for the freshness check to compare against, so this claim is unbound — not proved, and not stale either: the body has not been shown to change, it has never been pinned."
-           , details := ["no stored proof-subject digest"], failureClass := failureClassOf .staleProof
-           , repairClass := repairClassOf .staleProof
+           , details := ["no stored proof-subject digest"], failureClass := failureClassOf .unboundProofLink
+           , repairClass := repairClassOf .unboundProofLink
            , fingerprint := fp, expectedFp := "", loc := o.loc }
     | .stale =>
       some { kind := .staleProof, severity := .error, function := qn
@@ -2478,6 +2489,7 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
     | some o =>
       let statusOk := match d.kind with
         | .staleProof => o.status == .stale
+        | .unboundProofLink => o.status == .unbound
         | .missingProof => o.status == .missing
         | .ineligible => o.status == .ineligible
         | .trusted => o.status == .trusted

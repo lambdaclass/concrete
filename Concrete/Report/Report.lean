@@ -1157,6 +1157,7 @@ private def diagnosticKindLabel : Concrete.ProofDiagnosticKind → String
   | .attachmentIntegrity => "attachment_integrity"
   | .theoremLookup => "theorem_lookup"
   | .leanCheckFailure => "lean_check_failure"
+  | .unboundProofLink => "unbound_proof_link"
 
 /-- Render a proof diagnostic severity as a string. -/
 private def diagnosticSeverityLabel : Concrete.ProofDiagnosticSeverity → String
@@ -4447,7 +4448,8 @@ def diagnosticCodesReport : String :=
     entry "E0806" "proof" "warning" "theorem lookup: Lean proof name not found",
     entry "E0807" "proof" "error" "lean check failure: Lean kernel rejected proof",
     entry "E0808" "mono" "error" "user-defined generic enum reached codegen un-monomorphized — would corrupt memory; rejected fail-closed (bug 051)",
-    entry "E0809" "mono" "error" "a monomorphized specialization's name is already declared in the program — one name cannot carry two layouts (R-0001)"
+    entry "E0809" "mono" "error" "a monomorphized specialization's name is already declared in the program — one name cannot carry two layouts (R-0001)",
+    entry "E0810" "proof" "error" "proof link unbound: no stored proof-subject digest, so freshness cannot be checked and the claim is not proved (R-0004, bug 058)"
   ]
   (Val.obj [
     ("schema_version", .num (Int.ofNat schemaVersion)),
