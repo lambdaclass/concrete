@@ -59,6 +59,29 @@ says so through capabilities.
 
 That is less flexible than C. It is also easier to review.
 
+## Visible Is Step One; Knowable Is the Point
+
+Visibility alone is reporting. The deeper consequence of Concrete's refusals is
+what they make computable: with no closures, no trait objects, no macros, and
+whole-program monomorphization, callable values come from a closed set of named
+functions, and indirect calls carry value identity rather than a name to
+re-resolve. A function-pointer target may still be chosen at runtime, but its
+possible targets are statically enumerable.
+
+That gives per-function facts—authority, allocation, failure modes,
+obligations—a tractable path to conservative whole-program facts from `main`
+outward. A sound analysis must retain every possible target of an indirect
+call, and today's reports do not yet turn every such edge into a complete
+composition theorem. The advantage is narrower and still valuable: the
+possible callable set is finite and source-visible rather than extended by
+captured code, runtime type dispatch, or generated source.
+
+Today `--report authority` and `--report caps` expose part of this structure,
+while capability-bearing function-pointer types enforce authority at indirect
+call sites. The direction of the proof work is to make target-set completeness
+and transitive composition checked whole-program claims. That step is roadmap
+work, not a shipped feature.
+
 ## Evidence Is Visible
 
 Most codebases have evidence, but it is scattered:
@@ -257,6 +280,8 @@ Concrete is for the narrow case where all of these matter at once:
 - no garbage collector;
 - explicit authority;
 - predictable resource boundaries;
+- a closed, statically enumerable callable set, so conservative program-wide
+  analysis has a finite target space;
 - kernel-checked proofs for selected functions;
 - proof drift detected by the toolchain;
 - honest reporting of what is still trusted.
