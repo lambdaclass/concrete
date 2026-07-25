@@ -28,13 +28,37 @@ if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
   exit 0
 fi
 
-remote_sha="$(git rev-parse "@{upstream}" 2>/dev/null || echo "")"
-if [ -n "$remote_sha" ]; then
-  changed="$(git diff --name-only "$remote_sha"..HEAD)"
-else
-  changed="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")"
+# git feeds the pre-push hook one line per ref being pushed:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# That is the authoritative range — the whole push, not just the tip commit.
+# Deriving it from @{upstream} or HEAD~1 (as this hook first did) inspects the
+# wrong set: HEAD~1 sees only the last commit of a five-commit push, which is
+# how the first version ran ZERO area gates on a push full of Concrete/Proof
+# changes.
+changed=""
+while read -r _localref localsha _remoteref remotesha; do
+  [ -z "${localsha:-}" ] && continue
+  case "$localsha" in *[!0]*) ;; *) continue ;; esac   # all-zero = branch deletion
+  case "${remotesha:-}" in
+    ""|*[!0-9a-f]*) range="$localsha" ;;
+    *[!0]*) range="$remotesha..$localsha" ;;           # normal update
+    *)      range="$localsha" ;;                        # new branch: no base
+  esac
+  if [ "$range" = "$localsha" ]; then
+    changed="$changed"$'\n'"$(git diff --name-only "$(git rev-list --max-parents=0 "$localsha" | tail -1)".."$localsha" 2>/dev/null || true)"
+  else
+    changed="$changed"$'\n'"$(git diff --name-only $range 2>/dev/null || true)"
+  fi
+done
+# Fallback when stdin gave nothing (hook invoked by hand, or `make pre-push`).
+if [ -z "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
+  up="$(git rev-parse "@{upstream}" 2>/dev/null || echo "")"
+  [ -n "$up" ] && changed="$(git diff --name-only "$up"..HEAD)" \
+               || changed="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")"
 fi
+changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 [ -z "$changed" ] && { echo "pre-push: nothing to check"; exit 0; }
+echo "pre-push: $(printf '%s\n' "$changed" | wc -l | tr -d ' ') changed file(s) in this push"
 
 docs_only=1
 while IFS= read -r f; do
@@ -70,6 +94,8 @@ while IFS= read -r f; do
     std/*)                                        add collections; add stdlib; add proof ;;
     examples/*)                                   add evidence; add examples ;;
     scripts/tests/*|.github/workflows/*)          add hygiene ;;
+    Makefile|.githooks/*|flake.nix|lakefile.toml) add hygiene ;;
+    Concrete/*)                                   add hygiene ;;
   esac
 done <<< "$changed"
 
