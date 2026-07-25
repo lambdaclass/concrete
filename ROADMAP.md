@@ -838,18 +838,6 @@ reducer, plus a four-part proof-freshness class. The surface-gate task comes
 first because it protects those fixes; the defects immediately follow it in the
 one global file-order sequence.
 
-### Task R-0001
-
-**Objective:** Fix bug 051 — user generic-enum memory corruption User-defined generic enums retain one name/declaration while Lower uses instantiation-specific payload offsets, so mixed layouts can write beyond the emitted aggregate.
-
-   Immediate containment: reject every unsupported user generic-enum
-   instantiation before Lower/codegen with a stable diagnostic. Root fix:
-   monomorphize enums injectively per canonical type arguments (preferred), or
-   prove one program-wide union representation sound for every instantiation.
-   Gate at least two differently sized/aligned payload instantiations, nested
-   enums, arrays/structs, cross-module use, interpreter/LLVM/QBE where supported,
-   layout write-within-declaration verification, and a mutation removing the
-   containment/layout check.
 ### Task R-0002
 
 **Objective:** Fix bug 050 — indirect function-pointer call hijack A local callable value whose text matches a generic/global function is rewritten by Mono into a direct specialization. Add a distinct resolved Core/Mono call form whose callee is a value identity, never a string looked up in the global fn/alias maps; preserve it through Lower, SSA, interpreter, LLVM, QBE, reports, and source identities. Gate the `pick` 42-vs-21 wrong-code witness, std.io local callback names such as `f`, generic/non-generic collisions, renamed imports, and a mutation that routes indirect calls through direct-name resolution.
@@ -907,6 +895,18 @@ separate from bug 047's corruption observation inside the shared gate.
 
 **Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
 
+   The TYPE-name half of "first fail closed" already landed with R-0001 (E0809:
+   a specialization whose mangled name is declared, or two instantiations
+   mangling to one name, are refused; gated in
+   `scripts/tests/check_mono_name_collision.sh`). It had to, because
+   per-instantiation enum mono made forged ENUM specialization names reachable
+   for the first time. What remains here is the rest: the FUNCTION-symbol half
+   (fn specializations use a different mangler and are not covered), the
+   injective unforgeable encoding that would let a program spelling
+   `Box_Int` compile instead of being refused, semantic identity separate from
+   link/display symbols, and by-identity layout lookup with diagnosing
+   missing-field access.
+
 ### Task R-0008
 
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
@@ -946,6 +946,27 @@ same intended tip and bug/roadmap artifacts are present on every declared
 remote and required CI conclusions are recorded. Remote parity is process
 state, not a compiler bug; report it separately and do not let a green origin
 implicitly describe a lagging mirror.
+
+### Task R-0434
+
+**Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
+
+   The gate for R-0001 asserts this structurally for its own programs (distinct
+   declarations, differing footprints) and mutation #19 proves those programs are
+   discriminating, but a NEW way of desynchronizing a declaration from a write —
+   another aggregate kind, a second backend, a future layout change — would not be
+   caught by fixtures that predate it.
+
+   Add a post-Lower/SSA check that walks payload GEP + store chains rooted at an
+   alloca of known type and rejects any write whose offset plus size exceeds the
+   declared footprint, keying on layout identity rather than on type NAME. Report
+   it as a compiler-internal containment failure (the E0808 class) so a codegen
+   bug fails closed instead of corrupting memory. Gate it with programs that are
+   correct today, plus mutations that shrink a declaration or inflate an offset,
+   and require each mutation to be caught by the verifier rather than only by a
+   value mismatch. This is the criterion-7 remainder recorded in
+   `docs/bugs/051_generic_enums_not_monomorphized.md`; it hardens a closed defect
+   rather than fixing an open one, so it follows the confirmed defect queue.
 
 ### Task R-0011
 

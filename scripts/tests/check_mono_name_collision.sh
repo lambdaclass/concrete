@@ -77,6 +77,64 @@ else
   no "execution oracle fixture failed to compile"
 fi
 
+echo "=== a specialization name that is already taken fails closed (E0809, bug 054) ==="
+
+# `monoTypeName` is `base ++ "_" ++ suffixes`, built from source identifiers, so a
+# hand-written name can occupy the name a specialization needs. Layout lookup is
+# first-match-by-name, so the two then share ONE layout: with the hand-written
+# declaration narrower, the specialization's fields are written past its end. The
+# injective, unforgeable mangling that would remove the ambiguity is R-0007; until
+# then this must be refused rather than resolved by declaration order.
+rejects_e0809() {
+  local name="$1" src="$2" f="$TMP/$1.con"
+  printf '%s\n' "$src" > "$f"
+  local out; out="$("$COMPILER" "$f" -o "$TMP/$1.out" 2>&1)"
+  if grep -q "(E0809)" <<<"$out"; then ok "$name refused with E0809"
+  else no "$name NOT refused with E0809 — got: $(head -1 <<<"$out")"; fi
+}
+
+# Hand-written type occupies the specialization's name, and is NARROWER.
+rejects_e0809 user_shadows_specialization 'mod m {
+  struct Copy Box<T> { v: T }
+  struct Copy Box_Int { v: i8 }
+  pub fn main() -> Int {
+    let a: Box<Int> = Box::<Int> { v: 9223372036854775807 };
+    let b: Box_Int = Box_Int { v: 3 };
+    return (a.v / 1000000000000000000) + (b.v as Int);
+  }
+}'
+
+# Two DISTINCT instantiations mangling to one name (the bug-054 second variant):
+# `Pair<Int, Bool>` and `Pair_Int<Bool>` both produce `Pair_Int_Bool`.
+rejects_e0809 two_instantiations_one_name 'mod m {
+  struct Copy Pair<A, B> { a: A, b: B }
+  struct Copy Pair_Int<B> { a: Int, b: B }
+  pub fn main() -> Int {
+    let x: Pair<Int, Bool> = Pair::<Int, Bool> { a: 7, b: true };
+    let y: Pair_Int<Bool> = Pair_Int::<Bool> { a: 35, b: false };
+    return x.a + y.a;
+  }
+}'
+
+# The check must not fire on ordinary multi-argument generics.
+cat > "$TMP/nocollide.con" <<'EOF'
+mod m {
+  struct Copy Pair<A, B> { a: A, b: B }
+  pub fn main() -> Int {
+    let x: Pair<Int, Bool> = Pair::<Int, Bool> { a: 7, b: true };
+    let y: Pair<Int, i32> = Pair::<Int, i32> { a: 35, b: 1 };
+    return x.a + y.a;
+  }
+}
+EOF
+if "$COMPILER" "$TMP/nocollide.con" -o "$TMP/nocollide" >/dev/null 2>&1; then
+  "$TMP/nocollide" >/dev/null 2>&1
+  [ "$?" = "42" ] && ok "distinct multi-arg instantiations still compile and run (42)" \
+    || no "distinct multi-arg instantiations gave the wrong value"
+else
+  no "distinct multi-arg instantiations were rejected — E0809 is over-firing"
+fi
+
 echo ""
 echo "MONO-NAME-COLLISION: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

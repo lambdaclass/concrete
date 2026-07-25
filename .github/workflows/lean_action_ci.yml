@@ -448,10 +448,10 @@ jobs:
       - name: "Fast-surface gate-the-gate (R-0022 — removing a representative inventory row turns the aggregate RED)"
         run: bash scripts/tests/run_fast_surface_gates.sh --mutate
 
-      - name: "Generic-enum containment (R-0001 / bug 051 — user generic enums rejected fail-closed E0808; builtins unaffected)"
-        run: bash scripts/tests/check_generic_enum_containment.sh
+      - name: "Generic-enum monomorphization (R-0001 / bug 051 — one declaration per instantiation; values, neighbours, layout; builtins keep the canonical union)"
+        run: bash scripts/tests/check_generic_enum_mono.sh
 
-      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: E0808 containment or positive mono)"
+      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
         run: bash scripts/tests/check_generic_enum_inventory.sh
 
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)

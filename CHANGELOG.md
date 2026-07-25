@@ -10,6 +10,65 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Completed Task R-0001
+
+_Per-instantiation generic-enum monomorphization — bug 051 (user generic-enum
+memory corruption) fixed. Shipped 2026-07-24._
+
+A user generic enum kept ONE declaration for every instantiation: EmitSSA emitted
+one LLVM type per enum NAME, sized from whichever instantiation it found first,
+while Lower computed payload offsets from each instantiation's real type
+arguments. Instantiations differing in size or alignment therefore wrote outside
+the emitted aggregate. Slice 1 (2026-07-18) contained this by refusing every user
+generic enum with E0808; this completes the root fix and lifts the restriction.
+
+`monoStructsInProgram` became `monoTypesInProgram`, specializing structs and enums
+through ONE instance set and ONE mangled-name mapping (they nest in each other, so
+`Wrap<Point>` and `Holder { w: Wrap<i32> }` are only resolvable together). Three
+parts were not in the struct pass:
+
+- **Enum identity at use sites.** Lower resolves variant index and payload layout
+  by NAME, so `enumLit`/`enumArm` are rewritten to the specialization name. Arms
+  carry no type of their own, so the instantiation is read from the scrutinee type
+  — the same place Lower reads it.
+- **Every type-bearing declaration is rewritten**, not only function signatures
+  and bodies. A non-generic `struct Holder { w: Wrap<i32> }` kept a `Ty.generic`
+  field that Layout then sized from the unsubstituted declaration: the same
+  wrong-layout path reached through a field instead of a local.
+- **The instance set is a transitive closure** over definition bodies, since
+  `Wrap<Box<i32>>` names `Box<i32>` only inside Wrap's variant payload.
+
+Two boundary decisions worth keeping: `Option`/`Result` are excluded by NAME as
+well as by `builtinId`, because the name is the reserved identity every other pass
+uses (Elab types `vec_pop` as `.generic Option [elem]`) — specializing a
+user-written `enum Option<T>` desynchronizes it from the intrinsics that produce
+its values. And a specialization whose mangled name is already declared now fails
+closed with **E0809**: a declaration spelled `Wrap_Int` occupies the name
+`Wrap<Int>` mangles to, and if the user's is narrower the specialization writes
+past its end. That path was unreachable while E0808 refused all user generic enums,
+so the fix closes it rather than inheriting it (injective, unforgeable mangling
+remains R-0007's subject).
+
+Evidence: `scripts/tests/check_generic_enum_mono.sh` (20 checks — values with
+interpreter agreement across mixed size/alignment/array/struct/nested/enum-in-array
+/cross-module, layout footprints, linear-payload destroy-once and leak rejection,
+builtin non-interference, E0809 forged names, E0808 backstop);
+`tests/programs/regress_generic_enum_051.con` (43) and
+`adversarial_mono_generic_enum.con` (42), both flipped from E0808 rejection to
+positive coverage; `test_mutation.sh` #19 disables specialization and is KILLED.
+
+Two measurement lessons are recorded in the gate and the bug doc: a value check
+alone is not sufficient (under the mutation, cases where the WIDER instantiation is
+emitted first still return correct results, which is why the layout assertion
+exists), and guard locals do not detect the clobber (scalar locals live in SSA
+registers, not adjacent stack slots). The remaining criterion-7 item — a verifier
+proving for ALL programs that a payload write fits its declaration — is R-0434.
+
+Also fixed in passing: `test_mutation.sh` hardcoded `~/.elan/bin/lake`, so inside
+`nix develop` every mutation reported "KILLED (build)" and the run claimed perfect
+coverage while testing nothing. It now resolves `lake` from PATH and preflights a
+build of the pristine tree, refusing to report verdicts if that build fails.
+
 ### Completed Task R-0022
 
 _Fast fail-closed surface-gate unification. Shipped 2026-07-18 (tip b31c103b): one executable checklist (`scripts/tests/run_fast_surface_gates.sh` / `make test-fast-surface-gates`) run identically by the pre-push routine and CI's Language-surface job; prints the exact failing constituent; mutation self-test (`--mutate`) proves the aggregate goes red when a representative inventory row is removed. Original objective below._

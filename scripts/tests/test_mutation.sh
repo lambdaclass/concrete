@@ -13,7 +13,18 @@ cd "$ROOT_DIR"
 #   bash scripts/tests/test_mutation.sh --list       # list mutations without running
 #   bash scripts/tests/test_mutation.sh --mutation N # run only mutation N
 
-LAKE="$HOME/.elan/bin/lake"
+# Resolve `lake`: PATH first (the nix devshell puts it there, as does elan's
+# shim), then elan's default location. A hardcoded elan path reported every
+# mutation as "KILLED (build)" inside `nix develop`, because a missing toolchain
+# is indistinguishable from an ill-typed mutation once the build has failed —
+# a harness that cannot build must not be able to claim kills.
+LAKE="${LAKE:-$(command -v lake || true)}"
+[ -n "$LAKE" ] || LAKE="$HOME/.elan/bin/lake"
+if ! "$LAKE" --version >/dev/null 2>&1; then
+  echo "error: no working 'lake' found (tried \$LAKE, PATH, ~/.elan/bin/lake)." >&2
+  echo "hint: run inside the devshell, e.g. 'nix develop --command bash scripts/tests/test_mutation.sh'" >&2
+  exit 2
+fi
 
 KILLED=0
 SURVIVED=0
@@ -184,6 +195,31 @@ MUT_NEW+=("        if phiLabels.contains p then ctx
         else ctx -- MUTATION: phi pred check disabled")
 MUT_DESC+=("SSAVerify: disable phi predecessor check")
 
+# 19. Mono: no user generic enum is specialized (R-0001 / bug 051)
+# Treating every generic enum as a builtin removes BOTH halves of the fix at
+# once: no per-instantiation declaration is created, and the residual E0808
+# containment goes vacuous because its name list is empty. That is precisely the
+# pre-fix state where instantiations of different size share one declaration, so
+# a surviving mutation would mean nothing pins the layout.
+MUT_FILE+=("Concrete/IR/Mono.lean")
+MUT_OLD+=("  let isBuiltin (ed : CEnumDef) : Bool :=
+    ed.builtinId.isSome || ed.name == optionEnumName || ed.name == resultEnumName")
+MUT_NEW+=("  let isBuiltin (_ed : CEnumDef) : Bool := true -- MUTATION: enum mono disabled")
+MUT_DESC+=("Mono: user generic enums not specialized (bug 051)")
+
+# 20. Mono: enums recognized as generic but left out of the specialization map
+# The complement of #19: detection stays ON while specialization is skipped, so
+# the residual E0808 containment is armed and MUST fire. Correct programs never
+# reach E0808, so this mutation is the only thing proving that path is live
+# rather than dead code — without it, deleting the backstop would go unnoticed
+# until something else regressed.
+MUT_FILE+=("Concrete/IR/Mono.lean")
+MUT_OLD+=("    if allStructs.any (fun sd => sd.name == name) || allEnums.any (fun ed => ed.name == name)
+    then some (name, args, monoTypeName name args)")
+MUT_NEW+=("    if allStructs.any (fun sd => sd.name == name) -- MUTATION: enums unmapped
+    then some (name, args, monoTypeName name args)")
+MUT_DESC+=("Mono: generic enums detected but unmapped (E0808 backstop)")
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================
@@ -314,6 +350,20 @@ run_mutation() {
 # ============================================================
 
 echo "=== Mutation Testing ($NUM_MUTATIONS mutations) ==="
+echo ""
+
+# Preflight: the PRISTINE tree must build. Otherwise every mutation reports
+# "KILLED (build)" and the run claims perfect coverage while having tested
+# nothing — the same shape as a CI job that is green because it never ran.
+printf "preflight: pristine tree builds ... "
+if $LAKE build > /tmp/mutation_preflight.log 2>&1; then
+  echo "ok"
+else
+  echo "FAILED"
+  echo "error: the unmutated tree does not build, so kill/survive verdicts would be meaningless." >&2
+  echo "       see /tmp/mutation_preflight.log" >&2
+  exit 2
+fi
 echo ""
 
 if [[ "$MODE" == "single" ]]; then

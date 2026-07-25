@@ -1,0 +1,19 @@
+// Bug 051 / R-0001 regression: user-defined generic enums are monomorphized per
+// canonical type arguments. `Wrap<i64>` and `Wrap<i32>` are two DIFFERENTLY
+// SIZED instantiations of one declaration. Before the fix, EmitSSA emitted one
+// LLVM type per enum NAME from whichever instantiation it found first, while
+// Lower wrote each instantiation's real payload offsets — so the narrower
+// declaration was written with the wider payload's offsets and corrupted the
+// stack. Each instantiation now carries its own declaration and footprint.
+// Expected: 3 + 40 = 43
+mod b051 {
+    enum Wrap<T> { W { v: T }, N }
+    pub fn main() -> i64 {
+        let a: Wrap<i64> = Wrap::<i64>::W { v: 3 };
+        let b: Wrap<i32> = Wrap::<i32>::W { v: 40 };
+        let mut r: i64 = 0;
+        match a { Wrap::W { v } => { r = r + v; }, Wrap::N => {} }
+        match b { Wrap::W { v } => { r = r + (v as i64); }, Wrap::N => {} }
+        return r;
+    }
+}

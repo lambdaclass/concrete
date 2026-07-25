@@ -13,7 +13,7 @@ Diagnostics are a product surface, not debug output. Every predictable/proof/pol
 
 The compiler already has solid infrastructure:
 
-- **Stable error codes**: E0001 (parse) through E0807 (proof), 100+ distinct codes
+- **Stable error codes**: E0001 (parse) through E0809 (mono), 100+ distinct codes
 - **Structured diagnostics**: `Diagnostic.lean` carries severity, message, pass, span, hint, code, file, context
 - **Hint field**: many errors include actionable suggestions
 - **Source snippets**: rendered with caret underlines at the violation point

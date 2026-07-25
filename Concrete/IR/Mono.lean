@@ -602,15 +602,44 @@ private partial def collectAllModuleAliases (m : CModule) : List (String × Stri
 private def builtinGenericNames : List String :=
   ["Vec", "HashMap", "HashSet", "BinaryHeap", "Heap", "HeapArray"]
 
-/-- Compute a mangled struct name for a generic struct instantiation.
-    E.g., `Box` with `[.i32]` → `"Box_i32"`, `Box` with `[.int]` → `"Box_Int"`. -/
-private def monoStructName (baseName : String) (args : List Ty) : String :=
+/-- Compute a mangled name for a generic type instantiation (struct or enum).
+    E.g., `Box` with `[.i32]` → `"Box_i32"`, `Box` with `[.int]` → `"Box_Int"`.
+    Injective mangling that user identifiers cannot forge is R-0007's subject;
+    this pass fails closed on a collision instead (see `monoTypesInProgram`). -/
+private def monoTypeName (baseName : String) (args : List Ty) : String :=
   baseName ++ "_" ++ "_".intercalate (args.map tyToSuffix)
 
 /-- Collect all generic struct names (those with non-empty typeParams) from all modules. -/
 private partial def collectGenericStructNames (modules : List CModule) : List String :=
   let rec go (m : CModule) : List String :=
     let own := m.structs.filter (fun sd => !sd.typeParams.isEmpty) |>.map (·.name)
+    let sub := m.submodules.foldl (fun acc s => acc ++ go s) []
+    own ++ sub
+  modules.foldl (fun acc m => acc ++ go m) []
+
+/-- Collect all generic enum names that need per-instantiation monomorphization.
+
+    `Option`/`Result` are excluded: EmitSSA gives them one program-wide,
+    alignment-aware canonical union sized from every instantiation in the program
+    (`scanBuiltinEnumArgs`), so they are layout-safe unspecialized.
+
+    The exclusion tests `builtinId` OR the builtin NAME, because the name is the
+    reserved language-level identity for these two enums, not merely the label on
+    the prelude declaration: Elab types `vec_pop` as `.generic optionEnumName
+    [elem]`, EmitSSA pre-registers the canonical `%enum.Option` / `%enum.Result`
+    and keys their alloca alignment on the name, and Check/CheckHelpers recognize
+    `?`/try the same way. A program that writes its own `enum Option<T>` is
+    declaring THAT type, and specializing it would desynchronize it from the
+    intrinsic signatures that produce its values (an intrinsic returns the
+    canonical union while the call site expects `Option_Int`). Whether such a
+    declaration should be accepted at all is a name-identity question, owned by
+    R-0007, not a layout question. -/
+private partial def collectGenericEnumNames (modules : List CModule) : List String :=
+  let isBuiltin (ed : CEnumDef) : Bool :=
+    ed.builtinId.isSome || ed.name == optionEnumName || ed.name == resultEnumName
+  let rec go (m : CModule) : List String :=
+    let own := m.enums.filter (fun ed => !ed.typeParams.isEmpty && !isBuiltin ed)
+      |>.map (·.name)
     let sub := m.submodules.foldl (fun acc s => acc ++ go s) []
     own ++ sub
   modules.foldl (fun acc m => acc ++ go m) []
@@ -744,6 +773,25 @@ private partial def rewriteTy (mapping : List (String × List Ty × String)) : T
   | .fn_ ps cs ret => .fn_ (ps.map (rewriteTy mapping)) cs (rewriteTy mapping ret)
   | t => t
 
+/-- Specialization name for a type reference spelled with base name `base` whose
+    value type is `ty`.
+
+    Lower resolves enum variant indices and payload layout BY NAME
+    (`Lower.variantIndex` / `Lower.variantFields` / `Layout.enumPayloadOffset`),
+    so an `enumLit`/`enumArm` that keeps the generic base name after mono would
+    be laid out against the unsubstituted (`typeVar`) variant list while its
+    value type is the specialization. Type args are read off the value type the
+    same way Lower reads them (`typeArgsFromTy`: unwrap references/pointers),
+    so both sides agree on which instantiation is being named. -/
+private partial def monoTypeNameFor (mapping : List (String × List Ty × String))
+    (base : String) : Ty → String
+  | .generic n args =>
+    match mapping.find? (fun (nm, a, _) => nm == n && a == args) with
+    | some (_, _, mangled) => mangled
+    | none => base
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t => monoTypeNameFor mapping base t
+  | _ => base
+
 mutual
 /-- Rewrite all types in a CExpr. -/
 private partial def rewriteExprTys (m : List (String × List Ty × String)) : CExpr → CExpr
@@ -766,9 +814,14 @@ private partial def rewriteExprTys (m : List (String × List Ty × String)) : CE
     .structLit name' (targs.map (rewriteTy m)) (fields.map fun (n, e) => (n, rewriteExprTys m e)) ty'
   | .fieldAccess obj f ty => .fieldAccess (rewriteExprTys m obj) f (rewriteTy m ty)
   | .enumLit en v targs fields ty =>
-    .enumLit en v (targs.map (rewriteTy m)) (fields.map fun (n, e) => (n, rewriteExprTys m e)) (rewriteTy m ty)
+    -- The enum's post-mono identity is the specialization name, not the base
+    -- name: see `monoTypeNameFor`.
+    .enumLit (monoTypeNameFor m en ty) v (targs.map (rewriteTy m))
+      (fields.map fun (n, e) => (n, rewriteExprTys m e)) (rewriteTy m ty)
   | .match_ scrut arms ty =>
-    .match_ (rewriteExprTys m scrut) (arms.map (rewriteArmTys m)) (rewriteTy m ty)
+    -- Arms carry the enum name but no type of their own; the instantiation being
+    -- matched is the scrutinee's type, which is also where Lower reads it from.
+    .match_ (rewriteExprTys m scrut) (arms.map (rewriteArmTys m scrut.ty)) (rewriteTy m ty)
   | .borrow inner ty => .borrow (rewriteExprTys m inner) (rewriteTy m ty)
   | .borrowMut inner ty => .borrowMut (rewriteExprTys m inner) (rewriteTy m ty)
   | .deref inner ty => .deref (rewriteExprTys m inner) (rewriteTy m ty)
@@ -781,9 +834,11 @@ private partial def rewriteExprTys (m : List (String × List Ty × String)) : CE
   | .ifExpr cond then_ else_ ty =>
     .ifExpr (rewriteExprTys m cond) (rewriteStmtsTys m then_) (rewriteStmtsTys m else_) (rewriteTy m ty)
 
-private partial def rewriteArmTys (m : List (String × List Ty × String)) : CMatchArm → CMatchArm
+/-- `scrutTy` is the type of the match scrutinee these arms belong to; it names
+    the enum instantiation being matched (arms carry no type of their own). -/
+private partial def rewriteArmTys (m : List (String × List Ty × String)) (scrutTy : Ty) : CMatchArm → CMatchArm
   | .enumArm en v binds guard body =>
-    .enumArm en v (binds.map fun (n, t) => (n, rewriteTy m t)) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
+    .enumArm (monoTypeNameFor m en scrutTy) v (binds.map fun (n, t) => (n, rewriteTy m t)) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
   | .litArm val guard body => .litArm (rewriteExprTys m val) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
   | .varArm b ty guard body => .varArm b (rewriteTy m ty) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
   | .rangeArm lo hi incl guard body => .rangeArm (rewriteExprTys m lo) (rewriteExprTys m hi) incl (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
@@ -832,27 +887,137 @@ private partial def collectAllModuleEnums (m : CModule) : List CEnumDef :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllModuleEnums s) []
   own ++ sub
 
-/-- Monomorphize generic struct definitions in a program.
-    Collects all usages of generic struct types, creates concrete struct defs,
-    and rewrites all references from `Ty.generic` to `Ty.named`. -/
-private partial def monoStructsInProgram (modules : List CModule) : List CModule :=
-  -- 1. Collect all generic struct names from all modules
-  let genericNames := collectGenericStructNames modules
-  if genericNames.isEmpty then modules
+/-- Instances named only inside an already-collected instantiation's own body.
+
+    `Wrap<Box<i32>>` names `Box<i32>` only inside `Wrap`'s variant payload, and
+    `struct Pair<T> { b: Box<T> }` at `Pair<i32>` names `Box<i32>` only inside
+    its field list. Collecting instances from function signatures and bodies
+    alone therefore misses them, leaving a nested reference as `Ty.generic` —
+    exactly the un-monomorphized shape whose layout is read from an
+    unsubstituted definition. Closing over definition bodies is what makes the
+    instance set the transitive closure rather than the one-step frontier. -/
+private def instancesFromDefBody (gn : List String)
+    (structs : List CStructDef) (enums : List CEnumDef)
+    : (String × List Ty) → List (String × List Ty)
+  | (name, args) =>
+    match structs.find? (fun sd => sd.name == name) with
+    | some sd =>
+      let sd := Layout.substStructTypeArgs sd args
+      sd.fields.foldl (fun acc (_, ft) => acc ++ collectGenericTyInstances gn ft) []
+    | none =>
+      match enums.find? (fun ed => ed.name == name) with
+      | some ed =>
+        let ed := Layout.substEnumTypeArgs ed args
+        ed.variants.foldl (fun acc (_, fields) =>
+          acc ++ fields.foldl (fun acc (_, ft) => acc ++ collectGenericTyInstances gn ft) []) []
+      | none => []
+
+/-- Saturate the instance set under `instancesFromDefBody`.
+
+    Terminates by fixpoint for every finite type graph (a recursive
+    `enum L<T> { Cons { tail: heap L<T> } }` re-derives the instance it came
+    from and adds nothing). `fuel` bounds the pathological case where each round
+    names a strictly larger type (`Wrap<Wrap<...>>`); running out leaves
+    unspecialized references behind, which the post-pass residual check in
+    `monoProgram` then rejects fail-closed rather than laying out. -/
+private partial def closeInstances (fuel : Nat) (gn : List String)
+    (structs : List CStructDef) (enums : List CEnumDef)
+    (insts : List (String × List Ty)) : List (String × List Ty) :=
+  match fuel with
+  | 0 => insts
+  | fuel + 1 =>
+    let grown := dedupInstances
+      (insts ++ insts.foldl (fun acc i => acc ++ instancesFromDefBody gn structs enums i) [])
+    if grown.length == insts.length then insts
+    else closeInstances fuel gn structs enums grown
+
+/-- Monomorphize generic struct AND enum definitions in a program.
+    Collects all usages of generic struct/enum types, creates concrete defs, and
+    rewrites all references from `Ty.generic` to `Ty.named`.
+
+    Enums are specialized here for the same reason structs are (bug 051): Lower
+    computes payload offsets from the *instantiation* while a single declaration
+    per enum name is emitted from whichever instantiation is found first, so two
+    instantiations of different size or alignment write outside the emitted
+    aggregate. Structs and enums share ONE instance set and ONE mapping because
+    they nest in each other — `Wrap<Point>` and `Pair<Maybe<i32>>` are only
+    resolvable if both kinds are specialized together. -/
+private partial def monoTypesInProgram (modules : List CModule)
+    : Except Diagnostics (List CModule) :=
+  -- 1. Collect all generic struct/enum names from all modules
+  let genericStructNames := collectGenericStructNames modules
+  let genericEnumNames := collectGenericEnumNames modules
+  let genericNames := genericStructNames ++ genericEnumNames
+  if genericNames.isEmpty then .ok modules
   else
-  -- 2. Collect all struct defs (for substitution)
+  -- 2. Collect all struct/enum defs (for substitution)
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllModuleStructs m) []
-  -- 3. Collect all generic struct instances from all functions across all modules
+  let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  -- 3. Collect all generic instances from every type-bearing declaration across
+  -- all modules, then saturate over definition bodies so nested specializations
+  -- exist too. Non-generic struct/enum declarations are seeded as well: a field
+  -- typed `Wrap<i32>` needs that specialization to exist even when no function
+  -- signature or body mentions it.
+  let declInsts :=
+    (allStructs.foldl (fun acc sd =>
+      if sd.typeParams.isEmpty
+      then acc ++ sd.fields.foldl (fun acc (_, ft) => acc ++ collectGenericTyInstances genericNames ft) []
+      else acc) []) ++
+    (allEnums.foldl (fun acc ed =>
+      if ed.typeParams.isEmpty
+      then acc ++ ed.variants.foldl (fun acc (_, fields) =>
+        acc ++ fields.foldl (fun acc (_, ft) => acc ++ collectGenericTyInstances genericNames ft) []) []
+      else acc) [])
   let allInsts := modules.foldl (fun acc m =>
-    (collectAllModuleFns m).foldl (fun acc f => acc ++ collectFnInstances genericNames f) acc) []
-  let uniqueInsts := dedupInstances allInsts
-  if uniqueInsts.isEmpty then modules
+    (collectAllModuleFns m).foldl (fun acc f => acc ++ collectFnInstances genericNames f) acc)
+    declInsts
+  let uniqueInsts :=
+    closeInstances 64 genericNames allStructs allEnums (dedupInstances allInsts)
+  if uniqueInsts.isEmpty then .ok modules
   else
   -- 4. Build the full mapping first: (baseName, args, mangledName)
   let mapping := uniqueInsts.filterMap fun (name, args) =>
-    match allStructs.find? (fun sd => sd.name == name) with
-    | some _ => some (name, args, monoStructName name args)
-    | none => none
+    if allStructs.any (fun sd => sd.name == name) || allEnums.any (fun ed => ed.name == name)
+    then some (name, args, monoTypeName name args)
+    else none
+  -- 4a. A specialization's name must not be taken. `monoTypeName` builds link and
+  -- layout identity out of source identifiers, so a declaration the user spelled
+  -- `Wrap_Int` occupies the name `Wrap<Int>` mangles to. Both then resolve to ONE
+  -- declaration, and if the user's is narrower the specialization's payload is
+  -- written past its end — the same corruption as bug 051, reached through the
+  -- name instead of the type arguments. Distinct instantiations of one base are
+  -- already injective (`tyToSuffix` keys on the full bracketed type, gated by
+  -- check_mono_name_collision.sh); it is FORGED names that can still collide, so
+  -- reject them here. A mangling users cannot forge is R-0007's subject; failing
+  -- closed is what keeps this pass from re-opening the hole it exists to close.
+  let declaredNames := allStructs.map (·.name) ++ allEnums.map (·.name)
+  let takenName := mapping.findSome? fun (name, _, mangled) =>
+    if declaredNames.contains mangled then some (name, mangled) else none
+  -- Two DISTINCT instantiations must not mangle to one name either. Without
+  -- bracketing, `Pair<Int, Bool>` and `Pair_Int<Bool>` both produce
+  -- `Pair_Int_Bool` (bug 054), and first-match-by-name layout lookup then gives
+  -- one of them the other's field offsets.
+  let mangledTwice := mapping.findSome? fun (name, args, mangled) =>
+    if mapping.any (fun (n2, a2, m2) => m2 == mangled && (n2 != name || a2 != args))
+    then some (name, mangled) else none
+  match takenName, mangledTwice with
+  | some (base, mangled), _ =>
+    .error [{
+      severity := .error
+      message := s!"monomorphizing '{base}' produces the type name '{mangled}', which is already declared in this program"
+      pass := "mono"
+      span := none
+      hint := some s!"rename the declaration of '{mangled}'; a specialization and a hand-written type cannot share one name, because they would share one layout"
+      code := "E0809" }]
+  | none, some (base, mangled) =>
+    .error [{
+      severity := .error
+      message := s!"two different instantiations both monomorphize to the type name '{mangled}' (one of them from '{base}')"
+      pass := "mono"
+      span := none
+      hint := some "distinct instantiations cannot share one name, because they would share one layout; rename one of the generic types involved. Tracking: docs/bugs/054_struct_mono_name_collision.md"
+      code := "E0809" }]
+  | none, none =>
   -- Then create concrete struct defs using the full mapping (so nested generics resolve)
   let newStructs := mapping.filterMap fun (name, args, mangledName) =>
     match allStructs.find? (fun sd => sd.name == name) with
@@ -870,43 +1035,98 @@ private partial def monoStructsInProgram (modules : List CModule) : List CModule
         isPacked := sd.isPacked
         reprAlign := sd.reprAlign } : CStructDef)
     | none => none
-  -- 5. Conditional Copy (Phase 7 #3): a specialized `struct Copy S<T>` is Copy
-  -- iff every substituted field is Copy. Demote non-qualifying specializations
-  -- to linear (isCopy := false) instead of erroring — iterate to a fixpoint so
-  -- nested specializations (`Pair_Box_String` over `Box_String`) settle. This
-  -- keeps the machine-wide invariant "isCopy = true ⇒ all fields Copy" that
-  -- verifyCopyFieldsPostMono asserts.
-  let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  -- Same for enums: one concrete declaration per instantiation, with the variant
+  -- payloads substituted and nested generic references pointed at their own
+  -- specializations. `typeParams := []` is what makes the declaration Lower and
+  -- EmitSSA see carry the instantiation's real layout; `builtinId` stays `none`
+  -- here because builtin enums were excluded from `genericEnumNames`.
+  let newEnums := mapping.filterMap fun (name, args, mangledName) =>
+    match allEnums.find? (fun ed => ed.name == name) with
+    | some ed =>
+      let substEd := Layout.substEnumTypeArgs ed args
+      some { substEd with
+        name := mangledName
+        typeParams := []
+        variants := substEd.variants.map fun (vn, fields) =>
+          (vn, fields.map fun (fn, ft) => (fn, rewriteTy mapping ft)) }
+    | none => none
+  -- 5. Conditional Copy (Phase 7 #3): a specialized `struct Copy S<T>` /
+  -- `enum Copy E<T>` is Copy iff every substituted field/payload is Copy. Demote
+  -- non-qualifying specializations to linear (isCopy := false) instead of
+  -- erroring — iterate to a fixpoint so nested specializations
+  -- (`Pair_Box_String` over `Box_String`, `Maybe_Box_String` over `Box_String`)
+  -- settle. This keeps the machine-wide invariant "isCopy = true ⇒ all fields
+  -- Copy" that verifyCopyFieldsPostMono asserts. Structs and enums demote in ONE
+  -- fixpoint because either kind's Copy-ness can depend on the other's.
+  --
+  -- The ENUM half is consistency, not a behavior change users can observe: Check
+  -- already judges `Wrap<Tracked>` non-Copy before mono (it substitutes the
+  -- payload), so a program that duplicates a linear payload is rejected earlier.
+  -- What this prevents is a post-mono DISAGREEMENT — `verifyCopyFieldsPostMono`
+  -- resolves a struct field typed as an enum specialization through that
+  -- specialization's `isCopy`, and would otherwise read `true` for a payload
+  -- Check had already ruled linear.
   -- Copy predicate: delegates to the one shared definition
   -- (`Layout.isCopyTyCore`). Named refs resolve against BOTH the
   -- specializations being demoted and the pre-existing hand-written structs.
   -- Post-mono policy (`typeVarIsCopy := false`): any `.typeVar` here is treated
   -- as not-Copy. This routing also picks up conditional Copy for generic
   -- STRUCT instances, which the previous inline walker omitted.
-  let isCopyField (specialized : List CStructDef) (ty : Ty) : Bool :=
-    Layout.isCopyTyCore (specialized ++ allStructs) allEnums (typeVarIsCopy := false) ty
-  let rec demote (fuel : Nat) (structs : List CStructDef) : List CStructDef :=
+  let isCopyField (specStructs : List CStructDef) (specEnums : List CEnumDef) (ty : Ty) : Bool :=
+    Layout.isCopyTyCore (specStructs ++ allStructs) (specEnums ++ allEnums)
+      (typeVarIsCopy := false) ty
+  let rec demote (fuel : Nat) (structs : List CStructDef) (enums : List CEnumDef)
+      : List CStructDef × List CEnumDef :=
     match fuel with
-    | 0 => structs
+    | 0 => (structs, enums)
     | fuel+1 =>
       let structs' := structs.map fun sd =>
         if sd.isCopy && sd.typeParams.isEmpty
-           && !(sd.fields.all fun (_, fty) => isCopyField structs fty)
+           && !(sd.fields.all fun (_, fty) => isCopyField structs enums fty)
         then { sd with isCopy := false } else sd
+      let enums' := enums.map fun ed =>
+        if ed.isCopy && ed.typeParams.isEmpty
+           && !(ed.variants.all fun (_, fields) =>
+                  fields.all fun (_, fty) => isCopyField structs enums fty)
+        then { ed with isCopy := false } else ed
       if (structs'.zip structs).all (fun (a, b) => a.isCopy == b.isCopy)
-      then structs' else demote fuel structs'
-  let newStructs := demote (newStructs.length + 1) newStructs
-  -- 6. Rewrite all modules: rewrite types in functions, add new struct defs to first module only
+         && (enums'.zip enums).all (fun (a, b) => a.isCopy == b.isCopy)
+      then (structs', enums') else demote fuel structs' enums'
+  let (newStructs, newEnums) :=
+    demote (newStructs.length + newEnums.length + 1) newStructs newEnums
+  -- 6. Rewrite all modules and add the new defs to the first module only.
+  --
+  -- Every type-bearing declaration is rewritten, not just function signatures
+  -- and bodies: a non-generic `struct Holder { w: Wrap<i32> }` keeps a
+  -- `Ty.generic` field until it is rewritten, and Layout then sizes that field
+  -- from the UNSUBSTITUTED declaration — the same wrong-layout path this pass
+  -- exists to close, reached through a field instead of a local. Generic
+  -- templates are unaffected: their `Ty.generic` args are type variables, which
+  -- are never in `mapping`.
+  let rewriteStructDef (sd : CStructDef) : CStructDef :=
+    { sd with fields := sd.fields.map fun (fn, ft) => (fn, rewriteTy mapping ft) }
+  let rewriteEnumDef (ed : CEnumDef) : CEnumDef :=
+    { ed with variants := ed.variants.map fun (vn, fields) =>
+        (vn, fields.map fun (fn, ft) => (fn, rewriteTy mapping ft)) }
   let rec rewriteModule (m : CModule) : CModule :=
     { m with
       functions := m.functions.map (rewriteFnTys mapping)
+      structs := m.structs.map rewriteStructDef
+      enums := m.enums.map rewriteEnumDef
+      constants := m.constants.map fun (n, ty, e) =>
+        (n, rewriteTy mapping ty, rewriteExprTys mapping e)
+      externFns := m.externFns.map fun (n, ps, ret, tr) =>
+        (n, ps.map fun (pn, pt) => (pn, rewriteTy mapping pt), rewriteTy mapping ret, tr)
+      newtypes := m.newtypes.map fun nt => { nt with innerTy := rewriteTy mapping nt.innerTy }
       submodules := m.submodules.map rewriteModule }
   match modules with
-  | [] => []
+  | [] => .ok []
   | first :: rest =>
     let first' := rewriteModule first
-    let first' := { first' with structs := first'.structs ++ newStructs }
-    first' :: rest.map rewriteModule
+    let first' := { first' with
+      structs := first'.structs ++ newStructs
+      enums := first'.enums ++ newEnums }
+    .ok (first' :: rest.map rewriteModule)
 
 -- ============================================================
 -- Entry point
@@ -922,21 +1142,21 @@ def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
-  | .ok ms =>
-    let ms := monoStructsInProgram ms
-    -- R-0001 / bug 051 containment: user-defined generic enums are NOT yet
-    -- monomorphized (monoStructsInProgram handles only structs). EmitSSA emits
-    -- ONE LLVM type per enum name from the FIRST instantiation while Lower writes
-    -- each instantiation's real payload — so two instantiations of different
-    -- sizes (Wrap<[i64;3]> vs Wrap<[i32;4]>) silently corrupt the stack. Until
-    -- real per-instantiation enum mono lands, reject any generic user-enum
-    -- instantiation FAIL-CLOSED rather than emit corrupt code. Builtin
-    -- Option/Result are safe (EmitSSA gives them a program-wide alignment-aware
-    -- canonical union) and are excluded by name.
-    let genericEnumNames := (ms.foldl (fun acc m => acc ++ collectAllModuleEnums m) [])
-      |>.filterMap fun ed =>
-        if ed.typeParams.isEmpty || ed.name == "Option" || ed.name == "Result"
-        then none else some ed.name
+  | .ok ms0 =>
+    match monoTypesInProgram ms0 with
+    | .error e => .error e
+    | .ok ms =>
+    -- R-0001 / bug 051 residual containment. `monoTypesInProgram` specializes
+    -- every user generic enum per canonical type arguments, so a surviving
+    -- `Ty.generic` reference to one means a reference escaped the rewrite (an
+    -- instance the closure never reached, or fuel exhaustion on an unbounded
+    -- type). Lower would then compute payload offsets from the instantiation
+    -- while a single declaration is emitted from whichever instantiation is
+    -- found first, writing outside the emitted aggregate. Fail closed instead:
+    -- this check is the layout safety net, not the fix, and it must stay even
+    -- though correct programs no longer reach it. Builtin Option/Result are
+    -- excluded (canonical union, keyed on `builtinId` not on the name).
+    let genericEnumNames := collectGenericEnumNames ms
     if genericEnumNames.isEmpty then .ok ms
     else
       let insts := dedupInstances (ms.foldl (fun acc m =>
@@ -947,10 +1167,10 @@ def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
       | (name, _) :: _ =>
         .error [{
           severity := .error
-          message := s!"generic enum '{name}' cannot be compiled yet — user-defined generic enums are not monomorphized, so instantiations of different sizes would silently corrupt memory (bug 051)"
+          message := s!"generic enum '{name}' reached codegen un-monomorphized — its payload layout would be read from an unsubstituted declaration and could write outside the emitted aggregate (bug 051)"
           pass := "mono"
           span := none
-          hint := some "until per-instantiation enum monomorphization lands, use a non-generic enum (one concrete variant set) or wrap the payload in a struct; builtin Option/Result are unaffected. Tracking: docs/bugs/051_generic_enums_not_monomorphized.md"
+          hint := some "this is a compiler containment failure, not a program error: monomorphization did not reach this instantiation. Please report it with the source. Tracking: docs/bugs/051_generic_enums_not_monomorphized.md"
           code := "E0808" }]
   | .error e => .error e
 

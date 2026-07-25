@@ -1,9 +1,29 @@
 # Bug 054: struct mono-name collisions — user types shadow generated specializations
 
-**Status:** Open
+**Status:** Half closed — the collision now FAILS CLOSED (**E0809**), the mangling
+is still forgeable.
 **Discovered:** 2026-07-18, middle-end audit (two reproduced variants:
 compiled crash with Trace/BPT trap 5 vs interp `ok`; and compiled printing
 nothing vs interp `ok`).
+
+**Closed 2026-07-24 (via R-0001):** Mono refuses to emit a specialization whose
+mangled TYPE name is already declared, and refuses two distinct instantiations
+that mangle to one name — both reproduced variants above are now clean E0809
+rejections instead of silent layout sharing. Gate:
+`scripts/tests/check_mono_name_collision.sh` (`user_shadows_specialization`,
+`two_instantiations_one_name`, plus a non-firing case so the check cannot
+over-reject ordinary multi-argument generics). This was required by R-0001 rather
+than optional: while E0808 refused every user generic enum, a forged ENUM
+specialization name was unreachable; per-instantiation enum mono made it
+reachable, so it had to be closed in the same change.
+
+**Still open (R-0007):** the mangling itself remains forgeable — `base ++ "_" ++
+suffixes` built from source identifiers, with no reserved separator users cannot
+write. Failing closed means a legitimate program can be refused because it happens
+to spell a generated name; an injective encoding plus semantic
+`TypeId`/`FunctionId` separate from link/display symbols is what removes the
+ambiguity. The FUNCTION-symbol half is also untouched here: fn specializations are
+mangled by a different helper and are not covered by E0809.
 
 ## Symptom
 

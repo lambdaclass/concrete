@@ -7,12 +7,14 @@
 # `enum Foo <T>`, …; builtin Option/Result excluded) must be explicitly
 # classified as one of:
 #
-#   (a) E0808 CONTAINMENT coverage  — asserted with `run_err "<file>" "(E0808)"`
-#       in run_tests.sh (rejected fail-closed until per-instantiation enum
-#       monomorphization lands), OR
-#   (b) POSITIVE monomorphization coverage — asserted with `run_ok "<file>" <n>`
-#       in run_tests.sh (compiles + runs correctly; valid only AFTER the root
-#       fix lands and lifts E0808 for that shape).
+#   (a) POSITIVE monomorphization coverage — asserted with `run_ok "<file>" <n>`
+#       in run_tests.sh (compiles + runs correctly). This is the normal case now
+#       that per-instantiation enum monomorphization has landed (R-0001,
+#       2026-07-24), OR
+#   (b) E0808 CONTAINMENT coverage — asserted with `run_err "<file>" "(E0808)"`
+#       in run_tests.sh. E0808 is now the residual backstop for an instantiation
+#       that escapes specialization, so a fixture classified this way is
+#       asserting that a shape is still refused rather than laid out.
 #
 # A user-generic-enum fixture that is neither — or that lives outside
 # tests/programs where run_ok/run_err do not reach — FAILS. This forces a
@@ -55,7 +57,7 @@ for f in "${FILES[@]}"; do
   elif [ -n "$errline" ]; then
     no "$base — run_err present but does NOT require (E0808) specifically (a parser/checker/linker/crash failure would masquerade as containment)"
   elif [ -n "$okline" ]; then
-    ok "$base — positive monomorphization coverage (run_ok) [valid only post-root-fix]"
+    ok "$base — positive monomorphization coverage (run_ok)"
   else
     no "$base — UNCLASSIFIED user-generic-enum fixture: add run_err \"...\" \"(E0808)\" (containment) or run_ok \"...\" <n> (positive). See docs/bugs/051_generic_enums_not_monomorphized.md"
   fi
