@@ -967,15 +967,26 @@ and classified fuzzer legs — that no merged branch contains, on a branch named
 after unrelated work.
 
 This is not a request for status tags in this file: those are forbidden, and for
-good reason. It is a gate. Fail when a git worktree or local branch holds commits
-or dirty tracked state not represented on `main`, printing the branch/worktree,
-the paths, and the age. Wire it into the pre-push routine beside the surface
-gates, and allow an explicit opt-out row for a branch deliberately parked, so
-parking is a recorded decision rather than a silence.
+good reason. It is a gate — but scoped in three levels, because a pre-push hook
+that fails whenever *any* local branch has unmerged commits would fire on
+ordinary feature work, depend on unrelated local state, and behave differently
+from CI. An opt-out registry under that design becomes mandatory bookkeeping.
 
-Gate: fixtures for a dirty worktree, a branch with unmerged commits, a clean
-tree (must pass), and a parked branch with its opt-out row; plus a mutation
-removing the dirty-state leg. Cheap to run — this must not need a compiler build.
+1. **Pre-push, narrow:** only the branch being published. Dirty tracked state,
+   commits that belong to the milestone but are not in the push, and the required
+   gate evidence for what is being published.
+2. **Repository audit, explicit command:** report worktrees and branches with no
+   upstream and no recorded parked status past an age threshold. This is where
+   `worktree-h18-drop-glue` should surface — reported, not blocking.
+3. **Milestone gate:** every slice a milestone claims is merged or explicitly
+   retired. This is the level that would have caught R-0001's root fix sitting
+   uncommitted while three documents described the pre-fix language.
+
+Gate: fixtures for a dirty publishing branch (must fail at level 1), an unrelated
+unmerged feature branch (must NOT fail level 1, must appear at level 2), an aged
+branch with no upstream, a parked branch with its recorded status, a clean tree,
+and a milestone with an unmerged owned slice; plus a mutation removing the
+dirty-state leg. Cheap to run — level 1 must not need a compiler build.
 
 ### Task R-0434
 
@@ -1019,11 +1030,22 @@ cannot be misspelled — only silently ineffective. This is the C3 class
 generic-bound surface, and it is a semantically dark construct under the
 governing rule: it looks meaningful and is ignored.
 
-Validate the bound name where it is *declared*, against the compiler-known set
-(`Copy`, `Destroy`) plus names with a registered `impl`, so an unknown bound is
-refused whether or not the generic is ever instantiated and whatever it is
-instantiated at. Diagnose an unsatisfiable-by-construction bound distinctly from
-an unknown one.
+The rule is two-stage, because Concrete has real `trait` declarations
+(`grammar/concrete.ebnf:62`, `env.traits` / `m.traitDefs`, plus
+`builtinDestroyTrait`) and a generic may legitimately name a trait that has no
+implementation yet in this compilation context:
+
+1. **At the generic declaration** — the bound name must resolve to an in-scope
+   `TraitDef` or a builtin bound (`Copy`, `Destroy`). This is the stage that is
+   missing today, and it is what refuses `Nonsense` and `Cpoy` whether or not
+   the generic is ever instantiated.
+2. **At the instantiation** — the concrete type must have a matching valid
+   `TraitImpl`. This stage already exists (E0241) and needs only the primitive
+   fallthrough closed.
+
+Keying stage 1 on registered *impls* would be wrong: a declared-but-unimplemented
+trait would be misclassified as an unknown bound. Diagnose "no such trait" and
+"trait declared but not implemented for this type" as distinct errors.
 
 The impact is false assurance rather than unsoundness — bodies are still checked
 against declared bounds and linearity still catches double use — so this is a
@@ -1032,8 +1054,12 @@ among the miscompiles.
 
 Gate: the three programs above as fixtures (fictional bound at a primitive arg,
 typo'd bound on an uninstantiated generic, the E0241 struct case as positive
-control), a legal-bound-name inventory that fails when a new bound is recognized
-in code without an entry, and a mutation restoring the primitive fallthrough.
+control), plus a positive fixture for a declared-but-unimplemented trait used as
+a bound on an uninstantiated generic (must compile — this is the case the
+impl-keyed rule would wrongly reject), cross-module and renamed-trait-import
+resolution, a legal-bound-name inventory that fails when a new builtin bound is
+recognized in code without an entry, and a mutation restoring the primitive
+fallthrough.
 Record the bound vocabulary normatively — `Copy` is described in
 `docs/VALUE_MODEL.md`, `Destroy` in `docs/RUNTIME_COLLECTIONS.md`, and nothing
 states the whole set or what satisfies it, while `docs/DECISIONS.md` records
@@ -1489,12 +1515,26 @@ proved fragment — generics, indirect dispatch, module/import identity — are
 exactly the ones never enumerated. A hand-maintained inventory of a growing
 language lags, and this one lagged by seven constructs and seven bugs.
 
-Derive the row set from AST/Core constructors the way the backend capability
-matrix is keyed on `SInst`/`STerm`/`Ty` constructors, so adding a construct fails
-the gate until its story, evidence, and named gap are declared. Same principle,
-same machinery family, no parallel database.
+Two mechanisms, deliberately separate — they share a motivation but not an
+implementation, and merging them would produce a gate that greps English prose.
 
-Second leg, same task because it is the same failure: extend
+**Mechanism 1 — constructor coverage, generated.** Derive the row set from
+constructors the way the backend capability matrix is keyed on
+`SInst`/`STerm`/`Ty`, so adding a construct fails the gate until its story,
+evidence, and named gap are declared. AST and Core constructors alone are not
+enough: imports, modules, manifests, and target/module selection live in the
+resolve and project models, and those are precisely the identity-bearing surfaces
+the missing rows cover. Take the inventory from all three.
+
+**Mechanism 2 — structured claim records, not prose analysis.** A gate cannot
+infer from English whether a normative sentence is still true. Give each
+claim-bearing statement a record — claim id, `current` or `planned`, owning gate,
+fixture, the compiler fact it rests on, and the commit where it was last verified
+— and have the docs gate check the records and their backing, not the sentences.
+`planned` is what makes the "no aspirational behavior in the present tense" rule
+mechanical rather than stylistic.
+
+Second leg motivation: extend
 `scripts/tests/check_docs_drift.sh` past path resolution to claim checking. It is
 91 lines and 3 checks (paths resolve, `--report` kinds exist, roadmap IDs are
 well-formed) over 126 docs of which 106 assert a `Status:`. Nothing checks
@@ -1511,8 +1551,10 @@ normative claims, and aspirational behavior may not appear in the present tense
 beside a current guarantee.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
-story; the drift gate fails on each of the six stale claims above, reproduced as
-fixtures; and a mutation removing a row or a claim check proves both go red.
+story, in each of the AST, Core, resolve, and project inventories; the claim gate
+fails on each of the six stale claims above, reproduced as records whose backing
+no longer holds; a `planned` record asserted in the present tense fails; and a
+mutation removing a row or a claim record proves both go red.
 
 ### Phase 7 Completion Contract
 
@@ -3591,11 +3633,14 @@ authority surface as "Nine capabilities: `File`, `Network`, `Time`, `Env`,
 one spelling that grants nearly everything is absent from the document that
 enumerates authority.
 
-The audit consequence is specific and it is why this sits beside the budget task:
-a function declared `with(Std)` already holds a maximal ceiling, so adding
-`Network` or `Process` use inside it never widens a signature and never shows as
-a diff. A capability budget over `Std`-expanded code measures a declaration that
-cannot change.
+The audit consequence is specific and it is why this sits beside the budget task.
+Adding `Network` or `Process` use inside a `with(Std)` function produces **no
+declaration widening** — the ceiling was already maximal — so a budget checked
+against declared capabilities measures something that cannot change. It can still
+appear in a *reachable-authority* diff, since that is a call-graph fact. So the
+precise statement is: declaration-ceiling budgets over `Std` are meaningless,
+reachable-authority budgets remain meaningful, and the two must not be conflated
+in reports.
 
 Decide one rule and gate it: either audited profiles reject broad aliases
 outright, or a `Std` declaration must carry an exact transitive-use budget that
@@ -3608,10 +3653,12 @@ from reachable authority regardless of how the ceiling was spelled.
 Also fix the list: `Std` belongs in `IDENTITY.md`'s enumeration, marked as an
 alias over the other eight rather than a tenth capability.
 
-Gate: a fixture where `Std`-declared code gains `Network` use with no signature
-change (must fail under the chosen rule), the same code under an explicit cap set
-(must pass), a declared-vs-reachable report fixture, and a mutation removing the
-alias leg from whichever check is chosen.
+Gate: a fixture where `Std`-declared code gains `Network` use, proving both
+surfaces at once — declared ceiling unchanged, reachable authority changed — and
+failing under the chosen rule; the same code under an explicit cap set (must
+pass); a declared-vs-reachable report fixture; and a mutation removing the alias
+leg from whichever check is chosen. For high-integrity profiles, rejecting `Std`
+outright is likely the cleanest rule and should be the default proposal.
 
 ### Task R-0185
 
@@ -3773,20 +3820,36 @@ the backend and runtime, while a ProofCore theorem reasons more strongly over a
 narrower semantic layer. Neither is "below" the other — they are incomparable
 evidence about different scopes, and the current model cannot say so.
 
-Represent a claim as orthogonal fields — subject, claim kind, semantic scope,
-evidence method, status, assumptions, producer trust, freshness, replay command —
-and let the CLI keep rendering friendly composites like `proved_by_lean`. The
-scope axis is the one that is genuinely missing today, and it is the axis where
-the compiler already has the facts.
+Represent a claim as orthogonal fields — subject binding, claim kind, semantic
+scope, evidence method, status, assumptions, producer, validated_by,
+trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
+friendly composites like `proved_by_lean`. The scope axis is the one genuinely
+missing today, and it is the axis where the compiler already has the facts.
 
-Second, `producer_trust` must be a real field, because "compiler-enforced" reads
-as trust-free and is not: until checker soundness and artifact production are
-independently verified, enforcement depends on this compiler being correct.
-Being implemented in Lean does not remove that dependency; mutation testing and
-duplicate boundary checks are strong engineering evidence, not a soundness proof.
-`docs/TRUSTED_COMPUTING_BASE.md` already holds the concept — the change is that
-`producer_trust = concrete_compiler` appears on each claim, and can be narrowed
-later by independent certificate checking rather than by assertion.
+Trust is three fields, not one, because "who emitted the artifact", "who checked
+it", and "what must be trusted for the claim to hold" are different questions.
+The compiler may *produce* a Lean proof term that the kernel independently
+replays: the producer need not be trusted for proof-term validity, while the
+compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
+those into one `producer_trust` would lose exactly the distinction that makes
+independent checking worth building.
+
+What must stop being elided is that "compiler-enforced" reads as trust-free and
+is not: until checker soundness and artifact production are independently
+verified, enforcement depends on this compiler being correct. Being implemented in
+Lean does not remove that dependency; mutation testing and duplicate boundary
+checks are strong engineering evidence, not a soundness proof.
+`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
+compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
+the change is that the dependency appears per claim.
+
+Migration scope is larger than the two evidence documents. Residual total-ladder
+language elsewhere in this file recreates the ordering this task rejects —
+`tested_by_property` described as "always below proof and below solver evidence",
+and a cross-checked solver result as "stronger than" another method. A
+policy-specific partial order is fine, but it may only compare claims of
+equivalent scope and subject; rewrite those sites as part of this task rather than
+leaving a third vocabulary.
 
 Gate: a fixture set covering one claim per (scope × method) cell that exists
 today, a negative fixture proving two incomparable claims cannot be ordered by
