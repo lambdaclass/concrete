@@ -127,12 +127,21 @@ prefixing renamed any matching callee; Mono's `injectTypeArgsExpr` would hand a
 local fn-pointer a generic's type arguments; and CoreCheck picked capability and
 arity checks by whichever lookup succeeded, so an indirect call whose binding
 matched a global was checked against that global's contract instead of its own
-pointer type. ProofCore now treats an indirect callee as having no statically
-known definition: extraction returns `none` (blocked), the call graph gains no
-edge, and the fingerprint uses a `callptr` prefix so a direct call and an indirect
-call through a same-named local cannot share a proof subject. The capability-chain
-report therefore no longer follows fn pointers, which is accurate — authority for
-those is enforced at the pointer TYPE, by the CoreCheck rule above.
+pointer type. In ProofCore the fingerprint uses a `callptr` prefix, so a direct
+call and an indirect call through a same-named local cannot share a proof
+subject, and the call graph gains no edge for an indirect callee — the
+capability-chain report therefore no longer follows fn pointers, which is
+accurate: authority for those is enforced at the pointer TYPE, by the CoreCheck
+rule above.
+
+CORRECTION (2026-07-25, commit 139b7209): this entry originally also said
+extraction returns `none` (blocked) for an indirect callee. That was wrong and is
+no longer the behaviour. Refusing to extract inverted principle 12 — a parameter
+IS a semantic entity whose identity is its binding — and it silently blocked
+three real std proofs (`Option::map`, `Result::map`, `Result::map_err`) whose
+statements hold for ANY `f` precisely because `f` is opaque. Indirect callees
+extract as an uninterpreted application of the binding. CI's Language-surface
+job is what caught it.
 
 Evidence: `scripts/tests/check_indirect_call_identity.sh` (10 checks — dispatch
 through the local for generic, non-generic, intrinsic, fn-parameter and
