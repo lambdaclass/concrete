@@ -1,6 +1,10 @@
-# Language Gaps Discovered During Phase H
+# Phase H Language-Gap Audit — Historical Record
 
-Gaps found while writing the first real programs (`examples/policy_engine/` and `examples/mal/`). Each claim has been fact-checked against the codebase and corrected where wrong.
+Status: historical. This records what the first real programs
+(`examples/policy_engine/` and `examples/mal/`) pulled into the language and
+stdlib. It is not a current backlog. Residual defects belong in
+[the bug ledger](bugs/README.md) and scheduled work belongs in
+[ROADMAP.md](../ROADMAP.md).
 
 ## True Blockers
 
@@ -12,11 +16,17 @@ Gaps found while writing the first real programs (`examples/policy_engine/` and 
 
 **Status:** Fixed. Added `print_string(&String)`, `print_int(Int)`, `print_char(Int)` as compiler builtins with `Console` capability. User-defined functions with the same names take precedence.
 
-### 3. No string formatting or interpolation
+### ~~3. No usable formatting/string-building path~~ — FIXED; interpolation remains deferred
 
-Building `"[ALLOW] admin read source_code"` requires 7 chained `string_concat` calls. No `format(pattern, ...)` or string interpolation exists.
+**Status:** The original workload blocker is fixed. `std.fmt` ships decimal,
+hex, binary, octal, boolean, and padding helpers; `String::append`,
+`append_int`, and `push_char` support linear in-place construction; typed
+compiler desugaring supports mixed-value `print`/`println`.
 
-**Effect:** String-heavy code is verbose and error-prone. Every intermediate string is a potential leak if cleanup is missed.
+String interpolation and a general format-pattern language remain deliberately
+deferred in [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md). Their absence is
+not the original Phase-H blocker and is not a “remaining finding” in this
+historical audit.
 
 ### ~~4. No substring extraction path (Bug 010)~~ — FIXED
 
@@ -38,11 +48,16 @@ Added `ifExpr` to `AST.Expr`, `Core.CExpr`, parser (`parseExprBlock`), elaborati
 
 **Status:** Fixed. Added `string_push_char(&mut String, Int)` and `string_append(&mut String, &String)` builtins. These mutate in-place via `&mut`, working naturally with loop-carried mutable variables.
 
-### 7. No qualified name access across modules
+### ~~7. No qualified name access across modules~~ — FIXED; bug 055 remains
 
-When two modules export functions with the same name (e.g., `from_tag`), there's no way to disambiguate except renaming one. `Module.function()` syntax does not exist. Confirmed: call expressions take a plain `String` name, not a qualified path.
+**Status:** Qualified calls use `module::function`, and import aliases ship.
+The module-qualified collision fixtures exercise two modules exporting the same
+basename.
 
-**Tracked:** ROADMAP Phase 6 #2a (qualified paths + import aliases).
+One rejected-valid-program defect remains: a renamed import from a sibling file
+module can emit an undefined callee while the fully qualified form works
+([bug 055](bugs/055_sibling_import_alias_unusable.md), ROADMAP R-0008). That is
+a concrete identity bug, not absence of the language feature.
 
 ### ~~8. Const declarations are parsed but broken at SSA lowering (Bug 009)~~ — FIXED
 
@@ -147,8 +162,8 @@ half-patched — a checker-only workaround would be unsound or ad hoc.
 - **Bug 011** — Linear string building: fixed (`string_push_char`, `string_append` with `&mut`)
 - **Bug 012** — Standalone timing: fixed (`clock_monotonic_ns` builtin)
 
-### Remaining findings:
-1. **Add string formatting** — cuts string-building verbosity by 5-7x
-2. **No qualified name access across modules** — no `Module.function()` syntax
+### Current disposition
 
-(Destructuring let was on this list; it is now fixed for enum/struct forms — see item 9 above.)
+The two former “remaining findings” are shipped surfaces. String interpolation
+is a separately deferred ergonomic feature; renamed sibling imports retain the
+numbered bug 055. This document should not be used as a current task list.

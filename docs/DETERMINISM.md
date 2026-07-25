@@ -25,7 +25,9 @@ The compiler avoids the classic nondeterminism sources:
 3. **No environment-dependent data in artifacts.** No absolute paths, PIDs, or machine identifiers in output.
 4. **Explicit sorting where needed.** Capabilities are sorted via `mergeSort` in `CapSet.normalize`. Fact lists are concatenated in fixed order in `collectCoreFacts`.
 5. **Deterministic register naming.** SSA register names use a monotonic counter (`ssa.t0`, `ssa.t1`, ...).
-6. **Deterministic fingerprints.** Body fingerprints are computed by structural string concatenation over normalized syntax trees, with no hashing or randomization.
+6. **Deterministic fingerprints.** The canonical body fingerprint is structural
+   text over normalized syntax; in-source links store a deterministic truncated
+   SHA-256 digest of that text. Neither step uses randomness.
 
 ## Known Non-Deterministic Fields
 

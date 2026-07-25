@@ -71,11 +71,17 @@ Each entry has:
 - Go: No implicit numeric conversions. Explicit `int64(x)` syntax.
 - C/C++: Pervasive implicit conversions. A major source of subtle bugs.
 
-### No implicit string conversions
+### No user-extensible implicit string conversions
 
 **Why:** Implicit `ToString` or `Display`-style conversions hide allocation and make it unclear whether a function call produces a new heap-allocated string or borrows an existing one. This violates allocation visibility.
 
-**What Concrete does instead:** Explicit `format_int`, `append_int`, `bool_to_string` — each is a named function call with visible allocation. No implicit stringification in print, concatenation, or interpolation contexts.
+**What Concrete does instead:** Ordinary APIs use explicit `format_int`,
+`append_int`, and `format_bool`-style calls. The reserved
+`print`/`println`/`append` forms are a narrow compiler-known exception: Check
+accepts only a closed list of scalar/String types, and Elab expands each argument
+to a typed `print_*` or `string_append_*` call. There is no `Display`/`ToString`
+lookup, user conversion hook, or runtime format dispatch; unsupported types are
+rejected, and the required `Console`/`Alloc` authority remains visible.
 
 **Status:** Permanent. Implicit string conversion hides allocation.
 
@@ -268,13 +274,21 @@ reviewable source files outside the language.
 
 ## Variadic Functions
 
-### No variadic functions
+### No user-defined variadic functions
 
 **Why:** C-style variadic functions (`printf(fmt, ...)`) are type-unsafe — the compiler cannot check that the arguments match the format string. Even type-safe variadics (as in C++ parameter packs or Rust macros) add complexity to the type system and make function signatures harder to read.
 
-**What Concrete does instead:** Fixed parameter lists. For formatting, explicit `format_int`, `append`, `append_int` calls. For collections, explicit builder patterns or array literals.
+**What Concrete does instead:** User-defined functions have fixed parameter
+lists. Reserved `print`/`println` and `append` syntax accepts multiple typed
+arguments and is elaborated into a sequence of ordinary fixed-arity intrinsic
+calls; it is not a variadic function type, cannot be declared by users, and
+cannot be passed as a variadic callable value. Collections use explicit builder
+patterns or array literals.
 
-**Status:** Permanent for C-style variadics. Deferred for type-safe variadic-like patterns (may be addressed through generics or explicit tuple/array passing).
+**Status:** Permanent for C-style and user-defined variadics. The closed
+compiler-desugared output/buffer forms above are the only shipped exception;
+other type-safe variadic-like APIs remain deferred to explicit arrays or future
+workload-pulled structures.
 
 **Comparison:**
 - Rust: No C-style variadics. Variadic-like patterns via macros (`println!`, `vec!`).

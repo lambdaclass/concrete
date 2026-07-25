@@ -24,7 +24,10 @@ These properties are mechanically enforced by `Check.lean` and verified by adver
 
 6. **No cross-loop consumption.** A linear variable from an outer scope cannot be consumed inside a loop body. (Test: `error_memory_edge_loop_consume_outer.con`)
 
-7. **No linear reassignment.** Linear variables cannot be reassigned. (Test: `error_memory_edge_linear_reassign.con`)
+7. **No live linear overwrite.** A linear variable cannot be assigned while its
+   current value is live; a `mut` binding may be rebound after consumption.
+   (Negative: `error_memory_edge_linear_reassign.con`; positive:
+   `linear_rebind_after_drop.con`)
 
 8. **Branch agreement.** If/else branches and match arms must agree on consumption of pre-existing linear variables. (Tests: `error_memory_edge_branch_disagree.con`, `error_memory_edge_if_no_else_consume.con`, `bug_int_match_disagree.con`)
 

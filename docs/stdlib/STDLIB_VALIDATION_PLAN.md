@@ -110,7 +110,13 @@ Programs that pass `--check predictable` continue to pass after rewriting. Progr
 4. The pure validator core (`check_magic` etc.) can remain unchanged to preserve proofs. The boundary between trusted I/O and pure core narrows (ByteCursor is safe; `read_byte` was trusted).
 5. Optionally adopt `Result<T, E>` for the validator return types (this would invalidate existing Lean proofs and require re-proving -- separate decision).
 
-**Proof concern.** The pure core functions have Lean-backed proofs tied to their fingerprints. Changing their signatures or bodies invalidates the proofs. The stdlib rewrite should focus on the I/O shell, not the proved core. If the core is rewritten to use `Result`, the proofs must be regenerated.
+**Proof concern.** The pure core functions have Lean-backed proofs tied to
+stored body fingerprints. Body changes invalidate them, but the current
+fingerprint does not reliably cover every signature/type change (bug 059).
+Any signature or body rewrite therefore requires explicit kernel replay and a
+fresh attachment; do not rely on stale detection alone. The stdlib rewrite
+should focus on the I/O shell unless re-proving the core is an intentional
+slice.
 
 **Priority.** Nice-to-have. Demonstrates ByteCursor value but proof preservation is a constraint.
 

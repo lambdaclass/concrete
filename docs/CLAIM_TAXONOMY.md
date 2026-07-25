@@ -1,6 +1,9 @@
 # Proof-Claim Taxonomy
 
-Status: canonical reference — the standard vocabulary for every claim Concrete makes about a program. All docs, reports, CLI output, JSON facts, and release criteria must use these five classes and no others.
+Status: current-schema reference. These five labels describe the implemented
+reports and JSON compatibility surface. The ratified R-0440 target decomposes
+them into orthogonal claim fields; until that migration lands, this document
+must not present the current labels as a universal evidence ordering.
 
 For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md).
 For the effect/trust proof boundary, see [EFFECT_PROOF_BOUNDARIES.md](EFFECT_PROOF_BOUNDARIES.md).
@@ -9,16 +12,19 @@ For the user-facing proof contract, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md).
 
 ---
 
-## 1. The Five Claim Classes
+## 1. The Five Current Composite Classes
 
-Every statement the compiler makes about a program falls into exactly one of these classes:
+Current reports assign each statement one of these composite labels. This is a
+description of the shipped schema, not the target ontology: method, status,
+scope, disposition, and trust dependencies may not be collapsed when R-0440
+lands.
 
 ### Class 1: Enforced
 
 **Definition:** A property mechanically checked by the compiler (Check, CoreCheck, SSAVerify) that the program cannot violate and still compile.
 
 **What qualifies:**
-- Ownership and linearity (use-after-move, no-leak, no-linear-reassignment)
+- Ownership and linearity (use-after-move, no-leak, no-live-linear-overwrite)
 - Borrow safety (no-conflict, no-escape, frozen-variable access)
 - Capability containment (caller ⊇ callee capabilities)
 - Control-flow agreement (branch consumption, loop-depth restriction, break/continue checks)
@@ -31,7 +37,10 @@ Every statement the compiler makes about a program falls into exactly one of the
 - `--report traceability` → `"evidenceLevel": "enforced"`
 - Checker errors are hard failures — the program does not compile
 
-**What it means for users:** If the program compiles without `trusted` or `with(Unsafe)`, these properties hold. No trust required.
+**What it means for users:** If the program compiles without `trusted` or
+`with(Unsafe)`, the compiler enforces these properties. This still depends on
+the Concrete checker and artifact pipeline being correct; it adds no
+program-declared trusted boundary.
 
 ---
 
@@ -54,7 +63,13 @@ Every statement the compiler makes about a program falls into exactly one of the
 
 **What it means for users:** The stated theorem holds over the PExpr model with Lean's unbounded integer arithmetic. The proof does not cover integer overflow, compiled binary behavior, or backend correctness. See [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md) for the exact scope.
 
-**Stale detection:** If the function body changes, the fingerprint changes, and the proof is revoked. The evidence level drops to `"enforced (proof stale: body changed)"` until the proof is updated.
+**Current freshness limitation:** a source link without a stored fingerprint is
+`unbound`, not proved. A stored body fingerprint catches the body changes it
+encodes and revokes the proof, dropping the evidence level to
+`"enforced (proof stale: body changed)"`. Bugs 059–060 show that the current
+scheme does not cover all signature/type changes or contract/spec identity.
+R-0004 must replace it with a complete proof-subject digest and transitive
+dependency root; do not treat the current mechanism as comprehensive.
 
 ---
 
@@ -160,9 +175,9 @@ Every statement the compiler makes about a program falls into exactly one of the
 | JSON `kind` | Fields carrying taxonomy info | Values |
 |-------------|-------------------------------|--------|
 | `"effects"` | `"evidence"` | `"proved"`, `"enforced"`, `"enforced (proof stale: body changed)"`, `"reported"`, `"trusted-assumption"` |
-| `"proof_status"` | `"state"` | `"proved"`, `"stale"`, `"missing"`, `"blocked"`, `"ineligible"`, `"trusted"` |
+| `"proof_status"` | `"state"` | `"proved"`, `"unbound"`, `"stale"`, `"missing"`, `"blocked"`, `"ineligible"`, `"trusted"` |
 | `"eligibility"` | `"status"` | `"eligible"`, `"excluded"`, `"trusted"` |
-| `"obligation"` | `"status"` | `"proved"`, `"stale"`, `"missing"`, `"blocked"`, `"ineligible"`, `"trusted"` |
+| `"obligation"` | `"status"` | `"proved"`, `"unbound"`, `"stale"`, `"missing"`, `"blocked"`, `"ineligible"`, `"trusted"` |
 | `"traceability"` | `"evidence"`, `"boundary"` | Evidence: same as effects; Boundary: claim scope description |
 | `"proof_diagnostic"` | `"severity"` | `"warning"`, `"info"` |
 
@@ -240,11 +255,15 @@ For consistency across the project:
 
 5. **Use "trusted" only for the compiler mechanism.** `trusted fn` and `trusted extern fn` are specific Concrete keywords. Do not use "trusted" colloquially to mean "reliable" or "believed to be correct."
 
-6. **Use canonical status strings in all machine-readable output.** The six canonical proof/obligation status terms are defined in `ObligationStatus.canonical` and must be used consistently across all JSON facts, CLI status fields, and programmatic output:
+6. **Use canonical status strings in all machine-readable output.** The seven
+   canonical proof/obligation status terms are defined in
+   `ObligationStatus.canonical` and must be used consistently across all JSON
+   facts, CLI status fields, and programmatic output:
 
    | Canonical | Meaning | Former variants (now banned) |
    |-----------|---------|------------------------------|
    | `"proved"` | Spec attached, fingerprint matches, extraction succeeded | — |
+   | `"unbound"` | Source proof link exists but no stored proof subject exists | — |
    | `"stale"` | Spec attached, fingerprint changed | — |
    | `"missing"` | Eligible, extractable, no spec attached | (see below) |
    | `"blocked"` | Eligible but extraction failed (unsupported constructs) | — |

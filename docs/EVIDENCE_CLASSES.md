@@ -6,6 +6,12 @@ has sub-states (kernel-decision vs Lean refinement) and honest negative states
 (partial, stale). This page is the catalog: each class, the canonical audit
 line, the command that shows it, and a small worked reference.
 
+**Model transition:** the labels below describe the current CLI and artifact
+schema. The ratified target in [ROADMAP R-0440](../ROADMAP.md) separates subject,
+scope, method, status, trust, freshness, and replay facts. These labels will
+remain useful composite views, but they are not a universal ranking and must not
+be read as mutually exclusive semantic dimensions.
+
 The corpus under [`examples/evidence_classes/`](../examples/evidence_classes/)
 holds one clean subexample per class (no flagship-scale noise). Flagships are
 referenced where they are the better illustration.
@@ -28,13 +34,19 @@ refinement is a hand-written, kernel-checked theorem. See
 | state | what it means | command | reference |
 |---|---|---|---|
 | `partial` | one direction of a postcondition proved, converse outstanding | `--report contracts` | `evidence_classes/partial_contract` |
-| `stale` | proof link present but the body drifted from the spec | `--report proof-status` → `stale` | `evidence_classes/stale_proof` |
+| `unbound` | a source proof link exists without a stored proof subject; never proved | `--report proof-status` → `unbound` | `evidence_classes/proved_by_lean` containment case |
+| `stale` | a stored link disagrees with the subset covered by the current fingerprint | `--report proof-status` → `stale` | `evidence_classes/stale_proof` |
 | `missing` | proof-eligible, no proof attached yet | `--report proof-status` → `no proof` | any pure eligible fn |
 | `blocked` | eligible but extraction hit an unsupported construct | `--report proof-status` → `blocked` | a `u8 & u8` body |
 | `not eligible` | fails the predictable-profile gate (recursion, unbounded loop, caps) | `--report eligibility` | recursive fn |
 
 These are not failures to hide — they are the audit telling the truth. A
-`stale` link is the negative case for every `proved_*` entry.
+`stale` link is the negative case for every `proved_*` entry. R-0004 has
+contained bug 058: a missing stored fingerprint is now `unbound` and cannot
+retain a false `proved` verdict. Freshness is still incomplete because
+signature/type edits, contract edits, and transitive dependency drift are not
+all covered. Current `proved` output must not be described as fully
+proof-subject-fresh.
 
 ## Enforced / reported / assumed / trusted
 
@@ -55,14 +67,16 @@ release gates.
 |---|---|---|---|
 | `tested_by_oracle` | compiled program agrees with an independent reference across a vector set | `oracle/run_oracle.sh` | `evidence_classes/tested_by_oracle` (clamp, 200 cases) |
 
-A `tested` class raises confidence but does **not** kernel-verify — it is below
-`proved` on the ladder and is labeled as such. Disagreement is real signal.
+A `tested` class raises confidence but does **not** kernel-verify. It may cover a
+broader native/backend scope than a narrow theorem, so the two are not globally
+ordered; policy may compare them only for the same subject and scope.
+Disagreement is real signal.
 
 ## Runtime safety
 
 | class | what it means | command | reference |
 |---|---|---|---|
-| `runtime_checked` | runtime-error obligations: array bounds (`0 ≤ idx < N`), division (`divisor ≠ 0`), and integer overflow (`MIN ≤ result ≤ MAX`, opt-in), each reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
+| `runtime_checked` | runtime-error obligations: array bounds (`0 ≤ idx < N`), division (`divisor ≠ 0`), and ordinary integer overflow (`MIN ≤ result ≤ MAX`), each reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
 
 Three kinds are wired today — **array bounds** (`0 ≤ idx < N` per `arr[idx]`),
 **division** (`divisor ≠ 0` per `/` and `%`), and **integer overflow**

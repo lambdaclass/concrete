@@ -1,14 +1,14 @@
 # Known Holes and Tracked Soundness Gaps
 
-Status: canonical index — the single place that lists every known soundness or
-"semantically dark construct" gap, its honest current state, the gate that
-keeps it from drifting, and where its fix is scheduled.
+Status: curated index of legacy H-series gaps and cross-cutting safety
+boundaries.
 
-Why this file exists: holes were previously scattered across `CLAIMS_TODAY.md`
-disclosures, `AXIOMS.md`, individual gate scripts, and ROADMAP items, so no
-single page showed the whole picture. This is that page. Every entry must name
-(1) what the gap is, (2) whether it is OPEN/CLOSED, (3) the reproducing
-fixture, (4) the gate that locks it, and (5) the roadmap item that fixes it.
+This file is not a second bug ledger. Numbered compiler, runtime, stdlib, and
+evidence defects live in [bugs/README.md](bugs/README.md), and their execution
+owners live in [ROADMAP.md](../ROADMAP.md). This page retains the historical
+H-series disclosures, summarizes cross-cutting boundaries that need more than
+one bug record, and links to those canonical owners. Duplicating every numbered
+bug here would create two inventories that drift.
 
 Governing rule (from ROADMAP): no construct may be **semantically dark** — a
 construct that looks meaningful but is silently ignored, or whose unsoundness
@@ -17,7 +17,16 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ---
 
-## OPEN holes (tracked, gated, disclosed — not yet fixed)
+## Current open-defect index
+
+The complete numbered list and status are in
+[the bug ledger](bugs/README.md#open-numbered-bugs). Current high-consequence
+classes include structural destruction (bug 052 / R-0006), trap preservation
+(bug 053 / R-0005), specialization and import identity (bugs 054–055 /
+R-0007–R-0008), callable SSA identity (bug 056 / R-0436), proof-subject
+freshness (bugs 058–060 / R-0004), and ProofCore callable identity (bug 061 /
+R-0442). R-0010 will replace the legacy skip-based audit with mechanically
+checked per-bug states.
 
 ### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
 
@@ -29,15 +38,17 @@ with collections phase 2). Deterministic internals remain fine for replay.
 
 ## Recently closed
 
-### H18. Collections did not destroy non-Copy elements on drop/clear/remove/overwrite — CLOSED 2026-07-16
+### H18. Collection destruction for named element types — CLOSED 2026-07-16; structural nesting remains open
 
-ALL collections now carry compiler drop-glue: Vec (slice 1), HashMap/HashSet/
+All collections now carry compiler drop glue for supported named element types:
+Vec (slice 1), HashMap/HashSet/
 Deque/BinaryHeap/OrderedMap/OrderedSet (slice 2 — occupied-slot walks for the
 hash map, ring walk for the deque, contiguous walks elsewhere; K AND V bounds
 for maps). Same-key `insert` overwrites destroy the DISPLACED key (never
 silently leaked); `Vec.replace(at, v) -> T` is the overwrite primitive
 (displaced element returned; bounds trap via checked arithmetic). Every
-container has a conditional `impl Destroy` so nesting composes
+container has a conditional `impl Destroy`, so nesting through named
+destroyable types composes
 (`Vec<HashMap<String, Bytes>>` destroys leaves recursively). The v1 capability
 fence (E0584) rejects any Destroy impl requiring caps beyond Alloc — rule 3
 holds degenerately by construction. Destruction counts proven by std tests
@@ -52,60 +63,18 @@ exactly why it missed this — sentinels now use non-Copy keys).
 Gate: COLLECTIONS-DROP-GLUE (30 checks). Residual (deliberate, documented):
 `slice.set_unchecked`/`vec.set_unchecked` remain raw trusted overwrite escapes.
 
-
-`Vec/HashMap/OrderedMap/Deque/BinaryHeap` (`+ slice.set_unchecked`) reclaim
-their buffers on `drop`/`clear`/`remove`/overwrite but never run any
-destruction for LIVE non-Copy elements — an owning element is silently
-leaked (acknowledged at `vec.con:106`). LATENT today: every shipped user of
-these containers stores Copy elements, and the H12-checked front end still
-enforces linearity on the values BEFORE they enter the container.
-
-Decision (review 2026-07-14; RESOLVED 2026-07-15 — full rules in
-`docs/RUNTIME_COLLECTIONS.md` "Drop-glue rules", the single source of truth):
-Phase 7 pulls this forward before broad stdlib breadth. The permanent fix is
-**compiler-generated drop-glue at monomorphization**: when `Vec<String>` /
-`HashMap<String, Bytes>` / etc. is instantiated, the compiler resolves the
-element/key/value destruction path statically and emits the loops that destroy
-live slots before storage is freed or reused. No trait objects, no stored
-destructor function pointer in each collection value, and no permanent
-caller-supplied `drop_with(f)` burden. `drop_with(f)`-style APIs are acceptable
-only as an explicitly-labeled temporary bridge if a workload needs non-Copy
-collections before drop-glue is ready.
-
-Pinned rules (see RUNTIME_COLLECTIONS for the full statements): `Destroy` is
-infallible-only PERMANENTLY (fallible cleanup keeps explicit `close(self) ->
-Result` and no `Destroy` impl — so `Vec<File>` never gets `.drop()`; the idiom
-is drain-and-close, every error owned); `Vec<T>: Destroy` iff `T: Destroy`
-(conditional-impl machinery, compositional compile error); glue capabilities
-are derived from element destructors and visible in the drop signature (the
-final model — anything else is capability laundering through generated code);
-v1 glue is `with(Alloc)` as a documented V1 RESTRICTION (every real `Destroy`
-today is memory-only), with the symbolic associated-capability machinery in
-Check deferred until an infallible non-`Alloc` destructor is pulled.
+**Open structural remainder:** bug 052 shows that an array or another unnamed
+element type can still miss `tyName` lookup and receive synthesized no-op drop
+glue, so `Vec<[T; N]>.drop()` can skip the leaves. The permanent rule is
+structural, type-directed destruction independent of a printable type name;
+R-0006 owns containment and the root fix. Until it lands, “nesting composes”
+must be read as limited to the named element shapes exercised by
+COLLECTIONS-DROP-GLUE.
 
 This does **not** authorize implicit scope-end destruction. Concrete stays
-linear, not affine: the outer disposal remains a source-visible consuming action
-(`x.drop()` / `defer x.drop()` / `destroy(x)`). Generated glue only implements
-that explicit action by recursively destroying the live owned parts.
-
-Because Concrete aborts rather than unwinds, the H18 fix does not need Rust's
-panic-unwind drop-flag machinery. It only needs normal-path destruction for
-`drop`/`clear`/overwrite/replacement/compaction, and explicit ownership transfer
-for `pop`/`remove`/`swap_remove`.
-
-SLICE 1 LANDED (2026-07-16, Vec only): `Vec<T>` `drop`/`clear` now destroy
-live elements via the `Destroy`-bounded glue impl (the `Destroy` BOUND means
-destroyable — Copy passes trivially and mono elides the call; an explicit
-`impl Destroy` runs; non-Copy without Destroy makes drop/clear uncallable,
-E0241 → drain-and-close). `String`/`Bytes` carry trait-form destructors.
-Proven by `vec_test_vec_destroys_elements` (exactly-once, live slots only,
-pop transfers out). Compiler pieces: named-typeparam receiver normalization
-(Check+Elab), mono no-op synthesis for elided Copy destroys, interp dynamic
-`*_destroy` dispatch. REMAINING (slice 2): map/set/deque/heap/ordered_* drop/
-clear/remove/overwrite paths, `replace(i,v)->T`, `slice.set_unchecked`.
-
-Gate: `check_collections_copy_only.sh` (now COLLECTIONS-DROP-GLUE) pins the new behavior: glue accept/reject pairs, the counting test, the no-*_with rule, and the
-traversal policy.
+linear, not affine: the outer disposal remains a source-visible consuming
+action (`x.drop()` / `defer x.drop()` / `destroy(x)`). Generated glue only
+implements that explicit action by recursively destroying live owned parts.
 
 
 ### H13–H17. The 2026-07-05/06 value-flow discharge sweep — ALL CLOSED 2026-07-06
@@ -127,7 +96,7 @@ one burn-down. Two were duplications (double-free class), three were leaks
   skip-unconsumed check so a loop-local moved out via break counts as
   consumed, and a value declared immediately outside the broken loop is
   exempt from the loop-depth rule (`breakDepthExempt` — a break fires at most
-  once per loop entry; deeper outer values stay E0206).
+  once per loop entry; deeper outer values stay E0207).
 - **H15 (leak): `arr[i] = v` and `*r = v` (through `&mut`) leaked the
   overwritten value** — E0219 guarded only field assignment. Fixed: both now
   reject a non-Copy target (**E0291** `cannotOverwriteLinearPlace`).
@@ -137,7 +106,10 @@ one burn-down. Two were duplications (double-free class), three were leaks
   exit resolves locals by name, so `let f = mk(); let f = mk();` masked the
   first obligation. Fixed at the `let` site (**E0292** `shadowsLiveLinear`):
   shadowing a still-live non-Copy binding rejects; `let s = transform(s);`
-  stays legal (the RHS consumed the old value first).
+  remains accepted by the current checker (the RHS consumed the old value
+  first). The ratified target language rejects that second binding under
+  R-0435; this H16 entry records the already-closed resource-conservation bug,
+  not the pending auditability rule.
 - **H17 (leak): linear params (incl. by-value `self`) carried no consume
   obligation** — `fn drop_it(f: File) {}` was a universal silent-drop escape
   ("consumed by being received"), enforced only for generic-typed untouched

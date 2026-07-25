@@ -99,6 +99,19 @@ proofs.
     phase should earn its invariants through a validated artifact rather than by
     convention.
 
+    The live identity seams are indexed below so the principle is not applied
+    only after another defect. This is an ownership index, not a second task
+    queue; execution order remains the roadmap's file order.
+
+    | Entity / invariant | Representation that must not become identity | Owner |
+    |---|---|---|
+    | Direct call vs callable value | callee spelling | R-0002 (landed), R-0436 |
+    | Module/import target | alias or basename | R-0008 |
+    | Generic specialization | forgeable display/link symbol | R-0007 |
+    | Aggregate declaration and payload footprint | type name or restated size constant | R-0434 |
+    | Structural destruction | `tyName` lookup / empty fallback | R-0006 |
+    | ProofCore global call vs local application | one `PExpr.call` string | R-0442 |
+
 ## Short Positioning
 
 Concrete is a minimalist, no-GC, linear/resource-aware systems language

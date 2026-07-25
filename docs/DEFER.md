@@ -3,7 +3,7 @@
 Status: CORE-COMPLETE — ROADMAP Phase 6 #7. The `defer <call>;` form and its
 cleanup semantics are implemented and gated (`scripts/tests/check_defer.sh`,
 `examples/defer/cleanup_order/`); the open edges (block-form body, failure during
-cleanup, move-after-defer) are documented limitations below.
+cleanup, and normal-call argument coercions) are documented below.
 Date: 2026-06-23
 
 ## What `defer` does
@@ -30,6 +30,12 @@ Implemented semantics (locked by the gate):
   `emitAllDeferredCalls` on return/Err, `emitDeferredUntilLoop` on break/continue.)
 - **Per-scope.** Each block scope has its own deferred list; exiting a block runs
   that block's defers, inner-to-outer.
+- **Linear arguments are reserved at registration.** Once `defer drop(x)` is
+  accepted, `x` is in the `reserved` state and cannot be moved or consumed by a
+  later statement. Move-after-defer is rejected with E0206 (`reserved by
+  defer`), pinned by `error_defer_move.con`,
+  `error_memory_edge_defer_then_move.con`, and
+  `pressure_err_defer_then_move.con`.
 
 ## V1 boundaries (documented limitations)
 
@@ -50,13 +56,12 @@ The deeper cleanup-semantics questions from ROADMAP #7 are recorded here rather
 than built, as they need their own design pass:
 
 - **Failure during cleanup** — what happens if a deferred call itself fails or
-  diverges (especially mid-unwind on an error path). Today deferred calls are
-  ordinary calls with no special failure handling.
-- **Move-after-defer / linear interaction** — `defer drop(x)` followed by moving
-  `x` should be a linearity error; the precise rules (defer "uses" the value at
-  the defer point vs. at scope exit) are not yet specified or gated.
-- **Automatic drop/cleanup ordering vs. `defer`** — how explicit `defer`
-  composes with implicit linear-value drop at scope exit.
+  diverges while handling an ordinary return/error path. Today deferred calls
+  are ordinary calls with no special recovery or continuation rule.
 
 These compose with the linear/borrow model (`docs/VALUE_MODEL.md`); revisit when
 a workload exercises cleanup on error paths or `defer` over linear resources.
+
+There is no automatic scope-end drop to order against `defer`. Concrete has no
+implicit destruction: explicit `destroy(x)`, `x.drop()`, or a deferred explicit
+call consumes the value. Abort remains terminal and runs none of them.

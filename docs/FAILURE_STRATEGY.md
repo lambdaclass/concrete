@@ -28,10 +28,10 @@ Concrete uses **abort-only failure**. There is no panic, no stack unwinding, no 
 | Normal return | Function returns value | Yes — defer runs LIFO |
 | Error return via `?` | `Result::Err` propagated to caller | Yes — defer runs LIFO in each unwound frame |
 | `break` / `continue` | Loop control flow | Yes — defer runs for exited scopes |
-| Out-of-memory | `abort()` — process terminates | **No** |
+| Out-of-memory | terminal abort | **No** |
 | Stack overflow | OS guard page → SIGSEGV | **No** |
 | Hardware signal | OS kills process | **No** |
-| `abort()` call | Process terminates | **No** |
+| `abort()` call | terminal abort | **No** |
 
 The `?` operator is **not** unwinding. It is sugar for early return with a `Result::Err` value. Defer runs normally on `?`-triggered returns because they are normal returns from the caller's perspective.
 
@@ -57,9 +57,16 @@ Explicit errors:
 - Do not skip defer — all deferred cleanup runs
 - Are the **only** error mechanism in Concrete
 
-### 2. Abort (process termination)
+### 2. Abort (terminal operation)
 
-Abort terminates the process immediately. No defer runs. No cleanup. The OS reclaims all resources.
+Abort never returns. No defer, explicit destruction, or generated drop glue
+runs.
+
+- In the current hosted profile, abort terminates the process and the OS
+  reclaims process-owned resources.
+- A future freestanding profile must call a declared non-returning target
+  handler. The language does not assume an OS exists or that resources are
+  reclaimed.
 
 **Sources of abort:**
 
@@ -68,11 +75,14 @@ Abort terminates the process immediately. No defer runs. No cleanup. The OS recl
 | OOM | `malloc`/`realloc` returns null | `__concrete_check_oom` | No (no allocation) |
 | User code | `abort()` intrinsic | User | No (requires Process capability) |
 | Stdlib | Precondition violations in `std.alloc` | Stdlib wrappers | No (requires Alloc) |
+| Checked integer operation | overflow, div/mod zero, invalid shift, `MIN / -1` | compiler-emitted trap helper | Yes unless statically discharged |
+| Checked array index | negative or OOB index | compiler-emitted bounds helper | Yes unless statically discharged |
 
 **Abort behavior:**
 
-- Calls libc `abort()`, which typically raises SIGABRT
-- Exit code is OS-dependent (typically 134 on POSIX)
+- Hosted execution calls libc `abort()`, which typically raises SIGABRT; its
+  exit status is OS-dependent (often 134 on POSIX)
+- Freestanding execution uses the target profile's non-returning abort handler
 - No deferred expressions execute
 - No `Destroy` implementations or generated drop glue run — `abort()` bypasses
   all cleanup. Concrete has explicit destruction (`impl Destroy`, `destroy(x)`,
@@ -88,18 +98,21 @@ These terminate the process via OS signal. They are outside the language's seman
 |------|-------|--------|
 | Null pointer dereference | Load/store through null pointer (only in trusted code) | SIGSEGV |
 | Stack overflow | Call depth exceeds OS stack limit | SIGSEGV |
-| Division by zero | Integer division by zero on x86 | SIGFPE |
 | Illegal instruction | Should not happen from correct codegen | SIGILL |
 
-### 4. Undefined behavior (semantic gap)
+Checked arithmetic and safe indexing are not hardware-trap/UB cases: Concrete
+inserts language-defined abort paths before executing an invalid operation.
 
-These produce undefined behavior. The compiler does not detect or trap them.
+### 4. Undefined behavior outside the safe surface
+
+These require trusted/Unsafe operations or an incorrect foreign boundary; safe
+ordinary arithmetic and indexing are not in this table.
 
 | UB source | Consequence | Mitigation |
 |-----------|-------------|-----------|
-| Array out-of-bounds | Reads/writes arbitrary memory | Future: optional bounds checking |
-| Integer overflow | Silent wrap (two's complement) | Future: optional overflow checking |
-| Shift by >= bit width | LLVM poison value | Rare in practice |
+| Trusted unchecked pointer/index access | Reads/writes arbitrary memory | Keep the boundary named and audited |
+| Dishonest extern signature/contract | ABI or memory corruption | FFI wrapper review and assumptions |
+| Invalid raw-pointer lifetime/aliasing | use-after-free or alias violation | `trusted`/`Unsafe` containment |
 
 ---
 
@@ -139,12 +152,20 @@ For predictable code specifically:
 
 ### Leak on abort
 
-If a function calls `abort()` (directly or via OOM), resources held by that function and all callers are leaked to the OS. Since there are no destructors and no unwinding, there is no mechanism to run cleanup in the abort path.
+If a function aborts, resources held by that function and all callers receive no
+language-level cleanup. Concrete has explicit `Destroy` implementations and
+generated drop glue, but no unwinding or implicit scope-end destruction; none of
+those explicit actions runs unless it executed before the abort.
 
-This is acceptable because:
-- The process is terminating — the OS reclaims everything
+For hosted programs this is acceptable because:
+- The process is terminating and the OS reclaims process-owned resources
 - Predictable code cannot reach abort (no allocation, no Process capability)
 - The alternative (unwinding to run cleanup) would compromise the execution model
+
+The second bullet is limited to capability-driven abort. Checked arithmetic and
+bounds traps remain reachable in predictable code unless discharged. A
+freestanding target cannot rely on OS reclamation and must state its terminal
+handler/resource assumptions in the profile.
 
 ---
 
@@ -188,25 +209,35 @@ Proved functions cannot call extern functions (FFI gate in proof eligibility). T
 
 ### What proved code may assume
 
-1. **No abort reachable**: proved functions are pure (no capabilities), so `abort()` is not callable and OOM cannot occur
-2. **No hardware traps from safe operations**: proved functions use only safe operations (no raw pointers, no division in current provable subset)
+1. **No capability-driven abort or OOM**: proof-eligible functions are
+   authority-free and non-allocating. Checked arithmetic/bounds traps are a
+   separate semantic obligation.
+2. **No trusted hardware UB from safe operations**: proof-eligible functions
+   exclude raw-pointer/FFI behavior; admitted checked operations may still abort
+   outside the theorem's modeled domain.
 3. **Normal control flow only**: proved functions return normally or via explicit `Result` error — no hidden exit paths
 4. **Defer runs if present**: deferred expressions in proved functions always execute (no abort path exists)
 
 ### What proved code may NOT assume
 
-1. **No integer overflow safety**: proofs use unbounded integers (Lean `Int`); binary uses fixed-width wrapping. A theorem about `abs(x) >= 0` holds mathematically but not for `Int.MIN` at runtime.
-2. **No array bounds safety**: array indexing is not bounds-checked. A proved function accessing `arr[i]` has no runtime guarantee that `i < len`.
-3. **No termination guarantee**: the provable subset currently excludes loops, but the proof itself does not prove termination — it proves a property of the PExpr representation.
+1. **Trap-free fixed-width execution**: ordinary arithmetic traps when the
+   machine-width result is invalid, while many ProofCore theorems use unbounded
+   integers. The theorem needs an explicit range/no-overflow obligation to claim
+   normal return for all runtime inputs.
+2. **Static array bounds**: safe indexing traps rather than causing UB, but a
+   functional theorem does not by itself prove the trap unreachable.
+3. **Termination beyond the modeled evaluator/variant**: selected bounded loops
+   are admitted, but proof status alone is not a general language termination
+   theorem.
 4. **No binary correspondence**: the proof is over PExpr (source-level IR), not compiled LLVM IR. Backend transformations are not formally verified.
 
 ### Gap summary for proved code
 
 | Property | Proof model | Runtime reality | Gap |
 |----------|------------|-----------------|-----|
-| Integers | Unbounded | Fixed-width wrap | Overflow not caught |
-| Array access | Not modeled | Unchecked GEP | OOB is UB |
-| Control flow | PExpr (no loops, no mutation) | Compiled with LLVM optimizations | Backend not verified |
+| Integers | Mostly unbounded, with selected width-aware operators | Fixed-width checked or explicitly wrapping/saturating | Normal-return claim needs matching range/width semantics |
+| Array access | Functional get/set for admitted forms | Runtime bounds trap | Trap-unreachability is a separate obligation |
+| Control flow | Selected bounded loops and functional state forms | Compiled with LLVM optimizations | Backend not verified |
 | Failure | Not modeled | abort/signal/UB possible in theory | Proved functions avoid all sources in practice |
 
 ---
@@ -215,9 +246,12 @@ Proved functions cannot call extern functions (FFI gate in proof eligibility). T
 
 1. **Abort-only**: no panic, no unwinding, no catch. This is permanent.
 2. **Defer runs on normal paths**: every return, `?`, break, continue, scope exit.
-3. **Defer skipped on abort/signal**: the process is dying; the OS cleans up.
+3. **Defer skipped on abort/signal**: hosted execution terminates; freestanding
+   invokes its non-returning handler. Neither promises language cleanup.
 4. **No leak on normal paths**: linear ownership + defer guarantees cleanup.
-5. **Leak on abort is acceptable**: process termination reclaims everything.
+5. **Abort cleanup is profile-scoped**: hosted OS reclamation is an environmental
+   fact, not a language guarantee; freestanding targets must name their handler
+   and resource assumptions.
 6. **FFI is trust-based**: extern function contracts are not mechanically verified.
 7. **Proved code avoids all failure sources**: by construction (no capabilities, no raw pointers, no allocation).
 8. **Integer overflow and array OOB are known gaps**: documented, not yet mitigated at runtime.

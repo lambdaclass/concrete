@@ -6,10 +6,10 @@ differential harness. The harness lives in
 
 ## Why
 
-Concrete has a source-level interpreter (`Concrete/Interp.lean`,
-invoked via `concrete <file> --interp`). It is intentionally smaller
-than the full compiler pipeline and serves as a semantic oracle for
-the predictable/core subset.
+Concrete has a source-level interpreter (`Concrete/Interp/Interp.lean`,
+invoked via `concrete <file> --interp`). It is a second executable semantics
+over validated Core and serves as a differential oracle for the
+predictable/core subset.
 
 Phase A.1 of the roadmap requires that this oracle be a *regression
 surface*, not a one-off prototype: every supported program should run
@@ -19,8 +19,10 @@ build.
 Phase A.2 — the trust boundary of the interpreter — lives in
 [`docs/INTERPRETER_TRUST.md`](../../docs/INTERPRETER_TRUST.md).
 It enumerates supported constructs, excluded constructs, the
-arbitrary-precision-integer arithmetic model, and the explicit-failure
-contract that lets the harness distinguish PENDING from FAIL.
+fixed-width checked-arithmetic model, shared dependencies, and the
+explicit-failure contract that lets the harness distinguish PENDING from FAIL.
+Agreement is tested evidence, not proof or an automatic ruling that the
+interpreter is correct.
 
 ## Contract
 

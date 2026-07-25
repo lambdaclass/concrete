@@ -7,6 +7,7 @@ This document defines the complete workflow for proving Concrete functions with 
 For proof contract semantics, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md).
 For theorem shapes and naming rules, see [PROOF_THEOREM_SHAPES.md](PROOF_THEOREM_SHAPES.md).
 For the proof pressure set used during development, see [PROOF_PRESSURE_SET.md](PROOF_PRESSURE_SET.md).
+For the exact admitted language surface, see [PROVABLE_V1.md](PROVABLE_V1.md).
 For the future LLM-guided synthesis loop, see
 [PROOF_SYNTHESIS.md](PROOF_SYNTHESIS.md).
 
@@ -27,21 +28,19 @@ A function must pass **all** of these to be proof-eligible:
 | Not `trusted` | Functions marked `trusted fn` |
 | No trusted implementation origin | Functions backed by trusted code |
 | No recursion | Recursive functions |
-| No loops | Functions containing `while` |
 | No allocation | Functions using `new` |
 | No FFI | Functions calling `extern` |
 | No blocking I/O | Functions with blocking operations |
-| No mutable assignment | Functions with `var` mutation in body |
+| Admitted body | Constructs outside `ProvableV1` |
 
 ### Extraction gates
 
-Even if eligible, a function must use only constructs the extraction pipeline supports. Currently blocked constructs include:
-
-- Struct field access (`b.lo`, `b.hi`)
-- Match expressions
-- String literals
-- If-without-else
-- Mutable assignment
+Even if eligible, a function must use only constructs the extraction pipeline
+supports. Selected structs, enums, matches, fixed arrays, bounded loops, and
+functional state updates are supported. Strings/text, allocation, references,
+defer, recursion, and arbitrary unmodeled mutation remain outside
+`ProvableV1`. Treat [PROVABLE_V1.md](PROVABLE_V1.md) as the allowlist rather
+than copying a second list into a proof.
 
 ### Inspect eligibility
 
@@ -171,8 +170,15 @@ The compiler validates the synthesized links and rejects:
 - Empty proof/spec fields
 - Proofs attached to ineligible functions (capabilities, entry points, trusted)
 - Proofs attached to blocked functions (extraction failed)
+- **unbound** source links: `#[proof_by]` without a stored
+  `#[proof_fingerprint]` → reported `unbound`, never `proved`
 - **stale** links: `hash(current body) ≠ #[proof_fingerprint]`, or spec-drift
   (`extracted ≠ #[spec]`) → reported `stale`, not `proved`
+
+The current fingerprint covers the extracted body, not yet the full proof
+subject. Signature/type facts, source contracts, and transitive dependency
+roots remain R-0004 work; do not update a fingerprint without replaying the
+theorem.
 
 ---
 
@@ -214,6 +220,11 @@ Kernel-verified (1):
 Failed (0):
 ```
 
+Run this from the repository/workspace context. A current R-0004 defect makes
+theorem lookup working-directory-sensitive for nested example projects; a
+lookup failure from another directory is not by itself evidence that the
+theorem is absent.
+
 ### Full status
 
 ```bash
@@ -244,6 +255,7 @@ concrete src/main.con --report proof-diagnostics
 | `attachment_integrity` | E0805 | In-source link invalid | Fix the link (ineligible/blocked fn, empty proof/spec, etc.) |
 | `theorem_lookup` | E0806 | Lean proof name not found | Fix theorem name or write the theorem |
 | `lean_check_failure` | E0807 | Lean kernel rejected proof | Fix the Lean proof |
+| `unbound_proof_link` | E0810 | Link has no stored proof subject | Re-verify and add `#[proof_fingerprint]` |
 
 ### Failure and repair classes
 
@@ -361,7 +373,7 @@ The caller's own proof status remains `proved` (its body didn't change), but the
 | Add/change comments | Yes | Comments not in Core IR |
 | Change formatting | Yes | Whitespace not in Core IR |
 | Add a new function | Yes | Other functions' fingerprints unaffected |
-| Change code in a different function | Yes | Per-function fingerprints |
+| Change code in a different function | Local hash stays fresh; dependency review required | Per-function fingerprints do not yet include transitive callee roots (R-0004) |
 
 ### Refactors that invalidate proofs
 

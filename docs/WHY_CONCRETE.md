@@ -89,17 +89,25 @@ that distinction in the report.
 The common failure mode for external verification is synchronization. The code
 changes; the spec or proof still exists; the report still looks comforting.
 
-Concrete's strongest proof path ties the theorem to the exact extracted source
-body. The compiler extracts a ProofCore expression, records a body fingerprint,
-and checks that the registered proof is still attached to the same body shape.
-If the source changes, the proof becomes stale.
+Concrete's strongest proof path ties the theorem to a stored digest of the
+extracted source body. The compiler extracts a ProofCore expression, records a
+body fingerprint, and checks that the registered proof is still attached to
+the same body shape. A source link with no stored fingerprint is `unbound`, not
+proved; a changed stored body becomes stale.
+
+That is useful containment, not yet a complete semantic-subject digest. The
+current hash does not cover every signature/type fact, source contract, or
+transitive callee. Bugs 059/060 and R-0004 make those limits explicit rather
+than letting “fresh” overclaim.
 
 That is why the HMAC-SHA256 flagship matters. Its proof is not "there is a
 handwritten model that looks like the implementation." The shipped claim is:
 
-1. the Concrete source extracts to this ProofCore body;
+1. the Concrete source body extracts to this ProofCore body and has a stored
+   fingerprint;
 2. this ProofCore body refines an independent SHA-256/HMAC spec;
-3. if the source drifts, the claim turns stale.
+3. the named theorems replay through the Lean kernel;
+4. if the represented body drifts, the claim turns stale.
 
 That is the core thesis in one example.
 
@@ -137,8 +145,8 @@ Today:
 
 - the Lean kernel checks proof terms;
 - the Concrete compiler is written in Lean, but not fully verified;
-- the source-to-ProofCore tie is checked by the spec-drift mechanism for
-  registered proofs;
+- the source-body-to-ProofCore tie is checked by a stored fingerprint and the
+  current spec-drift mechanism, with the full-subject gaps tracked in R-0004;
 - LLVM, clang, the linker, libc, and the host kernel remain trusted;
 - machine-level timing claims remain assumptions unless a lower layer checks
   them;

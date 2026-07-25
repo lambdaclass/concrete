@@ -10,6 +10,37 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Documentation Truth Alignment
+
+_Docs-only resynchronization, 2026-07-25. No compiler or language behavior
+changed in this slice._
+
+The canonical claims now describe checked ordinary arithmetic and safe indexing,
+the implemented linear-rebind rule, the actual `ProvableV1` aggregate/loop/state
+surface, and the interpreter as a second semantics used for differential
+divergence hunting rather than a tiny privileged oracle. The proof contract
+distinguishes attachment freshness from kernel replay and records R-0004's
+remaining full-subject and replay-context gaps.
+
+Documentation ownership was narrowed to reduce future drift:
+
+- `ARITHMETIC_POLICY.md` owns arithmetic behavior; guarantee/profile documents
+  summarize and link to it.
+- `PROVABLE_V1.md` owns the admitted proof surface; explanatory proof documents
+  no longer maintain obsolete constructor lists.
+- `docs/bugs/README.md` owns numbered defect status, while
+  `KNOWN_HOLES.md` is a curated legacy/cross-cutting index and `ROADMAP.md` owns
+  implementation work.
+- `PROOF_STORY_MATRIX.md` has immediate manual rows for previously dark language
+  families; R-0438 still owns generated claim records and recurrence prevention.
+
+The roadmap preserves the findings without duplicating tasks: trap-semantics
+centralization stays in R-0005, fuzzer breadth in R-0272/R-0095/R-0096,
+performance evidence in R-0416–R-0419, abort profiles in R-0223/R-0322, and
+stored/derived callback inference in R-0016. The unmerged H18 worktree and
+`.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
+of being treated as ambient backlog.
+
 ### Completed Task R-0003
 
 _HashMap probe and occupancy invariants — bugs 047 (duplicate past a tombstone)
@@ -69,32 +100,31 @@ Two things this slice uncovered, both fixed here:
   048's shape — would have stalled the suite and the CI job rather than failing.
   The project-fixture loop now runs under a 60s watchdog reporting timeouts as a
   distinct failure, degrading with a warning where `timeout` is unavailable.
-||||||| d332a099
 
-### Completed Task R-0435
+### Superseded decision record: R-0435
 
-_Closed as a decision not to do it, 2026-07-25. The ID is retired and must never
-be reused._
+_A docs-only decision briefly closed this task on 2026-07-25; it was superseded
+the same day after the intended language preference was clarified. R-0435 is
+reopened in the roadmap under the same identity._
 
-R-0435 proposed banning variable shadowing to make
-`docs/LANGUAGE_INVARIANTS.md` #4 true. **Decided against: shadowing stays legal.**
-The invariant was corrected to describe the language instead, and the rationale is
-recorded in `docs/DECISIONS.md` ("No shadowing ban").
+The first decision kept shadowing legal because bug 045 was a name-resolution
+defect fixed by Elab alpha-renaming, not an inherent soundness failure. That
+technical diagnosis remains correct, but it answered the wrong design question.
+The superseding decision bans lexical value shadowing for audit clarity while
+retaining compiler-owned identity as defense in depth.
 
-The short version: shadowing was never a soundness problem. Bug 045 was a
-name-resolution defect — nested same-named match binders sharing one Lower slot —
-and it was fixed at the root by Elab alpha-renaming, now generalized as
-`docs/PRINCIPLES.md` #12 (semantic entities have compiler-owned identity). Banning
-the source construct would have encoded a former compiler weakness as a permanent
-language restriction, and it would have cost a new grammar form
-(`Variant { value: inner }` binder renaming) purely to keep nested
-`Option`/`Result` matching expressible, since both name their payload field
-`value`.
+The decided distinction is binding versus assignment. A new lexical value
+binding must use a fresh visible name; explicit assignment evolves one binding.
+Thus `let s = transform(s)` will reject once R-0435 lands, while
+`acc = f(acc, x)` remains legal when the old linear value is consumed before the
+new one is installed. Pattern-binder renaming is a prerequisite so nested
+`Option`/`Result` patterns remain expressible.
 
-Two things from the task's analysis were kept because they were real defects in
-their own right, independent of any ban: `LANGUAGE_INVARIANTS.md` #4 asserted a
-rule the checker does not enforce, and `LANGUAGE_SHAPE.md:47` contradicted
-`OWNERSHIP_MODEL.md:92-95` on linear rebind. Both are fixed.
+The review also exposed a separate documentation defect:
+`LANGUAGE_SHAPE.md` and `OWNERSHIP_MODEL.md` correctly describe the implemented
+linear-rebind rule, while older guarantee documents still said reassignment was
+unconditionally forbidden. Those current-truth documents were aligned with the
+checker as part of the decision correction.
 
 
 ### Completed Task R-0002

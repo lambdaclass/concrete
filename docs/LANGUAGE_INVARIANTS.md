@@ -4,9 +4,13 @@ Status: stable reference
 
 These rules apply across all phases. They come directly from the language design and must never be violated.
 
-## 1. Pure By Default
+## 1. Authority-Free By Default
 
-A function without `with()` is pure. It cannot call any function that has `with()`.
+A function without `with()` cannot exercise capabilities or call a function
+whose required capability set is non-empty. This is an authority claim, not a
+totality claim: such a function may still trap on a checked operation, diverge,
+or exhaust the stack. Proof eligibility and stronger behavioral claims are
+separate judgments.
 
 ## 2. True Linear Types
 
@@ -42,31 +46,38 @@ Each phase that adds a new consumption form must update this list.
 - the execution point (scope exit) is deterministic and visible from the block structure
 - no implicit function dispatch occurs; the exact function being called is the one written in the `defer` statement
 
-## 4. No Shadowing Of A Live Linear Binding
+## 4. No Lexical Value Shadowing
 
-Shadowing is legal. A `let` may reuse a name bound in the same or an enclosing
-scope, and nested `match` binders may share a name with an outer binder
-(`tests/programs/regress_045_match_binder_shadow.con` pins inner-shadows /
-outer-restored as intended behavior). The compiler owns identity, so the inner
-and outer binders are distinct entities regardless of sharing a spelling — see
-[PRINCIPLES.md](PRINCIPLES.md) #12.
+**Status:** decided language invariant; enforcement pending
+[ROADMAP R-0435](../ROADMAP.md). Until that task lands, this section distinguishes
+the target rule from current compiler behavior rather than claiming the ban is
+already enforced.
 
-Two shadowing forms are rejected, and they are the whole rule:
+**Target rule:** a new local value binding may not reuse the spelling of another
+local value binding visible along its lexical scope chain. Parameters, `let`,
+pattern and loop binders, and borrow-block value/region binders all introduce
+names. `let s = transform(s)` is therefore rejected as a new binding.
 
-- **A still-live non-`Copy` binding.** `Check` rejects a `let` that shadows an
-  unconsumed linear owner (H16, `.shadowsLiveLinear`), because scope exit
-  resolves locals by name and the older obligation would vanish behind the new
-  binding. `let s = transform(s);` is fine — the RHS consumed the old `s`.
-- **Borrow-block ref and region names.** `borrow x as xr in R` introduces `xr`
-  and `R`, and neither may shadow an existing name (`.borrowRefShadows`,
-  `tests/programs/error_borrow_shadow.con`).
+Assignment does not introduce a binding. `acc = f(acc, x)` remains legal for a
+`mut` linear place once evaluation consumes its old value; assigning over a live
+linear value remains E0219. Sibling match arms may use the same spelling because
+their bindings are not visible to one another, and a loop declaration remains
+one lexical binding across iterations. The rule is confined to the lexical
+value-binding namespace; fields, types, traits, modules, top-level functions,
+imports, and intrinsics are separate namespace decisions.
 
-A blanket shadowing ban was considered and rejected — see
-[DECISIONS.md](DECISIONS.md) "No shadowing ban". Bug 045 was a name-resolution
-defect fixed at the root in Elab, not a reason to restrict the source language.
-Same-name evolution is ordinary: `let s = transform(s);` for a consuming
-transform, `acc = f(acc, x)` for `let mut` linear rebind
-([OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md), legal including inside loops).
+**Current compiler behavior:** ordinary `let`/pattern shadowing is still accepted
+except for a still-live non-`Copy` binding (H16, `.shadowsLiveLinear`) and
+borrow-block ref/region collisions (`.borrowRefShadows`).
+`tests/programs/regress_045_match_binder_shadow.con` therefore remains a positive
+current-behavior fixture until R-0435 migrates it. Reports and reference pages
+must not describe the target ban as shipped before that gate lands.
+
+Elab alpha-renaming remains mandatory under
+[PRINCIPLES.md](PRINCIPLES.md) #12. Bug 045 was a name-resolution defect; the
+source restriction improves audit clarity but does not replace compiler-owned
+semantic identity. See [DECISIONS.md](DECISIONS.md) “No lexical value
+shadowing.”
 
 ## 5. No Uninitialized Variables
 
@@ -123,9 +134,13 @@ New language features must justify:
 
 If a feature makes the language harder to parse, harder to review, or harder to prove without delivering a correspondingly large benefit, it should be rejected or delayed.
 
-## 16. `abort()` Is Immediate Process Termination
+## 16. `abort()` Is Terminal And Runs No Cleanup
 
-Deferred cleanup does not run on `abort()`. Out-of-memory and stack overflow also trigger abort. This is outside the language's semantic model.
+Deferred cleanup, explicit `Destroy` calls, and generated drop glue do not run
+after `abort()`. In the current hosted profile, abort terminates the process. A
+future freestanding profile must route it to a declared non-returning target
+handler. Neither profile promises cleanup or recovery; R-0223 and R-0322 own the
+full runtime/target contract.
 
 On POSIX systems, `abort()` typically produces exit code `134`, but tests should check for nonzero exit rather than a specific code.
 
@@ -156,4 +171,3 @@ passes cannot drift.
 Enforced by: the differential fuzzer's taxonomy (`fuzz_differential.py`
 classifies any E07xx/panic/crash on a generated well-typed program as
 `compiler_bug`, never `rejected`) and `check_mixed_width_binops.sh`.
-

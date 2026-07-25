@@ -45,7 +45,11 @@ A function that calls `malloc` cannot run on bare metal without an allocator. A 
 - **No capabilities required.** Every function has `caps: (pure)` or at most borrows from caller context.
 - **No libc dependency.** No `malloc`, `free`, `printf`, `strlen`, or any extern call.
 - **Freestanding-compatible.** Core modules compile and run without an OS, without libc, without a heap.
-- **Proof-friendly.** Functions in core modules are candidates for `--check predictable` and many are proof-eligible (no loops, no mutation, no capabilities).
+- **Proof-friendly.** Functions in core modules are candidates for
+  `--check predictable`, and many are proof-eligible because their bodies stay
+  within `ProvableV1` and require no capabilities. Selected bounded loops and
+  functional state are supported; capability freedom alone does not imply
+  eligibility.
 - **Deterministic.** No I/O, no randomness, no clock, no environment reads. Same inputs always produce same outputs.
 
 ### What core is for

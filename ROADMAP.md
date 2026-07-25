@@ -834,37 +834,119 @@ notes become work only when their named workload or failing gate pulls them.
 
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
-reducer, plus a four-part proof-freshness class. The surface-gate task comes
-first because it protects those fixes; the defects immediately follow it in the
-one global file-order sequence.
+reducer, plus a four-part proof-freshness class. R-0004 is the current frontier:
+contain false proof-freshness claims, then replace their root model. The
+no-shadowing migration in R-0435 follows that evidence-integrity repair. This
+ordering is deliberate: the source-language decision is made, but a false
+`proved` claim is the stop-the-line defect.
 
 ### Task R-0004
 
-**Objective:** Fix proof-subject freshness and fail closed Before preserving any `proved` claim, treat the following as one evidence- integrity defect class and file individually numbered ledger entries/reproducers before implementation:
+**Objective:** Fix proof-subject freshness and fail closed.
 
-   - a source `#[proof_by]` without `#[proof_fingerprint]` currently compares a
-     synthesized current fingerprint with itself and can remain proved forever;
-   - `bodyFingerprint` hashes statements but omits parameters, return type,
-     generics/bounds, capabilities, and other signature facts;
-   - `#[requires]`/`#[ensures]` and selected spec/proof identity are outside the
-     body hash; and
-   - stale dependency propagation considers direct callees rather than the
-     transitive proof dependency closure.
+Treat the following as one evidence-integrity defect class:
 
-   Immediate containment: an in-source proof link without a stored, validated
-   proof-subject digest is `missing`/`unbound` (or `needs_recheck`), never
-   `proved`; release/verified profiles fail closed. Replace body-only freshness
-   with a versioned canonical `ProofSubjectDigest` covering qualified semantic
-   identity, full typed signature and generic constraints, capabilities,
-   normalized body, requires/ensures/invariants, selected spec and theorem
-   identity, extraction/schema version, and dependency root. Compute dependency
-   freshness transitively using a deterministic SCC/Merkle root so recursion is
-   finite and a deep callee edit stales every dependent claim without making
-   source location/alpha-renaming noise semantic. Gate each omitted component,
-   missing/malformed digest, false postcondition, `i32 -> u32` signature edit,
-   capability/generic edit, theorem/spec swap, direct and multi-hop dependency
-   drift, recursive SCCs, comments/formatting/alpha-renaming stability, and a
-   mutation proving no old body-only path can emit `proved`.
+- a source `#[proof_by]` without `#[proof_fingerprint]` currently compares a
+  synthesized current fingerprint with itself and can remain proved forever
+  (bug 058);
+- `bodyFingerprint` hashes statements but omits parameters, return type,
+  generics/bounds, capabilities, and other signature facts (bug 059);
+- `#[requires]`/`#[ensures]` and selected spec/proof identity are outside the
+  body hash (bug 060); and
+- stale dependency propagation considers direct callees rather than the
+  transitive proof dependency closure (number and file this leg only after its
+  multi-function witness exists).
+
+Land this task in five explicit slices:
+
+1. **Executable witnesses first.** Bugs 058–060 have numbered documents with
+   replay transcripts, but prose snippets are not permanent executable
+   reproducers. Check in minimal fixtures plus a dedicated freshness gate that
+   demonstrates each current false verdict and its control. Build the
+   multi-function dependency chain, reproduce the fourth defect, then give it
+   its own number. Bug 061 is a separate ProofCore identity/model defect and is
+   owned by R-0442; it is not folded into freshness merely because the same CI
+   repair exposed it.
+2. **Immediate containment.** An in-source proof link without a stored,
+   validated proof-subject digest is `missing`/`unbound` (or
+   `needs_recheck`), never `proved`; release/verified profiles fail closed.
+3. **Root digest.** Replace body-only freshness with a versioned canonical
+   `ProofSubjectDigest` covering qualified semantic identity, full typed
+   signature and generic constraints, capabilities, normalized typed body,
+   requires/ensures/invariants, selected spec and theorem identity, and
+   extraction/schema version.
+4. **Dependency root.** Compute freshness transitively using a deterministic
+   SCC/Merkle root so recursion is finite and a deep callee edit stales every
+   dependent claim without making source location or alpha-renaming noise
+   semantic.
+5. **Replay context.** Make `--report check-proofs` resolve the proof workspace
+   from the input project/repository rather than the process working directory.
+   The same HMAC input currently reports 11 verified / 0 failed from the
+   repository root but 0 / 11 `theorem_lookup` failures and `Toolchain: unknown`
+   from `examples/hmac_sha256/`. A replay command is not complete evidence until
+   its project root, proof modules, and toolchain resolve independently of the
+   caller's cwd.
+
+Gate each omitted component, missing/malformed digest, false postcondition,
+`i32 -> u32` signature edit, capability/generic edit, theorem/spec swap, direct
+and multi-hop dependency drift, recursive SCCs,
+comments/formatting/alpha-renaming stability, repository-root/project-root
+invocation parity, and a mutation proving no old body-only path can emit
+`proved`. Keep the R-0002 proof-extraction CI repair and its reverified std
+fingerprints in their already-landed commit; do not mix that repair with these
+new evidence gates.
+
+### Task R-0435
+
+**Objective:** Ban lexical value shadowing while preserving explicit assignment
+rebind.
+
+**Decision status:** ratified 2026-07-25; implementation pending. This reopens
+the same R-0435 task after the earlier same-day “shadowing stays legal” decision
+was superseded. The changelog preserves that history; reopening the task is not
+reuse of its stable ID.
+
+The language rule is:
+
+> A new local value binding may not reuse the spelling of another local value
+> binding visible along its lexical scope chain.
+
+This applies to parameters, `let` declarations, pattern binders, loop binders,
+and borrow-block value/region binders. It rejects both an enclosing-scope
+collision and a same-scope consuming spelling such as
+`let s = transform(s)`. It is an auditability and human-identity rule, not a
+substitute for compiler-owned identity: Elab alpha-renaming remains mandatory
+defense in depth.
+
+Assignment is not binding introduction. `acc = f(acc, x)` remains legal for a
+`mut` linear place when evaluation consumes the old value before installing the
+new one; overwriting a still-live linear value remains E0219. The normative
+slogan is “one lexical name, one binding; at most one live resource in a linear
+place,” not “one binding, one resource.” A declaration inside a loop denotes
+one lexical binding even though it executes each iteration, and equal binder
+spellings in sibling match arms remain legal because neither binding is visible
+from the other.
+
+The rule is scoped to the lexical value-binding namespace. Field labels, type
+names, traits, and modules occupy separate namespaces. Whether a local may
+shadow a top-level function, import alias, or intrinsic is a separate namespace
+decision and must not be smuggled into this migration.
+
+Slice 1 is the prerequisite pattern-binder renaming form
+(`Variant { value: inner }` or an equivalent LL(1) spelling), shared by
+`match`, `if let`, `while let`, and destructuring `let`. Without it, nested
+`Option`/`Result` patterns are not expressible without shadowing because both
+payloads are named `value`. Slice 2 adds one stable diagnostic for forbidden
+lexical reuse and migrates the existing corpus. Slice 3 adds the inventory and
+mutation gates.
+
+Gate renamed nested patterns in every supported pattern position; rejection of
+parameter/`let`/pattern/loop/borrow collisions; rejection of
+`let s = transform(s)`; positive assignment-rebind, per-iteration declaration,
+and sibling-arm cases; interpreter/native agreement; formatter round-trip; and
+mutations that omit each binder kind or accidentally reject assignment rebind.
+Land the cross-cutting migration in a worktree and merge once green.
+
 ### Task R-0005
 
 **Objective:** Fix bug 053 — DCE deletes checked integer negation Centralize a generated operation-semantics/trap inventory consumed by folding, DCE, interpreter, LLVM, QBE, fuzz generation, and the capability matrix. Until then, mark integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
@@ -947,6 +1029,15 @@ as covered/fixed. Mutation-sensitive class gates replace individual reproducers
 when the fix lands. The reverse inventory fails on undocumented `bug_*.con`
 files and on numbered bug docs absent from the state table.
 
+**Untracked audit corpus prerequisite.** Before the reverse inventory becomes
+enforcing, classify every file under `.audit_me/`: promote a minimal reproducer
+and its expected observation into the checked corpus, or delete it deliberately
+after recording why it is superseded. The directory currently contains the
+bug-050–055 audit probes, four mini-projects, and generated binaries/LLVM files;
+leaving them untracked makes `git clean` a data-loss event and makes the future
+reverse inventory fail for reasons no owner has adjudicated. Generated
+artifacts are never promoted as source fixtures.
+
 **Publication discipline.** A milestone is not “pushed everywhere” until the
 same intended tip and bug/roadmap artifacts are present on every declared
 remote and required CI conclusions are recorded. Remote parity is process
@@ -965,6 +1056,16 @@ documents on `main` described the pre-fix language. `worktree-h18-drop-glue`
 still holds three commits — a bug reproducer, a `MonoVerify` residual verifier,
 and classified fuzzer legs — that no merged branch contains, on a branch named
 after unrelated work.
+
+Do not merge that branch wholesale: R-0001's enum-monomorphization
+implementation already landed independently. Review and promote unique hunks by
+owner: `MonoVerify` type/layout invariants to R-0434;
+callable/application-identity material to R-0442; classified generator cases to
+R-0272/R-0095; and an independently reproduced user-Option defect to a newly
+numbered bug record. Discard superseded R-0001 implementation hunks only after
+that inventory is recorded. This selective review is the required disposition
+for the named worktree, not permission to mix implementation into a
+documentation slice.
 
 This is not a request for status tags in this file: those are forbidden, and for
 good reason. It is a gate — but scoped in three levels, because a pre-push hook
@@ -1287,6 +1388,18 @@ Bytes::with_slice<R, cap C>(&self, f: fn(&Slice<u8>) with(C) -> R) with(C) -> R
 Bytes::with_mut_slice<R, cap C>(&mut self, f: fn(&mut MutSlice<u8>) with(C) -> R) with(C) -> R
 ```
 
+**Confirmed prerequisite (2026-07-25): derived callable capability
+inference.** Capability checking fails closed today, but a callback reached
+through a struct field, array element, or call result cannot be passed to a
+`cap C` parameter even though its function type carries the exact capability
+set. It is rejected as E0220; bare function identifiers and locals infer and
+enforce their capabilities correctly. This is not an escalation hole, but it
+blocks the API above. R-0016 must make `cap C` unify from any checked function
+value origin, diagnose a genuinely underconstrained variable with
+`.cannotInferCapVariable`, and retain E0240 when the caller lacks the inferred
+authority. Gate direct/local/field/array/call-result callbacks, exact cap-set
+preservation, and a mutation that widens or erases the inferred set.
+
 `Slice`/`MutSlice` are private-field, non-Copy view tokens; the callback receives
 only a second-class reference to the token, not an owned pointer pair it can
 return. This adds no user-visible lifetime or region syntax. The callback scope
@@ -1515,6 +1628,12 @@ proved fragment — generics, indirect dispatch, module/import identity — are
 exactly the ones never enumerated. A hand-maintained inventory of a growing
 language lags, and this one lagged by seven constructs and seven bugs.
 
+**Immediate stopgap, before generation lands:** add explicit hand-maintained
+rows for `defer`, newtypes, generics, monomorphization, function-pointer values,
+indirect calls, modules, and imports/aliases. Each row names current status,
+evidence, gap, and roadmap owner. Mark the block as temporary so it is replaced,
+not duplicated, when constructor-derived generation lands.
+
 Two mechanisms, deliberately separate — they share a motivation but not an
 implementation, and merging them would produce a gate that greps English prose.
 
@@ -1549,6 +1668,15 @@ diagnosed as E0206, `LANGUAGE_SHAPE.md:47` contradicted
 `Status: stable reference` doc must cite the gate or fixture backing its
 normative claims, and aspirational behavior may not appear in the present tense
 beside a current guarantee.
+
+The one-time truth repair is part of this task's migration input, not another
+roadmap task. It aligns the canonical arithmetic/bounds and proof-eligibility
+claims; rewrites `INTERPRETER_TRUST.md` around a second semantics tested for
+divergence rather than a fictional tiny width-blind oracle; narrows
+`KNOWN_HOLES.md` to an index over the numbered corpus; and corrects stale
+`DEFER.md`, `LANGUAGE_GAPS.md`, `IDENTITY.md`, error-convention, and anti-feature
+statements. The repair may land as documentation commits before the generated
+claim records exist; R-0438 owns preventing recurrence.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
 story, in each of the AST, Core, resolve, and project inventories; the claim gate
@@ -2402,11 +2530,27 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
 
 ### Task R-0095
 
-**Objective:** Build the validation corpus by semantic family, not file count: every `SInst`, terminator, scalar width, signedness-sensitive operation, aggregate/layout class, direct/indirect call shape, builtin class, trap, and main/test wrapper path needs a manifest row. Seed it with the existing arithmetic, cast, enum-union-layout, nested-place, callable-value, fuzz, workload, wrong-code, and exit-model corpora. Add mutation checks proving the differential suite notices at least one injected fault in lowering, LLVM emission, QBE emission, interpreter semantics, layout, and builtin behavior.
+**Objective:** Build the validation corpus by semantic family, not file count:
+every `SInst`, terminator, scalar width, signedness-sensitive operation,
+aggregate/layout class, direct/indirect call shape, generic specialization
+shape, builtin class, distinct trap identity, and main/test wrapper path needs a
+manifest row. Seed it with the existing arithmetic, cast,
+enum-union-layout, nested-place, callable-value, fuzz, workload, wrong-code, and
+exit-model corpora. Add mutation checks proving the differential suite notices
+at least one injected fault in lowering, LLVM emission, QBE emission,
+interpreter semantics, layout, and builtin behavior.
 
 ### Task R-0096
 
-**Objective:** Run a deterministic quick QBE matrix on every CI change and a larger rotating fuzz/differential matrix on schedule. QBE-unavailable CI is a hard configuration failure for the QBE job, not a skip. Keep LLVM-only release jobs intact until Phase 15 graduates QBE; report QBE flakes separately and retain their artifacts.
+**Objective:** Run a deterministic quick differential matrix on every CI change
+and a larger rotating fuzz/differential matrix on schedule. Before QBE is
+available, the presubmit smoke compares interpreter and LLVM over a fixed,
+replayable seed set; once QBE lands it compares all three. Job-level workflow
+conditions must be honored by local workflow replay so a local “all gates” run
+does not silently execute or omit a different campaign. QBE-unavailable CI is a
+hard configuration failure for the QBE job, not a skip. Keep LLVM-only release
+jobs intact until Phase 15 graduates QBE; report QBE flakes separately and
+retain their artifacts.
 
 
 ### Phase Boundary And Graduation
@@ -2648,7 +2792,12 @@ and `hmac_sha256`.
 
 ### Task R-0125
 
-**Objective:** Keep the paper, website, README, and showcase manifest aligned with HMAC's actual claim: exact extracted source refines an independent SHA-256/HMAC spec under named assumptions and trusted backend boundaries.
+**Objective:** Keep the paper, website, README, and showcase manifest aligned
+with HMAC's actual claim: the stored-fingerprint extracted source body refines
+an independent SHA-256/HMAC spec under named assumptions and trusted backend
+boundaries. Until R-0004 lands its full `ProofSubjectDigest`, do not broaden
+“body-fresh” into “every signature, contract, dependency, and replay-context
+fact is pinned.”
 
 ### Task R-0126
 
@@ -2788,6 +2937,11 @@ and `hmac_sha256`.
 from Phase 8 flagships and workloads, before public comparison pressure turns
 informal speed impressions into claims.
 
+**Decision status:** the project affirms predictable generated-code performance
+as an evidence-bearing claim; `docs/DECISIONS.md` records the posture.
+Individual comparisons remain `performance_not_claimed` until this task supplies
+their workload-scoped evidence.
+
 Select deterministic kernels and end-to-end programs from the workload ladder,
 pair each with a pinned C reference and, only where maintenance is affordable,
 a Rust/Zig reference implementing the same algorithm, allocation strategy,
@@ -2815,7 +2969,13 @@ the comparison detects, and no gating threshold derived from a single sample.
  future guards/OR patterns, value-model collection access, `ByteView`,
  explicit capabilities); keep legacy examples only when they intentionally
  demonstrate the old/low-level form; and record any skipped update with a
- reason. Add `scripts/tests/check_example_refresh.sh` once the first refresh
+ reason. At the next release-facing checkpoint, judge rather than assume three
+ concrete candidates: whether `crypto_verify`'s `Int` 0/1 API is an intentional
+ C-compatible boundary or stale truthiness teaching; whether `grep` should use
+ the shipped `String::to_lower`; and whether integer-tag/string-pool
+ representations in JSON/TOML/Lox are workload-appropriate runtime models or
+ obsolete pre-enum workarounds. Add `scripts/tests/check_example_refresh.sh`
+ once the first refresh
  has enough concrete assertions; until then, each phase closure commit must
  name the examples/docs it checked and why no refresh was needed. The goal is
  to prevent tutorial/showcase drift without turning every feature into a
@@ -2851,6 +3011,11 @@ returns **GO**, Phase 6B has stable identities/dependency/invalidation contracts
 and structured validation records, Phase 6C's shadow edit corpus is green, and
 at least one medium Phase 8 workload is large enough to choose granularity from
 measurements rather than toy programs.
+
+Its position before later external-user phases is a dependency statement, not a
+reason to build caching ahead of demand. Without the measured workload and GO
+record above, the pull-gated doctrine requires an explicit defer/reject decision
+rather than speculative implementation.
 
 **Conditional phase rule.** The roadmap remains linear. After Phase 8, a GO
 verdict executes this phase before Phase 9. A NO verdict must produce the
@@ -3621,17 +3786,21 @@ and must not collapse the review into one green badge.
 
 ### Task R-0441
 
-**Objective:** Decide how `with(Std)` behaves under an authority budget, and put
-it in the canonical capability list.
+**Objective:** Decide how `with(Std)` behaves under an authority budget. The
+canonical-list documentation half is complete.
+
+**Decision status:** pending. Current profiles continue to accept `with(Std)`;
+the recommendation below is not a shipped restriction. Ratification must choose
+between rejecting the alias in high-integrity profiles and requiring an exact
+transitive-use budget before any gate changes program acceptance.
 
 `with(Std)` expands at parse time to every standard capability except `Unsafe`
 (`Concrete/Frontend/Parser.lean` "Expand \"Std\" to the full set";
 `docs/SAFETY.md:61`). It is used in `docs/DEFER.md`, `docs/SAFETY.md`, and
-several `adversarial_cap_*` fixtures. Meanwhile `docs/IDENTITY.md:101` states the
-authority surface as "Nine capabilities: `File`, `Network`, `Time`, `Env`,
-`Random`, `Process`, `Console`, `Alloc`, `Unsafe`" and never mentions `Std`. The
-one spelling that grants nearly everything is absent from the document that
-enumerates authority.
+several `adversarial_cap_*` fixtures. The canonical identity docs now list
+`Std` beside the nine capabilities and accurately mark it as an alias over the
+eight non-`Unsafe` capabilities. That documentation repair does not decide the
+policy below.
 
 The audit consequence is specific and it is why this sits beside the budget task.
 Adding `Network` or `Process` use inside a `with(Std)` function produces **no
@@ -3650,8 +3819,8 @@ Related and worth stating in the same decision: a declared capability is an
 authority *ceiling*, not evidence of use, so reports should distinguish declared
 from reachable authority regardless of how the ceiling was spelled.
 
-Also fix the list: `Std` belongs in `IDENTITY.md`'s enumeration, marked as an
-alias over the other eight rather than a tenth capability.
+The list repair is complete; the task remains open for the audited-profile
+policy and its gate.
 
 Gate: a fixture where `Std`-declared code gains `Network` use, proving both
 surfaces at once — declared ceiling unchanged, reachable authority changed — and
@@ -3715,8 +3884,11 @@ an LLM-generated proof bundle replays using only checked artifacts.
 
 **Objective:** Add property-based contract testing as a cheap counterexample finder, not proof. Command surface: `concrete test --contracts --property --json` generates inputs satisfying `#[requires]`, executes the function, checks `#[ensures]`, runtime obligations, and selected `assert` facts, then shrinks failures to a minimal source-level witness. Evidence class:
 
- `tested_by_property`, always below proof and below solver evidence. Required
- report fields: function, contract id, seed, generator profile, case count,
+ `tested_by_property`. It is counterexample-search evidence, not proof. Policy
+ may prefer a proof or solver discharge only when the subject, property,
+ assumptions, and semantic scope are comparable; unlike a ProofCore theorem, a
+ native property run may cover compiled/runtime behavior. Required report
+ fields: function, contract id, seed, generator profile, case count,
  shrunk witness, failing postcondition/obligation id, replay command, and
  whether the witness was persisted as a regression. Add
  `examples/property_contracts/` with `clamp`, `bounded_index`,
@@ -3810,6 +3982,10 @@ under a stronger badge.
 **Objective:** Make evidence multidimensional instead of a ladder, and record
 compiler trust per claim.
 
+**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
+remain as a policy preference among claims with the same subject and semantic
+scope, but it is not a universal ordering of unlike evidence.
+
 `docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
 not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
 *methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
@@ -3853,10 +4029,33 @@ leaving a third vocabulary.
 
 Gate: a fixture set covering one claim per (scope × method) cell that exists
 today, a negative fixture proving two incomparable claims cannot be ordered by
-the renderer, a fixture proving a claim with no `producer_trust` is rejected, and
-a red-team case proving no rendering path can present a weaker-scope claim under a
-stronger composite name. Reconcile both documents against the implemented model
-rather than leaving a third vocabulary.
+the renderer, a fixture proving a claim without the producer/validator/trusted-
+dependency accounting required by its method is rejected, and a red-team case
+proving no rendering path can present a weaker-scope claim under a stronger
+composite name. Reconcile both documents against the implemented model rather
+than leaving a third vocabulary.
+
+### Task R-0442
+
+**Objective:** Preserve locally-bound callable identity in ProofCore instead of
+spelling it as a global call.
+
+Bug 061 is latent but structurally real: `PExpr.call "f" args` represents both a
+direct call to a definition and application of a fn-typed parameter named `f`.
+The evaluator resolves both through the global-style `FnTable`. The current
+`Option::map`, `Result::map`, and `Result::map_err` proofs remain valid only for
+their explicitly registered representative callback; they do not quantify over
+arbitrary `f`, and no report or source attribute may upgrade their
+`proof_coverage(representative)` scope.
+
+Add a distinct `PExpr.applyVar`/`callValue` form (or an equivalent typed callable
+identity) with local callable semantics rather than global name lookup. Carry
+the direct/indirect distinction through extraction, evaluation, fingerprints,
+preservation statements, reports, and proof dependencies. Gate a global
+function and a parameter with the same spelling extracting to different nodes,
+function-table completeness for each form, preservation of the three existing
+representative proofs, and a negative check that those proofs cannot be rendered
+as universal callback theorems.
 
 ### Task R-0202
 
@@ -3923,9 +4122,11 @@ the smaller boundary.
  normalized query, `solver_disagreement` when they differ, and
  `solver_unavailable` / `solver_timeout` / `solver_unknown` for non-proofs.
  Agreement must record solver names, versions, logic, query hash, timeout,
- and replay commands. A cross-checked solver result is stronger than a
- single solver but still below `proved_by_lean` and
- `proved_by_kernel_decision`. Add `examples/solver_portfolio/` with one
+ and replay commands. For the same normalized query, assumptions, scope, and
+ policy, two independent agreeing solvers provide more corroboration than one;
+ this does not globally rank solver evidence against a Lean theorem or kernel
+ decision over a different subject or semantic scope. Add
+ `examples/solver_portfolio/` with one
  QF_NIA query, one bitvector query, one unsupported-fragment case, one fake
  disagreement wrapper, and one missing-solver case. Wire
  `scripts/tests/check_solver_portfolio.sh`; the gate must prove no external
@@ -3997,7 +4198,11 @@ promises.
 
 ### Task R-0220
 
-**Objective:** Define `PredictableV1`: no allocation unless bounded, no FFI unless trusted and assumed, no unbounded loops/recursion, explicit failure-path policy.
+**Objective:** Define `PredictableV1`: no allocation unless bounded, no FFI
+unless trusted and assumed, no unbounded loops/recursion, an enforced
+target/profile stack budget, and an explicit failure-path policy. A stack
+budget may come from an explicit policy or a named target-profile default; do
+not derive a universal byte threshold from the current example corpus.
 
 ### Task R-0221
 
@@ -4015,11 +4220,19 @@ and rejection/downgrade of proof claims that confuse checked and wrapping
 semantics.
 ### Task R-0223
 
-**Objective:** Define a first runtime failure model: abort, assertion failure, OOM, stack overflow, `defer`/cleanup, impossible branches, and what each does to proof/resource claims.
+**Objective:** Define a first runtime failure model: abort, assertion failure,
+OOM, stack overflow, checked arithmetic/bounds traps, `defer`/cleanup,
+impossible branches, and what each does to proof/resource claims. Abort is a
+profile-dependent terminal operation: hosted execution terminates the process;
+freestanding execution invokes a declared non-returning handler. Neither form
+promises unwinding, `defer`, destruction, or recovery.
 
 ### Task R-0224
 
-**Objective:** Define source-level stack-depth versus backend/target stack claims.
+**Objective:** Define source-level stack-depth versus backend/target stack
+claims, including how a source estimate, ABI/backend frame growth, and a named
+target budget combine before the predictable profile may call stack use
+bounded.
 
 ### Task R-0225
 
@@ -4163,6 +4376,10 @@ commands, and visible proof/enforcement status.
 ### Task R-0244
 
 **Objective:** Generate loop bound and variant obligations for bounded loops.
+Where the obligation can expose a symbolic iteration bound, retain it as a
+`complexity_guarded` fact for the same subject rather than reducing it to a
+Boolean “bounded” label. This is a source-level complexity/DoS-resistance
+claim, not wall-clock timing.
 
 ### Task R-0245
 
@@ -4195,7 +4412,11 @@ assertions, and profile-dependent panic behavior.
   rejected.
 ### Task R-0248
 
-**Objective:** Generate stack/recursion obligations where the profile claims boundedness.
+**Objective:** Generate stack/recursion obligations where the profile claims
+boundedness and enforce the configured target/profile stack budget rather than
+only reporting it. Gate just-under/just-over programs, deep call chains with
+large frames, report/gate accounting agreement, and a mutation that removes
+enforcement while leaving the report.
 
 ### Task R-0249
 
@@ -4285,16 +4506,18 @@ out of the trusted base.** The per-rule discharge below (R-01..R-21), the
 `CoreCertificateV1` independent checker, and Task R-0299 translation validation
 are not the finish line — they are the incremental ladder toward proving each
 pass semantics-preserving in Lean against the interpreter reference, so the
-compiler leaves the TCB entirely. Concrete is uniquely positioned for this: it
-is Lean-hosted, so the compiler's correctness proof and users' program proofs
-share ONE kernel — collapsing "trust the prover" and "trust the compiler" into a
-single trusted base no other verified-compiler effort (CompCert, CakeML) has.
-The 6B fact-centralized IR and interpreter-as-oracle are the runway: each pass
-is a clean function over committed facts with a reference semantics to prove
-against, so passes should be built PROVABLE-FIRST, not merely consistent. This
-names the endpoint so intermediate design choices bend toward it; it does not
-schedule a multi-year proof now, and it must not starve the near-term or the
-external trial. The complementary rewrite-passes-in-Concrete route is Task R-0413; the shorter path is proving the existing Lean-hosted passes here.
+compiler leaves the TCB entirely. Concrete's intended differentiator is that its
+Lean-hosted compiler-correctness work and selected user-program proofs can share
+one kernel and one evidence pipeline. CompCert and CakeML remain peer references
+for verified-compilation and bootstrap discipline, not projects this roadmap
+claims to surpass. The 6B fact-centralized IR and interpreter-as-oracle are the
+runway: each pass is a clean function over committed facts with a reference
+semantics to prove against, so passes should be built PROVABLE-FIRST, not merely
+consistent. This names the endpoint so intermediate design choices bend toward
+it; it does not schedule a multi-year proof now, and it must not starve the
+near-term or the external trial. The complementary rewrite-passes-in-Concrete
+route is Task R-0413; the shorter path is proving the existing Lean-hosted
+passes here.
 
 ### Task R-0260
 
@@ -4359,8 +4582,13 @@ record must name them so a proof's replay surface stays reproducible.
 **Objective:** [historical origin: Phase 4 items 44f/44g] Finish the remaining compiler-correctness hardening:
 
  - extend the differential generator with string, heap/allocation,
-   linear-value, and effectful-I/O shapes while preserving the rule that an
-   E07xx/panic on a generated well-typed program is a compiler bug;
+   linear-value, effectful-I/O, generic-function, generic-struct, and
+   multi-instantiation shapes; generate division/modulo including `MIN / -1`,
+   shifts at and around the width boundary, and arithmetic that can actually
+   reach checked overflow rather than bounding every expression back into a
+   safe range. Preserve the rule that an E07xx/panic on a generated well-typed
+   program is a compiler bug, and compare the identity of traps rather than
+   treating any trap as equivalent to every other trap;
  - rotate seeds in a nightly CI campaign and automatically minimize
    failures rather than relying only on the fixed presubmit seeds; and
  - repair the dead-path ref-return lowering case where a reference-typed
@@ -5093,10 +5321,11 @@ program performance; compiler throughput/caching remains primarily Phase 8.5,
 semantic equivalence remains the backend/differential gates, and release budgets
 consume rather than reinvent these facts.
 
-Trigger: start after Task R-0416 has a stable comparable corpus and at least one
-reproduced gap, regression, or release claim forces optimization work. If no
-performance claim is desired, execute the taxonomy and non-claim tasks and
-record `performance_not_claimed`; do not build speculative optimizers.
+Trigger: start after Task R-0416 has a stable comparable corpus. R-0417–R-0419
+are required evidence infrastructure for the affirmed project claim; actual
+optimization work remains conditional on a reproduced gap, regression, or
+release-facing comparison. If no such gap exists, retain measured baselines and
+do not build speculative optimizers.
 
 Done when: every public performance claim names its workload/input, comparable
 reference, backend/target/profile/toolchain, metric and uncertainty, raw data,
@@ -5115,6 +5344,14 @@ governor and load controls, toolchains, target, backend, optimization/profile,
 input, repetitions, estimator, dispersion, outlier policy, and comparison
 fairness. Complexity theorems or O(n²) ratchets describe growth, not wall-clock
 performance. Add `docs/PERFORMANCE_EVIDENCE.md` and machine-readable schema.
+
+`complexity_guarded` may carry compositional symbolic bounds on steps,
+allocated bytes, or stack bytes produced by R-0244/R-0248 and the allocation
+budget work. Such a claim names its source-level cost model and inputs and
+never implies cycles or elapsed time. Start with the std container bounds
+already forced by bug 048 plus one workload budget; do not build a parallel
+cost-semantics task before those existing obligation owners need shared
+machinery.
 
 ### Task R-0418
 
@@ -5224,7 +5461,11 @@ choices, and an audit report naming every remaining target/runtime assumption.
 
 ### Task R-0322
 
-**Objective:** Define `hosted` versus `freestanding` target profiles: libc, startup, allocator, panic/abort behavior, stack assumptions, I/O availability, floating-point assumptions, and supported capabilities.
+**Objective:** Define `hosted` versus `freestanding` target profiles: libc,
+startup, allocator, terminal abort behavior, stack assumptions, I/O
+availability, floating-point assumptions, and supported capabilities. Hosted
+abort terminates the process; freestanding abort transfers to a declared
+non-returning target handler. Neither profile promises cleanup.
 
 ### Task R-0323
 
@@ -6236,7 +6477,14 @@ second control-flow semantics.
 
 ### Task R-0405
 
-**Objective:** Research exact WCET/cache/pipeline behavior only with a target/hardware model.
+**Objective:** Research exact WCET/cache/pipeline behavior only with a
+target/hardware model. Posture: be a strong WCET annotation frontend, not
+another WCET analyzer—Concrete can export its closed callable set, explicit
+indirect edges, and loop-bound facts instead of making a source-level cycle
+claim. Requires deterministic hardware (freestanding Cortex-M class), so
+realistically after the freestanding profile (R-0322). Source-level
+step/space bounds stay with R-0244/R-0248 and R-0417's
+`complexity_guarded` evidence; none of them imply hardware timing.
 
 ### Task R-0406
 

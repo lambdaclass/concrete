@@ -119,19 +119,16 @@ The only resources predictable code may hold are file descriptors from Console (
 | OOM (malloc null) | No | No allocation in predictable code | |
 | Null pointer deref | Only in trusted | Safe code has no raw pointers | SIGSEGV if triggered |
 | Integer overflow | Trap (abort) | Ordinary `+ - *` are checked (ROADMAP #10 Stage 2.3) | Aborts on overflow; `wrapping_*` for intentional modular |
-| Array out-of-bounds | Possible | Safe `arr[i]` generates GEP+load | See below |
+| Array out-of-bounds | Trap (abort) | Safe `arr[i]` is runtime-checked | See below |
 | Stack overflow | Possible | Deep (but bounded) call chains | OS guard page → SIGSEGV |
 | abort() | No | Requires Process capability | |
 
 ### Array bounds checking
 
-Safe array indexing (`arr[i]`) currently generates unchecked GEP+load. The index is not bounds-checked at runtime. This is a known gap:
-
-- The compiler does **not** insert runtime bounds checks for `arr[i]`
-- The `--report stack-depth` shows call depth is bounded, but array indices are not statically bounded
-- Out-of-bounds access is undefined behavior
-
-This is explicitly documented in CLAIMS_TODAY.md and LANGUAGE_GAPS.md as a gap. Future work may add optional bounds checking or static index analysis.
+Safe array indexing (`arr[i]`) inserts a runtime check and aborts when the index
+is negative or outside the declared length. Constant OOB is rejected earlier,
+and a statically discharged in-range obligation may remove the redundant check.
+Trusted/explicitly unchecked pointer access remains outside this guarantee.
 
 ### Integer overflow
 
@@ -140,9 +137,9 @@ signed or unsigned overflow they **trap (abort)**, in every profile. Intentional
 modular arithmetic is the explicit `wrapping_*`; clamping is `saturating_*`. This
 narrows the proof-vs-runtime integer gap: a proof over unbounded integers and the
 checked runtime can only disagree by the runtime *aborting* — never by silently
-producing a wrong (wrapped) value. (Division/shift-overflow checks are the remaining
-ROADMAP #10 Stage 2.4/2.5 items.) See ARITHMETIC_POLICY.md and
-PROOF_SEMANTICS_BOUNDARY.md.
+producing a wrong (wrapped) value. Division/modulo zero and signed `MIN / -1`,
+invalid shifts, and checked negation follow the same defined trap policy. See
+ARITHMETIC_POLICY.md and PROOF_SEMANTICS_BOUNDARY.md.
 
 ---
 
@@ -163,10 +160,11 @@ PROOF_SEMANTICS_BOUNDARY.md.
 
 | Source of UB | How | Why not prevented |
 |-------------|-----|-------------------|
-| Array out-of-bounds | `arr[i]` with invalid index | No runtime bounds check (see above) |
-| Integer overflow | `a + b` wrapping silently | No overflow detection |
-| Division by zero | `a / 0` | No runtime check (hardware trap on x86) |
-| Shift overflow | `a << 64` | LLVM poison value |
+| Trusted unchecked pointer/index access | invalid raw address or index | trusted/Unsafe code is outside the safe guarantee |
+| Dishonest extern contract | ABI/type/lifetime mismatch | foreign implementation is an explicit assumption |
+
+Ordinary integer overflow, division/modulo by zero, invalid shifts, checked
+negation, and safe array OOB are defined aborts, not UB.
 
 ### UB NOT possible in safe predictable code
 
@@ -199,8 +197,7 @@ Functions with `evidence: proved` have all predictable properties plus a Lean-ve
 | Stated theorem holds over PExpr | Lean 4 kernel checking |
 | Fingerprint matches current body | Stale detection via structural fingerprint |
 | Function is pure (no capabilities) | Proof eligibility gate |
-| No mutation in body | Proof eligibility gate |
-| No loops | Proof eligibility gate (stricter than bounded) |
+| Only admitted state/loop forms | ProofCore extraction and boundedness gates |
 
 ### What "proved" does NOT add
 
@@ -211,10 +208,17 @@ Functions with `evidence: proved` have all predictable properties plus a Lean-ve
 | Composition | Per-function proofs, no cross-function theorem |
 | All properties covered | Only the stated theorem; other properties unchecked |
 | Backend faithfulness | Extraction pipeline not formally verified |
+| Full proof-subject freshness | Current body fingerprint omits some signature/type, contract, and dependency facts (R-0004) |
+
+A source proof link with no stored fingerprint is `unbound`, not proved. Kernel
+replay and attachment freshness are separately visible evidence.
 
 ### Proof ≠ predictable
 
-Proof eligibility is stricter than predictable (no loops, no mutation, no capabilities at all). A proved function is necessarily predictable, but a predictable function is not necessarily provable.
+Proof eligibility is stricter than predictable because it is authority-free and
+limited to the modeled ProofCore surface. Selected bounded loops and functional
+state updates are admitted; many predictable constructs are still not
+extractable.
 
 ---
 
@@ -224,14 +228,14 @@ Proof eligibility is stricter than predictable (no loops, no mutation, no capabi
 |----------|------|-------------|--------|
 | Ownership enforcement | Yes | Yes (inherited) | Yes (inherited) |
 | No recursion | No | Yes | Yes (inherited) |
-| Bounded loops | No | Yes | N/A (no loops) |
+| Bounded loops | No | Yes | Selected modeled forms |
 | No allocation | No | Yes | Yes (no capabilities) |
 | No FFI | No | Yes | Yes (inherited) |
 | No blocking I/O | No | Yes | Yes (no capabilities) |
 | Stack bound computable | No (may recurse) | Yes (`--report stack-depth`) | Yes (inherited) |
 | Lean theorem verified | No | No | Yes |
-| Integer overflow possible | Yes | Yes | Yes (gap) |
-| Array OOB possible | Yes | Yes | No (no array indexing in proved) |
+| Checked arithmetic trap possible | Yes | Yes | Yes unless discharged/modeled |
+| Array OOB trap possible | Yes | Yes | Yes for admitted array forms unless discharged |
 
 ---
 

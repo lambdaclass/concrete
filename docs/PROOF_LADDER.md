@@ -5,6 +5,12 @@ which is which (see the table at the end). It is the discharge-side companion
 to [CONTRACTS_AND_VCS.md](CONTRACTS_AND_VCS.md), which covers the claim →
 obligation side.
 
+**Decision note (2026-07-25):** R-0440 ratified a multidimensional evidence
+model. “Ladder” below means a trust-cost routing preference among discharge
+methods for the same obligation and semantic scope. It is not a total ordering
+between unlike evidence such as a native oracle test and a narrower ProofCore
+theorem.
+
 The pipeline is:
 
 ```
@@ -183,7 +189,7 @@ ghost values erase; the compiled binary is unchanged.
 | `state_to_bytes` refines `Sha256Spec.stateToBytes` — first **multi-store-per-iteration** loop (4 byte writes/word, `obAt` boundary invariant), bytes matched by `bv_decide` | **shipped** (`state_to_bytes_refines_spec`) |
 | Full `sha256_hash(data, len)` refines `Sha256Spec.hash` end-to-end (buffer copy, `0x80` marker, FIPS length stores at the computed `plen-k` indices, multi-block compress loop, digest unpack) for every `len ≤ 375` with a zero-padded buffer | **shipped** (`sha256_hash_refines_spec`; the symbolic-`i32` `nblocks=(len+9+63)/64` index discharged by the `BitVec.sdiv`→`Nat`-div bridge `sdiv64_bridge`) |
 | HMAC infrastructure — size-generic buffer model `arrN n`, the generic copy loop (`copy_loop`: `for i in 0..N { dst[off+i]=src[i] }` ⊑ `copyFn`), the ipad/opad two-buffer xor loop (`xor_loop`), and `sha256_hash` as a callable `shaFns` entry (`sha256_hash_call`) | **shipped** (all the loop/buffer building blocks hmac needs) |
-| Full `hmac_sha256(k, k_len, m, m_len)` refines `Sha256Spec.hmac` end-to-end (the `if k_len>64` key-prep branch + ipad/opad xor + message embed + three `sha256_hash` calls + digest copies) for every `k_len ≤ 128`, `m_len ≤ 256` | **shipped at graduation grade** (`hmac_sha256_refines_spec`; `hmac_linear` for the post-key-prep continuation, `kp_else`/`kp_if` for the branch). The proof is now about the **EXACT extracted source body** — `hmac_sha256Expr` matches the extraction: `gt k_len 64`, the key-prep `if` as a statement that mutates `kp` in place and **duplicates the whole linear tail into both branches** (`thenBranch`/`elseBranch`, each ending in `hmac_linear`). All nine chain refinements + the two bar-#1 point proofs are registered with the spec equal to the source-extracted PExpr (`Concrete.Proof.specs`), so the **spec-drift gate** ties every link to the source: editing a source body turns the proof stale (regression-verified). `--report check-proofs` = 11 verified, 0 failed. This is HMAC bar #2 / graduation closed at the same standard as the other flagships. |
+| Full `hmac_sha256(k, k_len, m, m_len)` refines `Sha256Spec.hmac` end-to-end (the `if k_len>64` key-prep branch + ipad/opad xor + message embed + three `sha256_hash` calls + digest copies) for every `k_len ≤ 128`, `m_len ≤ 256` | **shipped at graduation grade** (`hmac_sha256_refines_spec`; `hmac_linear` for the post-key-prep continuation, `kp_else`/`kp_if` for the branch). The proof is about the **stored-fingerprint extracted source body** — `hmac_sha256Expr` matches the extraction: `gt k_len 64`, the key-prep `if` as a statement that mutates `kp` in place and **duplicates the whole linear tail into both branches** (`thenBranch`/`elseBranch`, each ending in `hmac_linear`). All nine chain refinements + the two bar-#1 point proofs are registered with the spec equal to the source-extracted PExpr (`Concrete.Proof.specs`), so the **spec-drift gate** ties every link to the represented body: editing that body turns the proof stale (regression-verified). `--report check-proofs` = 11 verified, 0 failed. R-0004 still owns signatures, contracts, transitive dependencies, and replay context; “body-fresh” is not “full semantic subject pinned.” This is HMAC bar #2 / graduation closed at the same standard as the other flagships. |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

@@ -81,6 +81,8 @@ This is the core trust anchor for the "proved" label. When `--report check-proof
 **Actively verified by:**
 
 - Registry validation in compiler (`validateRegistry`): unknown functions, ineligible targets, extraction-blocked targets, empty fields, duplicates
+- Unbound-link containment: an in-source proof with no stored fingerprint is
+  E0810/`unbound`, not proved
 - Fingerprint determinism checks (same source → same fingerprint across runs)
 - Stale-repair cycle tests (mutate body → stale detected → update fingerprint → proved restored)
 - Rename-detection tests (rename function → orphaned entry matched by fingerprint)
@@ -93,6 +95,9 @@ Each Phase 2 item has tightened this layer. The registry is no longer a blind tr
 **Remaining trust:**
 
 - The fingerprint algorithm is assumed to be collision-free for practical purposes (truncated SHA-256 over the structural encoding; hardened from the former 64-bit `String.hash`, which was craftable into a silent stale→proved upgrade)
+- The current fingerprint does not yet cover every signature/type fact,
+  contract, transitive dependency, or replay-context fact; R-0004 owns the
+  versioned full-subject digest
 - The PExpr extraction is assumed to faithfully represent the Core IR semantics (no formal correspondence proof)
 - The `eval` function in `Proof.lean` is assumed to correctly model PExpr evaluation (no formal soundness proof of the evaluator)
 
@@ -212,7 +217,7 @@ Not yet defined. The intended shape is to inherit all three TCBs (safe + predict
 | Layer | Status |
 |-------|--------|
 | Concrete extraction | Trusted — PExpr faithfully represents Core IR |
-| Proof registry | Validated — fingerprint match enforced, stale detection automatic |
+| Proof registry | Validated at the current body boundary; missing fingerprints fail closed, full-subject coverage remains R-0004 |
 | Lean kernel | Verified — theorem is kernel-checked |
 | Backend | NOT covered — proof is over PExpr, not the binary |
 | Integer model | Gap — proof uses unbounded Int, binary uses fixed-width |

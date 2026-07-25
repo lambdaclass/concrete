@@ -11,9 +11,14 @@ For runtime boundary details, see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDA
 
 ## Principle
 
-Predictable code has **no hidden control flow**. Every exit from a function is visible in the source: a normal return, an explicit error return via `Result`, or a `break`/`continue`. There are no runtime surprises — no abort, no OOM, no panic, no unwinding, no exception, no longjmp.
+Predictable code has **no hidden effect or recovery mechanism**. Recoverable
+failure is visible as a return value, while language-defined checked operations
+may terminate through an explicit runtime trap unless their obligations are
+discharged. There is no panic/unwind, exception, catch, or `longjmp`.
 
-This is what "failure-only discipline" means: the only failures that can happen are the ones the programmer wrote.
+This is what the discipline means: recoverable paths are written in the source,
+and terminal paths are classified by the operation/profile rather than appearing
+through hidden authority or unwinding.
 
 ---
 
@@ -64,6 +69,10 @@ The five predictable gates exclude all hidden or unbounded failure paths:
 | `longjmp` across frames | Requires FFI | No blocking |
 | `exit()` | Requires Process capability | No blocking |
 
+Checked arithmetic and safe bounds traps are not excluded by the five
+predictable gates. They are deterministic language failure paths, reported as
+runtime obligations and removable only by static discharge.
+
 ### What about stack overflow from deep (but bounded) calls?
 
 Predictable functions have bounded call depth (acyclic call graph, no recursion). The `--report stack-depth` command shows the worst-case stack bound. However, the predictable profile does **not** currently gate on stack size — a deeply nested chain of functions with large frames could still overflow.
@@ -72,27 +81,32 @@ This is a known gap. The stack depth is **reported** but not **enforced**. The O
 
 ---
 
-## Remaining UB in Predictable Code
+## Checked runtime failures in predictable code
 
-Two sources of undefined behavior remain reachable from predictable code:
+Two common invalid operations fail closed rather than becoming UB or silent
+wrong values:
 
 ### Integer overflow
 
-Arithmetic on fixed-width integers wraps silently (LLVM two's complement default). This is not hidden control flow — the program continues executing — but the result may be incorrect.
+Ordinary fixed-width arithmetic is checked and aborts on overflow in every
+profile. Intentional modular or clamping behavior uses the explicit
+`wrapping_*` / `saturating_*` spellings.
 
-- **Current status**: not detected, not gated
-- **Visibility**: `--report effects` does not flag overflow risk
-- **Future**: optional overflow-checking mode (not yet planned)
+- **Current status**: runtime checked
+- **Visibility**: arithmetic/obligation reports classify the site
+- **Stronger posture**: discharge the no-overflow obligation statically
 
 ### Array out-of-bounds
 
-Safe array indexing (`arr[i]`) generates unchecked GEP+load. An invalid index produces UB, not a trap.
+Safe raw indexing (`arr[i]`) checks `0 <= i < len`; an invalid index aborts.
 
-- **Current status**: not detected, not gated
-- **Visibility**: no report flags OOB risk
-- **Future**: optional bounds-checking mode (not yet planned)
+- **Current status**: runtime checked
+- **Visibility**: bounds obligations/trap-site reports
+- **Stronger posture**: discharge the in-range obligation or use an
+  Option/Result-returning API when absence is recoverable
 
-Neither of these is hidden control flow — they do not change which code path executes. They are semantic correctness gaps, not control flow violations.
+Trusted unchecked pointer/index operations remain outside the safe predictable
+claim and must be named at the trust boundary.
 
 ---
 
@@ -111,7 +125,10 @@ Neither of these is hidden control flow — they do not change which code path e
 
 ## Connection to Proof Eligibility
 
-Proved functions are a strict subset of predictable functions with additional restrictions (no loops, no mutation, no capabilities at all). All proved functions satisfy the predictable failure discipline automatically.
+Proof-backed functions are authority-free and use only the current ProofCore
+surface. That surface now includes selected bounded loops and functional state
+updates; it is not characterized by a blanket “no loops/no mutation” rule.
+Proof status does not itself prove every checked trap unreachable.
 
 The reverse is not true: predictable functions may use loops, mutation, and Console capability, which makes them ineligible for proof but still predictable.
 
@@ -119,9 +136,11 @@ The reverse is not true: predictable functions may use loops, mutation, and Cons
 
 ## Summary
 
-Predictable failure discipline = **explicit errors only**.
+Predictable failure discipline = **explicit recoverable errors plus classified
+terminal checks**.
 
 - **Allowed**: `Result` return, error codes, sentinel values, `?` propagation
-- **Excluded**: abort, OOM, panic, unwinding, exceptions, blocking I/O failure, FFI failure, `longjmp`
-- **Remaining gaps**: integer overflow (silent wrap), array OOB (UB) — neither is hidden control flow
+- **Excluded by authority/profile gates**: user abort, OOM, panic, unwinding,
+  exceptions, blocking I/O failure, FFI failure, `longjmp`
+- **Runtime-checked**: integer overflow/division/shift and raw safe array bounds
 - **Verification**: `--check predictable` + `--report effects` + `--report stack-depth`

@@ -1,257 +1,158 @@
-# Interpreter trust boundary
+# Interpreter Trust Boundary
 
-Status: design + reference. Pinned to `Concrete/Interp/Interp.lean`.
+Status: current reference, pinned to `Concrete/Interp/Interp.lean`.
 
-This document defines the trust boundary of the source-level interpreter
-that is invoked via `concrete <file.con> --interp` and used as the
-oracle in the Phase A.1 differential harness (`tests/oracle/`).
+The source-level interpreter is invoked by
+`concrete <file.con> --interp` and participates in the differential corpus under
+`tests/oracle/` and `scripts/tests/check_differential_positions.sh`.
 
-It answers four questions, in order:
+It is not a privileged definition of the whole language and it is no longer
+justified by being a tiny, width-blind tree walker. It is a second executable
+semantics over validated Core. Its value comes from taking a different path from
+Lower/SSA/LLVM and exposing disagreements; trust is earned through explicit
+coverage, differential testing, and independent expectations where both paths
+could share a bug.
 
-1. What does the interpreter run?
-2. What does it explicitly refuse to run?
-3. What memory / UB / arithmetic assumptions does it make?
-4. Why is it intentionally smaller and more trustworthy than the full
-   compiler, and what does that earn us?
+## 1. Boundary and shared dependencies
 
-The interpreter is **not** a reference implementation of the full
-language. It is a small evaluator over validated Core IR that we trust
-as the source-level intent for the predictable subset. Programs outside
-that subset must be rejected by the interpreter with an explicit
-`interp: ...` diagnostic, never silently approximated.
+The interpreter consumes the `CModule` / `CExpr` / `CStmt` program produced
+after parsing, resolution, checking, elaboration, and `CoreCheck`. It does not
+run monomorphization, Lower, SSA cleanup, LLVM emission, clang, or the linker.
 
-## 1. What the interpreter runs
+That split provides useful independence for middle-end and backend defects, but
+it is not full independence:
 
-The interpreter operates on the `CModule` / `CExpr` / `CStmt` IR
-produced by the frontend after parsing, name resolution, type checking,
-elaboration, and `CoreCheck`. It does not run monomorphization,
-lowering, SSA emission, LLVM, clang, or any linker.
+- both interpreted and compiled paths trust the same frontend and Core;
+- checked integer rules are shared through
+  `Concrete.Semantics.IntArith`;
+- builtin contracts and some runtime conventions are represented on both paths;
+- neither agreement nor a cache/artifact match proves the shared input correct.
 
-### Supported expression forms
+Accordingly:
 
-- Integer literals, bool literals
-- Identifiers (variable lookup against a flat `(name, value)` list)
-- Binary operators: `+ - * / %`, `== != < > <= >=`, `&& ||`,
-  bitwise `^ & | << >>`
-- Unary operators: `-` (neg), `!` (not), `~` (bitnot)
-- Casts between integer types and bool→int (`true→1`, `false→0`)
-- Function calls (named, by-value or by-ref)
-- Struct literals and field access (including auto-deref when the
-  receiver is a borrow)
-- Enum literals and enum match (with field bindings)
-- Match expressions over int/bool literals, variable patterns, wildcard `_`,
-  and enum variants
-- Array literals, array index reads (with auto-deref when the receiver
-  is a borrow)
-- `if` / `else` expressions, with scope restoration so block-local
-  `let` bindings do not leak past the branch
-- `&` and `&mut` borrows of locals, fields, and array elements;
-  borrow targets capture a path (base + field/index steps) plus the
-  env frame depth at borrow time so callee shadowing cannot redirect
-  a borrow to the wrong binding
-- `?` (try) on `Result` / `Option` and any other enum: if the inner
-  value is the enum's first variant (tag 0 — by convention `Ok` /
-  `Some`), unwrap its single payload field; otherwise return the
-  whole enum from the current function. Mirrors the
-  `Concrete/IR/Lower.lean` lowering exactly
-- String literals — `IVal.string` carries the value; `&"literal"`
-  materializes the string under a synthetic env name keyed off env
-  length so successive borrows do not collide
-- Selected pure builtins: `string_length(&s)` returns byte length;
-  `drop_string(s)` is a no-op (the interpreter has no heap, so the
-  linear consume itself is enough)
-- The print intrinsics (`print_string`, `print_int`, `print_char`,
-  `print_bool`) append to a reserved stdout buffer seeded at the
-  bottom of the env; `--interp` prints the buffer before the return
-  value, byte-matching the compiled binary — printing programs are
-  differential-testable (2026-07-02). `print`/`println` themselves
-  are desugared to those intrinsics by Elab; reaching Core with them
-  is a desugar gap and stays a loud PENDING
+> Interpreter/compiled agreement is strong differential evidence over the
+> exercised observation, not proof and not an independent source oracle.
 
-### Supported statements
+When both paths could share a lowering-independent mistake, use a hand-authored
+expectation, standard test vector, external reference, or metamorphic property.
 
-- `let` declarations (block-scoped)
-- Assignment to a local
-- Field assignment, when the receiver is a plain identifier (owned
-  struct or borrow of a struct)
-- Array index assignment, when the receiver is a plain identifier
-  (owned array or borrow of an array)
-- Deref assignment `*r = e` through a mutable borrow
-- `return` (with or without value)
-- `if` / `else` with branch-local scope and outer-variable mutation
-  preserved
-- `while` loops, with `break` and `continue`, bounded by a fuel counter
-  of 10,000,000 iterations
-- Statement-level `match` (mutations to outer variables persist; arm-local
-  bindings are scoped out)
-- `borrow var as ref in 'region { body }` — named borrow regions
-  bind a borrow for the body and drop it on exit; mutations through
-  the borrow survive
+## 2. Current executable subset
 
-### Supported entry contract
+The interpreter currently models:
 
-The harness contract is `fn main() -> Int`. The interpreter:
+- fixed-width integer, boolean, character, and string values;
+- checked arithmetic, div/mod, shifts, negation, bitwise operations, and casts;
+- structs, enums, arrays, matches, and nested field/index paths;
+- local assignment, field/index/deref assignment, and outer-variable mutation;
+- `if`, bounded `while`, `break`, `continue`, and labeled loop flow;
+- direct calls, function-pointer values, and indirect calls;
+- immutable/mutable path borrows across calls and named borrow regions;
+- `Result`/`Option`-shaped `?` propagation;
+- `defer` on fall-through, return, break, and continue, in LIFO scope order;
+- selected String/Vec/print intrinsics sufficient for the checked differential
+  corpus.
 
-- Looks up `main`, evaluates its body, expects a `return <int>`, and
-  returns that integer to `Main.lean`.
-- Other return shapes (`bool`, `unit`, struct, enum, array) currently
-  collapse to exit code `0`. Programs whose `main` returns those types
-  are not on the oracle harness contract and must not be added to
-  `tests/oracle/vectors.txt` until the contract is widened
-  deliberately.
+`IVal` stores integer values as Lean `Int` together with their Concrete `Ty`.
+References are logical paths (base binding, creation-frame depth, field/index
+steps, mutability), not machine addresses. Function pointers are explicit
+`fnPtr` values. This lets the interpreter model observable value and mutation
+semantics without pretending to reproduce LLVM memory layout or ABI behavior.
 
-## 2. What the interpreter refuses to run
+The interpreter does not enforce the borrow checker or ownership discipline
+again. It consumes already-validated Core and assumes those checks were correct.
+Its path-reference model is therefore an execution model, not a second safety
+checker.
 
-These constructs raise an explicit `interp: ...` diagnostic. The
-diagnostic is the contract — it is the marker the harness reads to
-classify a vector as PENDING rather than FAIL.
+### Entry observation
 
-| Construct | Diagnostic |
+The original oracle-vector contract is `fn main() -> Int`, compared through the
+program's observable output/exit projection. Additional differential gates
+compare stdout and trap behavior for selected constructs. A new observation
+shape must be added deliberately; it must not be normalized away merely because
+one path prints it differently.
+
+## 3. Explicit exclusions
+
+Unsupported constructs fail with an `interp: ...` diagnostic rather than being
+silently approximated. Current important exclusions include:
+
+| Construct | Current result |
 |---|---|
-| Float literal | `interp: float literals not yet supported` |
-| Undefined function call | `interp: undefined function '<name>'` |
-| Function reference | `interp: function references not yet supported` |
-| Heap `alloc` | `interp: alloc expressions not yet supported` |
-| `while` as expression | `interp: while expressions not yet supported` |
-| `defer` | `interp: defer not yet supported` |
-| Borrow target shape (literal-borrow etc.) | `interp: unsupported borrow target shape` |
-| Deref-assign through immutable ref | `interp: deref-assign through immutable ref` |
-| Field-assign on non-ident | `interp: field assign on non-ident expression` |
-| Array index-assign on non-ident | `interp: array index assign on non-ident expression` |
-| Negative array index | `interp: negative array index <i>` |
-| Out-of-bounds index | `interp: array index <i> out of bounds (size <n>)` |
-| Division / modulo by zero | `interp: division by zero` / `interp: modulo by zero` |
-| Loop runaway (>10M iters) | `interp: loop exceeded maximum iterations (10000000)` |
+| Float literal/arithmetic | explicit `interp: float literals not yet supported` |
+| Heap `alloc` expression and unsupported heap builtins | explicit unsupported diagnostic |
+| Unsupported borrow/place shape | explicit shape diagnostic |
+| Unsupported print/IO intrinsic reaching Core without required desugaring | explicit desugar/support diagnostic |
+| Loop runaway beyond interpreter fuel | explicit fuel diagnostic |
 
-Adding a new "not yet supported" branch is fine; **silently widening
-support without the test corpus exercising the new construct is not**.
-Every supported construct must have at least one passing oracle
-vector.
+The implementation's exhaustive pattern matches and the differential-position
+gate are the operational source of truth for this list. Adding a new supported
+constructor requires a discriminating interpreter/native case; adding an
+unsupported branch requires an explicit diagnostic. R-0438 will generate
+constructor coverage so this table cannot silently lag the evaluator.
 
-## 3. Memory, UB, and arithmetic assumptions
+## 4. Arithmetic, bounds, and failure
 
-The interpreter is a value-passing tree walker. It has no concept of
-memory addresses, aliasing, lifetimes, or borrows. Every value is owned
-and copied semantically.
+The old arbitrary-precision oracle argument no longer describes the
+implementation. `Concrete.Semantics.IntArith` gives integer values fixed-width
+meaning:
 
-### Values are flat ADTs
+- ordinary addition, subtraction, multiplication, and negation trap when the
+  result is outside the type's range;
+- division/modulo trap on zero and on signed `MIN / -1`;
+- shift amounts are checked against the operand width;
+- bitwise operations are masked to the declared width;
+- casts follow the language's target-width cast policy.
 
-`IVal` is `int | bool | struct | enum | array | unit | ref`. Structs
-and arrays are represented by their fields/elements directly. Refs
-are paths (base name + field/index steps + the env frame depth at
-borrow time + a mut flag) rather than addresses.
+Raw array indexing is checked on both interpreted and compiled paths and traps
+when the index is negative or outside the declared length. These paths are
+expected to agree on value versus trap and, as the differential infrastructure
+matures, on trap identity. Stack exhaustion remains host-dependent: the
+interpreter uses Lean's stack while the compiled program uses the target stack,
+so stack-bound claims belong to the compiled/profile evidence.
 
-This means:
+Sharing `IntArith` is deliberate single-sourcing of the language rule, but it
+reduces oracle independence for arithmetic. Optimizer/DCE and emitted LLVM trap
+semantics still need separate structural and mutation gates under R-0005; an
+interpreter/compiled match alone cannot prove a shared rule was encoded
+correctly.
 
-- Two locals never alias the same memory by accident — a borrow only
-  participates in aliasing when there is an actual ref value.
-- A ref always names a binding visible at borrow time. Same-named
-  callee parameters cannot redirect a ref to the wrong binding because
-  the ref skips frames pushed after its creation.
-- Function calls share the env stack with the caller: parameters
-  push on top, mutations through ref params reach into the caller's
-  frame, and the local frame is dropped on return. A value passed by
-  value is fully owned by the callee and the caller cannot observe
-  internal callee state.
+## 5. Why the interpreter is useful
 
-The interpreter's borrow model is weaker than the surface language's
-borrow checker (it does not enforce lifetimes or alias exclusion —
-the type checker already did, and the interpreter operates on
-already-validated Core IR). It is strong enough to give the same
-observable result as the compiled binary for the supported subset.
+`Interp.lean` is currently about 1,200 lines and implements substantial language
+behavior, including width-aware traps, mutable path references, function
+pointers, loops, and `defer`. Its trust case is therefore not “small enough to
+assume correct.”
 
-### Integer arithmetic is arbitrary-precision
+The useful properties are:
 
-All `int` values are Lean `Int`s. The interpreter does **not** model
-integer width or wrapping:
+- **Different execution path after Core.** It bypasses Mono, Lower, SSA cleanup,
+  LLVM text generation, optimization, linking, and native ABI behavior.
+- **Explicit unsupported boundary.** Unsupported forms fail loudly and remain
+  inventory items instead of receiving guessed semantics.
+- **Deterministic replay.** Supported pure/core observations do not depend on an
+  LLVM version, linker, or target ABI.
+- **Divergence hunting.** Each supported semantic family has paired execution,
+  and failures retain the source and observations needed to determine which side
+  is wrong.
+- **No automatic authority upgrade.** Agreement is classified as tested
+  evidence and cannot become `proved`, `enforced`, or a broader semantic claim.
 
-- `i32 + i32` that would wrap in the compiled binary will not wrap in
-  the interpreter.
-- Shift amounts are unbounded; `1 << 100` produces `2^100`, not
-  undefined behavior.
-- `bitnot n` is computed as `-(n+1)` (Lean's two's-complement-on-Int
-  identity) rather than over a fixed width.
+On mismatch, neither side wins by status. Triage against the language policy,
+an independent expectation, or a reduced witness. A mismatch proves
+disagreement; it does not by itself identify the faulty implementation.
 
-This is a deliberate trade-off: the predictable subset deliberately
-avoids relying on wrap behavior, and proof claims about the predictable
-subset should hold over arbitrary-precision integers. Any oracle vector
-whose result depends on wrapping is a sign that the program is outside
-the predictable subset, not a bug in the interpreter — but the harness
-will surface the disagreement and force the call to be made
-explicitly.
-
-For an explicit overflow policy, see
-[ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md).
-
-### Failure modes are explicit, not silent
-
-The compiled binary inherits LLVM / target / OS behavior on division
-by zero, out-of-bounds access, and stack overflow. The interpreter
-turns each of these into a named `interp: ...` error. The oracle
-contract treats these as runtime errors of the interpreter; the
-compiled binary is allowed to behave differently (raise, abort, or
-hardware-trap). When that divergence matters, the program is outside
-the agreed-upon predictable subset.
-
-### Loop fuel
-
-`while` is bounded at 10,000,000 iterations. This guards the
-interpreter (and the harness) from accidentally non-terminating
-programs without claiming anything about the compiled binary's
-termination.
-
-### Stack
-
-The interpreter recurses through Lean's stack. Concrete programs that
-recurse deeply may hit the Lean stack limit before they hit the
-predictable-stack-depth bound the compiler reports. Stack-bound claims
-about a program belong on the compiled side, not the interpreter side;
-see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).
-
-## 4. Why this earns trust
-
-The interpreter is small on purpose:
-
-- **~550 lines, single file, no transformation passes.** Reading it
-  end-to-end fits in one sitting. Reading the full compiler does not.
-- **Operates on validated Core IR.** Parsing, name resolution, type
-  checking, elaboration, and `CoreCheck` already ran. The interpreter
-  inherits their guarantees and adds no new ones.
-- **No optimizer, no monomorphization, no lowering.** Every reduction
-  rule is a direct match on the IR; there is no opportunity for an
-  optimizer to rewrite a program into something equivalent-on-paper
-  but distinct-in-practice.
-- **No platform / target dependence.** The interpreter runs the same
-  on every host where Lean runs. There is no clang version, no LLVM
-  version, no libc, no linker.
-- **No silent approximations.** Every unsupported construct hits an
-  explicit `interp: ...` branch. The harness reads those exact strings
-  to classify a vector as PENDING.
-- **No external trust dependencies.** No FFI, no `unsafe`, no shelling
-  out. The Lean kernel and standard library are the only trust roots.
-
-Together, these mean: when the harness reports a mismatch, the simpler
-side is the one we treat as ground truth by default. A mismatch is a
-real disagreement, and at least one of the two sides has a bug. The
-harness exists to surface those disagreements; this document exists so
-we know where the line is.
-
-The interpreter is **not** intended to grow into a fully verified
-reference implementation. Phase G/I has a separate goal — a small
-proof-relevant reference interpreter scoped to ProofCore — and that
-work is gated on `Core → ProofCore` extraction being formal enough to
-support it.
+The interpreter is not intended to become a fully verified reference
+implementation by accretion. ProofCore and the compiler-soundness bridge own
+formal semantics/preservation work. The source interpreter remains an
+engineering oracle whose coverage and shared dependencies must stay visible.
 
 ## See also
 
-- `tests/oracle/README.md` — the harness, the vector format, and the
-  PENDING-vs-FAIL contract
-- [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md) — arithmetic and
-  overflow policy for predictable / proved profiles
-- [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md) — the
-  compiled-side predictable subset
-- [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md) — how the
-  proof workflow models program semantics over PExpr (a separate IR
-  from the interpreter's `CExpr`)
-- [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md) — the broader
-  trust map for Concrete
+- `tests/oracle/README.md` — vector and PENDING/FAIL contract
+- [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md) — integer and bounds semantics
+- [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md) — compiled/profile
+  execution boundary
+- [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md) — separate
+  ProofCore semantics
+- [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md) — project-wide trust
+  accounting

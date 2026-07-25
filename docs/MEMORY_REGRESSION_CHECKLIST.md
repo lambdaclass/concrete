@@ -98,12 +98,13 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 **Test coverage:**
 - `error_memory_edge_move_while_borrowed.con` — move frozen variable
 - `error_memory_edge_use_after_move.con` — use after move
-- `error_memory_edge_linear_reassign.con` — reassign linear
+- `error_memory_edge_linear_reassign.con` — reject overwrite of a live linear value
+- `linear_rebind_after_drop.con` — allow linear rebind after consuming the old value
 - `error_borrow_after_move.con` — borrow consumed variable
 - `error_use_after_move.con` — basic use-after-move
 - `error_assign_overwrites_linear.con` — overwrite linear
 - `error_trusted_use_after_move.con` — trusted code respects linearity
-- `error_trusted_linear_reassign.con` — trusted code respects no-reassign
+- `error_trusted_linear_reassign.con` — trusted code cannot overwrite a live linear value
 - `error_trusted_leak.con` — trusted code must consume linear values
 
 **Doc claim:** MEMORY_GUARANTEES.md properties 1, 5, 7, 10. MEMORY_SEMANTICS.md §1, §10, §11.
@@ -212,7 +213,9 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 **Doc claim:** MEMORY_GUARANTEES.md property 6. MEMORY_SEMANTICS.md §7.
 
-**Proof-facing status:** Not in proof model (no loops in PExpr).
+**Proof-facing status:** Selected bounded loops and functional state are in
+`ProvableV1`; this ownership-specific “outer linear value cannot be consumed in
+a loop” rule remains checker-enforced rather than a general ProofCore theorem.
 
 **Open gaps:**
 - `continueSkipsUnconsumedLinear` — **covered** by `error_continue_skip_linear.con`.
