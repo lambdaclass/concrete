@@ -5529,6 +5529,12 @@ validation are in place.
 - At least one non-author writes, proves, or contract-annotates a useful
   Concrete program and reports that ProofKit + contracts + `concrete prove`
   were worth the discipline.
+- Diagnostics teach the discipline: on the linearity, capability, and
+  must-use surfaces, errors name the remedy (consume / drop / return /
+  declare the capability), not only the rule. A first-user session stalling
+  on an undiagnosed E-code is filed as a compiler bug, not a user error —
+  this is measured through the external-validation transcript, not
+  self-assessed.
 - Source contracts are primary for at least one flagship, with source-linked
   proofs and no JSON dependency for that flagship's main proof surface.
 - `concrete prove` guides a user through contract -> obligation -> Lean/omega/
