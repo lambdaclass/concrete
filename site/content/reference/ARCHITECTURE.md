@@ -124,16 +124,19 @@ Keep as-is:
 Done:
 
 - `ValidatedCore` is a named pipeline artifact (`Concrete/Pipeline.lean`); `Pipeline.coreCheck` is the only constructor
-- `ProofCore` extracts the pure, proof-eligible fragment (`Concrete/ProofCore.lean`)
-- `Concrete/Proof.lean` defines formal evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness; literal evaluation; conditional reduction; arithmetic)
+- `ProofCore` extracts the authority-free, proof-eligible fragment (`Concrete/ProofCore.lean`)
+- `Concrete/Proof.lean` defines formal evaluation semantics for the admitted authority-free Core fragment and proves properties over it
 - `Pipeline.monomorphize` takes `ValidatedCore` — the type system enforces that validation happened
 
 Still change:
 
 - preserve source-to-Core traceability (span tracking)
 - add export support for selected Concrete functions to Lean proof workflows
-- extend proof fragment to cover structs, enums, match, and recursive functions
-- keep proof scopes staged: pure first, then effects, then runtime
+- keep the admitted operation widths and runtime-failure correspondence aligned
+  with the canonical `PROVABLE_V1.md` contract
+- keep proof scopes staged: authority-free functional semantics first,
+  program-structure properties separately, then effect/runtime semantics only
+  when explicitly modeled
 
 Fine for now:
 
@@ -291,9 +294,11 @@ Excludes:
 
 **Currently included** (via `extractProofCore`):
 
-- Pure functions (empty capability set, not trusted, no extern calls)
-- Algebraic data types (structs without repr(C)/packed, enums without builtin overrides)
-- Trait definitions (for context)
+- authority-free functions with no trusted/extern boundary whose entire body
+  is in the admitted ProofCore surface
+- selected scalar and fixed-width operations, algebraic data, arrays,
+  matching, functional updates, and bounded loop/state encodings
+- trait definitions needed as context
 
 **Currently excluded:**
 
@@ -302,16 +307,15 @@ Excludes:
 - Extern functions and FFI types
 - Entry-point functions (main)
 
-**Formal semantics** (`Concrete/Proof.lean`) define evaluation for a pure Core fragment:
-
-- Integer/boolean literals, arithmetic, comparisons
-- Let bindings, if/then/else, function calls
-- Proven properties: abs/max/clamp correctness, literal evaluation, conditional reduction, arithmetic identities
+**Formal semantics** (`Concrete/Proof.lean`) define evaluation for the admitted
+authority-free Core fragment. `PROVABLE_V1.md` is the canonical
+constructor/operation contract; this architecture document does not maintain a
+second allowlist or a hand-counted theorem total.
 
 **Next extensions:**
 
-- Structs, enums, and match expressions in the proof fragment
-- Recursive functions with termination proofs
+- operation widths and runtime-failure forms not yet admitted by `ProvableV1`
+- recursive functions with termination proofs, later
 - Source-to-Core traceability for selected-function export
 
 ## Boundary Rules
@@ -451,7 +455,14 @@ Validate SSA invariants and perform structural cleanup before codegen.
 
 Build mechanized proofs over the validated Core IR.
 
-**Status:** Started. `Concrete/Proof.lean` defines evaluation semantics for a pure Core fragment and proves 17 theorems (abs/max/clamp correctness, structural lemmas, conditional reduction, arithmetic). `Concrete/ProofCore.lean` extracts the proof-eligible subset from `ValidatedCore`. Scope is still narrow — structs, enums, match, recursive functions, and source-to-Core traceability remain.
+**Status:** Started. `Concrete/Proof.lean` defines evaluation semantics and
+kernel theorems for the admitted authority-free Core fragment;
+`Concrete/ProofCore.lean` extracts the proof-eligible subset from
+`ValidatedCore`. Selected structs, enums, matches, arrays, casts, functional
+updates, and bounded loops are already admitted. Recursion, references,
+allocation/effects, unsupported operation widths/failure forms, and complete
+source-to-Core preservation remain outside the current claim. Exact coverage is
+owned by `PROVABLE_V1.md` and generated proof/evidence reports.
 
 ## Architecture Priority Table
 
@@ -467,7 +478,7 @@ Build mechanized proofs over the validated Core IR.
 | 8 | A8 | Monomorphization cleanup | `Concrete/Mono.lean` | **DONE** |
 | 9 | A9 | SSA / lowering IR | `Concrete/Lower.lean` | **DONE** |
 | 10 | A9b | SSA verify / cleanup | `Concrete/SSAVerify.lean`, `Concrete/SSACleanup.lean` | **DONE** |
-| 11 | A10 | Formal kernel proofs | `Concrete/Proof.lean`, `Concrete/ProofCore.lean` | **Started** (17 theorems, pure fragment) |
+| 11 | A10 | Formal kernel proofs | `Concrete/Proof.lean`, `Concrete/ProofCore.lean` | **Started** (named `ProvableV1` subset; generated coverage remains partial) |
 
 ## Internal Semantic Spec Notes
 

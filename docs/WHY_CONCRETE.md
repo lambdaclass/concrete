@@ -80,7 +80,9 @@ Today `--report authority` and `--report caps` expose part of this structure,
 while capability-bearing function-pointer types enforce authority at indirect
 call sites. The direction of the proof work is to make target-set completeness
 and transitive composition checked whole-program claims. That step is roadmap
-work, not a shipped feature.
+work, not a shipped feature: R-0443 owns the first narrow, independently checked
+authority-path property and explicitly leaves effectful functional correctness
+and native behavior outside its claim.
 
 ## Evidence Is Visible
 

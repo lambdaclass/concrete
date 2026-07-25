@@ -118,7 +118,9 @@ That sentence has important boundaries:
    things.
 4. **Composition is not automatic.** The proof function table makes direct
    callees available to evaluation; it does not turn separate function
-   theorems into a whole-program theorem.
+   theorems into a whole-program theorem. R-0443’s planned authority-path
+   certificate is a separately scoped graph predicate, not automatic
+   composition of functional theorems.
 5. **Freshness is currently partial.** The shipped R-0004 containment refuses
    to report an in-source proof link as proved when no stored fingerprint
    exists. A stored fingerprint still covers the extracted body rather than a

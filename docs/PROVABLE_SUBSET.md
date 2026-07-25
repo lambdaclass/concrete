@@ -120,7 +120,7 @@ questions:
 
 | | Provable subset | High-integrity profile |
 |---|---|---|
-| Purpose | Lean-backed claims about selected pure functions | Restrictions and evidence for an entire executable |
+| Purpose | Lean-backed claims about selected authority-free functions | Restrictions and evidence for an entire executable |
 | Capabilities | None | A policy-defined restricted set |
 | Trusted/FFI | Excluded | May be admitted through approved boundaries |
 | Runtime failures | Theorem-specific assumptions/obligations | Profile policy and runtime behavior |

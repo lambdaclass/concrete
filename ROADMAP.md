@@ -1676,7 +1676,12 @@ divergence rather than a fictional tiny width-blind oracle; narrows
 `KNOWN_HOLES.md` to an index over the numbered corpus; and corrects stale
 `DEFER.md`, `LANGUAGE_GAPS.md`, `IDENTITY.md`, error-convention, and anti-feature
 statements. The repair may land as documentation commits before the generated
-claim records exist; R-0438 owns preventing recurrence.
+claim records exist; R-0438 owns preventing recurrence. The same repair removes
+stale hand-counted theorem totals, replaces “empty capability set means pure”
+with the narrower “authority-free” claim, and makes proof-boundary documents
+use R-0440’s orthogonal evidence dimensions instead of assigning every fact to
+one total tier. Stable documents link to generated proof coverage rather than
+freezing a count that changes when a theorem lands.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
 story, in each of the AST, Core, resolve, and project inventories; the claim gate
@@ -2995,6 +3000,15 @@ the comparison detects, and no gating threshold derived from a single sample.
 **Objective:** Add the Phase 8 validation artifact: a showcase/workload dashboard that proves every flagship and graduated workload has a check story, evidence bundle, oracle or reference when appropriate, interpreter-vs-compiled coverage, property-test/counterexample-regression coverage where relevant, runtime-obligation audit, trust/assumption classification, and release-CI replay. The first external-user workload in this dashboard is the external-validation-gate trial. Also publish representative cold pipeline timings and Phase 6C shadow invalidation traces for no-op, private-body, public-interface, proof/contract, policy, and target edits; those traces are
 
  the workload-derived input to Phase 8.5, not a cache implementation here.
+ The external-validation trial recruits three non-authors and records every
+ attempted session, including completion, abandonment point, time to first
+ useful result, diagnostics encountered, and whether the proof/evidence
+ discipline paid for its cost. Alpha still requires at least one non-author
+ to complete a useful workflow; the other attempts are evidence even when
+ they stop early and may not be omitted from the verdict. Run the trial once
+ the minimum teaching path and remedy-oriented diagnostics are usable, before
+ the large proof-automation investment, so external evidence can redirect
+ that investment rather than merely evaluate it afterward.
  If the external-validation trial finds manual proof authoring too costly,
  this artifact must also run the exact narrow Task R-0167 synthesis probe
  selected by the gate, preserve its transcript and review-cost measurements,
@@ -3725,6 +3739,13 @@ five graduated flagships and one package-scale example.
 
 **Objective:** Stabilize machine-readable fact schemas for proof status, obligations, effects, capabilities, assumptions, policies, snapshots, showcase metadata, runtime traps, synthesis attempts, stdlib evidence, and package evidence.
 
+Runtime-trap facts include one derived per-function view: direct trap sites,
+transitively reachable trap kinds, the call/indirect-target path that makes each
+kind reachable, and any trusted/extern boundary where completeness stops. This
+is a projection of the shared site and call-edge facts, not a separately
+maintained truth source. “No reachable trap” may be emitted only when the
+conservative target closure is complete for the named scope.
+
 Keep one shared evidence-class enum and one shared fact vocabulary across
 reports; no report kind may invent private status strings for `proved`,
 `reported`, `trusted`, `assumed`, `runtime_checked`, `tested_by_oracle`,
@@ -3745,7 +3766,11 @@ collapsed into or used to upgrade a proof/evidence class.
 
 ### Task R-0180
 
-**Objective:** Add `concrete explain <function>`: capabilities, proof status, assumptions, obligations, trusted callees, evidence level, and why each status is what it is.
+**Objective:** Add `concrete explain <function>`: capabilities, proof status,
+assumptions, obligations, trusted callees, direct and transitively reachable
+runtime-trap kinds, evidence dimensions, and why each status is what it is.
+Trap explanations reuse R-0178’s site/edge facts and show the path or
+completeness boundary rather than deriving reachability again.
 
 ### Task R-0181
 
@@ -3760,7 +3785,8 @@ This is also the first **proof/capability diff for code review** surface.
 Output must include human text and JSON rows for: added/removed capability,
 capability widening/narrowing, new `trusted`/`Unsafe`/extern boundary,
 stale/missing/downgraded proof, new runtime trap site, allocation authority
-change, changed assumption, and changed stdlib evidence class.
+change, changed assumption, changed stdlib evidence class, and a changed
+per-function reachable-trap set even when the changed trap site is in a callee.
 
 Done when the same JSON drives CI, a GitHub-comment/golden fixture, editor
 display, and agent consumption. This is Concrete's review differentiator:
@@ -3788,6 +3814,15 @@ and must not collapse the review into one green badge.
  widening, and reuses the same fact vocabulary as Phase 18 import fact
  constraints so the policy graduates cleanly to dependency/package
  boundaries.
+
+The budget verdict must retain a canonical reachability witness: stable
+function identities, direct edges, conservative possible-target sets for
+indirect calls, the entry roots, the path introducing each reachable
+capability, and every trusted/extern boundary where completeness stops.
+Compiler-produced witnesses remain `compiler_validated`; they do not become
+proof merely because the same compiler generated both the graph and verdict.
+R-0443 later makes the narrow whole-program authority property independently
+checkable from the canonical artifact.
 
 ### Task R-0441
 
@@ -4776,6 +4811,49 @@ record must name them so a proof's replay surface stays reproducible.
  layout/fingerprint helper and prove the checker still rejects the bad
  artifact without importing that helper. Wire
  `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
+
+### Task R-0443
+
+**Objective:** Add independently checkable whole-program authority-property
+certificates over a conservative closed-world call graph.
+
+V1 proves a deliberately structural property, not effectful program semantics:
+for named entry roots, no call path reaches a forbidden capability, or every
+path that reaches it passes through an explicit allowlist of gateway functions.
+The first forcing fixture is the shape “no path from `main` reaches `Network`
+except through `send_report`.” This extends R-0184’s authority-budget verdict;
+it does not replace functional ProofCore theorems and does not claim native
+behavior, path-value properties such as “files only under `/etc`,” termination,
+or correctness of an external effect.
+
+The independently checked subject is the canonical validated/monomorphized Core
+artifact plus the policy. The checker reconstructs stable function identities,
+entry roots, direct edges, capability declarations, and conservative indirect
+target sets instead of trusting a producer-emitted graph summary. V1 may use the
+closed, auditable over-approximation “every address-taken function compatible
+with the callable type” and refine it later; a false positive is acceptable,
+an omitted possible target is not. An unresolved callable origin,
+trusted/extern callback, dynamic ingress, unsupported identity, or incomplete
+artifact becomes `certificate_unsupported` or an explicit trusted boundary,
+never a clean theorem.
+
+Bind the certificate to the artifact digest, dependency root, policy digest,
+entry roots, target-set rule version, checked property, gateway identities, and
+remaining boundaries. Before independent replay the producer may report only
+`compiler_validated`. Reusing R-0275’s independent checker may emit
+`certificate_structurally_checked` for the named graph predicate; use
+`kernel_replayed` only if Lean actually checks an artifact-specific theorem.
+Neither status proves source-to-Core correspondence or backend behavior.
+
+Gate direct and indirect calls; runtime selection among two callable values; an
+unreachable `Network` function; a permitted gateway; a second path bypassing the
+gateway; nested and cross-module calls; monomorphized callees; `with(Std)` as a
+declared ceiling distinct from reachable use; trusted/extern incompleteness; a
+forged graph/certificate; and mutations that delete a direct edge, one indirect
+target, a capability declaration, the artifact binding, or the gateway-bypass
+path. The checker must reject each false-clean mutation without importing the
+compiler’s authority-report implementation.
+
 ### Task R-0276
 
 **Objective:** Reduce ProofCore partial-def opacity only where proof preservation needs it.

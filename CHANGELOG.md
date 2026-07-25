@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Whole-Program Evidence Direction And Proof Vocabulary Cleanup
+
+_Docs/roadmap only, 2026-07-25. No compiler or language behavior changed in
+this slice._
+
+R-0443 now owns the first independently checked whole-program
+authority-property certificate: a conservative call-graph predicate such as
+“no path from `main` reaches `Network` except through `send_report`,” with
+indirect targets, trusted/extern completeness boundaries, artifact binding, and
+claim scope stated explicitly. R-0184 supplies the canonical reachability
+witness; R-0275 supplies the independent checker boundary. The task does not
+claim effectful functional correctness, path-value properties, termination, or
+native behavior.
+
+Existing owners absorbed the smaller findings instead of multiplying tasks:
+R-0178/R-0180/R-0182 aggregate direct and transitive runtime-trap reachability,
+and R-0137 recruits three non-authors while retaining one completed workflow as
+the alpha gate. Failed or abandoned sessions remain evidence.
+
+The stable proof documents no longer freeze a theorem count or equate an empty
+capability set with purity/proof. They now say `authority-free`, keep eligibility
+separate from attached evidence, defer exact construct/theorem coverage to
+`PROVABLE_V1.md` and generated reports, and describe evidence using R-0440’s
+orthogonal scope/method/status/trust dimensions.
+
 ### Documentation Truth Alignment
 
 _Docs-only resynchronization, 2026-07-25. No compiler or language behavior

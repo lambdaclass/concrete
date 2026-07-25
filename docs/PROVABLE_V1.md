@@ -7,14 +7,16 @@ to say: this function can carry Lean-backed evidence, and the compiler has a
 defined workflow for keeping that evidence tied to the source.
 
 This is not a whole-language guarantee. It is a deliberately small, auditable
-profile for selected pure functions.
+profile for selected authority-free functions and explicitly modeled
+functional behavior.
 
 ## One-Sentence Contract
 
-A `ProvableV1` function is a pure, non-trusted, non-entry function whose
-validated Core body extracts to ProofCore, whose registered spec matches the
-current source extraction, whose callees are available in the proof function
-table, and whose theorem coverage is explicitly classified.
+A `ProvableV1` function is authority-free, non-trusted, and non-entry; its
+validated Core body extracts completely to ProofCore, its registered spec
+matches the current source extraction, its callees are available in the proof
+function table, and its theorem coverage is explicitly classified. An empty
+capability set alone does not claim termination or absence of runtime traps.
 
 ## Claim Classes
 
@@ -37,7 +39,7 @@ A function is inside `ProvableV1` only if all of these hold:
 
 | Gate | Requirement |
 |---|---|
-| Purity | The function has no capabilities. |
+| Authority | The function has no capabilities; this is authority-freedom, not by itself a purity/totality claim. |
 | Trust | The function is not `trusted`, not in a trusted impl, and does not cross FFI. |
 | Entry point | The function is not an entry point. |
 | Calls | Direct calls only; registered proof specs must be FnTable-complete. |

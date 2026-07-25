@@ -169,13 +169,19 @@ The proof boundary sits after CoreCheck and before Mono, materialized as the `Va
 - normalized by CoreCanonicalize
 - validated by CoreCheck (capabilities, types, match coverage, declaration legality)
 
-`ProofCore` (`Concrete/Proof/ProofCore.lean`) extracts the pure, proof-eligible fragment from `ValidatedCore`:
+`ProofCore` (`Concrete/Proof/ProofCore.lean`) extracts the authority-free,
+proof-eligible fragment from `ValidatedCore`:
 
-**Eligible:** Pure functions (empty capability set, not trusted, no extern calls), safe algebraic data types (no repr(C)/packed).
+**Eligible:** Authority-free functions with no trusted/extern boundary whose
+entire body is admitted by the named ProofCore version. An empty capability set
+does not by itself imply termination or absence of traps.
 
 **Excluded:** Functions with capabilities, trusted/unsafe functions, extern functions, entry points.
 
-`Concrete/Proof/Proof.lean` defines formal evaluation semantics for the pure Core fragment and proves properties (abs, max, clamp correctness, structural lemmas, conditional reduction, arithmetic). See [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the full definition of the proof-eligible subset, and [ARCHITECTURE.md](ARCHITECTURE.md) for the proof architecture.
+`Concrete/Proof/Proof.lean` defines formal evaluation semantics for the admitted
+authority-free Core fragment. See [PROVABLE_V1.md](PROVABLE_V1.md) for the
+canonical admitted surface, [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for its
+architecture, and [ARCHITECTURE.md](ARCHITECTURE.md) for the proof pipeline.
 
 ## High-Integrity Profile Direction
 
