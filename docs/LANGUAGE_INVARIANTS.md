@@ -44,7 +44,25 @@ Each phase that adds a new consumption form must update this list.
 
 ## 4. No Variable Shadowing
 
-Each variable name must be unique within its scope. This extends to region names in borrow blocks — `borrow x as xr in R` introduces `xr` and `R` into scope, and neither may shadow existing names.
+**Target rule:** each variable name is unique within its scope — no binding may
+shadow a name live in an enclosing scope.
+
+**Currently enforced (narrower):** `Check` rejects only a `let` that shadows a
+still-*live* non-`Copy` binding (H16, `.shadowsLiveLinear`), which permits
+`let s = transform(s);` after the old `s` is consumed, and permits nested
+same-named `match` binders (`tests/programs/regress_045_match_binder_shadow.con`
+pins inner-shadows/outer-restored as current behavior). Bug 045 was silent wrong
+code from that second shape; Elab alpha-renaming removed the miscompile, so the
+remaining exposure is readability and audit cost, not unsoundness.
+
+Closing the gap is ROADMAP Task R-0435, which must first add the pattern-binder
+renaming form (`Variant { value: inner }`) — without it, banning shadowing would
+make nested `Option`/`Result` matching unwritable, since both name their payload
+field `value`.
+
+Region names in borrow blocks already follow the target rule — `borrow x as xr in R`
+introduces `xr` and `R`, and neither may shadow an existing name
+(`.borrowRefShadows`, `tests/programs/error_borrow_shadow.con`).
 
 ## 5. No Uninitialized Variables
 
