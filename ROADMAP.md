@@ -838,13 +838,6 @@ reducer, plus a four-part proof-freshness class. The surface-gate task comes
 first because it protects those fixes; the defects immediately follow it in the
 one global file-order sequence.
 
-### Task R-0003
-
-**Objective:** Fix bugs 047 + 048 — one HashMap probe/occupancy invariant slice Insertion must remember the first tombstone but continue to a live equal key or a bounded chain end; lookup must inspect at most `cap` slots; load policy tracks occupied slots (`live + tombstones`) and rehashes/cleans tombstones before no empty slot can wedge a miss. Maintain explicit `len`, tombstone/occupied, and capacity invariants through insert/remove/clear/grow. Gate constant-hash overwrite-after-tombstone (`len == 2`, one remove eliminates the key), the zero-empty missing lookup under a watchdog, 10k+ churn, full-table misses,
-
-   grow/clear/reuse, Copy and linear key/value destruction, interpreter/native
-   agreement, a reference-map oracle, and independent mutations of remembered-
-   tombstone, bounded-probe, and occupancy accounting logic.
 ### Task R-0004
 
 **Objective:** Fix proof-subject freshness and fail closed Before preserving any `proved` claim, treat the following as one evidence- integrity defect class and file individually numbered ledger entries/reproducers before implementation:

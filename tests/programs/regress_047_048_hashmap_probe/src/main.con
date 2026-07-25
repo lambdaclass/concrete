@@ -1,0 +1,55 @@
+// Bugs 047 + 048 / R-0003 regression: open-addressing probe and occupancy.
+//
+// 047 — `insert` stopped at the first empty-OR-tombstone slot, so a key living
+// further down the chain behind a tombstone got a SECOND live slot: `len()`
+// overcounted and one `remove` left a copy behind. Insert now remembers the
+// first tombstone but keeps probing for a live equal key.
+//
+// 048 — the load factor counted only live entries, so tombstones accumulated
+// until no empty slot remained, and a missing-key lookup wrapped forever.
+// Occupancy is now `len + tombstones` (rehash at the same capacity when the
+// pressure is all tombstones), and the probe is bounded by `cap` as a fail-safe.
+//
+// Both legs use a CONSTANT hash so every key collides and the whole chain is
+// exercised. Exit 0; the printed values are the two invariants (2 then 60).
+mod main {
+    import std.map.{HashMap};
+    fn h_const(k: &i32) -> u64 { return 0; }   // constant hash: total collision
+    fn e_i32(a: &i32, b: &i32) -> bool { return *a == *b; }
+
+    fn main() with(Std, Alloc, Unsafe) -> u8 {
+        let mut bad: u8 = 0;
+
+        // --- bug 047: overwrite past a tombstone must not duplicate ---
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
+        discard(m.insert(1, 10).is_none());
+        discard(m.insert(2, 20).is_none());
+        discard(m.insert(3, 30).is_none());
+        let k2: i32 = 2;
+        discard(m.remove(&k2).is_some());
+        let old: Option<i32> = m.insert(3, 99);
+        if old.is_none() { bad = 1; }
+        println(m.len() as Int);
+        if m.len() != 2 { bad = 2; }
+        let k3: i32 = 3;
+        discard(m.remove(&k3).is_some());
+        if m.contains(&k3) { bad = 3; }
+        m.drop();
+
+        // --- bug 048: missing-key lookup with zero empty slots must return ---
+        let mut z: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
+        let mut i: i32 = 0;
+        while i < 200 { discard(z.insert(i, i).is_none()); i = i + 1; }
+        let mut j: i32 = 0;
+        while j < 200 { discard(z.remove(&j).is_some()); j = j + 1; }
+        let mut n: i32 = 200;
+        while n < 260 { discard(z.insert(n, n).is_none()); n = n + 1; }
+        let miss: i32 = 999999;
+        if z.contains(&miss) { bad = 4; }
+        println(z.len() as Int);
+        if z.len() != 60 { bad = 5; }
+        z.drop();
+
+        return bad;
+    }
+}

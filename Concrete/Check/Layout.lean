@@ -70,7 +70,18 @@ namespace Builtin
   def stringAlign : Nat := 8
   def vecSize : Nat := 24      -- ptr + i64 + i64
   def vecAlign : Nat := 8
-  def hashmapSize : Nat := 40  -- ptr + ptr + ptr + i64 + i64
+  -- MUST equal the size of `HashMap` as std/src/map.con declares it:
+  --   keys ptr, values ptr, flags ptr, len u64, tombstones u64, cap u64,
+  --   hash_fn ptr, eq_fn ptr  =  8 * 8
+  -- This constant is the layout the COMPILER uses for a by-value `HashMap`
+  -- (field offsets come from the declaration, but aggregate copies are sized
+  -- from here), so an undercount silently truncates the copy: it read 40 —
+  -- omitting the two fn-pointer fields entirely — which went unnoticed only
+  -- because no by-value path happened to read past offset 40. Adding a field
+  -- moved `cap` outside the copied prefix and `drop` began reading garbage,
+  -- destroying nothing. `check_builtin_layout_sizes.sh` now pins the two
+  -- against each other.
+  def hashmapSize : Nat := 64
   def hashmapAlign : Nat := 8
 end Builtin
 

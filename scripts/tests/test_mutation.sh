@@ -232,6 +232,63 @@ MUT_OLD+=("    return .call (.indirect fnName) [] cArgs retTy")
 MUT_NEW+=("    return .call (.direct fnName) [] cArgs retTy -- MUTATION: indirect call resolved by name")
 MUT_DESC+=("Elab: indirect call emitted as direct (bug 050)")
 
+# 22. std map: forget the remembered tombstone (R-0003 / bug 047)
+# Insert stops at the first free-or-tombstone slot again, so a key living past a
+# tombstone gets a second live slot. Independent of #23 and #24: this one is the
+# duplication invariant only.
+MUT_FILE+=("std/src/map.con")
+MUT_OLD+=("                if flag == 2 {
+                    if !have_tomb {
+                        have_tomb = true;
+                        tomb_idx = idx;
+                    }
+                }")
+MUT_NEW+=("                if flag == 2 {
+                    // MUTATION: write into the first tombstone immediately
+                    let key_ptr: *mut K = self.keys + idx;
+                    *key_ptr = key;
+                    let val_ptr: *mut V = self.values + idx;
+                    *val_ptr = value;
+                    *flag_ptr = 1;
+                    self.len = self.len + 1;
+                    self.tombstones = self.tombstones - 1;
+                    return Option::<V>::None;
+                }")
+MUT_DESC+=("std map: insert reuses the first tombstone (bug 047)")
+
+# 23. std map: unbounded lookup probe (R-0003 / bug 048, half 1)
+# The probe no longer stops after `cap` slots, so a missing-key lookup in a table
+# with no empty slot wraps forever. Caught as a TIMEOUT, which is why the gate
+# runs every leg under a watchdog.
+MUT_FILE+=("std/src/map.con")
+MUT_OLD+=("            while probes < self.cap {
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+
+                if flag == 0 {
+                    // Empty — the probe chain ends here, so the key is absent.
+                    return Option::<u64>::None;
+                }")
+MUT_NEW+=("            while true { // MUTATION: probe bound removed
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+
+                if flag == 0 {
+                    // Empty — the probe chain ends here, so the key is absent.
+                    return Option::<u64>::None;
+                }")
+MUT_DESC+=("std map: lookup probe unbounded (bug 048)")
+
+# 24. std map: occupancy ignores tombstones (R-0003 / bug 048, half 2)
+# The load factor counts only live entries again, so tombstones accumulate until
+# the table has no empty slot. With #23's bound still in place the lookup returns
+# rather than hanging, so what this must break is the VALUE invariants — proving
+# the two halves of 048 are gated separately.
+MUT_FILE+=("std/src/map.con")
+MUT_OLD+=("            if (self.len + self.tombstones) * 4 >= self.cap * 3 {")
+MUT_NEW+=("            if self.len * 4 >= self.cap * 3 { // MUTATION: tombstones uncounted")
+MUT_DESC+=("std map: load factor ignores tombstones (bug 048)")
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

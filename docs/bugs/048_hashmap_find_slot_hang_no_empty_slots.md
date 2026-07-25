@@ -1,6 +1,17 @@
 # Bug 048: HashMap find_slot infinite-loops when the table has no empty slots
 
-**Status:** Open
+**Status:** FIXED (R-0003, 2026-07-25) — occupancy is now `len + tombstones`
+(rehash at the SAME capacity when the pressure is all tombstones), and the
+lookup probe is bounded by `cap` as a fail-safe. Both halves are gated
+separately: mutation `test_mutation.sh` #23 removes the probe bound and #24
+makes the load factor ignore tombstones; both are KILLED. Gate:
+`scripts/tests/check_hashmap_probe_invariants.sh`; fixture:
+`tests/programs/regress_047_048_hashmap_probe/`.
+
+The hang also exposed that `run_tests.sh` had NO timeout anywhere: the fixture
+meant to catch this would have stalled the whole suite instead of failing. The
+project-fixture loop now runs under a 60s watchdog that reports a timeout as a
+distinct failure.
 **Discovered:** 2026-07-18, stdlib implementation audit (reproduced: a
 compiled program that reaches the state and hangs — killed by timeout).
 

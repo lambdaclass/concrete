@@ -46,7 +46,13 @@ declare -A BUG_TEST_MAP=(
   # R-0002: a callee VALUE is never resolved by global name. Single-file witness
   # (42, was 21) + the std.io collision variant as a project fixture.
   [050]="regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con"
+  # R-0003: one probe/occupancy slice — overwrite-past-tombstone (047) and the
+  # zero-empty-slot missing lookup (048) share the same fixture.
+  [047]="regress_047_048_hashmap_probe/src/main.con"
+  [048]="regress_047_048_hashmap_probe/src/main.con"
   [051]="regress_generic_enum_051.con adversarial_mono_generic_enum.con"
+  # Bug 057: a by-value HashMap must arrive whole (hash_fn for get, cap for drop).
+  [057]="regress_057_hashmap_by_value/src/main.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).
@@ -73,8 +79,6 @@ declare -A SKIP_BUGS=(
   [038]="FIXED -- regress_038_if_merge_promoted_aggregate.con (run_ok qm); Lower merge loops skip ANY promoted var (aggregate included); extended fuzzer is the class gate"
   [045]="FIXED by parallel session -- match binders alpha-renamed at Elab (4dcb9a2c)"
   [046]="FIXED by parallel session -- HashMap keys()/values()/elements() Copy-bounded (25510e5e); same finding as this audit's keys/values double-free"
-  [047]="OPEN -- HashMap::insert duplicates a key past a tombstone (map.con); repro reproduced, fix pending"
-  [048]="OPEN -- HashMap find_slot hangs at zero empty slots (map.con load factor ignores tombstones); repro hangs by timeout, fix pending"
   [049]="OPEN -- reduce --predicate crash is vacuous (parse-only); reduces any program to ~empty, fix pending"
   [052]="OPEN -- T_destroy no-op for arrays; Vec<[T;N]>.drop() skips element destruction (arrdrop cell-count repro)"
   [053]="OPEN -- DCE deletes checked negations; discard(-x) at MIN loses the trap (tA_neg_dce)"

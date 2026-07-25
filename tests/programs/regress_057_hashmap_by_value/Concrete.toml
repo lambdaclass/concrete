@@ -1,0 +1,3 @@
+[package]
+name = "regress_057_hashmap_by_value"
+version = "0.1.0"

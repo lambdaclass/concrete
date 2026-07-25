@@ -1,6 +1,11 @@
 # Bug 047: HashMap::insert duplicates a key that lives past a tombstone
 
-**Status:** Open
+**Status:** FIXED (R-0003, 2026-07-25) — `insert` remembers the first tombstone
+but keeps probing for a live equal key, taking the tombstone only at chain end.
+Gate: `scripts/tests/check_hashmap_probe_invariants.sh` (6 checks, including a
+reference-map oracle). Fixture:
+`tests/programs/regress_047_048_hashmap_probe/`. Mutation `test_mutation.sh`
+#22 restores the first-tombstone write and is KILLED.
 **Discovered:** 2026-07-18, stdlib implementation audit (reproduced with a
 compiled program: `len()` returns 3 for 2 distinct keys).
 

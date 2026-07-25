@@ -10587,6 +10587,21 @@ fi
 #   regress_050_generic_f_std_io/src/main  (bug 050 — a generic named `f` no
 #     longer hijacks std.io's local fn-pointer of the same name; pre-fix ANY
 #     project defining one was unbuildable as soon as it touched std.io)
+#   regress_047_048_hashmap_probe/src/main.con  (bugs 047+048 — overwrite past a
+#     tombstone must not duplicate a key, and a missing-key lookup with zero
+#     empty slots must return instead of wrapping forever)
+#   regress_057_hashmap_by_value/src/main.con  (bug 057 — a HashMap passed BY
+#     VALUE must arrive whole: hash_fn for get (SIGSEGV pre-fix), cap for drop)
+# `timeout` is coreutils; present in the devshell and on CI. Degrade to running
+# without a watchdog rather than skipping the fixtures entirely, but say so, so
+# a hang on such a machine is at least explicable.
+if command -v timeout >/dev/null 2>&1; then
+    PROJ_TIMEOUT="timeout 60"
+else
+    PROJ_TIMEOUT=""
+    echo "  warn  'timeout' not found — project fixtures run WITHOUT a hang watchdog"
+fi
+
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
     if [ -f "$projdir/Concrete.toml" ]; then
@@ -10608,7 +10623,17 @@ for projdir in "$TESTDIR"/*/; do
         esac
         output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_proj_"$projname" 2>&1 ) && build_ok=true || build_ok=false
         if $build_ok; then
-            run_result=$(/tmp/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
+            # Watchdog: a fixture that HANGS must fail, not stall the suite.
+            # Bug 048 was exactly this shape — a probe loop that never returned —
+            # and with no timeout anywhere in this script it would have taken the
+            # whole run (and the CI job) down with it rather than reporting.
+            run_result=$($PROJ_TIMEOUT /tmp/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
+            if [ "$run_exit" -eq 124 ]; then
+                echo "  FAIL $projname — TIMED OUT (did not terminate)"
+                FAIL=$((FAIL + 1))
+                rm -f /tmp/test_proj_"$projname"
+                continue
+            fi
             if [ "$run_exit" -eq 0 ]; then
                 echo "  ok  $projname"
                 PASS=$((PASS + 1))

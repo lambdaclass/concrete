@@ -615,7 +615,12 @@ def testLayoutBuiltinSizes : IO UInt32 := do
     ("String align",  Layout.tyAlign ctx .string,                        8),
     ("Vec size",      Layout.tySize ctx (.generic "Vec" [.int]),         24),
     ("Vec align",     Layout.tyAlign ctx (.generic "Vec" [.int]),        8),
-    ("HashMap size",  Layout.tySize ctx (.generic "HashMap" [.int, .int]), 40),
+    -- 64 = the eight fields std/src/map.con declares (bug 057). This expectation
+    -- said 40 and so pinned the undercount to itself: asserting a hardcoded
+    -- constant against a copy of the same constant verifies nothing. The check
+    -- with teeth is check_builtin_layout_sizes.sh, which DERIVES the size from
+    -- the std declaration; this one only guards the plumbing that reads it.
+    ("HashMap size",  Layout.tySize ctx (.generic "HashMap" [.int, .int]), 64),
     ("HashMap align", Layout.tyAlign ctx (.generic "HashMap" [.int, .int]), 8)
   ]
   let mut ok := true

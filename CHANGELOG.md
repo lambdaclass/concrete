@@ -10,6 +10,66 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Completed Task R-0003
+
+_HashMap probe and occupancy invariants — bugs 047 (duplicate past a tombstone)
+and 048 (missing-key lookup hangs) fixed as one slice. Shipped 2026-07-25._
+
+Both defects lived in the same open-addressing probe, so they are one change.
+
+`insert` stopped at the first empty-OR-tombstone slot and wrote there without
+finishing the chain, so a key living past a tombstone got a SECOND live slot:
+`len()` overcounted, `get` returned the duplicate, and one `remove` left the
+other copy behind. It now remembers the first tombstone but keeps probing for a
+live equal key, taking the tombstone only at chain end.
+
+The load factor counted only LIVE entries, so tombstones accumulated until no
+empty slot remained, and a lookup that terminated only on empty-or-match then
+wrapped forever. Occupancy is now `len + tombstones`; when the pressure is all
+tombstones the table rehashes at the SAME capacity rather than doubling a map
+that is not holding more. The probe is additionally bounded by `cap`, so a
+wedged table returns "absent" instead of hanging. `find_slot` became
+`find_live -> Option<u64>`: the old signature had to return a slot even when
+there was no answer, which is what made "absent" unrepresentable.
+
+HashSet is a thin wrapper over HashMap and inherits both fixes.
+
+Evidence: `scripts/tests/check_hashmap_probe_invariants.sh` (6 checks — both
+witnesses, 10k-operation churn under a low-entropy hash, full-table/clear/reuse,
+linear `Destroy` keys counted exactly once through remove/overwrite/drop, and a
+reference-map oracle: a key-indexed model with no hashing, probing or tombstones
+driven through 600 pseudo-random operations with agreement checked after each
+one). Every leg runs under a watchdog because 048's failure mode is a hang.
+Fixture `tests/programs/regress_047_048_hashmap_probe/`. Mutations #22
+(reuse the first tombstone), #23 (unbounded probe) and #24 (load factor ignores
+tombstones) are each KILLED independently, so the two halves of 048 are gated
+separately rather than by one catch-all.
+
+Two items from the task's gate list are NOT covered, and the gate does not
+pretend otherwise. Linear **values** are unchecked — only linear keys are counted
+(through remove, overwrite and drop) — and there is no interpreter/native
+agreement leg, because the interpreter does not implement the `Alloc` and
+raw-pointer intrinsics HashMap is built on. That is the same limitation that made
+`vec_pop` compiled-only in R-0002's gate; the reference-map oracle stands in for
+the missing second implementation.
+
+Two things this slice uncovered, both fixed here:
+
+- **Bug 057** — `Builtin.hashmapSize` was 40 ("ptr + ptr + ptr + i64 + i64")
+  while std declared seven fields (56 bytes): the two fn pointers were never
+  counted. Field offsets come from the declaration but aggregate copies are
+  sized from that constant, so a by-value `HashMap` lost `hash_fn`/`eq_fn` —
+  calling `get` on one **segfaults**, verified by reverting the constant. It
+  went unnoticed because no by-value path read past offset 40 until the new
+  `tombstones` field pushed `cap` there, at which point `drop` (also by value)
+  read an uncopied `cap`, destroyed nothing, and leaked every entry silently.
+  `check_builtin_layout_sizes.sh` now derives these sizes from std and fails on
+  drift in either direction.
+- **`run_tests.sh` had no timeout anywhere.** A hanging fixture — precisely bug
+  048's shape — would have stalled the suite and the CI job rather than failing.
+  The project-fixture loop now runs under a 60s watchdog reporting timeouts as a
+  distinct failure, degrading with a warning where `timeout` is unavailable.
+
 ### Completed Task R-0002
 
 _A callee value is resolved by identity, not by global name — bug 050 (indirect

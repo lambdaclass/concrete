@@ -14,6 +14,10 @@ mod map {
         values:  *mut V,
         flags:   *mut u8,
         len:     u64,
+        // Slots flagged 2. Occupancy is `len + tombstones`: a tombstone still
+        // consumes a probe slot, so the load policy must count it or the table
+        // can reach zero empty slots and wedge a missing-key lookup (bug 048).
+        tombstones: u64,
         cap:     u64,
         hash_fn: fn(&K) -> u64,
         eq_fn:   fn(&K, &K) -> bool,
@@ -31,6 +35,7 @@ mod map {
                 values: values,
                 flags: flags,
                 len: 0,
+                tombstones: 0,
                 cap: cap,
                 hash_fn: hash_fn,
                 eq_fn: eq_fn,
@@ -47,10 +52,10 @@ mod map {
         }
 
         pub fn contains(&self, key: &K) -> bool {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            return flag == 1;
+            match self.find_live(key) {
+                Option::Some { value } => { return true; },
+                Option::None => { return false; },
+            }
         }
 
         // Reading an element: see the `Copy`-bounded `impl` below for the value
@@ -65,17 +70,17 @@ mod map {
         // the container cannot be reallocated while a borrow is held.
         // Returns true if the key was present. ROADMAP Phase 6 #8a.
         pub fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                let old: V = *val_ptr;
-                let updated: V = f(old);
-                *val_ptr = updated;
-                return true;
+            match self.find_live(key) {
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    let old: V = *val_ptr;
+                    let updated: V = f(old);
+                    *val_ptr = updated;
+                    return true;
+                },
+                Option::None => { return false; },
             }
-            return false;
         }
 
         // Scoped read of one element: the borrowed `&V` is passed INTO `f` and
@@ -88,15 +93,15 @@ mod map {
         // (e.g. printing) callback without a combinatorial API split.
         // docs/CALLABLE_VALUES_AND_CAPABILITIES.md §5; ROADMAP Phase 5 #24.
         pub fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                let r: R = f(ctx, val_ptr as &V);
-                return Option::<R>::Some { value: r };
+            match self.find_live(key) {
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    let r: R = f(ctx, val_ptr as &V);
+                    return Option::<R>::Some { value: r };
+                },
+                Option::None => { return Option::<R>::None; },
             }
-            return Option::<R>::None;
         }
 
         /// Scoped MUTABLE access to one element in place (docs/CALLABLE_VALUES
@@ -107,29 +112,29 @@ mod map {
         /// (container-not-in-context), so the table cannot be reallocated
         /// while the element borrow is live.
         pub fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                let r: R = f(ctx, val_ptr as &mut V);
-                return Option::<R>::Some { value: r };
+            match self.find_live(key) {
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    let r: R = f(ctx, val_ptr as &mut V);
+                    return Option::<R>::Some { value: r };
+                },
+                Option::None => { return Option::<R>::None; },
             }
-            return Option::<R>::None;
         }
 
         /// Convenience over `with_value_mut` for the no-result case: mutate the
         /// value for `key` in place. Returns whether the key was present.
         pub fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                f(ctx, val_ptr as &mut V);
-                return true;
+            match self.find_live(key) {
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    f(ctx, val_ptr as &mut V);
+                    return true;
+                },
+                Option::None => { return false; },
             }
-            return false;
         }
 
         // (with_value_mut/modify landed 2026-07-06, above — enforcement is
@@ -139,41 +144,62 @@ mod map {
 
         // --- Internal helpers ---
 
-        fn find_slot(&self, key: &K) -> u64 {
+        /// Index of the LIVE slot holding `key`, or `None`.
+        ///
+        /// Bounded to `cap` probes. The old loop exited only on an empty slot
+        /// or a match, so with zero empty slots and no match it wrapped forever
+        /// — bug 048, reachable by ordinary insert/remove churn because
+        /// tombstones were not counted toward the load factor. The occupancy
+        /// policy in `insert` now keeps an empty slot available, and this bound
+        /// is the fail-safe: a wedged table must return "absent", never hang.
+        ///
+        /// Returning `Option` rather than an index-plus-flag convention is what
+        /// makes "absent" representable at all; the previous signature had to
+        /// hand back a slot even when there was no answer.
+        fn find_live(&self, key: &K) -> Option<u64> {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(key);
             let mask: u64 = self.cap - 1;
             let mut idx: u64 = h & mask;
+            let mut probes: u64 = 0;
 
-            while true {
+            while probes < self.cap {
                 let flag_ptr: *mut u8 = self.flags + idx;
                 let flag: u8 = *flag_ptr;
 
                 if flag == 0 {
-                    // Empty — key not found, return this slot
-                    return idx;
+                    // Empty — the probe chain ends here, so the key is absent.
+                    return Option::<u64>::None;
                 }
                 if flag == 1 {
                     let key_ptr: *mut K = self.keys + idx;
                     let eq_f: fn(&K, &K) -> bool = self.eq_fn;
                     if eq_f(key_ptr as &K, key) {
-                        return idx;
+                        return Option::<u64>::Some { value: idx };
                     }
                 }
-                // flag == 2 (tombstone) or hash collision: keep probing
+                // flag == 2 (tombstone) or a colliding live key: keep probing.
                 idx = (idx + 1) & mask;
+                probes = probes + 1;
             }
 
-            return 0;
+            // Every slot inspected without a match.
+            return Option::<u64>::None;
         }
 
-        fn grow(&mut self) with(Alloc, Unsafe) {
+        /// Rebuild the table at `new_cap`, keeping only LIVE entries.
+        ///
+        /// Takes the capacity so the same routine serves both pressures: a
+        /// bigger table when live entries demand it, and a same-capacity clean
+        /// when the pressure is tombstones. Either way every tombstone is gone
+        /// afterwards, which is what keeps an empty slot available and stops a
+        /// missing-key probe from wrapping (bug 048).
+        fn rehash(&mut self, new_cap: u64) with(Alloc, Unsafe) {
             let old_cap: u64 = self.cap;
             let old_keys: *mut K = self.keys;
             let old_values: *mut V = self.values;
             let old_flags: *mut u8 = self.flags;
 
-            let new_cap: u64 = old_cap * 2;
             let new_keys: *mut K = grow::<K>(0 as *mut K, new_cap);
             let new_values: *mut V = grow::<V>(0 as *mut V, new_cap);
             let new_flags: *mut u8 = grow::<u8>(0 as *mut u8, new_cap);
@@ -184,6 +210,8 @@ mod map {
             self.flags = new_flags;
             self.cap = new_cap;
             self.len = 0;
+            // Only live entries are carried over, so the new table has none.
+            self.tombstones = 0;
 
             // Rehash all occupied entries
             let mut i: u64 = 0;
@@ -397,14 +425,14 @@ mod map {
         }
 
         pub fn get(&self, key: &K) -> Option<V> {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                return Option::<V>::Some { value: *val_ptr };
+            match self.find_live(key) {
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    return Option::<V>::Some { value: *val_ptr };
+                },
+                Option::None => { return Option::<V>::None; },
             }
-            return Option::<V>::None;
         }
     }
 
@@ -417,26 +445,41 @@ mod map {
     // in/out, insert never destroys one (the old value is RETURNED).
     trusted impl<K: Destroy, V> HashMap<K, V> {
         pub fn remove(&mut self, key: &K) -> Option<V> {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag != 1 {
-                return Option::<V>::None;
+            match self.find_live(key) {
+                Option::None => { return Option::<V>::None; },
+                Option::Some { value } => {
+                    let idx: u64 = value;
+                    let val_ptr: *mut V = self.values + idx;
+                    let old: V = *val_ptr;
+                    // The STORED KEY is owned by the map and not returned —
+                    // destroy it before tombstoning (H18 keyed-remove rule:
+                    // later drop/clear skip tombstones, so an undestroyed key
+                    // here is leaked forever).
+                    ((self.keys + idx) as &K).destroy();
+                    let flag_ptr: *mut u8 = self.flags + idx;
+                    *flag_ptr = 2;  // tombstone
+                    self.len = self.len - 1;
+                    self.tombstones = self.tombstones + 1;
+                    return Option::<V>::Some { value: old };
+                },
             }
-            let val_ptr: *mut V = self.values + idx;
-            let old: V = *val_ptr;
-            // The STORED KEY is owned by the map and not returned — destroy
-            // it before tombstoning (H18 keyed-remove rule: later drop/clear
-            // skip tombstones, so an undestroyed key here is leaked forever).
-            ((self.keys + idx) as &K).destroy();
-            *flag_ptr = 2;  // tombstone
-            self.len = self.len - 1;
-            return Option::<V>::Some { value: old };
         }
         pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
-            // Grow if load factor >= 75%
-            if self.len * 4 >= self.cap * 3 {
-                self.grow();
+            // Load policy counts OCCUPIED slots (live + tombstones), not just
+            // live ones. Counting only `len` let tombstones accumulate forever
+            // at low `len`, so the table could reach zero empty slots without
+            // ever resizing — the state that wedged lookups (bug 048).
+            //
+            // Which action to take differs: if the LIVE entries alone justify a
+            // bigger table, double it; otherwise the pressure is all tombstones,
+            // so rehash at the SAME capacity, which clears them without growing
+            // a map that is not actually holding more.
+            if (self.len + self.tombstones) * 4 >= self.cap * 3 {
+                if self.len * 2 >= self.cap {
+                    self.rehash(self.cap * 2);
+                } else {
+                    self.rehash(self.cap);
+                }
             }
 
             let hash_f: fn(&K) -> u64 = self.hash_fn;
@@ -444,12 +487,35 @@ mod map {
             let mask: u64 = self.cap - 1;
             let mut idx: u64 = h & mask;
 
-            while true {
+            // Remember the first tombstone but KEEP PROBING for a live equal
+            // key. Writing into the first free-or-tombstone slot (the old
+            // behaviour) inserted a duplicate whenever the key already existed
+            // further down the chain behind a tombstone: two live slots for one
+            // key, `len` overcounting, and `remove` killing only the first copy
+            // (bug 047). The open-addressing rule is that a tombstone may be
+            // reused only after the chain has been searched for a live match.
+            let mut have_tomb: bool = false;
+            let mut tomb_idx: u64 = 0;
+            let mut probes: u64 = 0;
+
+            while probes < self.cap {
                 let flag_ptr: *mut u8 = self.flags + idx;
                 let flag: u8 = *flag_ptr;
 
-                if flag == 0 || flag == 2 {
-                    // Empty or tombstone — insert here
+                if flag == 0 {
+                    // Chain end: the key is absent. Prefer the remembered
+                    // tombstone so the chain does not keep growing.
+                    if have_tomb {
+                        let tomb_flag: *mut u8 = self.flags + tomb_idx;
+                        let key_ptr: *mut K = self.keys + tomb_idx;
+                        *key_ptr = key;
+                        let val_ptr: *mut V = self.values + tomb_idx;
+                        *val_ptr = value;
+                        *tomb_flag = 1;
+                        self.len = self.len + 1;
+                        self.tombstones = self.tombstones - 1;
+                        return Option::<V>::None;
+                    }
                     let key_ptr: *mut K = self.keys + idx;
                     *key_ptr = key;
                     let val_ptr: *mut V = self.values + idx;
@@ -457,6 +523,13 @@ mod map {
                     *flag_ptr = 1;
                     self.len = self.len + 1;
                     return Option::<V>::None;
+                }
+
+                if flag == 2 {
+                    if !have_tomb {
+                        have_tomb = true;
+                        tomb_idx = idx;
+                    }
                 }
 
                 if flag == 1 {
@@ -477,7 +550,26 @@ mod map {
                 }
 
                 idx = (idx + 1) & mask;
+                probes = probes + 1;
             }
+
+            // Every slot probed with no empty and no match. The load policy
+            // above keeps this unreachable; reuse a remembered tombstone rather
+            // than dropping the write on the floor.
+            if have_tomb {
+                let tomb_flag: *mut u8 = self.flags + tomb_idx;
+                let key_ptr: *mut K = self.keys + tomb_idx;
+                *key_ptr = key;
+                let val_ptr: *mut V = self.values + tomb_idx;
+                *val_ptr = value;
+                *tomb_flag = 1;
+                self.len = self.len + 1;
+                self.tombstones = self.tombstones - 1;
+                return Option::<V>::None;
+            }
+            // A completely full table of live keys: grow and retry once.
+            self.rehash(self.cap * 2);
+            return self.insert(key, value);
         }
 
     }
@@ -499,6 +591,8 @@ mod map {
             }
             memset(self.flags as *mut u8, 0, self.cap * sizeof::<u8>());
             self.len = 0;
+            // Every flag is now 0, so no tombstone survives the clear.
+            self.tombstones = 0;
         }
 
         pub fn drop(self) with(Alloc, Unsafe) {
@@ -511,7 +605,7 @@ mod map {
                 }
                 i = i + 1;
             }
-            let HashMap { keys, values, flags, len, cap, hash_fn, eq_fn } = self;
+            let HashMap { keys, values, flags, len, tombstones, cap, hash_fn, eq_fn } = self;
             dealloc::<K>(keys);
             dealloc::<V>(values);
             dealloc::<u8>(flags);
@@ -582,8 +676,8 @@ mod map {
             Option::Some { value } => { if value != 10 { return 1; } },
             Option::None => { return 1; },
         }
-        if after_remove != 2 { return 1; }
-        if after_drop != 3 { return 1; }
+        if after_remove != 2 { return (after_remove as i32) + 40; }
+        if after_drop != 3 { return (after_drop as i32) + 60; }
         return 0;
     }
 

@@ -454,6 +454,12 @@ jobs:
       - name: "Indirect-call identity (R-0002 / bug 050 — a callee VALUE is never resolved by global name; dispatch, interp agreement, no rewrite, std.io)"
         run: bash scripts/tests/check_indirect_call_identity.sh
 
+      - name: "HashMap probe invariants (R-0003 / bugs 047+048 — no duplicate past a tombstone; missing-key lookup always terminates; reference-map oracle)"
+        run: bash scripts/tests/check_hashmap_probe_invariants.sh
+
+      - name: "Builtin layout sizes (bug 057 — hardcoded sizes match the std declarations they describe)"
+        run: bash scripts/tests/check_builtin_layout_sizes.sh
+
       - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
         run: bash scripts/tests/check_generic_enum_inventory.sh
 

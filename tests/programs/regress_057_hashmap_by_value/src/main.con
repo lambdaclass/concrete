@@ -1,0 +1,34 @@
+// Bug 057 regression: a HashMap passed BY VALUE must arrive whole.
+//
+// Aggregate copies were sized from Builtin.hashmapSize, which undercounted the
+// struct (40 vs 56) by omitting the two fn-pointer fields. A by-value receiver
+// therefore lost hash_fn/eq_fn, and calling `get` on it jumped through garbage:
+// SIGSEGV, exit 139. The quieter half of the same truncation made
+// HashMap::drop (also by value) read an uncopied `cap`, destroy nothing, and
+// leak every remaining entry.
+//
+// Exit 0 = the by-value copy carried hash_fn (get works) and cap (drop runs).
+mod main {
+    import std.map.{HashMap};
+    import std.hash.{hash_i32, eq_i32};
+
+    fn consume_and_read(m: HashMap<i32, i32>) with(Alloc, Unsafe) -> i32 {
+        let k: i32 = 7;
+        let got: Option<i32> = m.get(&k);
+        let mut r: i32 = -1;
+        match got {
+            Option::Some { value } => { r = value; },
+            Option::None => { r = -1; },
+        }
+        m.drop();
+        return r;
+    }
+
+    fn main() with(Std, Alloc, Unsafe) -> u8 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        let o: Option<i32> = m.insert(7, 42);
+        discard(o.is_none());
+        if consume_and_read(m) != 42 { return 1; }
+        return 0;
+    }
+}
