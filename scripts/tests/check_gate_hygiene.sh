@@ -88,5 +88,20 @@ done
 [ "$hazard" -eq 0 ] && ok "no errexit gate script caps output with '| head -N'"
 
 echo ""
+echo "=== the pre-push hook is installed in this clone ==="
+# Advisory, not a failure: core.hooksPath is per-clone local config and cannot be
+# versioned, so a gate cannot assert it for anyone else. It CAN tell the person
+# running gates right now that their next push is unguarded — which is the moment
+# the information is useful. The ritual lived only in a Makefile comment until
+# 2026-07-25, and a comment did not stop two red pushes.
+hp="$(git -C "$ROOT_DIR" config core.hooksPath 2>/dev/null || true)"
+if [ "$hp" = ".githooks" ]; then
+  ok "core.hooksPath=.githooks — pre-push runs the CI gate set"
+else
+  echo "  warn pre-push hook NOT installed in this clone — run 'make setup-hooks'"
+  echo "       (advisory: local config, cannot be enforced from a versioned gate)"
+fi
+
+echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

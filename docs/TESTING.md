@@ -4,6 +4,43 @@ Status: stable reference
 
 This document describes the test architecture, coverage matrix, determinism policy, and execution model for Concrete.
 
+## Before You Push
+
+```sh
+make setup-hooks     # one-time, per clone
+```
+
+That points `core.hooksPath` at `.githooks`, whose `pre-push` builds and then
+runs **every gate the CI workflow runs**, in parallel (`~5 min` on a multicore
+box). `make pre-push` invokes the same thing by hand. Docs-only pushes take a
+short path: docs-drift plus the roadmap-linearity gate.
+
+Deliberate bypass is `CONCRETE_SKIP_GATES=1 git push`, which prints a warning
+saying you own the CI result.
+
+**`make test-full` is not a substitute and never was.** It does not execute the
+`check_*.sh` gate scripts at all — golden baselines, proof gates, and every
+per-feature gate run only in CI and in `test-ci-gates`. This repository has
+shipped a red `main` four times on exactly that substitution: twice in 2026-06
+and 2026-07 (14-15 pushes each before anyone noticed), and twice on 2026-07-25,
+where a 3200/0 local suite was followed by CI failures in
+`check_purecore_proofs.sh`, `check_cli_plumbing.sh` and
+`check_phase1_contracts.sh`. The ritual had been recorded in a Makefile comment
+since #34a; a comment is not enforcement, which is why it is a hook now.
+
+While iterating, run the relevant slice instead of the whole set:
+
+```sh
+scripts/tests/run_ci_gates_local.sh proof        # just the proof gates
+scripts/tests/run_ci_gates_local.sh mono         # just the mono gates
+JOBS=8 make test-ci-gates                        # everything, parallel
+```
+
+The runner extracts its command list **from the workflow file**, so the local
+set cannot drift from CI, and it re-checks any parallel failure sequentially
+before reporting it — a failure under `JOBS>1` is believed only after it fails
+again alone.
+
 ## Test Architecture
 
 The test system has four layers, ordered by cost:
