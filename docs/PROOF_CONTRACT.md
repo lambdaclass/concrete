@@ -17,9 +17,9 @@ A supportable Lean-backed claim has:
 1. a Lean theorem about a named `PExpr` specification;
 2. a proof attachment that names the function, specification, theorem, and
    coverage class;
-3. a stored fingerprint for the proof subject;
+3. a stored digest for the semantic proof subject;
 4. successful attachment validation; and
-5. successful Lean-kernel replay through `--report check-proofs`.
+5. a replay receipt from successful Lean-kernel checking.
 
 In-source attachments use `#[spec]`, `#[proof_by]`,
 `#[proof_coverage]`, and `#[proof_fingerprint]`. Registry-backed project
@@ -32,6 +32,22 @@ These roles must not be collapsed:
 - `--report check-proofs` establishes that the named theorem resolves and
   kernel-checks in the selected Lean workspace;
 - the coverage class states how much the theorem proves.
+
+The current implementation stores a body fingerprint and emits a replay
+verdict rather than the complete artifacts in items 3 and 5. R-0004's target
+model separates them:
+
+- `ProofSubjectDigest` identifies the semantic subject: qualified function
+  identity, typed signature and constraints, capabilities, normalized typed
+  body, contracts, selected normalized specification, claim scope/coverage,
+  and extraction/schema version;
+- the dependency root identifies the subject's transitive proof dependencies;
+- `ProofEvidenceReceipt` binds that subject and dependency root to the theorem
+  identity and artifact digest, compiler/Lean/ProofKit identities,
+  workspace/import closure, replay command, and kernel result.
+
+The theorem and toolchain are evidence about a semantic subject, not components
+that redefine the subject.
 
 ## 2. The `proved` State
 
@@ -59,6 +75,7 @@ A point theorem is not silently promoted to a full contract.
 | `proved` | Attachment is eligible, extractable, linked, and fresh | Run kernel replay; keep the gate |
 | `unbound` | A source proof link has no stored proof subject | Re-verify, then record `#[proof_fingerprint]` |
 | `stale` | A stored fingerprint no longer matches | Update the theorem/attachment or revert the source change |
+| `needs_recheck` *(R-0004 target)* | The subject/evidence schema or producer context changed without evidence that the program fact is false | Replay under the current schema/toolchain; do not copy hashes manually |
 | `missing` | An eligible function has no attachment | Add a proof or accept the missing state |
 | `blocked` | Extraction cannot represent the body | Use admitted constructs or extend ProofCore |
 | `ineligible` | Capabilities, trust, entry status, or another gate excludes it | Change the program/policy or accept the boundary |
@@ -68,6 +85,12 @@ R-0004's first containment introduced `unbound`: a
 `#[proof_by]` link without `#[proof_fingerprint]` is never reported
 `proved` and is not mislabeled `stale`. There was never a stored subject
 against which to detect change.
+
+`needs_recheck` is distinct from `stale`. `stale` means the semantic subject
+changed. `needs_recheck` means existing evidence cannot be reused under the
+current schema or producer context; the claim may still be true, but it is not
+green until replay succeeds. Current `proof-status` does not yet emit this
+target state.
 
 ## 4. What Users May Rely On
 
@@ -96,13 +119,15 @@ It is not yet a digest of the complete semantic proof subject:
 - signature and declared-type changes can be missed (bug 059);
 - source contracts and attributes can be missed (bug 060);
 - changes in direct or transitive callees do not invalidate the caller;
-- toolchain/workspace identity is not part of the subject;
+- toolchain/workspace identity is not bound to a persistent replay receipt;
 - generic instantiation identity is not generally recorded.
 
 R-0004 replaces this partial body hash with a versioned
-`ProofSubjectDigest` and transitive dependency roots. Until then, `proved`
-must be read with these limitations, not as “the exact complete program fact
-is pinned.”
+`ProofSubjectDigest`, transitive dependency roots, and replay receipts. The
+subject digest deliberately excludes theorem and toolchain identity; the
+receipt binds those evidence facts to the subject. Until then, `proved` must be
+read with these limitations, not as “the exact complete program fact is
+pinned.”
 
 ## 6. What `proved` Does Not Mean
 
@@ -149,8 +174,9 @@ The theorem also sits above unverified bridges:
 ## 8. Compatibility and CI
 
 Fingerprint values and `PExpr` normalization may change across compiler
-versions. A compiler upgrade therefore requires replay, not blind hash
-replacement:
+versions. Under R-0004's target model, a legacy schema or producer-context
+change becomes `needs_recheck`, while a changed semantic subject becomes
+`stale`. Either case requires replay, not blind hash replacement:
 
 1. run `--report proof-status`;
 2. run `--report check-proofs` from the repository/workspace context;

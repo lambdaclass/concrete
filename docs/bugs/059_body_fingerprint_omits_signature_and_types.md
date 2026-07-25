@@ -45,8 +45,12 @@ that give it meaning.
 R-0004's `ProofSubjectDigest`: a versioned canonical digest over qualified
 semantic identity, the full typed signature and generic constraints,
 capabilities, the normalized body (types included), requires/ensures/invariants,
-selected spec and theorem identity, extraction/schema version, and dependency
-root — replacing the body-only hash.
+the normalized selected specification and claim scope/coverage, and
+extraction/schema version — replacing the body-only hash. A deterministic
+dependency root is a separate input to the evidence decision. The theorem,
+toolchain, workspace/import closure, and replay result belong in the
+`ProofEvidenceReceipt` about that subject rather than changing what the semantic
+subject is.
 
 Regression: the `i32 -> u32` edit stales; a comment/formatting/alpha-renaming
 edit does NOT (the digest must stay insensitive to source noise, which is why

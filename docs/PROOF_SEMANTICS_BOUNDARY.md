@@ -118,13 +118,17 @@ That sentence has important boundaries:
    things.
 4. **Composition is not automatic.** The proof function table makes direct
    callees available to evaluation; it does not turn separate function
-   theorems into a whole-program theorem.
+   theorems into a whole-program theorem. R-0443’s planned authority-path
+   certificate is a separately scoped graph predicate, not automatic
+   composition of functional theorems.
 5. **Freshness is currently partial.** The shipped R-0004 containment refuses
    to report an in-source proof link as proved when no stored fingerprint
    exists. A stored fingerprint still covers the extracted body rather than a
    versioned digest of the full proof subject: signatures, declared types,
    contracts, and transitive dependency roots remain open under bugs 059/060
-   and R-0004.
+   and R-0004. The target keeps the semantic subject distinct from its evidence:
+   theorem/toolchain/workspace identity and kernel replay live in a receipt
+   bound to the subject and dependency root.
 6. **Replay has an execution context.** `--report check-proofs` must resolve
    the same Lean workspace and theorem environment in every supported working
    directory. R-0004 owns the current context-sensitive lookup defect.

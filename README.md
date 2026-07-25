@@ -154,7 +154,8 @@ into each other, and each is cheaper *because* of the others:
   selected at runtime, so a sound call graph must conservatively retain its
   possible target set. That is the shape needed for authority, allocation, and
   failure facts to compose from `main` outward. The composition theorem is the
-  direction of the proof work, not a shipped claim.
+  direction of the proof work, not a shipped claim; ROADMAP R-0443 owns the
+  first narrow authority-path certificate.
 
 The unifying pattern: **every design choice trades convenience for a property you
 can see and check—and the refusals keep whole-program uncertainty finite and

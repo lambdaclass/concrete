@@ -16,7 +16,8 @@ possible target set rather than pretending every call is direct. Even so, the
 set is statically enumerable. That is the structure needed for per-function
 evidence about authority, obligations, and proofs to grow into conservative
 whole-program facts. The actual composition theorems remain a direction of the
-proof work, not a shipped claim.
+proof work, not a shipped claim; ROADMAP R-0443 owns the first narrow,
+independently checked authority-path property.
 
 One important long-term direction is an explicit high-integrity profile: stricter execution and safety modes for critical code, built around bounded behavior, analyzability, and better evidence rather than feature sprawl.
 

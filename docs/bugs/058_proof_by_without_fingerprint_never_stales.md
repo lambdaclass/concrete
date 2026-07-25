@@ -97,8 +97,10 @@ verify. All twelve named theorems exist in
 The lesson generalizes to the fix: a verdict that depends on the working
 directory and leaves no artifact is an observation, not a receipt — and a
 fingerprint recorded from an observation is the same unfounded claim this bug is
-about, one level up. Backfilling therefore waits on a receipt that ties theorem,
-body digest, and toolchain together.
+about, one level up. Backfilling therefore waits on R-0004's split artifacts: a
+semantic subject digest plus dependency root, and a receipt that binds them to
+the theorem artifact, toolchain, workspace/import closure, and kernel replay
+result.
 
 ## Candidate fix
 

@@ -1,9 +1,10 @@
 # Effect and Trust Proof Boundaries
 
-Status: canonical reference — defines exactly where proofs apply, where they weaken into trusted assumptions, and how each effect category interacts with the proof boundary.
+Status: canonical reference — defines the semantic scopes in which proof and
+other evidence apply, and how effect/trust boundaries constrain those scopes.
 
 For the safety model and three-way split, see [SAFETY.md](SAFETY.md).
-For the provable subset definition, see [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md).
+For the provable subset definition, see [PROVABLE_V1.md](PROVABLE_V1.md).
 For memory/ownership guarantees, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For the execution model and runtime boundary, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
 For the language-semantics vs proof-semantics boundary, see [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
@@ -12,15 +13,33 @@ For the language-semantics vs proof-semantics boundary, see [PROOF_SEMANTICS_BOU
 
 ## 1. The Central Claim
 
-Concrete's proof story has a sharp boundary:
+Concrete has a sharp **functional-semantics boundary**, but evidence is not a
+three-rung ladder:
 
-**Proved territory:** Pure functions with no capabilities, no `trusted` marker, no extern calls, and no entry-point obligations. These are extracted into ProofCore, given formal semantics in `Proof.lean`, and can carry Lean 4–backed theorems.
+**ProofCore functional scope:** Authority-free functions with no `trusted` or
+extern boundary and an entirely admitted body may be extracted into ProofCore.
+They can carry Lean-backed theorems. Eligibility is not proof, and an empty
+capability set does not by itself establish termination or absence of traps.
 
-**Enforced territory:** All safe code (no `trusted`, no `with(Unsafe)`) is covered by the checker's ownership, linearity, borrow, and capability discipline. These properties are mechanically enforced but not yet formally proved.
+**Whole-program structural scope:** Capability containment, authority
+reachability, allocation/trap reachability, ownership, and other compiler facts
+apply to larger programs, including effectful functions. They may be enforced,
+reported, tested, or—when an independent checker reconstructs the fact from a
+canonical artifact—structurally certified. This does not give effectful
+functions ProofCore functional semantics.
 
-**Trusted-assumption territory:** Code marked `trusted`, code behind `with(Unsafe)`, and code calling extern functions. The compiler tracks and reports these boundaries but does not verify the correctness of the code inside them.
+**Trusted boundaries:** `trusted`, `Unsafe`, extern code, unsupported indirect
+ingress, backends, and targets remain explicit dependencies or completeness
+boundaries for the relevant claim.
 
-Everything the compiler says about a program falls into exactly one of these three categories. The rest of this document maps each effect category onto this split.
+Per the ratified R-0440 model, a claim must record subject, semantic scope,
+method, status, assumptions, producer, validator, trusted dependencies,
+freshness, and replay. Its schema migration is pending; current reports still
+contain legacy composites. The model can describe one function as
+authority-free, compiler-enforced for ownership, kernel-proved for one
+ProofCore contract, runtime-checked for overflow, and backend-trusted at the
+same time. The rest of this document maps effect categories onto those
+dimensions.
 
 ---
 
@@ -32,11 +51,15 @@ Capabilities (`with(File, Network, Alloc, ...)`) are compile-time effect declara
 
 | Capability state | Proof status | Evidence level |
 |-----------------|--------------|----------------|
-| No capabilities (pure) | **Proved** — eligible for ProofCore extraction and Lean theorems | Compiler-enforced + proof-backed |
+| No capabilities (authority-free) | **Eligible** for ProofCore if every other gate passes; proved only when a linked theorem checks | Compiler-enforced authority fact; optional proof evidence |
 | Has capabilities | **Enforced** — capability discipline is checked, but function is excluded from proof extraction | Compiler-enforced |
 | Has `Unsafe` capability | **Trusted assumption** — `Unsafe` is required for FFI and raw pointer ops; code correctness depends on audit | Compiler-reported |
 
-**Where proofs stop:** At any function with a non-empty capability set. A pure function that calls a function with capabilities cannot itself be proof-eligible — the capability requirement propagates to the caller's signature.
+**Where functional ProofCore extraction stops:** At any function with a
+non-empty capability set. An authority-free function that calls a function
+with capabilities acquires that requirement and is no longer eligible.
+Program-structure evidence about the larger call graph may still cross that
+edge while naming its scope and trust boundary.
 
 **What the compiler still guarantees:** Capability containment is enforced regardless of proof eligibility. A function cannot silently acquire capabilities it does not declare. `--report caps` and `--report authority` make the full capability graph visible.
 
@@ -46,11 +69,14 @@ Allocation is gated by the `Alloc` capability. Functions that allocate (`alloc`,
 
 | Allocation state | Proof status | Evidence level |
 |-----------------|--------------|----------------|
-| No allocation (no `Alloc` cap) | **Proved** (if other gates pass) | Compiler-enforced + proof-backed |
+| No allocation (no `Alloc` cap) | **Eligible** if other ProofCore gates pass; not automatically proved | Compiler-enforced authority fact; optional proof evidence |
 | Allocates with `Alloc` | **Enforced** — linearity ensures allocated resources are consumed or deferred; not proof-eligible | Compiler-enforced |
 | Allocation inside `trusted` code | **Trusted assumption** — the trusted wrapper is responsible for correctness | Compiler-reported |
 
-**Where proofs stop:** At the `Alloc` capability boundary. Heap operations (`Heap<T>`, `HeapArray<T>`) are fundamentally effectful and may never enter the pure proof subset.
+**Where functional ProofCore extraction stops:** At the `Alloc` capability
+boundary. Heap operations (`Heap<T>`, `HeapArray<T>`) are outside the current
+functional proof model; allocation authority and reachability remain valid
+whole-program structural facts.
 
 **What the compiler still guarantees:** Linear ownership of heap pointers. Every `Heap<T>` must be consumed (freed, dereferenced, or passed to an owner). The no-leak guarantee (see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md)) is enforced by the checker, not by the proof pipeline.
 
@@ -60,11 +86,14 @@ Host interaction is gated by capabilities: `File`, `Network`, `Process`, `Time`,
 
 | Host interaction state | Proof status | Evidence level |
 |-----------------------|--------------|----------------|
-| No host interaction | **Proved** (if other gates pass) | Compiler-enforced + proof-backed |
+| No host interaction | **Eligible** if other ProofCore gates pass; not automatically proved | Compiler-enforced authority fact; optional proof evidence |
 | Has host capabilities | **Enforced** — capability discipline checked; excluded from proof extraction | Compiler-enforced |
-| Passes `--check predictable` | **Enforced** — no recursion, bounded loops, no alloc, no FFI, no blocking; not proved unless also pure | Compiler-enforced |
+| Passes `--check predictable` | **Enforced** — no recursion, bounded loops, no alloc, no FFI, no blocking; not proof merely because it is authority-free | Compiler-enforced |
 
-**Where proofs stop:** At any host capability. A function with `with(File)` cannot be proof-eligible regardless of what it does internally.
+**Where functional ProofCore extraction stops:** At any host capability. A
+function with `with(File)` is not currently ProofCore-eligible regardless of
+what it does internally. Its authority/reachability properties remain eligible
+for separately scoped structural evidence.
 
 **What the compiler still guarantees:** Capability containment. A function declared `with(File)` cannot silently also use `Network`. The predictable profile gates (no recursion, bounded loops, no alloc, no FFI, no blocking) are enforced for functions that pass `--check predictable`, but this is a report-level check, not a proof-level one.
 
@@ -74,7 +103,7 @@ Extern functions are the boundary between Concrete and external code. Calling an
 
 | FFI state | Proof status | Evidence level |
 |-----------|--------------|----------------|
-| No extern calls | **Proved** (if other gates pass) | Compiler-enforced + proof-backed |
+| No extern calls | **Eligible** if other ProofCore gates pass; not automatically proved | Compiler-enforced boundary fact; optional proof evidence |
 | Calls `trusted extern fn` | **Trusted assumption** — the binding is audited as pure, but the compiler does not verify the foreign implementation | Compiler-reported |
 | Calls untrusted `extern fn` | **Trusted assumption** — requires `with(Unsafe)`; correctness depends entirely on the external code | Compiler-reported |
 
@@ -88,12 +117,15 @@ Extern functions are the boundary between Concrete and external code. Calling an
 
 | Trust state | Proof status | Evidence level |
 |-------------|--------------|----------------|
-| Not trusted | **Proved** or **Enforced** depending on other gates | Compiler-enforced (+ proof-backed if pure) |
+| Not trusted | **Eligible** or **enforced** depending on other gates; never automatically proved | Compiler-enforced (+ separately attached proof evidence where present) |
 | `trusted fn` / `trusted impl` | **Trusted assumption** — the code is outside the proof model; correctness depends on audit | Compiler-reported |
 | `trusted extern fn` | **Trusted assumption** — audited pure foreign binding; stronger than untrusted extern but still not verified | Compiler-reported |
 | Caller of trusted code | **Enforced** — callers see a safe signature; the trust boundary is contained at the declaration site | Compiler-enforced |
 
-**Where proofs stop:** At the `trusted` marker. A trusted function is ineligible for proof extraction regardless of whether it is pure, because it uses pointer-level techniques outside the formal model. Functions from `trusted impl` blocks inherit this exclusion via `trustedImplOrigin`.
+**Where functional ProofCore extraction stops:** At the `trusted` marker. A
+trusted function is ineligible regardless of whether it has an empty capability
+set, because its pointer-level behavior is outside the model. Functions from
+`trusted impl` blocks inherit this exclusion via `trustedImplOrigin`.
 
 **What the compiler still guarantees:**
 - Linearity is not relaxed inside trusted code. Linear values follow ownership rules everywhere.
@@ -109,7 +141,7 @@ ProofCore extraction requires all five gates to pass. Each gate corresponds to o
 
 | Gate | Check | Effect category | ProofCore.lean location |
 |------|-------|----------------|------------------------|
-| Pure | `f.capSet.isEmpty` | Capabilities | `CFnDef.isProofEligible` |
+| Authority-free | `f.capSet.isEmpty` | Capabilities | `CFnDef.isProofEligible` |
 | Not trusted | `!f.isTrusted && f.trustedImplOrigin.isNone` | Trusted code | `CFnDef.isProofEligible` |
 | Not entry point | `!f.isEntryPoint` | Host interaction | `CFnDef.isProofEligible` |
 | Body extractable | `cExprToPExpr body ≠ none` | All (construct support) | `extractProofCore` |
@@ -121,33 +153,50 @@ A function that passes gates 1–4 is extracted into ProofCore and can carry Lea
 
 ---
 
-## 4. Evidence Levels
+## 4. Evidence Dimensions
 
-Every compiler statement about a program carries one of these evidence levels:
+The canonical evidence model uses orthogonal fields, not one total level.
+R-0440 still owns migrating every current producer and renderer:
 
-| Level | Meaning | Example |
-|-------|---------|---------|
-| **Proof-backed** | Property proved in Lean 4 with formal semantics | `abs(x) ≥ 0` for a pure `abs` function |
-| **Compiler-enforced** | Property mechanically checked by the compiler (Check, CoreCheck, SSAVerify) but not formally proved | Linear variables consumed exactly once; capability containment |
-| **Compiler-reported** | Property visible in compiler reports but not enforced as a hard error | Allocation sites in `--report alloc`; trust boundaries in `--report unsafe` |
-| **Trusted assumption** | Property asserted by the programmer via `trusted` or `extern fn`; compiler cannot verify | `trusted extern fn sqrt(x: Float64) -> Float64` is pure |
-| **Backend/target assumption** | Property that depends on the backend, linker, OS, or hardware | Stack overflow caught by guard page; `malloc` returns valid memory |
+| Dimension | Examples |
+|-----------|----------|
+| Subject and claim | function contract, ownership judgment, authority path, trap reachability |
+| Semantic scope | source, ProofCore, validated Core, SSA, native artifact, target |
+| Method | Lean theorem, kernel decision procedure, compiler enforcement, oracle test, observation |
+| Status | current, stale, missing, counterexample, unsupported |
+| Trust and replay | producer, validator, trusted dependencies, freshness, replay receipt |
 
-The proof pipeline produces **proof-backed** evidence. The checker produces **compiler-enforced** evidence. Reports produce **compiler-reported** evidence. Everything behind `trusted`/`extern fn` is a **trusted assumption**. Everything below the LLVM IR boundary is a **backend/target assumption**.
+Friendly labels such as `proved_by_lean`, `compiler_enforced`,
+`tested_by_oracle`, and `trusted-assumption` remain useful renderings. They do
+not form a universal ordering: a narrow ProofCore theorem and a broad native
+oracle test establish different claims at different scopes. See
+`EVIDENCE_CLASSES.md`, `CLAIM_TAXONOMY.md`, and R-0440.
 
 ---
 
 ## 5. Boundary Interactions
 
-### Pure function calling enforced code
+### Authority-free function calling capability-bearing code
 
-A pure function cannot call a function with capabilities. Capabilities propagate — if `f` calls `g` and `g` requires `with(Alloc)`, then `f` must also declare `with(Alloc)`, making `f` ineligible for proof extraction.
+An authority-free function cannot call a function with capabilities.
+Capabilities propagate—if `f` calls `g` and `g` requires `with(Alloc)`, then
+`f` must also declare `with(Alloc)`, making `f` ineligible for ProofCore
+extraction.
 
-This is by design. The proof boundary is a hard wall, not a soft gradient. There is no mechanism to "trust" that a capability-requiring function is "really pure."
+This is by design. The functional ProofCore boundary is a hard wall, not a soft
+gradient. A separate whole-program theorem may reason about the existence of
+that authority edge; it does not turn the effectful function into a ProofCore
+function.
 
 ### Enforced code calling trusted code
 
-A non-trusted function can call a trusted function. The caller sees a safe signature with declared capabilities. The caller is not itself excluded from enforcement — it is still checked for linearity, capabilities, and borrow correctness. But if the caller is pure and the trusted function requires capabilities, the caller must declare those capabilities and loses proof eligibility.
+A non-trusted function can call a trusted function. The caller sees a safe
+signature with declared capabilities. The caller is not itself excluded from
+enforcement—it is still checked for linearity, capabilities, and borrow
+correctness. If an authority-free caller reaches a trusted function that
+requires capabilities, the caller must declare them and loses ProofCore
+eligibility. The trusted edge remains a dependency of any program-structure
+claim.
 
 ### Trusted code wrapping FFI
 
@@ -155,7 +204,11 @@ The standard pattern is: `extern fn` (requires `Unsafe`) → `trusted fn` wrappe
 
 ### Proof-eligible code inside a larger program
 
-ProofCore is a window, not a wall. Most programs mix proof-eligible pure functions with capability-using, trusted, and FFI code. The `--report proof` tool shows what is eligible and what is excluded. Proofs target the eligible fragment; the rest is covered by testing, reports, and audits.
+ProofCore is a window, not a wall. Most programs mix proof-eligible
+authority-free functions with capability-using, trusted, and FFI code. The
+`--report proof` tool shows what is eligible and what is excluded. Functional
+theorems target the admitted fragment; larger program properties use their own
+scope, method, and trust accounting.
 
 ---
 
@@ -165,14 +218,17 @@ ProofCore is a window, not a wall. Most programs mix proof-eligible pure functio
 |--------|--------------------------------------|
 | `--report proof` | Which functions are proof-eligible, which are excluded, and why (source + profile reasons) |
 | `--report eligibility` | Detailed eligibility assessment with source and profile gates broken out |
-| `--report caps` | Per-function capability requirements with "why" traces — shows what makes functions non-pure |
+| `--report caps` | Per-function capability requirements with "why" traces — shows what makes functions non-authority-free |
 | `--report authority` | Transitive capability chains — shows how capabilities propagate through the call graph |
 | `--report unsafe` | Trust boundaries: trusted fn/impl/extern, Unsafe holders, what trusted functions wrap |
-| `--report effects` | Combined per-function effect summary: caps, alloc class, recursion, loops, FFI, trusted, evidence level |
+| `--report effects` | Combined per-function effect summary: caps, alloc class, recursion, loops, FFI, trusted, legacy evidence summary |
 | `--check predictable` | Five-gate predictable profile check: no recursion, bounded loops, no alloc, no FFI, no blocking |
 | `--report alloc` | Allocation/cleanup summaries: alloc sites, defer patterns, leak warnings |
 
-The `evidence` field in `--report effects` uses the three-level classification from section 4: `"enforced"`, `"reported"`, or `"trusted-assumption"`.
+The current `evidence` field in `--report effects` is a legacy composite such
+as `"enforced"`, `"reported"`, or `"trusted-assumption"`. R-0440 replaces that
+single summary with orthogonal scope/method/status/trust fields while retaining
+friendly rendering.
 
 ---
 
@@ -191,7 +247,11 @@ eligibility from an older blanket “no loops/no mutation” rule.
 
 ### No cross-function proof composition
 
-Proofs are per-function. There is no mechanism to compose proofs across function boundaries or to verify that a caller's proof assumptions about a callee hold. This is future work.
+Functional ProofCore claims are currently attached per function. There is no
+general mechanism that composes arbitrary function contracts into a semantic
+whole-program theorem. R-0443 is narrower: it adds an independently checked
+program-structure predicate over conservative authority reachability. It must
+not be presented as effectful functional correctness.
 
 ### No proof of checker soundness
 
@@ -201,7 +261,7 @@ The checker enforces ownership, linearity, borrow, and capability rules, but the
 
 `--check predictable` is a report-level check, not a type-system-level enforcement. A function can fail the predictable profile and still compile. The profile gates are not integrated into the proof pipeline.
 
-### Evidence level is per-function, not per-statement
+### Functional proof attachment is per-function
 
 A function is either proof-eligible or not. There is no mechanism to prove a property about part of a function while trusting the rest. The granularity is the function boundary.
 
@@ -213,9 +273,13 @@ A function is either proof-eligible or not. There is no mechanism to prove a pro
 
 ## 8. Design Rationale
 
-### Why capabilities gate proof eligibility
+### Why capabilities gate functional ProofCore eligibility
 
-Capabilities are the effect system. A function with effects cannot be reasoned about purely — its meaning includes what it does to the world, not just what it returns. Rather than building an effect-aware proof system, Concrete draws the proof boundary at purity: no capabilities, no effects, no proofs about effects.
+Capabilities expose authority at the function boundary. The current ProofCore
+evaluator does not model external effects, so a capability-bearing function is
+outside its functional semantics. Concrete may still prove or independently
+check structural facts about effectful programs—such as authority
+reachability—without claiming to model the effects themselves.
 
 ### Why trusted code is excluded from proofs
 
@@ -223,8 +287,15 @@ Trusted code uses pointer-level techniques (arithmetic, dereference, assignment)
 
 ### Why the boundary is a hard wall
 
-A soft boundary ("this function is mostly pure") would make proof claims ambiguous. By making the boundary binary — either fully proof-eligible or not — the compiler can make unambiguous statements about what is proved and what is not. Users can always refactor code to move pure logic into proof-eligible functions.
+A soft functional boundary (“this function is mostly modeled”) would make a
+ProofCore theorem ambiguous. A body is either fully admitted by the named
+ProofCore version or it is not. That binary extraction boundary coexists with
+other claims at other scopes; it is not a universal evidence ladder.
 
-### Why evidence levels are explicit
+### Why evidence dimensions are explicit
 
-Every compiler output carries an evidence level so that users and auditors can distinguish between "the compiler proved this," "the compiler checked this," and "the programmer asserted this." Without explicit levels, it would be too easy to confuse enforced properties with trusted assumptions.
+Every claim records enough dimensions for users and auditors to distinguish
+“the kernel proved this ProofCore contract,” “the compiler enforced this source
+rule,” “an independent checker validated this artifact predicate,” “an oracle
+tested native behavior,” and “the programmer asserted this boundary.” A single
+level cannot preserve those differences.

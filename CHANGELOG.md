@@ -10,6 +10,49 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof Subject And Replay-Evidence Design Split
+
+_Docs/roadmap only, 2026-07-25. No compiler or proof verdict changed in this
+slice._
+
+R-0004 now lands dependency containment before its structural migration and
+separates the versioned semantic `ProofSubjectDigest` from the
+`ProofEvidenceReceipt` that binds theorem, toolchain, workspace, and kernel
+replay to that subject. The final receipt also binds a deterministic transitive
+dependency root. Legacy schema/toolchain evidence becomes `needs_recheck`;
+semantic subject drift remains `stale`.
+
+The proof workflow now states the shipped defect precisely: `staleDeps` is an
+advisory direct-edge field filled after status derivation, so it neither
+downgrades a caller nor propagates through a dependency chain. R-0439 also
+gives the narrow pre-push gate a measured runtime budget while retaining the
+full gate set in CI.
+
+### Whole-Program Evidence Direction And Proof Vocabulary Cleanup
+
+_Docs/roadmap only, 2026-07-25. No compiler or language behavior changed in
+this slice._
+
+R-0443 now owns the first independently checked whole-program
+authority-property certificate: a conservative call-graph predicate such as
+“no path from `main` reaches `Network` except through `send_report`,” with
+indirect targets, trusted/extern completeness boundaries, artifact binding, and
+claim scope stated explicitly. R-0184 supplies the canonical reachability
+witness; R-0275 supplies the independent checker boundary. The task does not
+claim effectful functional correctness, path-value properties, termination, or
+native behavior.
+
+Existing owners absorbed the smaller findings instead of multiplying tasks:
+R-0178/R-0180/R-0182 aggregate direct and transitive runtime-trap reachability,
+and R-0137 recruits three non-authors while retaining one completed workflow as
+the alpha gate. Failed or abandoned sessions remain evidence.
+
+The stable proof documents no longer freeze a theorem count or equate an empty
+capability set with purity/proof. They now say `authority-free`, keep eligibility
+separate from attached evidence, defer exact construct/theorem coverage to
+`PROVABLE_V1.md` and generated reports, and describe evidence using R-0440’s
+orthogonal scope/method/status/trust dimensions.
+
 ### Documentation Truth Alignment
 
 _Docs-only resynchronization, 2026-07-25. No compiler or language behavior

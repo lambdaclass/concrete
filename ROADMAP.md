@@ -853,48 +853,79 @@ Treat the following as one evidence-integrity defect class:
   generics/bounds, capabilities, and other signature facts (bug 059);
 - `#[requires]`/`#[ensures]` and selected spec/proof identity are outside the
   body hash (bug 060); and
-- stale dependency propagation considers direct callees rather than the
-  transitive proof dependency closure (number and file this leg only after its
-  multi-function witness exists).
+- dependency review does not affect the caller's verdict at any distance:
+  `staleDeps` is filled only after statuses are derived, is never consulted to
+  downgrade the caller, and is not propagated transitively. Check in the
+  reported multi-function witness and control (provisionally called bug 062);
+  the number becomes stable only when its document and executable control land.
 
-Land this task in five explicit slices:
+Land this task in seven explicit slices:
 
 1. **Executable witnesses first.** Bugs 058–060 have numbered documents with
    replay transcripts, but prose snippets are not permanent executable
    reproducers. Check in minimal fixtures plus a dedicated freshness gate that
-   demonstrates each current false verdict and its control. Build the
-   multi-function dependency chain, reproduce the fourth defect, then give it
-   its own number. Bug 061 is a separate ProofCore identity/model defect and is
-   owned by R-0442; it is not folded into freshness merely because the same CI
-   repair exposed it.
+   demonstrates each current false verdict and its control. Check in the
+   multi-function dependency chain for the provisional bug 062, including
+   direct and multi-hop controls, and file the numbered record in the same
+   slice. Bug 061 is a separate ProofCore identity/model defect and is owned by
+   R-0442; it is not folded into freshness merely because the same CI repair
+   exposed it.
 2. **Immediate containment.** An in-source proof link without a stored,
    validated proof-subject digest is `missing`/`unbound` (or
    `needs_recheck`), never `proved`; release/verified profiles fail closed.
-3. **Root digest.** Replace body-only freshness with a versioned canonical
-   `ProofSubjectDigest` covering qualified semantic identity, full typed
-   signature and generic constraints, capabilities, normalized typed body,
-   requires/ensures/invariants, selected spec and theorem identity, and
-   extraction/schema version.
-4. **Dependency root.** Compute freshness transitively using a deterministic
+   This containment has landed; preserve its executable controls.
+3. **Dependency containment.** Once the call/proof graph is available, a
+   reachable dependency that is stale, unbound, missing, failed, or otherwise
+   not current must prevent the caller from contributing `proved_by_lean`
+   evidence. Apply this conservatively over the reachable closure before the
+   final dependency-root design lands; `staleDeps` is not merely advisory.
+4. **Replay foundation and receipt envelope.** Make `--report check-proofs`
+   resolve the proof workspace from the input project/repository rather than
+   the process working directory. Define a versioned `ProofEvidenceReceipt`
+   envelope and deterministic workspace/import/toolchain identities. This
+   slice may establish replay and serialization plumbing, but it cannot upgrade
+   a legacy body hash to a complete proof claim.
+5. **Semantic subject digest.** Replace body-only freshness with a versioned
+   canonical `ProofSubjectDigest` covering qualified semantic identity, full
+   typed signature and generic constraints, capabilities, normalized typed
+   body, requires/ensures/invariants, the normalized selected specification and
+   claim scope/coverage, and extraction/schema version. The theorem and
+   toolchain are evidence about that subject; their identities belong in the
+   receipt, not in the semantic subject digest.
+6. **Dependency root.** Compute freshness transitively using a deterministic
    SCC/Merkle root so recursion is finite and a deep callee edit stales every
    dependent claim without making source location or alpha-renaming noise
    semantic.
-5. **Replay context.** Make `--report check-proofs` resolve the proof workspace
-   from the input project/repository rather than the process working directory.
-   The same HMAC input currently reports 11 verified / 0 failed from the
-   repository root but 0 / 11 `theorem_lookup` failures and `Toolchain: unknown`
-   from `examples/hmac_sha256/`. A replay command is not complete evidence until
-   its project root, proof modules, and toolchain resolve independently of the
-   caller's cwd.
+7. **Issue receipts and migrate honestly.** Only after the final subject digest
+   and dependency root exist may successful kernel replay issue a receipt. It
+   binds the subject digest and dependency root to theorem identity plus theorem
+   artifact digest, compiler/Lean/ProofKit and schema identities, workspace and
+   import closure, replay command, and result. A legacy fingerprint or receipt
+   schema becomes `needs_recheck`, not `stale`: the evidence format changed, not
+   necessarily the program. Backfill the repository corpus only from successful
+   kernel replay; never copy newly computed hashes into source as a substitute
+   for verification. R-0216 owns the general corpus-migration command after this
+   one-time R-0004 migration.
+
+Keep the axes explicit: subject freshness, dependency freshness, kernel replay,
+producer/toolchain identity, and coverage are separate facts under R-0440. A
+friendly `proved_by_lean` claim requires a current subject, a current dependency
+root, and a valid replay receipt; none of those facts alone upgrades the others.
+The same HMAC input currently reports 11 verified / 0 failed from the repository
+root but 0 / 11 `theorem_lookup` failures and `Toolchain: unknown` from
+`examples/hmac_sha256/`; the replay-foundation slice must eliminate that
+cwd-dependent verdict before any receipt is accepted.
 
 Gate each omitted component, missing/malformed digest, false postcondition,
-`i32 -> u32` signature edit, capability/generic edit, theorem/spec swap, direct
-and multi-hop dependency drift, recursive SCCs,
-comments/formatting/alpha-renaming stability, repository-root/project-root
-invocation parity, and a mutation proving no old body-only path can emit
-`proved`. Keep the R-0002 proof-extraction CI repair and its reverified std
-fingerprints in their already-landed commit; do not mix that repair with these
-new evidence gates.
+`i32 -> u32` signature edit, capability/generic edit, theorem/spec/receipt swap,
+direct and multi-hop dependency drift (including missing, unbound, and failed
+callees), recursive SCCs, comments/formatting/alpha-renaming stability,
+repository-root/project-root invocation parity, legacy-schema
+`needs_recheck`, theorem/toolchain/workspace receipt mismatch, and a mutation
+proving no old body-only or advisory-`staleDeps` path can emit
+`proved_by_lean`. Keep the R-0002 proof-extraction CI repair and its reverified
+std fingerprints in their already-landed commit; do not mix that repair with
+these new evidence gates.
 
 ### Task R-0435
 
@@ -1075,7 +1106,12 @@ from CI. An opt-out registry under that design becomes mandatory bookkeeping.
 
 1. **Pre-push, narrow:** only the branch being published. Dirty tracked state,
    commits that belong to the milestone but are not in the push, and the required
-   gate evidence for what is being published.
+   gate evidence for what is being published. This level must remain routinely
+   usable: target under five minutes. If measurement shows the full CI gate set
+   exceeds that budget or regularly hits the hook timeout, run
+   `make test-fast-surface-gates` plus path-matched load-bearing gates locally
+   and leave the exhaustive `make test-ci-gates` run mandatory in CI. Do not
+   preserve a predictably bypassed hook merely because it is stricter on paper.
 2. **Repository audit, explicit command:** report worktrees and branches with no
    upstream and no recorded parked status past an age threshold. This is where
    `worktree-h18-drop-glue` should surface — reported, not blocking.
@@ -1676,7 +1712,12 @@ divergence rather than a fictional tiny width-blind oracle; narrows
 `KNOWN_HOLES.md` to an index over the numbered corpus; and corrects stale
 `DEFER.md`, `LANGUAGE_GAPS.md`, `IDENTITY.md`, error-convention, and anti-feature
 statements. The repair may land as documentation commits before the generated
-claim records exist; R-0438 owns preventing recurrence.
+claim records exist; R-0438 owns preventing recurrence. The same repair removes
+stale hand-counted theorem totals, replaces “empty capability set means pure”
+with the narrower “authority-free” claim, and makes proof-boundary documents
+use R-0440’s orthogonal evidence dimensions instead of assigning every fact to
+one total tier. Stable documents link to generated proof coverage rather than
+freezing a count that changes when a theorem lands.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
 story, in each of the AST, Core, resolve, and project inventories; the claim gate
@@ -2995,6 +3036,15 @@ the comparison detects, and no gating threshold derived from a single sample.
 **Objective:** Add the Phase 8 validation artifact: a showcase/workload dashboard that proves every flagship and graduated workload has a check story, evidence bundle, oracle or reference when appropriate, interpreter-vs-compiled coverage, property-test/counterexample-regression coverage where relevant, runtime-obligation audit, trust/assumption classification, and release-CI replay. The first external-user workload in this dashboard is the external-validation-gate trial. Also publish representative cold pipeline timings and Phase 6C shadow invalidation traces for no-op, private-body, public-interface, proof/contract, policy, and target edits; those traces are
 
  the workload-derived input to Phase 8.5, not a cache implementation here.
+ The external-validation trial recruits three non-authors and records every
+ attempted session, including completion, abandonment point, time to first
+ useful result, diagnostics encountered, and whether the proof/evidence
+ discipline paid for its cost. Alpha still requires at least one non-author
+ to complete a useful workflow; the other attempts are evidence even when
+ they stop early and may not be omitted from the verdict. Run the trial once
+ the minimum teaching path and remedy-oriented diagnostics are usable, before
+ the large proof-automation investment, so external evidence can redirect
+ that investment rather than merely evaluate it afterward.
  If the external-validation trial finds manual proof authoring too costly,
  this artifact must also run the exact narrow Task R-0167 synthesis probe
  selected by the gate, preserve its transcript and review-cost measurements,
@@ -3611,6 +3661,11 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  compression rounds, message schedules, heap/alias-heavy code, effectful code,
  and induction-heavy specs until separate evidence shows they fit. Design
  note: `research/proof-evidence/operational-vc-auto-discharge.md`.
+
+ Loop-bound and `complexity_guarded` arithmetic obligations (R-0244) are a
+ named discharge class for this tier: a symbolic iteration bound that
+ survives to `needs_lean` is a signal about the obligation, not homework
+ for the user.
 ### Task R-0171
 
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
@@ -3686,6 +3741,21 @@ clause that auto-derives preservation) so frame conditions never become the
 majority of proof work. Gate: do not build it until a second update shape
 actually forces it (per the operating rules) — the current functional-list
 model gets framing for free.
+
+   Reference points beyond Smallfoot/Infer (2026-07-25): CN (Cambridge) —
+   separation-logic refinement types for C, used to verify pKVM's buddy
+   allocator; its resource inference for iterated separating conjunction,
+   with a syntactic restriction on ghost variables, gives predictable,
+   mostly-automatic ownership reasoning (eager unfold, lazy fold) — the
+   closest match for the inference mechanism. Verus — SMT-first
+   verification for a Rust-like linear language; the closest match for
+   the discharge posture (the boring majority closes without manual
+   proof). Aeneas — translates Rust to Lean 4 (also F*/Coq/HOL4) via pure
+   functional models, used on real crypto code; the closest existing
+   pipeline for source→Lean extraction faithfulness. CN's own admitted
+   gaps (Owned↔byte-representation conversion, concurrency) sit exactly
+   where Concrete's ByteView work does — import the inference ideas, not
+   the byte model.
 ### Task R-0176
 
 **Objective:** Deferred architecture refactor: split the current `Concrete.Proof` layering so registered example specs can move without a cycle, but do not let this block the active frontier unless spec ownership or proof authoring starts depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns the spec-drift table and imports whichever example spec modules it registers;
@@ -3720,6 +3790,13 @@ five graduated flagships and one package-scale example.
 
 **Objective:** Stabilize machine-readable fact schemas for proof status, obligations, effects, capabilities, assumptions, policies, snapshots, showcase metadata, runtime traps, synthesis attempts, stdlib evidence, and package evidence.
 
+Runtime-trap facts include one derived per-function view: direct trap sites,
+transitively reachable trap kinds, the call/indirect-target path that makes each
+kind reachable, and any trusted/extern boundary where completeness stops. This
+is a projection of the shared site and call-edge facts, not a separately
+maintained truth source. “No reachable trap” may be emitted only when the
+conservative target closure is complete for the named scope.
+
 Keep one shared evidence-class enum and one shared fact vocabulary across
 reports; no report kind may invent private status strings for `proved`,
 `reported`, `trusted`, `assumed`, `runtime_checked`, `tested_by_oracle`,
@@ -3740,7 +3817,11 @@ collapsed into or used to upgrade a proof/evidence class.
 
 ### Task R-0180
 
-**Objective:** Add `concrete explain <function>`: capabilities, proof status, assumptions, obligations, trusted callees, evidence level, and why each status is what it is.
+**Objective:** Add `concrete explain <function>`: capabilities, proof status,
+assumptions, obligations, trusted callees, direct and transitively reachable
+runtime-trap kinds, evidence dimensions, and why each status is what it is.
+Trap explanations reuse R-0178’s site/edge facts and show the path or
+completeness boundary rather than deriving reachability again.
 
 ### Task R-0181
 
@@ -3755,7 +3836,8 @@ This is also the first **proof/capability diff for code review** surface.
 Output must include human text and JSON rows for: added/removed capability,
 capability widening/narrowing, new `trusted`/`Unsafe`/extern boundary,
 stale/missing/downgraded proof, new runtime trap site, allocation authority
-change, changed assumption, and changed stdlib evidence class.
+change, changed assumption, changed stdlib evidence class, and a changed
+per-function reachable-trap set even when the changed trap site is in a callee.
 
 Done when the same JSON drives CI, a GitHub-comment/golden fixture, editor
 display, and agent consumption. This is Concrete's review differentiator:
@@ -3783,6 +3865,15 @@ and must not collapse the review into one green badge.
  widening, and reuses the same fact vocabulary as Phase 18 import fact
  constraints so the policy graduates cleanly to dependency/package
  boundaries.
+
+The budget verdict must retain a canonical reachability witness: stable
+function identities, direct edges, conservative possible-target sets for
+indirect calls, the entry roots, the path introducing each reachable
+capability, and every trusted/extern boundary where completeness stops.
+Compiler-produced witnesses remain `compiler_validated`; they do not become
+proof merely because the same compiler generated both the graph and verdict.
+R-0443 later makes the narrow whole-program authority property independently
+checkable from the canonical artifact.
 
 ### Task R-0441
 
@@ -4381,6 +4472,16 @@ Where the obligation can expose a symbolic iteration bound, retain it as a
 Boolean “bounded” label. This is a source-level complexity/DoS-resistance
 claim, not wall-clock timing.
 
+   Bounds are obligations and must discharge like them: loop-bound arithmetic
+   routes to `omega`/`bv_decide` through R-0170, and cost-bound discharge is
+   a named auto-discharge gate case — bounds that require hand-written Lean
+   will not be written. Bounds compose over the known call graph: a caller's
+   bound folds in its callees' bounds, and an indirect call folds the union
+   of its possible target set (with recursion excluded by the predictable
+   gate, composition is a DAG fold). Gate a bound that is too small and must
+   be rejected with a witness, composition through direct and indirect
+   calls, and a mutation that drops the bound check.
+
 ### Task R-0245
 
 **Objective:** Define policy gates for `#[overflow_checked]`: release profiles may require overflow obligations for selected functions/packages, while ordinary examples remain quiet unless they opt in. Reports must distinguish `overflow_checked`, `overflow checking not requested`, and explicit wrapping or saturating arithmetic.
@@ -4761,6 +4862,49 @@ record must name them so a proof's replay surface stays reproducible.
  layout/fingerprint helper and prove the checker still rejects the bad
  artifact without importing that helper. Wire
  `scripts/tests/check_core_certificates.sh` and a checker import-firewall gate.
+
+### Task R-0443
+
+**Objective:** Add independently checkable whole-program authority-property
+certificates over a conservative closed-world call graph.
+
+V1 proves a deliberately structural property, not effectful program semantics:
+for named entry roots, no call path reaches a forbidden capability, or every
+path that reaches it passes through an explicit allowlist of gateway functions.
+The first forcing fixture is the shape “no path from `main` reaches `Network`
+except through `send_report`.” This extends R-0184’s authority-budget verdict;
+it does not replace functional ProofCore theorems and does not claim native
+behavior, path-value properties such as “files only under `/etc`,” termination,
+or correctness of an external effect.
+
+The independently checked subject is the canonical validated/monomorphized Core
+artifact plus the policy. The checker reconstructs stable function identities,
+entry roots, direct edges, capability declarations, and conservative indirect
+target sets instead of trusting a producer-emitted graph summary. V1 may use the
+closed, auditable over-approximation “every address-taken function compatible
+with the callable type” and refine it later; a false positive is acceptable,
+an omitted possible target is not. An unresolved callable origin,
+trusted/extern callback, dynamic ingress, unsupported identity, or incomplete
+artifact becomes `certificate_unsupported` or an explicit trusted boundary,
+never a clean theorem.
+
+Bind the certificate to the artifact digest, dependency root, policy digest,
+entry roots, target-set rule version, checked property, gateway identities, and
+remaining boundaries. Before independent replay the producer may report only
+`compiler_validated`. Reusing R-0275’s independent checker may emit
+`certificate_structurally_checked` for the named graph predicate; use
+`kernel_replayed` only if Lean actually checks an artifact-specific theorem.
+Neither status proves source-to-Core correspondence or backend behavior.
+
+Gate direct and indirect calls; runtime selection among two callable values; an
+unreachable `Network` function; a permitted gateway; a second path bypassing the
+gateway; nested and cross-module calls; monomorphized callees; `with(Std)` as a
+declared ceiling distinct from reachable use; trusted/extern incompleteness; a
+forged graph/certificate; and mutations that delete a direct edge, one indirect
+target, a capability declaration, the artifact binding, or the gateway-bypass
+path. The checker must reject each false-clean mutation without importing the
+compiler’s authority-report implementation.
+
 ### Task R-0276
 
 **Objective:** Reduce ProofCore partial-def opacity only where proof preservation needs it.
@@ -5352,6 +5496,12 @@ never implies cycles or elapsed time. Start with the std container bounds
 already forced by bug 048 plus one workload budget; do not build a parallel
 cost-semantics task before those existing obligation owners need shared
 machinery.
+
+If a timing interpretation of `complexity_guarded` is ever entertained, run
+the correlation experiment first: cost-model step counts vs. measured time on
+the R-0416–R-0419 corpus (base64_cli, png_chunks, wordfreq). Poor correlation
+is expected on memory-bound workloads and invalidates nothing about the
+complexity claims; only a strong result licenses even speaking about time.
 
 ### Task R-0418
 
@@ -6461,6 +6611,20 @@ positive research direction lives here and in `docs/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a
 second control-flow semantics.
+
+   Reference points for the design survey (2026-07-25): Microsoft
+   Research's Project Verona — Behaviour-Oriented Concurrency: shared
+   state lives in isolated cowns (concurrent owners); a behaviour
+   acquires its whole cown set atomically, giving data-race freedom and
+   deadlock freedom by construction. A cown is a linear handle scheduled
+   against an executor — close to Concrete's linear-handle vocabulary,
+   but the honest mapping is typestate/protocol rather than a
+   `with(...)` capability, and the executor (scheduling, fairness, the
+   freestanding story) is the real design problem, not the spelling.
+   Pony's reference capabilities are the shipped, production-tested
+   ancestor of the same model. Verona itself is research-grade and
+   mid-refactor: steal the atomic multi-acquisition semantics, not the
+   runtime.
 ### Task R-0400
 
 **Objective:** Build concurrency pressure-test sketches and expected reports before implementation.

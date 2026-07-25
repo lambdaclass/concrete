@@ -348,19 +348,30 @@ main.check_nonce [proved, no dependencies]
 
 ### When a dependency goes stale
 
-If `check_nonce`'s proof becomes stale, `validate_header`'s `staleDeps` field updates:
+Today, if the directly called `check_nonce` proof becomes stale,
+`validate_header`'s `staleDeps` display field updates:
 
 ```
 main.validate_header [proved]
   → main.check_nonce (stale)
 ```
 
-The caller's own proof status remains `proved` (its body didn't change), but the `stale_deps` field signals that a dependency's proof is no longer current.
+This is diagnostic information, not sound dependency freshness. The caller's
+own status is derived before `staleDeps` is filled and remains `proved`; the
+field is not consulted to downgrade the verdict and does not propagate through
+a multi-hop chain. Until R-0004 lands dependency containment, a consumer must
+not treat the caller as current `proved_by_lean` evidence when any reachable
+proof dependency is not current.
 
 ### Repair order
 
 1. Fix the callee's proof first (repair `check_nonce`)
-2. Re-verify the caller (`validate_header`'s `stale_deps` clears automatically)
+2. Re-verify the caller after its dependency closure is current
+
+R-0004 replaces the advisory direct-edge field with conservative closure
+containment, then a deterministic SCC/Merkle dependency root. The final evidence
+receipt binds that root; a deep callee edit can no longer leave a caller's
+friendly proof claim green.
 
 ---
 

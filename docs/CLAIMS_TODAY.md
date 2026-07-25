@@ -129,7 +129,7 @@ The proof workflow is operational today, not aspirational. It includes:
 | Lean kernel verification | Working | `--report check-proofs` |
 | Full proof-status report | Working | `--report proof-status` |
 | Proof diagnostics (including unbound E0810) | Working | `--report proof-diagnostics` |
-| Dependency graph with stale tracking | Working | `--report proof-deps` |
+| Direct dependency graph with advisory stale-edge display | Working | `--report proof-deps`; caller verdict/closure containment remains R-0004 |
 | JSON evidence bundle | Working | `--report proof-bundle` |
 | Project-level check with scoped output | Working | `concrete check` |
 | CI evidence gate (20 checks, 8 sections) | Working | `scripts/ci/proof_gate.sh` |

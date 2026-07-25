@@ -64,16 +64,20 @@ Keep as-is:
 Done:
 
 - `ValidatedCore` is a named, explicit pipeline artifact (`Concrete/Pipeline.lean`)
-- `ProofCore` extracts the pure, proof-eligible fragment from validated Core (`Concrete/ProofCore.lean`)
-- `Concrete/Proof.lean` defines evaluation semantics for a pure Core fragment and proves properties (abs, max, clamp correctness, literal evaluation, conditional reduction, arithmetic)
+- `ProofCore` extracts the authority-free, proof-eligible fragment from validated Core (`Concrete/ProofCore.lean`)
+- `Concrete/Proof.lean` defines evaluation semantics for the admitted authority-free Core fragment and proves properties over it
 - `Pipeline.coreCheck` is the only constructor for `ValidatedCore`; `Pipeline.monomorphize` takes `ValidatedCore`
 
 Still change:
 
 - preserve source-to-Core traceability (span tracking from source through to Core)
 - add selected-function export support for Lean-facing proof workflows
-- extend proof fragment to cover structs, enums, match, and function calls with recursion
-- keep proof scopes staged explicitly: pure first, then effects/resources/capabilities, then runtime/concurrency
+- keep the admitted operation widths and runtime-failure correspondence aligned
+  with `PROVABLE_V1.md`; structs, enums, match, arrays, and bounded functional
+  state are already present
+- keep proof scopes staged explicitly: authority-free functional semantics
+  first, program-structure properties separately, then effect/runtime semantics
+  only when explicitly modeled
 
 Fine for now:
 

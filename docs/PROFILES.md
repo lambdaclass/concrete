@@ -235,10 +235,11 @@ Every function receives exactly one status:
 
 **Means:** The function has a linked theorem over its PExpr representation and
 its stored body fingerprint matches. `--report check-proofs` supplies the
-separate kernel-replay receipt. Until R-0004 lands, the binding is intentionally
-narrower than a full proof subject: signature/types, contracts/spec identity,
-and transitive dependencies are not all included. Missing stored fingerprints
-are unbound and cannot report `proved`.
+separate kernel-replay verdict; R-0004 turns that verdict into a receipt bound
+to the complete subject and dependency root. Until R-0004 lands, the binding is
+intentionally narrower than a full proof subject: signature/types,
+contracts/spec identity, and transitive dependencies are not all included.
+Missing stored fingerprints are unbound and cannot report `proved`.
 
 **Does not mean:** Binary correctness, checker soundness, cross-function composition, coverage of all properties, or coverage of all eligible functions.
 

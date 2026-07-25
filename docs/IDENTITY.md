@@ -19,7 +19,7 @@ The deeper thesis is that Concrete should make four things explicit enough to au
 1. authority
 2. operational behavior
 3. trust boundaries
-4. evidence level
+4. evidence scope, method, status, and trust
 
 That is the sense in which Concrete is trying to make operational power explicit, not just memory safety or proof objects in isolation.
 
@@ -112,7 +112,7 @@ The compiler doesn't just accept or reject programs. It answers questions about 
 - `--report authority` — per-capability function lists with transitive call-chain traces. "Why does `serve` need `File`? Because `serve → log_request → append_file`."
 - `--report unsafe` — trust boundary analysis: how many trusted functions, extern functions, unsafe crossings
 - `--report alloc` — allocation and cleanup summaries, leak warnings
-- `--report proof` — which functions are pure enough to be formally proved (no capabilities, not trusted, no extern calls)
+- `--report proof` — which functions satisfy the current ProofCore eligibility gates (authority-free, not trusted, no extern calls, supported body)
 - `--report layout` — struct/enum sizes, alignment, field offsets
 - `--report mono` — what monomorphized code actually exists
 - `--report interface` — public API surface
@@ -129,9 +129,16 @@ The compiler is written in Lean 4. This enables two layers of proof:
 
 **Layer 2 — prove user programs:** through formalized Core semantics, a Concrete function's behavior can be stated and proved as a Lean theorem. A hash function written in Concrete (real systems language, real FFI, real memory layout) could be proved correct in Lean (real theorem prover), with a well-defined semantic bridge between them.
 
-The architecture keeps proof tooling separate from compilation. The compiler produces stable artifacts (`ValidatedCore`, `ProofCore`); proof tools consume them. `ProofCore` is the pure subset — functions with no capabilities, not trusted, no extern calls. This is the subset where formal proofs are tractable.
+The architecture keeps proof tooling separate from compilation. The compiler
+produces stable artifacts (`ValidatedCore`, `ProofCore`); proof tools consume
+them. `ProofCore` is the authority-free functional subset: eligibility also
+requires no trusted/extern boundary and an entirely supported body. An empty
+capability set alone does not imply totality, termination, or absence of traps.
 
-Currently: 17 proven theorems over a pure Core fragment. Narrow, but the architecture is designed to grow without contaminating the compile path.
+The implemented proof surface includes kernel theorems over the evaluator and
+source-linked proofs for selected stdlib and flagship functions. Exact coverage
+belongs in generated proof/evidence reports and `PROVABLE_V1.md`, not a
+hand-maintained theorem count in this stable identity document.
 
 The important distinction is:
 
@@ -150,7 +157,7 @@ Concrete's long-term claim is the combination of:
 
 The normal program shape this pushes toward is:
 
-1. a small pure or tightly-bounded core
+1. a small authority-free or tightly-bounded core
 2. an effectful shell at the edge
 3. explicit authority and trust markers at the seam
 4. artifacts that make the seam visible to reviewers and tooling
