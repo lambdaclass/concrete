@@ -36,7 +36,12 @@ infrastructure can reason about today.
 mutual
 partial def collectCallsExpr (e : CExpr) : List String :=
   match e with
-  | .call fn _ args _ => [fn] ++ args.foldl (fun acc a => acc ++ collectCallsExpr a) []
+  -- Only a direct callee names a definition. An indirect callee is a fn-typed
+  -- binding, so its statically-known target set is empty — which is also why
+  -- extraction refuses such a body outright (see `cExprToPExprImpl`), rather
+  -- than letting a proof rest on a dependency closure that cannot be computed.
+  | .call callee _ args _ =>
+    callee.directName?.toList ++ args.foldl (fun acc a => acc ++ collectCallsExpr a) []
   | .binOp _ l r _ => collectCallsExpr l ++ collectCallsExpr r
   | .unaryOp _ e _ => collectCallsExpr e
   | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCallsExpr v) []
@@ -115,7 +120,7 @@ partial def collectDefersStmt (s : CStmt) : List String :=
   match s with
   | .defer body =>
     let desc := match body with
-      | .call fn _ _ _ => s!"defer {fn}(...)"
+      | .call callee _ _ _ => s!"defer {callee.spelling}(...)"
       | _ => "defer <expr>"
     [desc] ++ collectDefersExpr body
   | .letDecl _ _ _ v => collectDefersExpr v
@@ -494,7 +499,10 @@ private partial def fingerprintExpr : CExpr → String
   | .ident name _ => s!"(var {stripAlpha name})"
   | .binOp op lhs rhs _ => s!"(binop {repr op} {fingerprintExpr lhs} {fingerprintExpr rhs})"
   | .unaryOp op inner _ => s!"(unary {repr op} {fingerprintExpr inner})"
-  | .call fn _ args _ => s!"(call {fn} {fingerprintExprs args})"
+  | .call (.direct fn) _ args _ => s!"(call {fn} {fingerprintExprs args})"
+  -- Distinct prefix: a direct call and an indirect call through a same-named
+  -- local are different programs, so they must not fingerprint alike.
+  | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b} {fingerprintExprs args})"
   | .structLit name _ fields _ =>
     let fs := fields.map fun (n, e) => s!"{n}={fingerprintExpr e}"
     s!"(struct {name} {" ".intercalate fs})"
@@ -779,9 +787,13 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pl ← cExprToPExprImpl lhs
     let pr ← cExprToPExprImpl rhs
     some (.binOp pop pl pr)
-  | .call fn _ args _ => do
+  | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
+  -- Indirect callee: the target is a value chosen at runtime, so there is no
+  -- definition to extract or reason about. Refuse (blocked) rather than name the
+  -- binding as if it were a function — that is what let bug 050 through.
+  | .call (.indirect _) _ _ _ => none
   | .ifExpr cond thenBranch elseBranch _ => do
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
@@ -1092,9 +1104,13 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let pa ← cExprToPExpr arr
     let pi ← cExprToPExpr idx
     some (.arrayIndex pa pi)
-  | .call fn _ args _ => do
+  | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
+  -- Indirect callee: the target is a value chosen at runtime, so there is no
+  -- definition to extract or reason about. Refuse (blocked) rather than name the
+  -- binding as if it were a function — that is what let bug 050 through.
+  | .call (.indirect _) _ _ _ => none
   | .structLit name _ fields _ => do
     let pfields ← cFieldsToPExpr fields
     some (.structLit name pfields)

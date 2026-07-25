@@ -1,0 +1,34 @@
+// Bug 050 / R-0002 regression, second variant: defining a generic function named
+// `f` must not break std.io.
+//
+// `Writer::write_raw` and `Reader::read` bind their target as a local
+// fn-pointer literally named `f` (std/src/io.con). While Elab emitted an
+// indirect call with the same shape as a direct call, Mono resolved that `f`
+// against the global fn map, found this module's generic `f`, and rewrote the
+// call to `@f_for_PtrMut_T_u8_E` — a specialization that is not the write
+// function. SSAVerify then rejected the result with E0711, so ANY project
+// defining a one-letter generic became unbuildable as soon as it touched
+// std.io.
+//
+// Exit 0 = the Writer path still resolves to the real write function.
+mod main {
+    import std.io.{Writer, IoError, console_writer};
+
+    fn f<T: Copy>(x: T) -> T {
+        return x;
+    }
+
+    fn main() with(Std) -> u8 {
+        // Exercise the generic so it is actually specialized.
+        let n: Int = f::<Int>(1);
+        let w: Writer = console_writer();
+        let s: String = "r050";
+        let wr: Result<u64, IoError> = w.write_str(&s);
+        discard(wr.is_ok());
+        s.drop();
+        let wc: Result<u64, IoError> = w.close();
+        discard(wc.is_ok());
+        if n != 1 { return 1; }
+        return 0;
+    }
+}

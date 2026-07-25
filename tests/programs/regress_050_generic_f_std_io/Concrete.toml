@@ -1,0 +1,3 @@
+[package]
+name = "regress_050_generic_f_std_io"
+version = "0.1.0"

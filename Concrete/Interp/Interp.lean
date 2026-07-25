@@ -453,13 +453,19 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
     let result ← evalUnaryOp op v
     return (env, .val result)
 
-  | .call fnName _ args _ => do
+  | .call callee _ args _ => do
     let (env, argVals) ← evalCallArgs fns enums env args
-    -- A call `f(args)` where `f` is a local bound to a function pointer
-    -- dispatches to the pointed-to function; a direct call resolves to itself.
-    let fnName := match envGet env fnName with
-      | some (.fnPtr real) => real
-      | _ => fnName
+    -- The call form says which kind this is (bug 050), so the interpreter no
+    -- longer guesses by probing the environment for every callee name. An
+    -- indirect callee MUST resolve through the environment: its binding holds
+    -- the function it points at. A direct callee names its own definition.
+    let fnName ← match callee with
+      | .direct name => .ok name
+      | .indirect binding =>
+        match envGet env binding with
+        | some (.fnPtr real) => .ok real
+        | some _ => .error s!"interp: '{binding}' is not a function pointer"
+        | none => .error s!"interp: unbound fn-pointer local '{binding}'"
     match findFn fns fnName with
     | some fdef =>
       if fdef.params.length != argVals.length then

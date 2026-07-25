@@ -1057,14 +1057,17 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
       let cArg ← elabExpr arg
       cArgs := cArgs ++ [cArg]
     return .call "vec_free" [] cArgs .unit
-  -- Check if function pointer call
+  -- Call through a fn-typed LOCAL or parameter. This is the one place that knows
+  -- the callee is a value in scope rather than a global definition, so it is the
+  -- one place that can record it (bug 050): downstream passes must never
+  -- re-decide by looking the name up in a global fn/alias map.
   match ← lookupVar fnName with
   | some (.fn_ paramTys _ retTy) =>
     let mut cArgs : List CExpr := []
     for (arg, pTy) in args.zip paramTys do
       let cArg ← elabExpr arg (some pTy)
       cArgs := cArgs ++ [cArg]
-    return .call fnName [] cArgs retTy
+    return .call (.indirect fnName) [] cArgs retTy
   | _ => pure ()
   -- Regular function call
   match ← lookupFnSig fnName with
@@ -1452,9 +1455,16 @@ def elabFn (f : FnDef) (implTy : Option Ty := none) : ElabM CFnDef := do
 mutual
 /-- Rename function references in a CExpr tree using a lookup table. -/
 partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
-  | .call fn targs args ty =>
-    let fn' := rmap.lookup fn |>.getD fn
-    .call fn' targs (args.map (renameFnExpr rmap)) ty
+  | .call callee targs args ty =>
+    -- Only a DIRECT callee names a global function that submodule prefixing may
+    -- rewrite. An indirect callee names a local binding, which lives in no
+    -- module namespace: renaming it would point the call at a submodule
+    -- function that merely shares the local's name — bug 050's mistake, one
+    -- pass earlier.
+    let callee' := match callee with
+      | .direct name => Callee.direct (rmap.lookup name |>.getD name)
+      | .indirect binding => Callee.indirect binding
+    .call callee' targs (args.map (renameFnExpr rmap)) ty
   | .fnRef name ty =>
     let name' := rmap.lookup name |>.getD name
     .fnRef name' ty
@@ -1462,6 +1472,12 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     -- Only rename function-typed idents (fn refs used as values), not local variables
     match ty with
     | .fn_ .. =>
+      -- KNOWN GAP (bug 050's family, tracked in its doc): this cannot tell a
+      -- global fn used as a value from a LOCAL of fn type, so a local whose name
+      -- collides with a submodule function is renamed to that function. Unlike
+      -- the call case above, Core carries no marker for it — `.ident` has only a
+      -- name and a type. Closing it needs the same treatment as the callee:
+      -- record at elaboration, where the scope is still known.
       let name' := rmap.lookup name |>.getD name
       .ident name' ty
     | _ => .ident name ty

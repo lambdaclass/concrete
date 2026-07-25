@@ -836,11 +836,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     emit (.unaryOp dst op oVal ty)
     return .reg dst ty
 
-  | .call fn _typeArgs args ty =>
+  | .call callee _typeArgs args ty =>
     -- Intrinsic identity is by-resolution: a DEFINED function is never
-    -- intercepted, whatever it is named (mirrors Check/Elab guards).
+    -- intercepted, whatever it is named (mirrors Check/Elab guards). An INDIRECT
+    -- callee is a value in scope and can never be an intrinsic either — a local
+    -- fn-pointer named `print_int` would otherwise be intercepted (bug 050's
+    -- shape, one pass later).
     let st ← getState
-    let intrinsic := if st.definedFns.contains fn then none else resolveIntrinsic fn
+    let intrinsic := match callee with
+      | .indirect _ => none
+      | .direct fn => if st.definedFns.contains fn then none else resolveIntrinsic fn
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants
     if intrinsic == some .sizeof then
       let argTy := match _typeArgs with | t :: _ => t | [] => Ty.int
@@ -920,11 +925,19 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- For statically-known function references (@fnref.X), use the raw function name.
     -- For runtime registers, prefix with "%" to mark as indirect call target.
     let callTarget ← do
-      match ← lookupVar fn with
-      | some (.reg regName (.fn_ _ _ _)) =>
-        if regName.startsWith "@fnref." then pure (regName.drop 7).toString
-        else pure ("%" ++ regName)
-      | _ => pure fn
+      match callee with
+      | .direct name => pure name
+      | .indirect binding =>
+        match ← lookupVar binding with
+        | some (.reg regName (.fn_ _ _ _)) =>
+          if regName.startsWith "@fnref." then pure (regName.drop 7).toString
+          else pure ("%" ++ regName)
+        | _ =>
+          -- The call form says this callee is a fn-typed binding, so failing to
+          -- find one is a Core/Lower disagreement, not a program error. Emitting
+          -- the bare name would silently produce a direct call to whatever global
+          -- shares it — the bug-050 outcome.
+          throwLower s!"Lower: indirect callee '{binding}' is not bound to a fn-pointer register"
     if ty == .unit || ty == .never then
       emit (.call none callTarget aVals ty)
       -- Write back mutably borrowed variables

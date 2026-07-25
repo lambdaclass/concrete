@@ -111,13 +111,18 @@ end
 -- trait method calls on generic type parameters.
 mutual
 private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr → CExpr
-  | .call fn targs args ty =>
-    let fn' := nameMap.foldl (fun acc (paramName, concreteName) =>
-      let pfx := paramName ++ "_"
-      if acc.startsWith pfx then concreteName ++ "_" ++ acc.drop pfx.length
-      else acc
-    ) fn
-    .call fn' targs (args.map (rewriteCallNames nameMap)) ty
+  | .call callee targs args ty =>
+    -- `T_method` → `Point_method` applies to DIRECT callees only: the rewrite
+    -- exists because Elab spells trait-method calls on a type parameter that
+    -- way, and those are always global definitions. An indirect callee names a
+    -- local binding, which no substitution may rename.
+    let callee' := match callee with
+      | .indirect binding => Callee.indirect binding
+      | .direct name => Callee.direct (nameMap.foldl (fun acc (paramName, concreteName) =>
+          let pfx := paramName ++ "_"
+          if acc.startsWith pfx then concreteName ++ "_" ++ acc.drop pfx.length
+          else acc) name)
+    .call callee' targs (args.map (rewriteCallNames nameMap)) ty
   | .binOp op l r ty => .binOp op (rewriteCallNames nameMap l) (rewriteCallNames nameMap r) ty
   | .unaryOp op e ty => .unaryOp op (rewriteCallNames nameMap e) ty
   | .structLit n ta fs ty => .structLit n ta (fs.map fun (n, e) => (n, rewriteCallNames nameMap e)) ty
@@ -170,11 +175,18 @@ mutual
     walk the body and add typeArgs to any call targeting these functions
     that currently has empty typeArgs. -/
 partial def injectTypeArgsExpr (genericNames : List String) (typeArgs : List Ty) : CExpr → CExpr
-  | .call fn [] args ty =>
+  | .call callee [] args ty =>
     let args' := args.map (injectTypeArgsExpr genericNames typeArgs)
-    if genericNames.contains fn then .call fn typeArgs args' ty
-    else .call fn [] args' ty
-  | .call fn ta args ty => .call fn ta (args.map (injectTypeArgsExpr genericNames typeArgs)) ty
+    -- Only a direct callee can BE one of the generic functions whose type args
+    -- are being injected. Matching an indirect callee's binding name against
+    -- `genericNames` is bug 050 in miniature: a local fn-pointer named like a
+    -- generic would be handed that generic's type arguments.
+    match callee with
+    | .direct name =>
+      if genericNames.contains name then .call callee typeArgs args' ty
+      else .call callee [] args' ty
+    | .indirect _ => .call callee [] args' ty
+  | .call callee ta args ty => .call callee ta (args.map (injectTypeArgsExpr genericNames typeArgs)) ty
   | .binOp op l r ty => .binOp op (injectTypeArgsExpr genericNames typeArgs l) (injectTypeArgsExpr genericNames typeArgs r) ty
   | .unaryOp op inner ty => .unaryOp op (injectTypeArgsExpr genericNames typeArgs inner) ty
   | .structLit n ta fields ty => .structLit n ta (fields.map fun (n, e) => (n, injectTypeArgsExpr genericNames typeArgs e)) ty
@@ -386,7 +398,17 @@ private def enqueueMono (monoName : String) (monoFn : CFnDef) : MonoM Unit := do
 mutual
 partial def monoExpr (e : CExpr) : MonoM CExpr := do
   match e with
-  | .call fn typeArgs args ty =>
+  | .call (.indirect binding) typeArgs args ty =>
+    -- THE bug-050 site. An indirect callee is a value in the caller's scope, so
+    -- there is nothing here to monomorphize and nothing to resolve: the binding
+    -- name must never reach `lookupFn`, which searches the global fn map and the
+    -- linker-alias pool. Resolving it is what turned `pick(21)` into a call of a
+    -- same-named generic (compiled 21, interp 42) and made any project defining
+    -- `fn f<T: Copy>` unbuildable, because std's io calls local fn-pointers
+    -- named `f`. Only the arguments are monomorphized.
+    let args' ← args.mapM monoExpr
+    return .call (.indirect binding) typeArgs args' ty
+  | .call (.direct fn) typeArgs args ty =>
     let args' ← args.mapM monoExpr
     if typeArgs.isEmpty then
       -- Even with no explicit typeArgs, the callee might be generic.

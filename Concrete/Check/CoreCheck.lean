@@ -386,7 +386,26 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !isInteger operand.ty then
         addCCError (.bitwiseNotOnNonInteger (toString (repr operand.ty)))
 
-  | .call fn _typeArgs args _ty =>
+  -- A call through a fn-typed binding. Its authority and arity come from the
+  -- POINTER TYPE, never from a global definition: the two used to be chosen by
+  -- "whichever lookup happened to succeed", so a local fn-pointer whose name
+  -- matched a global function was capability- and arity-checked against that
+  -- global instead of against itself (bug 050's family, in the checker).
+  | .call (.indirect binding) _typeArgs args _ty =>
+    let env ← getEnv
+    match env.vars.lookup binding with
+    | some (.fn_ paramTys ptrCaps _) =>
+      -- The call exercises the authority the fn TYPE declares — no capability
+      -- smuggling through callbacks (mirrors the Check-pass fn-pointer rule).
+      if !capsContain env.currentCapSet ptrCaps then
+        addCCError (.insufficientCapabilities binding (capSetToString ptrCaps) (capSetToString env.currentCapSet))
+      if args.length != paramTys.length then
+        addCCError (.argCountMismatch binding paramTys.length args.length)
+    | _ => pure ()
+    for arg in args do
+      ccCheckExpr arg
+
+  | .call (.direct fn) _typeArgs args _ty =>
     -- Check capability discipline
     match ← lookupFnCaps fn with
     | some calleeCaps =>
@@ -397,17 +416,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       let capD := Capabilities.decideCall env.currentCapSet calleeCaps
       if !capD.satisfied then
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
-    | none =>
-      -- Not a known function: if it is a local fn-pointer variable, the call
-      -- exercises the authority the fn TYPE declares — enforce it like a
-      -- direct call (no capability smuggling through callbacks; mirrors the
-      -- Check-pass fn-pointer rule). Otherwise builtin/extern, skip.
-      let env ← getEnv
-      match env.vars.lookup fn with
-      | some (.fn_ _ ptrCaps _) =>
-        if !capsContain env.currentCapSet ptrCaps then
-          addCCError (.insufficientCapabilities fn (capSetToString ptrCaps) (capSetToString env.currentCapSet))
-      | _ => pure ()
+    | none => pure ()  -- builtin/extern: no recorded capability set
     -- Check argument types
     match ← lookupFnSig fn with
     | some (params, _retTy) =>

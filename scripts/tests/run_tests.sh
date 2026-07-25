@@ -6729,6 +6729,10 @@ run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
+# Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
+# local holds, not to a generic function that shares its name. Pre-fix: compiled
+# 21 (the identity generic) vs interp 42 — silent wrong code.
+run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5
@@ -10580,6 +10584,9 @@ fi
 # Bug-regression projects run here (referenced by name for audit_bug_corpus.sh):
 #   submodule_linear_consume/src/main  (bug 022 — submodule impl-offset)
 #   scand_aggregate_in_scope/src/main  (bug 023 — short-circuit aggregate phi)
+#   regress_050_generic_f_std_io/src/main  (bug 050 — a generic named `f` no
+#     longer hijacks std.io's local fn-pointer of the same name; pre-fix ANY
+#     project defining one was unbuildable as soon as it touched std.io)
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
     if [ -f "$projdir/Concrete.toml" ]; then

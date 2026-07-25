@@ -1,0 +1,25 @@
+// Bug 050 / R-0002 regression: a call through a fn-typed LOCAL must dispatch to
+// the value that local holds, even when a generic function shares its name.
+//
+// Elab used to emit an indirect call as `.call name args` — the same shape as a
+// direct call — so Mono resolved the name against the global fn map, found the
+// generic `pick`, specialized it, and rewrote the call. The program then
+// returned the identity generic's answer (21) instead of double(21) (42), while
+// the interpreter, which resolves the local first, returned 42.
+//
+// The callee's kind now travels with the call, so no later pass re-decides it.
+// Expected: 42
+mod t {
+    fn pick<T: Copy>(x: T) -> T {
+        return x;
+    }
+
+    fn double(x: i64) -> i64 {
+        return x * 2;
+    }
+
+    pub fn main() -> i64 {
+        let pick: fn(i64) -> i64 = double;
+        return pick(21);
+    }
+}
