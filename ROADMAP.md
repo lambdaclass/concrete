@@ -968,6 +968,70 @@ implicitly describe a lagging mirror.
    `docs/bugs/051_generic_enums_not_monomorphized.md`; it hardens a closed defect
    rather than fixing an open one, so it follows the confirmed defect queue.
 
+### Task R-0435
+
+**Objective:** Ban variable shadowing, after adding the pattern-binder renaming
+form it requires.
+
+`docs/LANGUAGE_INVARIANTS.md` #4 states that a variable name is unique within
+its scope. The implementation does not enforce that: `Check.lean`'s H16 rule
+rejects only shadowing of a still-*live* non-`Copy` binding
+(`.shadowsLiveLinear`), explicitly permitting `let s = transform(s);`, and
+nested same-named `match` binders shadow and restore as pinned behavior
+(`tests/programs/regress_045_match_binder_shadow.con`). Bug 045 was silent
+wrong code produced by exactly that shape — nested binders sharing one Lower
+slot — and Elab alpha-renaming removed the miscompile while leaving the
+source-level hazard. Close the class at the surface instead, and make the
+invariant true rather than editing it down to match the code.
+
+Slice 1 — pattern-binder renaming, a prerequisite and not optional.
+`binding_list = IDENT { ',' IDENT }` (`grammar/concrete.ebnf`) binds pattern
+fields by field name only. `Option`/`Result` name their payload field `value`,
+so any nested match over two of them yields nested `value` binders by
+construction: 25 such sites exist in `std/` and `examples/` today (`fs`, `cli`,
+`numeric`, `net`, `process`, `base64_cli`). Banning shadowing without a
+renaming form would make nested `Option`/`Result` matching unwritable — a
+language regression, not a migration cost. Extend the grammar to
+`binding = IDENT [ ':' IDENT ]`, which stays LL(1) (peek for `:` after the
+field IDENT) and therefore preserves invariant #13. Because `enum_pattern` and
+`match_pattern_tail` share `binding_list`, one change covers `match`, `if let`,
+`while let`, and pattern-destructuring `let`.
+
+Slice 2 — generalize the rule. Replace `.shadowsLiveLinear` with a rejection of
+any binding that shadows a name live in an enclosing scope, independent of
+`Copy`-ness and consumption state, under its own stable diagnostic. A loop body
+rebinding the same `let` on each iteration is a fresh scope and must not be
+caught; sibling `match` arms binding one name are disjoint scopes and must not
+be caught. `let mut buf: Bytes = buf;` (the "parameters are immutable"
+workaround, `std/src/fs.con`) becomes illegal and takes a distinct name: one
+binding, one resource. Keep Elab alpha-renaming as defense in depth, not as the
+guarantee.
+
+Out of scope, decided separately: function/intrinsic shadowing (a user
+`print_string` taking precedence over the builtin,
+`tests/programs/regress_intrinsic_shadowing.con`) and module-name shadowing
+(`tests/programs/module_qualified_parent_shadow`). Those are namespace
+questions, not binding-scope questions, and folding them in would hide two
+decisions inside one migration.
+
+Acceptance: positive fixtures for renamed binders in nested `match`, `if let`,
+`while let`, and destructuring `let`, including a renamed twin of
+`regress_045_match_binder_shadow.con` proving nesting still works;
+`regress_045_match_binder_shadow.con` itself flips to a rejection fixture;
+negative fixtures for let-rebinding, nested binder collision, and a binder
+colliding with a parameter; positive fixtures pinning that per-iteration loop
+bindings and sibling arms are *not* rejected; interpreter/compiled parity;
+formatter round-trip of the renaming form; stable diagnostic and span fixtures.
+Migrate the 25 nested-binder sites and the let-rebind sites in `std/`,
+`examples/`, and `tests/`. Gate with a corpus inventory that fails on any
+reintroduced shadowing site, and mutations that (a) restore the `Copy`/consumed
+carve-out and (b) drop the loop-scope or sibling-arm exemption, proving the rule
+is neither too weak nor too strong.
+
+This is a cross-cutting surface migration: it lands in a worktree and merges
+green once, with the gate-corpus sweep and `make test-ci-gates` run before
+push.
+
 ### Task R-0011
 
 **Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
