@@ -1227,7 +1227,12 @@ section of the Phase 17 language reference.
    Slice 3 (proof economics, the EverParse shape): prove the seven
    combinators + fold once in Lean; parsers built from them inherit
    memory-safety and non-malleability obligations instead of re-proving
-   per parser. Honesty boundary, stated in advance: claims hold for
+   per parser. The slice-3 proof target is a DNS message parser:
+   compression pointers (cycle-prone backward offsets) are the one loop
+   shape the seven combinators do not cover, so "cannot loop more than N
+   times the input length" must account for pointer-chasing, not just
+   index loops — the forcing case that makes `complexity_guarded`
+   (R-0244) honest. Honesty boundary, stated in advance: claims hold for
    parsers BUILT FROM the combinator core; Concrete is a general language
    and nothing stops hand-rolled pointer arithmetic outside the
    discipline. Never claim "Concrete parsers are safe."
@@ -3087,6 +3092,21 @@ the comparison detects, and no gating threshold derived from a single sample.
  and record the final GO/NO decision consumed by the Phase 8.5 trigger. It
  may not silently broaden that probe into the general synthesis roadmap.
 
+ Candidate workloads for the dashboard, each admitted with the claim it
+ would falsify on arrival (the envcfg→039 / httpget→045 precedent):
+ a capability-firewall proxy — "no path from `main` reaches `Network`
+ except through `proxy_send`" (R-0443's first real certificate customer);
+ a kv store with a write-ahead log — abort-only failure semantics, where
+ `defer` not running on abort forces correctness on every log prefix;
+ a naive-vs-bounded regex matcher pair — the `complexity_guarded` gate
+ must reject the first and accept the second, the diff being the demo;
+ an editor buffer core (gap buffer + owned undo stack) — drop-glue and
+ linearity composition under heavy nested non-Copy mutation (the bug 052
+ shape); and a job runner / mini-shell — `with(Process)`, argv/env, the
+ external-user ergonomics probe. The DNS parser is R-0444 slice 3's
+ target, not a separate entry here. Workloads are admitted one at a time,
+ when their named claim is the thing that needs testing.
+
 ## Phase 8.5 / 8B: Incremental Compiler Driver And Artifact Reuse
 
 Goal: make unchanged compiler, proof, report, and backend work reusable without
@@ -4732,7 +4752,17 @@ record must name them so a proof's replay surface stays reproducible.
    return materialized from a ref identifier or `&place` emits a spurious
    extra load. This path is unreachable from source while reference returns
    are rejected, so its regression fixtures must separately preserve the
-   accepted trusted raw-pointer (`*const`/`*mut`) return cases.
+   accepted trusted raw-pointer (`*const`/`*mut`) return cases;
+ - add a metamorphic alpha-invariance oracle: for each generated or corpus
+   program, systematically rename every user identifier and require the
+   renamed program to behave identically — same exit, same output, same
+   trap identity, interpreter and compiled. Bugs 044/050/051/054 were all
+   violations of exactly this invariant (identity recovered from name
+   strings, PRINCIPLES #12), and nothing today compares a program against
+   its own renaming: the differential harness compares programs against
+   the interpreter, but the rename oracle is the only one that hunts the
+   identity-bug class as a class rather than by example. Seed it with the
+   historical witnesses as fixed regression legs.
 ### Task R-0273
 
 **Objective:** Add a semantic-darkness audit and red-team gate. The goal is to catch the checked-arithmetic class of bug before it repeats: a construct looks ordinary in source, but its real behavior depends on width, profile, target, allocation, authority, runtime checks, or an outdated proof/interpreter model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the Phase 14 validation artifact. The audit must cover:
