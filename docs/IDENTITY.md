@@ -229,14 +229,19 @@ See [../research/packages-tooling/authority-budgets.md](../research/packages-too
 The intended direction is more compositional than the usual whole-program or whole-crate story. Ada/SPARK have pool-level bounds; Rust gets `no_std` by convention. Concrete's proposed version is per-function and compositional.
 
 See [../research/stdlib/allocation-budgets.md](../research/stdlib/allocation-budgets.md).
+R-0445 owns the first report-level allocation count/byte facts; later
+obligation and profile tasks decide enforcement. Resource quantity is not
+itself an authority capability.
 
 ### Execution Cost Tracking
 
 Structural classification of functions: bounded or unbounded loops, recursive
 or not, max static call depth. For bounded functions, abstract instruction
-counts via IPET. Concrete is unusually tractable for this: no trait-object
-dispatch or closures, an enumerable set of named callable values with explicit
-indirect edges, no hidden allocation, and clean SSA CFG.
+counts or another conservative source-cost model. Concrete is unusually
+tractable for this: no trait-object dispatch or closures, an enumerable set of
+named callable values with explicit indirect edges, no hidden allocation, and
+clean SSA CFG. R-0445 owns the early source certificate; R-0405 retains
+hardware WCET.
 
 See [../research/stdlib/execution-cost.md](../research/stdlib/execution-cost.md).
 

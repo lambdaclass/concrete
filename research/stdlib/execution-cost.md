@@ -1,6 +1,8 @@
 # Execution Cost Analysis
 
-**Status:** Open
+**Status:** Roadmap-committed in layers. R-0445 owns the early source-resource
+certificate; R-0244/R-0248 own obligation and target-budget strengthening;
+R-0416–R-0419 own measurements; R-0405 retains hardware WCET research.
 
 This note explores whether Concrete could provide static analysis of function execution cost — from simple structural reports up to bounded worst-case estimates.
 
@@ -15,7 +17,8 @@ Most languages make cost analysis very hard because of:
 Concrete avoids all of these by design:
 
 - no hidden control flow — what you see is what executes
-- no dynamic dispatch — all call targets known statically after monomorphization
+- no open-world dynamic dispatch — direct targets and conservative target sets
+  for explicit indirect calls are enumerable after monomorphization
 - no hidden allocation — `with(Alloc)` marks every allocation path
 - no closures, no trait objects, no implicit conversions
 - SSA IR already has a clean CFG and call graph
@@ -45,19 +48,26 @@ Why this is valuable:
 - it identifies which functions *could* be analyzed more deeply
 - it separates "provably bounded" from "might run forever"
 
-Implementation cost: **low** — the compiler already has the SSA CFG and call graph.
+Implementation cost is comparatively low because the compiler already has
+loop, call-edge, target-set, allocation, layout, and stack facts. R-0445 must
+compose those facts rather than add a second AST/CFG truth source.
 
-### Level 2: Abstract instruction count estimation
+### Level 2: Abstract source-step upper bounds
 
 For functions where all loops are bounded and there is no recursion, compute an upper bound on total operations.
 
 This requires:
 
 - loop bound annotations or inference — something like `#[bound(N)]` on loops, or automatic inference for simple patterns like `for i in 0..n` where `n` is a parameter
-- an abstract cost model that counts operations (adds, loads, stores, branches, calls) without modeling hardware
-- the IPET (Implicit Path Enumeration Technique) formulation: encode the CFG as an Integer Linear Programming problem, maximize total cost subject to flow and bound constraints
+- an explicit, versioned source cost model that counts operations without
+  modeling hardware
+- a conservative structural fold first; IPET (Implicit Path Enumeration
+  Technique) is an optional later precision improvement only if workload
+  evidence justifies solver complexity
 
-The result is: "this function costs at most N abstract operations."
+The result is: "under these named input bounds and assumptions, this function
+uses at most N source-model steps." If the required target set, loop bound, or
+boundary contract is incomplete, the result is `unknown` with the exact reason.
 
 That is useful for:
 
@@ -121,18 +131,23 @@ That would keep the explicitness while addressing the real need for bounded exec
 
 ## Recommended Order
 
-1. Level 1 structural reports — low cost, high value, fits existing `--report` infrastructure
-2. Loop bound annotation design — prerequisite for Level 2
-3. Level 2 abstract cost estimation — moderate cost, useful for scheduling and regression detection
-4. Integration with concurrency design — cost bounds inform scheduling strategy
-5. Level 3 only if there is a specific real-time target that demands it — and even then, prefer integrating with OTAWA or similar rather than building from scratch
+1. R-0444's parser combinators provide a real bounded-loop forcing workload.
+2. R-0445 ships one source-scoped structural/symbolic resource certificate and
+   explicit unknown reasons.
+3. R-0244 upgrades useful bounds into obligations; R-0224/R-0248 bridge and
+   enforce named target stack budgets.
+4. R-0416–R-0419 correlate source facts with measurements without relabeling
+   source steps as time.
+5. Level 3 proceeds only for a specific deterministic target, preferably by
+   exporting annotations to an existing WCET tool.
 
 ## Bottom Line
 
 Concrete's design makes cost analysis much more tractable than in most languages. The right approach is:
 
-- Level 1 is a natural extension of the audit output story
-- Level 2 is feasible and valuable for bounded functions
+- structural and symbolic source-resource facts are a natural extension of the
+  audit output story
+- useful bounds must name their source cost model, assumptions, and completeness
 - Level 3 is a trap unless you integrate with existing tools
 
 The biggest leverage is making cost *visible*, not making it *perfect*.

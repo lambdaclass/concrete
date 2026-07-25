@@ -125,6 +125,7 @@ This is the restricted execution-oriented profile aimed at code that should be e
 | `--report effects` | Effect classification including recursion, loop class, FFI crossings |
 | `--report alloc` | Allocation site attribution (allocating, stack-only, cleanup patterns) |
 | `--report eligibility` | Predictable gates as part of broader eligibility assessment |
+| `--report resources` | **Planned (R-0445):** symbolic source steps, call depth, source stack, allocation count/bytes, and explicit unknown reasons |
 
 ### Evidence artifacts
 
@@ -145,6 +146,7 @@ This is the restricted execution-oriented profile aimed at code that should be e
 | Allocation detection | Working |
 | Blocking/FFI detection | Working |
 | Stack-depth reporting | Working (`--report stack-depth`) |
+| Composite source-resource certificate | Not yet — pulled forward as R-0445; source scope only, not elapsed time or WCET |
 | Failure discipline | Defined ([PREDICTABLE_FAILURE_DISCIPLINE.md](PREDICTABLE_FAILURE_DISCIPLINE.md)) |
 | Checked indexing | Working for raw safe array indexing; invalid indices trap. Checked/unchecked APIs across borrowed views still need a unified surface |
 | Overflow-mode visibility | Working: ordinary arithmetic is checked in every profile; explicit wrapping/saturating spellings and arithmetic reports expose intent |

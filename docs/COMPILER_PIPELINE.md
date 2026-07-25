@@ -364,10 +364,15 @@ none may silently upgrade another or become a proof-evidence class. A hash
 authenticates declared content, a cache hit proves nothing, and
 unsupported/native regions remain visibly trusted.
 
-Metamorphic tests should exercise the same idea at the source level. Renaming
-locals, reordering independent declarations, changing whitespace/comments, or
-rewriting harmless parentheses should not change compiler facts except for the
-facts that honestly depend on source text or spans.
+Metamorphic tests should exercise the same idea at the source level. A strict,
+capture-avoiding alpha rename must preserve acceptance, behavior, and semantic
+facts except for honest display-name/span differences. A separate hostile-name
+leg should pressure mangled-name, builtin, intrinsic, import, and local/global
+collisions; that case may preserve behavior or fail closed with a specified
+diagnostic, but must never silently diverge or trigger an internal error.
+Random fresh names do not exercise the collision class. R-0007 owns these two
+gates. Reordering independent declarations, changing whitespace/comments, or
+rewriting harmless parentheses should likewise leave unrelated facts unchanged.
 
 ## Backend Contract
 

@@ -1,6 +1,8 @@
 # Allocation Budgets
 
-Status: research
+Status: roadmap-committed in layers. R-0445 owns report-level allocation
+count/byte facts; later obligation and predictable-profile tasks own discharge
+and enforcement. The surface syntax remains undecided.
 
 ## Problem
 
@@ -116,7 +118,11 @@ This is the cheapest option and may be sufficient for most audit use cases.
 
 ## Recommendation
 
-**Start with Option C** (report-only classification), then graduate to **Option A** (sub-capabilities) once the report proves valuable.
+**Start with Option C** (report-only classification) as part of R-0445. If real
+workloads use the facts, graduate them through the existing obligation and
+profile-policy machinery. Do not assume Option A follows: capabilities describe
+authority, while an allocation quantity is a resource fact/budget. A new
+capability spelling requires a separate language-design decision.
 
 Option C is ~200-300 lines in Report.lean. It leverages the existing call graph and intrinsic mapping. The classification algorithm:
 1. Walk the call graph from each function
@@ -124,7 +130,10 @@ Option C is ~200-300 lines in Report.lean. It leverages the existing call graph 
 3. If all allocation paths are inside non-recursive, bounded-iteration code → `Bounded`
 4. Otherwise → `Unbounded`
 
-Option A requires ~800-1200 lines across Check.lean, CoreCheck.lean, Report.lean, and stdlib annotations. The hard part is defining how budgets compose across function calls and what "bounded" means precisely.
+An enforceable budget requires work across checking, reporting, policy, and
+stdlib contracts. The hard part is defining how budgets compose across
+function calls and what "bounded" means precisely, not adding another
+capability name.
 
 ## Difficulty Assessment
 
@@ -136,9 +145,10 @@ Option A requires ~800-1200 lines across Check.lean, CoreCheck.lean, Report.lean
 
 ### What makes this tractable
 
-- Capability infrastructure is parametric — adding new capability names is trivial
-- `capsContain` in Shared.lean already handles arbitrary capability checking
-- Post-monomorphization, all calls are direct — no dynamic dispatch complicates analysis
+- Existing capability and allocation reports already identify allocation
+  authority and intrinsic sites
+- Post-monomorphization, direct calls and the conservative target sets of
+  explicit indirect calls are enumerable
 - Intrinsic.lean already maps every allocation operation to `Alloc`
 
 ### What makes byte-level budgets hard
@@ -151,7 +161,9 @@ Option A requires ~800-1200 lines across Check.lean, CoreCheck.lean, Report.lean
 
 - **Arena allocation**: Arenas have a fixed budget by construction (arena size = budget). `BoundedAlloc` + arenas compose naturally.
 - **defer**: No interaction — defer is about cleanup timing, not allocation.
-- **Proof story**: `NoAlloc` is directly provable in Lean (function body contains no allocation intrinsic calls). `BoundedAlloc` requires more sophisticated reasoning.
+- **Proof story**: `NoAlloc` can become an obligation over the complete
+  transitive call/target graph. `BoundedAlloc` additionally requires
+  path/loop-sensitive composition and a named allocation model.
 - **High-integrity profile**: Allocation budgets are a natural building block for restricted execution profiles.
 
 ## Evidence Needed

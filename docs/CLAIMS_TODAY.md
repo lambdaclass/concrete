@@ -205,6 +205,7 @@ Reference: [PROFILES.md](PROFILES.md)
 | Cross-function proof composition | Proofs are per-function; dependency tracking exists but is not compositional verification |
 | Finished high-integrity profile | Named direction, not a completed profile |
 | Finished predictable profile | Partially real, still being tightened |
+| Composite compile-time resource certificate | Planned as R-0445; no current composite resource-report command or source-step/space guarantee |
 | Stabilized first public release surface | Still evolving |
 | Concurrency safety | Single-threaded model assumed; concurrency is explicitly deferred. Async/concurrency capabilities, structured scopes, linear task handles, and simulation-backed evidence are research directions, not current claims. |
 | Cross-package guarantees | Single-compilation-unit model today |

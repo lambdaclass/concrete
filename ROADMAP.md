@@ -1009,6 +1009,19 @@ separate from bug 047's corruption observation inside the shared gate.
    link/display symbols, and by-identity layout lookup with diagnosing
    missing-field access.
 
+   This task also turns PRINCIPLES #12 into an adversarial metamorphic gate.
+   A strict, capture-avoiding alpha rename of source binders must preserve
+   acceptance, observable behavior, and semantic artifacts modulo honest
+   display names and source spans. A second hostile-spelling leg deliberately
+   pressures generated mangles, builtin/intrinsic names, import aliases, and
+   local/global collisions. That leg may preserve behavior or fail closed with
+   a phase-appropriate collision diagnostic; it may never silently change
+   behavior or trigger an internal error. Random fresh-name substitution is
+   insufficient because bugs 044/050/051/054 were collision-sensitive.
+   Lowering-only sentinels such as `@fnref.*` are exercised by IR mutation
+   fixtures, not treated as legal source identifiers. Keep both oracles here
+   rather than opening a second identity-testing task.
+
 ### Task R-0008
 
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
@@ -1239,6 +1252,68 @@ section of the Phase 17 language reference.
    certificates), R-0442 (proof links must survive extraction). DSL
    generation proper (EverParse-style spec→source) stays research-gated
    in R-0406 until the combinator proofs exist.
+
+   Immediate handoff: the numeric, PNG, and ELF ports are the first forcing
+   corpus for R-0445's source-level resource certificate. They must expose
+   bounded repetition and allocation facts through the shared schema rather
+   than grow parser-private cost annotations.
+
+### Task R-0445
+
+**Objective:** Ship a compile-time source-resource certificate early, before
+broad stdlib expansion. For each monomorphized function and selected program
+root, `--report resources` (human and deterministic JSON) reports a conservative
+upper bound or an explicit `unknown` for:
+
+- source-model execution steps, as a constant or symbolic expression over
+  named input bounds;
+- maximum call depth;
+- source-model stack bytes under a stated source layout model;
+- allocation count and allocated bytes; and
+- blocking, extern, trusted, or opaque boundaries that prevent a complete
+  bound.
+
+Every fact carries its subject identity, inputs, assumptions, provenance,
+completeness, a versioned cost/layout-model identifier,
+`semantic_scope = source`, and—when incomplete—a stable blocker code plus a
+remedy-oriented explanation. V1 publishes the small weighting table that
+defines a source step. Its stack value is the maximum sum of source-frame
+footprints along a call path under the named source layout/target-width model;
+it excludes backend spills, red zones, prologues, and ABI frame growth. A
+missing fact is never converted to zero, and a source-step or source-stack
+bound is never presented as elapsed time, cycles, native frame size, or a
+hardware WCET claim.
+
+Build the certificate from canonical loop, call-edge, target-set, layout,
+allocation, and stack facts. Do not add a private AST walk or second cost truth
+source. Pull forward only the minimal shared resource-fact family that later
+R-0178 will stabilize. Conditionals compose by conservative maximum, sequential
+work by checked sum, direct calls by substitution, and indirect calls over the
+conservative union/maximum of possible targets. Recursion, an unbounded loop,
+an incomplete indirect target set, FFI/trusted code without a resource
+contract, overflow in the bound expression, or an opaque intrinsic produces
+`unknown` with the exact reason.
+
+Use R-0444's fixed-width assembly, numeric parser, PNG, and ELF paths as the
+first real corpus. Include one non-author session focused on whether the report
+and its `unknown` remedies can be understood and acted on; record it as one
+attempt in R-0137, but do not let it replace the later three-user validation
+trial or its completion criterion.
+
+Gate constant, linear, and nested-loop bounds; branch maximum; direct-call
+composition; indirect-target maximum; zero-, fixed-, and symbolic-allocation
+cases; stack/call-depth composition; and honest unknowns for recursion,
+unbounded iteration, FFI/trusted boundaries, and opaque calls. Mutations that
+drop a loop, call, stack, or allocation term must fail. Report formatting and
+JSON must be deterministic, and adding the report may not change interpreter
+or native behavior.
+
+This is the early usability and design-pressure layer. R-0244 later turns the
+same symbolic bounds into dischargeable obligations, R-0224/R-0248 bridge and
+enforce target stack budgets, R-0416–R-0419 measure generated code, and R-0405
+researches hardware WCET under a fixed target model. Backend cost preservation,
+formal discharge, benchmark infrastructure, and hardware timing are explicit
+non-goals here.
 
 ### Task R-0011
 
@@ -2061,10 +2136,18 @@ evidence classes for each helper.
 
  integer/text formatting, simple
  scanners, structured parse results, error-set reports, and oracle-friendly
- output conventions.
+ output conventions. R-0444 owns the shared parser-combinator and fixed-width
+ assembly core; this task consumes that core for the remaining formatting and
+ text-parsing surface rather than creating a second parser vocabulary.
 ### Task R-0040
 
-**Objective:** Build a reusable scanner/parser core in `std.parse` over `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`, `consume`, span/position tracking, error reporting, and no hidden allocation unless the API carries `with(Alloc)`.
+**Objective:** Complete the scanner/parser surface left after R-0444 over
+`std.bytes.Bytes` and `std.text.Text`: span/position tracking, structured error
+reporting, and streaming/text adapters, with no hidden allocation unless the
+API carries `with(Alloc)`. R-0444 owns the reusable combinator core (`peek`,
+`advance`, bounded take/consume/repeat/scan shapes); do not duplicate it here.
+Retire any originally listed row that R-0444 demonstrably ships rather than
+keeping two nominal owners.
 
 ### Task R-0041
 
@@ -3026,6 +3109,9 @@ input validation, and I/O boundary. Record source/toolchain/profile/target,
 warmup and sample policy, input hashes, wall time distribution, peak memory,
 allocation count/bytes, output hash, binary size, and emitted-code size. Publish
 raw samples and replay commands; never collapse them into a single “fast” badge.
+Carry the matching R-0445 resource certificate and its unknown reasons beside
+each workload as source-scope evidence. Correlation with measured time or
+memory is an experiment, not a reinterpretation of the certificate.
 
 Define the pull trigger for Phase 15.75 optimization work: a stable workload
 shows a material, reproduced generated-code gap against its comparable
@@ -3081,6 +3167,10 @@ the comparison detects, and no gating threshold derived from a single sample.
  the minimum teaching path and remedy-oriented diagnostics are usable, before
  the large proof-automation investment, so external evidence can redirect
  that investment rather than merely evaluate it afterward.
+ R-0445's focused non-author resource-report session counts as one recorded
+ attempt here. It is an early pressure test, not a substitute for recruiting
+ three non-authors or for the alpha requirement that one non-author complete a
+ useful workflow.
  If the external-validation trial finds manual proof authoring too costly,
  this artifact must also run the exact narrow Task R-0167 synthesis probe
  selected by the gate, preserve its transcript and review-cost measurements,
@@ -3826,6 +3916,12 @@ five graduated flagships and one package-scale example.
 
 **Objective:** Stabilize machine-readable fact schemas for proof status, obligations, effects, capabilities, assumptions, policies, snapshots, showcase metadata, runtime traps, synthesis attempts, stdlib evidence, and package evidence.
 
+Absorb and version R-0445's early resource-fact schema for source steps,
+call depth, source stack, allocation count/bytes, completeness, assumptions,
+and blocker reasons. This phase may generalize the schema, but it must migrate
+the existing fact identities and meanings rather than recompute resources with
+a second analyzer.
+
 Runtime-trap facts include one derived per-function view: direct trap sites,
 transitively reachable trap kinds, the call/indirect-target path that makes each
 kind reachable, and any trusted/extern boundary where completeness stops. This
@@ -4330,6 +4426,10 @@ unless trusted and assumed, no unbounded loops/recursion, an enforced
 target/profile stack budget, and an explicit failure-path policy. A stack
 budget may come from an explicit policy or a named target-profile default; do
 not derive a universal byte threshold from the current example corpus.
+Freeze and policy-enforce the relevant R-0445 resource facts; do not invent a
+new predictable-only resource analyzer. `unknown` is a failed predictable
+precondition unless an explicit trusted assumption names and scopes the missing
+boundary.
 
 ### Task R-0221
 
@@ -4359,7 +4459,9 @@ promises unwinding, `defer`, destruction, or recovery.
 **Objective:** Define source-level stack-depth versus backend/target stack
 claims, including how a source estimate, ABI/backend frame growth, and a named
 target budget combine before the predictable profile may call stack use
-bounded.
+bounded. Consume R-0445's source-stack and call-depth facts as the source
+layer, then define the checked bridge to backend frame facts. Never relabel the
+source estimate as target stack bytes.
 
 ### Task R-0225
 
@@ -4508,6 +4610,11 @@ Where the obligation can expose a symbolic iteration bound, retain it as a
 Boolean “bounded” label. This is a source-level complexity/DoS-resistance
 claim, not wall-clock timing.
 
+   Reuse R-0445's resource subjects, symbolic expressions, assumptions,
+   completeness, and blocker codes. This task upgrades inferred bounds into
+   obligations with replayable discharge; it does not fork their identifiers
+   or introduce a parallel source cost semantics.
+
    Bounds are obligations and must discharge like them: loop-bound arithmetic
    routes to `omega`/`bv_decide` through R-0170, and cost-bound discharge is
    a named auto-discharge gate case — bounds that require hand-written Lean
@@ -4553,7 +4660,9 @@ assertions, and profile-dependent panic behavior.
 boundedness and enforce the configured target/profile stack budget rather than
 only reporting it. Gate just-under/just-over programs, deep call chains with
 large frames, report/gate accounting agreement, and a mutation that removes
-enforcement while leaving the report.
+enforcement while leaving the report. Enforce over R-0445's source facts only
+after R-0224 supplies the named backend/ABI/target bridge; keep source and
+target byte claims distinct in the resulting evidence.
 
 ### Task R-0249
 
@@ -5530,8 +5639,9 @@ allocated bytes, or stack bytes produced by R-0244/R-0248 and the allocation
 budget work. Such a claim names its source-level cost model and inputs and
 never implies cycles or elapsed time. Start with the std container bounds
 already forced by bug 048 plus one workload budget; do not build a parallel
-cost-semantics task before those existing obligation owners need shared
-machinery.
+cost-semantics task: R-0445 establishes the early schema and source model,
+R-0244/R-0248 add discharge and target-budget enforcement, and this task
+generalizes their evidence grammar without changing their meaning.
 
 If a timing interpretation of `complexity_guarded` is ever entertained, run
 the correlation experiment first: cost-model step counts vs. measured time on
@@ -6686,11 +6796,13 @@ second control-flow semantics.
 **Objective:** Research exact WCET/cache/pipeline behavior only with a
 target/hardware model. Posture: be a strong WCET annotation frontend, not
 another WCET analyzer—Concrete can export its closed callable set, explicit
-indirect edges, and loop-bound facts instead of making a source-level cycle
-claim. Requires deterministic hardware (freestanding Cortex-M class), so
-realistically after the freestanding profile (R-0322). Source-level
-step/space bounds stay with R-0244/R-0248 and R-0417's
-`complexity_guarded` evidence; none of them imply hardware timing.
+indirect edges, and R-0445/R-0244 resource facts instead of making a
+source-level cycle claim. Requires deterministic hardware (freestanding
+Cortex-M class), so realistically after the freestanding profile (R-0322).
+Source-level step/space bounds stay with R-0445, R-0244/R-0248, and R-0417's
+`complexity_guarded` evidence; none of them imply hardware timing. A future
+WCET bridge consumes those exported facts under a named hardware model and
+must not silently reinterpret or overwrite their source scope.
 
 ### Task R-0406
 

@@ -95,6 +95,20 @@ The only resources predictable code may hold are file descriptors from Console (
 | Bounded stack depth | Source-level | `--report stack-depth` (item 25), not gated |
 | Report/IR determinism | Compiler | No HashMap in output paths, monotonic counters |
 
+### Planned unified resource certificate
+
+Task R-0445 will pull a composite source-resource certificate forward before
+broad stdlib expansion. It will report a constant or symbolic upper bound—or a
+specific `unknown` reason—for source-model steps, call depth, source-model stack,
+allocation count/bytes, and blocking/opaque boundaries. The parser-combinator
+workloads are its first forcing corpus.
+
+This is planned work, not a current command or guarantee. Its facts will carry
+`semantic_scope = source`, assumptions, completeness, and provenance. They will
+also name the versioned source cost/layout model. They will not claim elapsed
+time, cycles, backend frame size, or hardware WCET; later tasks own those
+bridges and measurements.
+
 ### What is NOT deterministic (outside compiler scope)
 
 | Property | Why not | Mitigation |
@@ -246,6 +260,7 @@ extractable.
 | Does this function pass predictable? | `concrete file.con --check predictable` |
 | What are the effects of each function? | `concrete file.con --report effects` |
 | What is the stack depth? | `concrete file.con --report stack-depth` |
+| What is the composite source-resource bound? | Planned: `concrete file.con --report resources` (R-0445) |
 | Is this function proved? | `concrete file.con --report proof-status` |
 | What host calls does this function make? | `concrete file.con --report alloc` (allocation), `--report caps` (capabilities) |
 | Is there recursion? | `concrete file.con --report recursion` |

@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Early Source-Resource Certificate Sequencing
+
+_Docs/roadmap only, 2026-07-25. No compiler, report, or language behavior
+changed in this slice._
+
+R-0445 now pulls a conservative compile-time source-resource certificate ahead
+of broad stdlib expansion. It will report symbolic source steps, call depth,
+source-model stack, allocation count/bytes, and explicit unknown boundaries,
+with the numeric/PNG/ELF parser work as its first forcing corpus. One focused
+non-author session pressures the report and diagnostics without replacing the
+later three-user validation trial.
+
+The roadmap now keeps one resource model: R-0178 stabilizes the early schema,
+R-0220 applies predictable policy, R-0244 adds proof obligations, R-0224/R-0248
+bridge and enforce target stack, R-0416–R-0419 measure generated code, and
+R-0405 retains hardware WCET. Source bounds are not timing claims. R-0007 also
+owns strict alpha-invariance and hostile collision metamorphic gates, turning
+semantic-identity principle #12 into a direct regression oracle.
+
 ### Proof Subject And Replay-Evidence Design Split
 
 _Docs/roadmap only, 2026-07-25. No compiler or proof verdict changed in this

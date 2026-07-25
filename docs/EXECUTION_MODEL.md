@@ -408,7 +408,11 @@ The stdlib is classified into three layers by host dependency (see [Hosted vs Fr
 
 ## Execution Profiles
 
-Concrete does not yet implement execution profiles, but the direction is documented here so the constraints inform Phase F and G work.
+Concrete implements the initial Safe and Predictable checking/policy surfaces
+described in [PROFILES.md](PROFILES.md). The additional resource-sensitive
+profiles below remain design directions; R-0445 first exposes source-scoped
+resource facts, and later profile tasks decide which facts become enforceable
+budgets.
 
 ### What execution profiles would provide
 

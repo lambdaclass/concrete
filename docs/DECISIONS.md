@@ -125,6 +125,28 @@ useful views, but they may not erase the underlying dimensions or imply that a
 narrower claim dominates broader evidence merely because its method is called a
 proof.
 
+### Source-level resource certificates land early; hardware time stays scoped
+
+**Status:** Decided (2026-07-25); implementation pending
+[ROADMAP R-0445](../ROADMAP.md).
+
+Concrete will expose conservative per-function source-resource bounds before
+broad stdlib expansion. The first certificate covers symbolic source steps,
+call depth, source-model stack, allocation count/bytes, and the exact boundary
+that makes any component unknown. It is built from shared compiler facts and
+tested first on the parser-combinator workloads, so the language's restrictions
+pay an immediate, inspectable benefit and can influence API design while the
+surface is still small.
+
+The certificate's semantic scope is `source`. It is not elapsed time, cycles,
+native stack size, backend cost preservation, or WCET. Later obligation,
+target-stack, measurement, and fixed-hardware phases strengthen or relate the
+same facts without relabeling their scope. An honest `unknown` with a specific
+blocker is a valid result; fabricating a bound or inferring hardware performance
+from the source model is not. The source cost/layout model is versioned and
+named in every certificate so changing what a “step” or source frame means
+cannot silently preserve old evidence.
+
 ### Predictable generated-code performance is an affirmative project claim
 
 **Status:** Decided (2026-07-25); evidence machinery pending
