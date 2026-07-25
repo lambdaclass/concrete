@@ -34,7 +34,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL core/$name"
       echo "FAIL: core/$name"
-      diff -u "$core_expected" <(echo "$core_actual") | head -20 || true
+      diff -u "$core_expected" <(echo "$core_actual") | awk "NR<=20" || true
       echo "---"
     fi
   fi
@@ -50,7 +50,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL ssa/$name"
       echo "FAIL: ssa/$name"
-      diff -u "$ssa_expected" <(echo "$ssa_actual") | head -20 || true
+      diff -u "$ssa_expected" <(echo "$ssa_actual") | awk "NR<=20" || true
       echo "---"
     fi
   fi
@@ -66,7 +66,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL fmt/$name"
       echo "FAIL: fmt/$name"
-      diff -u "$fmt_expected" <(echo "$fmt_actual") | head -20 || true
+      diff -u "$fmt_expected" <(echo "$fmt_actual") | awk "NR<=20" || true
       echo "---"
     fi
     # Also check idempotency: format(format(x)) == format(x)
@@ -75,7 +75,7 @@ for src in "$SRC_DIR"/*.con; do
       failed=$((failed + 1))
       errors="$errors\n  FAIL fmt/$name (not idempotent)"
       echo "FAIL: fmt/$name (not idempotent)"
-      diff -u <(echo "$fmt_actual") <(echo "$fmt_round2") | head -20 || true
+      diff -u <(echo "$fmt_actual") <(echo "$fmt_round2") | awk "NR<=20" || true
       echo "---"
     else
       passed=$((passed + 1))

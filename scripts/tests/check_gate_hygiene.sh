@@ -61,5 +61,32 @@ for f in check_*.sh test_*.sh; do
 done
 
 echo ""
+echo "=== no '| head -N' inside an errexit+pipefail script (SIGPIPE self-abort) ==="
+# `cmd | head -N` closes the pipe once N lines arrive. A producer still writing
+# then dies of SIGPIPE, and in a script with BOTH `set -e` and `pipefail` that
+# failure becomes the script's exit status — so the gate fails for a reason
+# unrelated to what it tests, and only when the producer loses the race against
+# head's exit. That is exactly how the trust gate died on the R-0001 push: the
+# bug-corpus audit capped 55 entries at thirty lines this way, green on one
+# commit and exit-2 on the next. `awk "NR<=N"` reads all input and caps
+# identically. (This comment avoids spelling the pattern, which the scan below
+# would otherwise match in its own source.)
+#
+# Scoped to errexit scripts because that is where the SIGPIPE is fatal; gates
+# using `set -uo pipefail` (no -e) absorb it. If a script here gains `set -e`,
+# this check starts covering it.
+hazard=0
+for f in "$ROOT_DIR"/scripts/tests/*.sh; do
+  head -20 "$f" | grep -qE "set -[a-z]*e[a-z]* .*pipefail|set -o errexit" || continue
+  # `[h]ead` so this scan does not match its own pattern literal.
+  hits="$(grep -nE "\| *[h]ead -[0-9]" "$f" || true)"
+  if [ -n "$hits" ]; then
+    no "$(basename "$f") — '| head -N' under errexit+pipefail: $(head -1 <<<"$hits" | cut -d: -f1). Use '| awk \"NR<=N\"'"
+    hazard=1
+  fi
+done
+[ "$hazard" -eq 0 ] && ok "no errexit gate script caps output with '| head -N'"
+
+echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -53,7 +53,7 @@ for entry in "${BANNED_TERMS[@]}"; do
     if [ -n "$matches" ]; then
         count=$(echo "$matches" | wc -l | tr -d ' ')
         echo "FAIL: found $count occurrence(s) of non-canonical term '$old' (should be '$canonical'):"
-        echo "$matches" | head -10 | sed 's/^/  /'
+        echo "$matches" | awk "NR<=10" | sed 's/^/  /'
         if [ "$count" -gt 10 ]; then
             echo "  ... and $((count - 10)) more"
         fi

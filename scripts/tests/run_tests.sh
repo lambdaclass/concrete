@@ -525,7 +525,7 @@ record_result() {
         FAIL=$((FAIL + 1))
         # Save failure artifact with rerun info
         local fail_name
-        fail_name=$(echo "$message" | head -1 | sed 's/FAIL  //' | sed 's/[^a-zA-Z0-9_.-]/_/g' | head -c 120)
+        fail_name=$(echo "$message" | awk "NR==1" | sed 's/FAIL  //' | sed 's/[^a-zA-Z0-9_.-]/_/g' | head -c 120)
         if [ -n "$fail_name" ]; then
             mkdir -p "$FAILDIR"
             {
@@ -1879,8 +1879,8 @@ check_report_multi "$TESTDIR/report_layout_check.con" layout \
 
 # --- report layout: cross-validate sizes against runtime sizeof ---
 report_output=$(cached_output "$TESTDIR/report_layout_check.con" "--report layout")
-padded_size=$(grep <<<"$report_output" "struct Padded" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
-packed_size=$(grep <<<"$report_output" "struct Packed" -A1 | grep -o "size: [0-9]*" | head -1 | grep -o "[0-9]*")
+padded_size=$(grep <<<"$report_output" "struct Padded" -A1 | grep -o "size: [0-9]*" | awk "NR==1" | grep -o "[0-9]*")
+packed_size=$(grep <<<"$report_output" "struct Packed" -A1 | grep -o "size: [0-9]*" | awk "NR==1" | grep -o "[0-9]*")
 expected_sum=$((padded_size + packed_size))
 gate_selfprint_wrap "$TESTDIR/report_layout_check.con" "$TMPDIR/report_layout_check.w.con"
 $COMPILER "$TMPDIR/report_layout_check.w.con" -o "$TMPDIR/report_layout_check" > /dev/null 2>&1
@@ -3000,7 +3000,7 @@ if grep <<<"$drift_out" -q "proof stale" && \
     PASS=$((PASS + 1))
 else
     echo "FAIL  spec_drift: status should downgrade to stale, not stay proved"
-    grep <<<"$drift_out" -E "Totals|proof stale|proved" | head -5
+    grep <<<"$drift_out" -E "Totals|proof stale|proved" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
 
@@ -3854,7 +3854,7 @@ fi
 
 # 1e. Effects says pure_add evidence:enforced → proof_status should be eligible and waiting for proof
 # Note: JSON is one line, so we extract per-record to avoid cross-record grep matches
-pure_add_proof_state=$(grep <<<"$rc_json" -o '"kind": "proof_status"[^}]*"function": "main.pure_add"[^}]*' | grep -o '"state": "[^"]*"' | head -1)
+pure_add_proof_state=$(grep <<<"$rc_json" -o '"kind": "proof_status"[^}]*"function": "main.pure_add"[^}]*' | grep -o '"state": "[^"]*"' | awk "NR==1")
 if grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"' && \
    [ "$pure_add_proof_state" = '"state": "missing"' ]; then
     echo "  ok  consistency: effects enforced ↔ proof_status eligible/missing for pure_add"
@@ -6424,7 +6424,7 @@ if grep <<<"$llvm_output" -q "%struct.Point = type { i64, i64 }"; then
     PASS=$((PASS + 1))
 else
     echo "FAIL  struct_basic.con --emit-llvm missing %struct.Point = type { i64, i64 }"
-    echo "$llvm_output" | head -40
+    echo "$llvm_output" | awk "NR<=40"
     FAIL=$((FAIL + 1))
 fi
 
@@ -6645,7 +6645,7 @@ if grep <<<"$llvm_output" -q "%struct.Packed = type <{"; then
     PASS=$((PASS + 1))
 else
     echo "FAIL  report_layout_check.con --emit-llvm missing packed struct <{ syntax"
-    echo "$llvm_output" | head -40
+    echo "$llvm_output" | awk "NR<=40"
     FAIL=$((FAIL + 1))
 fi
 
@@ -7098,7 +7098,7 @@ for f in "$TESTDIR"/*.con; do
     output=$("$COMPILER" "$f" --report verify 2>&1) || true
     if grep <<<"$output" -q "VERIFIER FAILED"; then
         echo "  FAIL verify: $bn"
-        grep <<<"$output" "error:" | head -3 | sed 's/^/    /'
+        grep <<<"$output" "error:" | awk "NR<=3" | sed 's/^/    /'
         verify_fail=$((verify_fail + 1))
     else
         verify_pass=$((verify_pass + 1))
@@ -7165,7 +7165,7 @@ if grep <<<"$mal_toml" -q "warning.*Concrete.toml.*dependencies"; then
     mal_pass=$((mal_pass + 1))
 else
     echo "  FAIL malformed: bad Concrete.toml dependency line should produce warning"
-    echo "    output: $(echo "$mal_toml" | head -3)"
+    echo "    output: $(echo "$mal_toml" | awk "NR<=3")"
     mal_fail=$((mal_fail + 1))
 fi
 
@@ -7185,7 +7185,7 @@ if [ "$nofile_exit" -ne 0 ] && grep <<<"$mal_nofile" -q "error: file not found";
     mal_pass=$((mal_pass + 1))
 else
     echo "  FAIL malformed: diff with non-existent file should produce 'file not found' diagnostic"
-    echo "    output: $(echo "$mal_nofile" | head -2)"
+    echo "    output: $(echo "$mal_nofile" | awk "NR<=2")"
     mal_fail=$((mal_fail + 1))
 fi
 
@@ -7268,7 +7268,7 @@ if grep <<<"$bun_ok" -q "is valid"; then
     mal_pass=$((mal_pass + 1))
 else
     echo "  FAIL malformed: valid bundle should pass validation"
-    echo "    output: $(echo "$bun_ok" | head -3)"
+    echo "    output: $(echo "$bun_ok" | awk "NR<=3")"
     mal_fail=$((mal_fail + 1))
 fi
 
@@ -7329,7 +7329,7 @@ if [ "$bun_types_exit" -ne 0 ] && grep <<<"$bun_types" -q "\"version\" must be a
     mal_pass=$((mal_pass + 1))
 else
     echo "  FAIL malformed: bundle with wrong field types should produce type errors"
-    echo "    output: $(echo "$bun_types" | head -3)"
+    echo "    output: $(echo "$bun_types" | awk "NR<=3")"
     mal_fail=$((mal_fail + 1))
 fi
 
@@ -7382,7 +7382,7 @@ if [ "$q_exit" -ne 0 ] && grep <<<"$q_empty" -q "error.*empty query"; then
     query_pass=$((query_pass + 1))
 else
     echo "  FAIL query: empty query should produce explicit error"
-    echo "    output: $(echo "$q_empty" | head -2)"
+    echo "    output: $(echo "$q_empty" | awk "NR<=2")"
     query_fail=$((query_fail + 1))
 fi
 
@@ -7393,7 +7393,7 @@ if [ "$q_exit" -ne 0 ] && grep <<<"$q_bogus" -q "error.*unknown query kind.*bogu
     query_pass=$((query_pass + 1))
 else
     echo "  FAIL query: unknown single-word kind should produce error"
-    echo "    output: $(echo "$q_bogus" | head -2)"
+    echo "    output: $(echo "$q_bogus" | awk "NR<=2")"
     query_fail=$((query_fail + 1))
 fi
 
@@ -7502,7 +7502,15 @@ audit_exit=$?
 # Count pass/fail from audit output
 audit_pass=$(grep <<<"$audit_out" -c "^  ok " || true)
 audit_fail=$(grep <<<"$audit_out" -c "^  FAIL" || true)
-grep <<<"$audit_out" -E "^  (ok|FAIL|skip|warn)" | head -30
+# Print EVERY audited bug, and never through `| head`. This script runs under
+# `set -euo pipefail`, so a `head -N` that closes the pipe while grep is still
+# writing kills the whole trust gate with grep's exit 2 ("write error: Broken
+# pipe") — a race that depends on whether grep's writes fit the pipe buffer, so
+# it passes on one commit and fails on the next. It also truncated the report:
+# 55 bug entries with `head -30` hid 25 of them, FAIL lines included, while the
+# pass/fail counts above were computed from the full output. Evidence that is
+# silently cut is worse than verbose evidence.
+grep <<<"$audit_out" -E "^  (ok|FAIL|skip|warn)" || true
 if [ "$audit_exit" -eq 0 ]; then
     echo "  bug corpus audit passed ($audit_pass mapped, 0 failures)"
     PASS=$((PASS + 1))
@@ -7526,7 +7534,7 @@ if [ -f "examples/crypto_verify/src/main.con" ]; then
         evidence_pass=$((evidence_pass + 1))
     else
         echo "  FAIL predictable: crypto_verify should pass"
-        echo "$pred_out" | head -3 | sed 's/^/    /'
+        echo "$pred_out" | awk "NR<=3" | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
     fi
 fi
@@ -7553,7 +7561,7 @@ for main_file in examples/*/src/main.con; do
     ps_out=$("$COMPILER" "$main_file" --report proof-status 2>&1) || true
     if grep <<<"$ps_out" -qE "^-- (proof )?stale"; then
         echo "  FAIL stale-proof: $example_name has stale proofs"
-        grep <<<"$ps_out" "^-- stale" | head -3 | sed 's/^/    /'
+        grep <<<"$ps_out" "^-- stale" | awk "NR<=3" | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
     else
         echo "  ok  stale-proof: $example_name — no stale proofs"
@@ -7607,7 +7615,7 @@ for main_file in examples/*/src/main.con; do
         evidence_pass=$((evidence_pass + 1))
     else
         echo "  FAIL trust-drift: $example_name has consistency violations"
-        echo "$con_out" | head -3 | sed 's/^/    /'
+        echo "$con_out" | awk "NR<=3" | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
     fi
     # Fingerprints (non-empty)
@@ -7640,7 +7648,7 @@ drift_check() {
         evidence_pass=$((evidence_pass + 1))
     else
         echo "  FAIL drift-demo: $name — should detect trust weakening"
-        echo "$diff_out" | head -3 | sed 's/^/    /'
+        echo "$diff_out" | awk "NR<=3" | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
     fi
     # Check specific drift pattern
@@ -8125,8 +8133,8 @@ fi
 
 # 50. E2E: fingerprint in obligations matches extraction fingerprint
 e2e_ext=$($COMPILER examples/proof_pressure/src/main.con --report extraction 2>&1) || true
-e2e_ob_fp=$(grep <<<"$e2e_pp_ob" -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
-e2e_ext_fp=$(grep <<<"$e2e_ext" -A5 "check_nonce" | grep -o '\[.*\]' | head -1)
+e2e_ob_fp=$(grep <<<"$e2e_pp_ob" -A8 "check_nonce" | grep -o '\[.*\]' | awk "NR==1")
+e2e_ext_fp=$(grep <<<"$e2e_ext" -A5 "check_nonce" | grep -o '\[.*\]' | awk "NR==1")
 if [ -n "$e2e_ob_fp" ] && [ "$e2e_ob_fp" = "$e2e_ext_fp" ]; then
     echo "  ok  e2e-lean: obligation fingerprint matches extraction fingerprint"
     evidence_pass=$((evidence_pass + 1))
@@ -8371,7 +8379,7 @@ if grep <<<"$inelig_con" -q "All.*pass\|0 failures"; then
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL boundary-pressure: consistency check should pass for ineligible functions"
-    echo "    $(grep <<<"$inelig_con" -i "fail" | head -3)"
+    echo "    $(grep <<<"$inelig_con" -i "fail" | awk "NR<=3")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -8382,7 +8390,7 @@ if grep <<<"$blocked_con" -q "All.*pass\|0 failures"; then
     evidence_pass=$((evidence_pass + 1))
 else
     echo "  FAIL boundary-pressure: consistency check should pass for blocked functions"
-    echo "    $(grep <<<"$blocked_con" -i "fail" | head -3)"
+    echo "    $(grep <<<"$blocked_con" -i "fail" | awk "NR<=3")"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -8631,7 +8639,7 @@ if grep <<<"$err_out" -q '(E0100)'; then
     ec_pass=$((ec_pass + 1))
 else
     echo "FAIL  error-codes: rendered diagnostic should include error code"
-    echo "$err_out" | head -1
+    echo "$err_out" | awk "NR==1"
     ec_fail=$((ec_fail + 1))
 fi
 
@@ -8689,7 +8697,7 @@ policy_err() {
     else
         echo "  FAIL policy: $label (exit=$build_exit)"
         echo "    expected: $expected"
-        echo "    got: $(echo "$output" | head -2)"
+        echo "    got: $(echo "$output" | awk "NR<=2")"
         pol_fail=$((pol_fail + 1))
     fi
 }
@@ -8714,7 +8722,7 @@ policy_ok() {
             pol_fail=$((pol_fail + 1))
         fi
     else
-        echo "  FAIL policy: $label — build failed: $(echo "$output" | head -2)"
+        echo "  FAIL policy: $label — build failed: $(echo "$output" | awk "NR<=2")"
         pol_fail=$((pol_fail + 1))
     fi
 }
@@ -9195,8 +9203,8 @@ fi
 
 # 11. End-to-end: fingerprint from extraction matches fingerprint in obligations
 wf_ob=$($COMPILER "$PP_SRC" --report obligations 2>&1) || true
-wf_ext_fp=$(grep <<<"$wf_ext" -A6 "check_nonce" | grep -o '\[.*\]' | head -1)
-wf_ob_fp=$(grep <<<"$wf_ob" -A8 "check_nonce" | grep -o '\[.*\]' | head -1)
+wf_ext_fp=$(grep <<<"$wf_ext" -A6 "check_nonce" | grep -o '\[.*\]' | awk "NR==1")
+wf_ob_fp=$(grep <<<"$wf_ob" -A8 "check_nonce" | grep -o '\[.*\]' | awk "NR==1")
 if [ -n "$wf_ext_fp" ] && [ "$wf_ext_fp" = "$wf_ob_fp" ]; then
     echo "  ok  workflow: extraction fingerprint matches obligation fingerprint"
     wf_pass=$((wf_pass + 1))

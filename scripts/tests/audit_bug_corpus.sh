@@ -41,6 +41,9 @@ declare -A BUG_TEST_MAP=(
   [021]="bug_int_match_disagree.con"
   [022]="submodule_linear_consume/src/main.con"
   [023]="scand_aggregate_in_scope/src/main.con"
+  # R-0001: per-instantiation generic-enum mono. Both fixtures are positive
+  # (run_ok) — they were E0808 rejections while only containment existed.
+  [051]="regress_generic_enum_051.con adversarial_mono_generic_enum.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).
@@ -71,10 +74,9 @@ declare -A SKIP_BUGS=(
   [048]="OPEN -- HashMap find_slot hangs at zero empty slots (map.con load factor ignores tombstones); repro hangs by timeout, fix pending"
   [049]="OPEN -- reduce --predicate crash is vacuous (parse-only); reduces any program to ~empty, fix pending"
   [050]="OPEN -- Mono rewrites indirect fn-ptr calls when the local name matches a generic fn (tI_shadow + std io f-collision); repros in .audit_me"
-  [051]="OPEN -- user generic enums never monomorphized; mixed instantiations corrupt memory (tF_enum_layout: compiled garbage vs interp correct)"
   [052]="OPEN -- T_destroy no-op for arrays; Vec<[T;N]>.drop() skips element destruction (arrdrop cell-count repro)"
   [053]="OPEN -- DCE deletes checked negations; discard(-x) at MIN loses the trap (tA_neg_dce)"
-  [054]="OPEN -- struct mono-name collisions; user types shadow generated specializations (tD_collision crash)"
+  [054]="HALF CLOSED -- the collision now fails closed with E0809 (a specialization whose mangled name is declared, or two instantiations mangling to one name); gated in check_mono_name_collision.sh. Still OPEN: the mangling is forgeable, so a legitimate program spelling Box_Int is refused rather than compiled, and fn symbols are uncovered (R-0007)"
   [055]="OPEN -- project sibling import alias emits undefined callee (one044); fully-qualified form works"
   [039]="FIXED -- regress_039_import_alias_collision/src/main.con (project test, exit 0); emitSModule puts the module's own bare->qualified import aliases ahead of the program-wide pool"
   [040]="FIXED -- regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)"
