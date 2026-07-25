@@ -3705,6 +3705,21 @@ clause that auto-derives preservation) so frame conditions never become the
 majority of proof work. Gate: do not build it until a second update shape
 actually forces it (per the operating rules) — the current functional-list
 model gets framing for free.
+
+   Reference points beyond Smallfoot/Infer (2026-07-25): CN (Cambridge) —
+   separation-logic refinement types for C, used to verify pKVM's buddy
+   allocator; its resource inference for iterated separating conjunction,
+   with a syntactic restriction on ghost variables, gives predictable,
+   mostly-automatic ownership reasoning (eager unfold, lazy fold) — the
+   closest match for the inference mechanism. Verus — SMT-first
+   verification for a Rust-like linear language; the closest match for
+   the discharge posture (the boring majority closes without manual
+   proof). Aeneas — translates Rust to Lean 4 (also F*/Coq/HOL4) via pure
+   functional models, used on real crypto code; the closest existing
+   pipeline for source→Lean extraction faithfulness. CN's own admitted
+   gaps (Owned↔byte-representation conversion, concurrency) sit exactly
+   where Concrete's ByteView work does — import the inference ideas, not
+   the byte model.
 ### Task R-0176
 
 **Objective:** Deferred architecture refactor: split the current `Concrete.Proof` layering so registered example specs can move without a cycle, but do not let this block the active frontier unless spec ownership or proof authoring starts depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns the spec-drift table and imports whichever example spec modules it registers;
@@ -6560,6 +6575,20 @@ positive research direction lives here and in `docs/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a
 second control-flow semantics.
+
+   Reference points for the design survey (2026-07-25): Microsoft
+   Research's Project Verona — Behaviour-Oriented Concurrency: shared
+   state lives in isolated cowns (concurrent owners); a behaviour
+   acquires its whole cown set atomically, giving data-race freedom and
+   deadlock freedom by construction. A cown is a linear handle scheduled
+   against an executor — close to Concrete's linear-handle vocabulary,
+   but the honest mapping is typestate/protocol rather than a
+   `with(...)` capability, and the executor (scheduling, fairness, the
+   freestanding story) is the real design problem, not the spelling.
+   Pony's reference capabilities are the shipped, production-tested
+   ancestor of the same model. Verona itself is research-grade and
+   mid-refactor: steal the atomic multi-acquisition semantics, not the
+   runtime.
 ### Task R-0400
 
 **Objective:** Build concurrency pressure-test sketches and expected reports before implementation.
