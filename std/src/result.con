@@ -39,7 +39,7 @@ mod result {
         #[spec(Concrete.Proof.resultMapExpr)]
         #[proof_by(Examples.PureCore.Proofs.result_map_correct)]
         #[proof_coverage(representative)]
-        #[proof_fingerprint("ec92f3ef57cfa90815bb368a967b46db")]
+        #[proof_fingerprint("2217654a669cb7fb7b739afb9cbce1c0")]
         pub fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
             match self {
                 Result::Ok { value } => { return Result::<U, E>::Ok { value: f(value) }; },
@@ -59,7 +59,7 @@ mod result {
         #[spec(Concrete.Proof.resultMapErrExpr)]
         #[proof_by(Examples.PureCore.Proofs.result_map_err_correct)]
         #[proof_coverage(representative)]
-        #[proof_fingerprint("c2e5e72209481ec9b27e072f7d40c3d0")]
+        #[proof_fingerprint("605df137b5fb974cd0400eb85dbd922a")]
         pub fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
             match self {
                 Result::Ok { value } => { return Result::<T, F>::Ok { value: value }; },

@@ -47,7 +47,7 @@ mod option {
         #[spec(Concrete.Proof.optionMapExpr)]
         #[proof_by(Examples.PureCore.Proofs.option_map_correct)]
         #[proof_coverage(representative)]
-        #[proof_fingerprint("a65473353b511098995caa96320ba783")]
+        #[proof_fingerprint("d014cf025854c50afab467f67ad68330")]
         pub fn map<U>(self, f: fn(T) -> U) -> Option<U> {
             match self {
                 Option::Some { value } => { return Option::<U>::Some { value: f(value) }; },

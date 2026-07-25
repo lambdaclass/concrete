@@ -75,6 +75,11 @@ Those belong in:
 - [054_struct_mono_name_collision.md](054_struct_mono_name_collision.md) — user types shadow generated specializations (middle-end audit 2026-07-18)
 - [055_sibling_import_alias_unusable.md](055_sibling_import_alias_unusable.md) — project sibling `import a.{x as y}` emits undefined callee (middle-end audit 2026-07-18)
 - [056_fnptr_reassign_phi_undefined_register.md](056_fnptr_reassign_phi_undefined_register.md) — reassigning a fn-pointer local across a branch emits a phi over Lower's `@fnref.X` sentinel; valid program refused with E0709 (found building the R-0002 gate, 2026-07-25)
+- [057_hashmap_builtin_size_undercount.md](057_hashmap_builtin_size_undercount.md) — hardcoded `hashmapSize` undercounted the struct; by-value copies truncated, `get` segfaulted (found adding a field, 2026-07-25)
+- [058_proof_by_without_fingerprint_never_stales.md](058_proof_by_without_fingerprint_never_stales.md) — `#[proof_by]` with no `#[proof_fingerprint]` compares the current fingerprint with itself, so it can never go stale (R-0004, 2026-07-25)
+- [059_body_fingerprint_omits_signature_and_types.md](059_body_fingerprint_omits_signature_and_types.md) — the body hash drops declared types and never sees the signature; `i32 -> u32` keeps a proof `proved` (R-0004, 2026-07-25)
+- [060_contracts_outside_proof_fingerprint.md](060_contracts_outside_proof_fingerprint.md) — `#[ensures]` is outside the hash, so a FALSE postcondition still reports `proved` (R-0004, 2026-07-25)
+- [061_pexpr_conflates_param_application_with_global_call.md](061_pexpr_conflates_param_application_with_global_call.md) — the proof model spells a parameter application and a global call identically; latent, filed under principle 12 (2026-07-25)
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 

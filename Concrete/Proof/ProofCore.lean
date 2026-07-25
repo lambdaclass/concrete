@@ -790,10 +790,17 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
-  -- Indirect callee: the target is a value chosen at runtime, so there is no
-  -- definition to extract or reason about. Refuse (blocked) rather than name the
-  -- binding as if it were a function — that is what let bug 050 through.
-  | .call (.indirect _) _ _ _ => none
+  -- Indirect callee: applied as an UNINTERPRETED function named by its binding.
+  -- Refusing to extract these was too strong. The model does not need the
+  -- callee's definition — it needs an identity for the thing being applied, and
+  -- inside this body the parameter name IS that identity; the theorem quantifies
+  -- over it. Blocking instead cost std three real proofs (Option::map,
+  -- Result::map, Result::map_err), whose statements hold for ANY `f` precisely
+  -- because `f` is opaque. Bug 050's hazard was Mono RESOLVING such a name
+  -- against global definitions, which this does not do.
+  | .call (.indirect binding) _ args _ => do
+    let pargs ← cExprListToPExpr args
+    some (.call binding pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
@@ -1107,10 +1114,17 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
   | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
-  -- Indirect callee: the target is a value chosen at runtime, so there is no
-  -- definition to extract or reason about. Refuse (blocked) rather than name the
-  -- binding as if it were a function — that is what let bug 050 through.
-  | .call (.indirect _) _ _ _ => none
+  -- Indirect callee: applied as an UNINTERPRETED function named by its binding.
+  -- Refusing to extract these was too strong. The model does not need the
+  -- callee's definition — it needs an identity for the thing being applied, and
+  -- inside this body the parameter name IS that identity; the theorem quantifies
+  -- over it. Blocking instead cost std three real proofs (Option::map,
+  -- Result::map, Result::map_err), whose statements hold for ANY `f` precisely
+  -- because `f` is opaque. Bug 050's hazard was Mono RESOLVING such a name
+  -- against global definitions, which this does not do.
+  | .call (.indirect binding) _ args _ => do
+    let pargs ← cExprListToPExpr args
+    some (.call binding pargs)
   | .structLit name _ fields _ => do
     let pfields ← cFieldsToPExpr fields
     some (.structLit name pfields)

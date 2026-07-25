@@ -76,13 +76,20 @@ proofs.
     builtin, specialization, layout, and source-origin identity.
 
     This principle is written from failures, not from theory. Bugs 039, 044, 045,
-    050, 051, 054, and 055 have one shared cause: a string used as identity and
-    re-interpreted by a later pass — an import alias resolved twice, a match
+    050, 051, 054, 055, and — found after this principle was written, by looking
+    for the class it names — 056, 057 and 061 have one shared cause: a
+    representation used as identity and re-interpreted by a later pass — an import alias resolved twice, a match
     binder sharing a slot with its outer namesake, a local callable rewritten
     into a direct call because its text matched a global, one enum declaration
     serving instantiations of different sizes, a specialization name a user
-    program can spell. Each was found separately and fixed separately; the
-    principle is what makes the class visible in advance.
+    program can spell. The later three extend the class beyond source names: a
+    function reference carried as a REGISTER NAME (`@fnref.f`) that a phi cannot
+    hold (056), a struct size restated as a CONSTANT that drifted from the
+    declaration until by-value copies truncated and segfaulted (057), and a proof
+    model that spells a parameter application exactly like a call of a global
+    (061). Identity-as-representation is not only a string problem; any restated
+    fact drifts. Each was found separately and fixed separately; the principle is
+    what makes the class visible in advance.
 
     Corollary for evidence: a value-level test cannot establish an identity or
     layout property. R-0001 showed why — under a mutation that removed
