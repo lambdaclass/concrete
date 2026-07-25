@@ -1257,7 +1257,11 @@ def compileAndReport (inputPath : String) (reportType : String)
       let proofNames := pc.obligations.filterMap fun o =>
         match o.spec with
         | some s =>
-          if o.status == .proved || o.status == .stale then
+          -- `unbound` is replayable too, and must be: kernel replay is how a
+          -- link WITHOUT a stored subject earns one. Excluding it would leave
+          -- no path from unbound to bound — you could never obtain the receipt
+          -- the fingerprint is supposed to record.
+          if o.status == .proved || o.status == .stale || o.status == .unbound then
             some (o.functionId.qualName, s.proofName, s.source, o.status)
           else none
         | none => none
@@ -1265,7 +1269,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         if reportJson then
           IO.println "{\n  \"schema_version\": \"1\",\n  \"all_checked\": true,\n  \"checks\": [],\n  \"lean_error\": \"\",\n  \"summary\": {\"verified\": 0, \"failed\": 0, \"total\": 0}\n}"
         else
-          IO.println "=== Lean Proof Kernel Check ===\n\nNo proved or stale obligations with proof names to check."
+          IO.println "=== Lean Proof Kernel Check ===\n\nNo proved, stale, or unbound obligations with proof names to check."
         return 0
       -- Generate temp Lean file with #check for each theorem
       let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }

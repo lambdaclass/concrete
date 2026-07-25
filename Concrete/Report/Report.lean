@@ -337,6 +337,7 @@ private partial def effectsForModule
       | some o => match o.status with
         | .proved => if passesProfile then "proved" else "reported"
         | .stale => if passesProfile then "enforced (proof stale: body changed)" else "reported"
+        | .unbound => if passesProfile then "enforced (proof link unbound: no stored subject)" else "reported"
         | .trusted => "trusted-assumption"
         | _ => if passesProfile then "enforced" else "reported"
       | none => if passesProfile then "enforced" else "reported"
@@ -800,10 +801,14 @@ inductive ProofState where
   | blocked         -- eligible but extraction failed (unsupported constructs)
   | notEligible     -- fails profile gates (recursion, alloc, etc.)
   | trusted         -- marked trusted (bypasses proof)
+  /-- Link present, no stored proof-subject digest — nothing to be fresh
+      against. Distinct from `stale`, which asserts a body change. -/
+  | unbound
 
 /-- Canonical string for a ProofState. Uses the same terminology as
     ObligationStatus.canonical to prevent cross-surface drift. -/
 def ProofState.canonical : ProofState → String
+  | .unbound    => "unbound"
   | .proved     => "proved"
   | .stale      => "stale"
   | .notProved  => "missing"
@@ -831,6 +836,7 @@ structure ProofStatusEntry where
 
 /-- Convert ProofCore ObligationStatus to Report-side ProofState. -/
 private def obligationStatusToProofState : Concrete.ObligationStatus → ProofState
+  | .unbound => .unbound
   | .proved => .proved
   | .stale => .stale
   | .missing => .notProved
@@ -922,6 +928,14 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
   | .stale =>
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}{originLine}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."
+  | .unbound =>
+    -- Carry the drift line here too. `unbound` supersedes the status a drifted
+    -- spec would otherwise produce, so without this the spec-drift signal would
+    -- vanish from the report for exactly the links that are least verified.
+    let specLine :=
+      if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
+      else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
+    s!"-- proof link unbound {String.ofList (List.replicate 37 '-')} {locStr}\n\n  proof link unbound: no stored proof-subject digest for `{e.qualName}`.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  Not proved, and not stale: the body has not been shown to change, it has\n  never been pinned. With no stored subject the freshness check would compare\n  this body against itself.{specLine}\n\n  hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint(\"...\")]."
   | .notProved =>
     s!"-- no proof {String.ofList (List.replicate 47 '-')} {locStr}\n\n  `{e.qualName}` passes the predictable profile but has no registered proof.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above."
   | .blocked =>
@@ -953,11 +967,12 @@ def proofStatusReport (modules : List CModule) (locMap : FnLocMap := [])
   -- Summary
   let proved := (entries.filter fun e => e.state matches .proved).length
   let stale := (entries.filter fun e => e.state matches .stale).length
+  let unboundCnt := (entries.filter fun e => e.state matches .unbound).length
   let notProved := (entries.filter fun e => e.state matches .notProved).length
   let blockedCnt := (entries.filter fun e => e.state matches .blocked).length
   let notEligible := (entries.filter fun e => e.state matches .notEligible).length
   let trusted := (entries.filter fun e => e.state matches .trusted).length
-  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
+  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {unboundCnt} unbound, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
   s!"{header}\n\n{"\n\n".intercalate body}\n\n{summary}\n"
 
 /-- Program-level conformance check against `docs/PROVABLE_V1.md`.
@@ -2875,6 +2890,7 @@ private def collectTraceEntries
       | some e => match e.state with
         | .proved => "proved"
         | .stale => "stale"
+        | .unbound => "unbound"
         | .notProved => "enforced"
         | .blocked => "blocked"
         | .notEligible => "reported"

@@ -109,6 +109,10 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
   let (kind, status) := match e.state with
     | .proved      => ("source_proof_link", "proved_by_lean")
     | .stale       => ("spec_drift",        "stale")
+    -- Its own ledger kind: a release gate must be able to tell "the subject
+    -- moved" from "there is no subject", because only the second means the
+    -- claim was never checkable.
+    | .unbound     => ("unbound_proof_link", "unbound")
     | .notProved   => ("missing_theorem",   "missing")
     | .blocked     => ("blocked_proof",     "unproven")
     | .notEligible => ("ineligible_construct", "ineligible")
@@ -116,6 +120,7 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
   let engine := match e.state with | .proved => "lean" | _ => ""
   let concl := match e.state with
     | .stale       => s!"proof fingerprint {e.expectedFp} ≠ current {e.currentFp}"
+    | .unbound     => "proof link unbound: no stored proof-subject digest"
     | .proved      => if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
     | .notProved   => "no registered proof for an eligible function"
     | .blocked     => s!"extraction blocked: {", ".intercalate e.unsupported}"

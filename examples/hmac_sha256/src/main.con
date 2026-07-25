@@ -56,7 +56,6 @@ mod hmac_sha256 {
     // FIPS 180-4 § 5.3.3.
     #[spec(Concrete.Proof.sha256_initExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_init_correct)]
-    #[proof_fingerprint("a15d7f485991b6d1558210aa5ec5f43c")]
     #[proof_coverage(point)]
     fn sha256_init() -> [u32; 8] {
         return [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -106,7 +105,6 @@ mod hmac_sha256 {
     #[ensures(result == ch_spec(x, y, z))]
     #[spec(Concrete.Proof.chExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.ch_selects_high)]
-    #[proof_fingerprint("29e70bdc5b8f736d971a0587592b928d")]
     #[ensures_proof(Examples.HmacSha256.Proofs.ch_refines)]
     #[proof_coverage(point)]
     fn ch(x: u32, y: u32, z: u32) -> u32 {
@@ -185,7 +183,6 @@ mod hmac_sha256 {
     // Big-endian pack of a 64-byte block into 16 u32 words.
     #[spec(Concrete.Proof.blockToWordsExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.block_to_words_refines_spec)]
-    #[proof_fingerprint("676cc43853cf19b73e276957ea21a681")]
     #[proof_coverage(full_contract)]
     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
         let mut w: [u32; 16] = [0; 16];
@@ -203,7 +200,6 @@ mod hmac_sha256 {
     // for i in 16..63 (all additions mod 2^32).
     #[spec(Concrete.Proof.scheduleExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_schedule_refines_spec)]
-    #[proof_fingerprint("bf56a30dbff401567c6833e421cbf14d")]
     #[proof_coverage(full_contract)]
     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
         let mut w: [u32; 64] = [0; 64];
@@ -228,7 +224,6 @@ mod hmac_sha256 {
     //   next = [T1+T2, a, b, c, d+T1, e, f, g]
     #[spec(Concrete.Proof.roundExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.round_refines_list)]
-    #[proof_fingerprint("7326df8c63c52b64599c2294dd9c4784")]
     #[proof_coverage(full_contract)]
     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
         // All round additions are mod 2^32 — explicit `wrapping_add`.
@@ -245,7 +240,6 @@ mod hmac_sha256 {
     // (Davies-Meyer feed-forward), all mod 2^32.
     #[spec(Concrete.Proof.sha256_compressExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_compress_refines_spec)]
-    #[proof_fingerprint("71350bffd01258283ecf70530668353e")]
     #[proof_coverage(full_contract)]
     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
         let w16: [u32; 16] = block_to_words(block);
@@ -274,7 +268,6 @@ mod hmac_sha256 {
     #[requires(0 <= off && off + 64 <= 384)]
     #[spec(Concrete.Proof.blockToWordsAtExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.block_to_words_at_refines_spec)]
-    #[proof_fingerprint("5d0032ba66e5e13f80ad48580596b7b4")]
     #[proof_coverage(full_contract)]
     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
         let mut w: [u32; 16] = [0; 16];
@@ -294,7 +287,6 @@ mod hmac_sha256 {
     #[requires(0 <= off && off + 64 <= 384)]
     #[spec(Concrete.Proof.sha256_compressAtExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec)]
-    #[proof_fingerprint("d04965b933c940ab663de5c81e57f0cd")]
     #[proof_coverage(full_contract)]
     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
         let w: [u32; 64] = sha256_schedule(block_to_words_at(buf, off));
@@ -313,7 +305,6 @@ mod hmac_sha256 {
     // Big-endian unpack of the 8-word state into 32 bytes.
     #[spec(Concrete.Proof.stateToBytesExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.state_to_bytes_refines_spec)]
-    #[proof_fingerprint("8d00136da7198a512ce720690ecac7a0")]
     #[proof_coverage(full_contract)]
     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
         let mut out: [u8; 32] = [0; 32];
@@ -345,7 +336,6 @@ mod hmac_sha256 {
     #[requires(0 <= len && len <= 312)]
     #[spec(Concrete.Proof.sha256_hashExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_hash_refines_spec)]
-    #[proof_fingerprint("6e4ef9b4082254eda33cf145ed1f6ad2")]
     #[proof_coverage(full_contract)]
     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
         let mut buf: [u8; 384] = data;
@@ -374,7 +364,6 @@ mod hmac_sha256 {
     // KEY_MAX = 128, MSG_MAX = 256.
     #[spec(Concrete.Proof.hmac_sha256Expr)]
     #[proof_by(Examples.HmacSha256.Proofs.hmac_sha256_refines_spec)]
-    #[proof_fingerprint("e66b9e7341a0f911e8553ecd4f23b9ca")]
     #[proof_coverage(full_contract)]
     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
         // 1. Normalize the key to a 64-byte block K'.

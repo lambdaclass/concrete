@@ -93,6 +93,44 @@ to:
 This is the main evidence claim of the example: the proof is about the extracted
 program body, and drift breaks the claim.
 
+### Current status: the links are UNBOUND (2026-07-25)
+
+Read the paragraph above as the intended design, not as today's state. These 11
+`#[proof_by]` links carry no `#[proof_fingerprint]`, so there is no stored
+proof-subject digest for the freshness check to compare a body against. Since
+bug 058 was contained, `--report proof-status` reports them as:
+
+```text
+11 proof link unbound
+```
+
+Stated precisely:
+
+- **The theorems exist and replay clean.** `--report check-proofs` reports
+  `11 verified, 0 failed` against the current bodies. All twelve named theorems
+  are present in `proofs/Examples/HmacSha256/Proofs.lean`.
+- **Their source linkage is not freshness-validated.** Nothing records which body
+  each theorem was verified against, so an edit cannot be detected through the
+  fingerprint path. That is the whole of bug 058, and this example is its largest
+  instance.
+- **Spec-drift coverage is unaffected** — every link still reports
+  `spec: drift-checked`, so the `Concrete.Proof.specs` comparison continues to
+  catch a body that diverges from its recorded spec. That is the mechanism behind
+  the `10 proved, 1 stale` result above; it is a different check from the
+  fingerprint, and it still works.
+
+The links are deliberately left unbound. Recording a digest asserts "verified
+against this body", and that claim needs a trustworthy receipt — an artifact
+tying theorem, body digest, and toolchain together. `--report check-proofs` is
+also invocation-sensitive: run from inside this directory it reports
+`0 verified, 11 failed` with `theorem_lookup` errors, and from the repository
+root it reports `11 verified, 0 failed`. A check whose verdict depends on the
+working directory, leaving no artifact behind, is an observation rather than a
+receipt. Producing that receipt is part of R-0004's digest phase; until then the
+honest report is `unbound`.
+
+Under `[policy] require-proofs = true` these links now fail closed with E0612.
+
 ## Runtime oracle
 
 The executable is also checked against published and differential tests:

@@ -1,6 +1,9 @@
 # Bug 058: `#[proof_by]` without `#[proof_fingerprint]` can never go stale
 
-**Status:** Open — first of R-0004's evidence-integrity defect class.
+**Status:** CONTAINED (2026-07-25) — such a link now reports the distinct state
+`unbound` ("proof link unbound: no stored proof-subject digest"), never `proved`
+and never `stale`, and fails closed under `[policy] require-proofs` with E0612.
+The full fix — a versioned `ProofSubjectDigest` — remains R-0004's next phase.
 **Discovered:** 2026-07-25, filing R-0004's reproducers before implementation.
 **Severity:** a false `proved` claim. Not wrong code, but wrong *evidence*, which
 is the claim this project's guarantees rest on.
@@ -67,6 +70,35 @@ and `re.bodyFingerprint` was *synthesized from the current body*. The `none`
 branch therefore compares the current fingerprint with itself: always equal,
 never stale. The comment describes the mechanism accurately but treats it as an
 implementation note rather than the hole it is.
+
+## Why the state is `unbound` and not `stale`
+
+`stale` asserts that a recorded subject and the current body disagree — the
+renderer says "the body changed". For these links nothing changed and nothing was
+ever recorded, so reporting `stale` would state a fact not in evidence. `unbound`
+is its own `ObligationStatus`/`ProofState`, its own ledger kind
+(`unbound_proof_link`), and its own report block. Ordering matters: unbound is
+decided BEFORE staleness, because with no stored subject the staleness
+comparison is the body against itself.
+
+Kernel replay accepts unbound links deliberately (`check-proofs` used to skip
+anything not proved-or-stale). Replay is how such a link would earn a subject;
+excluding it would leave no path from unbound to bound.
+
+## A trap this bug set for its own investigation
+
+`--report check-proofs` is invocation-sensitive. Run from inside an example's
+directory it reported `0 verified, 11 failed` with `theorem_lookup` errors for
+`examples/hmac_sha256`; run from the repository root, `11 verified, 0 failed`.
+The first result nearly became a report that the flagship's proofs do not
+verify. All twelve named theorems exist in
+`proofs/Examples/HmacSha256/Proofs.lean`.
+
+The lesson generalizes to the fix: a verdict that depends on the working
+directory and leaves no artifact is an observation, not a receipt — and a
+fingerprint recorded from an observation is the same unfounded claim this bug is
+about, one level up. Backfilling therefore waits on a receipt that ties theorem,
+body digest, and toolchain together.
 
 ## Candidate fix
 

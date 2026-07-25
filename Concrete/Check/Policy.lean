@@ -169,7 +169,14 @@ private def enforceRequireProofs (pc : ProofCore) : Diagnostics :=
     | .blocked => some (mkDiag
         s!"'{o.functionId.qualName}' is proof-eligible but extraction failed"
         "simplify the function body or change [policy] require-proofs")
-    | _ => none
+    -- Fail closed: an unbound link is a claim nothing can check, which is a
+    -- worse basis for a release than a stale one (a stale claim was at least
+    -- pinned once). Listed explicitly rather than left to the catch-all below,
+    -- which is where this state silently fell through when it was introduced.
+    | .unbound => some (mkDiag
+        s!"'{o.functionId.qualName}' has a proof link with no stored proof-subject digest"
+        "re-verify the proof against the current body and record #[proof_fingerprint(\"...\")], or change [policy] require-proofs")
+    | .proved | .ineligible | .trusted => none
 
 /-- Reject vacuous contracts. A function whose precondition is unsatisfiable has
     a postcondition that holds only because no input ever reaches it — a

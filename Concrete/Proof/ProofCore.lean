@@ -1506,6 +1506,13 @@ inductive ObligationStatus where
   | blocked     -- eligible but extraction failed (unsupported constructs)
   | ineligible  -- fails profile gates
   | trusted     -- marked trusted
+  /-- A proof link exists but carries NO stored proof-subject digest, so there is
+      nothing for the freshness check to compare the body against. Distinct from
+      `stale`: `stale` means the subject was recorded and the body has since
+      changed; `unbound` means the subject was never recorded, so the claim was
+      never checkable and no edit could ever have revealed that. Reporting it as
+      `stale` would assert a body change that did not happen. -/
+  | unbound
   deriving BEq, Repr
 
 /-- Canonical string representation of an ObligationStatus.
@@ -1513,6 +1520,7 @@ inductive ObligationStatus where
     all output surfaces: JSON facts, CLI reports, documentation, and
     release criteria. All renderers MUST use this function. -/
 def ObligationStatus.canonical : ObligationStatus → String
+  | .unbound    => "unbound"
   | .proved     => "proved"
   | .stale      => "stale"
   | .missing    => "missing"
@@ -2105,21 +2113,24 @@ private def deriveObligationStatus
   -- construction — never `proved`. (`.hardcoded` attachments come from
   -- Proof.provedFunctions and carry a real expectedFp, so they keep the
   -- string compare.)
-  let unbound := fun (a : SpecAttachment) =>
+  let isUnbound := fun (a : SpecAttachment) =>
     a.source == .registry && a.expectedHash.isNone
   let isStale := fun (a : SpecAttachment) =>
-    if unbound a then true
-    else match a.expectedHash with
+    match a.expectedHash with
     | some h => shortHash currentFp != h
     | none   => a.expectedFp != currentFp
   if isTrusted then .trusted
   else if !eligible then
     match spec with
-    | some a => if isStale a then .stale else .ineligible
+    | some a => if isUnbound a then .unbound else if isStale a then .stale else .ineligible
     | none => .ineligible
   else match spec with
   | some a =>
-    if isStale a then .stale
+    -- Unbound is checked FIRST and reported as itself: with no stored subject
+    -- the staleness comparison below is the body against itself, so calling the
+    -- result `stale` would claim a body change that never happened.
+    if isUnbound a then .unbound
+    else if isStale a then .stale
     else if specDrifted then .stale
     else if a.source == .hardcoded then .proved  -- hardcoded proofs done in Lean, extraction not required
     else if !extracted then .blocked
@@ -2200,6 +2211,13 @@ private def generateDiagnostics
     let qn := o.functionId.qualName
     let fp := o.functionId.fingerprint
     match o.status with
+    | .unbound =>
+      some { kind := .staleProof, severity := .error, function := qn
+           , message := s!"proof link unbound: no stored proof-subject digest for `{qn}`."
+           , hint := "Re-verify the proof against the current body and record the result as #[proof_fingerprint(\"...\")]. Until a subject is stored there is nothing for the freshness check to compare against, so this claim is unbound — not proved, and not stale either: the body has not been shown to change, it has never been pinned."
+           , details := ["no stored proof-subject digest"], failureClass := failureClassOf .staleProof
+           , repairClass := repairClassOf .staleProof
+           , fingerprint := fp, expectedFp := "", loc := o.loc }
     | .stale =>
       some { kind := .staleProof, severity := .error, function := qn
            , message := s!"`{qn}` has a registered proof, but the body changed."

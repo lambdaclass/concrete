@@ -34,7 +34,25 @@ want() {
 }
 
 echo "=== evidence-class corpus: each class reports correctly ==="
-want "proved_by_lean → proved [point]"        proof-status proved_by_lean "proved [point]"
+# The proved_by_lean exemplar carries a #[proof_by] with NO #[proof_fingerprint],
+# so there is no stored subject to be fresh against. Until one is recorded from a
+# trustworthy kernel receipt, the honest state is `unbound` — NOT `proved` (bug
+# 058: the freshness check would compare the body with itself) and NOT `stale`
+# (nothing has been shown to change; it was never pinned). Both the downgrade and
+# its exact reason are asserted, so a regression that quietly restores `proved`,
+# or that relabels this as `stale`, fails here.
+want "proved_by_lean link → unbound"          proof-status proved_by_lean "proof link unbound"
+want "proved_by_lean → exact reason"          proof-status proved_by_lean "no stored proof-subject digest"
+if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | grep -qE "^-- proved"; then
+  echo "  FAIL proved_by_lean must NOT report proved without a stored subject"; FAIL=$((FAIL + 1))
+else
+  echo "  ok   proved_by_lean does not report proved while unbound"; PASS=$((PASS + 1))
+fi
+if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | grep -qE "^-- proof stale"; then
+  echo "  FAIL proved_by_lean reported as stale — no body change was shown; the state is unbound"; FAIL=$((FAIL + 1))
+else
+  echo "  ok   proved_by_lean is not mislabelled stale"; PASS=$((PASS + 1))
+fi
 want "omega → kernel decision"                contracts    proved_by_kernel_decision_omega "proved_by_kernel_decision"
 want "omega → engine omega"                   contracts    proved_by_kernel_decision_omega "omega"
 want "bv → engine bv_decide"                  contracts    proved_by_kernel_decision_bv "bv_decide"
