@@ -8,6 +8,8 @@ Concrete is not trying to win by having the most features. Its intended strength
 
 Concrete is also aiming at something broader than "a working compiler": a compiler that can explain itself, surface audit-relevant facts directly, and eventually produce inspectable and reproducible outputs that users can trust.
 
+The feature list hides the deepest consequence. The things Concrete refuses — closures, trait objects, macros, separate compilation — are exactly what make whole-program reasoning tractable elsewhere impossible or expensive: every call target is known at compile time, so the call graph is a complete, checkable artifact rather than an approximation. Rust gives this up to `dyn`, macros, and crates; SPARK buys it back with heavy annotation. Concrete gets it by construction, and it is what lets per-function evidence (authority, obligations, proofs) compose into claims about a whole binary.
+
 One important long-term direction is an explicit high-integrity profile: stricter execution and safety modes for critical code, built around bounded behavior, analyzability, and better evidence rather than feature sprawl.
 
 ## One Concrete Shape Of The Vision

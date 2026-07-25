@@ -19,7 +19,11 @@ It is not "Rust but smaller" or "Go but safer." Concrete optimizes for honesty
 and provability over convenience, and accepts real ergonomic costs to get them:
 non-`Copy` values are used exactly once, function headers expose required
 capabilities, cleanup is explicit, and the tooling keeps a clear path from source
-to evidence. The thesis in one line — **systems control plus evidence
+to evidence. The refusals have a second payoff beyond auditability: with no
+closures, no trait objects, no macros, and whole-program monomorphization, every
+call target is known at compile time — **the whole program is statically
+knowable**, not just inspectable, and per-function facts compose into
+whole-program facts. The thesis in one line — **systems control plus evidence
 accounting**: a no-GC systems core plus an evidence ledger a reviewer can
 actually inspect, one that never collapses proofs, tests, solver results, runtime
 checks, and assumptions into a single green badge.
@@ -142,9 +146,17 @@ into each other, and each is cheaper *because* of the others:
   tested against compiled output; and stage contracts catch a violation at the
   first boundary it crosses — so the pipeline stays honest enough to prove
   against.
+- **The closed world makes the whole program knowable.** No closures, no trait
+  objects, no macros, whole-program monomorphization, and indirect calls that
+  carry value identity (not a name to re-resolve) mean the call graph is
+  completely known at compile time. Authority, allocation, and failure facts
+  therefore compose transitively from `main` outward — which is what gives
+  "visible in a report" a path to "proved about the program." That last step is
+  the direction of the proof work, not a shipped claim.
 
 The unifying pattern: **every design choice trades convenience for a property you
-can see and check.** That is the language.
+can see and check — and the refusals compose into a program the compiler can
+fully know.** That is the language.
 
 ## What Concrete Deliberately Rejects
 
@@ -243,7 +255,10 @@ fn get16(a: [u8; 16], i: i32) -> u8 {
 Authority is visible the same way: a reviewer can ask "why does this need
 `File`?" or "which callee introduced `Network`?" and get a compiler answer rather
 than a convention — capabilities and their sources show up in `--report caps` /
-`--report authority`.
+`--report authority`. Visible is step one. Because the call graph is closed,
+transitive authority is a fact about the *whole program*, computed from complete
+knowledge — the shape a whole-program theorem takes once the proof work reaches
+it.
 
 ## Try It
 
@@ -319,8 +334,10 @@ replayed, not trusted from prose.
 Concrete is not trying to replace Rust, Zig, Odin, SPARK, Dafny, Austral, Lean,
 or C. Its claim is the composition: systems control, linear ownership, explicit
 authority, source contracts, Lean-checked proof links, drift detection,
-external-solver accounting, oracle evidence, and audit reports that refuse to
-hide trust.
+external-solver accounting, oracle evidence, audit reports that refuse to hide
+trust — and a call graph the compiler fully knows by construction, without the
+whole-program annotation SPARK needs or the `dyn`/macro/separate-compilation
+opacity Rust accepts.
 
 | System | What Concrete learns from it | Where Concrete differs |
 | --- | --- | --- |
