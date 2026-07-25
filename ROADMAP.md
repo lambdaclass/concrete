@@ -1204,6 +1204,42 @@ states the whole set or what satisfies it, while `docs/DECISIONS.md` records
 bounds exist and are load-bearing across the stdlib. Name bounds as a required
 section of the Phase 17 language reference.
 
+### Task R-0444
+
+**Objective:** Pull the fired parser trigger: build a combinator core for binary/text parsing and port the duplicated spellings onto it. R-0406's gate was "binary-format DSLs only if packet/ELF examples show repeated parser boilerplate" — the 2026-07-25 audit count found it already fired: seven combinator shapes spelled ~45–50 times across std.numeric, std.parse, std.base64, std.hex, std.cli, std.text, and five example parsers, with `numeric.con` writing the same bounds-guard-plus-endian-fold sixteen times. The seven: `take(n)` bounds-guard-then-advance, `tag` literal match, length-prefixed consume, bounded repeat over remaining, `take_until`/`skip_while` scan, byte→`Option` table map, verify-over-region — plus one pure fixed-width assembly fold.
+
+   Slice 1 (no Lean): the seven combinators + assembly fold as a
+   `std.parse` module; port `numeric.con` onto it (deletes more code than
+   it adds). Gate against the existing ByteCursor/byte_view fixtures. The
+   length-prefix overflow obligation (attacker-controlled length in offset
+   arithmetic) lives in the length-prefixed combinator ONCE, checked,
+   instead of being re-derived per parser by width accident — PNG's
+   `off + 12 + dlen` is unreachable today only because `be32` caps the
+   length, not by construction.
+
+   Slice 2: port png_chunks and elf_header. elf_header is the demo: its
+   validation core reads via trusted pointer reads with no bounds relation
+   to the bytes requested (it predates ByteCursor); after the port the
+   trusted boundary shrinks to fopen/fread and the core is
+   combinator-built — same parser, smaller boundary, one diff that tells
+   the whole story.
+
+   Slice 3 (proof economics, the EverParse shape): prove the seven
+   combinators + fold once in Lean; parsers built from them inherit
+   memory-safety and non-malleability obligations instead of re-proving
+   per parser. Honesty boundary, stated in advance: claims hold for
+   parsers BUILT FROM the combinator core; Concrete is a general language
+   and nothing stops hand-rolled pointer arithmetic outside the
+   discipline. Never claim "Concrete parsers are safe."
+
+   Composes with: R-0244 (bounded repeat exposes its symbolic iteration
+   bound as `complexity_guarded` — "cannot loop more than N times the
+   input length" is the combinator's contract), R-0443 (a combinator-built
+   parser is the first real customer for whole-program authority
+   certificates), R-0442 (proof links must survive extraction). DSL
+   generation proper (EverParse-style spec→source) stays research-gated
+   in R-0406 until the combinator proofs exist.
+
 ### Task R-0011
 
 **Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
@@ -6658,7 +6694,7 @@ step/space bounds stay with R-0244/R-0248 and R-0417's
 
 ### Task R-0406
 
-**Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate.
+**Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate. The trigger fired (2026-07-25 audit: seven combinator shapes spelled ~45–50 times; elf_header the least-protected parser in the tree); the combinator core and the numeric/PNG/ELF ports are pulled forward as R-0444. What remains gated here is the generation layer proper — EverParse-style spec→Concrete source — gated on R-0444's combinator proofs existing and on DECISIONS' external-generation rule (generated output is audited as ordinary source).
 
 ### Task R-0407
 
