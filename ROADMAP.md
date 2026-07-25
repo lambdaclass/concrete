@@ -960,6 +960,30 @@ remote and required CI conclusions are recorded. Remote parity is process
 state, not a compiler bug; report it separately and do not let a green origin
 implicitly describe a lagging mirror.
 
+### Task R-0439
+
+**Objective:** Gate work that is finished but not landed — the local counterpart
+of publication discipline.
+
+The Definition of Done covers *done*. Nothing represents "evidence exists, not
+merged", and that state has now cost real work twice. R-0001's root fix sat as
+uncommitted working-tree state in a locked worktree for a day while three
+documents on `main` described the pre-fix language. `worktree-h18-drop-glue`
+still holds three commits — a bug reproducer, a `MonoVerify` residual verifier,
+and classified fuzzer legs — that no merged branch contains, on a branch named
+after unrelated work.
+
+This is not a request for status tags in this file: those are forbidden, and for
+good reason. It is a gate. Fail when a git worktree or local branch holds commits
+or dirty tracked state not represented on `main`, printing the branch/worktree,
+the paths, and the age. Wire it into the pre-push routine beside the surface
+gates, and allow an explicit opt-out row for a branch deliberately parked, so
+parking is a recorded decision rather than a silence.
+
+Gate: fixtures for a dirty worktree, a branch with unmerged commits, a clean
+tree (must pass), and a parked branch with its opt-out row; plus a mutation
+removing the dirty-state leg. Cheap to run — this must not need a compiler build.
+
 ### Task R-0434
 
 **Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
@@ -1010,15 +1034,36 @@ field IDENT) and therefore preserves invariant #13. Because `enum_pattern` and
 `match_pattern_tail` share `binding_list`, one change covers `match`, `if let`,
 `while let`, and pattern-destructuring `let`.
 
-Slice 2 — generalize the rule. Replace `.shadowsLiveLinear` with a rejection of
-any binding that shadows a name live in an enclosing scope, independent of
-`Copy`-ness and consumption state, under its own stable diagnostic. A loop body
-rebinding the same `let` on each iteration is a fresh scope and must not be
-caught; sibling `match` arms binding one name are disjoint scopes and must not
-be caught. `let mut buf: Bytes = buf;` (the "parameters are immutable"
-workaround, `std/src/fs.con`) becomes illegal and takes a distinct name: one
-binding, one resource. Keep Elab alpha-renaming as defense in depth, not as the
-guarantee.
+Slice 2 — reject ENCLOSING-SCOPE shadowing only. Extend `.shadowsLiveLinear`
+into a rejection of any binding that shadows a name still visible from an
+enclosing scope, independent of `Copy`-ness and consumption state, under its own
+stable diagnostic. The hazard is two live meanings of one name coexisting, which
+is what bug 045 miscompiled; that is the whole target.
+
+Deliberately still legal, because none of these create a second live meaning:
+
+- **Same-scope consuming rebind.** `let s = transform(s);` has exactly one live
+  `s` at every program point — the RHS consumed the old one. H16 already rejects
+  the dangerous form (shadowing a still-LIVE non-`Copy` value), and that rule
+  stays exactly as it is.
+- **Assignment rebind.** `acc = f(acc, x)` and `let mut buf: Bytes = buf;` are
+  `let mut` reassignment, not new bindings — H13/H14, documented legal at
+  `docs/OWNERSHIP_MODEL.md:92-95` including inside loops. This task must not
+  touch them.
+- **Fresh scopes.** A loop body rebinding the same `let` each iteration, and
+  sibling `match` arms binding one name, are disjoint scopes.
+
+This narrowing is deliberate and reverses an earlier draft of this task that
+also banned same-scope consuming rebind by quoting
+`docs/LANGUAGE_SHAPE.md:47` ("Linear variables cannot be reassigned — one
+binding, one resource"). That line contradicts `docs/OWNERSHIP_MODEL.md:92-95`,
+which permits linear rebind and has the E-codes and fixtures behind it.
+Resolve the contradiction in OWNERSHIP_MODEL's favour and correct
+LANGUAGE_SHAPE:47 as part of this task. Do not add a `rebind` keyword: the
+existing live/consumed distinction already expresses "no implicit shadowing of a
+live resource" without new surface.
+
+Keep Elab alpha-renaming as defense in depth, not as the guarantee.
 
 Out of scope, decided separately: function/intrinsic shadowing (a user
 `print_string` taking precedence over the builtin,
@@ -1031,19 +1076,63 @@ Acceptance: positive fixtures for renamed binders in nested `match`, `if let`,
 `while let`, and destructuring `let`, including a renamed twin of
 `regress_045_match_binder_shadow.con` proving nesting still works;
 `regress_045_match_binder_shadow.con` itself flips to a rejection fixture;
-negative fixtures for let-rebinding, nested binder collision, and a binder
-colliding with a parameter; positive fixtures pinning that per-iteration loop
-bindings and sibling arms are *not* rejected; interpreter/compiled parity;
+negative fixtures for nested binder collision and a binder colliding with a
+parameter; positive fixtures pinning that same-scope consuming rebind,
+assignment rebind (`acc = f(acc, x)`, `let mut buf = buf`), per-iteration loop
+bindings, and sibling arms are *not* rejected; interpreter/compiled parity;
 formatter round-trip of the renaming form; stable diagnostic and span fixtures.
-Migrate the 25 nested-binder sites and the let-rebind sites in `std/`,
-`examples/`, and `tests/`. Gate with a corpus inventory that fails on any
-reintroduced shadowing site, and mutations that (a) restore the `Copy`/consumed
-carve-out and (b) drop the loop-scope or sibling-arm exemption, proving the rule
-is neither too weak nor too strong.
+Migrate the 25 nested-binder sites in `std/`, `examples/`, and `tests/`; the
+let-rebind sites stay as they are. Gate with a corpus inventory that fails on any
+reintroduced enclosing-scope shadowing site, and mutations that (a) widen the
+rule to catch same-scope or assignment rebind and (b) drop the loop-scope or
+sibling-arm exemption, proving the rule is neither too weak nor too strong.
 
 This is a cross-cutting surface migration: it lands in a worktree and merges
 green once, with the gate-corpus sweep and `make test-ci-gates` run before
 push.
+
+### Task R-0437
+
+**Objective:** Give generic bounds a closed, validated vocabulary — an unknown
+bound name is currently a silent no-op.
+
+Verified 2026-07-25 against the built compiler: `fn ident<T: Nonsense>(x: T) -> T`
+instantiated at `T = i64` compiles, runs, and returns its argument — the
+fictional bound constrains nothing. `fn never_called<T: Cpoy>(…)` compiles
+because bounds are only ever validated at an instantiation site. The same
+fictional bound at a user struct *is* caught (E0241), so the hole is exactly the
+primitive and never-instantiated paths.
+
+Cause: `Concrete/Check/CheckHelpers.lean` `checkTraitBounds` special-cases
+`"Copy"` and `"Destroy"`, treats every other bound name as a lookup into
+`env.traitImpls`, and ends with `| _ => pure () -- primitive types, skip
+non-Copy bound checking`. There is no set of legal bound names, so a bound
+cannot be misspelled — only silently ineffective. This is the C3 class
+("unknown attributes silently ignored", closed 2026-06-10) resurfacing on the
+generic-bound surface, and it is a semantically dark construct under the
+governing rule: it looks meaningful and is ignored.
+
+Validate the bound name where it is *declared*, against the compiler-known set
+(`Copy`, `Destroy`) plus names with a registered `impl`, so an unknown bound is
+refused whether or not the generic is ever instantiated and whatever it is
+instantiated at. Diagnose an unsatisfiable-by-construction bound distinctly from
+an unknown one.
+
+The impact is false assurance rather than unsoundness — bodies are still checked
+against declared bounds and linearity still catches double use — so this is a
+containment-of-claims fix, not a wrong-code fix, and it sits here rather than
+among the miscompiles.
+
+Gate: the three programs above as fixtures (fictional bound at a primitive arg,
+typo'd bound on an uninstantiated generic, the E0241 struct case as positive
+control), a legal-bound-name inventory that fails when a new bound is recognized
+in code without an entry, and a mutation restoring the primitive fallthrough.
+Record the bound vocabulary normatively — `Copy` is described in
+`docs/VALUE_MODEL.md`, `Destroy` in `docs/RUNTIME_COLLECTIONS.md`, and nothing
+states the whole set or what satisfies it, while `docs/DECISIONS.md` records
+"no trait objects" without mentioning that `impl Trait for Type` and `T: Trait`
+bounds exist and are load-bearing across the stdlib. Name bounds as a required
+section of the Phase 17 language reference.
 
 ### Task R-0011
 
@@ -1472,6 +1561,51 @@ not mention it. Adding a module or public symbol without a compiled behavioral
 fixture or reasoned exemption, API snapshot entry, and evidence/authority/
 failure classification fails CI. This extends the existing five-fact manifest
 and compiled-coverage machinery; do not create a parallel review database.
+
+### Task R-0438
+
+**Objective:** Generate the semantically-dark-construct inventory from compiler
+constructors, and make the docs-drift gate check claims rather than paths.
+
+`docs/PROOF_STORY_MATRIX.md` is what `docs/README.md` calls "the 'no semantically
+dark constructs' inventory": every construct must be `proved`, `enforced`,
+`reported`, `assumed`, or `trusted`. It has 30 hand-written rows, and grep counts
+zero occurrences of `defer`, `newtype`, `function pointer`, `monomorph`,
+`indirect`, `generic`, `import`, and `module`.
+
+Line that up against the defect corpus. Bug 050 was indirect calls through
+function pointers; 051 was generic-enum monomorphization; 054 is monomorphized
+name collision; 044 was renamed generic imports; 055 is sibling import aliases;
+039 and 045 were import-alias and match-binder identity. Every one lived in a row
+the inventory does not have. The constructs the language added on top of the
+proved fragment — generics, indirect dispatch, module/import identity — are
+exactly the ones never enumerated. A hand-maintained inventory of a growing
+language lags, and this one lagged by seven constructs and seven bugs.
+
+Derive the row set from AST/Core constructors the way the backend capability
+matrix is keyed on `SInst`/`STerm`/`Ty` constructors, so adding a construct fails
+the gate until its story, evidence, and named gap are declared. Same principle,
+same machinery family, no parallel database.
+
+Second leg, same task because it is the same failure: extend
+`scripts/tests/check_docs_drift.sh` past path resolution to claim checking. It is
+91 lines and 3 checks (paths resolve, `--report` kinds exist, roadmap IDs are
+well-formed) over 126 docs of which 106 assert a `Status:`. Nothing checks
+whether a normative claim is still true, which is why in one session
+`LANGUAGE_INVARIANTS.md` #4 asserted a rule the checker does not enforce,
+`KNOWN_HOLES.md`'s OPEN section read empty while seven defects were open,
+`LANGUAGE_GAPS.md`'s two "remaining findings" were both already shipped,
+`DEFER.md` called move-after-defer "not yet specified or gated" when it is
+diagnosed as E0206, `LANGUAGE_SHAPE.md:47` contradicted
+`OWNERSHIP_MODEL.md:92-95` on linear rebind, and `FAILURE_STRATEGY.md:74` said
+"there are no destructors" while `impl Destroy` and generated drop glue ship. A
+`Status: stable reference` doc must cite the gate or fixture backing its
+normative claims, and aspirational behavior may not appear in the present tense
+beside a current guarantee.
+
+Gate: the generated matrix fails on a newly added constructor with no declared
+story; the drift gate fails on each of the six stale claims above, reproduced as
+fixtures; and a mutation removing a row or a claim check proves both go red.
 
 ### Phase 7 Completion Contract
 
@@ -3535,6 +3669,43 @@ and must not collapse the review into one green badge.
  widening, and reuses the same fact vocabulary as Phase 18 import fact
  constraints so the policy graduates cleanly to dependency/package
  boundaries.
+
+### Task R-0441
+
+**Objective:** Decide how `with(Std)` behaves under an authority budget, and put
+it in the canonical capability list.
+
+`with(Std)` expands at parse time to every standard capability except `Unsafe`
+(`Concrete/Frontend/Parser.lean` "Expand \"Std\" to the full set";
+`docs/SAFETY.md:61`). It is used in `docs/DEFER.md`, `docs/SAFETY.md`, and
+several `adversarial_cap_*` fixtures. Meanwhile `docs/IDENTITY.md:101` states the
+authority surface as "Nine capabilities: `File`, `Network`, `Time`, `Env`,
+`Random`, `Process`, `Console`, `Alloc`, `Unsafe`" and never mentions `Std`. The
+one spelling that grants nearly everything is absent from the document that
+enumerates authority.
+
+The audit consequence is specific and it is why this sits beside the budget task:
+a function declared `with(Std)` already holds a maximal ceiling, so adding
+`Network` or `Process` use inside it never widens a signature and never shows as
+a diff. A capability budget over `Std`-expanded code measures a declaration that
+cannot change.
+
+Decide one rule and gate it: either audited profiles reject broad aliases
+outright, or a `Std` declaration must carry an exact transitive-use budget that
+the compiler checks against reachable authority, so the alias stays a
+convenience for scripts while audited code states what it actually reaches.
+Related and worth stating in the same decision: a declared capability is an
+authority *ceiling*, not evidence of use, so reports should distinguish declared
+from reachable authority regardless of how the ceiling was spelled.
+
+Also fix the list: `Std` belongs in `IDENTITY.md`'s enumeration, marked as an
+alias over the other eight rather than a tenth capability.
+
+Gate: a fixture where `Std`-declared code gains `Network` use with no signature
+change (must fail under the chosen rule), the same code under an explicit cap set
+(must pass), a declared-vs-reachable report fixture, and a mutation removing the
+alias leg from whichever check is chosen.
+
 ### Task R-0185
 
 **Objective:** Add `concrete audit --json`: machine-readable audit output for CI, dashboards, editor tooling, and release bundles.
@@ -3679,6 +3850,43 @@ Done when: all existing production proof specs are directly and transitively
 FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
+
+### Task R-0440
+
+**Objective:** Make evidence multidimensional instead of a ladder, and record
+compiler trust per claim.
+
+`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
+not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
+*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
+`reported` is an observation, not evidence at all; `runtime_checked` is a
+disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
+on one axis produces false comparisons: a native differential-oracle test covers
+the backend and runtime, while a ProofCore theorem reasons more strongly over a
+narrower semantic layer. Neither is "below" the other — they are incomparable
+evidence about different scopes, and the current model cannot say so.
+
+Represent a claim as orthogonal fields — subject, claim kind, semantic scope,
+evidence method, status, assumptions, producer trust, freshness, replay command —
+and let the CLI keep rendering friendly composites like `proved_by_lean`. The
+scope axis is the one that is genuinely missing today, and it is the axis where
+the compiler already has the facts.
+
+Second, `producer_trust` must be a real field, because "compiler-enforced" reads
+as trust-free and is not: until checker soundness and artifact production are
+independently verified, enforcement depends on this compiler being correct.
+Being implemented in Lean does not remove that dependency; mutation testing and
+duplicate boundary checks are strong engineering evidence, not a soundness proof.
+`docs/TRUSTED_COMPUTING_BASE.md` already holds the concept — the change is that
+`producer_trust = concrete_compiler` appears on each claim, and can be narrowed
+later by independent certificate checking rather than by assertion.
+
+Gate: a fixture set covering one claim per (scope × method) cell that exists
+today, a negative fixture proving two incomparable claims cannot be ordered by
+the renderer, a fixture proving a claim with no `producer_trust` is rejected, and
+a red-team case proving no rendering path can present a weaker-scope claim under a
+stronger composite name. Reconcile both documents against the implemented model
+rather than leaving a third vocabulary.
 
 ### Task R-0202
 

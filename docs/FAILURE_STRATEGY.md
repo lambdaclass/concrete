@@ -74,7 +74,10 @@ Abort terminates the process immediately. No defer runs. No cleanup. The OS recl
 - Calls libc `abort()`, which typically raises SIGABRT
 - Exit code is OS-dependent (typically 134 on POSIX)
 - No deferred expressions execute
-- No destructors run (there are no destructors)
+- No `Destroy` implementations or generated drop glue run — `abort()` bypasses
+  all cleanup. Concrete has explicit destruction (`impl Destroy`, `destroy(x)`,
+  `x.drop()`, `defer x.drop()`) but no implicit scope-exit destructors, so there
+  is nothing the compiler would have inserted on this path either.
 - OS reclaims all process memory, file descriptors, etc.
 
 ### 3. Hardware traps (outside language model)
