@@ -3611,6 +3611,11 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  compression rounds, message schedules, heap/alias-heavy code, effectful code,
  and induction-heavy specs until separate evidence shows they fit. Design
  note: `research/proof-evidence/operational-vc-auto-discharge.md`.
+
+ Loop-bound and `complexity_guarded` arithmetic obligations (R-0244) are a
+ named discharge class for this tier: a symbolic iteration bound that
+ survives to `needs_lean` is a signal about the obligation, not homework
+ for the user.
 ### Task R-0171
 
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
@@ -4380,6 +4385,16 @@ Where the obligation can expose a symbolic iteration bound, retain it as a
 `complexity_guarded` fact for the same subject rather than reducing it to a
 Boolean “bounded” label. This is a source-level complexity/DoS-resistance
 claim, not wall-clock timing.
+
+   Bounds are obligations and must discharge like them: loop-bound arithmetic
+   routes to `omega`/`bv_decide` through R-0170, and cost-bound discharge is
+   a named auto-discharge gate case — bounds that require hand-written Lean
+   will not be written. Bounds compose over the known call graph: a caller's
+   bound folds in its callees' bounds, and an indirect call folds the union
+   of its possible target set (with recursion excluded by the predictable
+   gate, composition is a DAG fold). Gate a bound that is too small and must
+   be rejected with a witness, composition through direct and indirect
+   calls, and a mutation that drops the bound check.
 
 ### Task R-0245
 
@@ -5352,6 +5367,12 @@ never implies cycles or elapsed time. Start with the std container bounds
 already forced by bug 048 plus one workload budget; do not build a parallel
 cost-semantics task before those existing obligation owners need shared
 machinery.
+
+If a timing interpretation of `complexity_guarded` is ever entertained, run
+the correlation experiment first: cost-model step counts vs. measured time on
+the R-0416–R-0419 corpus (base64_cli, png_chunks, wordfreq). Poor correlation
+is expected on memory-bound workloads and invalidates nothing about the
+complexity claims; only a strong result licenses even speaking about time.
 
 ### Task R-0418
 
