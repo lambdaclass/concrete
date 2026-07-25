@@ -5,7 +5,7 @@ Status: stable policy reference (Phase 3 items 60-61)
 This document defines Concrete's arithmetic overflow policy as a public language surface. It specifies what happens on integer overflow, division by zero, shift overflow, and narrowing for each profile, and how the active policy is made visible in source, reports, and proof artifacts.
 
 For the profile definitions, see [PROFILES.md](PROFILES.md).
-For the current runtime boundary classification (including overflow as UB), see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).
+For the current runtime boundary classification, see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).
 For the proof-vs-runtime integer gap, see [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
 For the failure strategy (abort-only, no unwinding), see [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md).
 
@@ -71,13 +71,19 @@ It also traps on out-of-bounds array access — which compiled code now does too
 
 ### Current proof behavior
 
-The proof model (`Proof.lean`) uses Lean's unbounded `Int`. Theorems proved over `PExpr` hold for mathematical integers but carry an implicit assumption that runtime values stay within representable range. Division and modulo are not modeled in `PBinOp` at all.
+The proof model (`Proof.lean`) uses Lean's unbounded `Int` for ordinary
+arithmetic, so theorems carry an implicit assumption that runtime intermediates
+stay representable when normal return is part of the claim. `i32`/`u32`
+division and modulo have explicit `PBinOp.div`/`.mod` forms; other widths and
+the full trap/no-overflow correspondence remain narrower than runtime
+semantics.
 
 ### Current overflow-obligation policy
 
 Overflow obligations are **not generated for every integer `+`, `-`, or `*` by
 default**. Arithmetic is everywhere, and Concrete's runtime overflow behavior is
-still profile-dependent while the checked/proved profiles are being built out.
+checked in every profile. The open question is whether a profile requires static
+discharge or accepts the runtime check, not what the source operation means.
 Emitting a missing obligation for every ordinary arithmetic expression would
 bury useful audit output in noise.
 
@@ -98,10 +104,9 @@ then be discharged by `omega`, `bv_decide`, a Lean theorem, runtime checking, or
 reported as missing according to the normal evidence ladder.
 
 Outside an `#[overflow_checked]` scope, audit output must not silently imply
-"overflow proved." It should either omit overflow obligations from that function
-or report that overflow checking is not requested for the active arithmetic
-profile. This keeps the evidence ledger honest without making every example
-unreadable.
+"overflow proved." It should either omit a static no-overflow claim or report
+that no static discharge was requested. The runtime operation remains checked.
+This keeps the evidence ledger honest without making every example unreadable.
 
 `#[overflow_checked]` is **not** an arithmetic mode switch. It does not make
 wrapping arithmetic wrap, trapping arithmetic trap, or saturating arithmetic
@@ -111,23 +116,29 @@ source-visible through their named intrinsics.
 
 ### What the pressure tests revealed
 
-The Phase 2 pressure programs expose real arithmetic pain:
+The Phase 2 pressure programs exposed the ambiguity that motivated the shipped
+policy:
 
-- **`pressure_fixcap_controller.con`**: PID controller uses integer-scaled gains (`Kp*error / 10`). The `meas_push` function subtracts the oldest value then adds the new one — if intermediate sums overflow `i32`, the running average silently corrupts. The comment "gains are scaled x10 to avoid needing floats" documents a manual workaround for the lack of overflow visibility.
-- **`pressure_fixcap_ring_buffer.con`**: wrap-around index `(r.head + 1) % 16` is intentionally modular arithmetic. The programmer means wrapping. There is no way to distinguish this intent from accidental overflow.
+- **`pressure_fixcap_controller.con`**: PID controller uses integer-scaled gains
+  (`Kp*error / 10`). Intermediate overflow now traps rather than silently
+  corrupting the running average.
+- **`pressure_fixcap_ring_buffer.con`**: wrap-around index intent must use the
+  explicit modular spelling where arithmetic overflow, rather than `%`, is the
+  intended mechanism.
 - **`pressure_parse_binary_endian.con`**: shift-and-or byte assembly (`(b0 << 24) | (b1 << 16) | (b2 << 8) | b3`) produces correct bit patterns, but for values above `2^31` the result is a negative `i32`. The comment "for 0xDEADBEEF (> 2^31), we use the raw bit pattern in i32" documents the confusion.
-- **`pressure_fixcap_state_machine.con`**: no overflow risk, but the code has no way to assert that.
+- **`pressure_fixcap_state_machine.con`**: no overflow risk; a static claim still
+  requires an obligation/proof rather than being inferred from confidence.
 
-The pattern is clear: some code intends wrapping, some code would prefer trapping, and nothing in the source distinguishes them.
+The resulting source rule distinguishes them: ordinary operators are checked,
+`wrapping_*` is modular, and `saturating_*` clamps.
 
 ---
 
 ## 2. Arithmetic Modes
 
-The modes below describe the intended public arithmetic policy. They are staged:
-Concrete currently has opt-in overflow obligations via `#[overflow_checked]`,
-while the runtime/backend switch to checked-by-default arithmetic remains a
-separate implementation step.
+The modes below describe the implemented public arithmetic policy. Static
+no-overflow obligations remain opt-in through `#[overflow_checked]`; runtime
+checked-by-default arithmetic is already shipped.
 
 Concrete defines three arithmetic modes for integer operations. Every integer operation executes in exactly one mode. The mode is always determinable from the source.
 
@@ -145,7 +156,7 @@ This is the **default mode** for all profiles.
 
 Explicit opt-in for code that intentionally uses two's-complement modular semantics.
 
-- Operations wrap silently in two's complement, exactly as today.
+- Operations wrap in two's complement by explicit request.
 - Available via named functions: `wrapping_add`, `wrapping_sub`, `wrapping_mul`.
 - These are compiler intrinsics, not stdlib functions. They emit plain LLVM `add`/`sub`/`mul` without `nsw`/`nuw`.
 - Available for all integer types.
@@ -342,7 +353,7 @@ This is a departure from C (where signed overflow is UB exploited by optimizers)
 
 ## 8. Narrowing and Widening Casts
 
-**Decision: explicit casts only. No silent truncation.**
+**Decision: no implicit conversions; explicit narrowing may truncate.**
 
 ### Widening (always safe)
 
@@ -471,7 +482,11 @@ directly in Lean against an explicit model, not through the Concrete pipeline.
 
 ### 10.3 Division and proofs
 
-Division and modulo are not currently modeled in `PBinOp`. This remains a gap. A function that uses division is proof-eligible (the other gates may pass), but the proof cannot reason about the division result. Until division is added to the proof model, proofs involving division carry an explicit caveat.
+`i32`/`u32` division and modulo are modeled by `PBinOp.div`/`.mod`, including
+their admitted proof semantics. Other widths and a complete proof that the
+runtime trap boundary matches the theorem's domain remain open; a claim that
+normal execution returns must state or discharge nonzero-divisor and signed
+`MIN / -1` conditions where applicable.
 
 ### 10.4 Future: overflow preconditions
 
@@ -540,7 +555,7 @@ This closes the interpreter-vs-compiled divergence for the first time.
 
 ---
 
-## 13. Implementation Sequence
+## 13. Historical Implementation Sequence
 
 1. **[DONE — 2026-06-24; ROADMAP #10 Stage 2.1]** Add wrapping intrinsics:
    `wrapping_add`, `wrapping_sub`, `wrapping_mul` as compiler intrinsics that emit
@@ -549,30 +564,37 @@ This closes the interpreter-vs-compiled divergence for the first time.
    checked while these stay plain); integer-only, same-type operands; interpreter
    wraps both signed and unsigned to match compiled. Gated by
    `scripts/tests/check_wrapping_arith.sh` (`make test-wrapping-arith` + CI step).
-2. **Add saturating intrinsics**: `saturating_add`, `saturating_sub`, `saturating_mul` emitting LLVM `llvm.*.sat` intrinsics. **[add/sub DONE — 2026-06-24; ROADMAP #10 Stage 2.2: `BinOp.saturatingAdd/Sub` → `llvm.{s,u}{add,sub}.sat.iW` (signed/width-mangled, statically declared); integer-only, same-type; interpreter clamps to range; gate `scripts/tests/check_saturating_arith.sh`.]** **[mul DONE — 2026-06-24; ROADMAP #10 Stage 2.2b]** `saturating_mul` has no direct `*.sat` intrinsic, so it lowers via `*.with.overflow` (struct `{iW,i1}` result + `extractvalue`, emitted as raw IR; LLVM auto-declares the intrinsic) then a branchless clamp `select` — unsigned clamps to MAX, signed clamps to MIN/MAX by the sign of the true product. This is the shared overflow infrastructure the checked flip (Stage 2.3) reuses (with `condBr`→abort instead of the clamp select). Interp clamps to match; gate covers signed/unsigned boundaries.
+2. **[DONE — 2026-06-24] Add saturating intrinsics**:
+   `saturating_add`, `saturating_sub`, `saturating_mul`. Add/sub use LLVM
+   saturating intrinsics; multiplication uses overflow detection plus a
+   signed/unsigned clamp. The interpreter clamps to match.
 3. **[DONE — 2026-06-24; Stage 2.4]** Add division-by-zero checks: per-type
    `@__cc_{sdiv,udiv,srem,urem}` helpers abort on `b == 0` (and signed `MIN/-1`
    overflow), else divide. Fixes real UB (was SIGFPE). Interp traps to match.
 4. **[DONE — 2026-06-24; Stage 2.5]** Add shift-range checks: per-type
    `@__cc_{shl,ashr,lshr}` helpers abort when the shift amount `>=` bit width
    (was LLVM poison/UB). Interp traps to match.
-5. **Switch default arithmetic to checked**: replace `add`/`sub`/`mul` emission with `llvm.*.with.overflow` intrinsics + abort branch. This is the breaking change.
+5. **[DONE — 2026-06-24; Stage 2.3] Switch default arithmetic to checked**:
+   replace plain `add`/`sub`/`mul` emission with overflow detection plus an abort
+   branch.
 6. **Add `--report arithmetic`** **[DONE — 2026-06-26]**: per-function, per-site
    classification into the §3.2 classes (runtime-checked / proved /
    explicit-wrapping / explicit-saturating); gate
    `scripts/tests/check_report_arithmetic.sh`. See §9.1.
-7. **Update interpreter**: add overflow/shift/division checks to `evalBinOp`.
-8. **Update pressure programs**: fix the handful of programs that rely on wrapping.
+7. **[DONE] Update interpreter**: fixed-width checks are shared through
+   `Concrete.Semantics.IntArith`.
+8. **[DONE] Update pressure programs/corpus**: intentional modular behavior uses
+   explicit wrapping operations.
 9. **Update proof eligibility** **[DONE — 2026-06-24]**: `wrapping_add` at `u32`
    maps to the proof model's `addw 32` (it is the mod-2³² operator SHA-256
    forces), so it IS in the proof subset; `wrapping_sub`/`wrapping_mul`, other
    widths, and all saturating intrinsics stay out (`binOpToPBinOp → none`).
    Ordinary checked `+` extracts to mathematical `add`, NOT to `addw` (see §10.2).
-10. **Update PREDICTABLE_BOUNDARIES.md**: remove "Integer overflow: silent wrap" from the UB table. Add "Integer overflow: trap (abort)" to the failure paths table.
-11. **Add `#[overflow_checked]` obligation generation**: before checked
-    arithmetic is the default everywhere, generate no-overflow obligations only
-    for functions or scopes that opt in. Audit output must distinguish
-    "overflow checked/proved" from "overflow checking not requested."
+10. **[DONE] Update current-claim documents**: ordinary overflow and safe OOB
+    are classified as defined traps, not UB/silent wrap.
+11. **[DONE] Add `#[overflow_checked]` obligation generation**: generate static
+    no-overflow obligations for functions/scopes that opt in. Audit output
+    distinguishes runtime checking from static proof.
 
 ---
 

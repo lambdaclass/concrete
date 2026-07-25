@@ -28,7 +28,11 @@ For FFI and trust boundaries, see [FFI](@/reference/FFI.md).
 ## Copy vs Linear
 
 - **Copy types** can be used multiple times. Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
-- **Linear types** must be consumed exactly once. All structs and enums are linear by default. Branches must agree on consumption. Loops cannot consume linear variables from outer scope.
+- **Linear types** must be consumed exactly once. All structs and enums are
+  linear by default. Branches must agree on consumption. A `mut` linear place
+  may be rebound after its old value is consumed, but assigning over a live
+  value is E0219. One lexical name denotes one binding; a linear place contains
+  at most one live resource.
 
 ## Newtype
 

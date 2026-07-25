@@ -68,51 +68,80 @@ All dispatch in Concrete is either statically resolved (monomorphization) or exp
 
 Concrete does not have type inference beyond local let-binding inference. No HM-style global inference, no implicit conversions, no implicit trait resolution beyond monomorphization. The cost: more type annotations. The benefit: every type is visible where it matters, diagnostics have clear ownership, and the compiler frontend stays phase-separated.
 
-### No shadowing ban — shadowing stays legal
+### No lexical value shadowing
 
-**Status:** Decided (2026-07-25)
+**Status:** Decided (2026-07-25); enforcement pending
+[ROADMAP R-0435](../ROADMAP.md).
 
-Variable shadowing is permitted. A `let` may reuse a name already bound in the
-same or an enclosing scope, and nested `match` binders may share a name with an
-outer binder. The two existing restrictions stay and are the whole rule:
+A new local value binding may not reuse the spelling of another local value
+binding visible along its lexical scope chain. The rule covers parameters,
+`let` declarations, pattern and loop binders, and borrow-block value/region
+binders. It rejects `let s = transform(s)` as a second binding even when the RHS
+consumes the old value.
 
-- shadowing a still-**live** non-`Copy` binding is rejected (H16,
-  `.shadowsLiveLinear`), because the older owner's obligation would vanish
-  behind the new binding;
-- borrow-block ref and region names may not shadow an existing name
-  (`.borrowRefShadows`).
+Assignment is different: it evolves one existing place rather than introducing
+a binding. A `mut` linear place may be rebound after its old value is consumed,
+so `acc = f(acc, x)` remains the ordinary fold/accumulate form. Assigning while
+the old value is live remains E0219. The invariant is:
 
-**Why not a ban.** Shadowing was never a soundness problem. Bug 045 — reading an
-outer `value` returned the inner binder's value on both backends — was a
-*name-resolution* defect: nested same-named binders shared one Lower slot. The
-root fix was Elab alpha-renaming, and the general form is now
-[PRINCIPLES.md](PRINCIPLES.md) #12: source names are representations, and the
-compiler owns identity. Once identity is compiler-owned, shadowing is
-unambiguous internally at no cost, and the source-level question is purely
-ergonomic. Banning the construct would encode a former compiler weakness as a
-permanent language restriction.
+> One lexical name, one binding; at most one live resource in a linear place.
 
-It would also have cost real surface. Pattern fields bind by field name only
-(`binding_list = IDENT { ',' IDENT }`), and `Option`/`Result` both name their
-payload field `value`, so nested matching over two of them produces nested
-`value` binders by construction — 25 such sites in `std/` and `examples/`. A ban
-requires adding a binder-renaming form (`Variant { value: inner }`) just to keep
-nested matching expressible. That is a grammar addition bought by a restriction,
-not by a feature.
+Sibling match arms may use the same binder spelling because neither is visible
+from the other. A declaration executed repeatedly by a loop remains one lexical
+binding. Field labels, type names, traits, and modules are separate namespaces;
+top-level functions, imports, and intrinsics require a separate namespace
+decision rather than an accidental expansion of this one.
 
-**What Concrete does instead:** same-name evolution is ordinary and visible.
-`let s = transform(s);` has one live `s` at every point because the RHS consumed
-the old one, and `acc = f(acc, x)` is `let mut` assignment (linear rebind,
-[OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md), legal including inside loops). If
-accidental shadowing later proves to cost audit clarity in review, the answer is
-a lint in the vet/tooling layer — an opt-in `no_implicit_shadowing` rule — not a
-language restriction. A `rebind` keyword was considered and rejected: `mut` plus
-assignment already marks a changing binding, and the live/consumed distinction
-already expresses "no implicit shadowing of a live resource."
+**Why:** the ban is an auditability and human-identity choice, not a claim that
+shadowing is inherently memory-unsafe. Bug 045 was a compiler identity defect
+and remains fixed at the root by Elab alpha-renaming. That defense stays
+mandatory under [PRINCIPLES.md](PRINCIPLES.md) #12; rejecting the source spelling
+does not authorize later passes to recover identity from strings.
 
-**Retired:** ROADMAP Task R-0435 (see CHANGELOG). The binder-renaming form
-remains available as pull-gated ergonomics if a workload wants distinct inner
-binder names; it is no longer a prerequisite for anything.
+Pattern-binder renaming must land before enforcement because `Option` and
+`Result` both use a payload field named `value`; nested patterns need an explicit
+spelling such as `Variant { value: inner }`.
+
+**Superseded history:** an earlier same-day decision said “shadowing stays
+legal” and retired R-0435. That decision answered whether shadowing caused bug
+045, not whether it belongs in an audit-first source language. It was superseded
+after the intended language preference was clarified. The changelog retains the
+record; R-0435 is reopened, not reused.
+
+### Evidence is multidimensional, not a total ladder
+
+**Status:** Decided (2026-07-25); implementation pending
+[ROADMAP R-0440](../ROADMAP.md).
+
+Evidence is represented by orthogonal facts: subject, claim kind, semantic
+scope, method, status, assumptions, producer, validator, trusted dependencies,
+freshness, and replay receipt. A broad native oracle test and a narrow
+kernel-checked ProofCore theorem are not globally rankable because they establish
+different claims over different scopes.
+
+A policy may prefer one discharge method over another only after subject and
+scope are comparable. Friendly composite labels such as `proved_by_lean` remain
+useful views, but they may not erase the underlying dimensions or imply that a
+narrower claim dominates broader evidence merely because its method is called a
+proof.
+
+### Predictable generated-code performance is an affirmative project claim
+
+**Status:** Decided (2026-07-25); evidence machinery pending
+[ROADMAP R-0416–R-0419](../ROADMAP.md).
+
+Concrete intends to make workload-scoped, replayable claims about generated-code
+time, size, memory, and optimization stability. That commitment does not
+authorize an unqualified “fast” badge or a comparison without a matched workload,
+input, backend, target, toolchain, metric, uncertainty, raw samples, and replay
+command. Before R-0416–R-0419 land, the honest status of an individual
+comparison remains `performance_not_claimed`.
+
+The decision is about maintaining the evidence capability, not pre-approving a
+result. Optimization remains pull-gated by a reproduced gap or regression.
+Retiring the project-level performance claim later would require retiring
+R-0416–R-0419 and removing the corresponding public language together; dead or
+informational benchmark scripts cannot substantiate it.
 
 ### Trusted means pointer containment only
 
@@ -123,6 +152,15 @@ binder names; it is no longer a prerequisite for anything.
 ## Deferred Decisions
 
 These are not rejected. They are explicitly sequenced as "not yet" to avoid premature complexity.
+
+### `with(Std)` in high-integrity profiles — pending
+
+**Status:** Pending; owned by [ROADMAP R-0441](../ROADMAP.md).
+
+Current profiles accept `with(Std)`. Rejecting the broad alias in a
+high-integrity profile is the preferred proposal, but it is not yet a language
+or profile guarantee. R-0441 must ratify either that restriction or an exact
+transitive-use budget before changing accepted programs.
 
 ### Freestanding / no-std mode — not yet
 

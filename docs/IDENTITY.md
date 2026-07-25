@@ -98,7 +98,12 @@ Most systems languages have one escape hatch. Rust has `unsafe`. C has... everyt
 
 **What `trusted` specifically permits:** pointer arithmetic, raw pointer dereference, raw pointer assignment, pointer-involving casts. Nothing else. It does NOT suppress capabilities, does NOT permit FFI without `with(Unsafe)`, does NOT relax linearity.
 
-**Nine capabilities:** `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`. A function can only call functions whose capabilities are a subset of its own.
+**Nine capabilities:** `File`, `Network`, `Time`, `Env`, `Random`, `Process`,
+`Console`, `Alloc`, `Unsafe`. `Std` is not a tenth capability; it is source
+shorthand for the eight standard capabilities other than `Unsafe`. Current
+profiles accept that alias, while its high-integrity policy remains pending
+under ROADMAP R-0441. A function can only call functions whose capabilities are
+a subset of its own.
 
 ## The Compiler as Audit Machine
 
@@ -220,7 +225,11 @@ See [../research/stdlib/allocation-budgets.md](../research/stdlib/allocation-bud
 
 ### Execution Cost Tracking
 
-Structural classification of functions: bounded or unbounded loops, recursive or not, max static call depth. For bounded functions, abstract instruction counts via IPET. Concrete is unusually tractable for this: no dynamic dispatch, no closures, no hidden allocation, clean SSA CFG.
+Structural classification of functions: bounded or unbounded loops, recursive
+or not, max static call depth. For bounded functions, abstract instruction
+counts via IPET. Concrete is unusually tractable for this: no trait-object
+dispatch or closures, an enumerable set of named callable values with explicit
+indirect edges, no hidden allocation, and clean SSA CFG.
 
 See [../research/stdlib/execution-cost.md](../research/stdlib/execution-cost.md).
 

@@ -1,227 +1,147 @@
 # Provable Subset
 
-Status: standing reference
+Status: standing architecture reference
 
-For the first named, release-facing subset contract, see
-[PROVABLE_V1.md](PROVABLE_V1.md).  This document remains the broader background
-reference for how ProofCore relates to the compiler pipeline; `PROVABLE_V1.md`
-is the tighter compatibility contract reviewers should read first.
+The release-facing compatibility contract is
+[PROVABLE_V1.md](PROVABLE_V1.md). That file is the canonical allowlist for
+types, expressions, state forms, failure behavior, and proof-attachment
+requirements. This document explains where the subset sits in the compiler and
+why it has this shape; it does not duplicate the allowlist.
 
-This document defines the clearly analyzable, proof-eligible subset of Concrete. It specifies what is included, what is excluded, why, and how the subset connects to the proof pipeline.
-
-For the safety model, see [SAFETY.md](SAFETY.md). For the proof architecture, see [ARCHITECTURE.md](ARCHITECTURE.md). For the effect/trust proof boundary, see [EFFECT_PROOF_BOUNDARIES.md](EFFECT_PROOF_BOUNDARIES.md).
-For the language-semantics vs proof-semantics boundary, see [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
-For the user-facing proof contract, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md). For the formalization roadmap, see [../research/proof-evidence/formalization-breakdown.md](../research/proof-evidence/formalization-breakdown.md). For language decisions that shape this subset, see [DECISIONS.md](DECISIONS.md).
+For user reliance rules, see [PROOF_CONTRACT.md](PROOF_CONTRACT.md). For the
+language/proof semantic boundary, see
+[PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
 
 ## Definition
 
-The provable subset is the fragment of Concrete programs that can be formally reasoned about in Lean 4. It currently has two related boundaries:
+The provable subset is the fragment of validated Concrete programs that the
+current ProofCore extractor can represent and the Lean evaluator can execute.
+It has three related boundaries:
 
-1. **ProofCore** (`Concrete/Proof/ProofCore.lean`) — the actual compiler extractor over validated Core IR
-2. **`--report proof`** (`Concrete/Report/Report.lean`) — a stricter report that approximates which functions are currently good proof targets
-3. **Proof** (`Concrete/Proof/Proof.lean`) — formal evaluation semantics and proved properties over the proof fragment
+1. **Eligibility** excludes entry points, capability-bearing functions,
+   trusted origins, and other declaration-level boundaries.
+2. **Extraction** translates every supported node of an eligible validated
+   Core body to `PExpr`; extraction fails closed if any node is unsupported.
+3. **Evidence attachment** binds a theorem and coverage class to a stored proof
+   subject and replays the theorem in Lean.
 
-ProofCore does not define its own semantics. It is a filter, not a rival IR. The semantic authority remains CoreCheck; ProofCore identifies which validated Core declarations the Lean proof infrastructure can reason about.
-
-The important distinction is:
-
-- **ProofCore extraction** is the real compiler boundary today.
-- **`--report proof`** is a stricter operational heuristic that also flags extern calls and raw-pointer operations in function bodies.
-
-This document describes both, and labels them explicitly.
-
-## What Is Included
-
-### Functions
-
-#### Current ProofCore extractor
-
-A function is proof-eligible when all of the following hold:
-
-| Criterion | Check | Rationale |
-|-----------|-------|-----------|
-| Empty capability set | `f.capSet.isEmpty` | No side effects — pure computation only |
-| Not trusted | `!f.isTrusted` | No pointer-level implementation techniques |
-| Not an entry point | `!f.isEntryPoint` | Entry points have runtime obligations (exit code, setup) |
-| No trusted impl origin | `f.trustedImplOrigin.isNone` | Not inherited from a trusted impl block |
-
-A ProofCore-eligible function is intended to be a pure transformation: it takes values, computes, and returns a value. The current extractor enforces the signature-level and declaration-level conditions above. It does not yet inspect function bodies for extern calls or raw-pointer operations.
-
-#### Stricter `--report proof` heuristic
-
-The `--report proof` mode applies the same base conditions and additionally excludes functions that:
-
-- call extern functions
-- perform raw pointer operations in their bodies
-
-That makes the report a better approximation of today's practical proof targets than the current extractor alone.
-
-### Types
-
-| Declaration | Eligible when | Rationale |
-|-------------|--------------|-----------|
-| Struct | Not `repr(C)`, not `packed`, no `reprAlign` | No FFI layout constraints — pure algebraic structure |
-| Enum | No `builtinId` | Not a compiler-intercepted builtin — ordinary algebraic data |
-| Trait definition | Always included | Provides context for method resolution (not yet verified) |
-
-### Expressions (formalized in Proof.lean)
-
-The current formal semantics covers:
-
-| Construct | Status |
-|-----------|--------|
-| Integer literals and arithmetic (add, sub, mul) | Formalized |
-| Boolean literals and logical operators | Formalized |
-| Comparison operators (eq, ne, lt, le, gt, ge) | Formalized |
-| Let bindings | Formalized |
-| If/then/else | Formalized |
-| Non-recursive function calls | Formalized |
-| Structs and field access | Not yet formalized |
-| Enums and match | Not yet formalized |
-| While loops | Not yet formalized |
-| Recursive functions | Not yet formalized (uses fuel for termination) |
-| String/char operations | Not yet formalized |
-
-## What Is Excluded
-
-### Always excluded by the current ProofCore extractor
-
-| Declaration | Why |
-|-------------|-----|
-| Functions with capabilities | Side effects make formal reasoning about return values insufficient — the function's meaning includes its effects |
-| Trusted functions | Contain pointer-level techniques that are outside the formal model |
-| Entry points | Runtime setup/teardown obligations, not pure computation |
-| `repr(C)` / packed structs | Layout is dictated by FFI constraints, not algebraic structure |
-| Builtin-overridden enums | Compiler-intercepted semantics, not user-defined algebraic data |
-
-### Additionally excluded by `--report proof`
-
-| Construct | Why |
-|-----------|-----|
-| Functions that call extern functions | Their behavior depends on external code not modeled in Proof.lean |
-| Functions with raw pointer operations in their bodies | These are a stronger practical signal that the function is outside today's proof-oriented fragment |
-
-### Not yet modeled (future work)
-
-| Construct | Blocking issue |
-|-----------|---------------|
-| Structs and enums in proof semantics | Needs PExpr extensions for constructors, field access, match |
-| Recursive functions | Needs termination discipline beyond fuel |
-| While loops with break/continue | Needs loop semantics formalization |
-| String/char operations | Needs string model |
-| Heap operations | Fundamentally effectful — may never enter the pure subset |
-| Raw pointer operations | Same — trusted/unsafe territory |
+ProofCore is a semantic projection of validated Core, not a replacement
+whole-language IR. The checker remains responsible for language validity,
+ownership, capability discipline, and match/type invariants.
 
 ## Pipeline Position
 
-```
-Source → Parse → Resolve → Check → Elab → CoreCanonicalize → CoreCheck → [ValidatedCore]
-                                                                              │
-                                                                    extractProofCore
-                                                                              │
-                                                                        [ProofCore]
-                                                                              │
-                                                                     Proof.lean semantics
-                                                                              │
-                                                                      Lean 4 theorems
+```text
+Source
+  → Resolve / Check / Elaborate / CoreCanonicalize / CoreCheck
+  → Validated Core
+  → ProofCore extraction
+  → PExpr evaluation and Lean theorems
 ```
 
-The proof boundary sits after CoreCheck and before Mono. At this point the program is:
+Extraction occurs before whole-program monomorphization. That matters:
+per-instantiation generic proof identity is not yet a general facility and is
+tracked under R-0271. The runtime compiler continues independently through
+Mono, lowering, SSA, and a backend; there is no verified preservation theorem
+connecting that chain to `PExpr`.
 
-- Fully elaborated (no surface sugar)
-- Normalized by CoreCanonicalize
-- Validated by CoreCheck (capabilities, types, match coverage, declaration legality)
+## Stable Eligibility Boundary
 
-ProofCore extraction happens at the `ValidatedCore` stage, not after monomorphization. This means proof-eligible functions are proved over their pre-monomorphization form. Generic functions that are proof-eligible in principle would need to be proved per-instantiation after mono — this is future work.
+A current proof target is:
 
-## Proved Properties (Current)
+- capability-free;
+- non-trusted and not from a trusted implementation;
+- not an entry point;
+- free of FFI, raw-pointer, and allocation behavior;
+- non-recursive;
+- fully expressible in the named `ProvableV1` surface.
 
-`Concrete/Proof/Proof.lean` holds proof INFRASTRUCTURE plus the hardcoded
-`provedFunctions` proof path; the flagship example-correctness theorems now live
-in per-example modules `Concrete.Examples.<Ex>.Proofs` (see CHANGELOG, 2026-06-06).
+“Capability-free” means authority-free, not total or incapable of checked
+failure. A proof target can contain selected bounded loops, functional state,
+arrays, structs, enums, matches, and fixed-width operations. Old blanket rules
+such as “no loops,” “no mutation,” or “no aggregates” are obsolete.
 
-**Concrete function correctness (hardcoded `provedFunctions` path):**
-- `parse_byte_correct` — `parse_byte` returns `data + offset` for all inputs
-- `check_length_rejects_short` / `check_length_accepts_valid` — length guard
-- `decode_header_rejects_short` / `decode_header_valid` — header decode failure/success paths
+## Surface Ownership
 
-**Structural lemmas:**
-- `eval_lit` — integer literals evaluate to themselves
-- `eval_bool_lit` — boolean literals evaluate to themselves
-- `eval_var_bound` — variable lookup succeeds when bound
-- `eval_if_true`, `eval_if_false` — conditional reduction
-- `eval_add_lits`, `eval_sub_lits`, `eval_mul_lits` — arithmetic on literals
+The documents have deliberately separate jobs:
 
-All proofs use either `native_decide` (kernel reduction) or `simp` (structural simplification).
+| Document | Owns |
+|---|---|
+| `PROVABLE_V1.md` | Exact admitted types, operations, state forms, and exclusions |
+| `PROOF_STATE_MODEL.md` | Functional model for admitted local/array mutation |
+| `PROOF_STORY_MATRIX.md` | Evidence and open obligation per language family |
+| `PROOF_OBLIGATIONS_REGISTER.md` | Formalization and soundness debt |
+| `PROOF_CONTRACT.md` | Meaning of attachment states and user reliance |
+| `PROOF_SEMANTICS_BOUNDARY.md` | Runtime/proof semantic differences and trust chain |
 
-## Tooling
+Adding a new construct updates the V1 contract and its evidence row. It should
+not require maintaining competing constructor lists in explanatory documents.
 
-### `--report proof`
+## Failure Model
 
-Shows which functions in a program are likely practical proof targets and why excluded functions are excluded:
+The proof evaluator returns a value or `none`. `none` represents a stuck proof
+evaluation, including an invalid operation, missing proof-table callee,
+out-of-bounds functional array access, or insufficient fuel. It is not one
+universal theorem that every corresponding runtime failure has the same
+mechanism.
 
-```
-$ concrete program.con --report proof
-=== Proof Eligibility Report ===
+Runtime ordinary arithmetic and safe indexing are checked terminal failures.
+Proofs over mathematical integers or partial operations must state the
+range/no-failure hypotheses they need. Explicit fixed-width operations carry
+only the semantics admitted by `ProvableV1`.
 
-module main:
-  ✓ pure_add
-  ✓ factorial
-  ✗ read_file  (requires capabilities: File)
-  ✗ main  (requires capabilities: Alloc, Console)
-  ✗ unsafe_cast  (trusted boundary)
+## Calls and Composition
 
-Totals: 5 functions, 2 eligible for ProofCore, 3 excluded
-```
+Non-recursive direct calls are represented when the proof function table is
+complete. This lets the evaluator execute a callee expression; it does not
+automatically compose independent correctness theorems.
 
-Exclusion reasons are specific: "requires capabilities: X", "trusted boundary", "calls extern: ...", "raw pointer operations".
+Opaque application through a function parameter is needed for real std
+higher-order proofs. Runtime Core preserves direct-versus-indirect call
+identity, but ProofCore's callable identity remains incomplete under bug 061
+and R-0442. A source shadowing restriction must never be used as a substitute
+for IR identity.
 
-## Relationship to Other Subsets
+## Attachment Integrity
 
-### ProofCore vs High-Integrity Profile
+A supportable proved claim has a stored fingerprint and successful kernel
+replay. A source link without a stored fingerprint is `unbound` and fails
+closed.
 
-The **provable subset** (ProofCore) and the **high-integrity profile** (see [SAFETY.md](SAFETY.md)) are related but different:
+The current fingerprint is body-oriented. It does not yet include every
+signature/type fact, contract, toolchain context, or transitive dependency.
+R-0004 owns the versioned `ProofSubjectDigest` and dependency-root work. These
+limits qualify freshness; they do not erase the already checked theorem.
+
+## Relationship to High-Integrity Profiles
+
+The provable subset and a high-integrity runtime profile answer different
+questions:
 
 | | Provable subset | High-integrity profile |
 |---|---|---|
-| **Purpose** | Formal verification in Lean | Stricter runtime restrictions for critical code |
-| **Scope** | Pure functions only | Entire programs under tighter rules |
-| **Capabilities** | None allowed | Restricted set (no Unsafe, bounded allocation) |
-| **Trusted** | Excluded | Allowed but restricted to approved wrappers |
-| **FFI** | Excluded | Allowed through approved `trusted extern fn` only |
-| **Enforcement** | ProofCore extraction filter (with stricter `--report proof` heuristic today) | Future compiler mode/checks |
+| Purpose | Lean-backed claims about selected pure functions | Restrictions and evidence for an entire executable |
+| Capabilities | None | A policy-defined restricted set |
+| Trusted/FFI | Excluded | May be admitted through approved boundaries |
+| Runtime failures | Theorem-specific assumptions/obligations | Profile policy and runtime behavior |
+| Evidence | Proof attachment, coverage, replay | Mixed enforced/reported/tested/proved/assumed/trusted evidence |
 
-The provable subset is strictly narrower than the high-integrity profile. Every proof-eligible function would also pass high-integrity restrictions, but many high-integrity functions (those with restricted capabilities or approved trusted wrappers) are not proof-eligible.
+Programs are not expected to be entirely proof-eligible. A normal design keeps
+effectful shells and trusted adapters outside while proving selected pure
+algorithms, validators, and state transitions.
 
-### ProofCore vs the rest of the program
+## Growth Rule
 
-ProofCore is not a wall. It is a window.
+The subset grows only with:
 
-Programs are not expected to be entirely proof-eligible. The typical pattern is:
+1. a forcing workload or proof obligation;
+2. an explicit ProofCore representation and evaluator semantics;
+3. extraction and negative tests;
+4. Lean evidence at the claimed coverage;
+5. updates to `PROVABLE_V1.md`, the proof-story matrix, and obligation
+   register;
+6. an honest statement of runtime correspondence and remaining trust.
 
-- Most of the program uses capabilities, trusted wrappers, and FFI normally
-- Selected pure functions (algorithms, validators, transformers) are proof-eligible
-- The `--report proof` tool shows what is and is not eligible
-- Proofs target the eligible fragment; the rest is covered by testing, reports, and audits
-
-## Design Constraints
-
-The provable subset's shape follows directly from Concrete's permanent language decisions:
-
-1. **No closures / no trait objects** → all dispatch in proof-eligible code is statically resolved. No hidden function pointers or vtables to reason about.
-2. **No inference-heavy abstraction** → types are explicit. The proof model does not need to reconstruct inferred types.
-3. **Trusted = pointer containment only** → the boundary between provable and non-provable code is clean. Trusted functions are excluded because they use pointer techniques, not because of vague "unsafety."
-4. **Capabilities in signatures** → the eligibility check is trivial: `capSet.isEmpty`. No need to analyze function bodies for hidden effects.
-5. **Phase separation** → ProofCore extracts from a well-defined pipeline stage (ValidatedCore) with known invariants. It does not depend on information from later passes.
-
-## Future Direction
-
-Tracked in [../research/proof-evidence/formalization-breakdown.md](../research/proof-evidence/formalization-breakdown.md). The main expansion axes are:
-
-1. **Richer proof semantics** — structs, enums, match, recursion in `Proof.lean`
-2. **Source-to-Core traceability** — connecting proof results back to user-visible source locations
-3. **Language guarantee proofs** — proving that capability checking is sound, linearity is enforced, trusted boundaries are honest
-4. **Compiler preservation proofs** — proving that Core→SSA lowering preserves the semantics of proof-eligible functions
-5. **User-facing proof workflow** — exporting proof subjects, documenting proof artifacts, tying proofs to `--report proof` output
-
-Each level builds on the previous. The current state (Level 1: formal semantics for a small pure fragment) is the foundation. See the formalization breakdown for the full roadmap.
+Removing or weakening an admitted V1 construct is a compatibility change.
+Adding a surface form without semantic and evidence ownership is not
+completion.

@@ -93,7 +93,7 @@ Evidence discharges or classifies obligations.
 
 | Evidence class | Meaning |
 |---|---|
-| `proved_by_lean` | A Lean theorem checks against the current source/spec/fingerprint. |
+| `proved_by_lean` | A Lean theorem kernel-checks against the linked ProofCore spec, with a stored body fingerprint; R-0004 records the remaining full-subject limits. |
 | `proved_by_smt_replayed_in_lean` | SMT found a proof and the result was replayed or reconstructed in Lean. |
 | `proved_by_trusted_solver` | A configured solver reported valid; the solver is part of the trusted base for this claim. |
 | `enforced_by_checker` | The compiler rejects violations. |
@@ -105,6 +105,7 @@ Evidence discharges or classifies obligations.
 | `blocked` | The obligation cannot yet be generated or checked because required compiler support is missing. |
 | `counterexample` | A solver or checker produced a concrete violation. |
 | `stale` | Evidence exists, but no longer matches the current source/spec/fingerprint. |
+| `unbound` | A proof link exists but no stored proof subject exists, so freshness cannot be claimed. |
 
 Do not display all successful evidence as plain "proved." The distinction is
 load-bearing.

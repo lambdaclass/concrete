@@ -17,6 +17,14 @@
         in function types. Proofs, runtime checks, oracle tests, assumptions,
         and trusted boundaries are reported as separate evidence classes.
       </p>
+      <p>
+        The refusals are the point: no closures, no trait objects, no macros,
+        and whole-program monomorphization keep callable values inside a closed
+        set of named functions. A function-pointer target may still be chosen
+        at runtime, but its possible targets are statically enumerable. That
+        gives facts about authority, allocation, and failure a tractable path
+        from <code>main</code> to whole-program claims.
+      </p>
       <div class="hero-actions">
         <a class="primary" href="{{ get_url(path='@/guide/getting_started.md') }}">Get started</a>
         <a href="{{ get_url(path='@/guide/landing.md') }}">Why Concrete?</a>

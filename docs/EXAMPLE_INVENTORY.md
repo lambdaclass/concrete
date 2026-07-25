@@ -14,7 +14,7 @@ If an example is not in this table, it does not exist as a named workload.
 |------|------|-------|-----------------|-----------------|------------|
 | crypto_verify | `examples/crypto_verify/` | Phase 1 + Phase 2 | Proof-backed predictable code with fingerprint drift detection | Trust-drift consistency, proved/stale transitions, capability escalation detection | 16+ (policy, proof, stack-depth, drift) |
 | elf_header | `examples/elf_header/` | Phase 1 + Phase 2 | Authority visible in signatures, Lean-backed proofs, trusted FFI boundary | End-to-end Lean attachment, trust-drift detection | 12+ (proof, drift, compilation) |
-| proof_pressure | `examples/proof_pressure/` | Phase 2 (item 1) | One function per proof obligation state (proved, stale, missing, blocked, ineligible, trusted) | Reproducible extraction, deterministic fingerprints, Lean theorem stub generation | 34+ (proof-status, obligations, extraction, eligibility, fingerprints, lean-stubs, check-proofs, registry) |
+| proof_pressure | `examples/proof_pressure/` | Phase 2 (item 1) | Original pressure set for proved, stale, missing, blocked, ineligible, and trusted; the later `unbound` state is exercised by the evidence-class and contract-negative fixtures | Reproducible extraction, deterministic fingerprints, Lean theorem stub generation | 34+ (proof-status, obligations, extraction, eligibility, fingerprints, lean-stubs, check-proofs, registry) |
 
 ### Canonical examples (phase centerpieces, trust-gate tested)
 

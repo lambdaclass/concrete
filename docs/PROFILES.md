@@ -35,9 +35,9 @@ are an enforcement/optimization axis. Neither axis flips source semantics: a
 reviewer must never need to know the profile to know whether `a + b` wraps.
 Arithmetic meaning is fixed and explicit — checked `+ - *`, explicit
 `wrapping_*` / `saturating_*` — per [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md)
-§14. (Arithmetic still lowers to silent wrap today; that is a tracked
-implementation gap — ROADMAP #10 / ARITHMETIC_POLICY.md §1, §13 — not a
-profile-dependent behavior.)
+§14. Ordinary arithmetic and raw safe indexing now lower to checked runtime
+paths in every profile; stronger profiles may require static discharge, but may
+not reinterpret the source operation.
 
 ## Profile 1: Safe
 
@@ -51,7 +51,7 @@ This is the ordinary checked Concrete surface. All compiled code gets these guar
 |------|----------------|
 | Ownership tracking | Use-after-move, double free, forgotten linear values |
 | Borrow checking | Borrow conflicts, borrow escape, frozen-variable access |
-| Linearity | Linear reassignment, cross-loop consumption, skip past linear |
+| Linearity | Overwrite of a live linear value, cross-loop consumption, skip past linear |
 | Capability containment | Callers must declare superset of callee capabilities |
 | Control flow agreement | Branches must agree on linear variable consumption |
 | `&mut T` tracking | Borrow-block exclusive refs consumed on call; no aliasing |
@@ -77,8 +77,8 @@ All gates are hard errors. The program cannot compile and violate them.
 
 ### What safe does NOT cover
 
-- Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
-- Integer overflow (wraps silently — runtime property)
+- Static proof that raw safe indices are in range; invalid indices trap at runtime
+- Static proof that checked arithmetic cannot overflow; invalid operations trap at runtime
 - Stack overflow (depends on OS guard page)
 - Termination (no loop/recursion termination analysis)
 - Formal proof of checker soundness (tested adversarially, not mechanized)
@@ -86,7 +86,9 @@ All gates are hard errors. The program cannot compile and violate them.
 
 ### Claim class
 
-Enforced. No trust required for safe code.
+Enforced by the Concrete checker. Safe code declares no `trusted`/`Unsafe`
+boundary, but the claim still depends on checker and artifact-pipeline
+correctness; R-0440 will carry that dependency per claim.
 
 References: [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [SAFETY.md](SAFETY.md)
 
@@ -144,8 +146,8 @@ This is the restricted execution-oriented profile aimed at code that should be e
 | Blocking/FFI detection | Working |
 | Stack-depth reporting | Working (`--report stack-depth`) |
 | Failure discipline | Defined ([PREDICTABLE_FAILURE_DISCIPLINE.md](PREDICTABLE_FAILURE_DISCIPLINE.md)) |
-| Checked indexing / slice-view contract | Not yet — indexing and views still need one explicit checked/unchecked surface across arrays and borrowed views |
-| Overflow-mode visibility | Not yet — arithmetic still wraps silently today and reports do not expose a chosen source-level policy |
+| Checked indexing | Working for raw safe array indexing; invalid indices trap. Checked/unchecked APIs across borrowed views still need a unified surface |
+| Overflow-mode visibility | Working: ordinary arithmetic is checked in every profile; explicit wrapping/saturating spellings and arithmetic reports expose intent |
 | No-std/freestanding split | Not yet as an implemented profile mode; design is documented in [FREESTANDING_SPLIT.md](FREESTANDING_SPLIT.md) |
 | Full predictable profile enforcement as a first-class surface | Not yet — five gates exist but the complete bounded-execution discipline is still being tightened |
 
@@ -174,13 +176,15 @@ This is the proof-backed subset. Functions that pass all eligibility gates can h
 | Not `trusted` | Functions marked `trusted fn` |
 | No trusted impl origin | Functions backed by trusted code |
 | No recursion | Recursive functions |
-| No loops | Functions containing `while` |
 | No allocation | Functions using `new` |
 | No FFI | Functions calling `extern` |
 | No blocking I/O | Functions with blocking operations |
-| No mutable assignment | Functions with `var` mutation in body |
 
-Additionally, the function body must use only supported extraction constructs: integer/boolean arithmetic, comparisons, let bindings, if/then/else, non-recursive calls.
+Additionally, the function body must use only supported extraction constructs.
+The current `ProvableV1` surface includes selected bounded loops, loop-carried
+scalar state, functional array get/set, and richer `while_step` encodings.
+Arbitrary mutation, unmodeled loops, heap/reference state, and unsupported
+expressions remain blocked; [PROVABLE_V1.md](PROVABLE_V1.md) is canonical.
 
 ### Proof obligation states
 
@@ -188,7 +192,8 @@ Every function receives exactly one status:
 
 | Status | Meaning |
 |--------|---------|
-| `proved` | Spec attached, fingerprint matches, extraction succeeded |
+| `proved` | Theorem attached, stored body fingerprint matches, extraction succeeded; kernel replay is checked separately |
+| `unbound` | Source proof link exists but no proof subject was stored; never treated as proved |
 | `stale` | Spec attached, fingerprint changed — body was modified |
 | `missing` | Eligible and extractable, no spec attached |
 | `blocked` | Eligible but extraction failed (unsupported constructs) |
@@ -211,7 +216,7 @@ Every function receives exactly one status:
 | `--report lean-stubs` | Generated Lean 4 theorem stubs |
 | `--report proof-status` | Per-function proof state with fingerprints |
 | `--report check-proofs` | Lean kernel verification results |
-| `--report proof-diagnostics` | Failure taxonomy (8 kinds, E0800–E0807) |
+| `--report proof-diagnostics` | Failure taxonomy, including unbound proof links (E0810) |
 | `--report proof-deps` | Dependency graph with proved/stale edges |
 | `--report proof-bundle` | JSON evidence bundle for review and CI |
 | `--report obligations` | Obligation internals (spec source, deps) |
@@ -228,7 +233,12 @@ Every function receives exactly one status:
 
 ### What "proved" means and does not mean
 
-**Means:** The function's PExpr representation satisfies the stated Lean 4 theorem. The body fingerprint matches. Stale detection is automatic.
+**Means:** The function has a linked theorem over its PExpr representation and
+its stored body fingerprint matches. `--report check-proofs` supplies the
+separate kernel-replay receipt. Until R-0004 lands, the binding is intentionally
+narrower than a full proof subject: signature/types, contracts/spec identity,
+and transitive dependencies are not all included. Missing stored fingerprints
+are unbound and cannot report `proved`.
 
 **Does not mean:** Binary correctness, checker soundness, cross-function composition, coverage of all properties, or coverage of all eligible functions.
 

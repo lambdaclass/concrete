@@ -17,11 +17,16 @@ This matrix is the language-level inventory. `ProvableV1` is the subset of rows
 that currently have a value-semantics proof story. Other rows may be enforced,
 reported, assumed, or trusted instead.
 
+**Temporary maintenance note:** the eight rows marked “manual stopgap” below
+close known inventory omissions now. R-0438 replaces the hand-maintained row set
+with constructor-derived coverage over the AST/Core, resolver, and project
+models; it must replace rather than duplicate these rows.
+
 ## Claim Classes
 
 | Class | Meaning |
 |---|---|
-| `proved` | A Lean theorem checks against an extracted model and current fingerprint. |
+| `proved` | A Lean theorem kernel-checks against an extracted model with a stored, current body fingerprint and explicit coverage. |
 | `enforced` | The compiler rejects violations before code generation. |
 | `reported` | The compiler reports the fact, but does not make it a hard error. |
 | `assumed` | The claim is explicit in assumptions/policy/release evidence. |
@@ -39,7 +44,12 @@ reported, assumed, or trusted instead.
 | Let bindings | proved | R-06; PExpr eval theorem pattern | none for current shape |
 | If/then/else and early-return fall-through | proved at extraction/eval shape | R-07; parse_validate proofs | fuller source semantics for all if forms |
 | Direct non-recursive calls | proved at extraction/eval shape when FnTable-complete | R-08; G-05 direct FnTable checks | transitive FnTable and proof dependency tracking |
+| Function-pointer values *(manual stopgap)* | enforced at type/capability boundaries; backend-tested | callable-value and capability-judgment gates | merged/loop-carried SSA identity is R-0436 |
+| Indirect calls *(manual stopgap)* | enforced and interpreter/native differential-tested | R-0002 indirect-call identity gate | ProofCore local-application identity is R-0442 |
+| Generics *(manual stopgap)* | enforced and monomorphized for admitted bounds | type-agreement, trait-bound, and workload gates | proof meaning per generic body vs generated instance is R-0271 |
+| Monomorphization *(manual stopgap)* | structurally gated for functions, structs, and enums | generic-enum mono/inventory and mono-name-collision gates | injective identity is R-0007; general payload-fit verification is R-0434 |
 | Struct literals and field access | proved at extraction/eval shape | R-09/R-10; parse_validate/fixed_capacity proofs | richer layout-sensitive structs remain excluded |
+| Newtypes *(manual stopgap)* | enforced nominal construction and Copy behavior | construction-rights and copy-judgment gates | richer proof/layout preservation remains under the aggregate proof bridge |
 | Enum literals and match | proved at extraction/eval shape | R-11/R-12; parse_validate proofs | per-arm semantic preservation and larger pattern surface |
 | Casts | proved for current identity/widening proof model | R-14; fixed_capacity specs | narrowing/invalid-cast obligations |
 | Fixed array literals and reads | proved at extraction/eval shape | R-13/R-15; fixed_capacity/constant_time_tag | bounds obligations for source-level runtime safety |
@@ -47,6 +57,7 @@ reported, assumed, or trusted instead.
 | Bounded flat-assignment while loops | proved at extraction/eval shape | R-18; compute_tag/checksum extraction | loop bound/variant obligations |
 | Rich loop bodies via `while_step` | proved at extraction shape; partially proved at eval shape | R-20; fixed_capacity ring_contains theorem | multi-iteration invariants and source-semantics preservation |
 | Linear ownership | enforced | checker rejects use-after-move, double-use, leaks, branch disagreement | formal checker soundness is open |
+| `defer` *(manual stopgap)* | enforced at lowering and interpreter/native-tested | `check_defer.sh` plus differential-position fixtures | cleanup is absent from ProofCore; failure/profile contract is R-0223 |
 | Borrows and `&mut` exclusivity | enforced | borrow-block checker, frozen-owner rules | proof model for references/borrows is open |
 | Capabilities in signatures | enforced | caller must declare superset of callee capabilities | effectful proof judgments are open |
 | Allocation | reported/enforced by policy, not proved | `--report alloc`, policies, assumptions | `PredictableV1` allocation budget and obligations |
@@ -60,6 +71,8 @@ reported, assumed, or trusted instead.
 | `trusted fn` / trusted impl | trusted/assumed | `--report unsafe`, assumptions, policy gates | smaller wrappers and stronger audit evidence |
 | Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | Phase 14/15 compiler/backend soundness work |
 | Machine-level constant time | assumed | constant_time_tag assumption files and manifest limits | source-level constant-time profile, backend timing assumptions |
+| Modules *(manual stopgap)* | enforced at resolve/check boundaries | module-visibility, project-model, and submodule-check gates | stable cross-phase identity remains part of R-0008/R-0438 |
+| Imports and aliases *(manual stopgap)* | enforced for shipped forms; one rejected-valid gap open | import/module gates and bug corpus | sibling renamed import bug 055 is owned by R-0008 |
 | Concurrency / async / threads / channels | open | research notes only | Phase 13 design, simulation, and evidence model |
 | Packages/dependencies | open | single-repo evidence today | Phase 11 dependency evidence |
 

@@ -22,7 +22,7 @@ For safe code that passes the checker, the compiler enforces at compile time:
 | No dangling safe reference | References are second-class — never returned (no `&T`/`&mut T` in any safe return, directly/aggregate-wrapped/generic); borrow-block scoping + escape analysis |
 | No borrow conflict | Exclusive mutable; shared precludes mutable |
 | No frozen-variable access | Owner frozen during active borrow block |
-| No linear reassignment | Linear variables cannot be reassigned |
+| No live linear overwrite | Assignment cannot replace a live linear value; rebind after consumption is legal |
 | No `&mut T` aliasing | Borrow-block exclusive refs consumed on call |
 | Deterministic cleanup | `defer` runs LIFO at scope exit |
 | No capability escalation | Caller must declare superset of callee capabilities — including calls through function pointers: calling `f: fn(i32) with(Network) -> i32` requires the caller to hold `Network` (E0240; `adversarial_neg_cap_fnptr_smuggle.con`) |
@@ -46,15 +46,19 @@ returned reference. (Deferred, evidence-gated: `from(param)`, and the mutable
 scoped callback `with_value_mut` — parked, nothing pulls it.)
 
 **What enforced does NOT cover:**
-- Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
-- Integer overflow (wraps silently — runtime property)
+- Static proof that every index is in range. Raw safe indexing is runtime-checked
+  and traps on OOB; explicitly trusted/unchecked access remains outside the safe
+  guarantee.
+- Static proof that ordinary arithmetic cannot overflow. Ordinary integer
+  arithmetic is runtime-checked and traps; explicit `wrapping_*` and
+  `saturating_*` have their named meanings.
 - Stack overflow (depends on OS guard page)
 - Termination (no loop/recursion termination analysis)
 - Formal proof of checker soundness (tested adversarially, not mechanized)
 
-The complete, current list of tracked soundness/dark-construct holes (with
-their gates and scheduled fixes) lives in one place:
-[KNOWN_HOLES.md](KNOWN_HOLES.md).
+Legacy H-series and cross-cutting safety boundaries are indexed in
+[KNOWN_HOLES.md](KNOWN_HOLES.md); numbered defects and their current status live
+in [bugs/README.md](bugs/README.md).
 
 References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [SAFETY.md](SAFETY.md), [KNOWN_HOLES.md](KNOWN_HOLES.md)
 
@@ -62,15 +66,28 @@ References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES
 
 ## 2. Proof-Backed Guarantees (provable subset)
 
-Proof-backed = function passes all eligibility gates and has a Lean 4 theorem attached via the proof registry with a matching body fingerprint.
+Proof-backed = function passes all eligibility/extraction gates, has a Lean 4
+theorem attached through the proof registry, has a stored body fingerprint that
+matches, and passes kernel replay.
 
 ### What "proved" means precisely
 
-The function's PExpr representation, evaluated with Lean's unbounded integer arithmetic, satisfies the stated theorem. The function's current body fingerprint matches the fingerprint the proof was written against. Stale detection is automatic and deterministic.
+The function's PExpr representation, evaluated with its declared proof
+semantics, satisfies the stated theorem. The stored body fingerprint matches the
+current body. This is current containment, not a complete proof-subject binding:
+until R-0004 lands, signature/types, contracts/spec identity, and transitive
+dependencies are not all covered by freshness (bugs 059–060 plus the
+dependency-closure leg). A source link without a stored fingerprint is unbound
+and cannot report `proved`.
 
 ### Proof eligibility gates
 
-A function must be: pure (no capabilities), not trusted, not an entry point, no recursion, no loops, no allocation, no FFI, no blocking I/O, no mutable assignment, and its body must use only supported extraction constructs (integer/boolean arithmetic, comparisons, let bindings, if/then/else, non-recursive calls).
+A function must be authority-free (no capabilities), not trusted, not an entry
+point, non-recursive, non-allocating, free of FFI/blocking I/O, and fully
+translatable to the current ProofCore surface. The shipped surface includes
+selected bounded-loop/state encodings and functional array update; arbitrary
+mutation, unmodeled loop shapes, heap/reference state, and unsupported
+expressions remain excluded. `PROVABLE_V1.md` is the canonical construct list.
 
 ### Supported theorem shapes
 
@@ -82,13 +99,15 @@ A function must be: pure (no capabilities), not trusted, not an entry point, no 
 
 ### Proof obligation states
 
-Every function has exactly one status: `proved`, `stale`, `missing`, `blocked`, `ineligible`, or `trusted`.
+Every function has exactly one status: `proved`, `unbound`, `stale`, `missing`,
+`blocked`, `ineligible`, or `trusted`.
 
 ### What "proved" does NOT mean
 
 - Does not mean the compiled binary is correct (proof is over PExpr with unbounded integers, not the binary)
 - Does not mean the checker is sound (no formal checker soundness proof)
-- Does not cover cross-function composition (proofs are per-function)
+- Does not provide automatic cross-function composition; callees need a complete
+  function table and an explicit composition/refinement argument
 - Does not mean all properties are proved (only the stated theorem)
 - Eligibility does not equal proved (many eligible functions have no proof attached)
 
@@ -109,7 +128,7 @@ The proof workflow is operational today, not aspirational. It includes:
 | In-source proof links with fingerprint binding | Working | `#[proof_by]` / `#[proof_fingerprint]` |
 | Lean kernel verification | Working | `--report check-proofs` |
 | Full proof-status report | Working | `--report proof-status` |
-| Proof diagnostics (8 kinds, E0800–E0807) | Working | `--report proof-diagnostics` |
+| Proof diagnostics (including unbound E0810) | Working | `--report proof-diagnostics` |
 | Dependency graph with stale tracking | Working | `--report proof-deps` |
 | JSON evidence bundle | Working | `--report proof-bundle` |
 | Project-level check with scoped output | Working | `concrete check` |
@@ -117,7 +136,10 @@ The proof workflow is operational today, not aspirational. It includes:
 
 ### Diagnostic taxonomy
 
-8 diagnostic kinds with stable error codes: stale proof (E0800), missing proof (E0801), ineligible (E0802), unsupported construct (E0803), trusted (E0804), attachment integrity (E0805), theorem lookup (E0806), Lean check failure (E0807). Each carries a failure class and repair class.
+Diagnostics distinguish stale proof (E0800), missing proof (E0801), ineligible
+(E0802), unsupported construct (E0803), trusted (E0804), attachment integrity
+(E0805), theorem lookup (E0806), Lean check failure (E0807), and an unbound
+source proof link (E0810). Each carries a failure class and repair class.
 
 ### Evidence bundle
 
@@ -125,7 +147,11 @@ The proof workflow is operational today, not aspirational. It includes:
 
 ### Rename and stale detection
 
-Registry entries are validated against current source. Renamed functions are detected by fingerprint matching. Body changes automatically invalidate proofs (stale detection). Comments and formatting changes do not.
+Registry entries are validated against current source. Renamed functions are
+detected by body-fingerprint matching. Body changes invalidate stored links;
+comments and formatting do not. R-0004 records the current limitation: this is
+body freshness, not yet a complete `ProofSubjectDigest` over signatures,
+contracts/spec identity, and transitive dependencies.
 
 **Claim class:** The workflow itself is compiler-enforced (fingerprinting, validation, stale detection) and reported (diagnostics, evidence bundle). Lean theorem checking is proved.
 
@@ -209,7 +235,7 @@ Use these words precisely:
 | Term | Meaning |
 |------|---------|
 | **Enforced** | Checker/compiler-enforced — program cannot violate and compile |
-| **Proved** | Lean 4 theorem with matching fingerprint over PExpr model |
+| **Proved** | Kernel-verified Lean theorem over PExpr with a matching stored body fingerprint; R-0004 records the remaining proof-subject scope |
 | **Reported** | Compiler-observed and surfaced in reports; not a hard error |
 | **Trusted assumption** | Programmer asserts correctness; compiler tracks but does not verify |
 | **Backend/target assumption** | Below the compiler's reach; assumed correct |

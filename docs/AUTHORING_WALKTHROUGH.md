@@ -45,8 +45,11 @@ fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
 }
 ```
 
-Contracts are erased metadata — they don't change the body fingerprint or
-codegen. They only generate obligations.
+Contracts are erased from codegen and generate obligations. They also do not
+change the current body fingerprint, which is a known integrity gap rather than
+a desired semantic property: bug 060/R-0004 requires contracts to enter the
+versioned proof-subject digest. Until then, a contract edit requires explicit
+replay even when the body hash stays unchanged.
 
 ## 3. Run `concrete prove`
 

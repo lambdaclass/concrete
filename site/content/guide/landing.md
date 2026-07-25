@@ -8,6 +8,16 @@ Concrete is not trying to win by having the most features. Its intended strength
 
 Concrete is also aiming at something broader than "a working compiler": a compiler that can explain itself, surface audit-relevant facts directly, and eventually produce inspectable and reproducible outputs that users can trust.
 
+The feature list hides a deeper consequence. By refusing closures, trait
+objects, source-generating macros, and separate-compilation opacity, Concrete
+keeps callable values inside a closed set of named functions. A function-pointer
+target may still be selected at runtime, so a sound call graph must retain its
+possible target set rather than pretending every call is direct. Even so, the
+set is statically enumerable. That is the structure needed for per-function
+evidence about authority, obligations, and proofs to grow into conservative
+whole-program facts. The actual composition theorems remain a direction of the
+proof work, not a shipped claim.
+
 One important long-term direction is an explicit high-integrity profile: stricter execution and safety modes for critical code, built around bounded behavior, analyzability, and better evidence rather than feature sprawl.
 
 ## One Concrete Shape Of The Vision

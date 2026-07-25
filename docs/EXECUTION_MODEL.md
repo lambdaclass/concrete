@@ -97,8 +97,8 @@ Concrete has no panic/unwind mechanism. Failure modes:
 | `exit(code)` | libc `exit()` terminates process | OS |
 | Out-of-memory | `malloc` returns null → `abort()` (see allocation section) | Process terminates |
 | Null pointer dereference | Hardware trap (SIGSEGV) | OS kills process |
-| Integer overflow | Wraps (LLVM default for `add`/`sub`/`mul`) | Silent — no trap |
-| Array out-of-bounds | Checked accessors return `Option`; unchecked is UB | User code / UB |
+| Integer overflow/div-zero/invalid shift | Checked operation aborts; explicit `wrapping_*`/`saturating_*` opt out by name | Runtime trap or named arithmetic |
+| Safe raw array out-of-bounds | Runtime bounds check aborts | Runtime trap |
 | Stack overflow | OS stack guard page, SIGSEGV | OS kills process |
 
 There is no structured panic. No stack unwinding. No catch mechanism. This is intentional — it keeps the execution model simple and compatible with freestanding targets in the future. Error handling is explicit through return types.

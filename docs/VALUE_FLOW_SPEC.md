@@ -71,7 +71,7 @@ params are borrows (exempt); `&T` params are Copy. See
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linears (return-path rule) | conservation + scope |
 | `expr` | `e;` (isValue=false) DISCARDS: fallible result **rejects** (**E0286**, regardless of Copy-ness); non-Copy **rejects** (**E0287**); trailing `e` (isValue=true) is the block's value, never a discard; `free(...)` is itself the consumption | discard |
 | `ifElse` | branches must AGREE on consumption of outer linears (E0209/E0211); branch locals checked at branch exit (H9) | scope |
-| `while_` | loop body may not consume an outer linear (**E0206**) except in a fn-exiting branch, a rebind, or a `break`-adjacent move (H14 one-level exemption) | scope |
+| `while_` | loop body may not consume an outer linear (**E0207**) except in a fn-exiting branch, a rebind, or a `break`-adjacent move (H14 one-level exemption) | scope |
 | `forLoop` | same rules as `while_` | scope |
 | `fieldAssign` | overwrite of a non-Copy field **rejects** (**E0219**); ident RHS **moves**; the object is a PLACE | conservation |
 | `derefAssign` | through `&mut T`: non-Copy pointee overwrite **rejects** (**E0291**, H15); through `*mut T`: trusted uninitialized-slot store (exempt), ident RHS **moves** | conservation (H15 rows) |

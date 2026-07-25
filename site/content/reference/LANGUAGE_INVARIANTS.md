@@ -8,9 +8,13 @@ Status: stable reference
 
 These rules apply across all phases. They come directly from the language design and must never be violated.
 
-## 1. Pure By Default
+## 1. Authority-Free By Default
 
-A function without `with()` is pure. It cannot call any function that has `with()`.
+A function without `with()` cannot exercise capabilities or call a function
+whose required capability set is non-empty. This is an authority claim, not a
+totality claim: such a function may still trap on a checked operation, diverge,
+or exhaust the stack. Proof eligibility and stronger behavioral claims are
+separate judgments.
 
 ## 2. True Linear Types
 
@@ -45,9 +49,28 @@ Each phase that adds a new consumption form must update this list.
 - the execution point (scope exit) is deterministic and visible from the block structure
 - no implicit function dispatch occurs; the exact function being called is the one written in the `defer` statement
 
-## 4. No Variable Shadowing
+## 4. No Lexical Value Shadowing
 
-Each variable name must be unique within its scope. This extends to region names in borrow blocks — `borrow x as xr in R` introduces `xr` and `R` into scope, and neither may shadow existing names.
+**Status:** decided language invariant; enforcement pending ROADMAP R-0435.
+Until that task lands, this section distinguishes the target rule from current
+compiler behavior.
+
+**Target rule:** a new local value binding may not reuse the spelling of another
+local value binding visible along its lexical scope chain. Parameters, `let`,
+pattern and loop binders, and borrow-block value/region binders all introduce
+names. `let s = transform(s)` is therefore rejected as a new binding.
+
+Assignment does not introduce a binding. `acc = f(acc, x)` remains legal for a
+`mut` linear place once evaluation consumes its old value; assigning over a live
+linear value remains E0219. Sibling match arms may use the same spelling because
+their bindings are not visible to one another. The rule is confined to lexical
+value bindings; fields, types, traits, modules, top-level functions, imports,
+and intrinsics are separate namespaces.
+
+**Current compiler behavior:** ordinary `let`/pattern shadowing is still
+accepted except for a still-live non-`Copy` binding and borrow-block ref/region
+collisions. Elaboration must continue to preserve binding identity even after
+the source restriction lands.
 
 ## 5. No Uninitialized Variables
 
@@ -104,9 +127,13 @@ New language features must justify:
 
 If a feature makes the language harder to parse, harder to review, or harder to prove without delivering a correspondingly large benefit, it should be rejected or delayed.
 
-## 16. `abort()` Is Immediate Process Termination
+## 16. `abort()` Is Terminal And Runs No Cleanup
 
-Deferred cleanup does not run on `abort()`. Out-of-memory and stack overflow also trigger abort. This is outside the language's semantic model.
+Deferred cleanup, explicit `Destroy` calls, and generated drop glue do not run
+after `abort()`. In the current hosted profile, abort terminates the process. A
+future freestanding profile must route it to a declared non-returning target
+handler. Neither profile promises cleanup or recovery; ROADMAP R-0223 and
+R-0322 own the full runtime/target contract.
 
 On POSIX systems, `abort()` typically produces exit code `134`, but tests should check for nonzero exit rather than a specific code.
 

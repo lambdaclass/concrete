@@ -22,7 +22,7 @@ Every claim about a `ProvableV1` function must use the project taxonomy:
 
 | Claim | Meaning in `ProvableV1` |
 |---|---|
-| `proved` | A Lean theorem checks against the registered spec and current body fingerprint. |
+| `proved` | A Lean theorem checks against the registered spec, the stored body fingerprint is current, and kernel replay succeeds. |
 | `enforced` | The compiler rejects violations, such as capability widening or ownership errors. |
 | `reported` | The compiler surfaces a fact, but does not make it a hard error. |
 | `assumed` | The claim depends on an explicit assumption file or trusted boundary. |
@@ -160,6 +160,11 @@ A proved `ProvableV1` claim requires all of these:
 
 The coverage classification is load-bearing. A `point` proof and an `iff`
 theorem are both kernel-checked, but they are not equally strong claims.
+
+The stored fingerprint is the current body-level containment, not yet the full
+semantic proof subject. A missing stored fingerprint is `unbound`, never
+`proved`; signatures/types, contracts, transitive dependencies, and replay
+context remain R-0004 work.
 
 ## Current Examples
 

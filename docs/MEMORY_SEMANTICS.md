@@ -75,7 +75,11 @@ All other types are linear. Linear values must be consumed exactly once before s
 - `Heap<T>`, `HeapArray<T>`
 - Newtypes wrapping a linear inner type
 
-**Linear variables cannot be reassigned.** Attempting to assign to a linear variable is always an error, regardless of state. One binding, one resource. Use a new `let` binding instead.
+**A live linear value cannot be overwritten.** A `mut` linear place may be
+rebound only after its old value has been consumed; assigning while the old value
+is live is E0219. This makes `acc = f(acc, x)` legal while preserving exactly one
+live owner. One lexical name denotes one binding; a linear place contains at most
+one live resource.
 
 ---
 
@@ -346,9 +350,12 @@ x = 2;  // OK
 
 ### Linear variables
 
-**Linear variables cannot be reassigned.** This is unconditional — regardless of whether the previous value has been consumed. Error: `assignOverwritesLinear`.
-
-The rationale: reassigning a linear variable would either leak the old value (if not consumed) or create a confusing lifecycle where the same name refers to two different resources. Use a new `let` binding instead.
+**A linear variable cannot be overwritten while its current value is live.**
+That case is `assignOverwritesLinear` (E0219), because replacing the value would
+leak its ownership obligation. Once the old value has been consumed, a `mut`
+binding may be assigned a new linear value; the rebound value becomes the
+binding's new live obligation and must itself be consumed. This is the
+fold/accumulate rule used by `acc = f(acc, x)`, including inside loops.
 
 ### Assignment guards
 
@@ -495,7 +502,8 @@ These invariants hold for all safe Concrete code that passes the checker:
 4. **No borrow escape.** References created by borrow blocks cannot be assigned to variables that outlive the block.
 5. **No frozen-variable access.** A variable frozen by an active borrow block cannot be read, written, moved, or re-borrowed.
 6. **No cross-loop consumption.** A linear variable from an outer scope cannot be consumed inside a loop body.
-7. **No linear reassignment.** A linear variable cannot be reassigned, period.
+7. **No live linear overwrite.** A linear variable cannot be assigned while its
+   current value is live; reassignment after consumption is a legal rebind.
 8. **No skip-past-linear.** Break and continue cannot skip unconsumed linear variables in the current loop scope.
 9. **No defer-body escape.** Break and continue are forbidden inside defer bodies.
 10. **No assign-through-immutable.** Only `mut` variables can be assigned.

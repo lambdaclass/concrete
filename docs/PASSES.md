@@ -151,7 +151,8 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 
 **Postconditions:**
 - Types are consistent across expressions, statements, and function signatures.
-- Linearity discipline enforced: linear variables consumed exactly once, cannot be reassigned.
+- Linearity discipline enforced: linear values are consumed exactly once; a
+  live value cannot be overwritten, while a consumed `mut` place may be rebound.
 - Capability discipline validated: callers possess required capabilities.
 - `defer` and borrow blocks are well-formed.
 - Cross-module imports resolved via export tables.
@@ -323,14 +324,15 @@ ProofCore is a side-channel extraction — it does not sit in the compilation pi
 - Eligible functions attempted for PExpr extraction; result is `Option PExpr`.
 - Unsupported constructs identified for blocked functions (non-empty list when extraction fails).
 - Obligations generated for all functions with mechanically derived status.
-- Diagnostics generated for stale proofs, missing proofs, ineligible functions, unsupported constructs.
+- Diagnostics generated for unbound/stale/missing proofs, ineligible
+  functions, and unsupported constructs.
 - Call graph and recursion classification computed.
 - Fingerprints computed for all functions.
 
 **Error conditions:**
 - None. ProofCore always succeeds (extraction failure is recorded as `extracted = none`, not as a hard error).
 
-**Self-consistency invariants** (13 checks, verified by `ProofCore.selfCheck`):
+**Self-consistency invariants** (verified by `ProofCore.selfCheck`):
 
 | Invariant | What it checks |
 |-----------|---------------|

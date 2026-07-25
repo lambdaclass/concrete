@@ -19,7 +19,8 @@ The threat model covers both **deliberate attacks** (malicious contributor, supp
 **Example:** `compute_tag(key, msg, nonce) = key * msg + nonce` → `key * msg - nonce`. The tag computation silently breaks. In a real HMAC wrapper, this would produce wrong authentication tags.
 
 **Detection mechanisms:**
-- Body fingerprinting: the compiler hashes the Core IR body. Any change makes the proof stale.
+- Stored body fingerprinting: a represented Core-body change makes the proof
+  stale; a source proof link with no stored fingerprint is `unbound`.
 - `--report effects`: evidence drops from `proved` to `enforced (proof stale: body changed)`
 - `--report proof-status`: shows `proof stale` with expected vs. actual fingerprint
 - `concrete diff`: reports `TRUST WEAKENED` with proof_status `proved → stale`
@@ -50,7 +51,7 @@ The threat model covers both **deliberate attacks** (malicious contributor, supp
 **Example:** `check_nonce(nonce, max) → if nonce > 0` → `if nonce >= 0`. Now accepts nonce=0, which may be a sentinel or replay value.
 
 **Detection mechanisms:**
-- Body fingerprinting: Core IR changes, proof becomes stale
+- Stored body fingerprinting: represented Core-body changes make the proof stale
 - `--report effects`: evidence drops from `proved` to `enforced`
 - `concrete diff`: shows the exact Core IR change (`BinOp.gt → BinOp.geq`)
 - Lean proof: the old theorem no longer applies (incorrect for nonce=0)
@@ -100,7 +101,10 @@ The threat model covers both **deliberate attacks** (malicious contributor, supp
 
 ## What Concrete Does NOT Protect Against
 
-- **Logic errors that don't change the IR fingerprint**: renaming a parameter, changing a comment, or modifying code outside the proved core.
+- **Semantic changes outside the current proof subject**: signature/type and
+  contract changes can evade the body fingerprint today (bugs 059/060), and
+  transitive callee drift is not yet rooted into callers. Comments are
+  deliberately ignored. R-0004 owns the full-subject digest.
 - **Trusted-code correctness**: trusted FFI functions are outside the proof boundary. If `fread` is wrong, Concrete won't catch it.
 - **Backend miscompilation**: Concrete proves properties at the Core IR level. LLVM/clang bugs are below the trust boundary.
 - **Side-channel attacks**: timing, power analysis, and cache behavior are not modeled.

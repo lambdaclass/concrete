@@ -180,9 +180,14 @@ The `evidence` field in `--report effects` uses the three-level classification f
 
 These are honest limitations, not bugs:
 
-### The proof model covers a small expression subset
+### The proof model covers a named subset
 
-ProofCore currently formalizes: integer/boolean literals and arithmetic, comparison, let bindings, if/then/else, and non-recursive function calls. Structs, enums, match, while loops, recursion, and string operations are not yet formalized. This means many proof-eligible functions are extracted but cannot yet carry Lean theorems. See [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the full construct table.
+`ProvableV1` now includes selected aggregates, arrays, matches, bounded loops,
+functional state, and fixed-width operations in addition to scalar
+expressions. It still excludes recursion, strings/text, references, allocation,
+FFI, trusted code, and arbitrary unmodeled state/control forms. See
+[PROVABLE_V1.md](PROVABLE_V1.md) for the canonical allowlist; do not infer
+eligibility from an older blanket “no loops/no mutation” rule.
 
 ### No cross-function proof composition
 

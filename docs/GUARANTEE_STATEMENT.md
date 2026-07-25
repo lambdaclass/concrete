@@ -27,7 +27,7 @@ For safe Concrete code that passes the checker, the following properties hold at
 | No dangling safe reference | Borrow-block scoping + escape analysis | Compiler-enforced |
 | No borrow conflict | Mutable borrows are exclusive; shared borrows are incompatible with mutable borrows | Compiler-enforced |
 | No frozen-variable access | Owner frozen during borrow block; no read, write, move, or re-borrow | Compiler-enforced |
-| No linear reassignment | Linear variables cannot be reassigned, period | Compiler-enforced |
+| No live linear overwrite | Assignment cannot replace a live linear value; a consumed `mut` place may be rebound | Compiler-enforced |
 | No `&mut T` aliasing | Borrow-block exclusive refs consumed on function call; no double-use | Compiler-enforced |
 | Deterministic cleanup order | `defer` runs LIFO at scope exit | Compiler-enforced |
 
@@ -50,8 +50,12 @@ For safe Concrete code that passes the checker, the following properties hold at
 
 ### What safe code does NOT guarantee
 
-- **No runtime bounds checking by default.** Array access through checked APIs returns `Option`; unchecked access is UB. The checker does not verify array bounds.
-- **No integer overflow protection.** Integer arithmetic wraps silently. This is a runtime property, not a checker property.
+- **No static proof that every array index is in range.** Raw safe indexing is
+  runtime-checked and traps on OOB; trusted/unchecked access remains outside the
+  safe guarantee.
+- **No static proof that ordinary arithmetic cannot overflow.** Ordinary
+  integer arithmetic is runtime-checked and traps on overflow in every profile;
+  explicit `wrapping_*` and `saturating_*` retain their named semantics.
 - **No stack overflow protection.** Stack depth depends on the OS guard page. The compiler does not analyze stack usage.
 - **No termination guarantee.** The checker does not verify that loops terminate or that recursion bottoms out.
 
@@ -68,7 +72,7 @@ For proof-backed code, the following additional properties hold:
 | Property | Mechanism | Evidence level |
 |----------|-----------|----------------|
 | Return value correctness | Lean 4 theorem proving `eval(body, env) = expected` | Proof-backed |
-| Stale detection | Body fingerprint invalidates proofs when source changes | Compiler-enforced |
+| Current stale detection | Stored body fingerprint invalidates links when the body changes; full proof-subject digest remains R-0004 | Compiler-enforced containment |
 | Extraction fidelity | `PExpr` normalized proof targets match Core IR semantics | Compiler-enforced |
 
 ### What makes code proof-eligible
@@ -78,8 +82,9 @@ All of these must hold simultaneously:
 1. **Pure** — empty capability set (no effects)
 2. **Not trusted** — no `trusted` marker, no `trusted impl` origin
 3. **Not entry point** — not `main`
-4. **Body extractable** — function body translatable to `PExpr` (integer/boolean arithmetic, comparisons, let bindings, if/then/else, non-recursive calls)
-5. **Profile gates** (advisory) — no recursion, bounded loops, no allocation, no FFI, no blocking I/O
+4. **Body extractable** — every construct is in the current `ProvableV1`
+   surface, including its selected bounded-loop and functional-state forms
+5. **Profile gates** (advisory) — no recursion, only admitted bounded loops, no allocation, no FFI, no blocking I/O
 
 ### What proof-backed code does NOT guarantee
 
@@ -132,7 +137,7 @@ These properties are assumed, not verified by the compiler:
 | LLVM IR semantics match Concrete's intended semantics | LLVM version, optimization level |
 | `malloc`/`realloc`/`free` behave correctly | libc implementation |
 | OS provides a guard page for stack overflow | OS and runtime |
-| Integer wrapping follows two's-complement semantics | Target architecture (universally true on supported targets) |
+| Explicit `wrapping_*` operations follow the declared fixed-width modular semantics | Target architecture and backend |
 | Linking produces a correct executable | Linker, system libraries |
 | `trusted extern fn` bindings are honest | Foreign library correctness |
 

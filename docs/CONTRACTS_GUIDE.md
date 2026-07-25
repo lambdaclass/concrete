@@ -228,6 +228,12 @@ the body so `hash(current) ≠ #[proof_fingerprint]`, or so the extracted PExpr 
 longer matches the linked `spec`, reports the function `stale` (see
 `examples/evidence_classes/stale_proof`).
 
+A `#[proof_by]` link without `#[proof_fingerprint]` is `unbound`, never proved.
+The current hash is body-level containment: signature/type facts, contracts,
+and transitive dependencies are not yet all included (bugs 059/060 and R-0004).
+Re-verify before recording a new hash; never copy the compiler's current value
+as if computing it were evidence of theorem validity.
+
 ## Generating a proof scaffold: `concrete prove`
 
 When a function needs a hand-written Lean proof, `concrete prove` generates a

@@ -89,15 +89,17 @@ concrete examples/proof_pressure/src/main.con --report proof-status
 Totals: 7 functions — 2 proved, 1 stale, 1 unproved, 1 blocked, 2 ineligible, 0 trusted
 ```
 
-The five possible states are:
+The canonical states are:
 
 | State | What it means |
 |-------|---------------|
-| **proved** | Has a proof, fingerprint matches, Lean theorem exists |
+| **proved** | Has a proof link and matching stored body fingerprint; run `check-proofs` for the kernel receipt |
+| **unbound** | Has a proof link but no stored proof subject; never treated as proved |
 | **stale** | Has a proof, but the function body changed since the proof was written |
 | **no proof** (missing) | Eligible and extractable, but nobody wrote a proof yet |
 | **blocked** | Eligible, but uses a construct the extraction pipeline does not support |
 | **not eligible** (ineligible) | Fails an eligibility gate — has capabilities, is trusted, or is an entry point |
+| **trusted** | Marked trusted; proof checking is bypassed |
 
 `clamp_value` shows **no proof** — it is ready to prove.
 
@@ -206,6 +208,11 @@ staleness. The compiler validates the link and rejects empty proof/spec fields
 or proofs attached to ineligible/blocked functions. (JSON `proof-registry.json`
 was the original mechanism and has been removed.)
 
+Do not omit the fingerprint: the link would be `unbound`, not proved. Do not
+refresh it until the theorem has been replayed. The current hash covers the
+body, while signature/type facts, contracts, and transitive dependencies remain
+R-0004 work.
+
 ## Step 6: Verify
 
 ### Check proof status
@@ -269,7 +276,8 @@ If you edit `clamp_value`'s body, the fingerprint changes and the proof becomes 
   current fingerprint:  [(if ...)]   ← the new body
 ```
 
-**To fix**: update the Lean theorem to match the new body, then update the `body_fingerprint` in the registry to the new fingerprint.
+**To fix**: update and replay the Lean theorem for the new body, then regenerate
+the in-source `#[proof_fingerprint]` with `--emit-link`.
 
 ### The function is not eligible
 
@@ -327,7 +335,7 @@ If `check_nonce`'s proof goes stale, `validate_header`'s dependency graph shows 
 | Add comments | Yes |
 | Change whitespace | Yes |
 | Add a new function | Yes |
-| Edit a different function | Yes |
+| Edit a different function | The local body hash survives; re-check dependencies because R-0004 has not yet rooted transitive callee drift |
 | Rename a variable in the body | **No** — stale |
 | Change a literal value | **No** — stale |
 | Rename the function | **Registry orphan** — update `function` field |
