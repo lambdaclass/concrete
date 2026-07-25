@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Completed Task R-0435
+
+_Closed as a decision not to do it, 2026-07-25. The ID is retired and must never
+be reused._
+
+R-0435 proposed banning variable shadowing to make
+`docs/LANGUAGE_INVARIANTS.md` #4 true. **Decided against: shadowing stays legal.**
+The invariant was corrected to describe the language instead, and the rationale is
+recorded in `docs/DECISIONS.md` ("No shadowing ban").
+
+The short version: shadowing was never a soundness problem. Bug 045 was a
+name-resolution defect — nested same-named match binders sharing one Lower slot —
+and it was fixed at the root by Elab alpha-renaming, now generalized as
+`docs/PRINCIPLES.md` #12 (semantic entities have compiler-owned identity). Banning
+the source construct would have encoded a former compiler weakness as a permanent
+language restriction, and it would have cost a new grammar form
+(`Variant { value: inner }` binder renaming) purely to keep nested
+`Option`/`Result` matching expressible, since both name their payload field
+`value`.
+
+Two things from the task's analysis were kept because they were real defects in
+their own right, independent of any ban: `LANGUAGE_INVARIANTS.md` #4 asserted a
+rule the checker does not enforce, and `LANGUAGE_SHAPE.md:47` contradicted
+`OWNERSHIP_MODEL.md:92-95` on linear rebind. Both are fixed.
+
 ### Completed Task R-0002
 
 _A callee value is resolved by identity, not by global name — bug 050 (indirect
