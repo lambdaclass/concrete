@@ -2144,12 +2144,18 @@ private def deriveObligationStatus
     | none => .ineligible
   else match spec with
   | some a =>
-    -- Unbound is checked FIRST and reported as itself: with no stored subject
-    -- the staleness comparison below is the body against itself, so calling the
-    -- result `stale` would claim a body change that never happened.
-    if isUnbound a then .unbound
+    -- Order matters, and spec drift comes first. Drift is AFFIRMATIVE evidence
+    -- that the extracted body disagrees with the recorded spec; `unbound` is the
+    -- ABSENCE of evidence about freshness. Reporting absence over a positive
+    -- finding loses the stronger signal — it is why the `stale_proof` evidence
+    -- exemplar, whose whole purpose is to demonstrate drift, briefly stopped
+    -- demonstrating anything.
+    if specDrifted then .stale
+    -- Then unbound, reported as itself rather than as `stale`: with no stored
+    -- subject the comparison below is the body against itself, so calling the
+    -- result `stale` would claim a body change that was never observed.
+    else if isUnbound a then .unbound
     else if isStale a then .stale
-    else if specDrifted then .stale
     else if a.source == .hardcoded then .proved  -- hardcoded proofs done in Lean, extraction not required
     else if !extracted then .blocked
     else .proved

@@ -46,7 +46,7 @@ ck "eligible-but-unproved fn → missing_theorem (missing)" "$TD" \
 ck "ineligible fn → ineligible_construct (ineligible)" "$TD" \
   "any(o['kind']=='ineligible_construct' and o['status']=='ineligible' for o in links())"
 ck "every proof-link obligation uses a canonical proof kind" "$TD" \
-  "all(o['kind'] in ('source_proof_link','spec_drift','missing_theorem','blocked_proof','ineligible_construct','trusted_boundary') for o in links())"
+  "all(o['kind'] in ('source_proof_link','spec_drift','missing_theorem','blocked_proof','ineligible_construct','trusted_boundary','unbound_proof_link') for o in links())"
 
 SP="examples/evidence_classes/stale_proof/src/main.con"
 echo "=== fingerprint drift surfaces as spec_drift (stale) — release-gate signal ==="
