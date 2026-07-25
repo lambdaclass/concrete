@@ -451,6 +451,9 @@ jobs:
       - name: "Generic-enum monomorphization (R-0001 / bug 051 — one declaration per instantiation; values, neighbours, layout; builtins keep the canonical union)"
         run: bash scripts/tests/check_generic_enum_mono.sh
 
+      - name: "Indirect-call identity (R-0002 / bug 050 — a callee VALUE is never resolved by global name; dispatch, interp agreement, no rewrite, std.io)"
+        run: bash scripts/tests/check_indirect_call_identity.sh
+
       - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
         run: bash scripts/tests/check_generic_enum_inventory.sh
 

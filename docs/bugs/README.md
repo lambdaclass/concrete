@@ -74,6 +74,7 @@ Those belong in:
 - [053_dce_deletes_checked_negation.md](053_dce_deletes_checked_negation.md) — discard(-x) at MIN loses the documented trap (middle-end audit 2026-07-18)
 - [054_struct_mono_name_collision.md](054_struct_mono_name_collision.md) — user types shadow generated specializations (middle-end audit 2026-07-18)
 - [055_sibling_import_alias_unusable.md](055_sibling_import_alias_unusable.md) — project sibling `import a.{x as y}` emits undefined callee (middle-end audit 2026-07-18)
+- [056_fnptr_reassign_phi_undefined_register.md](056_fnptr_reassign_phi_undefined_register.md) — reassigning a fn-pointer local across a branch emits a phi over Lower's `@fnref.X` sentinel; valid program refused with E0709 (found building the R-0002 gate, 2026-07-25)
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 

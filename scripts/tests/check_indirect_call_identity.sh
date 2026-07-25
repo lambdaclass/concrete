@@ -83,12 +83,14 @@ agrees shadows_nongeneric 42 'mod t {
 }'
 
 # Shadowing an INTRINSIC name. Lower resolves intrinsics by name, so an indirect
-# callee must be excluded there too or the call is intercepted.
+# callee must be excluded there too or the call is intercepted. (`sizeof` cannot
+# be used here: Check rejects it as "takes no value arguments" before shadowing is
+# considered, i.e. that name is reserved rather than hijackable.)
 agrees shadows_intrinsic 42 'mod t {
   fn double(x: i64) -> i64 { return x * 2; }
   pub fn main() -> i64 {
-    let sizeof: fn(i64) -> i64 = double;
-    return sizeof(21);
+    let print_int: fn(i64) -> i64 = double;
+    return print_int(21);
   }
 }'
 
@@ -111,6 +113,24 @@ agrees fn_param 42 'mod t {
   fn double(x: i64) -> i64 { return x * 2; }
   fn apply(pick: fn(i64) -> i64, v: i64) -> i64 { return pick(v); }
   pub fn main() -> i64 { return apply(double, 21); }
+}'
+
+# A local shadowing a RENAMED IMPORT. Mono resolves a callee name through the
+# linker-alias pool as well as the fn map (bug 044 widened that path), so the
+# alias is a second way a binding name can be mistaken for a definition — for a
+# plain import and for a generic one, whose alias resolution also specializes.
+agrees shadows_renamed_import 42 'mod Helpers {
+    pub fn twice(x: i64) -> i64 { return x * 2; }
+    pub fn gen_id<T: Copy>(x: T) -> T { return x; }
+}
+mod Main {
+    import Helpers.{ twice as pick, gen_id as tag };
+    fn triple(x: i64) -> i64 { return x * 3; }
+    pub fn main() -> i64 {
+        let pick: fn(i64) -> i64 = triple;
+        let tag: fn(i64) -> i64 = triple;
+        return pick(7) + tag(7);
+    }
 }'
 
 echo "=== 3. the emitted IR does not resolve the callee to a symbol ==="
@@ -141,10 +161,16 @@ if grep -qE "call .*@pick" <<<"$IR"; then
 else
   ok "the call does not target a @pick symbol"
 fi
-if grep -qE "call i64 %" <<<"$IR"; then
-  ok "the call dispatches through a register (indirect)"
+# What must be true is which function the call targets: the one the local holds.
+# Lower devirtualizes a statically-known fn reference to a direct call of that
+# function, which is correct and must not be mistaken for the bug — the bug was
+# targeting the SHADOWED NAME instead. (A pointer whose target is only known at
+# runtime cannot be exercised here: bug 056 makes reassigning a fn-pointer across
+# a branch fail SSAVerify, so that case joins this gate when R-0436 lands.)
+if grep -qE "call i64 @double" <<<"$IR"; then
+  ok "the call targets @double — the function the local holds"
 else
-  no "no register-dispatched call in the IR — expected the fn-pointer call to be indirect"
+  no "the call does not target @double; the callee value was not what got called"
 fi
 
 echo "=== 4. std.io survives a program that defines a generic named f ==="

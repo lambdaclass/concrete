@@ -43,6 +43,9 @@ declare -A BUG_TEST_MAP=(
   [023]="scand_aggregate_in_scope/src/main.con"
   # R-0001: per-instantiation generic-enum mono. Both fixtures are positive
   # (run_ok) — they were E0808 rejections while only containment existed.
+  # R-0002: a callee VALUE is never resolved by global name. Single-file witness
+  # (42, was 21) + the std.io collision variant as a project fixture.
+  [050]="regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con"
   [051]="regress_generic_enum_051.con adversarial_mono_generic_enum.con"
 )
 
@@ -73,11 +76,11 @@ declare -A SKIP_BUGS=(
   [047]="OPEN -- HashMap::insert duplicates a key past a tombstone (map.con); repro reproduced, fix pending"
   [048]="OPEN -- HashMap find_slot hangs at zero empty slots (map.con load factor ignores tombstones); repro hangs by timeout, fix pending"
   [049]="OPEN -- reduce --predicate crash is vacuous (parse-only); reduces any program to ~empty, fix pending"
-  [050]="OPEN -- Mono rewrites indirect fn-ptr calls when the local name matches a generic fn (tI_shadow + std io f-collision); repros in .audit_me"
   [052]="OPEN -- T_destroy no-op for arrays; Vec<[T;N]>.drop() skips element destruction (arrdrop cell-count repro)"
   [053]="OPEN -- DCE deletes checked negations; discard(-x) at MIN loses the trap (tA_neg_dce)"
   [054]="HALF CLOSED -- the collision now fails closed with E0809 (a specialization whose mangled name is declared, or two instantiations mangling to one name); gated in check_mono_name_collision.sh. Still OPEN: the mangling is forgeable, so a legitimate program spelling Box_Int is refused rather than compiled, and fn symbols are uncovered (R-0007)"
   [055]="OPEN -- project sibling import alias emits undefined callee (one044); fully-qualified form works"
+  [056]="OPEN -- reassigning a fn-pointer local across a branch emits a phi over Lower's @fnref.X sentinel (E0709); valid program refused, interp runs it. Pre-existing, confirmed on e1b3844e"
   [039]="FIXED -- regress_039_import_alias_collision/src/main.con (project test, exit 0); emitSModule puts the module's own bare->qualified import aliases ahead of the program-wide pool"
   [040]="FIXED -- regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)"
   [041]="FIXED -- regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)"

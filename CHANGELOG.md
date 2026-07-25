@@ -10,6 +10,65 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Completed Task R-0002
+
+_A callee value is resolved by identity, not by global name — bug 050 (indirect
+fn-pointer call hijack) fixed. Shipped 2026-07-25._
+
+Elab emitted a call through a fn-typed local as `.call name args`, the same Core
+shape as a direct call, so every later pass had to re-derive whether the callee
+was a local. Lower and Interp each probed their own variable scope and got it
+right; Mono had no scope and resolved the name against the global fn map plus the
+linker-alias pool, rewriting a local fn-pointer call into a direct call of a
+same-named generic. Two consequences: silent wrong code (`pick(21)` returning the
+identity generic's 21 while the interpreter returned 42), and unbuildable
+projects — std.io's `Writer::write_raw` binds its target as a local literally
+named `f`, so any program defining `fn f<T: Copy>` died in SSAVerify with E0711.
+
+`CExpr.call`'s callee is now a `Callee` sum (`direct` / `indirect`), decided in
+Elab where the scope is still known. The migration technique is worth reusing: a
+`Coe String Callee` keeps existing construction sites meaning `direct` — which
+every one of them is — so the compile errors land only where code CONSUMES a
+callee as a name. That was 23 sites, each a real decision, instead of 288
+mechanical edits. Adding a constructor was rejected for the opposite reason: the
+new form would have fallen silently into 160+ catch-all arms in Check's linearity
+walker, Interp, and Lower.
+
+Lower and Interp got SMALLER — both deleted their scope-probing re-derivation.
+Three passes were wrong in the same way and had not been filed: Elab's submodule
+prefixing renamed any matching callee; Mono's `injectTypeArgsExpr` would hand a
+local fn-pointer a generic's type arguments; and CoreCheck picked capability and
+arity checks by whichever lookup succeeded, so an indirect call whose binding
+matched a global was checked against that global's contract instead of its own
+pointer type. ProofCore now treats an indirect callee as having no statically
+known definition: extraction returns `none` (blocked), the call graph gains no
+edge, and the fingerprint uses a `callptr` prefix so a direct call and an indirect
+call through a same-named local cannot share a proof subject. The capability-chain
+report therefore no longer follows fn pointers, which is accurate — authority for
+those is enforced at the pointer TYPE, by the CoreCheck rule above.
+
+Evidence: `scripts/tests/check_indirect_call_identity.sh` (10 checks — dispatch
+through the local for generic, non-generic, intrinsic, fn-parameter and
+renamed-import collisions, all with interpreter agreement; the emitted IR
+contains no specialization of the shadowed generic and targets the function the
+local holds; std.io builds under a generic named `f`);
+`tests/programs/regress_050_indirect_call_shadow.con` (42, was 21) and the
+project `tests/programs/regress_050_generic_f_std_io/`; mutation
+`test_mutation.sh` #21 re-emits the indirect call as direct and is KILLED.
+
+Left open deliberately: `.ident name (.fn_ ..)` in the same rename pass has the
+identical hazard and Core carries no marker for it, so closing it needs the same
+Elab-time treatment (comment at the site, recorded in the bug doc). Building the
+gate also surfaced **bug 056** — Lower represents a fn reference as a register
+NAME (`@fnref.<fn>`), the same identity-in-a-string anti-pattern one layer down,
+which makes reassigning a fn pointer across a branch fail SSAVerify. Filed as
+R-0436, confirmed pre-existing on `e1b3844e`.
+
+The mutation harness now rebuilds after restoring a mutation. Restoring only the
+source left `.lake/build/bin/concrete` built from the mutation, so gates and
+probes run afterwards silently measured the mutated compiler against clean
+source — which produced two false findings during this task before being spotted.
+
 ### Completed Task R-0001
 
 _Per-instantiation generic-enum monomorphization — bug 051 (user generic-enum

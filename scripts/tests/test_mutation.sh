@@ -220,6 +220,18 @@ MUT_NEW+=("    if allStructs.any (fun sd => sd.name == name) -- MUTATION: enums 
     then some (name, args, monoTypeName name args)")
 MUT_DESC+=("Mono: generic enums detected but unmapped (E0808 backstop)")
 
+# 21. Elab: emit an indirect call as a DIRECT one (R-0002 / bug 050)
+# Restores the pre-fix Core shape — a call through a fn-typed local becomes
+# indistinguishable from a direct call, so Mono resolves the binding name against
+# the global fn map again and a same-named generic hijacks the call. This is the
+# mutation the roadmap asks for: "routes indirect calls through direct-name
+# resolution". It must be caught by the fn-pointer fixtures, not merely by
+# something downstream noticing an undefined symbol.
+MUT_FILE+=("Concrete/Elab/Elab.lean")
+MUT_OLD+=("    return .call (.indirect fnName) [] cArgs retTy")
+MUT_NEW+=("    return .call (.direct fnName) [] cArgs retTy -- MUTATION: indirect call resolved by name")
+MUT_DESC+=("Elab: indirect call emitted as direct (bug 050)")
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================
@@ -294,6 +306,13 @@ restore_mutation() {
   local idx=$1
   local file="${MUT_FILE[$idx]}"
   mv "$file.mutbak" "$file"
+  # Rebuild so the tree's BINARY matches its restored SOURCE. Restoring only the
+  # source leaves `.lake/build/bin/concrete` built from the mutation, and anything
+  # run afterwards — a gate, a probe, another script — silently measures the
+  # mutated compiler while the source looks clean. That is a trap this harness
+  # has sprung on its callers more than once, and it costs more than the rebuild.
+  $LAKE build > /tmp/mutation_restore_build.log 2>&1 \
+    || echo "  WARNING: rebuild after restore FAILED — .lake holds a mutated binary (see /tmp/mutation_restore_build.log)" >&2
 }
 
 # ============================================================

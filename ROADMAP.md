@@ -838,10 +838,6 @@ reducer, plus a four-part proof-freshness class. The surface-gate task comes
 first because it protects those fixes; the defects immediately follow it in the
 one global file-order sequence.
 
-### Task R-0002
-
-**Objective:** Fix bug 050 — indirect function-pointer call hijack A local callable value whose text matches a generic/global function is rewritten by Mono into a direct specialization. Add a distinct resolved Core/Mono call form whose callee is a value identity, never a string looked up in the global fn/alias maps; preserve it through Lower, SSA, interpreter, LLVM, QBE, reports, and source identities. Gate the `pick` 42-vs-21 wrong-code witness, std.io local callback names such as `f`, generic/non-generic collisions, renamed imports, and a mutation that routes indirect calls through direct-name resolution.
-
 ### Task R-0003
 
 **Objective:** Fix bugs 047 + 048 — one HashMap probe/occupancy invariant slice Insertion must remember the first tombstone but continue to a live equal key or a bounded chain end; lookup must inspect at most `cap` slots; load policy tracks occupied slots (`live + tombstones`) and rehashes/cleans tombstones before no empty slot can wedge a miss. Maintain explicit `len`, tombstone/occupied, and capacity invariants through insert/remove/clear/grow. Gate constant-hash overwrite-after-tombstone (`len == 2`, one remove eliminates the key), the zero-empty missing lookup under a watchdog, 10k+ churn, full-table misses,
@@ -910,6 +906,23 @@ separate from bug 047's corruption observation inside the shared gate.
 ### Task R-0008
 
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
+
+### Task R-0436
+
+**Objective:** Fix bug 056 — a fn pointer must be a value, not a register name Lower represents a statically-known function reference as an `SVal.reg` whose register NAME is the sentinel `@fnref.<fn>`, and the call path decodes that name back into a direct call. The sentinel is not a real register, so the moment two branches bind the same fn-typed variable the branch merge builds a phi over sentinel names and SSAVerify rejects it (E0709). Reassigning a fn pointer across an `if`, or in a loop, therefore cannot compile, while the interpreter runs it correctly.
+
+   Materialize a function reference as a real `ptr`-typed value and let the call
+   path consume either that value or a direct symbol, so devirtualization is an
+   optimization over a value rather than the decoding of a register name. This is
+   the Lower-side instance of the anti-pattern R-0002 removed from Core: identity
+   carried in a string that a later pass re-interprets.
+
+   Gate reassignment across `if`/`else`, reassignment in a loop body, a phi over
+   two different statically-known targets, a fn pointer stored in a struct field
+   and reloaded, interpreter/compiled agreement on each, and preservation of the
+   straight-line devirtualized form (the common shape must not regress to an
+   indirect call). Fails closed today, so a mutation must show the verifier still
+   rejects a genuinely undefined phi operand.
 
 ### Task R-0009
 
