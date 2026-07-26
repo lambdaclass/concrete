@@ -935,7 +935,13 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
     let specLine :=
       if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
       else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
-    s!"-- proof link unbound {String.ofList (List.replicate 37 '-')} {locStr}\n\n  proof link unbound: no stored proof-subject digest for `{e.qualName}`.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  Not proved, and not stale: the body has not been shown to change, it has\n  never been pinned. With no stored subject the freshness check would compare\n  this body against itself.{specLine}\n\n  hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint(\"...\")]."
+    -- Coverage and origin are still KNOWN facts about the link — what is unknown
+    -- is its freshness. Dropping them (as the first version of this block did)
+    -- traded away information the proved block shows, for no reason: snapshot
+    -- review caught 12 links silently losing both.
+    let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
+    let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    s!"-- proof link unbound {String.ofList (List.replicate 37 '-')} {locStr}\n\n  proof link unbound: no stored proof-subject digest for `{e.qualName}`.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  Not proved, and not stale: the body has not been shown to change, it has\n  never been pinned. With no stored subject the freshness check would compare\n  this body against itself.{coverageTag}{originLine}{specLine}\n\n  hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint(\"...\")]."
   | .notProved =>
     s!"-- no proof {String.ofList (List.replicate 47 '-')} {locStr}\n\n  `{e.qualName}` passes the predictable profile but has no registered proof.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above."
   | .blocked =>

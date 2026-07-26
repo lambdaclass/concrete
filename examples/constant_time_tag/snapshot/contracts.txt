@@ -1,3 +1,4 @@
+error: proof link for 'constant_time_tag.ct_compare' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
 === Source Contracts ===
 
 constant_time_tag.ct_compare
