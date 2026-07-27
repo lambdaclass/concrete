@@ -128,5 +128,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 3 proved, 0 stale, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 3 proved, 0 stale, 0 unbound, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
 

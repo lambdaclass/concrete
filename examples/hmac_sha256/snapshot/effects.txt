@@ -1,12 +1,23 @@
+error: proof link for 'hmac_sha256.sha256_init' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.ch' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.block_to_words' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.sha256_schedule' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.sha256_round' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.sha256_compress' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.block_to_words_at' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.sha256_compress_at' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.state_to_bytes' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.sha256_hash' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
+error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — #[proof_by] without #[proof_fingerprint] cannot detect a changed body (the freshness check would compare the current body with itself), so this claim is unbound, not proved. Add #[proof_fingerprint("...")] after re-verifying
 === Combined Effects Report ===
 
 module hmac_sha256:
       sha256_init
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:60
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:60
       sha256_k
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:68
       ch
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:110
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:110
       maj
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:115
       rotr
@@ -22,23 +33,23 @@ module hmac_sha256:
       ct_compare_32
     caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:164
       block_to_words
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:187
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:187
       sha256_schedule
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:204
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:204
       sha256_round
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:228
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:228
       sha256_compress
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:244
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:244
       block_to_words_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:272
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:272
       sha256_compress_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:291
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:291
       state_to_bytes
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:309
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:309
       sha256_hash
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:340
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:340
       hmac_sha256
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:368
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:368
       verify_hmac
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:396
       abc_block
@@ -51,5 +62,5 @@ module hmac_sha256:
     caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:441
 
 Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
-Evidence: 11 proved, 13 enforced, 0 trusted-assumption, 0 reported
+Evidence: 0 proved, 24 enforced, 0 trusted-assumption, 0 reported
 

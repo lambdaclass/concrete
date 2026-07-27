@@ -16,7 +16,9 @@ COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 HMAC="examples/hmac_sha256/src/main.con"
 TD="examples/thesis_demo/src/main.con"
-VOCAB="proved_by_lean,proved_by_kernel_decision,proved_by_lean_replay,arithmetic_proved,solver_trusted,tested_by_oracle,runtime_checked,enforced,assumed,trusted,partial,stale,vacuous,missing,unproven,planned,counterexample,unknown,timeout,solver_error,ineligible"
+# Derived, not restated — see scripts/tests/lib/vocab.sh for why.
+source "$ROOT_DIR/scripts/tests/lib/vocab.sh"
+VOCAB="$(vocab_csv statusVocabulary)" || { echo "FAIL could not derive statusVocabulary"; exit 1; }
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }

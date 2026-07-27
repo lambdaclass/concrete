@@ -18,5 +18,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 2 functions — 0 proved, 0 stale, 0 unproved, 0 blocked, 1 ineligible, 1 trusted
+Totals: 2 functions — 0 proved, 0 stale, 0 unbound, 0 unproved, 0 blocked, 1 ineligible, 1 trusted
 
