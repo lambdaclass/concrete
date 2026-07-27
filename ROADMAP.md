@@ -834,11 +834,57 @@ notes become work only when their named workload or failing gate pulls them.
 
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
-reducer, plus a four-part proof-freshness class. R-0004 is the current frontier:
-contain false proof-freshness claims, then replace their root model. The
-no-shadowing migration in R-0435 follows that evidence-integrity repair. This
-ordering is deliberate: the source-language decision is made, but a false
-`proved` claim is the stop-the-line defect.
+reducer, plus a four-part proof-freshness class. The unbound-proof containment
+has landed, so the current frontier is the remaining silent wrong-code defect
+R-0005. ProofCore callable identity R-0442 follows immediately because the
+final R-0004 subject digest, dependency facts, and replay receipts must bind an
+unambiguous application model. R-0004 then resumes and completes the
+evidence-integrity migration. The no-shadowing migration in R-0435 follows
+those correctness foundations. This ordering is deliberate: silent wrong code
+precedes a language-design migration, and proof automation remains behind both
+honest semantics and the external-user trial.
+
+### Task R-0005
+
+**Objective:** Fix bug 053 — DCE deletes checked integer negation. Centralize a
+generated operation-semantics/trap inventory consumed by folding, DCE,
+interpreter, LLVM, QBE, fuzz generation, and the capability matrix. Until then,
+mark integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
+float neg remains pure.
+
+Gate discarded MIN negation for every fixed/native signed width, non-MIN
+removal where valid, optimized/unoptimized/interpreter agreement, and mutations
+omitting every trapping unary/binary constructor. Do not descope this task to
+the one DCE witness: the shared trap inventory is the class-level recurrence
+prevention. Bug 048's observable hang is closed only by R-0003; a timeout merely
+detects that historical defect and is not part of this task.
+
+### Task R-0442
+
+**Objective:** Preserve locally-bound callable identity in ProofCore instead of
+spelling it as a global call.
+
+Bug 061 is latent but structurally real: `PExpr.call "f" args` represents both a
+direct call to a definition and application of a fn-typed parameter named `f`.
+The evaluator resolves both through the global-style `FnTable`. The current
+`Option::map`, `Result::map`, and `Result::map_err` proofs remain valid only for
+their explicitly registered representative callback; they do not quantify over
+arbitrary `f`, and no report or source attribute may upgrade their
+`proof_coverage(representative)` scope.
+
+Add a distinct `PExpr.applyVar`/`callValue` form (or an equivalent typed callable
+identity) with local callable semantics rather than global name lookup. Carry
+the direct/indirect distinction through extraction, evaluation, fingerprints,
+preservation statements, reports, and proof dependencies. Gate a global
+function and a parameter with the same spelling extracting to different nodes,
+function-table completeness for each form, preservation of the three existing
+representative proofs, and a negative check that those proofs cannot be rendered
+as universal callback theorems.
+
+This is a prerequisite to R-0004's final subject digest and receipt issuance,
+not an optional cleanup afterward. R-0004's extraction/schema identity must
+name the representation introduced here, and its migration must not issue
+receipts over the ambiguous pre-R-0442 subject model.
 
 ### Task R-0004
 
@@ -867,9 +913,9 @@ Land this task in seven explicit slices:
    demonstrates each current false verdict and its control. Check in the
    multi-function dependency chain for the provisional bug 062, including
    direct and multi-hop controls, and file the numbered record in the same
-   slice. Bug 061 is a separate ProofCore identity/model defect and is owned by
-   R-0442; it is not folded into freshness merely because the same CI repair
-   exposed it.
+   slice. Bug 061 remains a separate ProofCore identity/model defect completed
+   immediately before this task by R-0442; do not recreate its old ambiguous
+   call representation inside the freshness implementation.
 2. **Immediate containment.** An in-source proof link without a stored,
    validated proof-subject digest is `missing`/`unbound` (or
    `needs_recheck`), never `proved`; release/verified profiles fail closed.
@@ -905,7 +951,13 @@ Land this task in seven explicit slices:
    necessarily the program. Backfill the repository corpus only from successful
    kernel replay; never copy newly computed hashes into source as a substitute
    for verification. R-0216 owns the general corpus-migration command after this
-   one-time R-0004 migration.
+   one-time R-0004 migration. As a migration output, publish the first
+   proof-coverage baseline consumed by R-0150: use the existing eligibility
+   report as the denominator and classify every eligible obligation by
+   discharge route (`structural`, `omega`, `bv_decide`, linked Lean, or
+   unsupported), including stable blocker reasons. This measures the automation
+   opportunity; it does not make auto-discharge a prerequisite for replaying
+   existing Lean artifacts.
 
 Keep the axes explicit: subject freshness, dependency freshness, kernel replay,
 producer/toolchain identity, and coverage are separate facts under R-0440. A
@@ -977,17 +1029,6 @@ parameter/`let`/pattern/loop/borrow collisions; rejection of
 and sibling-arm cases; interpreter/native agreement; formatter round-trip; and
 mutations that omit each binder kind or accidentally reject assignment rebind.
 Land the cross-cutting migration in a worktree and merge once green.
-
-### Task R-0005
-
-**Objective:** Fix bug 053 — DCE deletes checked integer negation Centralize a generated operation-semantics/trap inventory consumed by folding, DCE, interpreter, LLVM, QBE, fuzz generation, and the capability matrix. Until then, mark integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
-
-   float neg remains pure. Gate discarded MIN negation for every fixed/native
-   signed width, non-MIN removal where valid, optimized/unoptimized/interpreter
-   agreement, and mutations omitting every trapping unary/binary constructor.
-Bug 048's observable hang is closed only by task 3; a timeout merely detects the
-defect and is not the fix. Keep its denial-of-service/watchdog observation
-separate from bug 047's corruption observation inside the shared gate.
 
 ### Task R-0006
 
@@ -1239,31 +1280,31 @@ section of the Phase 17 language reference.
    combinator-built — same parser, smaller boundary, one diff that tells
    the whole story.
 
-   Slice 3 (proof economics, the EverParse shape): prove the seven
-   combinators + fold once in Lean; parsers built from them inherit
-   memory-safety and non-malleability obligations instead of re-proving
-   per parser. The slice-3 proof target is a DNS message parser:
-   compression pointers (cycle-prone backward offsets) are the one loop
-   shape the seven combinators do not cover, so "cannot loop more than N
-   times the input length" must account for pointer-chasing, not just
-   index loops — the forcing case that makes `complexity_guarded`
-   (R-0244) honest. Honesty boundary, stated in advance: claims hold for
-   parsers BUILT FROM the combinator core; Concrete is a general language
-   and nothing stops hand-rolled pointer arithmetic outside the
-   discipline. Never claim "Concrete parsers are safe."
+   Proof handoff, deliberately outside this early task: R-0170 proves the
+   seven combinators + fold once after operational auto-discharge has an exact
+   semantic foundation, so parsers built from them can inherit
+   memory-safety/non-malleability obligations instead of accumulating
+   hand-written bridge theorems. R-0244 owns the DNS message parser and its
+   compression-pointer bound: cycle-prone backward offsets must show “cannot
+   loop more than N times the input length,” not merely reuse an index-loop
+   argument. Claims apply only to parsers built from the combinator core;
+   Concrete remains a general language and nothing stops hand-rolled pointer
+   arithmetic outside that discipline. Never claim “Concrete parsers are
+   safe.”
 
    Composes with: R-0244 (bounded repeat exposes its symbolic iteration
-   bound as `complexity_guarded` — "cannot loop more than N times the
-   input length" is the combinator's contract), R-0443 (a combinator-built
-   parser is the first real customer for whole-program authority
-   certificates), R-0442 (proof links must survive extraction). DSL
-   generation proper (EverParse-style spec→source) stays research-gated
-   in R-0406 until the combinator proofs exist.
+   bound as `complexity_guarded`), R-0443 (a combinator-built parser is the
+   first real customer for whole-program authority certificates), and R-0442
+   (proof links survive extraction). DSL generation proper (EverParse-style
+   spec→source) stays research-gated in R-0406 until the R-0170 combinator
+   proof leg exists.
 
-   Immediate handoff: the numeric, PNG, and ELF ports are the first forcing
-   corpus for R-0445's source-level resource certificate. They must expose
-   bounded repetition and allocation facts through the shared schema rather
-   than grow parser-private cost annotations.
+   Immediate handoff after slice 2: the numeric, PNG, and ELF ports are the
+   first forcing corpus for R-0445's source-level resource certificate. The
+   task is complete at that handoff; do not hold the early resource report
+   behind R-0170/R-0244 proof work. The ports must expose bounded repetition
+   and allocation facts through the shared schema rather than grow
+   parser-private cost annotations.
 
 ### Task R-0445
 
@@ -1276,7 +1317,9 @@ upper bound or an explicit `unknown` for:
   named input bounds;
 - maximum call depth;
 - source-model stack bytes under a stated source layout model;
-- allocation count and allocated bytes; and
+- cumulative allocation count and allocated bytes;
+- peak live allocated bytes when the source ownership/lifetime facts suffice,
+  otherwise an explicit `unknown`; and
 - blocking, extern, trusted, or opaque boundaries that prevent a complete
   bound.
 
@@ -1287,9 +1330,17 @@ remedy-oriented explanation. V1 publishes the small weighting table that
 defines a source step. Its stack value is the maximum sum of source-frame
 footprints along a call path under the named source layout/target-width model;
 it excludes backend spills, red zones, prologues, and ABI frame growth. A
-missing fact is never converted to zero, and a source-step or source-stack
-bound is never presented as elapsed time, cycles, native frame size, or a
-hardware WCET claim.
+missing fact is never converted to zero. Cumulative allocated bytes and peak
+live allocated bytes are distinct facts and must never share a label or value
+by convenience. A source-step or source-stack bound is never presented as
+elapsed time, cycles, native frame size, or a hardware WCET claim.
+
+Every symbolic input bound names its origin: a checked syntactic bound, a
+validated contract/obligation, a profile/policy fact, or an explicit trusted
+assumption. An arbitrary annotation or unchecked caller promise cannot become
+a usable bound; it remains `unknown` or is surfaced as an assumption with its
+scope and trust dependency. Substitution must preserve this provenance through
+the call graph.
 
 Build the certificate from canonical loop, call-edge, target-set, layout,
 allocation, and stack facts. Do not add a private AST walk or second cost truth
@@ -1308,12 +1359,14 @@ attempt in R-0137, but do not let it replace the later three-user validation
 trial or its completion criterion.
 
 Gate constant, linear, and nested-loop bounds; branch maximum; direct-call
-composition; indirect-target maximum; zero-, fixed-, and symbolic-allocation
-cases; stack/call-depth composition; and honest unknowns for recursion,
-unbounded iteration, FFI/trusted boundaries, and opaque calls. Mutations that
-drop a loop, call, stack, or allocation term must fail. Report formatting and
-JSON must be deterministic, and adding the report may not change interpreter
-or native behavior.
+composition; indirect-target maximum; zero-, fixed-, and symbolic cumulative
+allocation; peak-live reuse versus simultaneous-live allocation; bound
+provenance and rejection of an unchecked bound; stack/call-depth composition;
+and honest unknowns for recursion, unbounded iteration, incomplete lifetime
+facts, FFI/trusted boundaries, and opaque calls. Mutations that drop a loop,
+call, stack, cumulative-allocation, or peak-live term must fail. Report
+formatting and JSON must be deterministic, and adding the report may not change
+interpreter or native behavior.
 
 This is the early usability and design-pressure layer. R-0244 later turns the
 same symbolic bounds into dischargeable obligations, R-0224/R-0248 bridge and
@@ -3174,6 +3227,19 @@ the comparison detects, and no gating threshold derived from a single sample.
  the minimum teaching path and remedy-oriented diagnostics are usable, before
  the large proof-automation investment, so external evidence can redirect
  that investment rather than merely evaluate it afterward.
+
+ This task owns the minimum diagnostics bar rather than depending on an
+ unowned notion of “usable.” For the first-session high-friction cases—an
+ unconsumed linear value (E0208), a missing capability declaration (E0240), an
+ ignored `Result`, and one proof/evidence failure—the diagnostic must preserve
+ the rule explanation and add source-located next actions using facts the
+ compiler already knows (for example consume/return/destroy sites or the exact
+ `with(Capability)` addition). A suggestion is offered only when its edit is
+ semantically valid; otherwise present ranked alternatives and the command
+ that explains the obligation. Gate the checked message structure and spans,
+ not one brittle prose sentence. This is the bounded adoption prerequisite;
+ general IDE quick-fixes remain later tooling work.
+
  R-0445's focused non-author resource-report session counts as one recorded
  attempt here. It is an early pressure test, not a substitute for recruiting
  three non-authors or for the alpha requirement that one non-author complete a
@@ -3195,9 +3261,10 @@ the comparison detects, and no gating threshold derived from a single sample.
  an editor buffer core (gap buffer + owned undo stack) — drop-glue and
  linearity composition under heavy nested non-Copy mutation (the bug 052
  shape); and a job runner / mini-shell — `with(Process)`, argv/env, the
- external-user ergonomics probe. The DNS parser is R-0444 slice 3's
- target, not a separate entry here. Workloads are admitted one at a time,
- when their named claim is the thing that needs testing.
+ external-user ergonomics probe. The DNS parser is R-0244's
+ pointer-chasing-bound target over R-0444's combinator core, not a separate
+ entry here. Workloads are admitted one at a time, when their named claim is
+ the thing that needs testing.
 
 ## Phase 8.5 / 8B: Incremental Compiler Driver And Artifact Reuse
 
@@ -3592,7 +3659,31 @@ too expensive.
 
 ### Task R-0150
 
-**Objective:** Instrument the flagships with PROOF-EFFORT TELEMETRY before investing in automation, so the external-validation gate's "was the proof discipline worth the cost?" question has data instead of anecdotes: per proved function, record Lean proof lines, tactic depth, solver/`bv_decide` time, and the source complexity it covers (loops, branches, width casts). Publish a small baseline table for hmac_sha256/constant_time_tag and refresh it per flagship. Cheap to collect now; impossible to reconstruct later.
+**Objective:** Instrument the flagships with PROOF-EFFORT AND COVERAGE TELEMETRY
+before investing in automation, so the external-validation gate's “was the
+proof discipline worth the cost?” question has data instead of anecdotes.
+
+Measure both sides of the investment:
+
+- **cost:** per proved function, Lean proof lines, tactic depth,
+  solver/`bv_decide` time, replay time, and the source complexity covered
+  (loops, branches, width casts); and
+- **coverage:** the fraction of the existing eligibility report's pure-Core
+  denominator closed without a hand-written Lean bridge, classified by
+  obligation class, discharge route (`structural`, `omega`, `bv_decide`,
+  linked Lean, or unsupported), and stable blocker reason, including the share
+  blocked by absent operational or fixed-width semantics.
+
+Never invent a telemetry-only definition of “eligible”; use the compiler's
+canonical eligibility facts so the denominator cannot be improved by excluding
+hard cases. Seed the coverage side from R-0004's honest post-migration baseline.
+Publish a small table for hmac_sha256/constant_time_tag, refresh it per flagship
+and release, and retain comparable history rather than replacing the previous
+number. R-0438's generated claim records eventually own the durable trend; this
+task owns the measurement definition and initial series. The result may justify
+changing the later R-0169/R-0170 investment, but it must not move automation
+ahead of proof-subject identity, exact semantic coverage, or the R-0137
+external-user trial. Cheap to collect now; impossible to reconstruct later.
 
 ### Task R-0151
 
@@ -3789,7 +3880,11 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  `auto_closed`, `needs_lean`, or `not_supported` per obligation. Wire
  `scripts/tests/check_structural_auto_discharge.sh`; auto-discharge may only
  emit `proved_by_kernel_decision` or a linked Lean theorem when the kernel
- actually checks the generated proof.
+ actually checks the generated proof. This task follows the R-0137 external
+ trial by design: use R-0150's measured structural shapes and blocker
+ distribution to choose V1 coverage instead of treating “the boring 95%” as an
+ assumption. It consumes R-0442 callable identity and R-0004 replay receipts;
+ it does not replace kernel replay of existing hand-written artifacts.
 ### Task R-0170
 
 **Objective:** Add operational VC auto-discharge as the next automation tier after structural auto-discharge. Today `linear` and `bitvector` obligations route to `omega` / `bv_decide`, while `operational` and `refinement` obligations route to Lean proof links; that leaves ordinary `#[ensures]` bodies and loop operational-preservation steps dependent on hand-written bridge theorems.
@@ -3814,6 +3909,25 @@ spec PExprs in `Concrete.Proof` until the later `ProofCore` /
  named discharge class for this tier: a symbolic iteration bound that
  survives to `needs_lean` is a signal about the obligation, not homework
  for the user.
+
+ Soundness boundary: automation may close only an operation whose ProofCore
+ semantics matches the typed runtime operation at that width. Checked
+ arithmetic needs a discharged no-overflow/no-trap obligation; explicit
+ modular arithmetic needs the corresponding fixed-width operator; an
+ unbounded-`Int` theorem may not silently stand for fixed-width trapping
+ execution. Missing div/mod, shift-cast, saturating, width, callable-target, or
+ semantic-scope support yields `needs_lean`/`not_supported`, never a broader
+ green claim. Record the exact extraction and operation-semantics versions in
+ the replay artifact so R-0222 can later broaden arithmetic-site coverage
+ without retroactively upgrading these results.
+
+ The first reuse-economics customer is R-0444's parser core: close the seven
+ combinators plus fixed-width assembly fold once, with ordinary parsers
+ inheriting their obligations through composition instead of requiring a
+ bridge theorem per parser. This is a gate on the automation tier, not a reason
+ to hand-author those proofs before the tier exists. Preserve the honesty
+ boundary that only parsers built from the checked combinators inherit the
+ result.
 ### Task R-0171
 
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
@@ -4280,27 +4394,10 @@ proving no rendering path can present a weaker-scope claim under a stronger
 composite name. Reconcile both documents against the implemented model rather
 than leaving a third vocabulary.
 
-### Task R-0442
-
-**Objective:** Preserve locally-bound callable identity in ProofCore instead of
-spelling it as a global call.
-
-Bug 061 is latent but structurally real: `PExpr.call "f" args` represents both a
-direct call to a definition and application of a fn-typed parameter named `f`.
-The evaluator resolves both through the global-style `FnTable`. The current
-`Option::map`, `Result::map`, and `Result::map_err` proofs remain valid only for
-their explicitly registered representative callback; they do not quantify over
-arbitrary `f`, and no report or source attribute may upgrade their
-`proof_coverage(representative)` scope.
-
-Add a distinct `PExpr.applyVar`/`callValue` form (or an equivalent typed callable
-identity) with local callable semantics rather than global name lookup. Carry
-the direct/indirect distinction through extraction, evaluation, fingerprints,
-preservation statements, reports, and proof dependencies. Gate a global
-function and a parameter with the same spelling extracting to different nodes,
-function-table completeness for each form, preservation of the three existing
-representative proofs, and a negative check that those proofs cannot be rendered
-as universal callback theorems.
+ProofCore callable identity is pulled forward as R-0442 in the global sequence.
+Every Phase 11 dependency/completeness task consumes that direct-call versus
+callable-value distinction; none may recover callable identity from a source
+spelling or reintroduce the old ambiguous `PExpr.call` representation.
 
 ### Task R-0202
 
@@ -4646,6 +4743,12 @@ claim, not wall-clock timing.
    gate, composition is a DAG fold). Gate a bound that is too small and must
    be rejected with a witness, composition through direct and indirect
    calls, and a mutation that drops the bound check.
+
+   Use a DNS message parser built from R-0444's combinator core as the forcing
+   non-index-loop case. Compression pointers can jump backward and form cycles,
+   so its `complexity_guarded` certificate must account for pointer-chasing and
+   prove the accepted bound in terms of input length; an index-only argument or
+   a watchdog is not discharge.
 
 ### Task R-0245
 
@@ -6841,7 +6944,7 @@ must not silently reinterpret or overwrite their source scope.
 
 ### Task R-0406
 
-**Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate. The trigger fired (2026-07-25 audit: seven combinator shapes spelled ~45–50 times; elf_header the least-protected parser in the tree); the combinator core and the numeric/PNG/ELF ports are pulled forward as R-0444. What remains gated here is the generation layer proper — EverParse-style spec→Concrete source — gated on R-0444's combinator proofs existing and on DECISIONS' external-generation rule (generated output is audited as ordinary source).
+**Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate. The trigger fired (2026-07-25 audit: seven combinator shapes spelled ~45–50 times; elf_header the least-protected parser in the tree); the combinator core and the numeric/PNG/ELF ports are pulled forward as R-0444. What remains gated here is the generation layer proper — EverParse-style spec→Concrete source — gated on R-0170's checked combinator proof leg existing and on DECISIONS' external-generation rule (generated output is audited as ordinary source).
 
 ### Task R-0407
 
