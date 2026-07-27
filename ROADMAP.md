@@ -1019,8 +1019,10 @@ separate from bug 047's corruption observation inside the shared gate.
    behavior or trigger an internal error. Random fresh-name substitution is
    insufficient because bugs 044/050/051/054 were collision-sensitive.
    Lowering-only sentinels such as `@fnref.*` are exercised by IR mutation
-   fixtures, not treated as legal source identifiers. Keep both oracles here
-   rather than opening a second identity-testing task.
+   fixtures, not treated as legal source identifiers. Land the semantic
+   contract and fixed historical/adversarial legs here; R-0272 later scales
+   the same oracle across generated and corpus programs rather than defining a
+   second identity-testing semantics.
 
 ### Task R-0008
 
@@ -4862,16 +4864,19 @@ record must name them so a proof's replay surface stays reproducible.
    extra load. This path is unreachable from source while reference returns
    are rejected, so its regression fixtures must separately preserve the
    accepted trusted raw-pointer (`*const`/`*mut`) return cases;
- - add a metamorphic alpha-invariance oracle: for each generated or corpus
-   program, systematically rename every user identifier and require the
-   renamed program to behave identically — same exit, same output, same
-   trap identity, interpreter and compiled. Bugs 044/050/051/054 were all
-   violations of exactly this invariant (identity recovered from name
-   strings, PRINCIPLES #12), and nothing today compares a program against
-   its own renaming: the differential harness compares programs against
-   the interpreter, but the rename oracle is the only one that hunts the
-   identity-bug class as a class rather than by example. Seed it with the
-   historical witnesses as fixed regression legs.
+ - scale R-0007's metamorphic identity oracle across generated and corpus
+   programs. Its strict alpha leg performs capture-avoiding fresh renames in
+   the correct lexical namespace and requires identical acceptance, exit,
+   output, trap identity, interpreter behavior, and compiled behavior modulo
+   honest display/span facts. Its distinct hostile-spelling leg pressures
+   generated mangles, builtin/intrinsic names, import aliases, and
+   local/global collisions; that transform may preserve behavior or fail
+   closed with an allowed collision diagnostic, but may never silently
+   diverge or trigger an internal error. Bugs 044/050/051/054 were
+   collision-sensitive, so random fresh renaming alone is not coverage.
+   Seed the historical witnesses as fixed legs, and keep IR-only spellings
+   such as `@fnref.*` in lowering mutation fixtures rather than the source
+   renamer.
 ### Task R-0273
 
 **Objective:** Add a semantic-darkness audit and red-team gate. The goal is to catch the checked-arithmetic class of bug before it repeats: a construct looks ordinary in source, but its real behavior depends on width, profile, target, allocation, authority, runtime checks, or an outdated proof/interpreter model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the Phase 14 validation artifact. The audit must cover:

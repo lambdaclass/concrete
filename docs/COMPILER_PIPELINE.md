@@ -371,8 +371,10 @@ leg should pressure mangled-name, builtin, intrinsic, import, and local/global
 collisions; that case may preserve behavior or fail closed with a specified
 diagnostic, but must never silently diverge or trigger an internal error.
 Random fresh names do not exercise the collision class. R-0007 owns these two
-gates. Reordering independent declarations, changing whitespace/comments, or
-rewriting harmless parentheses should likewise leave unrelated facts unchanged.
+gates and their fixed historical legs; R-0272 later scales the same contract
+across generated and corpus programs. Reordering independent declarations,
+changing whitespace/comments, or rewriting harmless parentheses should
+likewise leave unrelated facts unchanged.
 
 ## Backend Contract
 

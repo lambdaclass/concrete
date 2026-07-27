@@ -25,9 +25,10 @@ later three-user validation trial.
 The roadmap now keeps one resource model: R-0178 stabilizes the early schema,
 R-0220 applies predictable policy, R-0244 adds proof obligations, R-0224/R-0248
 bridge and enforce target stack, R-0416–R-0419 measure generated code, and
-R-0405 retains hardware WCET. Source bounds are not timing claims. R-0007 also
-owns strict alpha-invariance and hostile collision metamorphic gates, turning
-semantic-identity principle #12 into a direct regression oracle.
+R-0405 retains hardware WCET. Source bounds are not timing claims. R-0007 owns
+the strict alpha-invariance/hostile-collision contract and fixed regression
+legs; R-0272 later scales that oracle across generated programs, turning
+semantic-identity principle #12 into a direct regression class.
 
 ### Proof Subject And Replay-Evidence Design Split
 
