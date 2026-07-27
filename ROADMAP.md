@@ -835,29 +835,15 @@ notes become work only when their named workload or failing gate pulls them.
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
 reducer, plus a four-part proof-freshness class. The unbound-proof containment
-has landed, so the current frontier is the remaining silent wrong-code defect
-R-0005. ProofCore callable identity R-0442 follows immediately because the
+and the R-0005 trap inventory have landed, closing the last reproduced
+silent-wrong-code defect in that set; generation of the inventory continues as
+R-0446. ProofCore callable identity R-0442 follows immediately because the
 final R-0004 subject digest, dependency facts, and replay receipts must bind an
 unambiguous application model. R-0004 then resumes and completes the
 evidence-integrity migration. The no-shadowing migration in R-0435 follows
 those correctness foundations. This ordering is deliberate: silent wrong code
 precedes a language-design migration, and proof automation remains behind both
 honest semantics and the external-user trial.
-
-### Task R-0005
-
-**Objective:** Fix bug 053 — DCE deletes checked integer negation. Centralize a
-generated operation-semantics/trap inventory consumed by folding, DCE,
-interpreter, LLVM, QBE, fuzz generation, and the capability matrix. Until then,
-mark integer `.unaryOp .neg` side-effecting unless it is proved non-trapping;
-float neg remains pure.
-
-Gate discarded MIN negation for every fixed/native signed width, non-MIN
-removal where valid, optimized/unoptimized/interpreter agreement, and mutations
-omitting every trapping unary/binary constructor. Do not descope this task to
-the one DCE witness: the shared trap inventory is the class-level recurrence
-prevention. Bug 048's observable hang is closed only by R-0003; a timeout merely
-detects that historical defect and is not part of this task.
 
 ### Task R-0442
 
@@ -7033,3 +7019,26 @@ must not silently reinterpret or overwrite their source scope.
 ### Task R-0415
 
 **Objective:** Add the Phase 20 validation artifact: one pressure-test sketch, expected report, and decision record for every research-gated extension (concurrency, atomics/memory model, typestate, arena allocation, WCET, binary-format DSLs, hardware capability mapping, Miri-style interpreter, sized evaluator, persistent rewrite state, row effects, generational dynamic fallback, compiler self-verification, and Datalog-style relational facts). No research item graduates unless its forcing example, report shape, evidence class, and rejection or pull-forward criteria are recorded.
+
+### Task R-0446
+
+**Objective:** Generate the operation-semantics/trap inventory rather than
+hand-maintaining it, and extend its consumer set.
+
+R-0005 removed the recurrence mechanism for bug 053: `IntArith` now answers
+whether and how an operation traps, for the unary family as it already did for
+the binary one, and folding, DCE, the interpreter and EmitSSA read that one
+answer (`scripts/tests/check_trap_inventory.sh`, mutations #25-#27). QBE
+reaches the same checked helpers through EmitSSA.
+
+What R-0005 asked for and did not build is the *generated* form. Two consumers
+remain outside the inventory entirely: **fuzz generation**, which would emit
+trapping cases per constructor and is the thing that would surface the next
+trapping operation without an audit, and the **capability matrix**. A
+hand-written inventory still requires someone to remember to extend it when a
+constructor is added; a generated one does not, and generation is what makes
+the consumer list checkable rather than conventional.
+
+Gate: a new trapping constructor added to the inventory must appear in
+generated fuzz cases without editing the generator, and every declared consumer
+must be shown to read the generated artifact rather than a local copy.

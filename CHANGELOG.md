@@ -150,10 +150,14 @@ gap. A first attempt at #26 (`| .neg => false`) was discarded for reporting
 `KILLED (build)` — Lean's unused-variable linter rejecting the file says
 nothing about whether any test can observe the semantics.
 
-Not covered: the task's wider ask for a *generated* operation-semantics
-inventory consumed by QBE and fuzz generation as well. QBE reaches the same
-checked helpers through EmitSSA, and the binary family was already centralized;
-what remains unbuilt is generation rather than centralization.
+The task said not to descope to the single DCE witness, and this does not: the
+recurrence mechanism, not the missing arm, is what changed. It is also not the
+whole task. R-0005 asked for a *generated* inventory consumed by fuzz
+generation and the capability matrix too; what shipped is hand-written, and QBE
+is covered only because it reaches the same checked helpers through EmitSSA.
+Generation, and those two remaining consumers, continue as **R-0446** rather
+than being absorbed into this entry — a hand-written inventory still depends on
+someone remembering to extend it.
 
 ### Completed Task R-0003
 
