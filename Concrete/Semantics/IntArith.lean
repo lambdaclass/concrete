@@ -234,5 +234,42 @@ def shiftAmountInRange (ty : Ty) (b : Int) : Bool :=
   | some (w, _) => 0 ≤ b && b < Int.ofNat w
   | none => false
 
+/-- Evaluate a UNARY op on an integer operand under type `ty`. The unary
+    counterpart of `evalIntBinOp`, and for the same reason: "does `-x` trap?"
+    was being re-derived independently by the interpreter, the constant folder,
+    EmitSSA, and dead-code elimination. Three of the four got it right; DCE had
+    no unary case at all and deleted discarded negations, silently removing the
+    documented MIN trap (bug 053). The folder's own comment next door said
+    "leave the op live so the checked negation helper traps at runtime" — the
+    knowledge existed, adjacent and unconsulted.
+
+    * `neg` is CHECKED: `-x` is `0 - x`, which fails whenever the result is not
+      representable — signed MIN, and any nonzero value at an unsigned type.
+    * `bitnot` never traps: `~n` at width w is `2^w - 1 - n`, always in range.
+    * `not_` is boolean, not integer arithmetic — `notApplicable`. -/
+def evalIntUnaryOp (op : UnaryOp) (n : Int) (ty : Ty) : ArithResult :=
+  match op with
+  | .neg =>
+    match checkedToType ty (-n) with
+    | some v => .value v ty
+    | none   => .trap "arithmetic overflow (checked negation)"
+  | .bitnot => .value (maskWidth ty (-(n + 1))) ty
+  | .not_ => .notApplicable
+
+/-- THE trap inventory for unary ops: can `op` at type `ty` trap for SOME
+    operand? This is the value-independent question dead-code elimination needs
+    — it must decide whether an operation may be deleted without knowing what
+    flows into it.
+
+    Deliberately conservative: it answers about the type, not the value. A caller
+    holding a constant operand can prove a specific instance safe by evaluating
+    `evalIntUnaryOp` and checking for `.value`, exactly as the binary path uses
+    `constPairNonTrapping`. -/
+def unaryOpCanTrap (op : UnaryOp) (ty : Ty) : Bool :=
+  match op with
+  -- Integer negation only. Float negation is total, and `~`/`!` cannot fail.
+  | .neg => isIntTy ty
+  | .bitnot | .not_ => false
+
 end IntArith
 end Concrete

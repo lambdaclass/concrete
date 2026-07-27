@@ -89,7 +89,14 @@ add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
 while IFS= read -r f; do
   case "$f" in
     Concrete/Proof/*|Concrete/Report/*|proofs/*)  add proof; add evidence; add contract ;;
-    Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa ;;
+    Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap ;;
+    # Semantics and the interpreter are where trap/overflow facts live, and the
+    # interpreter is half of every differential. Without this line they matched
+    # only the catch-all `Concrete/*` -> hygiene, which is how a change to the
+    # trap inventory could reach CI having run no gate that evaluates one.
+    # `positions` rather than `differential`: the latter also selects the
+    # workload differentials (httpget, wordfreq, tar_list), which are minutes.
+    Concrete/Semantics/*|Concrete/Interp/*)       add trap; add totality; add builtin; add positions ;;
     Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
     std/*)                                        add collections; add stdlib; add proof ;;
     examples/*)                                   add evidence; add examples ;;

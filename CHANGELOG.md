@@ -104,6 +104,57 @@ stored/derived callback inference in R-0016. The unmerged H18 worktree and
 `.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
 of being treated as ambient backlog.
 
+### Completed Task R-0005
+
+_Bug 053 — a discarded checked negation was deleted, and its documented trap
+with it. 2026-07-27._
+
+Per ARITHMETIC_POLICY, `-x` traps at the type's MIN exactly as checked `0 - x`
+does. It did not: with `x: i8 = -128`, `discard(-x)` exited 0 and the emitted
+`user_main` contained no checked-negation call, while the interpreter aborted
+with `arithmetic overflow (checked negation)`. Wrong code, not a rejected
+program — the abort the language promises simply did not happen.
+
+Dead-code elimination had no `.unaryOp` case at all, so a discarded negation
+fell into a catch-all meaning "harmless". The one-line fix is to add the arm.
+That is not what shipped, because the missing arm was a symptom: **four**
+consumers each decided independently whether `-x` can trap — the interpreter,
+`foldConstants`, EmitSSA, and DCE. Three agreed, one never asked, and the
+folder's comment saying neg must stay live *to trap* sat one screen above the
+arm that deleted it. A fifth local answer restores agreement without removing
+what let them disagree.
+
+`Concrete/Semantics/IntArith.lean` now owns the unary trap inventory, the same
+single-source treatment `evalIntBinOp` already gave the binary family:
+`evalIntUnaryOp` answers WHAT an operation yields (`.value` / `.trap` /
+`.notApplicable`), `unaryOpCanTrap` answers WHETHER it can trap. DCE reads
+`unaryOpCanTrap`, then refines with `evalIntUnaryOp` for constant operands so a
+provably-safe discarded negation stays deletable; the interpreter evaluates
+through `evalIntUnaryOp`. Blanket-preserving every discarded unary op would
+have passed a trap regression while quietly costing dead work at every site.
+
+Evidence: `scripts/tests/check_trap_inventory.sh` (12 checks). Discarded `-x`
+at MIN aborts on compiled AND interp at i8/i16/i32/Int; the used-result shape
+still traps, proving the gate observes *discard* rather than negation in
+general; non-trapping discards (small constant, `~x`, float neg) stay
+removable; `__cc_ssub` survives into the emitted `user_main`. Three checks are
+structural — every consumer must read `IntArith` — because the value checks
+pass for any fix, including four consumers that agree today and drift tomorrow.
+
+Mutations #25-#27 are each KILLED by that gate: DCE ignoring the inventory, the
+inventory's answer inverted, and checked negation wrapping at MIN instead of
+trapping. The harness gained per-mutation gate binding (`gate_for_last`) to
+make those kills real: its killer is the fast suite, which runs no `check_*.sh`
+gate, so a gate-backed mutation would have been reported as a surviving test
+gap. A first attempt at #26 (`| .neg => false`) was discarded for reporting
+`KILLED (build)` — Lean's unused-variable linter rejecting the file says
+nothing about whether any test can observe the semantics.
+
+Not covered: the task's wider ask for a *generated* operation-semantics
+inventory consumed by QBE and fuzz generation as well. QBE reaches the same
+checked helpers through EmitSSA, and the binary family was already centralized;
+what remains unbuilt is generation rather than centralization.
+
 ### Completed Task R-0003
 
 _HashMap probe and occupancy invariants — bugs 047 (duplicate past a tombstone)

@@ -39,6 +39,14 @@ MUT_FILE=()
 MUT_OLD=()
 MUT_NEW=()
 MUT_DESC=()
+# Optional per-mutation gate. The fast suite is the default killer, but a defect
+# whose guard is a `check_*.sh` gate would SURVIVE that suite and be reported as
+# a test gap — the harness would be measuring the wrong thing and saying so
+# confidently. Naming the gate turns "this gate is load-bearing" into a claim
+# the harness actually checks. Set it with `gate_for_last`, which indexes off
+# the current array length so it cannot drift out of alignment.
+MUT_GATE=()
+gate_for_last() { MUT_GATE[$(( ${#MUT_FILE[@]} - 1 ))]="$1"; }
 
 # 1. Layout: i32/u32/f32 size 4 → 8  (tySize)
 MUT_FILE+=("Concrete/Check/Layout.lean")
@@ -289,6 +297,50 @@ MUT_OLD+=("            if (self.len + self.tombstones) * 4 >= self.cap * 3 {")
 MUT_NEW+=("            if self.len * 4 >= self.cap * 3 { // MUTATION: tombstones uncounted")
 MUT_DESC+=("std map: load factor ignores tombstones (bug 048)")
 
+# 25. DCE: unary ops are always removable again (R-0005 / bug 053)
+# Restores the pre-fix state — `.unaryOp` falls through to the catch-all meaning
+# "harmless" — so a discarded checked negation at MIN is deleted and the trap
+# silently disappears. The roadmap asks for a mutation omitting a trapping unary
+# constructor; this is that, and it must be caught by the differential (compiled
+# vs interpreter), not merely by a value check.
+MUT_FILE+=("Concrete/IR/SSACleanup.lean")
+MUT_OLD+=("  | .unaryOp _ op operand ty =>
+    if !(IntArith.unaryOpCanTrap op ty) then false")
+MUT_NEW+=("  | .unaryOp _ op operand ty =>
+    if true then false -- MUTATION: unary trap inventory ignored")
+MUT_DESC+=("DCE: discarded trapping unary ops removable again (bug 053)")
+gate_for_last "scripts/tests/check_trap_inventory.sh"
+
+# 26. IntArith: the trap inventory's answer is inverted (R-0005 / bug 053)
+# Mutates the SINGLE SOURCE rather than a consumer. If the centralisation is
+# real, poisoning the inventory must break behaviour in the consumers — a
+# consumer that still passes is deriving the answer locally, and the
+# single-source claim is false.
+#
+# Inverted rather than constant-`false` on purpose: `| .neg => false` leaves
+# `ty` unused, so Lean's linter rejects the file and the harness reports
+# "KILLED (build)" — a kill that says nothing about whether any test can see
+# the semantics. A mutation killed by the wrong mechanism is a mutation that
+# never ran.
+MUT_FILE+=("Concrete/Semantics/IntArith.lean")
+MUT_OLD+=("  | .neg => isIntTy ty
+  | .bitnot | .not_ => false")
+MUT_NEW+=("  | .neg => !(isIntTy ty) -- MUTATION: inventory answer inverted
+  | .bitnot | .not_ => false")
+MUT_DESC+=("IntArith: unary trap inventory inverted (bug 053)")
+gate_for_last "scripts/tests/check_trap_inventory.sh"
+
+# 27. IntArith: checked negation wraps instead of trapping (R-0005 / bug 053)
+# The other half of the inventory: `unaryOpCanTrap` says WHETHER, this says
+# WHAT. Wrapping at MIN is the plausible-looking wrong answer, and it must be
+# visible on the interpreter path — the differential is what makes a silent
+# semantic drift observable rather than merely a missing abort.
+MUT_FILE+=("Concrete/Semantics/IntArith.lean")
+MUT_OLD+=("    | none   => .trap \"arithmetic overflow (checked negation)\"")
+MUT_NEW+=("    | none   => .value (maskWidth ty (-n)) ty -- MUTATION: wrap, do not trap")
+MUT_DESC+=("IntArith: checked negation wraps at MIN instead of trapping (bug 053)")
+gate_for_last "scripts/tests/check_trap_inventory.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================
@@ -397,12 +449,16 @@ run_mutation() {
   # Try to build
   if $LAKE build > /tmp/mutation_build.log 2>&1; then
     # Build succeeded — run tests
-    if bash scripts/tests/run_tests.sh --fast > /tmp/mutation_test.log 2>&1; then
-      result="SURVIVED"
-      SURVIVED=$((SURVIVED + 1))
-    else
+    local gate="${MUT_GATE[$idx]:-}"
+    if ! bash scripts/tests/run_tests.sh --fast > /tmp/mutation_test.log 2>&1; then
       result="KILLED"
       KILLED=$((KILLED + 1))
+    elif [[ -n "$gate" ]] && ! bash "$gate" > /tmp/mutation_gate.log 2>&1; then
+      result="KILLED (gate)"
+      KILLED=$((KILLED + 1))
+    else
+      result="SURVIVED"
+      SURVIVED=$((SURVIVED + 1))
     fi
   else
     # Build failed — type system caught it

@@ -511,6 +511,9 @@ jobs:
       - name: "Totality-judgment matrix (trap/divergence facts agree interp == compiled)"
         run: bash scripts/tests/check_totality_judgment.sh
 
+      - name: "Trap inventory (R-0005 / bug 053 — one source says which unary ops can trap; DCE may not delete one)"
+        run: bash scripts/tests/check_trap_inventory.sh
+
       - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
         run: bash scripts/tests/check_corecheck_boundary.sh
 

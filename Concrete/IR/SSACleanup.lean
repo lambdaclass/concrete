@@ -337,6 +337,25 @@ private def isSideEffecting : SInst → Bool
           !(constPairNonTrapping op lhs rhs ty)
         | _ => false)
      | _ => false)
+  -- Bug 053: this arm did not exist, so `.unaryOp` fell into the catch-all
+  -- below and a DISCARDED integer negation was deleted — taking the documented
+  -- MIN trap with it. `discard(-x)` at `i8::MIN` exited 0 compiled while the
+  -- interpreter aborted, and the emitted function contained no checked-negation
+  -- call at all. The trap answer now comes from the ONE arithmetic reference
+  -- (`IntArith.unaryOpCanTrap`) instead of being re-derived here, which is what
+  -- let three consumers agree and this one silently disagree.
+  | .unaryOp _ op operand ty =>
+    if !(IntArith.unaryOpCanTrap op ty) then false
+    else
+      -- A constant operand whose negation fits is provably non-trapping, so it
+      -- stays removable — mirroring `constPairNonTrapping` on the binary side,
+      -- and keeping the folder's output free of dead constant ops.
+      match operand with
+      | .intConst n _ =>
+        match IntArith.evalIntUnaryOp op n ty with
+        | .value _ _ => false
+        | _ => true
+      | _ => true
   | _ => false
 
 /-- Eliminate instructions whose dst is never used. Iterate until fixpoint. -/

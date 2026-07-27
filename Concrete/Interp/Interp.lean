@@ -222,15 +222,15 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
   match op, v with
   -- Negation is CHECKED (ROADMAP #10): `-x` overflows when `x` is the type's
   -- MIN, exactly as the compiled `0 - x` checked-subtract helper traps.
-  | .neg, .int n ty =>
-    match IntArith.checkedToType ty (-n) with
-    | some v => .ok (.int v ty)
-    | none   => .error "interp: arithmetic overflow (checked negation)"
+  -- Integer unary ops evaluate through the ONE arithmetic reference, exactly as
+  -- the binary ops above do. This used to re-derive "negation is checked" here
+  -- with its own `checkedToType` call and its own message; the same fact was
+  -- also re-derived in the folder and EmitSSA, and NOT derived at all in DCE,
+  -- which is how bug 053 deleted the trap. `~n` at an unsigned width is
+  -- `2^w - 1 - n`, which the reference expresses as maskWidth (-(n+1)).
+  | .neg, .int n ty => arithOut (IntArith.evalIntUnaryOp .neg n ty)
+  | .bitnot, .int n ty => arithOut (IntArith.evalIntUnaryOp .bitnot n ty)
   | .not_, .bool b => .ok (.bool (!b))
-  -- ~n at an unsigned width is `2^w - 1 - n`; maskWidth turns the
-  -- mathematical `-(n+1)` into exactly that (e.g. ~0 = 0xFFFFFFFF
-  -- at u32, not -1).
-  | .bitnot, .int n ty => .ok (.int (IntArith.maskWidth ty (-(n + 1))) ty)
   | _, _ => .error "interp: unsupported unary op"
 
 -- ============================================================
