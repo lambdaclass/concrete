@@ -845,33 +845,6 @@ those correctness foundations. This ordering is deliberate: silent wrong code
 precedes a language-design migration, and proof automation remains behind both
 honest semantics and the external-user trial.
 
-### Task R-0442
-
-**Objective:** Preserve locally-bound callable identity in ProofCore instead of
-spelling it as a global call.
-
-Bug 061 is latent but structurally real: `PExpr.call "f" args` represents both a
-direct call to a definition and application of a fn-typed parameter named `f`.
-The evaluator resolves both through the global-style `FnTable`. The current
-`Option::map`, `Result::map`, and `Result::map_err` proofs remain valid only for
-their explicitly registered representative callback; they do not quantify over
-arbitrary `f`, and no report or source attribute may upgrade their
-`proof_coverage(representative)` scope.
-
-Add a distinct `PExpr.applyVar`/`callValue` form (or an equivalent typed callable
-identity) with local callable semantics rather than global name lookup. Carry
-the direct/indirect distinction through extraction, evaluation, fingerprints,
-preservation statements, reports, and proof dependencies. Gate a global
-function and a parameter with the same spelling extracting to different nodes,
-function-table completeness for each form, preservation of the three existing
-representative proofs, and a negative check that those proofs cannot be rendered
-as universal callback theorems.
-
-This is a prerequisite to R-0004's final subject digest and receipt issuance,
-not an optional cleanup afterward. R-0004's extraction/schema identity must
-name the representation introduced here, and its migration must not issue
-receipts over the ambiguous pre-R-0442 subject model.
-
 ### Task R-0004
 
 **Objective:** Fix proof-subject freshness and fail closed.

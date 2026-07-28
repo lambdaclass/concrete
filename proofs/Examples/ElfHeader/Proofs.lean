@@ -60,12 +60,12 @@ theorem validate_header_correct (b0 b1 b2 b3 cls encoding ver : Int) (fuel : Nat
   · by_cases hc1 : cls = 1 <;> by_cases hc2 : cls = 2 <;>
       by_cases he1 : encoding = 1 <;> by_cases he2 : encoding = 2 <;>
       by_cases hv : ver = 1 <;>
-      simp_all [validateHeaderExpr, eval, eval.evalArgs, elfFns,
+      simp_all [validateHeaderExpr, eval, eval.evalArgs, elfFns, elfFnsGlobals,
           checkMagicFn, checkMagicExpr, checkClassFn, checkClassExpr,
           checkDataFn, checkDataExpr, checkVersionFn, checkVersionExpr,
           Env.bind, evalBinOp, bindArgs, BEq.beq]
   -- Negative magic cases (any byte wrong): check_magic returns 0, short-circuit
-  all_goals simp_all [validateHeaderExpr, eval, eval.evalArgs, elfFns,
+  all_goals simp_all [validateHeaderExpr, eval, eval.evalArgs, elfFns, elfFnsGlobals,
       checkMagicFn, checkMagicExpr, Env.bind, evalBinOp, bindArgs,
       BEq.beq]
 end Examples.ElfHeader.Proofs

@@ -593,12 +593,37 @@ theorem eval_call_reduces
     (fns : FnTable) (env : Env) (fuel : Nat)
     (fn : String) (args : List PExpr)
     (fdef : PFnDef) (argVals : List PVal) (callEnv : Env) (v : PVal)
-    (h_fns : fns fn = some fdef)
+    (h_fns : fns.globals fn = some fdef)
     (h_args : eval.evalArgs fns env fuel args = some argVals)
     (h_bind : bindArgs Env.empty fdef.params argVals = some callEnv)
     (h_body : eval fns callEnv fuel fdef.body = some v) :
     eval fns env (fuel + 1) (.call fn args) = some v := by
   simp [eval, h_fns, h_args, h_bind, h_body]
+
+/-! R-08b: the same reduction for an application of a LOCALLY BOUND callable.
+Deliberately a separate lemma over `fns.callables`: a proof about applying a
+parameter must not be dischargeable by a hypothesis about a definition of the
+same name, which is the confusion bug 061 recorded. -/
+theorem eval_apply_var_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (binding : String) (args : List PExpr)
+    (fdef : PFnDef) (argVals : List PVal) (callEnv : Env) (v : PVal)
+    (h_fns : fns.callables binding = some fdef)
+    (h_args : eval.evalArgs fns env fuel args = some argVals)
+    (h_bind : bindArgs Env.empty fdef.params argVals = some callEnv)
+    (h_body : eval fns callEnv fuel fdef.body = some v) :
+    eval fns env (fuel + 1) (.applyVar binding args) = some v := by
+  simp [eval, h_fns, h_args, h_bind, h_body]
+
+/-- A definition NEVER answers an application of a locally bound callable. This
+is the negative half of R-0442 and the direct refutation of bug 061: with an
+empty callable namespace, `.applyVar f` is stuck no matter what `globals` holds,
+so a global `f` cannot stand in for a parameter `f`. -/
+theorem apply_var_ignores_globals
+    (g : String → Option PFnDef) (env : Env) (fuel : Nat)
+    (binding : String) (args : List PExpr) :
+    eval (FnTable.ofGlobals g) env (fuel + 1) (.applyVar binding args) = none := by
+  simp [eval]
 
 /-! R-09: eval reduces structLit to a `.struct_` value when
 the fields all evaluate. -/
@@ -760,6 +785,11 @@ def pexprCalls : PExpr → List String
   | .letIn _ v b => pexprCalls v ++ pexprCalls b
   | .ifThenElse c t e => pexprCalls c ++ pexprCalls t ++ pexprCalls e
   | .call fn args => fn :: pexprCallsList args
+  -- A locally bound callable is NOT a definition, so it does not belong in the
+  -- global-name list that `fnTableComplete` checks against `globals`. Collecting
+  -- it here would demand a definition for every callback parameter — the exact
+  -- direction of the old conflation. `pexprApplies` collects these instead.
+  | .applyVar _ args => pexprCallsList args
   | .structLit _ fields => pexprCallsFields fields
   | .enumLit _ _ fields => pexprCallsFields fields
   | .fieldAccess o _ => pexprCalls o
@@ -783,6 +813,43 @@ def pexprCallsArms : List (PMatchPat × PExpr) → List String
   | (_, b) :: rest => pexprCalls b ++ pexprCallsArms rest
 end
 
+/-! The mirror of `pexprCalls` for the OTHER namespace: every locally bound
+callable the expression APPLIES. Two collectors rather than one returning a
+tagged list, because the two feed different completeness predicates over
+different tables, and a single list is what let one predicate check a parameter
+against the global namespace. -/
+mutual
+def pexprApplies : PExpr → List String
+  | .lit _ => []
+  | .var _ => []
+  | .binOp _ l r => pexprApplies l ++ pexprApplies r
+  | .letIn _ v b => pexprApplies v ++ pexprApplies b
+  | .ifThenElse c t e => pexprApplies c ++ pexprApplies t ++ pexprApplies e
+  | .call _ args => pexprAppliesList args
+  | .applyVar binding args => binding :: pexprAppliesList args
+  | .structLit _ fields => pexprAppliesFields fields
+  | .enumLit _ _ fields => pexprAppliesFields fields
+  | .fieldAccess o _ => pexprApplies o
+  | .arrayIndex a i => pexprApplies a ++ pexprApplies i
+  | .match_ s arms => pexprApplies s ++ pexprAppliesArms arms
+  | .cast i => pexprApplies i
+  | .arrayLit elems => pexprAppliesList elems
+  | .arraySet a i v => pexprApplies a ++ pexprApplies i ++ pexprApplies v
+  | .while_ c assigns cont =>
+      pexprApplies c ++ pexprAppliesFields assigns ++ pexprApplies cont
+  | .while_step c _ s cont =>
+      pexprApplies c ++ pexprApplies s ++ pexprApplies cont
+def pexprAppliesList : List PExpr → List String
+  | [] => []
+  | e :: rest => pexprApplies e ++ pexprAppliesList rest
+def pexprAppliesFields : List (String × PExpr) → List String
+  | [] => []
+  | (_, e) :: rest => pexprApplies e ++ pexprAppliesFields rest
+def pexprAppliesArms : List (PMatchPat × PExpr) → List String
+  | [] => []
+  | (_, b) :: rest => pexprApplies b ++ pexprAppliesArms rest
+end
+
 /-- Every callee directly invoked by `pe` resolves in `table`.
 
     This is the one-level check: it catches the immediate
@@ -797,7 +864,15 @@ end
     `ProofCore` (`buildCallGraphModule`) is the natural
     next-step for that. -/
 def fnTableComplete (table : FnTable) (pe : PExpr) : Bool :=
-  (pexprCalls pe).all (fun name => (table name).isSome)
+  (pexprCalls pe).all (fun name => (table.globals name).isSome)
+
+/-- Completeness for the OTHER namespace: every locally bound callable that the
+expression applies is bound in `callables`. Checked separately from
+`fnTableComplete` because the two namespaces answer different nodes; one
+predicate over one table is what allowed a parameter to be "resolved" by a
+definition. -/
+def callableTableComplete (table : FnTable) (pe : PExpr) : Bool :=
+  (pexprApplies pe).all (fun name => (table.callables name).isSome)
 
 /-! ### Per-flagship completeness assertions
 
@@ -829,6 +904,32 @@ example : fnTableComplete fixedCapacityFns fcTagExpr := by decide
 
 -- constant_time_tag (uses ctTagFns)
 example : fnTableComplete ctTagFns ctCompareExpr := by decide
+
+/-! ### Per-spec completeness for the CALLABLE namespace (R-0442)
+
+The three HOF specs apply a fn-typed parameter, so their applications are
+`.applyVar` nodes answered only by `callables`. Both directions are asserted:
+
+  * `callableTableComplete` — every applied binding is bound, so the theorems are
+    not vacuous over a stuck `eval`;
+  * `fnTableComplete` — these specs call NO definitions, so an empty global
+    namespace is a checked fact. Before R-0442 the callback was bound as a
+    global, and `fnTableComplete` was what "passed"; asserting the empty global
+    namespace is what makes the regression visible. -/
+example : callableTableComplete pureCoreFns optionMapExpr := by decide
+example : callableTableComplete pureCoreFns resultMapExpr := by decide
+example : callableTableComplete pureCoreFns resultMapErrExpr := by decide
+
+example : fnTableComplete pureCoreFns optionMapExpr := by decide
+example : fnTableComplete pureCoreFns resultMapExpr := by decide
+example : fnTableComplete pureCoreFns resultMapErrExpr := by decide
+
+/-- The specs that call definitions apply no locally bound callables, so the
+callable namespace is vacuously complete for them. Stated so that a spec which
+GAINS a callback application without gaining a binding fails here rather than
+silently evaluating to `none`. -/
+example : callableTableComplete parseValidateFns parseHeaderExpr := by decide
+example : callableTableComplete cryptoFns verifyMessageExpr := by decide
 
 /-! ## Source-contract soundness (Phase 1, R-22..R-28)
 

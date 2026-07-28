@@ -29,7 +29,7 @@ theorem compute_tag_correct (key message nonce : Int) (fuel : Nat) :
 theorem verify_tag_correct (key message nonce : Int) (fuel : Nat) :
     let env := (((Env.empty.bind "key" (.int key)).bind "message" (.int message)).bind "nonce" (.int nonce)).bind "expected_tag" (.int (key * message + nonce))
     eval cryptoFns env (fuel + 6) verifyTagExpr = some (.int 1) := by
-  simp [verifyTagExpr, eval, eval.evalArgs, cryptoFns, computeTagFn, computeTagExpr,
+  simp [verifyTagExpr, eval, eval.evalArgs, cryptoFns_globals, cryptoFnsGlobals, computeTagFn, computeTagExpr,
         Env.bind, evalBinOp, bindArgs]
 
 /-- verify_tag returns 0 when the expected tag does not match.
@@ -41,7 +41,7 @@ theorem verify_tag_rejects (key message nonce expected : Int)
   have hne : (key * message + nonce == expected) = false := by
     show decide (key * message + nonce = expected) = false
     exact decide_eq_false (Ne.symm h)
-  simp [verifyTagExpr, eval, eval.evalArgs, cryptoFns, computeTagFn, computeTagExpr,
+  simp [verifyTagExpr, eval, eval.evalArgs, cryptoFns_globals, cryptoFnsGlobals, computeTagFn, computeTagExpr,
         Env.bind, evalBinOp, bindArgs, hne]
 
 /-- check_nonce returns 1 for nonces in range [1, max_nonce]. -/
@@ -105,7 +105,7 @@ theorem verify_message_composed_correct
             verifyTagFn, verifyTagExpr,
             checkNonceFn, checkNonceExpr,
             computeTagFn, computeTagExpr,
-            eval, eval.evalArgs, cryptoFns,
+            eval, eval.evalArgs, cryptoFns, cryptoFnsGlobals,
             Env.bind, evalBinOp, bindArgs, BEq.beq]
 
 /-- Full contract for check_nonce: returns 1 iff nonce ∈ [1, max_nonce], 0 otherwise.

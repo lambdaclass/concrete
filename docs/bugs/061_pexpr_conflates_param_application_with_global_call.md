@@ -1,8 +1,6 @@
 # Bug 061: the proof model spells a parameter application and a global call the same way
 
-**Status:** Open — latent. No reachable witness in std today; filed because the
-proof model is where soundness claims live, and principle 12 asks for this class
-to be visible before it bites rather than after.
+**Status:** Fixed (2026-07-28, R-0442).
 **Discovered:** 2026-07-25, auditing R-0002/R-0003 against `docs/PRINCIPLES.md`.
 
 ## Symptom
@@ -64,3 +62,88 @@ that another entity can also spell.
 Regression when fixed: a program with a global `f` and a function taking a
 parameter `f` extracts two distinguishable nodes; existing proofs over
 `Option::map`/`Result::map`/`Result::map_err` still verify.
+
+## The witness, found while fixing it
+
+Filed as latent with "no reachable witness in std today". That was wrong in one
+respect worth recording: the witness was already in the repository, in the
+proofs themselves.
+
+`pureCoreFns` bound the representative callback `f` in the **global** function
+table, because the HOF specs applied their fn-pointer parameter as `.call "f"`.
+So `option_map_correct`, `result_map_correct` and `result_map_err_correct` were
+discharged by resolving a *parameter* application against a *definition* — the
+conflation, load-bearing, in three shipped theorems. The theorems are still
+true (the callback really is that function, and their scope was always recorded
+as `proof_coverage(representative)`), but the mechanism by which Lean accepted
+them was the defect.
+
+A source-level witness is now trivial to write, and is the gate's first case:
+
+```concrete
+fn f(x: Int) -> Int { return x + 100; }
+#[spec] fn global_f(y: Int) -> Int { return f(y); }
+#[spec] fn param_f(f: fn(Int) -> Int, y: Int) -> Int { return f(y); }
+```
+
+Before: both bodies extract to `.call "f" [.var "y"]`. After: `global_f` gives
+`.call "f"`, `param_f` gives `.applyVar "f"`.
+
+## Fix as shipped
+
+Two identities, and two namespaces to resolve them in:
+
+- `PExpr.call fn args` — `fn` names a definition. Answered by
+  `FnTable.globals` only.
+- `PExpr.applyVar binding args` — `binding` is a local. Answered by
+  `FnTable.callables` only.
+
+`FnTable` became a structure carrying both. It stayed *named* `FnTable` so the
+~96 `(fns : FnTable)` annotations and ~166 `eval fns …` call sites kept their
+meaning; only the three places that actually **apply** a table had to choose a
+namespace, which is where the choice belongs. There is deliberately no
+`CoeFun FnTable`: an implicit application would resolve to `globals`, silently
+reinstating the conflation.
+
+Carried through, per the task's list:
+
+- **extraction** — `cExprToPExprImpl` maps `.call (.indirect b)` to `.applyVar`
+  at both of its sites. It does not refuse them; refusing cost three real std
+  proofs and was reverted earlier for that reason.
+- **evaluation** — two `eval` arms over two namespaces.
+- **fingerprints** — already `call` vs `callptr`; now verified by gate rather
+  than by inspection.
+- **preservation statements** — `eval_call_reduces` takes a `globals`
+  hypothesis; new `eval_apply_var_reduces` takes a `callables` one; new
+  `apply_var_ignores_globals` proves an application of a local is *stuck* under
+  any global table, which is the formal refutation of this bug.
+- **reports** — `renderPExpr` prints `&binding(...)`, `renderPExprAsLean` emits
+  `.applyVar`, and both scaffold generators emit a two-namespace table with the
+  callable slot documented. A report that printed the two forms identically
+  would let a reader upgrade a representative-scoped theorem by eye.
+- **proof dependencies** — `collectCallsExpr` takes only `directName?`, so an
+  applied parameter contributes no edge; gated by asserting `param_f` depends on
+  nothing.
+- **table completeness** — `pexprCalls`/`fnTableComplete` for globals,
+  new `pexprApplies`/`callableTableComplete` for locals. Two collectors, not one
+  tagged list: a single list is what let one predicate check a parameter against
+  the global namespace. Kernel-checked `example`s for the three HOF specs assert
+  the callable namespace is complete AND that their global namespace is empty.
+
+## Regression
+
+`scripts/tests/check_proofcore_callable_identity.sh` (29 checks): same-spelling
+extraction to different nodes; distinct fingerprints; no dependency edge; both
+collectors in both directions; a global `f` failing to answer `.applyVar f`
+while answering `.call f`, and a callable `f` the reverse; the three theorems
+still present and now callable-scoped; the specs' global namespace empty; the
+report rendering distinct; no proof presenting its callback as arbitrary; and
+structural checks that both identities exist with no coercion between them.
+
+Mutations #31-#33: extraction collapsing back to `.call` (killed by the gate),
+`eval` resolving a local through `globals`, and the representative callback
+rebound as a global. The last two are killed by the Lean **kernel** rather than
+the gate — the three map theorems reduce to `⊢ False`, because `.applyVar f` is
+stuck when `f` is bound in the wrong namespace. The proofs are therefore
+themselves evidence for the separation, and the gate's structural assertions are
+an independent second line rather than the only one.

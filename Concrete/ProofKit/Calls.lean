@@ -16,7 +16,7 @@ namespace Concrete.Proof
     (`href`), for any `fns : FnTable`. The template for `rotr`/σ-style call
     reductions. -/
 theorem unary_call (fns : FnTable) (name : String) (body : PExpr) (specf : BitVec 32 → BitVec 32)
-    (hfn : fns name = some ⟨name, ["x"], body⟩)
+    (hfn : fns.globals name = some ⟨name, ["x"], body⟩)
     (href : ∀ (Y : BitVec 32) (f : Nat),
       eval fns (Env.empty.bind "x" (.int Y.toNat)) (f + 2) body = some (.int (specf Y).toNat))
     (X : BitVec 32) (env : Env) (xe : PExpr) (fuel : Nat)

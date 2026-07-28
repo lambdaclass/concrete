@@ -377,6 +377,41 @@ MUT_NEW+=("    .reg resolved -- MUTATION: fn reference emitted as a register")
 MUT_DESC+=("EmitSSA: fn reference no longer resolves to a global (R-0436)")
 gate_for_last "scripts/tests/check_fnptr_values.sh"
 
+# 31. ProofCore: an applied parameter extracts as a definition call (R-0442 / 061)
+# Restores bug 061 exactly: `.applyVar` collapses back into `.call`, so a
+# parameter named `f` and a definition named `f` become the same node and the
+# evaluator resolves the parameter through the global function table.
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("    some (.applyVar binding pargs)")
+MUT_NEW+=("    some (.call binding pargs) -- MUTATION: parameter application as a definition call")
+MUT_DESC+=("ProofCore: applied parameter extracts as a global call (bug 061)")
+gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
+
+# 32. Proof: an applied local resolves in the GLOBAL namespace (R-0442 / 061)
+# The other half. Extraction stays correct but `eval` looks the binding up among
+# definitions, so a global `f` answers an application of a parameter `f` — the
+# soundness hazard, in the evaluator rather than the extractor.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("    match fns.callables binding with")
+MUT_NEW+=("    match fns.globals binding with -- MUTATION: local resolved as a global")
+MUT_DESC+=("Proof: eval resolves an applied local through globals (bug 061)")
+gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
+
+# 33. Proof: the representative callback goes back into the global namespace
+# The state R-0442 found: the HOF specs' callback bound as a DEFINITION.
+# Measured outcome, better than expected: this and #32 are killed by the Lean
+# KERNEL, not by the gate — the three map theorems reduce to `⊢ False` because
+# `.applyVar f` is stuck when `f` lives in the wrong namespace. So the proofs
+# themselves are load-bearing evidence for the separation; the gate's structural
+# assertions are a second, independent line rather than the only one.
+# (A `KILLED (build)` is weak when a LINTER rejects the file; it is the strongest
+# possible signal when the kernel rejects the theorem.)
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("  FnTable.withCallables (fun _ => none) pureCoreCallables")
+MUT_NEW+=("  FnTable.withCallables pureCoreCallables (fun _ => none) -- MUTATION: callback as a global")
+MUT_DESC+=("Proof: representative callback bound as a global (bug 061)")
+gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

@@ -26,7 +26,7 @@ def addThreeExpr : PExpr :=
 
 /-- `add_three(x)` evaluates to `x + 3` for every integer `x`. -/
 theorem add_three_correct (x : Int) (fuel : Nat) :
-    eval (fun _ => none) (Env.empty.bind "x" (.int x)) (fuel + 1) addThreeExpr
+    eval FnTable.empty (Env.empty.bind "x" (.int x)) (fuel + 1) addThreeExpr
       = some (.int (x + 3)) := by
   simp [addThreeExpr, eval, Env.bind, evalBinOp]
 
@@ -40,7 +40,7 @@ def scaleByTwoExpr : PExpr :=
 
 /-- `scale_by_two(x)` evaluates to `x * 2` for every integer `x`. -/
 theorem scale_by_two_correct (x : Int) (fuel : Nat) :
-    eval (fun _ => none) (Env.empty.bind "x" (.int x)) (fuel + 1) scaleByTwoExpr
+    eval FnTable.empty (Env.empty.bind "x" (.int x)) (fuel + 1) scaleByTwoExpr
       = some (.int (x * 2)) := by
   simp [scaleByTwoExpr, eval, Env.bind, evalBinOp]
 
@@ -57,7 +57,7 @@ def putExpr : PExpr :=
 /-- Writing index 1 changes that cell and frames the rest (point proof over a
     concrete 4-element array): `[10,11,12,13][1 := 99] = [10,99,12,13]`. -/
 theorem put_writes_index_1_frames_rest (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       ((Env.empty.bind "a" (.array_ [.int 10, .int 11, .int 12, .int 13])).bind "v" (.int 99))
       (fuel + 3) putExpr
       = some (.array_ [.int 10, .int 99, .int 12, .int 13]) := by
@@ -83,7 +83,7 @@ def copy2Expr : PExpr :=
 
 /-- The copy loop faithfully copies a concrete two-element array. -/
 theorem copy2_copies_faithfully (fuel : Nat) :
-    eval (fun _ => none) (Env.empty.bind "src" (.array_ [.int 5, .int 7])) (fuel + 10) copy2Expr
+    eval FnTable.empty (Env.empty.bind "src" (.array_ [.int 5, .int 7])) (fuel + 10) copy2Expr
       = some (.array_ [.int 5, .int 7]) := by
   simp [copy2Expr, eval, evalBinOp, Env.bind,
         eval.evalAssigns, eval.evalElems, eval.lookupIndex]
@@ -108,7 +108,7 @@ def sum4Expr : PExpr :=
 
 /-- The fold computes the correct total on a concrete four-element array. -/
 theorem sum4_totals_concrete (fuel : Nat) :
-    eval (fun _ => none) (Env.empty.bind "a" (.array_ [.int 1, .int 2, .int 3, .int 4])) (fuel + 14) sum4Expr
+    eval FnTable.empty (Env.empty.bind "a" (.array_ [.int 1, .int 2, .int 3, .int 4])) (fuel + 14) sum4Expr
       = some (.int 10) := by
   simp [sum4Expr, eval, evalBinOp, Env.bind,
         eval.evalAssigns, eval.lookupIndex]
@@ -128,10 +128,18 @@ def incFn : PFnDef := { name := "inc", params := ["x"], body := incExpr }
 def dblFn : PFnDef := { name := "dbl", params := ["x"], body := dblExpr }
 
 /-- Function table the composition resolves its calls against. -/
-def combineFns : FnTable
+def combineFnsGlobals : String → Option PFnDef
   | "inc" => some incFn
   | "dbl" => some dblFn
   | _     => none
+
+def combineFns : FnTable := FnTable.ofGlobals combineFnsGlobals
+
+-- Keeps `simp only [eval, combineFns_globals, combineFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `combineFns`. The old `def combineFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem combineFns_globals : combineFns.globals = combineFnsGlobals := rfl
 
 /-- Spec = the extracted body of `combine`: `inc(x) + dbl(x)`. -/
 def combineExpr : PExpr :=
@@ -141,7 +149,7 @@ def combineExpr : PExpr :=
 theorem combine_correct (x : Int) (fuel : Nat) :
     eval combineFns (Env.empty.bind "x" (.int x)) (fuel + 5) combineExpr
       = some (.int ((x + 1) + (x * 2))) := by
-  simp [combineExpr, eval, eval.evalArgs, combineFns, incFn, incExpr,
+  simp [combineExpr, eval, eval.evalArgs, combineFns_globals, combineFnsGlobals, incFn, incExpr,
         dblFn, dblExpr, Env.bind, evalBinOp, bindArgs]
 
 /-! ## 6. Ghost-assisted proof
@@ -168,7 +176,7 @@ def ghostSumExpr : PExpr :=
 
 /-- The ghost-assisted loop sums `0 + 1 + 2 + 3 = 6` (point coverage). -/
 theorem ghost_sum_correct (fuel : Nat) :
-    eval (fun _ => none) Env.empty (fuel + 14) ghostSumExpr = some (.int 6) := by
+    eval FnTable.empty Env.empty (fuel + 14) ghostSumExpr = some (.int 6) := by
   simp [ghostSumExpr, eval, evalBinOp, Env.bind, eval.evalAssigns]
 
 end Examples.ProofPatterns.Proofs

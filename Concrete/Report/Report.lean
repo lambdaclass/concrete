@@ -1243,6 +1243,13 @@ private partial def renderPExpr : Proof.PExpr → String
   | .call fn args =>
     let argsStr := ", ".intercalate (args.map renderPExpr)
     s!"{fn}({argsStr})"
+  -- Rendered distinctly from `.call`: a report that spelled a parameter
+  -- application the same way as a definition call would let a reader upgrade a
+  -- representative-callback theorem to a universal one by eye. The `&` marks
+  -- the callee as a bound value, not a name in the program.
+  | .applyVar binding args =>
+    let argsStr := ", ".intercalate (args.map renderPExpr)
+    s!"&{binding}({argsStr})"
   | .structLit name fields =>
     let fieldsStr := ", ".intercalate (fields.map fun (fname, fexpr) =>
       s!"{fname}: {renderPExpr fexpr}")
@@ -1378,6 +1385,9 @@ private partial def renderPExprAsLean : Proof.PExpr → String
   | .call fn args =>
     let argsLean := args.map fun a => s!"({renderPExprAsLean a})"
     s!".call \"{fn}\" [{", ".intercalate argsLean}]"
+  | .applyVar binding args =>
+    let argsLean := args.map fun a => s!"({renderPExprAsLean a})"
+    s!".applyVar \"{binding}\" [{", ".intercalate argsLean}]"
   | .structLit name fields =>
     let fieldsLean := fields.map fun (fname, fexpr) =>
       s!"(\"{fname}\", {renderPExprAsLean fexpr})"
@@ -1440,7 +1450,18 @@ def leanStubsReport (pc : Concrete.ProofCore)
   let tableCases := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
     s!"  | \"{name}\" => some {name}Fn"
-  let tableStr := s!"def generatedFns : FnTable\n{"\n".intercalate tableCases}\n  | _ => none"
+  -- Emitted as an equation-compiled function wrapped in `FnTable.ofGlobals`, not
+  -- as a `def _ : FnTable | …` literal: `FnTable` is a two-namespace structure
+  -- since R-0442, and a bare pattern match no longer typechecks against it. The
+  -- wrapper also keeps `simp`'s equation lemmas available, which a structure
+  -- instance built from an anonymous match would not.
+  let tableStr :=
+    s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n" ++
+    s!"/-- Locally bound callables (fn-typed parameters). Applications of these\n" ++
+    s!"    extract to `.applyVar` and are answered ONLY here — a definition of the\n" ++
+    s!"    same name cannot satisfy them (R-0442). -/\n" ++
+    s!"def generatedFnsCallables : String → Option PFnDef := fun _ => none\n\n" ++
+    s!"def generatedFns : FnTable :=\n  FnTable.withCallables generatedFnsGlobals generatedFnsCallables"
   -- Build eval helpers
   let evalHelpers := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
@@ -2600,7 +2621,12 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"namespace Concrete.Proof.Generated.{name}\nopen Concrete.Proof\n\n",
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
       s!"def {name}Fn : PFnDef :=\n  \{ name := \"{name}\", params := {paramsList}, body := {name}Expr }\n\n",
-      s!"def fns : FnTable\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
+      s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
+      s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++
+      s!"    that is an `.applyVar` node and must be bound HERE, not above: a\n" ++
+      s!"    definition of the same name will not answer it (R-0442). -/\n" ++
+      s!"def fnsCallables : String → Option PFnDef := fun _ => none\n\n",
+      s!"def fns : FnTable := FnTable.withCallables fnsGlobals fnsCallables\n\n",
       s!"def eval_{name} {paramSig} (fuel : Nat := 20) : Option PVal :=\n  eval fns {paramBinds} fuel {name}Expr\n\n",
       "-- Obligations to discharge:\n", oblSection, "\n\n",
       s!"/-- TODO: replace `sorry` (RHS) with the spec, then prove it. -/\n",

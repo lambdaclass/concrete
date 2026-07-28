@@ -88,7 +88,7 @@ areas=""
 add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
 while IFS= read -r f; do
   case "$f" in
-    Concrete/Proof/*|Concrete/Report/*|proofs/*)  add proof; add evidence; add contract ;;
+    Concrete/Proof/*|Concrete/Report/*|proofs/*)  add proof; add evidence; add contract; add callable ;;
     Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
     # Semantics and the interpreter are where trap/overflow facts live, and the
     # interpreter is half of every differential. Without this line they matched

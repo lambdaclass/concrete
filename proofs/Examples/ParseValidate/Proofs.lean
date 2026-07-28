@@ -62,7 +62,7 @@ theorem validate_header_fields_success
             validatePayloadLenFn, validatePayloadLenExpr,
             validateTotalLenFn, validateTotalLenExpr,
             validateChecksumFn, validateChecksumExpr,
-            eval, eval.evalArgs, parseValidateFns,
+            eval, eval.evalArgs, parseValidateFns, parseValidateFnsGlobals,
             Env.bind, evalBinOp, bindArgs, BEq.beq]
 
 set_option linter.unusedSimpArgs false in
@@ -86,7 +86,7 @@ theorem parse_header_too_short
   have h_dec : decide (5 ≤ len) = false := decide_eq_false (by omega)
   simp [parseHeaderExpr, errResultExpr,
         validateTotalLenFn, validateTotalLenExpr,
-        eval, eval.evalArgs, eval.evalFields, parseValidateFns,
+        eval, eval.evalArgs, eval.evalFields, parseValidateFns_globals, parseValidateFnsGlobals,
         Env.bind, evalBinOp, bindArgs, BEq.beq, h_dec]
 
 -- The remaining failure-path theorems all share the same shape:
@@ -112,7 +112,7 @@ theorem parse_header_bad_version
         validateTotalLenFn, validateTotalLenExpr,
         validateVersionFn, validateVersionExpr,
         eval, eval.evalArgs, eval.evalFields, eval.lookupIndex,
-        parseValidateFns,
+        parseValidateFns_globals, parseValidateFnsGlobals,
         Env.bind, evalBinOp, bindArgs, BEq.beq, h_len_dec, h_v_dec]
 
 set_option linter.unusedSimpArgs false in
@@ -135,7 +135,7 @@ theorem parse_header_bad_type
         validateVersionFn, validateVersionExpr,
         validateMsgTypeFn, validateMsgTypeExpr,
         eval, eval.evalArgs, eval.evalFields, eval.lookupIndex,
-        parseValidateFns,
+        parseValidateFns_globals, parseValidateFnsGlobals,
         Env.bind, evalBinOp, bindArgs, BEq.beq, h_len_dec]
   -- Two sub-cases on whether t < 1 or t > 4.
   rcases h_t with h_lo | h_hi
@@ -164,7 +164,7 @@ theorem parse_header_payload_too_big
         validateMsgTypeFn, validateMsgTypeExpr,
         validatePayloadLenFn, validatePayloadLenExpr,
         eval, eval.evalArgs, eval.evalFields, eval.lookupIndex,
-        parseValidateFns,
+        parseValidateFns_globals, parseValidateFnsGlobals,
         Env.bind, evalBinOp, bindArgs, BEq.beq, h_len_dec]
   rcases h_plen with h_lo | h_hi
   · have hd0 : decide (0 ≤ plen) = false := decide_eq_false (by omega)
@@ -195,7 +195,7 @@ theorem parse_header_truncated
         validateMsgTypeFn, validateMsgTypeExpr,
         validatePayloadLenFn, validatePayloadLenExpr,
         eval, eval.evalArgs, eval.evalFields, eval.lookupIndex,
-        parseValidateFns,
+        parseValidateFns_globals, parseValidateFnsGlobals,
         Env.bind, evalBinOp, bindArgs, BEq.beq,
         h_len_dec, h_plen_lo_d, h_plen_hi_d, h_trunc_d]
 end Examples.ParseValidate.Proofs

@@ -104,6 +104,59 @@ stored/derived callback inference in R-0016. The unmerged H18 worktree and
 `.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
 of being treated as ambient backlog.
 
+### Completed Task R-0442
+
+_Bug 061 — the proof model spelled a parameter application and a definition call
+the same way. 2026-07-28._
+
+`PExpr.call "f" args` meant both "call the definition `f`" and "apply the
+fn-typed parameter `f`", and `eval` resolved both through the global `FnTable`.
+In the one place this project makes soundness claims, a parameter and a
+definition of the same spelling were the same thing.
+
+The bug was filed as latent, with "no reachable witness in std today". That was
+wrong, and the correction is the interesting part: the witness was already in the
+repository. `pureCoreFns` bound the representative callback `f` as a **global**,
+because the HOF specs applied their parameter as `.call "f"` — so
+`option_map_correct`, `result_map_correct` and `result_map_err_correct` were
+discharged by resolving a parameter application against a definition. The
+conflation was load-bearing in three shipped theorems. They remain true, and
+their scope was always recorded as `proof_coverage(representative)`; the
+mechanism by which Lean accepted them was the defect.
+
+Two identities, two namespaces: `PExpr.call fn` is answered by `FnTable.globals`
+only, `PExpr.applyVar binding` by `FnTable.callables` only. `FnTable` became a
+structure carrying both, and stayed *named* `FnTable` so ~96 annotations and ~166
+`eval fns …` call sites kept their meaning — only the three places that APPLY a
+table had to choose a namespace, which is where the choice belongs. No
+`CoeFun FnTable`: an implicit application would resolve to `globals`, silently
+reinstating the conflation. (The same reasoning retired `Coe String SCallee` in
+R-0436.)
+
+Carried through the whole list the task named: extraction (both sites, mapping
+indirect callees to `.applyVar` rather than refusing them — refusing cost three
+real proofs), evaluation, fingerprints (`call` vs `callptr`, now gated rather
+than inspected), preservation statements (`eval_apply_var_reduces`, plus
+`apply_var_ignores_globals` proving an applied local is stuck under any global
+table), reports (`&binding(...)`, `.applyVar`, and both scaffold generators
+emitting a documented two-namespace table), proof dependencies (an applied
+parameter contributes no edge), and per-form table completeness
+(`pexprApplies`/`callableTableComplete` beside `pexprCalls`/`fnTableComplete` —
+two collectors, because one tagged list is what let a single predicate check a
+parameter against the global namespace). Kernel-checked `example`s assert the
+three HOF specs' callable namespace is complete AND that their global namespace
+is empty; the latter is what makes a regression visible.
+
+Evidence: `scripts/tests/check_proofcore_callable_identity.sh` (29 checks),
+including the source-level witness that was said not to exist — one program
+where `f` is both a definition and a parameter name, extracting to `.call "f"`
+and `.applyVar "f"` respectively.
+
+Mutations #31-#33. The two that rebind resolution are killed by the Lean
+**kernel**, not the gate: the three map theorems reduce to `⊢ False` when the
+callback sits in the wrong namespace. The proofs are themselves evidence for the
+separation, which is a better outcome than the gate alone.
+
 ### Completed Task R-0436
 
 _Bug 056 — a function reference was a register name, and a call target was a

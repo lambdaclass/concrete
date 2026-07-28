@@ -38,8 +38,9 @@ partial def collectCallsExpr (e : CExpr) : List String :=
   match e with
   -- Only a direct callee names a definition. An indirect callee is a fn-typed
   -- binding, so its statically-known target set is empty — which is also why
-  -- extraction refuses such a body outright (see `cExprToPExprImpl`), rather
-  -- than letting a proof rest on a dependency closure that cannot be computed.
+  -- it contributes no dependency edge. Extraction keeps it as `PExpr.applyVar`
+  -- rather than refusing the body (which cost three real std proofs); the
+  -- identity is the binding, not a global name.
   | .call callee _ args _ =>
     callee.directName?.toList ++ args.foldl (fun acc a => acc ++ collectCallsExpr a) []
   | .binOp _ l r _ => collectCallsExpr l ++ collectCallsExpr r
@@ -565,6 +566,10 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
   | .letIn n v b => pexprFreeIn name v || (n != name && pexprFreeIn name b)
   | .ifThenElse c t e => pexprFreeIn name c || pexprFreeIn name t || pexprFreeIn name e
   | .call _ args => args.any (pexprFreeIn name)
+  -- The BINDING is itself a free occurrence: `f` in `f(x)` refers to the local
+  -- `f`, so a normalizer that thinks `f` is unused could eliminate the very let
+  -- that supplies it. `.call`'s name denotes a definition and is not free.
+  | .applyVar binding args => binding == name || args.any (pexprFreeIn name)
   | .structLit _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .enumLit _ _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .fieldAccess obj _ => pexprFreeIn name obj
@@ -665,6 +670,11 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     | _ => .ifThenElse c t e
   | .call fn args =>
     .call fn (args.map normalizePExpr)
+  -- Alpha-stripped like `.var`: the binding is a LOCAL name, so Elab's
+  -- `f` → `f.bN` renaming reaches it exactly as it reaches a variable
+  -- occurrence. A `.call` name is a definition and must stay verbatim.
+  | .applyVar binding args =>
+    .applyVar (stripAlpha binding) (args.map normalizePExpr)
   | .structLit name fields =>
     .structLit name (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
   | .enumLit enumName variant fields =>
@@ -790,17 +800,21 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
-  -- Indirect callee: applied as an UNINTERPRETED function named by its binding.
-  -- Refusing to extract these was too strong. The model does not need the
-  -- callee's definition — it needs an identity for the thing being applied, and
-  -- inside this body the parameter name IS that identity; the theorem quantifies
-  -- over it. Blocking instead cost std three real proofs (Option::map,
-  -- Result::map, Result::map_err), whose statements hold for ANY `f` precisely
-  -- because `f` is opaque. Bug 050's hazard was Mono RESOLVING such a name
-  -- against global definitions, which this does not do.
+  -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
+  -- not need the callee's definition — it needs an identity for the thing being
+  -- applied, and inside this body the parameter name IS that identity, which the
+  -- theorem quantifies over. Refusing to extract these was too strong: it cost
+  -- std three real proofs (Option::map, Result::map, Result::map_err), whose
+  -- statements hold for ANY `f` precisely because `f` is opaque.
+  --
+  -- Extracting them as `.call` was ALSO wrong (bug 061): a parameter named `f`
+  -- and a definition named `f` became the SAME node, so the evaluator resolved a
+  -- parameter application through the GLOBAL function table — a soundness hazard
+  -- in the one place soundness claims are made. `.applyVar` keeps the identity
+  -- local, answerable only by `FnTable.callables` (R-0442).
   | .call (.indirect binding) _ args _ => do
     let pargs ← cExprListToPExpr args
-    some (.call binding pargs)
+    some (.applyVar binding pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
@@ -1114,17 +1128,21 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
   | .call (.direct fn) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
-  -- Indirect callee: applied as an UNINTERPRETED function named by its binding.
-  -- Refusing to extract these was too strong. The model does not need the
-  -- callee's definition — it needs an identity for the thing being applied, and
-  -- inside this body the parameter name IS that identity; the theorem quantifies
-  -- over it. Blocking instead cost std three real proofs (Option::map,
-  -- Result::map, Result::map_err), whose statements hold for ANY `f` precisely
-  -- because `f` is opaque. Bug 050's hazard was Mono RESOLVING such a name
-  -- against global definitions, which this does not do.
+  -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
+  -- not need the callee's definition — it needs an identity for the thing being
+  -- applied, and inside this body the parameter name IS that identity, which the
+  -- theorem quantifies over. Refusing to extract these was too strong: it cost
+  -- std three real proofs (Option::map, Result::map, Result::map_err), whose
+  -- statements hold for ANY `f` precisely because `f` is opaque.
+  --
+  -- Extracting them as `.call` was ALSO wrong (bug 061): a parameter named `f`
+  -- and a definition named `f` became the SAME node, so the evaluator resolved a
+  -- parameter application through the GLOBAL function table — a soundness hazard
+  -- in the one place soundness claims are made. `.applyVar` keeps the identity
+  -- local, answerable only by `FnTable.callables` (R-0442).
   | .call (.indirect binding) _ args _ => do
     let pargs ← cExprListToPExpr args
-    some (.call binding pargs)
+    some (.applyVar binding pargs)
   | .structLit name _ fields _ => do
     let pfields ← cFieldsToPExpr fields
     some (.structLit name pfields)

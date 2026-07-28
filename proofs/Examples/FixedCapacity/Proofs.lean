@@ -39,7 +39,7 @@ theorem ring_contains_empty_correct
       (fuel + 10) ringContainsExpr
     = some (.int 0) := by
   simp [ringContainsExpr, eval, eval.evalWhileStep, eval.lookupField,
-        fixedCapacityFns, Env.bind, evalBinOp]
+        fixedCapacityFns_globals, fixedCapacityFnsGlobals, Env.bind, evalBinOp]
 
 set_option maxHeartbeats 2000000 in
 set_option linter.unusedSimpArgs false in
@@ -76,7 +76,7 @@ theorem ring_push_then_contains_correct
   simp (config := { maxSteps := 1000000 })
        [ringContainsExpr, eval, eval.evalWhileStep, eval.evalFields,
         eval.lookupField, eval.lookupIndex,
-        fixedCapacityFns, Env.bind, evalBinOp]
+        fixedCapacityFns, fixedCapacityFnsGlobals, Env.bind, evalBinOp]
 
 set_option linter.unusedSimpArgs false in
 /-- `ring_push` on the canonical empty RingBuf (head=0, count=0,
@@ -101,7 +101,7 @@ theorem ring_push_zero_correct (v : Int) (fuel : Nat) :
         , ("count", .int 1)
         ]) := by
   simp [ringPushExpr, eval, eval.evalFields, eval.lookupField,
-        eval.lookupIndex, fixedCapacityFns, Env.bind, evalBinOp,
+        eval.lookupIndex, fixedCapacityFns_globals, fixedCapacityFnsGlobals, Env.bind, evalBinOp,
         List.replicate, List.set]
 
 set_option linter.unusedSimpArgs false in
@@ -126,7 +126,7 @@ theorem compute_tag_zero_correct (rest : List PVal) (fuel : Nat) :
   -- fires the fall-through branch.
   simp [fcTagExpr,
         eval, eval.evalAssigns, eval.lookupField, eval.lookupIndex,
-        fixedCapacityFns, Env.bind, evalBinOp, List.replicate]
+        fixedCapacityFns_globals, fixedCapacityFnsGlobals, Env.bind, evalBinOp, List.replicate]
 
 set_option linter.unusedSimpArgs false in
 /-- `ring_new()` evaluates to the canonical empty RingBuf:
@@ -142,6 +142,6 @@ theorem ring_new_correct (fuel : Nat) :
         ]) := by
   simp [ringNewExpr,
         eval, eval.evalElems, eval.evalFields,
-        fixedCapacityFns, Env.bind,
+        fixedCapacityFns_globals, fixedCapacityFnsGlobals, Env.bind,
         List.replicate]
 end Examples.FixedCapacity.Proofs

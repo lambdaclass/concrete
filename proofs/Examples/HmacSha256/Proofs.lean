@@ -79,7 +79,7 @@ set_option linter.unusedSimpArgs false in
     first eval ↔ spec refinement; the word-level identity
     `(X∧Y) ⊕ ((X⊕1ⁿ)∧Z) = (X∧Y) ⊕ (¬X∧Z)` is closed by `bv_decide`. -/
 theorem ch_refines (X Y Z : BitVec 32) (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       (((Env.empty.bind "x" (.int X.toNat)).bind "y" (.int Y.toNat)).bind
         "z" (.int Z.toNat))
       (fuel + 1) chExpr
@@ -96,7 +96,7 @@ set_option linter.unusedSimpArgs false in
     coincide after the round-trip collapse — `bv_decide` discharges any
     residual (and is a no-op when `simp` already closes it). -/
 theorem maj_refines (X Y Z : BitVec 32) (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       (((Env.empty.bind "x" (.int X.toNat)).bind "y" (.int Y.toNat)).bind
         "z" (.int Z.toNat))
       (fuel + 1) majExpr
@@ -367,7 +367,7 @@ def sha256kExpr : PExpr := .arrayLit [.lit (.int 0x428a2f98), .lit (.int 0x71374
 -- `lenStoreS`, `sha256_hashExpr` (sha256_hash) relocated to `Concrete.Proof`
 -- (task #22, verbatim).
 
-def shaFns : FnTable
+def shaFnsGlobals : String → Option PFnDef
   | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
   | "ch"           => some ⟨"ch",           ["x", "y", "z"],    chExpr⟩
   | "maj"          => some ⟨"maj",          ["x", "y", "z"],    majExpr⟩
@@ -386,17 +386,25 @@ def shaFns : FnTable
   | "sha256_hash"        => some ⟨"sha256_hash",        ["data", "len"],      sha256_hashExpr⟩
   | _                   => none
 
+def shaFns : FnTable := FnTable.ofGlobals shaFnsGlobals
+
+-- Keeps `simp only [eval, shaFns_globals, shaFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `shaFns`. The old `def shaFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem shaFns_globals : shaFns.globals = shaFnsGlobals := rfl
+
 /-- Completeness: the unified table resolves every function
     `sha256_compress` reaches, directly (`block_to_words`,
     `sha256_schedule`, `sha256_k`, `sha256_round`) and transitively
     (`ch`/`maj`/`rotr` and the four sigmas). No call bottoms out at a
     missing callee. -/
 theorem shaFns_resolves_compress_calls :
-    (shaFns "block_to_words").isSome ∧ (shaFns "sha256_schedule").isSome ∧
-    (shaFns "sha256_k").isSome ∧ (shaFns "sha256_round").isSome ∧
-    (shaFns "ch").isSome ∧ (shaFns "maj").isSome ∧ (shaFns "rotr").isSome ∧
-    (shaFns "big_sigma0").isSome ∧ (shaFns "big_sigma1").isSome ∧
-    (shaFns "small_sigma0").isSome ∧ (shaFns "small_sigma1").isSome := by
+    (shaFnsGlobals "block_to_words").isSome ∧ (shaFnsGlobals "sha256_schedule").isSome ∧
+    (shaFnsGlobals "sha256_k").isSome ∧ (shaFnsGlobals "sha256_round").isSome ∧
+    (shaFnsGlobals "ch").isSome ∧ (shaFnsGlobals "maj").isSome ∧ (shaFnsGlobals "rotr").isSome ∧
+    (shaFnsGlobals "big_sigma0").isSome ∧ (shaFnsGlobals "big_sigma1").isSome ∧
+    (shaFnsGlobals "small_sigma0").isSome ∧ (shaFnsGlobals "small_sigma1").isSome := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> rfl
 
 /-- A call `rotr(xe, c)` where `xe` evaluates to `X` and the literal
@@ -408,7 +416,7 @@ theorem rotr_call (X : BitVec 32) (n : Nat) (c : Int) (hc : c = (n:Int)) (hn : n
     eval shaFns env (fuel + 2) (.call "rotr" [xe, .lit (.int c)])
       = some (.int (Sha256Spec.rotr X n).toNat) := by
   subst hc
-  simp only [eval, shaFns, eval.evalArgs, hx, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hx, bindArgs]
   exact rotr_refines shaFns X n hn fuel
 
 set_option linter.unusedSimpArgs false in
@@ -491,7 +499,7 @@ theorem round_refines (S0 S1 S2 S3 S4 S5 S6 S7 K W : BitVec 32) (fuel : Nat) :
     = some (.array_ ((Sha256Spec.round
         [S0, S1, S2, S3, S4, S5, S6, S7] K W).map (fun w => PVal.int w.toNat))) := by
   simp only [roundExpr, addwE, stateAt, eval, Env.bind, evalBinOp, eval.evalArgs,
-    eval.evalElems, eval.lookupIndex, bindArgs, shaFns, rotrExpr, chExpr, majExpr,
+    eval.evalElems, eval.lookupIndex, bindArgs, shaFns_globals, shaFnsGlobals, rotrExpr, chExpr, majExpr,
     bigSigma0Expr, bigSigma1Expr, Sha256Spec.round, Sha256Spec.ch, Sha256Spec.maj,
     Sha256Spec.bigSigma0, Sha256Spec.bigSigma1, Sha256Spec.rotr,
     beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
@@ -938,7 +946,7 @@ theorem round_call (s : List (BitVec 32)) (hs : s.length = 8) (K W : BitVec 32)
     (hwe : eval shaFns env (fuel + 8) we = some (.int W.toNat)) :
     eval shaFns env (fuel + 9) (.call "sha256_round" [se, ke, we])
       = some (.array_ ((Sha256Spec.round s K W).map (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hse, hke, hwe, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hse, hke, hwe, bindArgs]
   exact round_refines_list s hs K W fuel
 
 -- generic read of L.map enc at index j -> enc (L.getD j 0)
@@ -1116,20 +1124,20 @@ theorem block_to_words_call (b : Nat → BitVec 8) (env : Env) (be : PExpr) (fue
     eval shaFns env (fuel + 25) (.call "block_to_words" [be])
       = some (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map
           (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hbe, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hbe, bindArgs]
   exact block_to_words_refines_spec shaFns b fuel
 
 theorem schedule_call (wf : Nat → BitVec 32) (env : Env) (we : PExpr) (fuel : Nat)
     (hwe : eval shaFns env (fuel + 75) we = some (w16arr wf)) :
     eval shaFns env (fuel + 76) (.call "sha256_schedule" [we])
       = some (.array_ ((Sha256Spec.expandSchedule (w16of wf)).map (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hwe, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hwe, bindArgs]
   exact sha256_schedule_refines_spec wf fuel
 
 theorem sha256_k_call (env : Env) (fuel : Nat) :
     eval shaFns env (fuel + 3) (.call "sha256_k" [])
       = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, bindArgs]
   exact sha256_k_refines Env.empty fuel
 
 -- ==================================================================
@@ -1368,7 +1376,7 @@ theorem block_to_words_at_call (bf : Nat → BitVec 8) (off : Nat) (hoff : off +
     (hoffe : eval shaFns env (fuel + 24) offE = some (.int (off:Int))) :
     eval shaFns env (fuel + 25) (.call "block_to_words_at" [bufE, offE])
       = some (.array_ ((Sha256Spec.blockToWords (sliceAt bf off)).map (fun w => PVal.int w.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hbuf, hoffe, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hbuf, hoffe, bindArgs]
   exact block_to_words_at_refines_spec shaFns bf off hoff fuel
 
 -- ==================================================================
@@ -1604,7 +1612,7 @@ theorem sha256_compress_at_call (state0 : List (BitVec 32)) (h0 : state0.length 
     (hoffe : eval shaFns env (fuel + 78) offE = some (.int (off:Int))) :
     eval shaFns env (fuel + 79) (.call "sha256_compress_at" [stateE, bufE, offE])
       = some (.array_ ((Sha256Spec.compress state0 (sliceAt bf off)).map (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hstate, hbuf, hoffe, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hstate, hbuf, hoffe, bindArgs]
   exact sha256_compress_at_refines_spec state0 h0 bf off hoff fuel
 
 -- ---- multi-block hash loop ----
@@ -1920,7 +1928,7 @@ theorem sdiv64_bridge (L : Nat) (hL : L ≤ 375) :
 theorem sha256_init_call (env : Env) (fuel : Nat) :
     eval shaFns env (fuel + 3) (.call "sha256_init" [])
       = some (.array_ (Sha256Spec.initState.map (fun x => PVal.int x.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, bindArgs]
   simp [eval, sha256_initExpr, eval.evalElems, Sha256Spec.initState]
 
 theorem state_to_bytes_call (state : List Sha256Spec.W) (h8 : state.length = 8) (env : Env)
@@ -1928,7 +1936,7 @@ theorem state_to_bytes_call (state : List Sha256Spec.W) (h8 : state.length = 8) 
     (hstate : eval shaFns env (fuel + 16) stateE = some (.array_ (state.map (fun x => PVal.int x.toNat)))) :
     eval shaFns env (fuel + 17) (.call "state_to_bytes" [stateE])
       = some (.array_ ((Sha256Spec.stateToBytes state).map (fun b => PVal.int b.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hstate, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hstate, bindArgs]
   exact state_to_bytes_refines_spec Env.empty state h8 fuel
 
 
@@ -2213,7 +2221,7 @@ theorem sha256_hash_call (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375
     (hlenv : eval shaFns env (fuel + 91 + (len + 9 + 63) / 64) lenE = some (.int (len : Int))) :
     eval shaFns env ((fuel + 91 + (len + 9 + 63) / 64) + 1) (.call "sha256_hash" [dataE, lenE])
       = some (.array_ ((Sha256Spec.hash ((List.range len).map df)).map (fun b => PVal.int b.toNat))) := by
-  simp only [eval, shaFns, eval.evalArgs, hdata, hlenv, bindArgs]
+  simp only [eval, shaFns_globals, shaFnsGlobals, eval.evalArgs, hdata, hlenv, bindArgs]
   exact sha256_hash_refines_spec df len hlen hz _ fuel (by simp [Env.bind]) (by simp [Env.bind])
 
 -- ==================================================================
@@ -2587,7 +2595,7 @@ theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat
     body-fingerprint mechanism on the candidate's simplest function,
     the foundation the compression-pipeline theorems build on. -/
 theorem sha256_init_correct (fuel : Nat) :
-    eval (fun _ => none) Env.empty (fuel + 2) sha256_initExpr
+    eval FnTable.empty Env.empty (fuel + 2) sha256_initExpr
       = some (.array_
           [ .int 1779033703, .int 3144134277, .int 1013904242, .int 2773480762
           , .int 1359893119, .int 2600822924, .int 528734635, .int 1541459225 ]) := by
@@ -2600,7 +2608,7 @@ theorem sha256_init_correct (fuel : Nat) :
     (`bitand`/`bitxor` at width 32); sha256_init had no PBinOp
     dependency, this one bottoms out in the BitVec eval rules. -/
 theorem ch_selects_high (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       (((Env.empty.bind "x" (.int 4294967295)).bind "y" (.int 305419896)).bind
         "z" (.int 2596069104))
       (fuel + 1) chExpr

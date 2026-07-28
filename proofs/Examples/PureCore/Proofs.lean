@@ -77,7 +77,7 @@ theorem option_map_correct (v : Int) (fuel : Nat) :
     (eval pureCoreFns (Env.empty.bind "self" (.enum_ "Option" "None" []))
       (fuel + 6) optionMapExpr = some (.enum_ "Option" "None" [])) := by
   constructor <;>
-    simp [optionMapExpr, pureCoreFns, pureCoreReprFFn, pureCoreReprFExpr,
+    simp [optionMapExpr, pureCoreFns, pureCoreCallables, pureCoreReprFFn, pureCoreReprFExpr,
           eval, eval.evalFields, eval.evalArms, eval.matchPat,
           eval.bindEnumFields, eval.evalArgs, bindArgs,
           Env.bind, evalBinOp, BEq.beq]
@@ -94,7 +94,7 @@ theorem result_map_correct (v e : Int) (fuel : Nat) :
       (fuel + 6) resultMapExpr
       = some (.enum_ "Result" "Err" [("error", .int e)])) := by
   constructor <;>
-    simp [resultMapExpr, pureCoreFns, pureCoreReprFFn, pureCoreReprFExpr,
+    simp [resultMapExpr, pureCoreFns, pureCoreCallables, pureCoreReprFFn, pureCoreReprFExpr,
           eval, eval.evalFields, eval.evalArms, eval.matchPat,
           eval.bindEnumFields, eval.evalArgs, bindArgs,
           Env.bind, evalBinOp, BEq.beq]
@@ -111,7 +111,7 @@ theorem result_map_err_correct (v e : Int) (fuel : Nat) :
       (fuel + 6) resultMapErrExpr
       = some (.enum_ "Result" "Err" [("error", .int (e * 3 + 1))])) := by
   constructor <;>
-    simp [resultMapErrExpr, pureCoreFns, pureCoreReprFFn, pureCoreReprFExpr,
+    simp [resultMapErrExpr, pureCoreFns, pureCoreCallables, pureCoreReprFFn, pureCoreReprFExpr,
           eval, eval.evalFields, eval.evalArms, eval.matchPat,
           eval.bindEnumFields, eval.evalArgs, bindArgs,
           Env.bind, evalBinOp, BEq.beq]

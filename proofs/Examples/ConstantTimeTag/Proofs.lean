@@ -78,7 +78,7 @@ theorem ct_compare_same_tag_correct
   -- rewrite rules.
   simp [ctCompareExpr,
         eval, eval.evalAssigns, eval.lookupIndex,
-        ctTagFns, Env.bind, evalBinOp,
+        ctTagFns_globals, ctTagFnsGlobals, Env.bind, evalBinOp,
         BitVec.xor_self, BitVec.zero_or]
 
 set_option maxHeartbeats 2000000 in
@@ -116,7 +116,7 @@ theorem ct_compare_equal_zeros_correct (fuel : Nat) :
     = some (.int 1) := by
   simp [ctCompareExpr,
         eval, eval.evalAssigns, eval.lookupIndex,
-        ctTagFns, Env.bind, evalBinOp, List.replicate]
+        ctTagFns_globals, ctTagFnsGlobals, Env.bind, evalBinOp, List.replicate]
 
 /-- `Nat` bitwise fact: xor is zero iff the operands are equal. Proved by bit
     extensionality (`Nat.eq_of_testBit_eq` + `Nat.testBit_xor`); no Mathlib. -/

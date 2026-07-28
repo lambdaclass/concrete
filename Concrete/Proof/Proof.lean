@@ -205,7 +205,21 @@ inductive PExpr where
   | binOp (op : PBinOp) (lhs rhs : PExpr)
   | letIn (name : String) (val body : PExpr)
   | ifThenElse (cond thenBr elseBr : PExpr)
+  /-- `f(args)` where `f` NAMES A DEFINITION. -/
   | call (fn : String) (args : List PExpr)
+  /-- `f(args)` where `f` is a LOCALLY BOUND callable — a fn-typed parameter or
+      binding. Spelled identically in source, and until R-0442 extracted to the
+      same `.call` node, so the evaluator resolved a parameter application
+      through the global function table (bug 061). A definition named `f` and a
+      parameter named `f` were the same thing to the model, which is a soundness
+      hazard in the one place soundness claims are made.
+
+      Kept distinct from `.call` rather than distinguished by a naming
+      convention: the identity of the thing being applied is its binding, and a
+      binding is not a global name (PRINCIPLES 12). Resolution goes through
+      `FnTable.callables`, never `FnTable.globals`, so no definition can satisfy
+      an application of a parameter. -/
+  | applyVar (binding : String) (args : List PExpr)
   | structLit (name : String) (fields : List (String × PExpr))
   | fieldAccess (obj : PExpr) (field : String)
   | enumLit (enumName variant : String) (fields : List (String × PExpr))
@@ -298,8 +312,50 @@ structure PFnDef where
 /-- An environment maps variable names to values. -/
 abbrev Env := String → Option PVal
 
-/-- A function table maps function names to definitions. -/
-abbrev FnTable := String → Option PFnDef
+/-- Resolution environment for applications. TWO namespaces, deliberately not
+one: `globals` answers `.call` (a name that denotes a definition) and
+`callables` answers `.applyVar` (a locally bound fn value). A single table made
+`f` the parameter and `f` the definition indistinguishable — bug 061.
+
+It stays a structure of functions rather than gaining an `eval` parameter so the
+~166 existing `eval fns …` call sites and ~96 `(fns : FnTable)` annotations keep
+their meaning; only the three places that APPLY the table had to choose a
+namespace, which is exactly where the choice belongs. -/
+structure FnTable where
+  globals : String → Option PFnDef
+  callables : String → Option PFnDef := fun _ => none
+
+/-- No definitions and no callables. `eval FnTable.empty …` is the shape for a
+closed expression that applies nothing. -/
+def FnTable.empty : FnTable := { globals := fun _ => none }
+
+@[simp] theorem FnTable.globals_empty : FnTable.empty.globals = (fun _ => none) := rfl
+@[simp] theorem FnTable.callables_empty : FnTable.empty.callables = (fun _ => none) := rfl
+
+/-- A table of definitions only — no locally bound callables. The common case. -/
+def FnTable.ofGlobals (g : String → Option PFnDef) : FnTable := { globals := g }
+
+/-- A table binding locally bound callables as well. Used by theorems about
+higher-order specs, where the callback is the thing under discussion. -/
+def FnTable.withCallables (g c : String → Option PFnDef) : FnTable :=
+  { globals := g, callables := c }
+
+-- Existing proofs `simp`-unfold `eval`, which now projects a field; without
+-- these the projections stay stuck and every arithmetic proof downstream fails.
+@[simp] theorem FnTable.globals_ofGlobals (g) :
+    (FnTable.ofGlobals g).globals = g := rfl
+@[simp] theorem FnTable.callables_ofGlobals (g) :
+    (FnTable.ofGlobals g).callables = (fun _ => none) := rfl
+@[simp] theorem FnTable.globals_withCallables (g c) :
+    (FnTable.withCallables g c).globals = g := rfl
+@[simp] theorem FnTable.callables_withCallables (g c) :
+    (FnTable.withCallables g c).callables = c := rfl
+
+-- Deliberately NO `CoeFun FnTable`. An implicit application would resolve to
+-- `globals`, so a site that ought to consult `callables` would silently get the
+-- global namespace — reinstating the conflation this type exists to remove. The
+-- three sites that apply a table each name their namespace.
+
 
 def Env.empty : Env := fun _ => none
 
@@ -600,7 +656,22 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     | some (.bool false) => eval fns env fuel elseBr
     | _ => none
   | fuel + 1, .call fn args =>
-    match fns fn with
+    -- A definition, resolved in the GLOBAL namespace only.
+    match fns.globals fn with
+    | none => none
+    | some fdef =>
+      match evalArgs fns env fuel args with
+      | none => none
+      | some argVals =>
+        match bindArgs Env.empty fdef.params argVals with
+        | none => none
+        | some callEnv => eval fns callEnv fuel fdef.body
+  | fuel + 1, .applyVar binding args =>
+    -- A locally bound callable, resolved in the CALLABLE namespace only. A
+    -- definition spelled the same way cannot answer here, which is the whole
+    -- point: `Option::map`'s theorem is about the callback bound as `f`, not
+    -- about whatever global happens to share the name.
+    match fns.callables binding with
     | none => none
     | some fdef =>
       match evalArgs fns env fuel args with
@@ -783,10 +854,18 @@ def checkLengthFn : PFnDef :=
   { name := "check_length", params := ["len"], body := checkLengthExpr }
 
 /-- Function table for proofs. -/
-def proofFns : FnTable
+def proofFnsGlobals : String → Option PFnDef
   | "parse_byte" => some parseByteFn
   | "check_length" => some checkLengthFn
   | _ => none
+
+def proofFns : FnTable := FnTable.ofGlobals proofFnsGlobals
+
+-- Keeps `simp only [eval, proofFns_globals, proofFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `proofFns`. The old `def proofFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem proofFns_globals : proofFns.globals = proofFnsGlobals := rfl
 
 -- ============================================================
 -- Proofs
@@ -947,7 +1026,7 @@ theorem validate_rejects_short (data len : Int) (h : len < 10) (fuel : Nat) :
       (fuel + 5) validateGuardExpr
     = some (.int 1) := by
   have hd : decide (len < 10) = true := decide_eq_true h
-  simp [validateGuardExpr, eval, eval.evalArgs, proofFns, checkLengthFn,
+  simp [validateGuardExpr, eval, eval.evalArgs, proofFns_globals, proofFnsGlobals, checkLengthFn,
         checkLengthExpr, Env.bind, evalBinOp, bindArgs, hd]
 
 -- ============================================================
@@ -990,11 +1069,19 @@ def decodeHeaderFn : PFnDef :=
   { name := "decode_header", params := ["data", "len"], body := decodeHeaderExpr }
 
 /-- Extended function table including decode_header. -/
-def proofFnsExt : FnTable
+def proofFnsExtGlobals : String → Option PFnDef
   | "parse_byte" => some parseByteFn
   | "check_length" => some checkLengthFn
   | "decode_header" => some decodeHeaderFn
   | _ => none
+
+def proofFnsExt : FnTable := FnTable.ofGlobals proofFnsExtGlobals
+
+-- Keeps `simp only [eval, proofFnsExt_globals, proofFnsExtGlobals]` working WITHOUT delta-unfolding
+-- the bare `proofFnsExt`. The old `def proofFnsExt : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem proofFnsExt_globals : proofFnsExt.globals = proofFnsExtGlobals := rfl
 
 /-- Helper: evaluate decode_header with given inputs. -/
 def evalDecodeHeader (data len : Int) (fuel : Nat) : Option PVal :=
@@ -1014,7 +1101,7 @@ theorem decode_header_rejects_short (data len : Int) (h : len < 10) (fuel : Nat)
       (fuel + 6) decodeHeaderExpr
     = some (.int 1) := by
   have hd : decide (len < 10) = true := decide_eq_true h
-  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt, checkLengthFn,
+  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt_globals, proofFnsExtGlobals, checkLengthFn,
         checkLengthExpr, Env.bind, evalBinOp, bindArgs, hd]
 
 /-- 2a. Version rejection (too low): version < 1 returns error 2.
@@ -1027,7 +1114,7 @@ theorem decode_header_rejects_low_version
   have hlen' : decide (len < 10) = false := decide_eq_false (by omega)
   -- simp reduces `data + 0` to `data`, so the remaining decide is on `data < 1`
   have hver' : decide (data < 1) = true := decide_eq_true hver
-  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt, checkLengthFn,
+  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt_globals, proofFnsExtGlobals, checkLengthFn,
         checkLengthExpr, parseByteFn, parseByteExpr, Env.bind, evalBinOp,
         bindArgs, hlen', hver']
 
@@ -1041,7 +1128,7 @@ theorem decode_header_rejects_high_version
   -- After simp: version checks become `decide (data < 1)` and `decide (2 < data)`
   have hver_low : decide (data < 1) = false := decide_eq_false (by omega)
   have hver_high : decide (2 < data) = true := decide_eq_true (by omega)
-  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt, checkLengthFn,
+  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt_globals, proofFnsExtGlobals, checkLengthFn,
         checkLengthExpr, parseByteFn, parseByteExpr, Env.bind, evalBinOp,
         bindArgs, hlen', hver_low, hver_high]
 
@@ -1057,7 +1144,7 @@ theorem decode_header_rejects_overflow
   have hver_low : decide (data < 1) = false := decide_eq_false (by omega)
   have hver_high : decide (2 < data) = false := decide_eq_false (by omega)
   have hov : decide (len - 10 < data + 1) = true := decide_eq_true (by omega)
-  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt, checkLengthFn,
+  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt_globals, proofFnsExtGlobals, checkLengthFn,
         checkLengthExpr, parseByteFn, parseByteExpr, Env.bind, evalBinOp,
         bindArgs, hlen', hver_low, hver_high, hov]
 
@@ -1073,7 +1160,7 @@ theorem decode_header_valid
   have hver_low : decide (data < 1) = false := decide_eq_false (by omega)
   have hver_high : decide (2 < data) = false := decide_eq_false (by omega)
   have hov : decide (len - 10 < data + 1) = false := decide_eq_false (by omega)
-  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt, checkLengthFn,
+  simp [decodeHeaderExpr, eval, eval.evalArgs, proofFnsExt_globals, proofFnsExtGlobals, checkLengthFn,
         checkLengthExpr, parseByteFn, parseByteExpr, Env.bind, evalBinOp,
         bindArgs, hlen', hver_low, hver_high, hov]
 
@@ -1147,12 +1234,20 @@ def verifyMessageFn : PFnDef :=
     body := verifyMessageExpr }
 
 /-- Function table for crypto verification proofs. -/
-def cryptoFns : FnTable
+def cryptoFnsGlobals : String → Option PFnDef
   | "compute_tag" => some computeTagFn
   | "verify_tag" => some verifyTagFn
   | "check_nonce" => some checkNonceFn
   | "verify_message" => some verifyMessageFn
   | _ => none
+
+def cryptoFns : FnTable := FnTable.ofGlobals cryptoFnsGlobals
+
+-- Keeps `simp only [eval, cryptoFns_globals, cryptoFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `cryptoFns`. The old `def cryptoFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem cryptoFns_globals : cryptoFns.globals = cryptoFnsGlobals := rfl
 
 -- Evaluation helpers
 
@@ -1260,13 +1355,21 @@ def validateHeaderFn : PFnDef :=
     body := validateHeaderExpr }
 
 /-- Function table for ELF header validator proofs. -/
-def elfFns : FnTable
+def elfFnsGlobals : String → Option PFnDef
   | "check_magic"   => some checkMagicFn
   | "check_class"   => some checkClassFn
   | "check_data"    => some checkDataFn
   | "check_version" => some checkVersionFn
   | "validate_header" => some validateHeaderFn
   | _ => none
+
+def elfFns : FnTable := FnTable.ofGlobals elfFnsGlobals
+
+-- Keeps `simp only [eval, elfFns_globals, elfFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `elfFns`. The old `def elfFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem elfFns_globals : elfFns.globals = elfFnsGlobals := rfl
 
 -- Concrete test cases
 #eval eval elfFns
@@ -1475,7 +1578,7 @@ def parseHeaderFn : PFnDef :=
   { name := "parse_header", params := ["data", "len"], body := parseHeaderExpr }
 
 /-- Function table for parse_validate proofs. -/
-def parseValidateFns : FnTable
+def parseValidateFnsGlobals : String → Option PFnDef
   | "validate_version" => some validateVersionFn
   | "validate_msg_type" => some validateMsgTypeFn
   | "validate_payload_len" => some validatePayloadLenFn
@@ -1486,11 +1589,19 @@ def parseValidateFns : FnTable
   | "parse_header" => some parseHeaderFn
   | _ => none
 
+def parseValidateFns : FnTable := FnTable.ofGlobals parseValidateFnsGlobals
+
+-- Keeps `simp only [eval, parseValidateFns_globals, parseValidateFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `parseValidateFns`. The old `def parseValidateFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem parseValidateFns_globals : parseValidateFns.globals = parseValidateFnsGlobals := rfl
+
 -- NOTE: the `parse_validate` proof theorems (validate_version_correct,
 -- validate_header_fields_success, parse_header_too_short, and the four
 -- parse_header failure-path theorems) were moved OUT of this namespace into
 -- `Examples.ParseValidate.Proofs` (namespace `Examples.ParseValidate.Proofs`).
--- Their registered spec PExprs + eval scaffolding (parseValidateFns, *Fn, *Expr) stay here.
+-- Their registered spec PExprs + eval scaffolding (parseValidateFns, parseValidateFnsGlobals, *Fn, *Expr) stay here.
 
 -- ============================================================
 -- fixed_capacity — first attached theorem (bar #1 for the active
@@ -1623,12 +1734,20 @@ def ringContainsFn : PFnDef :=
 
 /-- Function table for fixed_capacity proofs.  Each new proof
     extends this table with the function it targets. -/
-def fixedCapacityFns : FnTable
+def fixedCapacityFnsGlobals : String → Option PFnDef
   | "ring_new"      => some ringNewFn
   | "compute_tag"   => some fcTagFn
   | "ring_push"     => some ringPushFn
   | "ring_contains" => some ringContainsFn
   | _               => none
+
+def fixedCapacityFns : FnTable := FnTable.ofGlobals fixedCapacityFnsGlobals
+
+-- Keeps `simp only [eval, fixedCapacityFns_globals, fixedCapacityFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `fixedCapacityFns`. The old `def fixedCapacityFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem fixedCapacityFns_globals : fixedCapacityFns.globals = fixedCapacityFnsGlobals := rfl
 
 -- ============================================================
 -- while_step lemma surface (Phase 4 item 1 follow-through)
@@ -1790,9 +1909,17 @@ def ctCompareFn : PFnDef :=
   { name := "ct_compare", params := ["a", "b"], body := ctCompareExpr }
 
 /-- Function table for constant_time_tag proofs. -/
-def ctTagFns : FnTable
+def ctTagFnsGlobals : String → Option PFnDef
   | "ct_compare" => some ctCompareFn
   | _            => none
+
+def ctTagFns : FnTable := FnTable.ofGlobals ctTagFnsGlobals
+
+-- Keeps `simp only [eval, ctTagFns_globals, ctTagFnsGlobals]` working WITHOUT delta-unfolding
+-- the bare `ctTagFns`. The old `def ctTagFns : FnTable | "x" => …` produced equation lemmas
+-- that rewrote only APPLIED occurrences; a plain def unfolds everywhere, which
+-- broke `exact`s whose statements mention the table by name.
+@[simp] theorem ctTagFns_globals : ctTagFns.globals = ctTagFnsGlobals := rfl
 
 -- NOTE: the constant_time_tag proof theorems + bit-helper lemmas were moved OUT
 -- into `Examples.ConstantTimeTag.Proofs`. The ctCompareExpr spec + ctTagFns stay here.
@@ -2156,14 +2283,14 @@ def optionUnwrapOrExpr : PExpr :=
 def optionMapExpr : PExpr :=
   .match_ (.var "self")
     [ (.enumPat "Option" "Some" ["value"],
-        .enumLit "Option" "Some" [("value", .call "f" [.var "value"])])
+        .enumLit "Option" "Some" [("value", .applyVar "f" [.var "value"])])
     , (.enumPat "Option" "None" [], .enumLit "Option" "None" []) ]
 
 /-- Extracted spec for `result.map`. -/
 def resultMapExpr : PExpr :=
   .match_ (.var "self")
     [ (.enumPat "Result" "Ok" ["value"],
-        .enumLit "Result" "Ok" [("value", .call "f" [.var "value"])])
+        .enumLit "Result" "Ok" [("value", .applyVar "f" [.var "value"])])
     , (.enumPat "Result" "Err" ["error"],
         .enumLit "Result" "Err" [("error", .var "error")]) ]
 
@@ -2173,7 +2300,7 @@ def resultMapErrExpr : PExpr :=
     [ (.enumPat "Result" "Ok" ["value"],
         .enumLit "Result" "Ok" [("value", .var "value")])
     , (.enumPat "Result" "Err" ["error"],
-        .enumLit "Result" "Err" [("error", .call "f" [.var "error"])]) ]
+        .enumLit "Result" "Err" [("error", .applyVar "f" [.var "error"])]) ]
 
 /-- Representative callback for the HOF laws: `f(x) = x * 3 + 1` — injective
     enough that a mapped payload is visibly transformed. The map theorems are
@@ -2186,11 +2313,21 @@ def pureCoreReprFExpr : PExpr :=
 def pureCoreReprFFn : PFnDef :=
   { name := "f", params := ["x"], body := pureCoreReprFExpr }
 
-/-- Fn table for the pure-core specs: binds the representative callback `f`
-    (the HOF specs call their fn-pointer parameter by name). -/
-def pureCoreFns : FnTable
+/-- Fn table for the pure-core specs. The representative callback `f` is bound
+    as a CALLABLE, not a global: the HOF specs apply a fn-pointer PARAMETER, and
+    after R-0442 that is an `.applyVar` node which only `callables` can answer.
+    Binding it under `globals` (as this did before) is precisely bug 061 — it let
+    a parameter application be satisfied by a definition of the same name, in the
+    one place where soundness claims are made.
+
+    `globals` is deliberately empty here: these specs call no definitions, and an
+    empty global namespace makes that checkable rather than incidental. -/
+def pureCoreCallables : String → Option PFnDef
   | "f" => some pureCoreReprFFn
   | _ => none
+
+def pureCoreFns : FnTable :=
+  FnTable.withCallables (fun _ => none) pureCoreCallables
 
 /-- Extracted spec shared by `NonZeroU32/NonZeroU64/Port::try_new`
     (std/src/numeric.con): zero is rejected, anything else wraps. The newtype
