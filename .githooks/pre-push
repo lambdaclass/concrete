@@ -86,9 +86,21 @@ bash scripts/tests/run_fast_surface_gates.sh || {
 # one costs a red main and a CI round-trip.
 areas=""
 add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
+# Whole CI JOBS to run, for areas where a name-substring filter is not
+# trustworthy. `proof` selects 6 gates by name; the "Proof evidence gate" job
+# runs 40, and the one that broke on R-0442
+# (check_operational_vc_auto_discharge.sh, which typechecks Lean fixtures
+# against the Proof API) has no "proof" in its name. The workflow already
+# declares which gates belong to which job — deriving the set from the job is
+# one source instead of a naming convention.
+jobs_to_run=""
+addjob() { case "$jobs_to_run" in *"|$1|"*) ;; *) jobs_to_run="$jobs_to_run|$1|" ;; esac; }
 while IFS= read -r f; do
   case "$f" in
-    Concrete/Proof/*|Concrete/Report/*|proofs/*)  add proof; add evidence; add contract; add callable ;;
+    # A Proof/Report/proofs change runs the whole evidence job, not a guess at
+    # gate names: these touch a Lean API that .lean FIXTURES depend on, and
+    # `make build` does not typecheck those fixtures.
+    Concrete/Proof/*|Concrete/Report/*|proofs/*)  addjob "Proof evidence gate" ;;
     Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
     # Semantics and the interpreter are where trap/overflow facts live, and the
     # interpreter is half of every differential. Without this line they matched
@@ -106,9 +118,23 @@ while IFS= read -r f; do
   esac
 done <<< "$changed"
 
+CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
+JOBS_N=$(( CORES > 8 ? 8 : CORES ))
+
+if [ -n "$jobs_to_run" ]; then
+  # while-read, not `for j in $(...)`: CI job names contain SPACES, so word
+  # splitting would turn "Proof evidence gate" into three bogus job names and
+  # every one of them would fail to match — a loop that appears to run and
+  # checks nothing.
+  while IFS= read -r j; do
+    [ -z "$j" ] && continue
+    echo "pre-push: all gates in CI job '$j'"
+    JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh --job "$j" || {
+      echo "pre-push: GATES FAILED in CI job '$j' — fix, or bypass deliberately." >&2; exit 1; }
+  done <<< "$(printf '%s' "$jobs_to_run" | sed 's/^|//; s/|$//; s/||/\n/g')"
+fi
+
 if [ -n "$areas" ]; then
-  CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
-  JOBS_N=$(( CORES > 8 ? 8 : CORES ))
   for a in $areas; do
     echo "pre-push: gates matching '$a'"
     JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh "$a" || {

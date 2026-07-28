@@ -19,6 +19,15 @@
 # a pre-push step would dirty the working tree it is meant to protect.
 #
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
+#        scripts/tests/run_ci_gates_local.sh --job "<CI job name substring>"
+#
+# `--job` selects every gate declared inside one CI JOB, instead of guessing at
+# gate names. Filtering by name substring is itself a fact restated where it can
+# drift: the workflow already says which gates belong to which job, and a
+# name filter re-derives that by convention. `proof` selects 6 gates, but the
+# "Proof evidence gate" job runs 40 — including `check_operational_vc_auto_discharge.sh`,
+# whose NAME contains no "proof". R-0442 changed a Proof-layer API, the hook ran
+# the 6, and the 40th broke a Lean fixture that only CI typechecks.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -26,6 +35,11 @@ cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"
 [ -x ".lake/build/bin/concrete" ] || { echo "error: build first" >&2; exit 2; }
 FILTER="${1:-}"
+JOB=""
+if [ "$FILTER" = "--job" ]; then
+  JOB="${2:-}"; FILTER=""
+  [ -n "$JOB" ] || { echo "error: --job needs a CI job name substring" >&2; exit 2; }
+fi
 
 # The nightly fuzz steps derive SEED from the date in CI; the extracted fuzz
 # commands reference "$SEED", which would trip `set -u` here. Mirror CI.
@@ -38,8 +52,25 @@ SEED="${SEED:-$(date -u +%Y%m%d)}"
 JOBS="${JOBS:-1}"
 export SEED
 
+# When --job is given, narrow the workflow text to that job's block first, so
+# the gate list comes from the same declaration CI uses.
+SRC="$WORKFLOW"
+if [ -n "$JOB" ]; then
+  SRC="$(mktemp)"; trap 'rm -f "$SRC"' EXIT
+  awk -v job="$JOB" '
+    # job headers sit at two-space indent under `jobs:`; a name: line at that
+    # depth starts a new job block.
+    /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { inblock=0 }
+    /^    name:/ { inblock = (index($0, job) > 0) }
+    inblock { print }
+  ' "$WORKFLOW" > "$SRC"
+  if ! [ -s "$SRC" ]; then
+    echo "error: no CI job matching '$JOB'" >&2; exit 2
+  fi
+fi
+
 # Extract the gate command list once (same filter as before).
-mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$WORKFLOW" \
+mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$SRC" \
          | grep -v 'check_gate_mutation_coverage\.sh' \
          | sed 's/[[:space:]]*$//' \
          | sort -u)

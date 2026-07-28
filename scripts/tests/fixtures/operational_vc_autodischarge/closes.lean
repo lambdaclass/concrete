@@ -37,7 +37,7 @@ open Examples.ParseValidate.Proofs
 
 -- TEST 1 — `ch`: pure bitwise word function. eval-unfold → bv_decide.
 theorem probe_ch (X Y Z : BitVec 32) (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       (((Env.empty.bind "x" (.int X.toNat)).bind "y" (.int Y.toNat)).bind
         "z" (.int Z.toNat))
       (fuel + 1) chExpr
@@ -50,7 +50,7 @@ theorem probe_ch (X Y Z : BitVec 32) (fuel : Nat) :
 
 -- TEST 2 — `maj`: pure bitwise word function.
 theorem probe_maj (X Y Z : BitVec 32) (fuel : Nat) :
-    eval (fun _ => none)
+    eval FnTable.empty
       (((Env.empty.bind "x" (.int X.toNat)).bind "y" (.int Y.toNat)).bind
         "z" (.int Z.toNat))
       (fuel + 1) majExpr
