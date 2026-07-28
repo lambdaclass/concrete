@@ -88,6 +88,51 @@ done
 [ "$hazard" -eq 0 ] && ok "no errexit gate script caps output with '| head -N'"
 
 echo ""
+echo "=== no 'local' statement reads a variable it assigns in the same statement ==="
+# A builtin's arguments are word-expanded BEFORE the builtin runs, so in
+#     local name="$1" f="$TMP/$name.con"
+# `$name` is NOT the local being declared on the same line — it resolves against
+# the enclosing scope. Two ways that goes wrong, and both happened at once in
+# check_trap_inventory.sh:
+#   * on CI, where the outer name is unset, `set -u` aborts the whole gate, so
+#     it never ran at all;
+#   * in the nix devshell, which EXPORTS `name=nix-shell-env`, it silently
+#     expanded to that instead — the gate reported PASS=12 FAIL=0 while writing
+#     every fixture to one wrong path.
+# The second is the dangerous one: green for the wrong reason. The sibling gates
+# spell the same line with `$1`, which is always set, which is why this read as
+# idiomatic rather than as a hazard.
+selfref=0
+for f in "$ROOT_DIR"/scripts/tests/*.sh; do
+  while IFS=: read -r lineno line; do
+    [ -z "${lineno:-}" ] && continue
+    body="${line#*local }"
+    assigned=""
+    bad=""
+    # Walk the assignments left to right. A value referencing an ALREADY-listed
+    # name on this same line is the hazard.
+    for word in $body; do
+      case "$word" in
+        *=*)
+          nm="${word%%=*}"
+          val="${word#*=}"
+          for prior in $assigned; do
+            case "$val" in
+              *"\$$prior"*|*"\${$prior}"*|*"\${$prior:"*) bad="$prior" ;;
+            esac
+          done
+          case "$nm" in [A-Za-z_]*) assigned="$assigned $nm" ;; esac
+          ;;
+      esac
+    done
+    if [ -n "$bad" ]; then
+      no "$(basename "$f"):$lineno — 'local' reads \$$bad, which it assigns in the same statement; split the declaration"
+      selfref=1
+    fi
+  done < <(grep -nE '^[[:space:]]*local[[:space:]]+[A-Za-z_][A-Za-z0-9_]*=' "$f" || true)
+done
+[ "$selfref" -eq 0 ] && ok "no 'local' statement depends on its own earlier assignment"
+echo ""
 echo "=== the pre-push hook is installed in this clone ==="
 # Advisory, not a failure: core.hooksPath is per-clone local config and cannot be
 # versioned, so a gate cannot assert it for anyone else. It CAN tell the person

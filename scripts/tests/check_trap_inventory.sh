@@ -35,7 +35,12 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # trap. Agreement is the point: a silent compiled success against an aborting
 # interpreter is exactly the bug-053 signature.
 traps() {
-  local name="$1" src="$2" f="$TMP/$name.con"
+  # Split, not one `local`: the builtin's arguments are expanded BEFORE it
+  # assigns any of them, so `$name` here resolved against the OUTER (unset)
+  # scope and `set -u` aborted the gate. It passed review because the sibling
+  # gates spell the same line with `$1`, which is always set.
+  local name="$1" src="$2"
+  local f="$TMP/$name.con"
   printf '%s\n' "$src" > "$f"
   if ! "$COMPILER" "$f" -o "$TMP/$name.out" >/dev/null 2>&1; then
     no "$name did not compile"; return
@@ -62,7 +67,8 @@ traps() {
 # removable <name> <expected-rc> <source> — a provably non-trapping discarded op
 # must still be deletable; the fix must not blanket-preserve dead work.
 removable() {
-  local name="$1" want="$2" src="$3" f="$TMP/$name.con"
+  local name="$1" want="$2" src="$3"
+  local f="$TMP/$name.con"
   printf '%s\n' "$src" > "$f"
   if ! "$COMPILER" "$f" -o "$TMP/$name.out" >/dev/null 2>&1; then
     no "$name did not compile"; return
