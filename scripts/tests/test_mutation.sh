@@ -341,6 +341,42 @@ MUT_NEW+=("    | none   => .value (maskWidth ty (-n)) ty -- MUTATION: wrap, do n
 MUT_DESC+=("IntArith: checked negation wraps at MIN instead of trapping (bug 053)")
 gate_for_last "scripts/tests/check_trap_inventory.sh"
 
+# 28. SSACleanup: the indirect call target is not substituted (R-0436 / bug 056)
+# Restores the pre-fix behaviour at the exact spot: the callee operand is left
+# alone while every other operand is rewritten. Folding a fn-pointer phi then
+# leaves a call through a value nothing defines.
+MUT_FILE+=("Concrete/IR/SSACleanup.lean")
+MUT_OLD+=("      | .indirect target => .indirect (r target)")
+MUT_NEW+=("      | .indirect target => .indirect target -- MUTATION: callee not substituted")
+MUT_DESC+=("SSACleanup: indirect call target escapes substitution (bug 056)")
+gate_for_last "scripts/tests/check_fnptr_values.sh"
+
+# 29. SSAVerify: the indirect call target is not a use (R-0436 / bug 056)
+# This is the state the String callee forced — the verifier could not see a call
+# target at all, so a call through an undefined register passed verification and
+# was caught by llvm-as instead. DCE may also delete the producing instruction.
+MUT_FILE+=("Concrete/IR/SSAVerify.lean")
+MUT_OLD+=("    | .indirect target => svalRegs target ++ argRegs")
+MUT_NEW+=("    | .indirect _ => argRegs -- MUTATION: callee is not a use")
+MUT_DESC+=("SSAVerify: indirect call target invisible to use-checking (bug 056)")
+gate_for_last "scripts/tests/check_fnptr_values.sh"
+
+# 30. EmitSSA: a function reference stops resolving to a global (R-0436)
+# Devirtualization is decided HERE, not in Lower: `.indirect (.fnRef f)` and
+# `.direct f` both reach `svalToOperand` and both emit `call @f`, so removing
+# Lower's `.direct` conversion leaves the emitted IR byte-identical (measured)
+# and is NOT a behaviour change worth mutating. Lower's conversion still matters
+# for passes that key on a direct callee — `checkCallArity` only validates
+# those — but it cannot be what the direct-call assertions detect.
+# Making `.fnRef` emit a register instead is the real inverse: correctness legs
+# keep passing (the call still reaches the right function via a load) while the
+# common case silently becomes an indirect call.
+MUT_FILE+=("Concrete/Backend/EmitSSA.lean")
+MUT_OLD+=("    .global resolved")
+MUT_NEW+=("    .reg resolved -- MUTATION: fn reference emitted as a register")
+MUT_DESC+=("EmitSSA: fn reference no longer resolves to a global (R-0436)")
+gate_for_last "scripts/tests/check_fnptr_values.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

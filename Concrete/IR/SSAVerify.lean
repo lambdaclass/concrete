@@ -149,7 +149,15 @@ private def svalRegs : SVal → List String
 private def instUses : SInst → List String
   | .binOp _ _ lhs rhs _ => svalRegs lhs ++ svalRegs rhs
   | .unaryOp _ _ operand _ => svalRegs operand
-  | .call _ _ args _ => args.foldl (fun acc a => acc ++ svalRegs a) []
+  -- The indirect target counts as a use. While the callee was a String the
+  -- verifier could not see it at all, so a call through an undefined register
+  -- passed verification and was caught downstream by llvm-as instead of here
+  -- (bug 056's second half).
+  | .call _ callee args _ =>
+    let argRegs := args.foldl (fun acc a => acc ++ svalRegs a) []
+    match callee with
+    | .direct _ => argRegs
+    | .indirect target => svalRegs target ++ argRegs
   | .alloca _ _ => []
   | .load _ ptr _ => svalRegs ptr
   | .store val ptr => svalRegs val ++ svalRegs ptr
@@ -276,7 +284,6 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
     let uses := instUses inst
     let ctx := uses.foldl (fun ctx u =>
       if ctx.paramNames.contains u then ctx
-      else if u.startsWith "@fnref." then ctx
       else if phiDefs.contains u then ctx
       else if running.contains u then ctx
       else if strictDomRegs.contains u then ctx
@@ -302,7 +309,6 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   let allBlockDefs := phiDefs ++ runningDefs.toList ++ strictDomRegs
   let ctx := (termUses b.term).foldl (fun ctx u =>
     if ctx.paramNames.contains u then ctx
-    else if u.startsWith "@fnref." then ctx
     else if allBlockDefs.contains u then ctx
     else
       match regDefBlock ctx.blocks u with
@@ -438,13 +444,16 @@ private def checkPhiTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 private def checkCallArity (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   b.insts.foldl (fun ctx inst =>
     match inst with
-    | .call _ fn args _ =>
+    | .call _ (.direct fn) args _ =>
       match ctx.fnSigs.find? fun (n, _, _) => n == fn with
       | some (_, paramTys, _) =>
         if args.length != paramTys.length then
           addSSAError ctx (.callArityMismatch b.label fn args.length paramTys.length)
         else ctx
-      | none => ctx  -- unknown function (e.g. indirect call, builtin), skip
+      | none => ctx  -- unknown function (e.g. builtin), skip
+    -- An indirect target has no declared signature to compare against; arity is
+    -- the fn type's business, checked before Lower.
+    | .call _ (.indirect _) _ _ => ctx
     | _ => ctx
   ) ctx
 

@@ -75,6 +75,7 @@ Those belong in:
 - [051_generic_enums_not_monomorphized.md](051_generic_enums_not_monomorphized.md) — fixed by R-0001
 - [057_hashmap_builtin_size_undercount.md](057_hashmap_builtin_size_undercount.md) — fixed in the R-0003 slice
 - [053_dce_deletes_checked_negation.md](053_dce_deletes_checked_negation.md) — fixed in R-0005: the unary trap inventory moved into `IntArith`, so DCE stops deciding locally whether `-x` can trap
+- [056_fnptr_reassign_phi_undefined_register.md](056_fnptr_reassign_phi_undefined_register.md) — fixed in R-0436: a function reference became `SVal.fnRef` and a call target became `SCallee`, retiring both string encodings
 
 ## Open Numbered Bugs
 
@@ -83,7 +84,6 @@ Those belong in:
 - [052_array_element_destroy_noop.md](052_array_element_destroy_noop.md) — Vec<[T; N]>.drop() skips element destruction via synthesized no-op T_destroy (middle-end audit 2026-07-18)
 - [054_struct_mono_name_collision.md](054_struct_mono_name_collision.md) — user types shadow generated specializations (middle-end audit 2026-07-18)
 - [055_sibling_import_alias_unusable.md](055_sibling_import_alias_unusable.md) — project sibling `import a.{x as y}` emits undefined callee (middle-end audit 2026-07-18)
-- [056_fnptr_reassign_phi_undefined_register.md](056_fnptr_reassign_phi_undefined_register.md) — reassigning a fn-pointer local across a branch emits a phi over Lower's `@fnref.X` sentinel; valid program refused with E0709 (found building the R-0002 gate, 2026-07-25)
 - [058_proof_by_without_fingerprint_never_stales.md](058_proof_by_without_fingerprint_never_stales.md) — contained: a missing stored fingerprint is now `unbound`, never `proved`; the full subject digest remains R-0004 work (2026-07-25)
 - [059_body_fingerprint_omits_signature_and_types.md](059_body_fingerprint_omits_signature_and_types.md) — the body hash drops declared types and never sees the signature; `i32 -> u32` keeps a proof `proved` (R-0004, 2026-07-25)
 - [060_contracts_outside_proof_fingerprint.md](060_contracts_outside_proof_fingerprint.md) — `#[ensures]` is outside the hash, so a FALSE postcondition still reports `proved` (R-0004, 2026-07-25)

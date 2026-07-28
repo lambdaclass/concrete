@@ -170,7 +170,7 @@ private def arrayLenOfTy : Ty → Option Nat
     is still used for the GEP. -/
 private def emitBoundsCheck (idxVal : SVal) (len : Nat) : LowerM Unit := do
   let idxI64 ← coerceVal idxVal .int "boundsidx."
-  emit (.call none "__cc_bounds_check" [idxI64, .intConst (Int.ofNat len) .int] .unit)
+  emit (.call none (.direct "__cc_bounds_check") [idxI64, .intConst (Int.ofNat len) .int] .unit)
 
 /-- Emit an alloca that will be hoisted to the function entry block.
     This prevents dynamic stack growth when allocas occur inside loops. -/
@@ -757,7 +757,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with
-        | .fn_ _ _ _ => return .reg ("@fnref." ++ name) ty
+        | .fn_ _ _ _ => return .fnRef name ty
         | _ => return .reg name ty
 
   | .binOp op lhs rhs ty =>
@@ -863,7 +863,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         let innerTy := arg.ty
         let szDst ← freshReg
         let sz ← computeTySize innerTy
-        emit (.call (some szDst) "malloc" [.intConst (Int.ofNat sz) .int] (.ptrMut innerTy))
+        emit (.call (some szDst) (.direct "malloc") [.intConst (Int.ofNat sz) .int] (.ptrMut innerTy))
         let ptrVal := SVal.reg szDst (.ptrMut innerTy)
         emit (.store aVal ptrVal)
         return ptrVal
@@ -878,13 +878,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | .generic "Heap" [t] => t
           | t => t
         if ty == .unit || ty == .never then
-          emit (.call none "free" [ptrVal] .unit)
+          emit (.call none (.direct "free") [ptrVal] .unit)
           return .unit
         else
           -- Load value before freeing
           let loadDst ← freshReg
           emit (.load loadDst ptrVal innerTy)
-          emit (.call none "free" [ptrVal] .unit)
+          emit (.call none (.direct "free") [ptrVal] .unit)
           return .reg loadDst innerTy
       | none => return .unit
     else
@@ -922,16 +922,19 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         aVals := aVals ++ [v]
     -- Resolve fn-pointer variables: if the call target is a local variable
     -- holding a fn pointer, resolve it to the actual function / register name.
-    -- For statically-known function references (@fnref.X), use the raw function name.
+    -- A statically-known target is an `SVal.fnRef`, so devirtualization here is
+    -- reading a value's constructor rather than decoding a register name.
     -- For runtime registers, prefix with "%" to mark as indirect call target.
-    let callTarget ← do
+    let callTarget : SCallee ← do
       match callee with
-      | .direct name => pure name
+      | .direct name => pure (.direct name)
       | .indirect binding =>
         match ← lookupVar binding with
-        | some (.reg regName (.fn_ _ _ _)) =>
-          if regName.startsWith "@fnref." then pure (regName.drop 7).toString
-          else pure ("%" ++ regName)
+        -- Devirtualization: the binding holds a statically-known function, so
+        -- this becomes a direct call. It is now a decision about a VALUE's
+        -- constructor, not a string prefix a later pass has to re-parse.
+        | some (.fnRef fnName (.fn_ _ _ _)) => pure (.direct fnName)
+        | some (v@(.reg _ (.fn_ _ _ _))) => pure (.indirect v)
         | _ =>
           -- The call form says this callee is a fn-typed binding, so failing to
           -- find one is a Core/Lower disagreement, not a program error. Emitting
@@ -1426,7 +1429,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .reg dst targetTy
 
   | .fnRef name ty =>
-    return .reg ("@fnref." ++ name) ty
+    return .fnRef name ty
 
   | .try_ inner ty =>
     -- Try operator: unwrap Ok value or early-return Err

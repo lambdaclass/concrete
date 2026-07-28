@@ -340,20 +340,18 @@ private def floatTyToLLVMTy : Ty → LLVMTy
 /-- Convert an SVal to a structured LLVM operand. -/
 private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
   match v with
-  | .reg name _ =>
-    if name.startsWith "@fnref." then
-      let bareName := (name.drop 7).toString
-      -- Resolve linker aliases for function pointer references (e.g., hash_i32 → hash_hash_i32)
-      let resolved := if s.definedFnNames.contains bareName then bareName
-        else match s.localAliases.lookup bareName with
-          | some orig => orig
-          | none => match s.linkerAliases.lookup bareName with
-            | some orig => match s.localAliases.lookup orig with
-              | some qual => qual
-              | none => orig
-            | none => bareName
-      .global resolved
-    else .reg name
+  | .reg name _ => .reg name
+  | .fnRef bareName _ =>
+    -- Resolve linker aliases for function pointer references (e.g., hash_i32 → hash_hash_i32)
+    let resolved := if s.definedFnNames.contains bareName then bareName
+      else match s.localAliases.lookup bareName with
+        | some orig => orig
+        | none => match s.linkerAliases.lookup bareName with
+          | some orig => match s.localAliases.lookup orig with
+            | some qual => qual
+            | none => orig
+          | none => bareName
+    .global resolved
   | .intConst val _ => .intLit val
   | .floatConst val _ => .floatLit val
   | .boolConst b => .boolLit b
@@ -777,11 +775,23 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem ty)) [(iTy, .intLit 0), (iTy, valOp)])
     | .not_ => emitStructured s (.binOp dst .xor_ .i1 valOp (.intLit 1))
     | .bitnot => emitStructured s (.binOp dst .xor_ (intTyToLLVMTy ty) valOp (.intLit (-1)))
-  | .call dst fn args retTy =>
+  | .call dst callee args retTy =>
+    -- Vec specialization, extern ABI and linker-alias resolution are all
+    -- properties of a KNOWN SYMBOL, so they apply only to a direct callee.
+    -- Previously every one of them read a string that might have been a
+    -- `%`-prefixed register, and each had to be careful not to.
+    let directName : Option String := match callee with
+      | .direct n => some n
+      | .indirect _ => none
     -- Intercept vec sized operations for per-element-size dispatch
-    match resolveVecCall s fn args retTy with
+    match (match directName with
+           | some fn => resolveVecCall s fn args retTy
+           | none => none) with
     | some (specFn, es, payOff) =>
       let s := recordVecElemSpec s es payOff
+      -- `resolveVecCall` only answered `some` for a direct callee, so this is
+      -- always bound; `""` cannot match any vec op name.
+      let fn := directName.getD ""
       if fn == "vec_new" then
         emitStructured s (.call dst (.struct_ "Vec") (.global specFn) [])
       else if fn == "vec_get" then
@@ -824,7 +834,9 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     | none =>
     -- General call path (non-vec or unspecialized vec ops like vec_len/vec_free)
     -- For extern fn calls, #[repr(C)] struct args use C ABI (by-value) passing.
-    let isExternCall := s.externFnNames.contains fn
+    let isExternCall := match directName with
+      | some fn => s.externFnNames.contains fn
+      | none => false
     -- Build typed argument list
     let (s, argOps) := args.foldl (fun (s, ops) a =>
       let paramTy := if isExternCall then externParamTyToLLVMTy s a.ty
@@ -904,29 +916,34 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- For extern calls, flatten the return type per C ABI
     let retLLTy := if isExternCall then externABIFlattenRet s retTy
                    else tyToLLVMTy s retTy
-    -- Indirect call: function is a parameter with fn type, a register loaded
-    -- from memory (fnTypeRegs), or a %-prefixed register from the Lower pass.
-    let isIndirect := fn.startsWith "%"
-      || (s.fnParams.any fun (n, t) =>
-        n == fn && match t with | .fn_ _ _ _ => true | _ => false)
-      || s.fnTypeRegs.contains fn
-    -- Resolve aliased imports to their real linker symbol.
-    -- If the call target already matches a defined function, use it directly
-    -- (avoids alias chains that would de-qualify a qualified colliding name).
-    -- Otherwise: check per-module aliases first, then global aliases,
-    -- chaining through local aliases if the linker alias target also collides.
-    let linkerFn := if s.definedFnNames.contains fn then fn
-      else match s.localAliases.lookup fn with
-        | some orig => orig
-        | none => match s.linkerAliases.lookup fn with
-          | some orig => match s.localAliases.lookup orig with
-            | some qual => qual
-            | none => orig
-          | none => fn
-    let callTarget : LLVMOperand := if isIndirect then
-      if fn.startsWith "%" then .reg (fn.drop 1).toString
-      else .reg fn
-    else .global linkerFn
+    let callTarget : LLVMOperand := match callee with
+      -- An indirect target is whatever operand it is: `.reg` for a computed
+      -- pointer, `.global` for a `.fnRef` that survived to the call — that is
+      -- devirtualization falling out of the representation instead of being
+      -- decoded from a name.
+      | .indirect target => svalToOperand s target
+      | .direct fn =>
+        -- A fn-typed parameter, or a register loaded from memory (fnTypeRegs),
+        -- is still a call THROUGH a value even though it is spelled as a bare
+        -- symbol here.
+        if (s.fnParams.any fun (n, t) =>
+              n == fn && match t with | .fn_ _ _ _ => true | _ => false)
+           || s.fnTypeRegs.contains fn then
+          .reg fn
+        else
+          -- Resolve aliased imports to their real linker symbol.
+          -- If the call target already matches a defined function, use it directly
+          -- (avoids alias chains that would de-qualify a qualified colliding name).
+          -- Otherwise: check per-module aliases first, then global aliases,
+          -- chaining through local aliases if the linker alias target also collides.
+          .global (if s.definedFnNames.contains fn then fn
+            else match s.localAliases.lookup fn with
+              | some orig => orig
+              | none => match s.linkerAliases.lookup fn with
+                | some orig => match s.localAliases.lookup orig with
+                  | some qual => qual
+                  | none => orig
+                | none => fn)
     -- For extern calls returning small repr(C) structs: call returns i64,
     -- store through pointer so downstream code sees the struct correctly.
     -- Downstream code expects dst to be a pointer (pass-by-ptr for structs).

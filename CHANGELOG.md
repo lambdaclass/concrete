@@ -104,6 +104,58 @@ stored/derived callback inference in R-0016. The unmerged H18 worktree and
 `.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
 of being treated as ambient backlog.
 
+### Completed Task R-0436
+
+_Bug 056 — a function reference was a register name, and a call target was a
+string. 2026-07-28._
+
+Rebinding a fn-pointer local across an `if`, or in a loop, could not compile:
+the merge built a phi over `@fnref.<name>`, a register no block defines, and
+SSAVerify refused it with E0709. The interpreter ran the same programs
+correctly, which is the signature of a representation problem rather than a
+semantics one.
+
+Two string encodings were involved, and fixing the first exposed the second
+within minutes:
+
+- `SVal.reg "@fnref.<name>"` spelled a statically-known function as a register
+  whose name encoded the function. Three passes carried a `startsWith
+  "@fnref."` exemption so they would not mistake it for a real register. It is
+  now `SVal.fnRef name ty`; `svalRegs` answers `[]` for it through its ordinary
+  catch-all, so all three exemptions were **deleted** rather than joined by a
+  fourth.
+- `SInst.call`'s `fn : String` meant a direct call when bare and an indirect
+  call when `%`-prefixed. `replaceRegInInst` could rewrite that string only into
+  another register, so folding a fn-pointer phi down to a known function left a
+  dangling `%if.phi.N` in the emitted call. Worse, SSAVerify's `instUses` could
+  not see a call target hidden in a string at all — an indirect call through an
+  undefined register passed our verifier and was caught by `llvm-as`. It is now
+  `SCallee.direct` / `SCallee.indirect`, with deliberately **no** `Coe String
+  SCallee`: an implicit coercion would let the bare-string form compile again
+  silently, which is how it survived this long. Removing it is what surfaced the
+  four runtime-symbol call sites that had been relying on it.
+
+This is the Lower-side instance of what R-0002 removed from Core, and the same
+class as bugs 050, 057 and the restated vocabularies: identity kept in a string
+that a later pass re-interprets (PRINCIPLES 12).
+
+Evidence: `scripts/tests/check_fnptr_values.sh` (17 checks) — rebinding across
+`if`/`else`, across a constant-folded `if`, and in a loop; a phi mixing a
+loaded register with a known global; compiled/interpreter agreement on each;
+devirtualization preserved (the straight-line case still emits `call @a`, a
+folded phi still devirtualizes, no reference to the eliminated phi survives);
+the verifier still refusing an undefined phi operand AND an undefined indirect
+call target while accepting well-formed ones; and structural checks that neither
+string convention exists anywhere in the compiler.
+
+Mutations #28-#30 are each killed by that gate. Two earlier candidates were
+discarded for proving nothing: one was killed only by Lean's unused-binder
+linter, and one — removing Lower's devirtualization — left the emitted IR
+byte-identical, because `.indirect (.fnRef f)` and `.direct f` both resolve to a
+global in `svalToOperand`. EmitSSA, not Lower, is what decides the emitted
+operand; Lower's `.direct` conversion still matters only to passes that key on a
+direct callee.
+
 ### Completed Task R-0005
 
 _Bug 053 — a discarded checked negation was deleted, and its documented trap

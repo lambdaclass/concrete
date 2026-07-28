@@ -1055,23 +1055,6 @@ Land the cross-cutting migration in a worktree and merge once green.
 
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
 
-### Task R-0436
-
-**Objective:** Fix bug 056 — a fn pointer must be a value, not a register name Lower represents a statically-known function reference as an `SVal.reg` whose register NAME is the sentinel `@fnref.<fn>`, and the call path decodes that name back into a direct call. The sentinel is not a real register, so the moment two branches bind the same fn-typed variable the branch merge builds a phi over sentinel names and SSAVerify rejects it (E0709). Reassigning a fn pointer across an `if`, or in a loop, therefore cannot compile, while the interpreter runs it correctly.
-
-   Materialize a function reference as a real `ptr`-typed value and let the call
-   path consume either that value or a direct symbol, so devirtualization is an
-   optimization over a value rather than the decoding of a register name. This is
-   the Lower-side instance of the anti-pattern R-0002 removed from Core: identity
-   carried in a string that a later pass re-interprets.
-
-   Gate reassignment across `if`/`else`, reassignment in a loop body, a phi over
-   two different statically-known targets, a fn pointer stored in a struct field
-   and reloaded, interpreter/compiled agreement on each, and preservation of the
-   straight-line devirtualized form (the common shape must not regress to an
-   indirect call). Fails closed today, so a mutation must show the verifier still
-   rejects a genuinely undefined phi operand.
-
 ### Task R-0009
 
 **Objective:** Fix bug 049 — vacuous `reduce --predicate crash` Remove the predicate from help/CLI immediately unless the same slice evaluates candidates in an isolated subprocess with bounded time/memory/output and preserves the original crash boundary/class. Parse success is never a crash predicate.

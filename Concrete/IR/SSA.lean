@@ -15,6 +15,15 @@ No structured control flow (if/while are gone — replaced by conditional branch
 
 inductive SVal where
   | reg (name : String) (ty : Ty)
+  -- A statically-known function, as a VALUE. Previously spelled
+  -- `reg "@fnref.<name>"`: identity smuggled inside a register name, which
+  -- every later pass had to decode by string prefix. It is not a register, so
+  -- the moment two branches bound the same fn-typed variable the merge built a
+  -- phi over a name no block defines and SSAVerify refused it (bug 056) —
+  -- while the interpreter, which never saw the encoding, ran the program fine.
+  -- As its own constructor it simply is not a register use, so no pass needs an
+  -- exemption to avoid mistaking it for one.
+  | fnRef (name : String) (ty : Ty)
   | intConst (val : Int) (ty : Ty)
   | floatConst (val : Float) (ty : Ty)
   | boolConst (val : Bool)
@@ -26,10 +35,29 @@ inductive SVal where
 -- SSA Instructions
 -- ============================================================
 
+/-- Where a call goes. Previously a single `String`: a bare name meant a direct
+call, a `%`-prefixed name meant an indirect call through that register. Three
+passes decoded that convention by hand, and each rewrite of an operand had to
+remember the target was hiding in a string — `replaceRegInInst` substituted
+`%old` only when the replacement was another register, so folding a fn-pointer
+phi down to a known function left a dangling `%if.phi.N` in the emitted call
+(the second half of bug 056). As a value the target is an ordinary operand:
+substitution, use-collection and verification reach it the same way they reach
+every other one. -/
+inductive SCallee where
+  | direct (name : String)
+  | indirect (target : SVal)
+
+-- No `Coe String SCallee`. The point of the type is that a call target cannot
+-- be spelled as a bare string any more; an implicit coercion would let the old
+-- `"%reg"` convention compile again silently, which is how it survived this
+-- long. Direct calls to fixed runtime symbols write `.direct "name"`.
+
+
 inductive SInst where
   | binOp (dst : String) (op : BinOp) (lhs rhs : SVal) (ty : Ty)
   | unaryOp (dst : String) (op : UnaryOp) (operand : SVal) (ty : Ty)
-  | call (dst : Option String) (fn : String) (args : List SVal) (retTy : Ty)
+  | call (dst : Option String) (callee : SCallee) (args : List SVal) (retTy : Ty)
   | alloca (dst : String) (ty : Ty)
   | load (dst : String) (ptr : SVal) (ty : Ty)
   | store (val : SVal) (ptr : SVal)
@@ -89,6 +117,7 @@ structure SModule where
 
 def SVal.ty : SVal → Ty
   | .reg _ t => t
+  | .fnRef _ t => t
   | .intConst _ t => t
   | .floatConst _ t => t
   | .boolConst _ => .bool
@@ -131,6 +160,9 @@ private def ssaTyToStr : Ty → String
 
 private def ppSVal : SVal → String
   | .reg n _ => s!"%{n}"
+  -- `@name`, like any other global — the sigil says "not a register", which is
+  -- the whole point of the constructor.
+  | .fnRef n _ => s!"@{n}"
   | .intConst v _ => toString v
   | .floatConst v _ => toString v
   | .boolConst b => if b then "1" else "0"
@@ -160,12 +192,20 @@ private def ppSInst (inst : SInst) : String :=
     s!"  %{dst} = {binOpToStr op} {ssaTyToStr ty} {ppSVal lhs}, {ppSVal rhs}"
   | .unaryOp dst op operand ty =>
     s!"  %{dst} = {unaryOpToStr op} {ssaTyToStr ty} {ppSVal operand}"
-  | .call (some dst) fn args retTy =>
+  | .call (some dst) callee args retTy =>
     let argsStr := args.map fun a => s!"{ssaTyToStr a.ty} {ppSVal a}"
-    s!"  %{dst} = call {ssaTyToStr retTy} @{fn}({", ".intercalate argsStr})"
-  | .call none fn args retTy =>
+    -- A direct symbol keeps its `@` sigil; an indirect target prints as the
+    -- operand it is, so `%r` and `@f` are visibly different in the dump.
+    let calleeStr := match callee with
+      | .direct name => s!"@{name}"
+      | .indirect target => ppSVal target
+    s!"  %{dst} = call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
+  | .call none callee args retTy =>
     let argsStr := args.map fun a => s!"{ssaTyToStr a.ty} {ppSVal a}"
-    s!"  call {ssaTyToStr retTy} @{fn}({", ".intercalate argsStr})"
+    let calleeStr := match callee with
+      | .direct name => s!"@{name}"
+      | .indirect target => ppSVal target
+    s!"  call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
   | .alloca dst ty =>
     s!"  %{dst} = alloca {ssaTyToStr ty}"
   | .load dst ptr ty =>

@@ -57,14 +57,16 @@ private def replaceRegInInst (inst : SInst) (oldReg : String) (replacement : SVa
   match inst with
   | .binOp dst op lhs rhs ty => .binOp dst op (r lhs) (r rhs) ty
   | .unaryOp dst op operand ty => .unaryOp dst op (r operand) ty
-  | .call dst fn args retTy =>
-    -- Also handle indirect calls where fn is a register name (e.g., "%phi.6")
-    let fn' := if fn == "%" ++ oldReg then
-      match replacement with
-      | .reg name _ => "%" ++ name
-      | _ => fn
-    else fn
-    .call dst fn' (args.map r) retTy
+  | .call dst callee args retTy =>
+    -- The indirect target is an ordinary operand, so it substitutes through the
+    -- same `r` as everything else. The old string form could only be rewritten
+    -- to another REGISTER; folding a fn-pointer phi down to a known function
+    -- left the dead `%name` in place and the backend emitted a call through an
+    -- undefined value (bug 056).
+    let callee' := match callee with
+      | .direct name => .direct name
+      | .indirect target => .indirect (r target)
+    .call dst callee' (args.map r) retTy
   | .alloca dst ty => .alloca dst ty
   | .load dst ptr ty => .load dst (r ptr) ty
   | .store val ptr => .store (r val) (r ptr)
@@ -158,12 +160,14 @@ private def svalUses : SVal → List String
 private def instUses : SInst → List String
   | .binOp _ _ lhs rhs _ => svalUses lhs ++ svalUses rhs
   | .unaryOp _ _ operand _ => svalUses operand
-  | .call _ fn args _ =>
+  | .call _ callee args _ =>
     let argUses := args.foldl (fun acc a => acc ++ svalUses a) []
-    -- If the call target is a %-prefixed register (indirect fn-pointer call),
-    -- include the register name as a use so DCE preserves the producing instruction.
-    if fn.startsWith "%" then (fn.drop 1).toString :: argUses
-    else argUses
+    -- An indirect target is a use like any other, so DCE keeps the instruction
+    -- that produces it; `svalUses` also answers `[]` for a `.fnRef`, which is a
+    -- global and needs nothing kept alive.
+    match callee with
+    | .direct _ => argUses
+    | .indirect target => svalUses target ++ argUses
   | .alloca _ _ => []
   | .load _ ptr _ => svalUses ptr
   | .store val ptr => svalUses val ++ svalUses ptr
