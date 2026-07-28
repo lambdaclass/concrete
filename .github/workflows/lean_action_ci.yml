@@ -577,6 +577,9 @@ jobs:
       - name: "ProofCore callable identity (R-0442 / bug 061 — a locally bound callable is not a global name; two namespaces)"
         run: bash scripts/tests/check_proofcore_callable_identity.sh
 
+      - name: "Proof freshness witnesses (R-0004 slice 1 — executable reproducers for bugs 058/059/060/062 + controls; TRIPWIRE: gap legs fail when fixed)"
+        run: bash scripts/tests/check_proof_freshness.sh
+
       - name: "Workload 3: hexdump differential vs xxd + exit codes"
         run: bash scripts/tests/check_hexdump_differential.sh
 

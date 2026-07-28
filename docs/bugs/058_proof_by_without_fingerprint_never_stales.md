@@ -114,3 +114,12 @@ Regression: the program above reports a non-`proved` state before any edit
 (because there is nothing to compare against), and the control case with a
 stored fingerprint keeps its current proved → stale behaviour. A mutation that
 restores the self-comparison must be killed.
+
+## Executable witness (R-0004 slice 1)
+
+`scripts/tests/check_proof_freshness.sh` now drives this from a copy of the real
+`examples/loop_invariant` project: removing the stored `#[proof_fingerprint]`
+must yield `proof link unbound`, never `proved`, and must carry the exact wording
+`proof link unbound: no stored proof-subject digest`. This bug is CONTAINED
+(R-0004 slice 2), so the leg is a positive assertion guarding the containment —
+not a tripwire.

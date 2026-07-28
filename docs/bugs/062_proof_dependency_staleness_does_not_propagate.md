@@ -69,3 +69,28 @@ alpha-renaming case proving the root is insensitive to source noise.
 
 Regression: in the chain above, staling `leaf` alone must leave neither `mid` nor
 `top` reported `proved`.
+
+## Executable witness (R-0004 slice 1) — and the number is now stable
+
+The roadmap held this number provisional until "its document and executable
+control land". The control has landed, so **062 is now a stable number**.
+
+`scripts/tests/check_proof_freshness.sh` uses the real `examples/crypto_verify`
+chain — `verify_message -> verify_tag -> compute_tag` — and edits ONLY the leaf.
+Measured on 2026-07-28:
+
+| function | role | status |
+| --- | --- | --- |
+| `compute_tag` | leaf, edited | `proof stale` — correct |
+| `verify_tag` | DIRECT dependent | `proved [one_direction]` — wrong |
+| `verify_message` | TWO HOPS up | `proved [iff]` — wrong |
+
+The gate additionally asserts that the stale EDGE *is* recorded in
+`--report proof-deps` (so this is not "the graph cannot see it"), and that
+`verify_message`'s dependency block mentions no stale dependency at all — the
+transitive half, which is worse than showing it and ignoring it because a reader
+of that line sees an all-proved chain.
+
+Both legs are **tripwires**, and there is a control: the unedited chain must
+report no stale edge, so the witness responds to the edit rather than always
+firing.

@@ -97,10 +97,18 @@ jobs_to_run=""
 addjob() { case "$jobs_to_run" in *"|$1|"*) ;; *) jobs_to_run="$jobs_to_run|$1|" ;; esac; }
 while IFS= read -r f; do
   case "$f" in
-    # A Proof/Report/proofs change runs the whole evidence job, not a guess at
-    # gate names: these touch a Lean API that .lean FIXTURES depend on, and
-    # `make build` does not typecheck those fixtures.
-    Concrete/Proof/*|Concrete/Report/*|proofs/*)  addjob "Proof evidence gate" ;;
+    # A Proof/Report/proofs change runs BOTH: the name-matched areas AND the
+    # whole evidence job. Neither alone is sufficient, which is easy to get
+    # wrong — proof gates are split across two CI jobs. The name filters catch
+    # proof-named gates wherever they live (check_purecore_proofs.sh and
+    # check_proofcore_callable_identity.sh are in "Language-surface gates", not
+    # the evidence job); the job catches the evidence job's oddly-named ones
+    # (check_operational_vc_auto_discharge.sh, which broke on R-0442 and has no
+    # "proof" in its name). Dropping the name filters for the job alone would
+    # have traded one gap for another.
+    Concrete/Proof/*|Concrete/Report/*|proofs/*)
+      add proof; add evidence; add contract; add callable
+      addjob "Proof evidence gate" ;;
     Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
     # Semantics and the interpreter are where trap/overflow facts live, and the
     # interpreter is half of every differential. Without this line they matched

@@ -56,3 +56,16 @@ Regression: the `i32 -> u32` edit stales; a comment/formatting/alpha-renaming
 edit does NOT (the digest must stay insensitive to source noise, which is why
 `stripAlpha` exists); a capability or generic-bound edit stales. A mutation that
 drops any single component from the digest must be killed.
+
+## Executable witness (R-0004 slice 1)
+
+`scripts/tests/check_proof_freshness.sh` changes the return type, the
+accumulator and the loop counter from `i32` to `u32` in a copy of the real
+`examples/loop_invariant` project. Every STATEMENT is textually identical, so a
+body-only hash sees nothing — measured verdict is still `proved [invariant]`.
+
+That leg is a **tripwire**: it passes because the bug is present, and it FAILS
+when the digest starts covering declared types. That failure is the signal to
+convert it to a positive assertion and close this document, not a regression.
+The gate pairs it with a control (a statement edit, which correctly stales), so
+"still proved" cannot be an artifact of the harness never re-reading the file.

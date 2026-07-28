@@ -45,3 +45,14 @@ Regression: the `28 -> 999` edit above stales; swapping the `#[proof_by]` theore
 invalidates the receipt and requires replay; swapping the `#[spec]` stales the
 subject; reformatting a contract without changing its meaning does not. A
 mutation that omits contracts from the digest must be killed.
+
+## Executable witness (R-0004 slice 1)
+
+`scripts/tests/check_proof_freshness.sh` adds `#[ensures(result == 999)]`
+(FALSE — the loop sums 0..7 = 28) and, separately, `#[ensures(result == 28)]`
+(TRUE), leaving body and types untouched. Measured: both report
+`proved [invariant]`, and the gate asserts they are INDISTINGUISHABLE rather
+than asserting a particular string, which is the actual defect.
+
+**Tripwire**: it fails once the two differ, which is the signal to close this
+document.

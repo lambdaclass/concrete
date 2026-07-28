@@ -866,15 +866,20 @@ Treat the following as one evidence-integrity defect class:
 
 Land this task in seven explicit slices:
 
-1. **Executable witnesses first.** Bugs 058–060 have numbered documents with
-   replay transcripts, but prose snippets are not permanent executable
-   reproducers. Check in minimal fixtures plus a dedicated freshness gate that
-   demonstrates each current false verdict and its control. Check in the
-   multi-function dependency chain for the provisional bug 062, including
-   direct and multi-hop controls, and file the numbered record in the same
-   slice. Bug 061 remains a separate ProofCore identity/model defect completed
-   immediately before this task by R-0442; do not recreate its old ambiguous
-   call representation inside the freshness implementation.
+1. **Executable witnesses first.** This slice has landed:
+   `scripts/tests/check_proof_freshness.sh` drives copies of the real
+   `examples/loop_invariant` and `examples/crypto_verify` projects — real proof
+   links with real stored fingerprints, because a synthetic fixture with a
+   hand-written fingerprint would prove only that string comparison works. Bug
+   058's containment is asserted positively; 059, 060 and both halves of 062 are
+   TRIPWIRE legs that pass because the defect is present and FAIL when it is
+   fixed, which is the signal to convert them and close the document. Every gap
+   leg is paired with a control, so "still proved" cannot be an artifact of the
+   harness never re-reading the file, and `edit` reports fixture drift as a
+   failure rather than a silent no-op. Bug 062's number is now stable. Bug 061
+   was a separate ProofCore identity/model defect, completed immediately before
+   this task by R-0442; do not recreate its old ambiguous call representation
+   inside the freshness implementation.
 2. **Immediate containment.** An in-source proof link without a stored,
    validated proof-subject digest is `missing`/`unbound` (or
    `needs_recheck`), never `proved`; release/verified profiles fail closed.
