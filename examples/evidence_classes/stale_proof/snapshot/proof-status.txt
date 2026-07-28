@@ -30,5 +30,5 @@ error: spec drift for 'constant_time_tag.ct_compare' — registered spec 'Concre
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 2 functions — 0 proved, 1 stale, 0 unbound, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 2 functions — 0 proved, 1 stale, 0 unbound, 0 dependency-not-current, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
 

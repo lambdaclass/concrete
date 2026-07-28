@@ -5798,10 +5798,16 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# verify_tag is NOT in the weakened list (unchanged). Use JSON view so
-# we look at the entry's function field, not substring-match the
-# rendered fingerprint (which mentions `(call verify_tag ...)` from
-# `main`'s body and would yield a false positive).
+# verify_tag IS weakened, even though its own body is unchanged: it calls the
+# drifted compute_tag, and since R-0004 slice 3 a proof resting on a non-current
+# dependency no longer contributes proved evidence.
+#
+# This assertion used to be the opposite — "verify_tag is NOT weakened
+# (unchanged)" — and that was bug 062 written down as an expectation. The test
+# was not wrong about the old behaviour; the old behaviour was wrong. Use the
+# JSON view so we read the entry's function field rather than substring-matching
+# the rendered fingerprint, which mentions `(call verify_tag ...)` from `main`'s
+# body and would yield a false positive.
 $COMPILER diff "$CRYPTO_SNAP_DIR/good.facts.json" "$CRYPTO_SNAP_DIR/drifted.facts.json" --json > "$CRYPTO_SNAP_DIR/diff_for_vt.json" 2>&1 && : || :
 if python3 -c "
 import json
@@ -5809,12 +5815,13 @@ with open('$CRYPTO_SNAP_DIR/diff_for_vt.json') as f:
     entries = json.load(f)
 for e in entries:
     if e.get('drift') == 'weakened' and e.get('function') == 'main.verify_tag':
-        raise SystemExit(1)
+        raise SystemExit(0)
+raise SystemExit(1)
 " 2>/dev/null; then
-    echo "  ok  crypto_verify: verify_tag not flagged as weakened (unchanged)"
+    echo "  ok  crypto_verify: verify_tag IS weakened (its dependency drifted)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  crypto_verify: verify_tag should not be weakened"
+    echo "FAIL  crypto_verify: verify_tag should be weakened by its drifted dependency"
     FAIL=$((FAIL + 1))
 fi
 
@@ -5846,18 +5853,26 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Drifted snapshot shows stale proofs
+# Drifted snapshot: 2 stale, and the function that depended on one of them is
+# now contained rather than proved (R-0004 slice 3 — previously `proved: 1`).
+# Also assert the census TOTALS: `total_functions` silently failed to equal the
+# sum of the state counts, because `unbound`/`blocked`/`deps_not_current` were
+# missing from the summary object.
 if python3 -c "
 import json
 with open('$CRYPTO_SNAP_DIR/drifted.facts.json') as f:
     s = json.load(f)
-assert s['summary']['stale'] == 2
-assert s['summary']['proved'] == 1
+summ = s['summary']
+assert summ['stale'] == 2, summ
+assert summ['proved'] == 0, summ
+assert summ['deps_not_current'] == 1, summ
+states = ['proved','stale','missing','ineligible','trusted','unbound','blocked','deps_not_current']
+assert sum(summ[k] for k in states) == summ['total_functions'], summ
 " 2>/dev/null; then
-    echo "  ok  crypto_verify: drifted snapshot shows 2 stale, 1 proved"
+    echo "  ok  crypto_verify: drifted snapshot shows 2 stale, 0 proved, 1 contained (census totals)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  crypto_verify: drifted snapshot stale counts wrong"
+    echo "FAIL  crypto_verify: drifted snapshot counts wrong"
     FAIL=$((FAIL + 1))
 fi
 

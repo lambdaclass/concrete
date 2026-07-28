@@ -77,6 +77,7 @@ Those belong in:
 - [053_dce_deletes_checked_negation.md](053_dce_deletes_checked_negation.md) — fixed in R-0005: the unary trap inventory moved into `IntArith`, so DCE stops deciding locally whether `-x` can trap
 - [056_fnptr_reassign_phi_undefined_register.md](056_fnptr_reassign_phi_undefined_register.md) — fixed in R-0436: a function reference became `SVal.fnRef` and a call target became `SCallee`, retiring both string encodings
 - [061_pexpr_conflates_param_application_with_global_call.md](061_pexpr_conflates_param_application_with_global_call.md) — fixed in R-0442: `PExpr.applyVar` + a `FnTable.callables` namespace; filed as latent, but the witness was already load-bearing in three shipped HOF proofs
+- [062_proof_dependency_staleness_does_not_propagate.md](062_proof_dependency_staleness_does_not_propagate.md) — fixed in R-0004 slice 3: a reachable non-current dependency downgrades its dependent to `deps_not_current`, at one hop and transitively
 
 ## Open Numbered Bugs
 
@@ -88,7 +89,6 @@ Those belong in:
 - [058_proof_by_without_fingerprint_never_stales.md](058_proof_by_without_fingerprint_never_stales.md) — contained: a missing stored fingerprint is now `unbound`, never `proved`; the full subject digest remains R-0004 work (2026-07-25)
 - [059_body_fingerprint_omits_signature_and_types.md](059_body_fingerprint_omits_signature_and_types.md) — the body hash drops declared types and never sees the signature; `i32 -> u32` keeps a proof `proved` (R-0004, 2026-07-25)
 - [060_contracts_outside_proof_fingerprint.md](060_contracts_outside_proof_fingerprint.md) — `#[ensures]` is outside the hash, so a FALSE postcondition still reports `proved` (R-0004, 2026-07-25)
-- [062_proof_dependency_staleness_does_not_propagate.md](062_proof_dependency_staleness_does_not_propagate.md) — a stale proof does not invalidate its dependents, not even one hop; `staleDeps` is recorded but never consulted (R-0004, 2026-07-25)
 - [063_cap_inference_defaults_derived_fnptr_to_empty.md](063_cap_inference_defaults_derived_fnptr_to_empty.md) — cap-variable inference records "unknown argument type" as "no capabilities", so a fn pointer read from a struct field, call result or array element cannot reach a `cap C` parameter; misreported as E0220 against a `with()` the program never wrote (2026-07-27)
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)

@@ -408,5 +408,5 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 24 functions — 0 proved, 0 stale, 11 unbound, 12 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 24 functions — 0 proved, 0 stale, 11 unbound, 0 dependency-not-current, 12 unproved, 0 blocked, 1 ineligible, 0 trusted
 

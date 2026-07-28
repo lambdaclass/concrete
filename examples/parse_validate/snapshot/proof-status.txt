@@ -75,35 +75,50 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- proved [one_direction] ------------------------------------------------ examples/parse_validate/src/main.con:115
+-- dependency not current ---------------------------------- examples/parse_validate/src/main.con:115
 
-  ✓ `parse_validate.validate_header_fields` — proof matches current body.
+  `parse_validate.validate_header_fields` cannot contribute proved evidence: it reaches a dependency that is not current.
 
  115 |     fn validate_header_fields(
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+  not current:
+    - parse_validate.validate_checksum
+    - parse_validate.validate_payload_len
+    - parse_validate.validate_msg_type
+    - parse_validate.validate_total_len
+
+  This function's own subject is FRESH — the problem is downstream. Make the
+  listed dependencies current and this claim recovers on its own.
+
   coverage: one_direction
-
-  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
-
-  spec: drift-checked (Concrete.Proof.specs)
 
   origin: source_linked
 
--- proved [one_direction] ------------------------------------------------ examples/parse_validate/src/main.con:137
+  hint: Re-verify and update those fingerprints, attach their missing proofs, or mark a boundary trusted.
 
-  ✓ `parse_validate.parse_header` — proof matches current body.
+-- dependency not current ---------------------------------- examples/parse_validate/src/main.con:137
+
+  `parse_validate.parse_header` cannot contribute proved evidence: it reaches a dependency that is not current.
 
  137 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+  not current:
+    - parse_validate.validate_checksum
+    - parse_validate.compute_checksum
+    - parse_validate.validate_payload_len
+    - parse_validate.validate_msg_type
+    - parse_validate.validate_total_len
+
+  This function's own subject is FRESH — the problem is downstream. Make the
+  listed dependencies current and this claim recovers on its own.
+
   coverage: one_direction
 
-  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
-
-  spec: drift-checked (Concrete.Proof.specs)
-
   origin: source_linked
+
+  hint: Re-verify and update those fingerprints, attach their missing proofs, or mark a boundary trusted.
 
 -- no proof ----------------------------------------------- examples/parse_validate/src/main.con:179
 
@@ -128,5 +143,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 3 proved, 0 stale, 0 unbound, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 1 proved, 0 stale, 0 unbound, 2 dependency-not-current, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
 

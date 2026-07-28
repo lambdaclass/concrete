@@ -71,5 +71,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 5 functions — 4 proved, 0 stale, 0 unbound, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 5 functions — 4 proved, 0 stale, 0 unbound, 0 dependency-not-current, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
 

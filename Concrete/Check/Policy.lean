@@ -176,6 +176,13 @@ private def enforceRequireProofs (pc : ProofCore) : Diagnostics :=
     | .unbound => some (mkDiag
         s!"'{o.functionId.qualName}' has a proof link with no stored proof-subject digest"
         "re-verify the proof against the current body and record #[proof_fingerprint(\"...\")], or change [policy] require-proofs")
+    -- Fail closed, for the same reason: a claim whose dependency is not current
+    -- is not evidence, and a release must not ship on it. This function's own
+    -- subject being fresh is exactly what makes the case easy to miss — the
+    -- catch-all below would have treated it as acceptable.
+    | .depsNotCurrent => some (mkDiag
+        s!"'{o.functionId.qualName}' reaches a dependency that is not current, so it contributes no proved evidence"
+        "make the dependencies current (re-verify their fingerprints, attach their proofs, or mark a boundary trusted), or change [policy] require-proofs")
     | .proved | .ineligible | .trusted => none
 
 /-- Reject vacuous contracts. A function whose precondition is unsatisfiable has

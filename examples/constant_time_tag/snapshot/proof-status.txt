@@ -34,5 +34,5 @@ error: proof link for 'constant_time_tag.ct_compare' has no stored proof subject
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 2 functions — 0 proved, 0 stale, 1 unbound, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 2 functions — 0 proved, 0 stale, 1 unbound, 0 dependency-not-current, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
 

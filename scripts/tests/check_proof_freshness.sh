@@ -44,11 +44,14 @@ verdict() {
   "$COMPILER" "$1/src/main.con" --report proof-status 2>&1 \
     | grep -oE '^-- [a-z ]+(\[[a-z_]+\])?' | head -1 | sed 's/^-- //; s/ *$//'
 }
-# status_of <project> <line> — the headline for the function declared at <line>.
+# status_of <project> <qualified-name> — that function's status, looked up BY
+# NAME via --report proof-deps / obligations rather than by source line.
+# An earlier version indexed by line number and silently read `check_nonce`
+# where it meant `verify_message`: the leg passed while asserting the wrong
+# function. Line numbers are not identity (PRINCIPLES 12); the name is.
 status_of() {
-  "$COMPILER" "$1/src/main.con" --report proof-status 2>&1 \
-    | grep -E "^-- .*main\.con:$2\$" | grep -oE '^-- [a-z ]+(\[[a-z_]+\])?' \
-    | head -1 | sed 's/^-- //; s/ *$//'
+  "$COMPILER" "$1/src/main.con" --report obligations 2>&1 \
+    | awk -v fn="  $2" '$0 == fn {found=1; next} found && /status:/ {print $2; exit}'
 }
 # edit <file> <old> <new> — records a FAIL if the anchor is gone. These fixtures
 # are the REAL examples, so they can drift; a silent no-op would leave the gate
@@ -144,15 +147,16 @@ else
 fi
 
 echo
-echo "=== bug 062 — GAP OPEN: dependency staleness does not propagate ==="
+echo "=== bug 062 — CLOSED by slice 3: containment propagates over the closure ==="
 # crypto_verify is a real chain: verify_message -> verify_tag -> compute_tag.
 # Stale ONLY the leaf; the two dependents are untouched and correctly bound.
 edit "$CV/src/main.con" '    return key * message + nonce;' '    return key * message + nonce + 1;' \
 
 
-LEAF="$(status_of "$CV" 22)"     # compute_tag
-MID="$(status_of "$CV" 32)"      # verify_tag        — DIRECT dependent
-TOP="$(status_of "$CV" 47)"      # verify_message    — TWO HOPS up
+LEAF="$(status_of "$CV" main.compute_tag)"      # edited
+MID="$(status_of "$CV" main.verify_tag)"       # DIRECT dependent
+TOP="$(status_of "$CV" main.verify_message)"   # TWO HOPS up
+SIBLING="$(status_of "$CV" main.check_nonce)"  # unrelated to the edit
 DEPS="$("$COMPILER" "$CV/src/main.con" --report proof-deps 2>&1)"
 
 case "$LEAF" in
@@ -164,21 +168,31 @@ grep -q "main.compute_tag (stale)" <<<"$DEPS" \
   && ok "the stale edge IS recorded in --report proof-deps" \
   || no "the stale edge is not even recorded, which contradicts bug 062's transcript"
 
-case "$MID" in
-  *proved*) ok "TRIPWIRE(062-direct): the DIRECT dependent is still '$MID' beside a stale edge — gap open, as recorded" ;;
-  *)        no "TRIPWIRE(062-direct) FIRED: direct dependent now '$MID'. Bug 062's direct half is FIXED — update this leg and docs/bugs/062" ;;
-esac
-case "$TOP" in
-  *proved*) ok "TRIPWIRE(062-transitive): the TWO-HOP dependent is still '$TOP' — gap open, as recorded" ;;
-  *)        no "TRIPWIRE(062-transitive) FIRED: two-hop dependent now '$TOP'. Bug 062's transitive half is FIXED — update this leg and docs/bugs/062" ;;
-esac
+# CLOSED by R-0004 slice 3. Both halves are now positive assertions: a stale
+# dependency downgrades its dependent at one hop AND at two.
+[ "$MID" = "deps_not_current" ] \
+  && ok "the DIRECT dependent is contained ($MID)" \
+  || no "the direct dependent is '$MID', expected deps_not_current — 062's direct half REGRESSED"
+[ "$TOP" = "deps_not_current" ] \
+  && ok "the TWO-HOP dependent is contained ($TOP) — containment is transitive" \
+  || no "the two-hop dependent is '$TOP', expected deps_not_current — 062's transitive half REGRESSED"
+# Containment must be targeted, not blanket: a function that reaches nothing
+# stale keeps its proof. Without this, "everything is deps_not_current" would
+# pass both legs above.
+[ "$SIBLING" = "proved" ] \
+  && ok "an unrelated function in the same module is still proved ($SIBLING)" \
+  || no "an unrelated function became '$SIBLING' — containment is over-firing" 
 # The transitive half is specifically that `top` shows NOTHING about the stale
 # leaf — worse than showing it and ignoring it, because a reader of top's line
 # sees an all-proved chain.
-if awk '/main\.verify_message \[/{f=1;next} f&&/^$/{exit} f' <<<"$DEPS" | grep -q "stale"; then
-  no "TRIPWIRE(062-transitive) FIRED: the two-hop line now mentions a stale dependency — update this leg"
+# The transitive half was specifically that `verify_message` showed NOTHING
+# about the stale leaf — worse than showing it and ignoring it, because a reader
+# of that line saw an all-proved chain. It must now name it.
+if awk '/main\.verify_message \[/{f=1;next} f&&/^$/{exit} f' <<<"$DEPS" | grep -q "compute_tag (stale)"; then
+  ok "the two-hop dependency block now names the stale leaf two hops down"
 else
-  ok "TRIPWIRE(062-transitive): the two-hop line mentions no stale dependency at all — gap open, as recorded"
+  no "the two-hop block still hides the stale leaf:
+$(awk '/main\.verify_message \[/{f=1;next} f&&/^$/{exit} f' <<<"$DEPS")"
 fi
 restore cv crypto_verify
 

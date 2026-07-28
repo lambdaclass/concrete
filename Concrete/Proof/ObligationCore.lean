@@ -120,6 +120,10 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
     -- moved" from "there is no subject", because only the second means the
     -- claim was never checkable.
     | .unbound     => ("unbound_proof_link", "unbound")
+    -- A distinct ledger kind, and deliberately NOT "proved_by_lean": the whole
+    -- purpose of the status is that this claim contributes no proved evidence.
+    -- A release gate reading the ledger must see the containment, not a pass.
+    | .depsNotCurrent => ("dependency_not_current", "deps_not_current")
     | .notProved   => ("missing_theorem",   "missing")
     | .blocked     => ("blocked_proof",     "unproven")
     | .notEligible => ("ineligible_construct", "ineligible")
@@ -128,6 +132,9 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
   let concl := match e.state with
     | .stale       => s!"proof fingerprint {e.expectedFp} ≠ current {e.currentFp}"
     | .unbound     => "proof link unbound: no stored proof-subject digest"
+    | .depsNotCurrent =>
+      if e.notCurrentDeps.isEmpty then "reaches a dependency that is not current"
+      else s!"reaches non-current dependencies: {", ".intercalate e.notCurrentDeps}"
     | .proved      => if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
     | .notProved   => "no registered proof for an eligible function"
     | .blocked     => s!"extraction blocked: {", ".intercalate e.unsupported}"

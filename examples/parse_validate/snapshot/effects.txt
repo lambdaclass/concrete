@@ -14,14 +14,14 @@ module parse_validate:
       validate_checksum
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:91
       validate_header_fields
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:115
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:115
       parse_header
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:137
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:137
       error_code
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:179
   pub main
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:192
 
 Totals: 10 functions, 10 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
-Evidence: 3 proved, 7 enforced, 0 trusted-assumption, 0 reported
+Evidence: 1 proved, 9 enforced, 0 trusted-assumption, 0 reported
 

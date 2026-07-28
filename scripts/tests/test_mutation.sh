@@ -412,6 +412,41 @@ MUT_NEW+=("  FnTable.withCallables pureCoreCallables (fun _ => none) -- MUTATION
 MUT_DESC+=("Proof: representative callback bound as a global (bug 061)")
 gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
 
+# 34. ProofCore: dependency containment removed entirely (R-0004 slice 3 / 062)
+# Restores the pre-slice-3 state: notCurrentDeps is still computed and recorded,
+# and still has no effect on the status — which is exactly what bug 062 was.
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("    | some .proved => if (notCurrentOf n).isEmpty then .proved else .depsNotCurrent")
+MUT_NEW+=("    | some .proved => .proved -- MUTATION: containment has no effect")
+MUT_DESC+=("ProofCore: a non-current dependency no longer downgrades (bug 062)")
+gate_for_last "scripts/tests/check_proof_freshness.sh"
+
+# 35. ProofCore: containment stops at ONE hop (R-0004 slice 3 / 062)
+# The subtler half. The direct dependent is still contained, so a gate that only
+# checked one hop would pass; only the two-hop leg can see this.
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+# Mutated INSIDE the walk so every binding stays used: replacing the call site
+# left `reachableFrom` unused and Lean's linter rejected the file, which is a
+# kill that says nothing about whether a test can see one-hop-only behaviour.
+MUT_OLD+=("        else go fuel (rest ++ directCalleesOf n) (n :: seen)")
+MUT_NEW+=("        else go fuel rest (n :: seen) -- MUTATION: frontier never expands (one hop)")
+MUT_DESC+=("ProofCore: containment does not traverse the closure (bug 062 transitive)")
+gate_for_last "scripts/tests/check_proof_freshness.sh"
+
+# 36. ProofCore: a stale dependency counts as current (R-0004 slice 3)
+# Mutates the single-source policy rather than a consumer. If the policy really
+# is single-source, poisoning it must break containment everywhere at once.
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+# Both arms replaced together: adding `.stale` to the first line alone leaves it
+# overlapping the second, which Lean rejects structurally rather than any test
+# catching the semantics.
+MUT_OLD+=("  | .proved | .trusted => true
+  | .stale | .missing | .blocked | .ineligible | .unbound | .depsNotCurrent => false")
+MUT_NEW+=("  | .proved | .trusted | .stale => true -- MUTATION: stale counts as current
+  | .missing | .blocked | .ineligible | .unbound | .depsNotCurrent => false")
+MUT_DESC+=("ProofCore: trap inventory of dependency currency admits stale (slice 3)")
+gate_for_last "scripts/tests/check_proof_freshness.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

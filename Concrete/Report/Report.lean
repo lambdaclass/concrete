@@ -804,11 +804,16 @@ inductive ProofState where
   /-- Link present, no stored proof-subject digest — nothing to be fresh
       against. Distinct from `stale`, which asserts a body change. -/
   | unbound
+  /-- This function's own subject is fresh, but something it reaches is not
+      current, so the claim contributes no proved evidence. Distinct from `stale`
+      and `unbound`, which are both statements about THIS body. -/
+  | depsNotCurrent
 
 /-- Canonical string for a ProofState. Uses the same terminology as
     ObligationStatus.canonical to prevent cross-surface drift. -/
 def ProofState.canonical : ProofState → String
-  | .unbound    => "unbound"
+  | .unbound        => "unbound"
+  | .depsNotCurrent => "deps_not_current"
   | .proved     => "proved"
   | .stale      => "stale"
   | .notProved  => "missing"
@@ -831,12 +836,18 @@ structure ProofStatusEntry where
   origin        : String       -- "source_linked" | "json_backed" | "hardcoded" | "" (link provenance)
   coverage      : String       -- proof coverage kind: point|one_direction|iff|invariant|runtime_error|full_contract|""
   specDriftCovered : Bool := false  -- Proof.specFor hit for qualName (the drift check ran)
+  /-- Reachable dependencies that are not current, when `state` is
+      `depsNotCurrent`. Carried so the report can NAME them: "a dependency is
+      not current" without saying which one is not actionable, and the whole
+      point of this status is that the repair is somewhere else. -/
+  notCurrentDeps : List String := []
   loc           : Option SourceLoc
   fnSpan        : Option Span
 
 /-- Convert ProofCore ObligationStatus to Report-side ProofState. -/
 private def obligationStatusToProofState : Concrete.ObligationStatus → ProofState
   | .unbound => .unbound
+  | .depsNotCurrent => .depsNotCurrent
   | .proved => .proved
   | .stale => .stale
   | .missing => .notProved
@@ -891,6 +902,7 @@ private partial def collectProofStatus
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName
     , proofSource := pSrc, origin, coverage
     , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
+    , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
     , loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectProofStatus pc locMap sub qualPrefix registry) []
@@ -942,6 +954,14 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
     let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- proof link unbound {String.ofList (List.replicate 37 '-')} {locStr}\n\n  proof link unbound: no stored proof-subject digest for `{e.qualName}`.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  Not proved, and not stale: the body has not been shown to change, it has\n  never been pinned. With no stored subject the freshness check would compare\n  this body against itself.{coverageTag}{originLine}{specLine}\n\n  hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint(\"...\")]."
+  | .depsNotCurrent =>
+    -- Name the dependencies. "A dependency is not current" without saying which
+    -- is unactionable, and the defining feature of this status is that the fix is
+    -- in another function.
+    let depLines := String.intercalate "\n" (e.notCurrentDeps.map fun d => s!"    - {d}")
+    let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
+    let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    s!"-- dependency not current {String.ofList (List.replicate 34 '-')} {locStr}\n\n  `{e.qualName}` cannot contribute proved evidence: it reaches a dependency that is not current.{snippet}\n\n  not current:\n{depLines}\n\n  This function's own subject is FRESH — the problem is downstream. Make the\n  listed dependencies current and this claim recovers on its own.{coverageTag}{originLine}\n\n  hint: Re-verify and update those fingerprints, attach their missing proofs, or mark a boundary trusted."
   | .notProved =>
     s!"-- no proof {String.ofList (List.replicate 47 '-')} {locStr}\n\n  `{e.qualName}` passes the predictable profile but has no registered proof.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above."
   | .blocked =>
@@ -978,7 +998,12 @@ def proofStatusReport (modules : List CModule) (locMap : FnLocMap := [])
   let blockedCnt := (entries.filter fun e => e.state matches .blocked).length
   let notEligible := (entries.filter fun e => e.state matches .notEligible).length
   let trusted := (entries.filter fun e => e.state matches .trusted).length
-  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {unboundCnt} unbound, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
+  -- Every status must appear here. `depsNotCurrent` was missing at first and the
+  -- line silently added up to 4 of 5 functions — a totals row that does not
+  -- total is worse than no row, because it reads as a complete census.
+  let depsNC := (entries.filter fun e =>
+    match e.state with | .depsNotCurrent => true | _ => false).length
+  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {unboundCnt} unbound, {depsNC} dependency-not-current, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
   s!"{header}\n\n{"\n\n".intercalate body}\n\n{summary}\n"
 
 /-- Program-level conformance check against `docs/PROVABLE_V1.md`.
@@ -1083,7 +1108,7 @@ structure ObligationEntry where
   proof        : String       -- proof name (from registry/hardcoded, or empty)
   status       : String       -- proved | stale | missing | blocked | ineligible | trusted
   dependencies : List String  -- qualified names of proved helpers this function calls
-  staleDeps    : List String  -- proved callees whose proof has gone stale
+  notCurrentDeps    : List String  -- proved callees whose proof has gone stale
   fingerprint  : String       -- current body fingerprint
   source       : String       -- "registry" | "hardcoded" | "none"
   loc          : Option SourceLoc
@@ -1096,7 +1121,7 @@ private def obligationToEntry (o : Concrete.Obligation) : ObligationEntry :=
         match a.source with | .registry => "registry" | .hardcoded => "hardcoded")
     | none => ("", "", "none")
   { function := o.functionId.qualName, spec := sName, proof := pName
-  , status := statusStr, dependencies := o.dependencies, staleDeps := o.staleDeps
+  , status := statusStr, dependencies := o.dependencies, notCurrentDeps := o.notCurrentDeps
   , fingerprint := o.functionId.fingerprint, source := src, loc := o.loc }
 
 /-- Render the obligations report as human-readable output. -/
@@ -1108,11 +1133,14 @@ def obligationsReport (_modules : List CModule) (_locMap : FnLocMap := [])
     let locStr := fmtLoc e.loc
     let depsStr := if e.dependencies.isEmpty then "none"
       else ", ".intercalate e.dependencies
-    let staleDepsStr := if e.staleDeps.isEmpty then ""
-      else s!"\n    stale deps:   {", ".intercalate e.staleDeps}"
+    let notCurrentDepsStr := if e.notCurrentDeps.isEmpty then ""
+      -- "not current", not "stale": since slice 3 this list is the reachable
+      -- closure of anything that blocks proved evidence, and most entries are
+      -- `missing` rather than stale. The old label described a subset.
+      else s!"\n    not current:  {", ".intercalate e.notCurrentDeps}"
     let specStr := if e.spec.isEmpty then "(none)" else e.spec
     let proofStr := if e.proof.isEmpty then "(none)" else e.proof
-    s!"  {e.function}\n    status:       {e.status}\n    spec:         {specStr}\n    proof:        {proofStr}\n    source:       {e.source}\n    fingerprint:  {e.fingerprint}\n    dependencies: {depsStr}{staleDepsStr}\n    loc:          {locStr}"
+    s!"  {e.function}\n    status:       {e.status}\n    spec:         {specStr}\n    proof:        {proofStr}\n    source:       {e.source}\n    fingerprint:  {e.fingerprint}\n    dependencies: {depsStr}{notCurrentDepsStr}\n    loc:          {locStr}"
   let proved := (entries.filter fun e => e.status == "proved").length
   let stale := (entries.filter fun e => e.status == "stale").length
   let missing := (entries.filter fun e => e.status == "missing").length
@@ -1132,19 +1160,30 @@ def proofDepsReport (pc : Concrete.ProofCore) : String :=
   let header := "=== Proof Dependency Graph ==="
   -- Show only obligations that have dependencies or stale deps
   let withDeps := pc.obligations.filter fun o =>
-    !o.dependencies.isEmpty || !o.staleDeps.isEmpty
+    !o.dependencies.isEmpty || !o.notCurrentDeps.isEmpty
   let noDeps := pc.obligations.filter fun o =>
-    o.status == .proved && o.dependencies.isEmpty && o.staleDeps.isEmpty
+    o.status == .proved && o.dependencies.isEmpty && o.notCurrentDeps.isEmpty
   let body := withDeps.map fun o =>
     let statusTag := o.status.canonical
-    let depLines := o.dependencies.map fun d => s!"    → {d} (proved)"
-    let staleLines := o.staleDeps.map fun d => s!"    → {d} (stale)"
-    let allLines := depLines ++ staleLines
+    -- Label each edge with the callee's FINAL status. Hardcoding "(proved)" here
+    -- misreported a callee that slice 3 had just downgraded: `verify_message`
+    -- listed `verify_tag (proved)` while verify_tag itself read
+    -- `deps_not_current`. The status is a fact about the callee, so read it from
+    -- the callee rather than restating it at the edge.
+    let labelOf : String → String := fun d =>
+      match pc.obligations.find? (fun x => x.functionId.qualName == d) with
+      | some c => c.status.canonical
+      | none   => "unknown"
+    let depLines := o.dependencies.map fun d => s!"    → {d} ({labelOf d})"
+    let staleLines := o.notCurrentDeps.map fun d => s!"    → {d} ({labelOf d})"
+    -- notCurrentDeps is the CLOSURE, so a direct callee can appear in both lists.
+    let allLines := (depLines ++ staleLines).eraseDups
     s!"  {o.functionId.qualName} [{statusTag}]\n{"\n".intercalate allLines}"
   let isolatedNames := noDeps.map fun o => s!"  {o.functionId.qualName} [proved, no dependencies]"
   let provedCount := (pc.obligations.filter fun o => o.status == .proved).length
-  let withStaleCount := (withDeps.filter fun o => !o.staleDeps.isEmpty).length
-  let summary := s!"Summary: {provedCount} proved functions, {withDeps.length} with dependencies, {withStaleCount} with stale dependencies"
+  let withStaleCount := (withDeps.filter fun o => !o.notCurrentDeps.isEmpty).length
+  let containedCount := (pc.obligations.filter fun o => o.status == .depsNotCurrent).length
+  let summary := s!"Summary: {provedCount} proved functions, {withDeps.length} with dependencies, {withStaleCount} reaching a non-current dependency, {containedCount} contained by one"
   let sections := if body.isEmpty && isolatedNames.isEmpty then ["  (no proof dependencies)"]
     else body ++ (if isolatedNames.isEmpty then [] else [""] ++ isolatedNames)
   s!"{header}\n\n{"\n\n".intercalate sections}\n\n{summary}\n"
@@ -1164,6 +1203,7 @@ private def diagnosticKindLabel : Concrete.ProofDiagnosticKind → String
   | .theoremLookup => "theorem_lookup"
   | .leanCheckFailure => "lean_check_failure"
   | .unboundProofLink => "unbound_proof_link"
+  | .dependencyNotCurrent => "dependency_not_current"
 
 /-- Render a proof diagnostic severity as a string. -/
 private def diagnosticSeverityLabel : Concrete.ProofDiagnosticSeverity → String
@@ -2924,6 +2964,9 @@ private def collectTraceEntries
         | .proved => "proved"
         | .stale => "stale"
         | .unbound => "unbound"
+        -- Not "proved": that is the entire point of the status. Traceability
+        -- must not launder a contained claim into evidence.
+        | .depsNotCurrent => "deps_not_current"
         | .notProved => "enforced"
         | .blocked => "blocked"
         | .notEligible => "reported"
@@ -3156,7 +3199,7 @@ private def obligationToFact (e : ObligationEntry) : Val :=
     ("source", .str e.source),
     ("fingerprint", .str e.fingerprint),
     ("dependencies", .arr (e.dependencies.map .str)),
-    ("stale_deps", .arr (e.staleDeps.map .str)),
+    ("stale_deps", .arr (e.notCurrentDeps.map .str)),
     ("loc", locToJson e.loc)
   ])
 
@@ -3500,7 +3543,7 @@ private def buildProofSummary (pc : Concrete.ProofCore) : Val :=
   let blockedCount := (pc.entries.filter fun e => e.extracted.isNone && !e.unsupported.isEmpty).length
   let excludedCount := pc.excluded.length
   let depsCount := (pc.obligations.filter fun o => !o.dependencies.isEmpty).length
-  let staleDepsCount := (pc.obligations.filter fun o => !o.staleDeps.isEmpty).length
+  let notCurrentDepsCount := (pc.obligations.filter fun o => !o.notCurrentDeps.isEmpty).length
   .obj [
     ("total_functions", .num (pc.obligations.length)),
     ("proved", .num (obCount .proved)),
@@ -3519,7 +3562,7 @@ private def buildProofSummary (pc : Concrete.ProofCore) : Val :=
     ("missing_proof_count", .num (diagCount .missingProof)),
     ("attachment_integrity_count", .num (diagCount .attachmentIntegrity)),
     ("functions_with_dependencies", .num depsCount),
-    ("functions_with_stale_deps", .num staleDepsCount)
+    ("functions_with_stale_deps", .num notCurrentDepsCount)
   ]
 
 open Json in
@@ -3539,7 +3582,7 @@ private def depEdgeToJson (o : Concrete.Obligation) : Val :=
     ("function", .str o.functionId.qualName),
     ("status", .str o.status.canonical),
     ("proved_deps", .arr (o.dependencies.map .str)),
-    ("stale_deps", .arr (o.staleDeps.map .str))
+    ("stale_deps", .arr (o.notCurrentDeps.map .str))
   ]
 
 open Json in
@@ -3563,7 +3606,7 @@ def proofBundleJson
   let registryJson := registry.map registryEntryToJson
   -- Dependency edges (only functions that have deps or stale deps)
   let depEdges := (pc.obligations.filter fun o =>
-    !o.dependencies.isEmpty || !o.staleDeps.isEmpty).map depEdgeToJson
+    !o.dependencies.isEmpty || !o.notCurrentDeps.isEmpty).map depEdgeToJson
   -- Assumptions
   let assumptions := Val.obj [
     ("proof_model", .str "PExpr with Lean unbounded Int, pure functional semantics"),
@@ -4023,6 +4066,14 @@ private def buildSummaryFact (facts : List Val) : Val :=
     ("missing", .num (proofState "missing")),
     ("ineligible", .num (proofState "ineligible")),
     ("trusted", .num (proofState "trusted")),
+    -- These three completed the census. `total_functions` never added up:
+    -- `unbound` and `blocked` had been missing since those states existed, so a
+    -- function in either was invisible to any consumer summing this object, and
+    -- `deps_not_current` would have joined them. A summary that silently drops
+    -- states is worse than one that omits the field, because it reads complete.
+    ("unbound", .num (proofState "unbound")),
+    ("blocked", .num (proofState "blocked")),
+    ("deps_not_current", .num (proofState "deps_not_current")),
     ("eligibility_eligible", .num (eligStatus "eligible")),
     ("eligibility_excluded", .num (eligStatus "excluded")),
     ("eligibility_trusted", .num (eligStatus "trusted")),

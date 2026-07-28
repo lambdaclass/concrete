@@ -884,11 +884,19 @@ Land this task in seven explicit slices:
    validated proof-subject digest is `missing`/`unbound` (or
    `needs_recheck`), never `proved`; release/verified profiles fail closed.
    This containment has landed; preserve its executable controls.
-3. **Dependency containment.** Once the call/proof graph is available, a
-   reachable dependency that is stale, unbound, missing, failed, or otherwise
-   not current must prevent the caller from contributing `proved_by_lean`
-   evidence. Apply this conservatively over the reachable closure before the
-   final dependency-root design lands; `staleDeps` is not merely advisory.
+3. **Dependency containment.** This slice has landed. A reachable dependency
+   that is not current downgrades its dependent to the new
+   `ObligationStatus.depsNotCurrent`, at one hop and transitively, closing bug
+   062. Which statuses count is decided in one place
+   (`ObligationStatus.isCurrentForDependents`: `proved` and `trusted` are
+   current, everything else is not); `verified`/`release` fail closed on it and
+   the ledger gives it its own kind rather than `proved_by_lean`. The closure is
+   a worklist bounded by the node count, so recursion terminates rather than
+   diverging, and one pass is a fixpoint because reachability is transitive.
+   `staleDeps` was renamed `notCurrentDeps` — its meaning widened past its name.
+   Measured effect: only `examples/parse_validate` changes, where two claims
+   reach `missing` callees. Slice 6 replaces this conservative closure with the
+   deterministic SCC/Merkle root; this containment does not wait for it.
 4. **Replay foundation and receipt envelope.** Make `--report check-proofs`
    resolve the proof workspace from the input project/repository rather than
    the process working directory. Define a versioned `ProofEvidenceReceipt`
