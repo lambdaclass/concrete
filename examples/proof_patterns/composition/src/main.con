@@ -1,10 +1,37 @@
-// proof_patterns: call composition proof.
-// `combine` calls two proved helpers; the proof evaluates through the FnTable /
-// call scaffolding and shows the composed result for all inputs.
+// proof_patterns: call composition proof (MODULAR style).
+//
+// `combine` calls two helpers, and each helper carries its OWN kernel-verified
+// proof link. That is what makes this a modular proof: the caller's evidence
+// depends on its callees' evidence being current, and R-0004 slice 3 enforces
+// exactly that — edit `inc` and `combine` becomes `deps_not_current` until the
+// helper is re-verified.
+//
+// Before slice 3 the helpers had no links at all, and the comment here still
+// called them "proved". `combine` reported proved while resting on bodies
+// nothing pinned, so editing `inc` changed no verdict anywhere.
+//
+// The links on the HELPERS are a temporary repair, not the permanent model.
+// Requiring a proof link on every helper would make composition cost
+// bureaucracy. The long-term design is typed dependency edges in the receipt,
+// derived from what the theorem actually uses: a `contract` edge (survives an
+// implementation change that preserves the contract) or a `body` edge (binds the
+// exact callee implementation, so helpers need no links of their own). Which one
+// a proof has is read off the theorem, not declared. See README.md.
+//
+// See composition_unlinked_helper for the negative twin, and
+// composition_trusted_helper for a boundary whose trust propagates.
 mod calls {
+    #[spec(Examples.ProofPatterns.Proofs.incExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.inc_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("62e8ce897272bec8825e22663e959cc7")]
     fn inc(x: i32) -> i32 {
         return x + 1;
     }
+    #[spec(Examples.ProofPatterns.Proofs.dblExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.dbl_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("9d54db9ae7b78dd6f3db9a77875f7622")]
     fn dbl(x: i32) -> i32 {
         return x * 2;
     }

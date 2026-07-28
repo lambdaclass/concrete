@@ -897,7 +897,42 @@ Land this task in seven explicit slices:
    Measured effect: only `examples/parse_validate` changes, where two claims
    reach `missing` callees. Slice 6 replaces this conservative closure with the
    deterministic SCC/Merkle root; this containment does not wait for it.
-4. **Replay foundation and receipt envelope.** Make `--report check-proofs`
+4. **Replay foundation and receipt envelope.** The envelope must carry TYPED
+   DEPENDENCY EDGES, derived from what the theorem actually uses — not a
+   manually selected mode, and not merely the call graph:
+
+   | edge | the caller relies on | invalidated by |
+   | --- | --- | --- |
+   | `contract` | the callee's proved contract | that contract, or the callee's proof receipt, changing |
+   | `body` | the exact callee implementation | the callee's body / type / semantic digest changing |
+   | `trusted` | a declared trust boundary | the boundary changing; and the trust PROPAGATES |
+   | `missing` | nothing validated | always: the caller is `depsNotCurrent` |
+
+   Two honest proof styles then fall out of the edges rather than being chosen:
+   a **modular** proof depends on callee *contracts*, so an implementation change
+   that preserves the contract does not stale its callers; a **closed-subject**
+   proof binds exact transitive *bodies*, so its helpers need no individual proof
+   links but any relevant body change stales the caller. Deriving the edge kind
+   from the theorem is what makes the distinction honest — a mode flag would let
+   an author assert a relationship the proof does not have.
+
+   Cycles are represented through a versioned SCC/Merkle dependency root (slice
+   6), not by special-casing recursion at each consumer.
+
+   Until typed edges exist, slice 3's conservative containment stands and the
+   system fails closed: a caller whose callees have no links is `depsNotCurrent`.
+   Adding per-helper proof links (as `examples/proof_patterns/composition` now
+   does) is a TEMPORARY repair to keep the canonical example honest — it is not
+   the permanent model, and proof-link bureaucracy must not become the price of
+   composition. Once typed edges land, migrate that example to demonstrate the
+   modular and closed-subject styles side by side.
+
+   A trusted boundary counts as current for traversal, but its trust propagates
+   into the caller's evidence assumptions: a proof reaching one records
+   `proved_by_lean_modulo_trusted`, never unqualified `proved_by_lean`
+   (`composition_trusted_helper`). The receipt must carry the same distinction.
+
+   Make `--report check-proofs`
    resolve the proof workspace from the input project/repository rather than
    the process working directory. Define a versioned `ProofEvidenceReceipt`
    envelope and deterministic workspace/import/toolchain identities. This

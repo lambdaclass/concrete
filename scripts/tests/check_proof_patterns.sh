@@ -65,12 +65,49 @@ assert_json "fold --json proved + stable id" \
   'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$FD" fold.sum4 --json
 
-echo "=== composition (calls two proved helpers) ==="
+echo "=== composition (MODULAR: caller + both helpers carry current proofs) ==="
 CO="$PP/composition/src/main.con"
 assert_contains "composition proved" "proof matches current body" "$COMPILER" "$CO" --report proof-status
 assert_json "composition --json proved + stable id" \
   'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$CO" calls.combine --json
+# The helpers must be proved too, not merely called "proved" in a comment. Until
+# R-0004 slice 3 they had no links at all, and `combine` reported proved while
+# resting on bodies nothing pinned — the modular contract asserted here is what
+# makes the caller's claim mean something.
+assert_contains "composition: all three functions proved" \
+  "3 proved, 0 stale, 0 unbound, 0 dependency-not-current" \
+  "$COMPILER" "$CO" --report proof-status
+
+echo "=== composition_unlinked_helper (NEGATIVE twin: one helper has no link) ==="
+# Same shape, `dbl` unlinked. `combine`'s own body is unchanged and its own
+# fingerprint fresh, so this is precisely the case that used to read `proved`.
+CU="$PP/composition_unlinked_helper/src/main.con"
+assert_contains "unlinked helper: caller is contained, not proved" \
+  "dependency not current" "$COMPILER" "$CU" --report proof-status
+assert_contains "unlinked helper: the linked helper stays proved" \
+  "1 proved, 0 stale, 0 unbound, 1 dependency-not-current" \
+  "$COMPILER" "$CU" --report proof-status
+# ...and it must name the culprit, or the verdict is not actionable.
+assert_contains "unlinked helper: names the unlinked callee" \
+  "calls.dbl" "$COMPILER" "$CU" --report proof-status
+
+echo "=== composition_trusted_helper (trust must not launder through the caller) ==="
+CT="$PP/composition_trusted_helper/src/main.con"
+# Trusted is CURRENT for traversal, so the caller is not contained...
+assert_contains "trusted helper: caller is still proved" \
+  "2 proved, 0 stale, 0 unbound, 0 dependency-not-current" "$COMPILER" "$CT" --report proof-status
+# ...but the claim must SAY it is conditional, where it is read.
+assert_contains "trusted helper: the proved claim names its assumption" \
+  "ASSUMES trusted boundaries (not proved): calls.dbl" "$COMPILER" "$CT" --report proof-status
+# ...and the ledger must not emit an unqualified proved_by_lean, or a consumer
+# filtering on that string counts an assumption-bearing claim as unconditional.
+assert_contains "trusted helper: ledger qualifies the evidence" \
+  "proved_by_lean_modulo_trusted" "$COMPILER" "$CT" --report obligation-ledger
+# The sibling with no trusted dependency must stay UNqualified, so the check
+# above is not just "every claim is modulo_trusted".
+assert_contains "no-trusted sibling keeps unqualified proved_by_lean" \
+  "proved_by_lean (lean)" "$COMPILER" "$CO" --report obligation-ledger
 
 echo "=== ghost (ghost-assisted; fingerprint ghost-invariant) ==="
 GH="$PP/ghost/src/main.con"
@@ -110,7 +147,14 @@ if command -v lake >/dev/null 2>&1; then
   assert_contains "array_update kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$AU" --report check-proofs
   assert_contains "loop_copy kernel-verified"    "1 verified, 0 failed" "$COMPILER" "$LC" --report check-proofs
   assert_contains "fold kernel-verified"         "1 verified, 0 failed" "$COMPILER" "$FD" --report check-proofs
-  assert_contains "composition kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$CO" --report check-proofs
+  # THREE now, not one: the helpers carry real proof links since R-0004 slice 3,
+  # so kernel replay covers the whole modular chain rather than only the caller.
+  assert_contains "composition kernel-verified (all 3)" "3 verified, 0 failed" "$COMPILER" "$CO" --report check-proofs
+  # The negative twin replays what it HAS — the linked helper and the caller's
+  # own theorem — while the caller's STATUS stays contained. Kernel replay and
+  # dependency currency are different questions, and conflating them is how a
+  # contained claim would sneak back in as evidence.
+  assert_contains "unlinked twin kernel-verifies its linked proofs" "0 failed" "$COMPILER" "$CU" --report check-proofs
   assert_contains "ghost kernel-verified"        "verified" "$COMPILER" "$GH" --report check-proofs
   assert_contains "workspace fn kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$PP/workspace/src/main.con" --report check-proofs
   echo "=== kernel: emit-lean stub typechecks (up to sorry) ==="

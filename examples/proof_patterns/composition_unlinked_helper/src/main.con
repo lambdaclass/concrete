@@ -1,0 +1,35 @@
+// proof_patterns: the NEGATIVE twin of `composition`.
+//
+// Identical shape, one difference: `dbl` carries no proof link. `combine`'s own
+// body is unchanged and its own fingerprint is fresh, so before R-0004 slice 3
+// it reported `proved` — a claim resting on a helper that nothing pinned and no
+// theorem covered.
+//
+// It now reports `deps_not_current`: the caller's evidence is only as current as
+// its callees', and one of them has none. That is the modular contract stated
+// negatively, and it is the reason the sibling `composition` example had to gain
+// real links on BOTH helpers rather than keep calling them "proved" in a comment.
+//
+// This is not a bug to fix in this file. The file exists to fail this way.
+mod calls {
+    #[spec(Examples.ProofPatterns.Proofs.incExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.inc_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("62e8ce897272bec8825e22663e959cc7")]
+    fn inc(x: i32) -> i32 {
+        return x + 1;
+    }
+
+    // Deliberately unlinked: no #[spec], no #[proof_by], no fingerprint.
+    fn dbl(x: i32) -> i32 {
+        return x * 2;
+    }
+
+    #[spec(Examples.ProofPatterns.Proofs.combineExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.combine_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("e39660b9356a1e28a7546a37100e6eb3")]
+    fn combine(x: i32) -> i32 {
+        return inc(x) + dbl(x);
+    }
+}

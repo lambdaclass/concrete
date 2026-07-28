@@ -145,6 +145,26 @@ def combineFns : FnTable := FnTable.ofGlobals combineFnsGlobals
 def combineExpr : PExpr :=
   .binOp .add (.call "inc" [(.var "x")]) (.call "dbl" [(.var "x")])
 
+/-- `inc(x) = x + 1`, for every input.
+
+    R-0004 slice 3: the helpers carry their OWN proof links now. The composition
+    example claimed to compose "two proved helpers" while neither had a link, so
+    `combine`'s claim rested on bodies nothing pinned — editing `inc` would have
+    left `combine` reporting proved. This is the MODULAR proof style: the caller
+    depends on current proofs for its callees. The alternative (a closed-subject
+    proof, where the caller's receipt binds the transitive bodies) is not
+    expressible until the receipt carries a transitive dependency root. -/
+theorem inc_correct (x : Int) (fuel : Nat) :
+    eval combineFns (Env.empty.bind "x" (.int x)) (fuel + 1) incExpr
+      = some (.int (x + 1)) := by
+  simp [incExpr, eval, Env.bind, evalBinOp]
+
+/-- `dbl(x) = x * 2`, for every input. -/
+theorem dbl_correct (x : Int) (fuel : Nat) :
+    eval combineFns (Env.empty.bind "x" (.int x)) (fuel + 1) dblExpr
+      = some (.int (x * 2)) := by
+  simp [dblExpr, eval, Env.bind, evalBinOp]
+
 /-- `combine(x)` composes its two proved helpers: `(x + 1) + (x * 2)`. -/
 theorem combine_correct (x : Int) (fuel : Nat) :
     eval combineFns (Env.empty.bind "x" (.int x)) (fuel + 5) combineExpr

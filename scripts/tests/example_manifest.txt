@@ -121,6 +121,8 @@ examples/project/src/mymod/submodule.con project-build
 examples/project/src/other.con project-build
 examples/proof_patterns/array_update/src/main.con skip
 examples/proof_patterns/composition/src/main.con skip
+examples/proof_patterns/composition_trusted_helper/src/main.con skip
+examples/proof_patterns/composition_unlinked_helper/src/main.con skip
 examples/proof_patterns/fold/src/main.con skip
 examples/proof_patterns/ghost/src/main.con skip
 examples/proof_patterns/loop_copy/src/main.con skip

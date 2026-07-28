@@ -1,0 +1,38 @@
+// proof_patterns: composition across a TRUSTED boundary.
+//
+// The third variant of the composition shape. `dbl` is `trusted`: a declared,
+// audited escape hatch rather than a proved function.
+//
+// Trusted counts as CURRENT for dependency traversal, so `combine` is not
+// contained the way the unlinked twin is — the boundary is a deliberate
+// decision, not an accident. But the trust is an ASSUMPTION and it travels with
+// the claim: `combine` reports proved AND states that it assumes `calls.dbl`,
+// and the ledger records `proved_by_lean_modulo_trusted` rather than plain
+// `proved_by_lean`.
+//
+// Without that qualification a caller launders trust: a reader sees a
+// kernel-checked claim and cannot tell that part of the chain was never proved.
+// The distinct status string matters because a consumer filtering on
+// `proved_by_lean` would otherwise count this as unconditional.
+mod calls {
+    // Audited boundary, deliberately unproved.
+    trusted fn dbl(x: i32) -> i32 {
+        return x * 2;
+    }
+
+    #[spec(Examples.ProofPatterns.Proofs.incExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.inc_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("62e8ce897272bec8825e22663e959cc7")]
+    fn inc(x: i32) -> i32 {
+        return x + 1;
+    }
+
+    #[spec(Examples.ProofPatterns.Proofs.combineExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.combine_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("e39660b9356a1e28a7546a37100e6eb3")]
+    fn combine(x: i32) -> i32 {
+        return inc(x) + dbl(x);
+    }
+}

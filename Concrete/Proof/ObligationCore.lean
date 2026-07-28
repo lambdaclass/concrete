@@ -114,7 +114,13 @@ example (v : Report.VC) : (ofVC v).fn = v.fn
     from the same ledger as the runtime/contract obligations. -/
 def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
   let (kind, status) := match e.state with
-    | .proved      => ("source_proof_link", "proved_by_lean")
+    -- A proof reaching a trusted boundary is REAL, and it is conditional. It
+    -- gets its own status string rather than an extra field, because a consumer
+    -- filtering `status == "proved_by_lean"` would otherwise count it as
+    -- unconditional — which is precisely the laundering to prevent.
+    | .proved      =>
+      if e.trustedDeps.isEmpty then ("source_proof_link", "proved_by_lean")
+      else ("source_proof_link", "proved_by_lean_modulo_trusted")
     | .stale       => ("spec_drift",        "stale")
     -- Its own ledger kind: a release gate must be able to tell "the subject
     -- moved" from "there is no subject", because only the second means the
@@ -135,7 +141,10 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
     | .depsNotCurrent =>
       if e.notCurrentDeps.isEmpty then "reaches a dependency that is not current"
       else s!"reaches non-current dependencies: {", ".intercalate e.notCurrentDeps}"
-    | .proved      => if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
+    | .proved      =>
+      let base := if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
+      if e.trustedDeps.isEmpty then base
+      else s!"{base}, ASSUMING trusted boundaries: {", ".intercalate e.trustedDeps}"
     | .notProved   => "no registered proof for an eligible function"
     | .blocked     => s!"extraction blocked: {", ".intercalate e.unsupported}"
     | .notEligible => s!"ineligible: {", ".intercalate e.profileGates}"

@@ -841,6 +841,9 @@ structure ProofStatusEntry where
       not current" without saying which one is not actionable, and the whole
       point of this status is that the repair is somewhere else. -/
   notCurrentDeps : List String := []
+  /-- Reachable trusted boundaries. Qualifies a `proved` claim rather than
+      blocking it: the proof is real, and it rests on an unproven boundary. -/
+  trustedDeps : List String := []
   loc           : Option SourceLoc
   fnSpan        : Option Span
 
@@ -903,6 +906,7 @@ private partial def collectProofStatus
     , proofSource := pSrc, origin, coverage
     , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
     , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
+    , trustedDeps := match obl with | some o => o.trustedDeps | none => []
     , loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectProofStatus pc locMap sub qualPrefix registry) []
@@ -932,7 +936,14 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
     -- Honesty line (audit 2026-07-16): this REPORT verifies link presence +
     -- fingerprint freshness only; it does not run the Lean kernel. The
     -- kernel replay is `--report check-proofs` (gated in CI for std).
-    let trustLine := "\n\n  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`"
+    let trustLine :=
+      if e.trustedDeps.isEmpty then
+        "\n\n  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`"
+      else
+        -- The claim is CONDITIONAL and must say so where it is read. A reader
+        -- seeing only "proved" cannot tell that part of the chain is an
+        -- unproven, audited boundary.
+        s!"\n\n  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`\n\n  ASSUMES trusted boundaries (not proved): {", ".intercalate e.trustedDeps}"
     let specLine :=
       if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
       else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"

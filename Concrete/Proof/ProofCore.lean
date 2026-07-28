@@ -1595,7 +1595,18 @@ structure Obligation where
   profileGates : List String      -- reasons for ineligibility (empty if eligible)
   ineligCat    : Option IneligibleCategory  -- typed ineligibility classification
   dependencies : List String      -- qualified names of proved callees
-  notCurrentDeps    : List String      -- proved callees whose proof has gone stale
+  /-- Reachable dependencies that are not current (stale / unbound / missing /
+      blocked / ineligible). Named for what it holds: it was `staleDeps` while
+      holding mostly `missing` entries, and the invariant checking it duly fired
+      on correct output. -/
+  notCurrentDeps    : List String
+  /-- Reachable TRUSTED boundaries. Trusted counts as current for traversal — it
+      is a declared, audited escape hatch — but it is an ASSUMPTION, and it has
+      to travel with the claim. A Lean proof reaching a trusted boundary must not
+      surface as an unqualified `proved_by_lean`, or the caller launders the
+      trust: readers see a kernel-checked claim and cannot tell that part of it
+      rests on an unproven boundary. -/
+  trustedDeps  : List String := []
   loc          : Option SourceLoc
 
 -- ============================================================
@@ -2254,6 +2265,7 @@ private def generateObligations
     , ineligCat := cat
     , dependencies := []  -- filled in second pass
     , notCurrentDeps := []
+    , trustedDeps := []
     , loc := e.loc : Obligation }
   -- Build obligations for excluded entries (never extracted).
   -- Excluded functions have no extracted PExpr to compare, so
@@ -2273,6 +2285,7 @@ private def generateObligations
     , ineligCat := cat
     , dependencies := []
     , notCurrentDeps := []
+    , trustedDeps := []
     , loc := e.loc : Obligation }
   let allObls := entryObls ++ exclObls
   -- Second pass: dependencies, and — R-0004 slice 3 — dependency CONTAINMENT.
@@ -2331,6 +2344,11 @@ private def generateObligations
     | some .proved => if (notCurrentOf n).isEmpty then .proved else .depsNotCurrent
     | some st => st
     | none => .missing
+  let trustedOf : String → List String := fun self =>
+    (reachableFrom self).filter fun c =>
+      c != self && (match statusOf c with
+                    | some .trusted => true
+                    | _ => false)
   allObls.map fun o =>
     let self := o.functionId.qualName
     -- `dependencies` means "proved callees" and must read the FINAL status: a
@@ -2340,6 +2358,7 @@ private def generateObligations
     let provedCallees := (directCalleesOf self).filter fun c => finalStatus c == .proved
     { o with dependencies := provedCallees
            , notCurrentDeps := notCurrentOf self
+           , trustedDeps := trustedOf self
            , status := finalStatus self }
 
 /-- Generate proof diagnostics from obligations and extraction results. -/
