@@ -77,7 +77,13 @@ check_file "catches/01_authority_widening.con" "$OUT/catches/01_authority_wideni
 
 # Manifest correctness
 check_contains "manifest.json names example" "$OUT/manifest.json" '"example": "parse_validate"'
-check_contains "manifest.json reports proved_functions" "$OUT/manifest.json" '"proved_functions": 3'
+# ONE, not three. R-0004 slice 3: parse_validate's `validate_header_fields` and
+# `parse_header` each reach four or five `missing` callees, so they are
+# `deps_not_current` rather than proved. The bundle counts '✓' lines in
+# proof-status, and a contained claim does not get one — which is the point: a
+# release bundle must not advertise proved evidence that rests on unverified
+# dependencies. Only `validate_version` is unconditionally proved.
+check_contains "manifest.json reports proved_functions" "$OUT/manifest.json" '"proved_functions": 1'
 check_contains "manifest.json reports has_policy" "$OUT/manifest.json" '"has_policy": true'
 check_contains "manifest.json reports has_assumptions" "$OUT/manifest.json" '"has_assumptions": true'
 check_contains "manifest.json reports has_negative_pair" "$OUT/manifest.json" '"has_negative_pair": true'

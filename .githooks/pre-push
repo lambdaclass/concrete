@@ -108,7 +108,12 @@ while IFS= read -r f; do
     # have traded one gap for another.
     Concrete/Proof/*|Concrete/Report/*|proofs/*)
       add proof; add evidence; add contract; add callable
-      addjob "Proof evidence gate" ;;
+      addjob "Proof evidence gate"
+      # ...and the release bundle, which CONSUMES report output: it counts the
+      # `✓` lines in proof-status, so a verdict change moves its manifest. Only
+      # 8 gates, and it is the job that caught R-0004 slice 3 after two rounds of
+      # name-filter patching. Route to the job rather than guess another name.
+      addjob "Extra gates" ;;
     Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
     # Semantics and the interpreter are where trap/overflow facts live, and the
     # interpreter is half of every differential. Without this line they matched
@@ -119,7 +124,8 @@ while IFS= read -r f; do
     Concrete/Semantics/*|Concrete/Interp/*)       add trap; add totality; add builtin; add positions ;;
     Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
     std/*)                                        add collections; add stdlib; add proof ;;
-    examples/*)                                   add evidence; add examples ;;
+    # Example sources feed the release bundle and the snapshot corpus.
+    examples/*)                                   add evidence; add examples; addjob "Extra gates" ;;
     scripts/tests/*|.github/workflows/*)          add hygiene ;;
     Makefile|.githooks/*|flake.nix|lakefile.toml) add hygiene ;;
     Concrete/*)                                   add hygiene ;;
