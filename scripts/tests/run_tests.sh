@@ -7501,8 +7501,14 @@ fi # end section: query
 if section_active bugaudit; then
 echo ""
 echo "=== Bug-to-regression corpus audit ==="
-audit_out=$(bash "$ROOT_DIR/scripts/tests/audit_bug_corpus.sh" 2>&1)
-audit_exit=$?
+# `|| audit_exit=$?`, not a bare capture: this script runs under `set -e`, so a
+# failing audit killed run_tests.sh AT THIS ASSIGNMENT — before the code below
+# that exists specifically to print every audited bug. The trust gate reported
+# failure with the section header and nothing after it, so the one diagnostic
+# designed for this path never ran. Same family as the `| head` SIGPIPE bug
+# noted below: careful failure reporting that the shell disposes of first.
+audit_exit=0
+audit_out=$(bash "$ROOT_DIR/scripts/tests/audit_bug_corpus.sh" 2>&1) || audit_exit=$?
 # Count pass/fail from audit output
 audit_pass=$(grep <<<"$audit_out" -c "^  ok " || true)
 audit_fail=$(grep <<<"$audit_out" -c "^  FAIL" || true)
