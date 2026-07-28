@@ -77,8 +77,10 @@ changelog does not erase a still-relevant condition:
   constants, lint/vet, doc, bench, trace/debug, eval/inspect, LSP:** future
   usability/tooling work should be pulled by Phase 7+ workloads or the later
   phase that owns the corresponding user surface.
-- **Build-output convention:** move generated binaries/IR out of source dirs when
-  the next build-UX touch makes it worthwhile.
+- **Build-output convention:** R-0447 makes `.build/` (or the one equivalent
+  project-local artifact root it ratifies) the only ordinary home for generated
+  binaries, IR, reports, reductions, and proof artifacts. New source-directory
+  outputs are forbidden immediately; legacy producers migrate when touched.
 
 ## Cross-Cutting Decisions
 
@@ -1188,12 +1190,15 @@ files and on numbered bug docs absent from the state table.
 
 **Untracked audit corpus prerequisite.** Before the reverse inventory becomes
 enforcing, classify every file under `.audit_me/`: promote a minimal reproducer
-and its expected observation into the checked corpus, or delete it deliberately
-after recording why it is superseded. The directory currently contains the
+with its control, expected observation, and case manifest into
+`tests/bugs/<id>/`, or delete it deliberately after recording why it is
+superseded. Existing `tests/wrong-code`/fixture paths may migrate when touched,
+but no second bug registry is created. The directory currently contains the
 bug-050–055 audit probes, four mini-projects, and generated binaries/LLVM files;
 leaving them untracked makes `git clean` a data-loss event and makes the future
 reverse inventory fail for reasons no owner has adjudicated. Generated
-artifacts are never promoted as source fixtures.
+artifacts are never promoted as source fixtures, and new `.audit_me/` files are
+forbidden once this gate lands.
 
 **Publication discipline.** A milestone is not “pushed everywhere” until the
 same intended tip and bug/roadmap artifacts are present on every declared
@@ -1329,6 +1334,399 @@ states the whole set or what satisfies it, while `docs/DECISIONS.md` records
 "no trait objects" without mentioning that `impl Trait for Type` and `T: Trait`
 bounds exist and are load-bearing across the stdlib. Name bounds as a required
 section of the Phase 17 language reference.
+
+### Task R-0447
+
+**Objective:** Freeze repository ownership and layout before broad stdlib,
+test, proof, and documentation growth multiplies the current ambiguity.
+
+This is an ownership contract and no-new-debt migration, not a repository-wide
+rename commit. The compiler is comparatively small; the pressure is in the
+surrounding apparatus—flat test scripts, fixtures spread across tests/examples/
+bug notes/audit directories, example-specific proofs separated from their
+programs, normative text mirrored into the site, and generated artifacts beside
+source. Moving all of it at once would create path churn while R-0442/R-0004
+still change semantic identities. Leaving it unconstrained until Phase 8 would
+make every stdlib and workload task add more debt.
+
+Measured 2026-07-28 migration baselines make the hotspots concrete:
+`scripts/tests/run_tests.sh` is 10,970 lines, `scripts/tests/` has 198
+top-level files, `tests/programs/` has 819 top-level tracked `.con` fixtures,
+`Concrete/Report/Report.lean` is 4,474 lines, `docs/` has 126 top-level
+Markdown files, and the site has 16 named reference mirrors plus its index.
+The clean tracked corpus has no `.ll` fixture at `tests/programs/` top level;
+LLVM files observed there are generated worktree debt, not source fixtures.
+Use these numbers as a ratchet baseline, not as a reason to split files or
+directories mechanically.
+
+**Target ownership layout:** `config/repository-layout.toml` will become the
+canonical machine-checked definition of this tree, and
+`docs/REPOSITORY_LAYOUT.md` its human explanation. These names describe the
+repository architecture we want, not merely examples:
+
+```text
+.github/
+  workflows/                hosted CI entrypoints only
+.githooks/                  thin local policy entrypoints
+config/
+  repository-layout.toml    canonical ownership and dependency manifest
+
+Concrete/
+  Frontend/                 syntax, parser, source spans
+  Resolve/                  modules, imports, semantic identities
+  Check/                    types, ownership, capabilities
+  Core/                     checked typed program
+  Mono/                     instance collection and specialization
+  SSA/                      lowering, verification, cleanup
+  Semantics/                arithmetic, traps, layout, effects
+  Interpreter/              executable second semantics / differential oracle
+  Backend/
+    LLVM/
+    QBE/
+  Proof/
+    Core/
+    Extract/
+    Replay/
+    Receipt/
+  ProofKit/                 reusable proof definitions and lemmas
+  Evidence/                 claims, obligations, provenance
+  Report/                   rendering only
+  Driver/                   CLI, projects, build/run/test orchestration
+
+std/src/
+  pure/                     authority-free, allocation-free core
+  alloc/                    allocation-owning data structures and algorithms
+  hosted/                   filesystem, network, process, clock, console
+
+tests/
+  language/
+  ownership/
+  semantics/
+  mono/
+  ssa/
+  backends/
+  proof/
+  evidence/
+  stdlib/
+  workloads/
+  bugs/
+    <bug-id>/
+      case.toml
+      fixtures/
+      controls/
+      expected/
+  shared/
+    harnesses/
+    oracles/
+
+examples/
+  tutorials/
+  showcase/
+  workloads/
+  evidence/
+  known-holes/
+  <category>/<name>/
+    example.toml
+    src/
+    proofs/
+    fixtures/
+    expected/
+    README.md
+
+docs/
+  reference/                normative current language
+  design/                   ratified design and decisions
+  evidence/                 claim and evidence model
+  stdlib/
+  bugs/
+  guides/
+  historical/
+
+research/
+  active/
+  archived/
+
+grammar/                    canonical standalone grammar artifacts
+editor/
+  grammar/                  syntax package generated/checked against grammar/
+  lsp/                      editor protocol implementation when pulled
+
+paper/                      thesis/paper source and bibliography
+
+site/
+  content/                  site-only prose; no normative reference copies
+  templates/
+  static/
+
+scripts/
+  ci/                       thin CI composition
+  tests/
+    runners/                small semantic-area runners
+    generators/             manifests → inventories/matrices
+  reduce/                   failure predicates and minimization helpers
+  release/                  distribution/replay tooling
+  dev/                      local developer commands
+
+bench/
+  manifests/                comparable workload and measurement definitions
+  inputs/                   pinned small benchmark inputs
+  references/               pinned comparable reference implementations
+  baselines/                reviewed provenance-bearing baseline ledgers
+
+release/
+  manifests/                supported targets and bundle contents
+  baselines/                tracked release budgets
+  policy/                   signing, reproducibility, and publication policy
+
+.build/
+  artifacts/
+  reports/
+  proofs/
+  reductions/
+  tests/
+  site/
+  benchmarks/
+  releases/
+
+dist/                       generated publication output only
+```
+
+Ownership is stricter than spelling. `Semantics` owns reusable semantic facts;
+`Report` may render them and `Driver` may schedule them, but neither may
+recompute them. Compiler regressions belong to `tests/bugs/`, never to a
+teaching category. An example owns its example-specific `proofs/`, `fixtures/`,
+`expected/`, and replay material beneath its own directory even though those
+children are not repeated in the compact tree above. The site is a generated
+consumer of `docs/` and is not a second documentation root.
+
+Root files are limited to repository entrypoints and tool configuration
+(`README`, `ROADMAP`, `CHANGELOG`, contribution/security/license policy,
+`Makefile`, Lean/Nix configuration, and equivalent canonical manifests).
+There is no durable top-level `proofs/` in the target: reusable material lives
+in `Concrete/ProofKit`, compiler proof machinery in `Concrete/Proof`, and
+example-specific theorems with their example. There is no `.audit_me/` in the
+target. The Rust-era `bench/` contents are deleted or replaced by
+R-0416–R-0419's evidence-bearing shape above; preserving the directory name
+does not preserve dead machinery. `dist/` is the single release-publication
+exception to the ordinary `.build/` rule: it is generated, ignored, reproducible
+from `.build/releases/`, and contains no canonical source or evidence record.
+
+Physical moves to this tree occur only with their owner migration and must
+preserve stable imports, test IDs, history, and links. Where the current module
+loader couples an import name to a path—especially under `std/src/`—land the
+namespace-stability rule before the move; until then the ownership manifest
+must expose the target pure/alloc/hosted structure over the legacy path. A
+different final directory name requires a ratified amendment to
+`docs/REPOSITORY_LAYOUT.md`, not an ad hoc local convention.
+
+**Concrete implementation contract:** use
+`config/repository-layout.toml` as the one machine-readable source for
+top-level owners, compiler layers and allowed import edges, test areas,
+example/document/research classes, generated roots, and temporary migration
+exceptions. `docs/REPOSITORY_LAYOUT.md` is its checked human explanation, not a
+parallel list. Every exception carries `id`, `owner`, `reason`, `introduced`,
+`removal_task`, and the exact path/import pattern; the gate rejects ownerless
+or removal-task-free exceptions. Add
+`scripts/tests/check_repository_layout.sh` as the umbrella gate.
+
+The test-case source schema is `tests/<area>/<case>/case.toml` (or
+`tests/bugs/<bug-id>/case.toml` for a numbered defect) with required fields:
+stable `id`, `owner`, `area`, `kind`, fixture paths, positive/negative controls,
+expected compile/exit/stdout/stderr/trap or report observation,
+interpreter/LLVM/QBE applicability, target/profile matrix, CI tier, mutation or
+class-gate expectation, and bug/roadmap/claim IDs. Unsupported matrix legs name
+an explicit reason; absence never means “not run.” Generate
+`.build/tests/registry.json` and `.build/reports/test-inventory.md` from those
+manifests. `scripts/tests/runners/<area>.sh` consumes the generated registry and
+remains independently runnable; CI and the legacy aggregate invoke those area
+runners rather than re-encoding fixture lists. The first pilot must migrate one
+identity-sensitive area with a positive control, negative/fail-closed case,
+interpreter-vs-compiled observation, and mutation kill, proving the schema
+handles the hardest existing test shape.
+
+Path-to-job routing comes from the same ownership records. A source path names
+its owning component and consumer jobs; a gate names its owner, CI tier, and
+hosted job. Generate the pre-push selection consumed by `.githooks/pre-push`
+from those records, while `run_ci_gates_local.sh --job` continues to execute a
+hosted job's own declared gate set. The generator must reject an unowned path,
+an ownerless gate, an unknown job, and disagreement between local-hook and
+hosted-CI membership. Central consumers such as `Main.lean` declare every
+affected job explicitly. A broad `Concrete/*` or filename-substring catch-all
+may be a temporary enumerated fallback, but may not silently override exact
+ownership or count as complete coverage.
+
+This is forced by four measured misses in the hand-written router:
+`check_operational_vc_auto_discharge.sh` was invisible to Proof changes,
+`example_manifest.txt` was omitted for new examples, the release-bundle proof
+status consumer lived in another job, and `Main.lean` reached every report
+surface while routing only to hygiene. Each was caught by hosted CI after the
+local hook selected too little. Gate the class, not those four spellings: remove
+one generated owner/job edge and prove the hook-selection parity gate turns
+red.
+
+Every example carries `example.toml` with stable `id`, lifecycle class
+(`tutorial`, `showcase`, `workload`, `evidence`, or `known_hole`), owner,
+status, entrypoints, supported targets/profiles, gates, evidence/claim IDs, and
+its proof/fixture paths. All five categories use the same
+`examples/<category>/<name>/{src,proofs,fixtures,expected,README.md}` project
+shape; absent optional children are allowed, alternative homes are not.
+`examples/evidence/hmac_sha256` is the proof-colocation migration control.
+Reusable theorems may move from an example into `Concrete/ProofKit` only with a
+second consumer and a gate for both. A regression extracted from an example
+receives a case manifest under `tests/bugs/` before the example copy is
+removed.
+
+Documentation and research classification lives in the ownership manifest with
+`path`, `class`, `owner`, `status`, and `canonical_source`. Normative reference
+records must name their backing gate/fixture; historical and archived records
+cannot satisfy a current claim. The site build generates its reference input
+from canonical `docs/` records into `.build/site/`; it fails if an authored
+site file has the same canonical ID. Research status is exactly `active` or
+`archived`, and every active record names a roadmap/decision owner.
+
+Generate the Lean dependency graph as
+`.build/reports/lean-import-graph.{json,dot}` and check it with
+`scripts/tests/check_import_architecture.sh`. The target DAG is the compiler
+sequence shown above plus these consumer rules: `Semantics` is the canonical
+shared fact owner; interpreter/backends/proofs consume typed Core/SSA and
+Semantics; Evidence consumes typed facts and proof/replay results; Report
+consumes facts/evidence; Driver may orchestrate every layer. Reverse imports,
+Report/Driver semantic derivations, and direct backend-to-frontend recovery are
+forbidden. Baseline edges that cannot yet move are enumerated exceptions tied
+to R-0114–R-0118; no wildcard exception or baseline growth is permitted.
+
+Artifact enforcement snapshots a clean tracked worktree, runs representative
+build, test, proof, reduction, site, benchmark, and release commands, and fails
+on a new output outside `.build/` or the release-only `dist/` projection.
+Ignoring a leaked artifact is not a passing fix. Session/worktree metadata
+lives outside the repository; minimized reproducers are either temporary
+`.build/reductions/` outputs or promoted manifest-backed bug cases.
+
+Every legacy-area migration is one reviewable ownership transaction: add and
+validate its source manifests, run old and generated selection in comparison,
+move the owned files, update imports/links/gates, remove the old registry or
+copy, and decrement the published baseline in the same slice. A compatibility
+shim is permitted only to preserve a public import or command while its named
+owner task lands; it has a removal task and cannot become a second permanent
+path. Do not leave “temporary” duplicate fixtures, proofs, documentation, or
+semantic catalogs after the comparison passes.
+
+Land these slices in order:
+
+1. **One canonical ownership map.** Add
+   `config/repository-layout.toml`,
+   `docs/REPOSITORY_LAYOUT.md`, and the umbrella gate named above. The manifest
+   classifies compiler layers, test areas, example lifecycle, proof ownership,
+   normative documentation, research status, and generated-artifact roots.
+   Every new file must have one owner and one lifecycle; the manifest is an
+   index into existing semantic facts, not a second compiler database.
+2. **Compiler dependency ratchet.** Record and gate the intended direction:
+   frontend → resolve → check → typed Core → mono → SSA → backend, with
+   Semantics as the canonical owner of arithmetic/traps/layout/effects,
+   Proof/Evidence consuming typed artifacts, Report rendering existing facts,
+   and Driver orchestrating without deriving semantics. Generate the import
+   graph from Lean modules. Baseline current exceptions, forbid new ones, and
+   let R-0114–R-0118 remove the baseline as identities, `ProgramFacts`, typed
+   pass results, and consumer matrices land.
+3. **Manifest-driven test ownership.** Define one small case manifest carrying
+   area owner, fixture/control, expected observation, interpreter/backend
+   matrix, CI tier, mutation/class gate, and bug/roadmap ID. Pilot one semantic
+   area end to end, extract its block from `run_tests.sh`, and generate its
+   registry. The legacy script becomes a shrinking dispatcher and may not grow.
+   New flat `check_*.sh` files or fixtures without a manifest fail; legacy
+   tests migrate when their owning task touches them. Do not replace the flat
+   directory with one universal mega-runner—keep small area runners over one
+   generated registry. Fixture prefixes such as `adversarial_`, `regress_`,
+   and `error_` are migration evidence for area ownership, not a request for a
+   one-shot directory rename. Generate pre-push path-to-job routing from the
+   same ownership records and prove local/hosted job parity; do not create a
+   second routing manifest.
+4. **Canonical corpus homes.** User-facing programs are classified as
+   tutorial, showcase, workload, evidence example, or known-hole example.
+   Compiler regressions and bug witnesses live under a checked test-corpus
+   owner, not among teaching examples. Example-specific proofs live with the
+   example; reusable proof infrastructure remains compiler/ProofKit-owned.
+   Normative language text is authored once under `docs/`; site pages consume
+   or generate from it rather than maintaining hand-edited semantic mirrors.
+   Make `site/content/reference/` a generated projection of the canonical docs
+   (or links to them) so a site build cannot depend on a second hand-edited
+   copy. Research records carry active/archived status and a roadmap/decision
+   owner. Do not physically regroup the 126 docs before R-0438's generated
+   claim/index view exists; organize discovery by semantic ownership first.
+5. **Hot-file authority split.** Extract the stable diagnostic-code catalog
+   from `Report.lean` into one canonical diagnostic data/module owner that the
+   defining passes validate against and reports consume. `Report` renders
+   diagnostics; it does not independently own their identity or wording.
+   Split other renderers only when their semantic owner or compile/merge
+   pressure requires it, not to hit a line-count target.
+6. **Artifact hygiene.** Generated binaries, LLVM/QBE text, reports, proof
+   replay bundles, reductions, and test outputs go under the canonical
+   project-local artifact root. `.audit_me/` is emptied through R-0010's
+   promote-or-delete decision; worktree/session state is ignored or stored
+   outside the repository.
+
+The migration is ratcheted, not big-bang: publish counts for unclassified
+files, flat test scripts, wrong-layer imports, regression-shaped examples,
+detached example proofs, normative mirrors, and generated source-tree
+artifacts; every touched area must reduce or preserve each count, never increase
+it. Directory moves happen in the semantic task that establishes the owner so
+history remains reviewable and active worktrees do not receive path-only
+conflicts. The stdlib's pure/alloc/hosted layering is made visible in the
+ownership manifest first; physical `std/src` subdirectories require a
+namespace-stable module rule and measured navigation benefit rather than being
+ratified by this task.
+
+Gate an unclassified new test/example/research record, a wrong-layer Lean
+import, a report or driver module deriving a semantic fact privately, a
+regression fixture added as a tutorial, a second normative site copy, and a
+generated `.ll`/binary outside the artifact root. Gate growth of
+`run_tests.sh`, a second independently maintained E-code catalog, an unowned
+path/gate, a central consumer missing one declared job, and local/hosted job
+membership divergence. Each must fail with the owning directory/task and
+remedy. R-0010 owns bug-corpus promotion, R-0438 owns generated semantic/claim
+inventories, R-0114–R-0118 own compiler-layer migration, R-0135 owns example
+refresh, and R-0151 owns proof colocation; this task supplies their shared
+layout contract and prevents parallel registries. Dead performance harnesses
+remain owned by R-0416–R-0419; this task does not delete tracked or untracked
+research notes merely because they are at repository root.
+
+**Completion state for R-0447:** close this task only when:
+
+- every new file class has a machine-readable owner and lifecycle;
+- a new test can be registered through the case manifest without growing
+  `run_tests.sh`, and one semantic area demonstrates fixture, control,
+  interpreter/backend matrix, CI selection, mutation, and local replay end to
+  end;
+- pre-push routing is generated from the ownership records, every path and gate
+  is owned, central consumers fan out explicitly, and local/hosted job
+  membership agrees;
+- generated output has one enforced artifact root and a clean build leaves
+  source directories unchanged;
+- site reference content cannot drift from its canonical document;
+- the generated Lean import graph rejects every new wrong-direction edge;
+- examples, regressions, example proofs, reusable proof infrastructure,
+  normative documents, and research records have distinct checked
+  classifications;
+- `Report` consumes the canonical diagnostic catalog instead of owning a
+  second statement of diagnostic identity; and
+- the measured legacy-debt baselines are published and no tracked count can
+  increase silently.
+
+R-0447 establishes that contract, one complete pilot, and the no-new-debt
+ratchets; it does not wait for every legacy file to move. The owner tasks above
+complete the incremental migration. At that later steady state,
+`run_tests.sh` is a small dispatcher or gone, test fixtures are navigable by
+semantic area and bug owner, regression witnesses no longer masquerade as
+teaching examples, and an example's program/proofs/fixtures/replay data are
+colocated while reusable proof machinery stays central. Compiler imports
+follow the declared pipeline with the exception baseline eliminated; reports
+and drivers contain no private semantic implementations; normative text has
+one authored copy; and ordinary builds leave the source tree unchanged.
+
+The usability criterion is deliberately human-sized: a contributor can
+determine where an artifact belongs, who owns its semantics, how it is tested,
+and whether it is generated without searching the whole repository or editing
+a global hand-maintained registry.
 
 ### Task R-0444
 
@@ -1959,6 +2357,14 @@ with the narrower “authority-free” claim, and makes proof-boundary documents
 use R-0440’s orthogonal evidence dimensions instead of assigning every fact to
 one total tier. Stable documents link to generated proof coverage rather than
 freezing a count that changes when a theorem lands.
+
+Consume R-0447's repository ownership manifest rather than inventing a second
+file registry. Constructor/claim records may point to test-case manifests,
+example lifecycle records, normative-document owners, and generated artifacts;
+those references must resolve through the shared ownership map. R-0438
+generates semantic and claim coverage, while R-0447 classifies where the
+supporting artifacts belong—the two schemas join by stable IDs and neither
+copies the other's facts.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
 story, in each of the AST, Core, resolve, and project inventories; the claim gate
@@ -2992,6 +3398,15 @@ consumers. Each is an independently green vertical slice, never a compiler-wide
 rewrite; production entry points remain runnable and LLVM output is byte-stable
 unless the task records and gates an intentional delta.
 
+These tasks execute the compiler-code half of R-0447's repository contract.
+Move a module only when its semantic owner and typed boundary are established;
+in the same slice, update the generated import graph and remove the corresponding
+baseline exception. The target ownership is frontend/resolve/check/typed Core/
+mono/SSA/backend, with shared Semantics owning operation meaning, Proof/Evidence
+consuming typed artifacts, Report rendering rather than deriving facts, and
+Driver orchestrating rather than becoming a second pipeline. Do not precede
+these migrations with a path-only `Concrete/` reshuffle.
+
 ### Task R-0114
 
 **Objective:** Introduce stable semantic identities at definition boundaries.
@@ -3273,6 +3688,14 @@ the comparison detects, and no gating threshold derived from a single sample.
  name the examples/docs it checked and why no refresh was needed. The goal is
  to prevent tutorial/showcase drift without turning every feature into a
  repo-wide churn pass.
+
+Apply R-0447's lifecycle classification whenever an example is touched:
+`tutorial`, `showcase`, `workload`, `evidence`, or `known_hole`. A file whose
+purpose is compiler regression or bug reproduction moves to the owning
+test/bug corpus instead of remaining user-facing by accident. Do not bulk-move
+the examples tree for taxonomy alone; ratchet the unclassified count to zero
+through these refresh checkpoints, and fail new examples that omit their
+lifecycle/owner record.
 ### Task R-0136
 
 **Objective:** Upgrade the constant-time flagship from `reported` to `enforced` with a secret-dependent-flow checker. Today `constant_time_tag` reports a constant-time source shape and leaves machine timing `assumed`; add a source/IR information-flow pass that rejects secret-tagged values reaching branch conditions, loop bounds, or array indices, so the discipline becomes a compiler-enforced structural property, not a reported shape. This needs no hardware/timing model and must not claim machine-level timing: it produces `enforced` for the source-flow property only, with machine timing still named `assumed`. Mark secrets with an explicit annotation (e.g. `#[secret]`); the
@@ -3770,7 +4193,11 @@ source `#[proof_by]` / `#[ensures_proof]` links, and update
 reject new example proof modules under `Concrete/Examples/`. Pilot on one
 small example, then migrate all current example proof modules. Keep registered
 spec PExprs in `Concrete.Proof` until the later `ProofCore` /
-`SpecRegistry` split.
+`SpecRegistry` split. This executes R-0447's proof-ownership rule: after each
+example migrates, delete its old top-level `proofs/Examples` copy and make the
+layout manifest reject a second owner. Reusable lemmas stay in ProofKit;
+example-specific theorem code, fixtures, snapshots, and replay metadata stay
+with the example.
 ### Task R-0152
 
 **Objective:** Add proof minimization: `concrete prove --minimize <obligation_id>` emits the smallest source / ProofCore / Lean slice needed to reproduce a failed obligation. Output directory:
