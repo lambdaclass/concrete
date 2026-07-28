@@ -854,6 +854,29 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
     ++ Report.renderDiv divObls omegaProved
     ++ Report.renderOverflow ovfObls omegaProved bvProved
 
+/-- Walk up from `path` for the directory holding a Lake workspace.
+
+Kernel replay used to invoke `lake` with no `cwd`, so the workspace came from the
+PROCESS working directory and the verdict depended on where the caller stood
+(R-0004 slice 4). Resolving from the input makes the answer a property of what is
+being checked. Returns `none` rather than guessing a default: a wrong workspace
+would replay against the wrong library and report confident nonsense. -/
+partial def findLakeWorkspace (path : String) : IO (Option System.FilePath) := do
+  let abs ← IO.FS.realPath (System.FilePath.mk path)
+  let rec up (dir : System.FilePath) (fuel : Nat) : IO (Option System.FilePath) := do
+    match fuel with
+    | 0 => return none
+    | fuel + 1 =>
+      if (← (dir / "lakefile.toml").pathExists) || (← (dir / "lakefile.lean").pathExists) then
+        return some dir
+      match dir.parent with
+      | some p => if p == dir then return none else up p fuel
+      | none => return none
+  -- Start at the file's directory; a file path has a parent, a directory is its
+  -- own starting point.
+  let start := if (← abs.isDir) then abs else (abs.parent.getD abs)
+  up start 64
+
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
     through project mode so std and other dependencies resolve. -/
@@ -1292,10 +1315,30 @@ def compileAndReport (inputPath : String) (reportType : String)
       for (fn, thm) in ensuresThms do
         leanSrc := leanSrc ++ s!"-- {fn} (ensures)\n#check @{thm}\n\n"
       IO.FS.writeFile ⟨tmpPath⟩ leanSrc
-      -- Invoke lake env lean to check the file
+      -- Resolve the proof workspace from the INPUT, not the process working
+      -- directory (R-0004 slice 4). `lake` finds its workspace by walking up
+      -- from wherever it is invoked, so with no `cwd` set this verdict depended
+      -- on where the user happened to stand: the same file by absolute path gave
+      -- "3 verified, 0 failed" from the repo root and "0 verified, 3 failed"
+      -- from /tmp. Worse, it blamed each theorem with `theorem_lookup` — the
+      -- theorems were fine; the workspace was never found.
+      let wsRoot ← findLakeWorkspace inputPath
+      match wsRoot with
+      | none =>
+        -- Say what is actually wrong. Reporting N missing theorems for one
+        -- missing workspace sends the reader to look for the wrong thing.
+        let msg := s!"cannot locate a Lake workspace for '{inputPath}' (no lakefile.toml or lakefile.lean in any parent directory), so the Lean theorems it references cannot be replayed"
+        if reportJson then
+          IO.println s!"\{\n  \"schema_version\": \"1\",\n  \"all_checked\": false,\n  \"checks\": [],\n  \"lean_error\": \"{msg}\",\n  \"summary\": \{\"verified\": 0, \"failed\": 0, \"total\": 0}\n}"
+        else
+          IO.println s!"=== Lean Proof Kernel Check ===\n\nerror: {msg}"
+        return 1
+      | some ws =>
+      -- Invoke lake env lean to check the file, from the resolved workspace.
       let result ← IO.Process.output {
         cmd := "lake"
         args := #["env", "lean", tmpPath]
+        cwd := ws
         env := #[("LAKE_TERM_ANSI", "0")]
       }
       -- Parse results: Lean may put errors on stdout or stderr

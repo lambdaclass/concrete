@@ -932,9 +932,16 @@ Land this task in seven explicit slices:
    `proved_by_lean_modulo_trusted`, never unqualified `proved_by_lean`
    (`composition_trusted_helper`). The receipt must carry the same distinction.
 
-   Make `--report check-proofs`
-   resolve the proof workspace from the input project/repository rather than
-   the process working directory. Define a versioned `ProofEvidenceReceipt`
+   The workspace-resolution half has LANDED: `--report check-proofs` resolves the
+   Lake workspace by walking up from the INPUT rather than using the process
+   working directory. It previously invoked `lake` with no `cwd`, so the verdict
+   depended on where the caller stood — the same file by absolute path gave
+   "3 verified, 0 failed" from the repo root and "0 verified, 3 failed" from
+   /tmp, blaming each theorem with `theorem_lookup` when the theorems were fine
+   and the workspace was simply never found. An input with no workspace above it
+   now says so and exits non-zero. Gated in `check_proof_freshness.sh`.
+
+   What remains in this slice: define a versioned `ProofEvidenceReceipt`
    envelope and deterministic workspace/import/toolchain identities. This
    slice may establish replay and serialization plumbing, but it cannot upgrade
    a legacy body hash to a complete proof claim.

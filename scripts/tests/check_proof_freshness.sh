@@ -205,5 +205,40 @@ grep -q "(stale)" <<<"$DEPS0" \
   || ok "the unedited chain has no stale edge"
 
 echo
+echo "=== R-0004 slice 4: the replay verdict does not depend on the caller's cwd ==="
+# `lake` finds its workspace by walking up from where it is invoked, so kernel
+# replay with no `cwd` answered according to where the user happened to stand:
+# the same file by absolute path gave "3 verified, 0 failed" from the repo root
+# and "0 verified, 3 failed" from /tmp — and blamed each theorem with
+# `theorem_lookup`, sending the reader after the wrong thing entirely.
+CDIR="$ROOT_DIR/examples/proof_patterns/composition/src/main.con"
+ABS_COMPILER="$(cd "$(dirname "$COMPILER")" && pwd)/$(basename "$COMPILER")"
+from_root="$("$ABS_COMPILER" "$CDIR" --report check-proofs 2>&1 | grep -oE '[0-9]+ verified, [0-9]+ failed' | tail -1)"
+from_tmp="$(cd "$TMP" && "$ABS_COMPILER" "$CDIR" --report check-proofs 2>&1 | grep -oE '[0-9]+ verified, [0-9]+ failed' | tail -1)"
+if [ -n "$from_root" ] && [ "$from_root" = "$from_tmp" ]; then
+  ok "same verdict from the repo root and from elsewhere ($from_root)"
+else
+  no "the replay verdict moved with the working directory: root='$from_root' elsewhere='$from_tmp'"
+fi
+
+# An input with no workspace above it must SAY SO and fail closed, not report a
+# pile of missing theorems that are not missing.
+NOWS="$TMP/nows"; mkdir -p "$NOWS"; cp "$CDIR" "$NOWS/main.con"
+nows_out="$(cd "$NOWS" && "$ABS_COMPILER" "$NOWS/main.con" --report check-proofs 2>&1)"
+nows_rc=0; (cd "$NOWS" && "$ABS_COMPILER" "$NOWS/main.con" --report check-proofs >/dev/null 2>&1) || nows_rc=$?
+if grep -q "cannot locate a Lake workspace" <<<"$nows_out"; then
+  ok "a missing workspace is reported as a missing workspace"
+else
+  no "a missing workspace is not named; got: $(printf '%s' "$nows_out" | tr '\n' ' ' | head -c 200)"
+fi
+if grep -qi "theorem_lookup" <<<"$nows_out"; then
+  no "a missing workspace is still blamed on the theorems (theorem_lookup)"
+else
+  ok "no theorem is blamed for a workspace that was never found"
+fi
+[ "$nows_rc" -ne 0 ] && ok "unreplayable input fails closed (rc=$nows_rc)" \
+                     || no "unreplayable input exited 0 — replay must fail closed"
+
+echo
 echo "PROOF-FRESHNESS: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
