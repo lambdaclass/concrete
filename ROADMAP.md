@@ -919,8 +919,33 @@ Land this task in seven explicit slices:
    Cycles are represented through a versioned SCC/Merkle dependency root (slice
    6), not by special-casing recursion at each consumer.
 
+   **Ownership.** The edge vocabulary and the theorem-expression metaprogram
+   belong under Proof extraction, NOT in ProofKit, examples, reports or the CLI:
+
+   ```
+   Concrete/Proof/Core/DependencyEdge.lean       -- typed-edge vocabulary
+   Concrete/Proof/Extract/DependencyEdges.lean   -- theorem-expression metaprogram
+   Concrete/Proof/Receipt/                       -- serializes extracted edges
+   Concrete/Proof/Replay/                        -- revalidates them
+   ```
+
+   If that directory split is premature (it depends on R-0114-R-0118, per
+   [[repo-reorganization-plan]]), land it as a flat `Concrete/Proof` module with
+   this declared future owner recorded in the module header.
+
+   **Sequencing constraint (measured).** `PFnDef` carries `name : String` and no
+   semantic identity, and all nine FnTables in the proof corpus are hand-written.
+   Enforcing `body`-edge classification before generated, ID-carrying tables
+   exist would classify essentially every table-naming theorem as `missing` and
+   contain the whole corpus — far larger than slice 3's two claims, and the
+   pressure would then be to weaken the rule rather than finish the migration.
+   Order: `CallableId` on `PFnDef` → compiler-generated tables → migrate the nine
+   hand-written tables → then enforce. Contract edges are unaffected throughout.
+
    The `contract`/`body` discriminator is visible in the theorem's TYPE, and both
-   shapes already exist in the tree — see `docs/PROOF_CONTRACT.md` §1.1.
+   shapes already exist in the tree — see `docs/PROOF_CONTRACT.md` §1.1-1.3 for
+   the normative rules, including how a `body` edge is resolved and why the
+   receipt's workspace field is a closure digest rather than a path.
    `ProofKit.unary_call` quantifies over `fns : FnTable` and takes the callee's
    behaviour as a hypothesis (contract); `combine_correct` names the concrete
    `combineFns` and unfolds the helper bodies (body). Deriving the edge kind
@@ -7074,3 +7099,37 @@ the consumer list checkable rather than conventional.
 Gate: a new trapping constructor added to the inventory must appear in
 generated fuzz cases without editing the generator, and every declared consumer
 must be shown to read the generated artifact rather than a local copy.
+### Task R-0447
+
+**Objective:** Generate path-to-job ownership from the repository manifest
+instead of maintaining a hand-written filename map.
+
+The pre-push hook decides which CI gates a change needs by matching touched paths
+against a hand-written map of gate-name substrings and job names
+(`.githooks/pre-push`). That map re-derives, badly, something the workflow
+already declares — and it has now missed four times in a single day, each caught
+only by CI:
+
+1. `check_operational_vc_auto_discharge.sh` typechecks Lean fixtures against the
+   Proof API but has no "proof" in its name, so a `Concrete/Proof` change never
+   ran it;
+2. the fail-closed `scripts/tests/example_manifest.txt`, which new example
+   directories must declare an outcome in;
+3. `test_release_bundle.sh`, which counts proof-status output and lives in a
+   different job;
+4. `Main.lean`, which drives every `--report` surface but mapped only to
+   `hygiene` through the `Concrete/*` catch-all.
+
+Each fix widened the map by hand, which is the same maintenance every time.
+`run_ci_gates_local.sh --job "<name>"` already narrows extraction to a CI job's
+own declaration; the remaining hand-written part is which paths OWN which job.
+
+Derive that from the repository manifest work in the reorganization plan (each
+test/gate declaring its owner/component, per priority 2 there), so a gate's
+ownership is stated once where the gate is defined and the hook consumes it.
+Until then the map stays hand-written and will keep missing.
+
+Gate: a gate whose owning area is declared must be selected for a change in that
+area without the hook naming it; and a gate declared by no owner must fail the
+inventory rather than be silently unroutable.
+

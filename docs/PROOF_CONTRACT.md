@@ -84,10 +84,72 @@ transitive dependency root and replay verifies it. Until then the default is
 modular and the system fails closed: a caller whose callees have neither links
 nor bound bodies is `deps_not_current`.
 
+### 1.2 How a `body` edge is resolved
+
+A `body` edge names the callee's exact implementation, so resolving it must never
+go through pretty-printed text, source names, absolute paths, or positional table
+indices. Any of those is a guess, and a guessed dependency root is worse than no
+root: it is confidently wrong.
+
+The process is:
+
+1. structurally reify the referenced `FnTable` constant;
+2. require each relevant entry to carry a compiler-generated semantic
+   `CallableId`;
+3. resolve that ID through a generated proof-subject index;
+4. compare the proof-model body digest against the extracted source-subject
+   digest;
+5. record the table digest, entry ID, callable ID and subject digest in the
+   receipt.
+
+Failures are classified precisely, because "unknown" and "known-stale" are
+different facts and deserve different verdicts:
+
+| outcome | verdict |
+| --- | --- |
+| no mapping | `missing` |
+| multiple or colliding mappings | integrity error |
+| identity matches, body digest differs | `stale` |
+| exact mapping, digests agree | a current `body` edge |
+
+**Never under-approximate.** Where table accesses are statically known, record
+the exact subset; where they are dynamic, bind the ENTIRE table root. Recording
+only the statically-visible subset of a dynamically-accessed table mints a
+receipt that omits real dependencies — a confident `current` that is wrong.
+
+**Migration order.** `PFnDef` currently carries `name : String` and no semantic
+identity, and every FnTable in the proof corpus is hand-written. Enforcing the
+classification before generated, ID-carrying tables exist would therefore report
+`missing` for essentially every table-naming theorem and contain the whole
+corpus. The order is: `CallableId` on `PFnDef` → compiler-generated tables →
+migrate the hand-written tables → then enforce. Contract edges are unaffected
+throughout, since they never name a table.
+
+### 1.3 Workspace locator vs workspace identity
+
+Locating a workspace and identifying one are different jobs. The locator policy
+is: explicit `--workspace` → the input's workspace → the caller's workspace →
+error. That is a convenience ordering and may use paths.
+
+A durable receipt must NOT use the absolute workspace path as identity. It
+carries the logical subject/callable ID, the workspace/import-closure digest,
+manifest and lock digests, relevant module-content digests, proof/toolchain/
+schema versions, and the workspace-selection origin as informational metadata
+only.
+
+For `verified`/`release` issuance, a caller-workspace fallback may produce a
+receipt ONLY after proving the input corresponds to a subject in that closure.
+Otherwise it may report locally but must not mint durable evidence.
+
 A `trusted` edge never disappears into the caller. A proof reaching one is
 recorded as `proved_by_lean_modulo_trusted`, never unqualified `proved_by_lean`
 — otherwise trust is laundered through the caller, and a reader sees a
 kernel-checked claim without being told part of the chain was never proved.
+
+Only an EXPLICIT typed `trusted` edge authorizes a boundary. The call graph may
+identify candidates for diagnostics, but it may not authorize: the current
+implementation derives `trustedDeps` from the call graph, which is a conservative
+stand-in to be replaced by the derived edge.
 
 ## 2. The `proved` State
 
