@@ -352,14 +352,58 @@ Concrete does not want:
 
 ### Why3 / WhyML
 
-**Status:** Adapted
+**Status:** Adapted (workflow), reference architecture (multi-prover dispatch)
 
-Concrete wants to copy:
+Why3 is the closest existing system to Concrete's proof-backend ambition: it is a
+production platform (the engine under Frama-C and SPARK) that generates proof
+obligations and dispatches each to *many* provers — SMT solvers *and* ITPs (Coq,
+Isabelle, PVS) — through a shared neutral layer. It is worth studying carefully.
+
+Concrete wants to copy (workflow):
 
 - explicit proof-obligation artifacts
 - inspectable separation between code, specs, obligations, and proof results
 - proof workflow that feels like a real tool pipeline, not hidden magic
 - machine-consumable proof/audit artifacts rather than only human prose
+
+Concrete wants to copy (architecture — see `NOTES/why3-architecture-and-positioning.md`):
+
+- **Task = obligation.** Why3's "task" (a self-contained context + one goal) is the
+  right shape for Concrete's prover-neutral obligation unit.
+- **Composable transformation pipeline.** Lowering is a list of small, named,
+  logic-to-logic transforms (`split_goal`, inline, compute, eliminate-algebraic,
+  encode-polymorphism), *per-backend selected* — so one obligation serves both a
+  first-order SMT solver and an ITP. Concrete should generalize its current fixed
+  `toLeanProp`/`exprToSmt` lowering into this shape.
+- **Drivers as declarative data.** A per-prover config (symbol printing, selected
+  transforms, built-in theories, command line, result-parsing regexp) means adding a
+  prover is a *data file*, not a new module. Concrete's `obBinOp` operator table is a
+  proto-driver; push it all the way.
+- **Session shape+checksum staleness.** A structural goal *shape* stored separately from
+  an exact checksum lets an edit re-attach a proof to a moved-but-unchanged goal instead
+  of marking everything stale — a refinement of Concrete's `ProofSubjectDigest` /
+  `stale`/`unbound`/`depsNotCurrent` machinery.
+- **Realization** as a semantics bridge: prove inside each ITP that the shared
+  obligation-language axioms hold in that system's model (stronger than conformance
+  testing alone).
+
+Concrete does not want (and this is why it copies the ideas rather than building *on*
+Why3):
+
+- **WhyML as an execution substrate.** WhyML is an ML that extracts to GC'd OCaml — the
+  wrong target for a no-GC systems language. Concrete owns its LLVM/QBE codegen instead.
+- **Why3's trust posture.** Why3's transformations, drivers, and printers are a large,
+  largely-*unverified* trusted surface (a printer bug can make a false goal look proved).
+  That is the opposite of Concrete's shrinking-TCB thesis. Concrete copies the
+  architecture but diverges on trust: prefer **certificate replay** (LRAT/Alethe checked
+  in a kernel — the `solver_checked` evidence class) over trusting a driver, and keep the
+  transform set small and, where possible, itself proven sound.
+
+The distinction that matters: multi-prover dispatch is *not* a reason Concrete exists —
+Why3 already does it better today. Concrete's reason to exist is the two axes Why3 does
+not occupy (no-GC systems substrate; a graded, audit-visible evidence ledger), and it can
+reuse Why3's dispatch *design* — or even Why3 itself as a temporary scaffold/oracle while
+building its own — to get there without adopting Why3's TCB.
 
 ### F*
 
