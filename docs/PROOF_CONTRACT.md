@@ -49,6 +49,46 @@ model separates them:
 The theorem and toolchain are evidence about a semantic subject, not components
 that redefine the subject.
 
+### 1.1 Typed dependency edges
+
+The dependency root is not a flat list of callees. Each edge carries a KIND, and
+the kind is DERIVED from what the theorem actually uses — never declared by the
+author, because a declaration can assert a relationship the proof does not have:
+
+| edge | the caller relies on | invalidated by |
+| --- | --- | --- |
+| `contract` | the callee's proved contract | that contract, or the callee's receipt, changing |
+| `body` | the exact callee implementation | the callee's body / type / semantic digest changing |
+| `trusted` | a declared trust boundary | the boundary changing; the trust also PROPAGATES |
+| `missing` | nothing validated | always: the caller is `deps_not_current` |
+
+The discriminator between `contract` and `body` is already visible in the
+theorem's TYPE, and both shapes exist in the tree today:
+
+- **contract** — `Concrete.ProofKit.unary_call` is universally quantified over
+  `fns : FnTable` and takes the callee's behaviour as a HYPOTHESIS
+  (`href : ∀ Y f, eval fns … body = some (specf Y)`). It holds for ANY table
+  satisfying that contract, so an implementation change preserving `specf`
+  leaves the theorem applicable and must not stale the caller.
+- **body** — `Examples.ProofPatterns.Proofs.combine_correct` names the CONCRETE
+  `combineFns` and unfolds `incFn`/`incExpr`/`dblFn`/`dblExpr`. It is a
+  statement about those exact bodies; change `inc` and the theorem is about a
+  different program.
+
+Two honest proof styles therefore fall out of the edges rather than being
+selected. A **modular** proof carries `contract` edges; a **closed-subject**
+proof carries `body` edges and needs no individual proof links on its helpers.
+
+`closed_subject` MUST NOT be available until the receipt actually carries the
+transitive dependency root and replay verifies it. Until then the default is
+modular and the system fails closed: a caller whose callees have neither links
+nor bound bodies is `deps_not_current`.
+
+A `trusted` edge never disappears into the caller. A proof reaching one is
+recorded as `proved_by_lean_modulo_trusted`, never unqualified `proved_by_lean`
+— otherwise trust is laundered through the caller, and a reader sees a
+kernel-checked claim without being told part of the chain was never proved.
+
 ## 2. The `proved` State
 
 When `proof-status` reports `proved`, it means:

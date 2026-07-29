@@ -919,6 +919,15 @@ Land this task in seven explicit slices:
    Cycles are represented through a versioned SCC/Merkle dependency root (slice
    6), not by special-casing recursion at each consumer.
 
+   The `contract`/`body` discriminator is visible in the theorem's TYPE, and both
+   shapes already exist in the tree — see `docs/PROOF_CONTRACT.md` §1.1.
+   `ProofKit.unary_call` quantifies over `fns : FnTable` and takes the callee's
+   behaviour as a hypothesis (contract); `combine_correct` names the concrete
+   `combineFns` and unfolds the helper bodies (body). Deriving the edge kind
+   therefore means reading the theorem's type, which `check-proofs` already
+   obtains via `#check` — the open design question is how to parse it robustly
+   rather than whether the signal exists.
+
    Until typed edges exist, slice 3's conservative containment stands and the
    system fails closed: a caller whose callees have no links is `depsNotCurrent`.
    Adding per-helper proof links (as `examples/proof_patterns/composition` now
