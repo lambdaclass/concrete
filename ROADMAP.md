@@ -933,14 +933,41 @@ Land this task in seven explicit slices:
    [[repo-reorganization-plan]]), land it as a flat `Concrete/Proof` module with
    this declared future owner recorded in the module header.
 
-   **Sequencing constraint (measured).** `PFnDef` carries `name : String` and no
-   semantic identity, and all nine FnTables in the proof corpus are hand-written.
+   **Build order (normative).** `PFnDef` carries `name : String` and no semantic
+   identity, and all nine FnTables in the proof corpus are hand-written.
    Enforcing `body`-edge classification before generated, ID-carrying tables
    exist would classify essentially every table-naming theorem as `missing` and
    contain the whole corpus — far larger than slice 3's two claims, and the
    pressure would then be to weaken the rule rather than finish the migration.
-   Order: `CallableId` on `PFnDef` → compiler-generated tables → migrate the nine
-   hand-written tables → then enforce. Contract edges are unaffected throughout.
+
+   1. **`CallableId` in the compiler's semantic-identity layer.** It identifies
+      resolved declarations and monomorphized instances, and must not be
+      recoverable from function names, pretty-printing, paths or table
+      positions.
+   2. **Identity on `PFnDef`** — `callableId`, `params`, `body`. Legacy entries
+      stay READABLE during migration but cannot mint receipts.
+   3. **Canonical finite tables** replace function-shaped ones:
+      `structure FnTable where schemaVersion : Nat; entries : Array PFnDef`.
+      A `CoeFun`/lookup interface preserves existing theorem syntax, and
+      canonical ordering by `CallableId` gives a deterministic table root.
+      (Today's `FnTable` is a pair of `String → Option PFnDef` functions, which
+      has no root to digest.)
+   4. **Generate tables from the compiler** — IDs, proof bodies, source-subject
+      digests and the canonical root. Hand-written string dispatch stops being
+      evidence-bearing.
+   5. **Migrate the nine**, one at a time, with dual comparison: same theorem
+      results, same evaluation behaviour, stable generated root, kernel replay,
+      and no new hand-written entries.
+   6. **Enable typed classification** (§1.1-1.2).
+   7. **Enforce never-under-approximate** — static access binds the exact
+      reachable entries; dynamic access binds the entire canonical root; if
+      exact coverage cannot be established the answer is `missing`, never a
+      guessed subset.
+   8. **Complete the `ProofSubjectDigest`** last: signatures, generics,
+      capabilities, contracts, theorem/spec identity, dependency roots,
+      workspace closure, toolchain/schema versions.
+
+   Contract edges are unaffected throughout, since they never name a table.
 
    The `contract`/`body` discriminator is visible in the theorem's TYPE, and both
    shapes already exist in the tree — see `docs/PROOF_CONTRACT.md` §1.1-1.3 for
@@ -7099,37 +7126,3 @@ the consumer list checkable rather than conventional.
 Gate: a new trapping constructor added to the inventory must appear in
 generated fuzz cases without editing the generator, and every declared consumer
 must be shown to read the generated artifact rather than a local copy.
-### Task R-0447
-
-**Objective:** Generate path-to-job ownership from the repository manifest
-instead of maintaining a hand-written filename map.
-
-The pre-push hook decides which CI gates a change needs by matching touched paths
-against a hand-written map of gate-name substrings and job names
-(`.githooks/pre-push`). That map re-derives, badly, something the workflow
-already declares — and it has now missed four times in a single day, each caught
-only by CI:
-
-1. `check_operational_vc_auto_discharge.sh` typechecks Lean fixtures against the
-   Proof API but has no "proof" in its name, so a `Concrete/Proof` change never
-   ran it;
-2. the fail-closed `scripts/tests/example_manifest.txt`, which new example
-   directories must declare an outcome in;
-3. `test_release_bundle.sh`, which counts proof-status output and lives in a
-   different job;
-4. `Main.lean`, which drives every `--report` surface but mapped only to
-   `hygiene` through the `Concrete/*` catch-all.
-
-Each fix widened the map by hand, which is the same maintenance every time.
-`run_ci_gates_local.sh --job "<name>"` already narrows extraction to a CI job's
-own declaration; the remaining hand-written part is which paths OWN which job.
-
-Derive that from the repository manifest work in the reorganization plan (each
-test/gate declaring its owner/component, per priority 2 there), so a gate's
-ownership is stated once where the gate is defined and the hook consumes it.
-Until then the map stays hand-written and will keep missing.
-
-Gate: a gate whose owning area is declared must be selected for a change in that
-area without the hook naming it; and a gate declared by no owner must fail the
-inventory rather than be silently unroutable.
-
