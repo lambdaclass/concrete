@@ -454,6 +454,9 @@ jobs:
       - name: "Indirect-call identity (R-0002 / bug 050 — a callee VALUE is never resolved by global name; dispatch, interp agreement, no rewrite, std.io)"
         run: bash scripts/tests/check_indirect_call_identity.sh
 
+      - name: "Callable identity (R-0004 step 1 — CallableId is constructed from a resolved declaration, never recovered from text)"
+        run: bash scripts/tests/check_callable_identity.sh
+
       - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
         run: bash scripts/tests/check_fnptr_values.sh
 

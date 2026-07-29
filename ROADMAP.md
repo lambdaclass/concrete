@@ -942,10 +942,24 @@ Land this task in seven explicit slices:
    contain the whole corpus — far larger than slice 3's two claims, and the
    pressure would then be to weaken the rule rather than finish the migration.
 
-   1. **`CallableId` in the compiler's semantic-identity layer.** It identifies
-      resolved declarations and monomorphized instances, and must not be
-      recoverable from function names, pretty-printing, paths or table
-      positions.
+   1. **`CallableId` in the compiler's semantic-identity layer.** LANDED, in
+      `Concrete/Resolve/CallableId.lean` — the resolve layer, not Proof, because
+      the proof machinery is a CONSUMER of identity and an identity minted by its
+      consumer is that consumer's opinion. Explicit `user`/`builtin`/`intrinsic`/
+      `extern` namespaces; `defModule`/`declName` from the DEFINITION site so an
+      imported alias preserves identity; `typeArgs` so specializations differ;
+      schema-versioned rendering. No `String → CallableId` parser exists, by
+      design — a parser is what would let a consumer rebuild identity from text.
+      Carries no span, path, alias or binder field, so alpha-renaming cannot move
+      it. Gated by `check_callable_identity.sh` (33 checks, one per acceptance
+      criterion).
+
+      This needed its own total `tyCanonical`: `Resolve.Shared.tyName` renders
+      `.generic n args` as just `n` and answers `""` for refs, arrays, pointers
+      and fn types, so reusing it would have collapsed exactly the
+      monomorphization distinctions the identity exists to make. Capability sets
+      go through `CapSet.normalize`, so union order cannot produce two identities
+      for one callable.
    2. **Identity on `PFnDef`** — `callableId`, `params`, `body`. Legacy entries
       stay READABLE during migration but cannot mint receipts.
    3. **Canonical finite tables** replace function-shaped ones:

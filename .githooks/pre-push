@@ -127,6 +127,7 @@ while IFS= read -r f; do
     # workload differentials (httpget, wordfreq, tar_list), which are minutes.
     Concrete/Semantics/*|Concrete/Interp/*)       add trap; add totality; add builtin; add positions ;;
     Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
+    Concrete/Resolve/*)                           add linear; add callable; add mono ;;
     std/*)                                        add collections; add stdlib; add proof ;;
     # Example sources feed the release bundle and the snapshot corpus.
     examples/*)                                   add evidence; add examples; addjob "Extra gates" ;;
