@@ -948,7 +948,19 @@ Land this task in seven explicit slices:
    "3 verified, 0 failed" from the repo root and "0 verified, 3 failed" from
    /tmp, blaming each theorem with `theorem_lookup` when the theorems were fine
    and the workspace was simply never found. An input with no workspace above it
-   now says so and exits non-zero. Gated in `check_proof_freshness.sh`.
+   now says so and exits non-zero. An input that has NO workspace but is replayed
+   by a caller inside one falls back to the caller's workspace — resolving only
+   from the input was too strict and made 12 real kernel-verified std proofs
+   report as unreachable, because the gate copies sources to a temp dir. The
+   report names which workspace it used and whether it came from the input or
+   the working directory, so a fallback verdict is never anonymous. Gated in
+   `check_proof_freshness.sh` (identical verdict from two directories; the
+   fallback case; the missing-workspace case named, unblamed and fail-closed).
+
+   NOTE for the receipt: the human report prints the absolute workspace path,
+   which is useful for auditing but is NOT a deterministic identity — it is
+   machine-specific. The receipt's `workspace` field must be a digest of the
+   workspace/import closure, not a path.
 
    What remains in this slice: define a versioned `ProofEvidenceReceipt`
    envelope and deterministic workspace/import/toolchain identities. This

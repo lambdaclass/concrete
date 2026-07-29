@@ -1322,7 +1322,23 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- "3 verified, 0 failed" from the repo root and "0 verified, 3 failed"
       -- from /tmp. Worse, it blamed each theorem with `theorem_lookup` — the
       -- theorems were fine; the workspace was never found.
-      let wsRoot ← findLakeWorkspace inputPath
+      -- Input first, then the caller's own directory. Resolving ONLY from the
+      -- input was too strict and broke a legitimate case: a tool that copies
+      -- sources to a temp dir and replays them from inside the repo (which is
+      -- how check_purecore_proofs.sh exercises std). Such an input has no
+      -- workspace of its own, and the caller's workspace is then the only
+      -- available answer — refusing it made 12 real, kernel-verified std proofs
+      -- report as unreachable.
+      --
+      -- The cwd-independence property is preserved where it means something: an
+      -- input that HAS a workspace always resolves to that one, so the same file
+      -- gives the same verdict from anywhere. Only an input with no workspace
+      -- falls back, and the report names which workspace was used so the answer
+      -- is never anonymous.
+      let wsFromInput ← findLakeWorkspace inputPath
+      let wsRoot ← match wsFromInput with
+        | some w => pure (some w)
+        | none   => findLakeWorkspace "."
       match wsRoot with
       | none =>
         -- Say what is actually wrong. Reporting N missing theorems for one
@@ -1397,6 +1413,11 @@ def compileAndReport (inputPath : String) (reportType : String)
         return (if failed.isEmpty && !generalFailure then 0 else 1)
       -- Render report
       let mut out := "=== Lean Proof Kernel Check ===\n"
+      -- Name the workspace. Slice 4 needs a deterministic workspace identity in
+      -- the receipt, and a verdict that does not say where it was produced
+      -- cannot be audited — especially in the fallback case above.
+      out := out ++ s!"\nWorkspace: {ws}"
+      out := out ++ (if wsFromInput.isSome then " (from input)\n" else " (from working directory; the input is outside any workspace)\n")
       out := out ++ s!"\nToolchain: "
       out := out ++ tc ++ "\n"
       if !verified.isEmpty then

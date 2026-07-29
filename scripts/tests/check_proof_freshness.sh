@@ -239,6 +239,25 @@ fi
 [ "$nows_rc" -ne 0 ] && ok "unreplayable input fails closed (rc=$nows_rc)" \
                      || no "unreplayable input exited 0 — replay must fail closed"
 
+# ...but an input outside a workspace, replayed BY A CALLER INSIDE ONE, must
+# still work. Resolving only from the input broke exactly this: tools that copy
+# sources to a temp dir and replay them from inside the repo — which is how
+# check_purecore_proofs.sh exercises std — saw 12 real kernel-verified proofs
+# reported as unreachable. The caller's workspace is the only available answer
+# for such an input, and refusing it is not "fail closed", it is "fail wrong".
+fallback_out="$(cd "$ROOT_DIR" && "$ABS_COMPILER" "$NOWS/main.con" --report check-proofs 2>&1)"
+if grep -qE '[1-9][0-9]* verified' <<<"$fallback_out"; then
+  ok "an out-of-workspace input replays from the caller's workspace"
+else
+  no "an out-of-workspace input failed to replay from inside the repo: $(printf '%s' "$fallback_out" | tr '\n' ' ' | head -c 200)"
+fi
+# ...and it must SAY which workspace it used, so a fallback verdict is auditable.
+if grep -q "from working directory" <<<"$fallback_out"; then
+  ok "the fallback names the workspace it used"
+else
+  no "the fallback does not disclose which workspace produced the verdict"
+fi
+
 echo
 echo "PROOF-FRESHNESS: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
