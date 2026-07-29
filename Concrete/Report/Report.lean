@@ -1496,7 +1496,7 @@ def leanStubsReport (pc : Concrete.ProofCore)
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsLean := e.params.map fun p => s!"\"{p}\""
     let paramsList := "[" ++ ", ".intercalate paramsLean ++ "]"
-    s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\ndef {name}Fn : PFnDef :=\n  \{ name := \"{name}\", params := {paramsList}, body := {name}Expr }"
+    s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\ndef {name}Fn : PFnDef :=\n  \{ displayName := \"{name}\", params := {paramsList}, body := {name}Expr }"
   -- Build function table
   let tableCases := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
@@ -2671,7 +2671,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       "import Concrete.Proof.Proof\nimport Concrete.ProofKit\n\n",
       s!"namespace Concrete.Proof.Generated.{name}\nopen Concrete.Proof\n\n",
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
-      s!"def {name}Fn : PFnDef :=\n  \{ name := \"{name}\", params := {paramsList}, body := {name}Expr }\n\n",
+      s!"def {name}Fn : PFnDef :=\n  \{ displayName := \"{name}\", params := {paramsList}, body := {name}Expr }\n\n",
       s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
       s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++
       s!"    that is an `.applyVar` node and must be bound HERE, not above: a\n" ++

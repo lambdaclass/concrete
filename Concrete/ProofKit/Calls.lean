@@ -16,7 +16,13 @@ namespace Concrete.Proof
     (`href`), for any `fns : FnTable`. The template for `rotr`/σ-style call
     reductions. -/
 theorem unary_call (fns : FnTable) (name : String) (body : PExpr) (specf : BitVec 32 → BitVec 32)
-    (hfn : fns.globals name = some ⟨name, ["x"], body⟩)
+    -- Named fields, not `⟨name, ["x"], body⟩`: positional construction silently
+    -- shifts when the structure gains a field, which is the same
+    -- position-as-identity hazard that `CallableId` exists to remove. This
+    -- hypothesis leaves `callableId` at its default, so the lemma applies to
+    -- legacy and identified entries alike — it is a CONTRACT edge and does not
+    -- depend on which callee body is registered.
+    (hfn : fns.globals name = some { displayName := name, params := ["x"], body := body })
     (href : ∀ (Y : BitVec 32) (f : Nat),
       eval fns (Env.empty.bind "x" (.int Y.toNat)) (f + 2) body = some (.int (specf Y).toNat))
     (X : BitVec 32) (env : Env) (xe : PExpr) (fuel : Nat)

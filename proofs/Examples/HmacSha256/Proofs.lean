@@ -368,22 +368,22 @@ def sha256kExpr : PExpr := .arrayLit [.lit (.int 0x428a2f98), .lit (.int 0x71374
 -- (task #22, verbatim).
 
 def shaFnsGlobals : String → Option PFnDef
-  | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
-  | "ch"           => some ⟨"ch",           ["x", "y", "z"],    chExpr⟩
-  | "maj"          => some ⟨"maj",          ["x", "y", "z"],    majExpr⟩
-  | "big_sigma0"   => some ⟨"big_sigma0",   ["x"],              bigSigma0Expr⟩
-  | "big_sigma1"   => some ⟨"big_sigma1",   ["x"],              bigSigma1Expr⟩
-  | "small_sigma0" => some ⟨"small_sigma0", ["x"],              smallSigma0Expr⟩
-  | "small_sigma1" => some ⟨"small_sigma1", ["x"],              smallSigma1Expr⟩
-  | "sha256_round"    => some ⟨"sha256_round",    ["state", "k", "w"], roundExpr⟩
-  | "block_to_words"  => some ⟨"block_to_words",  ["block"],            blockToWordsExpr⟩
-  | "sha256_schedule" => some ⟨"sha256_schedule", ["w16"],             scheduleExpr⟩
-  | "sha256_k"          => some ⟨"sha256_k",          [],                   sha256kExpr⟩
-  | "block_to_words_at" => some ⟨"block_to_words_at", ["buf", "off"],      blockToWordsAtExpr⟩
-  | "sha256_compress_at" => some ⟨"sha256_compress_at", ["state", "buf", "off"], sha256_compressAtExpr⟩
-  | "sha256_init"        => some ⟨"sha256_init",        [],                   sha256_initExpr⟩
-  | "state_to_bytes"     => some ⟨"state_to_bytes",     ["state"],            stateToBytesExpr⟩
-  | "sha256_hash"        => some ⟨"sha256_hash",        ["data", "len"],      sha256_hashExpr⟩
+  | "rotr"         => some { displayName := "rotr", params := ["x", "n"], body := rotrExpr }
+  | "ch"           => some { displayName := "ch", params := ["x", "y", "z"], body := chExpr }
+  | "maj"          => some { displayName := "maj", params := ["x", "y", "z"], body := majExpr }
+  | "big_sigma0"   => some { displayName := "big_sigma0", params := ["x"], body := bigSigma0Expr }
+  | "big_sigma1"   => some { displayName := "big_sigma1", params := ["x"], body := bigSigma1Expr }
+  | "small_sigma0" => some { displayName := "small_sigma0", params := ["x"], body := smallSigma0Expr }
+  | "small_sigma1" => some { displayName := "small_sigma1", params := ["x"], body := smallSigma1Expr }
+  | "sha256_round"    => some { displayName := "sha256_round", params := ["state", "k", "w"], body := roundExpr }
+  | "block_to_words"  => some { displayName := "block_to_words", params := ["block"], body := blockToWordsExpr }
+  | "sha256_schedule" => some { displayName := "sha256_schedule", params := ["w16"], body := scheduleExpr }
+  | "sha256_k"          => some { displayName := "sha256_k", params := [], body := sha256kExpr }
+  | "block_to_words_at" => some { displayName := "block_to_words_at", params := ["buf", "off"], body := blockToWordsAtExpr }
+  | "sha256_compress_at" => some { displayName := "sha256_compress_at", params := ["state", "buf", "off"], body := sha256_compressAtExpr }
+  | "sha256_init"        => some { displayName := "sha256_init", params := [], body := sha256_initExpr }
+  | "state_to_bytes"     => some { displayName := "state_to_bytes", params := ["state"], body := stateToBytesExpr }
+  | "sha256_hash"        => some { displayName := "sha256_hash", params := ["data", "len"], body := sha256_hashExpr }
   | _                   => none
 
 def shaFns : FnTable := FnTable.ofGlobals shaFnsGlobals

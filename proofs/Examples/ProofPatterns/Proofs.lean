@@ -124,8 +124,8 @@ def incExpr : PExpr := .binOp .add (.var "x") (.lit (.int 1))
 /-- `dbl(x) = x * 2`. -/
 def dblExpr : PExpr := .binOp .mul (.var "x") (.lit (.int 2))
 
-def incFn : PFnDef := { name := "inc", params := ["x"], body := incExpr }
-def dblFn : PFnDef := { name := "dbl", params := ["x"], body := dblExpr }
+def incFn : PFnDef := { displayName := "inc", params := ["x"], body := incExpr }
+def dblFn : PFnDef := { displayName := "dbl", params := ["x"], body := dblExpr }
 
 /-- Function table the composition resolves its calls against. -/
 def combineFnsGlobals : String → Option PFnDef

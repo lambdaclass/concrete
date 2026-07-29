@@ -960,14 +960,65 @@ Land this task in seven explicit slices:
       monomorphization distinctions the identity exists to make. Capability sets
       go through `CapSet.normalize`, so union order cannot produce two identities
       for one callable.
-   2. **Identity on `PFnDef`** — `callableId`, `params`, `body`. Legacy entries
-      stay READABLE during migration but cannot mint receipts.
-   3. **Canonical finite tables** replace function-shaped ones:
-      `structure FnTable where schemaVersion : Nat; entries : Array PFnDef`.
-      A `CoeFun`/lookup interface preserves existing theorem syntax, and
-      canonical ordering by `CallableId` gives a deterministic table root.
-      (Today's `FnTable` is a pair of `String → Option PFnDef` functions, which
-      has no root to digest.)
+   2. **Identity on `PFnDef`** — LANDED, as a TYPED distinction rather than an
+      `Option` + `isSome` test. `PFnIdentity` is `legacy | semantic id`, and the
+      evidence path takes `IdentifiedPFnDef` (which has a `CallableId`, not an
+      optional one), reachable only through `PFnDef.identified?`. With an
+      Option, every consumer wanting to mint evidence has to remember to check,
+      and forgetting silently upgrades a legacy entry; here passing a legacy
+      entry to the receipt path is UNREPRESENTABLE. `name` became `displayName`
+      and is excluded from identity and from every digest.
+
+      Measured while doing it: `PFnDef.name` is WRITE-ONLY — set at 26
+      construction sites and projected at none. It never identified anything;
+      lookup goes through the table's own string key, which is keyed identity,
+      not semantic identity, and is exactly what step 3 removes. The field stays
+      only so existing literals elaborate during the migration.
+
+      Sixteen HMAC table entries were built POSITIONALLY (`⟨"rotr", […], expr⟩`)
+      and broke on the new field — the same position-as-identity hazard. All
+      converted to named fields and gated.
+   3. **Canonical finite tables.** The TYPE has landed; the nine tables migrate
+      in step 5. `FnTable` gained `schemaVersion : Nat` and
+      `entries : Array PFnDef`, alongside the legacy `globals` function so
+      migration is incremental rather than a flag day — adding them broke no
+      existing table or proof, since both default.
+
+      A `String → Option PFnDef` cannot be evidence: a Lean function cannot be
+      enumerated, hashed or ordered, so there is nothing to digest. That is why
+      this is not an ergonomic refactor — the finite table is what makes a root
+      exist. Empty `entries` marks a legacy table: it evaluates, and it has no
+      root, so it mints nothing.
+
+      Shipped with the properties the root depends on, each gated:
+      canonical ordering by rendered `CallableId` (insertion order cannot change
+      a root); duplicate identities are an INTEGRITY ERROR rather than
+      last-writer-wins (silently picking one would make the root depend on
+      insertion order); one unidentified entry disqualifies the whole table
+      (evidence needs identity for all of it, not most); the schema version is
+      inside the root; and `lookupById` resolves by identity, never by name or
+      position — a same-named entry in another module is not found.
+
+      **Calls still select by STRING.** `PExpr.call "f"` picks an entry by name,
+      so an ID-bearing table does not by itself remove keyed identity — the
+      string key is a second, parallel identity. Until calls carry a
+      `CallableId`, `FnTable.keyIndex` exposes the mapping as what it is (legacy
+      operational lookup), `keyIndexUnique` rejects a table where one key reaches
+      two entries, and the index is bound INTO the root so a receipt commits to
+      the mapping it was produced under. Renaming a `displayName` therefore
+      moves the root.
+
+      The root is LENGTH-PREFIXED and tagged, not delimiter-joined: `a;b` and
+      `a` + `;b` are different entry lists that a plain join renders identically,
+      which would let two distinct tables share a root.
+
+      Still to do here: the per-entry `[simp]` lookup lemmas that preserve proof
+      behaviour. Every proof currently does
+      `simp [XFns_globals, XFnsGlobals, …]`, relying on a projection lemma plus
+      the equation lemmas of a pattern-matching function. Under `Array` those
+      equations do not exist, so the lemmas must be GENERATED with the table
+      (step 4), not hand-written. The bar is the same KERNEL THEOREM RESULTS,
+      not identical proof terms or delta-unfolding behaviour.
    4. **Generate tables from the compiler** — IDs, proof bodies, source-subject
       digests and the canonical root. Hand-written string dispatch stops being
       evidence-bearing.

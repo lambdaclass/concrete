@@ -1,4 +1,5 @@
 import Concrete.Elab.Core
+import Concrete.Resolve.CallableId
 
 namespace Concrete.Proof
 
@@ -302,12 +303,60 @@ inductive PExpr where
                (step cont : PExpr)
   deriving Repr, BEq
 
-/-- A function definition in the proof fragment. -/
+/-- Whether an entry carries semantic identity.
+
+    A TYPED distinction, not `Option CallableId` + an `isSome` test. The
+    difference matters: with an Option, every consumer that wants to mint
+    evidence must remember to test it, and forgetting is a silent upgrade of a
+    legacy entry into evidence. Here the receipt path takes an
+    `IdentifiedPFnDef`, so there is no legacy value to pass it — accidentally
+    minting evidence is UNREPRESENTABLE rather than merely checked. -/
+inductive PFnIdentity where
+  /-- No semantic identity. Evaluates; cannot appear in a receipt. -/
+  | legacy
+  | semantic (id : CallableId)
+deriving Repr, BEq, Inhabited
+
+def PFnIdentity.id? : PFnIdentity → Option CallableId
+  | .legacy => none
+  | .semantic id => some id
+
 structure PFnDef where
-  name : String
+  /-- Semantic identity, or `legacy` (R-0004 step 2). -/
+  identity : PFnIdentity := .legacy
+  /-- Human-readable name. EXPLICITLY NOT IDENTITY.
+
+      Measured 2026-07-29: this field is write-only — set at 26 construction
+      sites and projected at none. It never identified anything; operational
+      lookup goes through the table's string key. Renamed from `name` so no
+      reader can mistake it for identity, and excluded from every digest. -/
+  displayName : String := ""
   params : List String
   body : PExpr
   deriving Repr, BEq
+
+/-- An entry that HAS identity. The receipt path takes this type, so a legacy
+    entry cannot reach it — the boundary is the type, not a runtime check. -/
+structure IdentifiedPFnDef where
+  callableId : CallableId
+  displayName : String := ""
+  params : List String
+  body : PExpr
+  deriving Repr
+
+/-- Narrow an entry to the identified form, or fail. The ONLY way into
+    `IdentifiedPFnDef`, so every evidence path goes through one place. -/
+def PFnDef.identified? (d : PFnDef) : Option IdentifiedPFnDef :=
+  match d.identity with
+  | .legacy => none
+  | .semantic id =>
+    some { callableId := id, displayName := d.displayName,
+           params := d.params, body := d.body }
+
+/-- Widen back, for evaluation. -/
+def IdentifiedPFnDef.toPFnDef (d : IdentifiedPFnDef) : PFnDef :=
+  { identity := .semantic d.callableId, displayName := d.displayName,
+    params := d.params, body := d.body }
 
 /-- An environment maps variable names to values. -/
 abbrev Env := String → Option PVal
@@ -322,6 +371,23 @@ It stays a structure of functions rather than gaining an `eval` parameter so the
 their meaning; only the three places that APPLY the table had to choose a
 namespace, which is exactly where the choice belongs. -/
 structure FnTable where
+  /-- Schema version of the table encoding. The table is evidence-bearing once
+      it has a root, so the encoding is versioned: a root computed under one
+      schema must never be compared against another. -/
+  schemaVersion : Nat := 1
+  /-- CANONICAL entries — the evidence-bearing form (R-0004 step 3).
+
+      A `String → Option PFnDef` cannot be evidence: a Lean function cannot be
+      enumerated, hashed, or ordered, so there is nothing to digest. That is why
+      this is not an ergonomic refactor — the finite table is what makes a
+      dependency root exist at all.
+
+      Empty means a LEGACY table: it still evaluates through `globals` below, so
+      the nine hand-written tables keep working and step 5 can migrate them one
+      at a time, but it has no root and therefore mints no receipt. -/
+  entries : Array PFnDef := #[]
+  /-- Legacy dispatch. Retained only until every table is migrated; a table with
+      canonical `entries` never consults it. -/
   globals : String → Option PFnDef
   callables : String → Option PFnDef := fun _ => none
 
@@ -332,8 +398,102 @@ def FnTable.empty : FnTable := { globals := fun _ => none }
 @[simp] theorem FnTable.globals_empty : FnTable.empty.globals = (fun _ => none) := rfl
 @[simp] theorem FnTable.callables_empty : FnTable.empty.callables = (fun _ => none) := rfl
 
-/-- A table of definitions only — no locally bound callables. The common case. -/
+/-- A table of definitions only — no locally bound callables. The common case.
+
+    LEGACY: builds a table with no canonical entries, so it evaluates but cannot
+    carry a root. Kept so the nine hand-written tables migrate one at a time
+    rather than in one flag-day rewrite. -/
 def FnTable.ofGlobals (g : String → Option PFnDef) : FnTable := { globals := g }
+
+/-- Compare two entries by semantic identity, for canonical ordering.
+
+    Ordering is by rendered `CallableId`, which is deterministic and
+    schema-versioned. Entries WITHOUT an identity sort last and keep their given
+    order: they cannot participate in a root anyway, so imposing an order on
+    them would invent a fact. -/
+def PFnDef.identityKey (d : PFnDef) : String :=
+  match d.identity with
+  | .semantic id => id.render
+  | .legacy      => ""
+
+/-- Canonical entry order: deterministic, and a function of identity only. -/
+def FnTable.canonicalEntries (t : FnTable) : Array PFnDef :=
+  t.entries.qsort (fun a b => a.identityKey < b.identityKey)
+
+/-- Every entry carries an identity. A table with even one legacy entry cannot
+    mint a receipt — evidence requires identity for the WHOLE table, not most
+    of it. -/
+def FnTable.allIdentified (t : FnTable) : Bool :=
+  t.entries.all (fun d => d.identified?.isSome)
+
+/-- No two entries share an identity.
+
+    A duplicate is an INTEGRITY ERROR rather than a last-writer-wins lookup:
+    two entries claiming one identity means the table disagrees with itself, and
+    silently picking one would make the root depend on insertion order. -/
+def FnTable.hasDuplicateIds (t : FnTable) : Bool :=
+  let keys := (t.entries.toList.filterMap (·.identity.id?)).map CallableId.render
+  keys.length != keys.eraseDups.length
+
+/-- The string-key → identity index that OPERATIONAL lookup still uses.
+
+    `PExpr.call "f"` selects an entry by NAME. An ID-bearing table does not
+    remove keyed identity while calls still do that: the string key is a second,
+    parallel identity, and if it maps ambiguously the table means two things at
+    once. Until calls carry `CallableId` directly, the mapping is exposed here as
+    what it is — LEGACY OPERATIONAL LOOKUP — and bound into the root, so a
+    receipt commits to the key→identity mapping it was produced under.
+
+    Keys come from `displayName`, which is explicitly not identity; that is the
+    point. This index records the coupling rather than pretending it is absent. -/
+def FnTable.keyIndex (t : FnTable) : List (String × String) :=
+  t.canonicalEntries.toList.map fun d => (d.displayName, d.identityKey)
+
+/-- Is the operational key → identity mapping unambiguous?
+
+    Two entries reachable by one string key means a call by that name selects
+    arbitrarily, so the table cannot bear evidence. Checked separately from
+    duplicate IDENTITIES: distinct callables sharing a display name is a
+    different fault from one callable listed twice. -/
+def FnTable.keyIndexUnique (t : FnTable) : Bool :=
+  let keys := t.keyIndex.map (·.1)
+  keys.length == keys.eraseDups.length
+
+/-- May this table take part in minting a receipt?
+
+    Requires canonical entries, every one identified, and no duplicate identity.
+    One predicate, so no consumer invents its own answer. -/
+def FnTable.isEvidenceBearing (t : FnTable) : Bool :=
+  !t.entries.isEmpty && t.allIdentified && !t.hasDuplicateIds && t.keyIndexUnique
+
+/-- Deterministic root over every evidence-bearing field of the table.
+
+    `none` when the table cannot bear evidence, which is the fail-closed answer:
+    a legacy, partly-identified or self-contradicting table gets NO root rather
+    than a root over whatever happens to be present. The schema version is
+    inside the root, so roots from different encodings cannot collide. -/
+def FnTable.root (t : FnTable) : Option String :=
+  if !t.isEvidenceBearing then none
+  else
+    -- LENGTH-PREFIXED, not delimiter-joined. `a;b` and `a` + `;b` are different
+    -- entry lists that a plain join renders identically, so a delimiter-only
+    -- encoding lets two distinct tables share a root. Every variable-length
+    -- piece carries its length, and every field is tagged.
+    let lp := fun (tag s : String) => s!"{tag}{s.length}:{s}"
+    let parts := t.canonicalEntries.toList.map fun d =>
+      let ps := String.intercalate "," (d.params.map fun p => lp "p" p)
+      lp "i" d.identityKey ++ lp "P" ps
+    -- The operational key index is INSIDE the root: while calls select by
+    -- string, a receipt must commit to the mapping it was produced under.
+    let idx := t.keyIndex.map fun (k, v) => lp "k" k ++ lp "v" v
+    some (s!"tblv{t.schemaVersion}:" ++ lp "E" (String.join parts) ++ lp "K" (String.join idx))
+
+/-- Look an entry up by semantic identity.
+
+    By IDENTITY, never by name or position — the two things step 3 exists to
+    stop being identity. -/
+def FnTable.lookupById (t : FnTable) (id : CallableId) : Option IdentifiedPFnDef :=
+  (t.entries.find? fun d => d.identityKey == id.render).bind PFnDef.identified?
 
 /-- A table binding locally bound callables as well. Used by theorems about
 higher-order specs, where the callback is the thing under discussion. -/
@@ -840,7 +1000,7 @@ where
 def parseByteExpr : PExpr :=
   .binOp .add (.var "data") (.var "offset")
 
-def parseByteFn : PFnDef := { name := "parse_byte", params := ["data", "offset"], body := parseByteExpr }
+def parseByteFn : PFnDef := { displayName := "parse_byte", params := ["data", "offset"], body := parseByteExpr }
 
 /-- `fn check_length(len: Int) -> Int { if len < 10 { return 1; } return 0; }`
     Bounds guard from decode_header — rejects packets shorter than the header. -/
@@ -851,7 +1011,7 @@ def checkLengthExpr : PExpr :=
     (.lit (.int 0))
 
 def checkLengthFn : PFnDef :=
-  { name := "check_length", params := ["len"], body := checkLengthExpr }
+  { displayName := "check_length", params := ["len"], body := checkLengthExpr }
 
 /-- Function table for proofs. -/
 def proofFnsGlobals : String → Option PFnDef
@@ -1066,7 +1226,7 @@ def decodeHeaderExpr : PExpr :=
               (.lit (.int 0)))))))
 
 def decodeHeaderFn : PFnDef :=
-  { name := "decode_header", params := ["data", "len"], body := decodeHeaderExpr }
+  { displayName := "decode_header", params := ["data", "len"], body := decodeHeaderExpr }
 
 /-- Extended function table including decode_header. -/
 def proofFnsExtGlobals : String → Option PFnDef
@@ -1177,7 +1337,7 @@ def computeTagExpr : PExpr :=
   .binOp .add (.binOp .mul (.var "key") (.var "message")) (.var "nonce")
 
 def computeTagFn : PFnDef :=
-  { name := "compute_tag", params := ["key", "message", "nonce"], body := computeTagExpr }
+  { displayName := "compute_tag", params := ["key", "message", "nonce"], body := computeTagExpr }
 
 /-- `fn verify_tag(key, message, nonce, expected_tag) -> Int {
        let computed = compute_tag(key, message, nonce);
@@ -1191,7 +1351,7 @@ def verifyTagExpr : PExpr :=
       (.lit (.int 0)))
 
 def verifyTagFn : PFnDef :=
-  { name := "verify_tag", params := ["key", "message", "nonce", "expected_tag"], body := verifyTagExpr }
+  { displayName := "verify_tag", params := ["key", "message", "nonce", "expected_tag"], body := verifyTagExpr }
 
 /-- `fn check_nonce(nonce, max_nonce) -> Int {
        if nonce > 0 { if nonce <= max_nonce { return 1; } else { return 0; } }
@@ -1207,7 +1367,7 @@ def checkNonceExpr : PExpr :=
     (.lit (.int 0))
 
 def checkNonceFn : PFnDef :=
-  { name := "check_nonce", params := ["nonce", "max_nonce"], body := checkNonceExpr }
+  { displayName := "check_nonce", params := ["nonce", "max_nonce"], body := checkNonceExpr }
 
 /-- `fn verify_message(key, message, nonce, expected_tag, max_nonce) -> Int {
        if verify_tag(key, message, nonce, expected_tag) != 1 { return 0; }
@@ -1229,8 +1389,7 @@ def verifyMessageExpr : PExpr :=
       (.lit (.int 1)))
 
 def verifyMessageFn : PFnDef :=
-  { name := "verify_message",
-    params := ["key", "message", "nonce", "expected_tag", "max_nonce"],
+  { displayName := "verify_message", params := ["key", "message", "nonce", "expected_tag", "max_nonce"],
     body := verifyMessageExpr }
 
 /-- Function table for crypto verification proofs. -/
@@ -1300,7 +1459,7 @@ def checkMagicExpr : PExpr :=
     (.lit (.int 0))
 
 def checkMagicFn : PFnDef :=
-  { name := "check_magic", params := ["b0", "b1", "b2", "b3"], body := checkMagicExpr }
+  { displayName := "check_magic", params := ["b0", "b1", "b2", "b3"], body := checkMagicExpr }
 
 /-- `fn check_class(cls) -> Int` — checks 1 (32-bit) or 2 (64-bit) -/
 def checkClassExpr : PExpr :=
@@ -1311,7 +1470,7 @@ def checkClassExpr : PExpr :=
       (.lit (.int 0)))
 
 def checkClassFn : PFnDef :=
-  { name := "check_class", params := ["cls"], body := checkClassExpr }
+  { displayName := "check_class", params := ["cls"], body := checkClassExpr }
 
 /-- `fn check_data(encoding) -> Int` — checks 1 (little) or 2 (big) -/
 def checkDataExpr : PExpr :=
@@ -1322,7 +1481,7 @@ def checkDataExpr : PExpr :=
       (.lit (.int 0)))
 
 def checkDataFn : PFnDef :=
-  { name := "check_data", params := ["encoding"], body := checkDataExpr }
+  { displayName := "check_data", params := ["encoding"], body := checkDataExpr }
 
 /-- `fn check_version(ver) -> Int` — checks ver == 1 (EV_CURRENT) -/
 def checkVersionExpr : PExpr :=
@@ -1331,7 +1490,7 @@ def checkVersionExpr : PExpr :=
     (.lit (.int 0))
 
 def checkVersionFn : PFnDef :=
-  { name := "check_version", params := ["ver"], body := checkVersionExpr }
+  { displayName := "check_version", params := ["ver"], body := checkVersionExpr }
 
 /-- `fn validate_header(b0, b1, b2, b3, cls, encoding, ver) -> Int` -/
 def validateHeaderExpr : PExpr :=
@@ -1350,8 +1509,7 @@ def validateHeaderExpr : PExpr :=
       (.lit (.int 0)))
 
 def validateHeaderFn : PFnDef :=
-  { name := "validate_header",
-    params := ["b0", "b1", "b2", "b3", "cls", "encoding", "ver"],
+  { displayName := "validate_header", params := ["b0", "b1", "b2", "b3", "cls", "encoding", "ver"],
     body := validateHeaderExpr }
 
 /-- Function table for ELF header validator proofs. -/
@@ -1406,7 +1564,7 @@ def validateVersionExpr : PExpr :=
     (.lit (.int 1))
 
 def validateVersionFn : PFnDef :=
-  { name := "validate_version", params := ["v"], body := validateVersionExpr }
+  { displayName := "validate_version", params := ["v"], body := validateVersionExpr }
 
 /-- `fn validate_msg_type(t: i32) -> i32` — checks 1 ≤ t ≤ 4. -/
 def validateMsgTypeExpr : PExpr :=
@@ -1417,7 +1575,7 @@ def validateMsgTypeExpr : PExpr :=
     (.lit (.int 1))
 
 def validateMsgTypeFn : PFnDef :=
-  { name := "validate_msg_type", params := ["t"], body := validateMsgTypeExpr }
+  { displayName := "validate_msg_type", params := ["t"], body := validateMsgTypeExpr }
 
 /-- `fn validate_payload_len(plen, max_len: i32) -> i32` —
     checks 0 ≤ plen ≤ max_len. -/
@@ -1429,7 +1587,7 @@ def validatePayloadLenExpr : PExpr :=
     (.lit (.int 1))
 
 def validatePayloadLenFn : PFnDef :=
-  { name := "validate_payload_len", params := ["plen", "max_len"], body := validatePayloadLenExpr }
+  { displayName := "validate_payload_len", params := ["plen", "max_len"], body := validatePayloadLenExpr }
 
 /-- `fn validate_total_len(actual, needed: i32) -> i32` —
     checks actual ≥ needed. -/
@@ -1439,7 +1597,7 @@ def validateTotalLenExpr : PExpr :=
     (.lit (.int 1))
 
 def validateTotalLenFn : PFnDef :=
-  { name := "validate_total_len", params := ["actual", "needed"], body := validateTotalLenExpr }
+  { displayName := "validate_total_len", params := ["actual", "needed"], body := validateTotalLenExpr }
 
 /-- `fn validate_checksum(expected, computed: i32) -> i32` —
     checks expected == computed. -/
@@ -1449,7 +1607,7 @@ def validateChecksumExpr : PExpr :=
     (.lit (.int 1))
 
 def validateChecksumFn : PFnDef :=
-  { name := "validate_checksum", params := ["expected", "computed"], body := validateChecksumExpr }
+  { displayName := "validate_checksum", params := ["expected", "computed"], body := validateChecksumExpr }
 
 /-- `fn compute_checksum(data: [i32; 8], count: i32) -> i32` —
     XOR fold of `data[0..count)` at i32 width.  Source:
@@ -1485,7 +1643,7 @@ def computeChecksumExpr : PExpr :=
         (.var "acc")))
 
 def computeChecksumFn : PFnDef :=
-  { name := "compute_checksum", params := ["data", "count"], body := computeChecksumExpr }
+  { displayName := "compute_checksum", params := ["data", "count"], body := computeChecksumExpr }
 
 /-- `fn validate_header_fields(v, t, plen, total_len, cs_expected, cs_computed) -> i32`
     — composes the five validators. Returns 0 on success or the
@@ -1506,8 +1664,7 @@ def validateHeaderFieldsExpr : PExpr :=
               (.lit (.int 0)))))))
 
 def validateHeaderFieldsFn : PFnDef :=
-  { name := "validate_header_fields",
-    params := ["v", "t", "plen", "total_len", "cs_expected", "cs_computed"],
+  { displayName := "validate_header_fields", params := ["v", "t", "plen", "total_len", "cs_expected", "cs_computed"],
     body := validateHeaderFieldsExpr }
 
 -- Helpers for parse_header construction (PExpr layer, not Concrete source).
@@ -1575,7 +1732,7 @@ def parseHeaderExpr : PExpr :=
                 okHeaderExpr))))))
 
 def parseHeaderFn : PFnDef :=
-  { name := "parse_header", params := ["data", "len"], body := parseHeaderExpr }
+  { displayName := "parse_header", params := ["data", "len"], body := parseHeaderExpr }
 
 /-- Function table for parse_validate proofs. -/
 def parseValidateFnsGlobals : String → Option PFnDef
@@ -1638,7 +1795,7 @@ def fcTagExpr : PExpr :=
         (.var "acc")))
 
 def fcTagFn : PFnDef :=
-  { name := "compute_tag", params := ["buf"], body := fcTagExpr }
+  { displayName := "compute_tag", params := ["buf"], body := fcTagExpr }
 
 /-- `fn ring_new() -> RingBuf` — returns a fresh RingBuf with a
     16-element data array zeroed, head = 0, count = 0. -/
@@ -1651,7 +1808,7 @@ def ringNewExpr : PExpr :=
       ])
 
 def ringNewFn : PFnDef :=
-  { name := "ring_new", params := [], body := ringNewExpr }
+  { displayName := "ring_new", params := [], body := ringNewExpr }
 
 /-- `fn ring_push(rb: RingBuf, val: i32) -> RingBuf` — push `val`
     at the current head slot, advance head by 1 mod 16, bump count
@@ -1686,7 +1843,7 @@ def ringPushExpr : PExpr :=
               ])))))
 
 def ringPushFn : PFnDef :=
-  { name := "ring_push", params := ["rb", "val"], body := ringPushExpr }
+  { displayName := "ring_push", params := ["rb", "val"], body := ringPushExpr }
 
 /-- `fn ring_contains(rb: RingBuf, val: i32) -> i32` — scans the
     ring (up to `rb.count` entries, capped at 16) and returns 1 if
@@ -1730,7 +1887,7 @@ def ringContainsExpr : PExpr :=
           (.lit (.int 0)))))
 
 def ringContainsFn : PFnDef :=
-  { name := "ring_contains", params := ["rb", "val"], body := ringContainsExpr }
+  { displayName := "ring_contains", params := ["rb", "val"], body := ringContainsExpr }
 
 /-- Function table for fixed_capacity proofs.  Each new proof
     extends this table with the function it targets. -/
@@ -1906,7 +2063,7 @@ def ctCompareExpr : PExpr :=
           (.lit (.int 0)))))
 
 def ctCompareFn : PFnDef :=
-  { name := "ct_compare", params := ["a", "b"], body := ctCompareExpr }
+  { displayName := "ct_compare", params := ["a", "b"], body := ctCompareExpr }
 
 /-- Function table for constant_time_tag proofs. -/
 def ctTagFnsGlobals : String → Option PFnDef
@@ -2311,7 +2468,7 @@ def pureCoreReprFExpr : PExpr :=
   .binOp .add (.binOp .mul (.var "x") (.lit (.int 3))) (.lit (.int 1))
 
 def pureCoreReprFFn : PFnDef :=
-  { name := "f", params := ["x"], body := pureCoreReprFExpr }
+  { displayName := "f", params := ["x"], body := pureCoreReprFExpr }
 
 /-- Fn table for the pure-core specs. The representative callback `f` is bound
     as a CALLABLE, not a global: the HOF specs apply a fn-pointer PARAMETER, and
