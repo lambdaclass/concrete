@@ -1190,6 +1190,69 @@ these new evidence gates.
    records both trust directions: agreement reduces kernel-soundness
    trust; bridge trust is untouched until realization (R-0449).
 
+### Task R-0440
+
+**Objective:** Make evidence multidimensional instead of a ladder, and record
+compiler trust per claim.
+
+**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
+remain as a policy preference among claims with the same subject and semantic
+scope, but it is not a universal ordering of unlike evidence.
+
+`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
+not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
+*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
+`reported` is an observation, not evidence at all; `runtime_checked` is a
+disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
+on one axis produces false comparisons: a native differential-oracle test covers
+the backend and runtime, while a ProofCore theorem reasons more strongly over a
+narrower semantic layer. Neither is "below" the other — they are incomparable
+evidence about different scopes, and the current model cannot say so.
+
+Represent a claim as orthogonal fields — subject binding, claim kind, semantic
+scope, evidence method, status, assumptions, producer, validated_by,
+trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
+friendly composites like `proved_by_lean`. The scope axis is the one genuinely
+missing today, and it is the axis where the compiler already has the facts.
+
+Trust is three fields, not one, because "who emitted the artifact", "who checked
+it", and "what must be trusted for the claim to hold" are different questions.
+The compiler may *produce* a Lean proof term that the kernel independently
+replays: the producer need not be trusted for proof-term validity, while the
+compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
+those into one `producer_trust` would lose exactly the distinction that makes
+independent checking worth building.
+
+What must stop being elided is that "compiler-enforced" reads as trust-free and
+is not: until checker soundness and artifact production are independently
+verified, enforcement depends on this compiler being correct. Being implemented in
+Lean does not remove that dependency; mutation testing and duplicate boundary
+checks are strong engineering evidence, not a soundness proof.
+`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
+compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
+the change is that the dependency appears per claim.
+
+Migration scope is larger than the two evidence documents. Residual total-ladder
+language elsewhere in this file recreates the ordering this task rejects —
+`tested_by_property` described as "always below proof and below solver evidence",
+and a cross-checked solver result as "stronger than" another method. A
+policy-specific partial order is fine, but it may only compare claims of
+equivalent scope and subject; rewrite those sites as part of this task rather than
+leaving a third vocabulary.
+
+Gate: a fixture set covering one claim per (scope × method) cell that exists
+today, a negative fixture proving two incomparable claims cannot be ordered by
+the renderer, a fixture proving a claim without the producer/validator/trusted-
+dependency accounting required by its method is rejected, and a red-team case
+proving no rendering path can present a weaker-scope claim under a stronger
+composite name. Reconcile both documents against the implemented model rather
+than leaving a third vocabulary.
+
+ProofCore callable identity is pulled forward as R-0442 in the global sequence.
+Every Phase 11 dependency/completeness task consumes that direct-call versus
+callable-value distinction; none may recover callable identity from a source
+spelling or reintroduce the old ambiguous `PExpr.call` representation.
+
 ### Task R-0435
 
 **Objective:** Ban lexical value shadowing while preserving explicit assignment
@@ -4957,69 +5020,6 @@ Done when: all existing production proof specs are directly and transitively
 FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
-
-### Task R-0440
-
-**Objective:** Make evidence multidimensional instead of a ladder, and record
-compiler trust per claim.
-
-**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
-remain as a policy preference among claims with the same subject and semantic
-scope, but it is not a universal ordering of unlike evidence.
-
-`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
-not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
-*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
-`reported` is an observation, not evidence at all; `runtime_checked` is a
-disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
-on one axis produces false comparisons: a native differential-oracle test covers
-the backend and runtime, while a ProofCore theorem reasons more strongly over a
-narrower semantic layer. Neither is "below" the other — they are incomparable
-evidence about different scopes, and the current model cannot say so.
-
-Represent a claim as orthogonal fields — subject binding, claim kind, semantic
-scope, evidence method, status, assumptions, producer, validated_by,
-trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
-friendly composites like `proved_by_lean`. The scope axis is the one genuinely
-missing today, and it is the axis where the compiler already has the facts.
-
-Trust is three fields, not one, because "who emitted the artifact", "who checked
-it", and "what must be trusted for the claim to hold" are different questions.
-The compiler may *produce* a Lean proof term that the kernel independently
-replays: the producer need not be trusted for proof-term validity, while the
-compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
-those into one `producer_trust` would lose exactly the distinction that makes
-independent checking worth building.
-
-What must stop being elided is that "compiler-enforced" reads as trust-free and
-is not: until checker soundness and artifact production are independently
-verified, enforcement depends on this compiler being correct. Being implemented in
-Lean does not remove that dependency; mutation testing and duplicate boundary
-checks are strong engineering evidence, not a soundness proof.
-`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
-compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
-the change is that the dependency appears per claim.
-
-Migration scope is larger than the two evidence documents. Residual total-ladder
-language elsewhere in this file recreates the ordering this task rejects —
-`tested_by_property` described as "always below proof and below solver evidence",
-and a cross-checked solver result as "stronger than" another method. A
-policy-specific partial order is fine, but it may only compare claims of
-equivalent scope and subject; rewrite those sites as part of this task rather than
-leaving a third vocabulary.
-
-Gate: a fixture set covering one claim per (scope × method) cell that exists
-today, a negative fixture proving two incomparable claims cannot be ordered by
-the renderer, a fixture proving a claim without the producer/validator/trusted-
-dependency accounting required by its method is rejected, and a red-team case
-proving no rendering path can present a weaker-scope claim under a stronger
-composite name. Reconcile both documents against the implemented model rather
-than leaving a third vocabulary.
-
-ProofCore callable identity is pulled forward as R-0442 in the global sequence.
-Every Phase 11 dependency/completeness task consumes that direct-call versus
-callable-value distinction; none may recover callable identity from a source
-spelling or reintroduce the old ambiguous `PExpr.call` representation.
 
 ### Task R-0202
 
