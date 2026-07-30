@@ -46,6 +46,19 @@ Deferred work stays in the phase where its trigger lives. Do not build machinery
 because the roadmap can imagine it; build it when a workload, proof, failing gate,
 or public API forces it.
 
+### Spike-First / Kill Criteria
+
+Large investments are validated before they are built. Any task whose cost is
+measured in weeks or more should name a cheap falsification probe — an
+afternoon-to-days experiment whose result decides whether the task proceeds —
+and its kill criteria: the outcome that stops the work. Precedents: the
+combinator count before the parser arc (seven shapes, not forty, made the
+EverParse economics real), the cap-inference probes before the capability
+verdict, the step-count correlation experiment before any timing claim. The
+roadmap is a hypothesis list, not a build list; a task that survives its probe
+is built with evidence, and a task killed by one is a success recorded in the
+changelog, not a failure.
+
 ### Where Execution Starts
 
 Execution starts at the first `Task R-NNNN` heading and advances by file
@@ -1193,6 +1206,105 @@ proving no old body-only or advisory-`staleDeps` path can emit
 std fingerprints in their already-landed commit; do not mix that repair with
 these new evidence gates.
 
+### Task R-0450
+
+**Objective:** Unify obligation lowering into one prover-neutral IR with per-backend drivers (Why3 shape) — implementation already in progress off-repo; land it in a worktree and merge once green per the operating rules. Today `toLeanProp` (Lean path) and `exprToSmt` (solver path) are two hard-coded, monolithic lowerings of the same obligation expressions: two answers to one question, free to drift — and drift here means the Lean proof and the SMT check silently prove DIFFERENT obligations, an evidence-integrity defect in the system R-0004 is hardening. Define one typed obligation IR (linear integer arithmetic, bitvectors, bools, arrays: the deliberate intersection fragment; everything else `not_supported`), one semantics (a single `eval` in Lean, the IntArith single-source discipline), lowering as small named transforms, and per-backend drivers that select which transforms run.
+
+   Slice 1 unifies the two existing backends only — no new provers; the diff
+   should be net-negative in lowering code. Gates: constructor coverage
+   (every transform/emitter handles or explicitly rejects every IR
+   constructor, fail-closed), Lean/SMT verdict agreement on generated
+   obligations including identical `unsupported`s, and identity carried as
+   resolved callable references (R-0442's output), never name strings.
+   R-0170's auto-discharge must generate INTO the IR, not the ad-hoc
+   lowerings. Version-stamp the IR in every emitted artifact so R-0004
+   receipts record what produced them.
+
+### Task R-0448
+
+**Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). Positioned immediately after R-0450 because the owner is executing it now to test the idea; the spike branch is the experiment vehicle, this task is its graduation bar.
+
+   Merge bar (the graduation note's verified list): badge-teeth negative
+   case (a weakly-bounded `a * b` closes with no kernel and stays
+   `unproven`), kernel-absent honesty (no `coqc` → no attestation), class
+   distinctness, no laundering past `trusted`, and a mutation proving the
+   badge disappears when a kernel leaves the agreement set. The
+   emitter-agreement differential runs generated obligations across kernels
+   and reports DISAGREEMENT as signal (a lowering defect or a
+   decision-procedure discrepancy), never noise. Credibility gate: one
+   flagship row (`hmac_sha256` or `vc_suite`) showing
+   `proved_by_two_kernels`, replayable by an outsider with either kernel.
+   Provers stay optional tooling (`nix develop .#provers`); the linear
+   fragment boundary stays a gate, with scope growth only through R-0450's
+   named transforms. Dependencies: R-0450 (the IR), R-0004 (receipts),
+   R-0440 (the independence field ships inline here as its first consumer
+   if the full model has not landed). On merge, TRUSTED_COMPUTING_BASE.md
+   records both trust directions: agreement reduces kernel-soundness
+   trust; bridge trust is untouched until realization (R-0449).
+
+### Task R-0440
+
+**Objective:** Make evidence multidimensional instead of a ladder, and record
+compiler trust per claim.
+
+**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
+remain as a policy preference among claims with the same subject and semantic
+scope, but it is not a universal ordering of unlike evidence.
+
+`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
+not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
+*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
+`reported` is an observation, not evidence at all; `runtime_checked` is a
+disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
+on one axis produces false comparisons: a native differential-oracle test covers
+the backend and runtime, while a ProofCore theorem reasons more strongly over a
+narrower semantic layer. Neither is "below" the other — they are incomparable
+evidence about different scopes, and the current model cannot say so.
+
+Represent a claim as orthogonal fields — subject binding, claim kind, semantic
+scope, evidence method, status, assumptions, producer, validated_by,
+trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
+friendly composites like `proved_by_lean`. The scope axis is the one genuinely
+missing today, and it is the axis where the compiler already has the facts.
+
+Trust is three fields, not one, because "who emitted the artifact", "who checked
+it", and "what must be trusted for the claim to hold" are different questions.
+The compiler may *produce* a Lean proof term that the kernel independently
+replays: the producer need not be trusted for proof-term validity, while the
+compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
+those into one `producer_trust` would lose exactly the distinction that makes
+independent checking worth building.
+
+What must stop being elided is that "compiler-enforced" reads as trust-free and
+is not: until checker soundness and artifact production are independently
+verified, enforcement depends on this compiler being correct. Being implemented in
+Lean does not remove that dependency; mutation testing and duplicate boundary
+checks are strong engineering evidence, not a soundness proof.
+`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
+compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
+the change is that the dependency appears per claim.
+
+Migration scope is larger than the two evidence documents. Residual total-ladder
+language elsewhere in this file recreates the ordering this task rejects —
+`tested_by_property` described as "always below proof and below solver evidence",
+and a cross-checked solver result as "stronger than" another method. A
+policy-specific partial order is fine, but it may only compare claims of
+equivalent scope and subject; rewrite those sites as part of this task rather than
+leaving a third vocabulary.
+
+Gate: a fixture set covering one claim per (scope × method) cell that exists
+today, a negative fixture proving two incomparable claims cannot be ordered by
+the renderer, a fixture proving a claim without the producer/validator/trusted-
+dependency accounting required by its method is rejected, and a red-team case
+proving no rendering path can present a weaker-scope claim under a stronger
+composite name. Reconcile both documents against the implemented model rather
+than leaving a third vocabulary.
+
+ProofCore callable identity is pulled forward as R-0442 in the global sequence.
+Every Phase 11 dependency/completeness task consumes that direct-call versus
+callable-value distinction; none may recover callable identity from a source
+spelling or reintroduce the old ambiguous `PExpr.call` representation.
+
 ### Task R-0435
 
 **Objective:** Ban lexical value shadowing while preserving explicit assignment
@@ -1243,6 +1355,20 @@ parameter/`let`/pattern/loop/borrow collisions; rejection of
 and sibling-arm cases; interpreter/native agreement; formatter round-trip; and
 mutations that omit each binder kind or accidentally reject assignment rebind.
 Land the cross-cutting migration in a worktree and merge once green.
+
+   Falsification probe first: rename the same-name binders in ONE std file
+   and review the result. If the renamed form is visibly worse (`s1`/`s2`/
+   `s3` noise), narrow the ban before the migration, not after.
+
+   Probe result (2026-07-30, preliminary hand-sample, ~20 sites across
+   std option/result/deque/map + envcfg/kvstore/conlog/error_conventions):
+   the pervasive `Variant { value }` idiom is arm-local and immediately
+   consumed (exempt); the one nested case found (envcfg) is sibling-arm
+   exempt under the ratified rule; the live consuming-rebind shape
+   `let s = transform(s)` did not appear. Zero forced renames in the
+   sample — preliminary evidence to proceed as ratified. A systematic
+   pass over the ~25 sites DECISIONS cites should confirm before the
+   migration lands.
 
 ### Task R-0006
 
@@ -1968,6 +2094,13 @@ researches hardware WCET under a fixed target model. Backend cost preservation,
 formal discharge, benchmark infrastructure, and hardware timing are explicit
 non-goals here.
 
+   Falsification probes before the machinery: (1) hand-write the symbolic
+   bound for five real functions (HashMap.find_slot, one parse loop, one
+   Vec grow, two others) — if the bounds cannot be stated cleanly for real
+   std code, the cost model is wrong; (2) the step-count vs measured-time
+   correlation experiment on the R-0416–R-0419 workloads — poor correlation
+   kills every timing-adjacent reading early, by design.
+
 ### Task R-0011
 
 **Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
@@ -2412,6 +2545,9 @@ and compiled-coverage machinery; do not create a parallel review database.
 
 **Objective:** Generate the semantically-dark-construct inventory from compiler
 constructors, and make the docs-drift gate check claims rather than paths.
+Also expand the gate's coverage: `PRESENT_DOCS` currently lists five files,
+while `docs/NOTES/` and `research/` accumulate claim-bearing design notes
+outside any drift check — bring both under the path check at minimum.
 
 `docs/PROOF_STORY_MATRIX.md` is what `docs/README.md` calls "the 'no semantically
 dark constructs' inventory": every construct must be `proved`, `enforced`,
@@ -4958,69 +5094,6 @@ FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
 
-### Task R-0440
-
-**Objective:** Make evidence multidimensional instead of a ladder, and record
-compiler trust per claim.
-
-**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
-remain as a policy preference among claims with the same subject and semantic
-scope, but it is not a universal ordering of unlike evidence.
-
-`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
-not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
-*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
-`reported` is an observation, not evidence at all; `runtime_checked` is a
-disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
-on one axis produces false comparisons: a native differential-oracle test covers
-the backend and runtime, while a ProofCore theorem reasons more strongly over a
-narrower semantic layer. Neither is "below" the other — they are incomparable
-evidence about different scopes, and the current model cannot say so.
-
-Represent a claim as orthogonal fields — subject binding, claim kind, semantic
-scope, evidence method, status, assumptions, producer, validated_by,
-trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
-friendly composites like `proved_by_lean`. The scope axis is the one genuinely
-missing today, and it is the axis where the compiler already has the facts.
-
-Trust is three fields, not one, because "who emitted the artifact", "who checked
-it", and "what must be trusted for the claim to hold" are different questions.
-The compiler may *produce* a Lean proof term that the kernel independently
-replays: the producer need not be trusted for proof-term validity, while the
-compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
-those into one `producer_trust` would lose exactly the distinction that makes
-independent checking worth building.
-
-What must stop being elided is that "compiler-enforced" reads as trust-free and
-is not: until checker soundness and artifact production are independently
-verified, enforcement depends on this compiler being correct. Being implemented in
-Lean does not remove that dependency; mutation testing and duplicate boundary
-checks are strong engineering evidence, not a soundness proof.
-`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
-compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
-the change is that the dependency appears per claim.
-
-Migration scope is larger than the two evidence documents. Residual total-ladder
-language elsewhere in this file recreates the ordering this task rejects —
-`tested_by_property` described as "always below proof and below solver evidence",
-and a cross-checked solver result as "stronger than" another method. A
-policy-specific partial order is fine, but it may only compare claims of
-equivalent scope and subject; rewrite those sites as part of this task rather than
-leaving a third vocabulary.
-
-Gate: a fixture set covering one claim per (scope × method) cell that exists
-today, a negative fixture proving two incomparable claims cannot be ordered by
-the renderer, a fixture proving a claim without the producer/validator/trusted-
-dependency accounting required by its method is rejected, and a red-team case
-proving no rendering path can present a weaker-scope claim under a stronger
-composite name. Reconcile both documents against the implemented model rather
-than leaving a third vocabulary.
-
-ProofCore callable identity is pulled forward as R-0442 in the global sequence.
-Every Phase 11 dependency/completeness task consumes that direct-call versus
-callable-value distinction; none may recover callable identity from a source
-spelling or reintroduce the old ambiguous `PExpr.call` representation.
-
 ### Task R-0202
 
 **Objective:** Add transitive FnTable completeness: walk registered spec call graphs, not only direct call sites, and fail or flag missing callees before theorem authors hit confusing `none` evaluations.
@@ -5809,6 +5882,11 @@ forged graph/certificate; and mutations that delete a direct edge, one indirect
 target, a capability declaration, the artifact binding, or the gateway-bypass
 path. The checker must reject each false-clean mutation without importing the
 compiler’s authority-report implementation.
+
+   Falsification probe first: run the algorithm by hand on kvstore and
+   httpget. If the conservative address-taken approximation is so coarse
+   that everything reaches everything, V1's design is wrong — refine it
+   before building the certificate machinery.
 
 ### Task R-0276
 
@@ -7563,6 +7641,10 @@ Source-level step/space bounds stay with R-0445, R-0244/R-0248, and R-0417's
 `complexity_guarded` evidence; none of them imply hardware timing. A future
 WCET bridge consumes those exported facts under a named hardware model and
 must not silently reinterpret or overwrite their source scope.
+
+### Task R-0449
+
+**Objective:** Research Why3-style realization for the prover backends — proving, in Rocq and Isabelle themselves, that the obligation IR's built-in theories are sound in that prover's model — only after R-0448 has a real multi-kernel user who needs bridge-level trust rather than agreement-level trust. Each realization proof converts a slice of the trusted Core→obligation bridge into kernel-checked evidence; without it, "three kernels" means three syntaxes over one trusted bridge. Pulled by an audited consumer requiring it, not by symmetry.
 
 ### Task R-0406
 
