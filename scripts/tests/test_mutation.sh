@@ -33,6 +33,15 @@ fi
 # Concrete/Proof/Proof.lean, one run reporting "mv: cannot stat …mutbak" and
 # another "SKIPPED (pattern not found)". Test machinery that can corrupt the tree
 # it is testing must refuse to run twice, not rely on the operator remembering.
+# KNOWN LIMIT, measured 2026-07-30: a TERM/INT arriving while a FOREGROUND CHILD
+# runs (`lake build`, which dominates each mutation) does not restore promptly —
+# bash defers the trap until the child exits, so the tree stays mutated for the
+# rest of that build. Traps cannot fix this; only not touching the developer's
+# tree can. The real answer is to run mutations in a DISPOSABLE WORKTREE, which is
+# tracked and not yet built. Until then: the lock stops concurrent corruption, the
+# hash postcondition refuses to exit quietly on an inexact restore, and a killed
+# run must be followed by
+#   grep -rn -- "-- MUTATION" Concrete && git checkout -- <files>
 LOCK_DIR="$ROOT_DIR/.mutation.lock"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "error: another mutation run holds $LOCK_DIR" >&2
@@ -59,11 +68,32 @@ cleanup_lock() {
   # run: the next build, gate or commit silently uses it, and a green result then
   # describes mutated code. This must make the harness FAIL.
   local bad=0
+  # RESTORE FIRST, then verify. Detecting a stray mutation and exiting leaves the
+  # tree modified, which is the failure this trap exists to prevent — a signalled
+  # run must not be able to leave the developer's source semantically changed.
+  # Backups live in $MUT_BACKUP_DIR, so this works even on INT/TERM mid-mutation.
+  if [ -d "$MUT_BACKUP_DIR" ]; then
+    for bak in "$MUT_BACKUP_DIR"/*.bak; do
+      [ -f "$bak" ] || continue
+      local base rel
+      base="$(basename "$bak" .bak)"
+      rel="$(printf '%s' "$base" | tr '_' '/')"
+      # Recover the real path from the hash table rather than guessing: the
+      # flattening is not invertible when a path component contains '_'.
+      for f in "${!MUT_HASH0[@]}"; do
+        if [ "$(printf '%s' "$f" | tr '/' '_')" = "$base" ]; then rel="$f"; fi
+      done
+      if [ -f "$ROOT_DIR/$rel" ]; then
+        cp "$bak" "$ROOT_DIR/$rel"
+        echo "  restored $rel from backup" >&2
+      fi
+    done
+  fi
   local stray
   stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete "$ROOT_DIR"/std 2>/dev/null || true)"
   if [ -n "$stray" ]; then
     echo "" >&2
-    echo "FATAL: a mutation is still applied in the source tree:" >&2
+    echo "FATAL: a mutation survived restoration:" >&2
     printf '%s\n' "$stray" >&2
     bad=1
   fi
@@ -626,8 +656,11 @@ apply_mutation() {
   local old="${MUT_OLD[$idx]}"
   local new="${MUT_NEW[$idx]}"
 
-  # Save backup
-  cp "$file" "$file.mutbak"
+  # Backup into the unique temp dir, NOT beside the source. A `<file>.mutbak` in
+  # the tree is itself state left behind — one was staged into a commit before
+  # being caught — and two runs racing on that path is what corrupted
+  # Proof.lean. The key flattens the path so nested files cannot collide.
+  cp "$file" "$MUT_BACKUP_DIR/$(printf '%s' "$file" | tr '/' '_').bak"
 
   # Use python for reliable multi-line string replacement
   python3 -c "
@@ -648,7 +681,13 @@ with open(path, 'w') as f:
 restore_mutation() {
   local idx=$1
   local file="${MUT_FILE[$idx]}"
-  mv "$file.mutbak" "$file"
+  local bak="$MUT_BACKUP_DIR/$(printf '%s' "$file" | tr '/' '_').bak"
+  if [ -f "$bak" ]; then
+    cp "$bak" "$file"
+    rm -f "$bak"
+  else
+    echo "  WARNING: no backup for $file — cannot restore" >&2
+  fi
   # Rebuild so the tree's BINARY matches its restored SOURCE. Restoring only the
   # source leaves `.lake/build/bin/concrete` built from the mutation, and anything
   # run afterwards — a gate, a probe, another script — silently measures the

@@ -1487,6 +1487,37 @@ private partial def renderPExprAsLean : Proof.PExpr → String
 private def leanIdent (name : String) : String :=
   name.map fun c => if c == '-' then '_' else c
 
+/-- A COLLISION-PROOF Lean identifier for a generated symbol.
+
+    Derived from the FULL qualified name, not the last segment. A program with
+    `Alpha.compute`, `Beta.compute` and `Gamma.compute` previously generated three
+    `computeExpr` / `computeId` / `computeFn` declarations — invalid Lean, and
+    three entries all keyed `"compute"`, which is also an ambiguous operational
+    key. Measured before fixing.
+
+    Every character outside `[A-Za-z0-9_]` becomes `_`, so a module separator and
+    any punctuation collapse; the qualified name is unique per callable, so the
+    result is too. -/
+private def leanSymbol (qualName : String) : String :=
+  qualName.map fun c =>
+    if ('a' ≤ c && c ≤ 'z') || ('A' ≤ c && c ≤ 'Z') || ('0' ≤ c && c ≤ '9') then c else '_'
+
+/-- Emit a `CallableId` literal that preserves the COMPLETE carried value.
+
+    An earlier version hardcoded `ns := .user` and omitted `schemaVersion` and
+    `typeArgs`, so a builtin, intrinsic, extern or specialization would have been
+    emitted as a plain user callable with no type arguments — silently a different
+    identity from the one the compiler minted. `none` renders nothing and lets the
+    caller fail closed. -/
+private def renderCallableId (cid : Concrete.CallableId) : String :=
+  let nsLit := match cid.ns with
+    | .user => ".user" | .builtin => ".builtin"
+    | .intrinsic => ".intrinsic" | .extern => ".extern"
+  let argsLit :=
+    if cid.typeArgs.isEmpty then ""
+    else ", typeArgs := [" ++ ", ".intercalate (cid.typeArgs.map reprStr) ++ "]"
+  s!"\{ schemaVersion := {cid.schemaVersion}, ns := {nsLit}, defModule := \"{cid.defModule}\", declName := \"{cid.declName}\"{argsLit} }"
+
 /-- Generate Lean theorem stubs for all extracted functions. -/
 def leanStubsReport (pc : Concrete.ProofCore)
     (registry : ProofRegistry := []) : String :=
@@ -1497,7 +1528,7 @@ def leanStubsReport (pc : Concrete.ProofCore)
   let header := "import Concrete.Proof.Proof\n\nnamespace Concrete.Proof.Generated\n\nopen Concrete.Proof"
   -- Build function table entries
   let fnDefs := extracted.map fun e =>
-    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    let name := leanSymbol e.qualName
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsLean := e.params.map fun p => s!"\"{p}\""
     let paramsList := "[" ++ ", ".intercalate paramsLean ++ "]"
@@ -1507,18 +1538,24 @@ def leanStubsReport (pc : Concrete.ProofCore)
     -- READ the identity that ProofCore minted from resolved compiler facts.
     -- Splitting `qualName` here is what this replaces: it re-derived identity
     -- from a rendering, one layer away from the facts.
-    let (defMod, declN) := match e.callableId with
-      | some cid => (cid.defModule, cid.declName)
-      | none     => ("", "")   -- unmappable; fails the guard below
+    -- The COMPLETE carried identity, not a reconstructed subset.
+    let idLit := match e.callableId with
+      | some cid => renderCallableId cid
+      | none     => "sorry  -- UNMAPPABLE: no CallableId carried from ProofCore"
     s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n" ++
     s!"/-- Semantic identity of `{e.qualName}`. Generated, not hand-written: an\n" ++
-    s!"    identity an author can type is an identity an author can get wrong. -/\n" ++
-    s!"def {name}Id : CallableId :=\n  \{ ns := .user, defModule := \"{defMod}\", declName := \"{declN}\" }\n\n" ++
+    s!"    identity an author can type is an identity an author can get wrong.\n" ++
+    s!"    Every field is carried from the compiler — namespace, schema version and\n" ++
+    s!"    type arguments included, since a partial identity is a different one. -/\n" ++
+    s!"def {name}Id : CallableId :=\n  {idLit}\n\n" ++
     s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }"
   -- Build function table
   let tableCases := extracted.map fun e =>
-    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
-    s!"  | \"{name}\" => some {name}Fn"
+    -- The operational KEY stays the bare name (that is what `PExpr.call`
+    -- selects by), but the SYMBOL is qualified so declarations cannot collide.
+    let name := leanSymbol e.qualName
+    let key := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    s!"  | \"{key}\" => some {name}Fn"
   -- Emitted as an equation-compiled function wrapped in `FnTable.ofGlobals`, not
   -- as a `def _ : FnTable | …` literal: `FnTable` is a two-namespace structure
   -- since R-0442, and a bare pattern match no longer typechecks against it. The
@@ -1537,19 +1574,27 @@ def leanStubsReport (pc : Concrete.ProofCore)
     | none     => ""
   let sortedEntries := extracted.toArray.qsort
     (fun a b => identityKeyOf a < identityKeyOf b) |>.toList
-  let entryNames := sortedEntries.map fun e => (leanIdent (e.qualName.splitOn "." |>.getLast!)) ++ "Fn"
+  let entryNames := sortedEntries.map fun e => leanSymbol e.qualName ++ "Fn"
   -- Per-entry `[simp]` LOOKUP LEMMAS. An `Array` has no equation lemmas, so the
   -- `simp [XFnsGlobals]` idiom that every existing proof relies on has nothing to
   -- rewrite with. These restore that behaviour, and they are GENERATED with the
   -- table so the lemma set cannot drift from the entries it describes.
   let lookupLemmas := extracted.map fun e =>
-    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    let name := leanSymbol e.qualName
     s!"@[proofTable] theorem generatedFns_lookup_{name} :\n" ++
     -- `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
     -- deliberately has no `DecidableEq` (see PVal's note), so `decide` cannot
     -- synthesize an instance. Lookup reduces to the entry definitionally, which
     -- is the stronger statement anyway.
     s!"    generatedFns.lookupById {name}Id = ({name}Fn).identified? := by\n  rfl"
+  -- Ambiguous operational keys make the table unable to bear evidence, and a
+  -- dispatch with two arms for one key is invalid Lean besides. FAIL CLOSED: say
+  -- so, and do not emit the integrity assertion — a partial table must not appear
+  -- complete. Measured on a program with Alpha.compute / Beta.compute /
+  -- Gamma.compute, which previously produced three redundant match arms.
+  let opKeys := extracted.map fun e => leanIdent (e.qualName.splitOn "." |>.getLast!)
+  let dupKeys := (opKeys.filter fun k => (opKeys.filter (· == k)).length > 1).eraseDups
+  let keysAmbiguous := !dupKeys.isEmpty
   let tableStr :=
     -- CANONICAL entries — the evidence-bearing form. The legacy string dispatch
     -- is still emitted because `PExpr.call` selects by name, and it is labelled
@@ -1559,7 +1604,11 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"def generatedEntries : Array PFnDef := #[{", ".intercalate entryNames}]\n\n" ++
     s!"/-- LEGACY OPERATIONAL LOOKUP. `PExpr.call \"f\"` still selects by name, so\n" ++
     s!"    this mapping survives; it is not identity, and the table root binds it. -/\n" ++
-    s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n" ++
+    (if keysAmbiguous then
+       s!"-- legacy dispatch omitted: ambiguous keys (see the note below)\n" ++
+       s!"def generatedFnsGlobals : String → Option PFnDef := fun _ => none\n\n"
+     else
+       s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n") ++
     s!"/-- Locally bound callables (fn-typed parameters). Applications of these\n" ++
     s!"    extract to `.applyVar` and are answered ONLY here — a definition of the\n" ++
     s!"    same name cannot satisfy them (R-0442). -/\n" ++
@@ -1570,11 +1619,19 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"/-- The table must be able to bear evidence: every entry identified, no\n" ++
     s!"    duplicate identity, and no string key reaching two entries. Checked by\n" ++
     s!"    the kernel at build time, so a generator bug fails the build. -/\n" ++
-    s!"example : generatedFns.isEvidenceBearing := by decide\n\n" ++
+    (if keysAmbiguous then
+       s!"-- CANNOT BEAR EVIDENCE: these operational keys reach more than one\n" ++
+       s!"-- entry, so `PExpr.call` by name would select arbitrarily:\n" ++
+       s!"--   {", ".intercalate dupKeys}\n" ++
+       s!"-- Migrate those calls to CallableId, or disambiguate the names. The\n" ++
+       s!"-- integrity assertion and the legacy dispatch are deliberately OMITTED:\n" ++
+       s!"-- a table that cannot bear evidence must not look like one that can.\n\n"
+     else
+       s!"example : generatedFns.isEvidenceBearing := by decide\n\n") ++
     s!"{"\n\n".intercalate lookupLemmas}"
   -- Build eval helpers
   let evalHelpers := extracted.map fun e =>
-    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    let name := leanSymbol e.qualName
     let paramBinds := e.params.foldl (fun acc p =>
       if acc.isEmpty then s!"(Env.empty.bind \"{p}\" (.int {p}))"
       else s!"({acc}.bind \"{p}\" (.int {p}))"
@@ -1583,7 +1640,7 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"def eval_{name} {paramSig} (fuel : Nat := 20) : Option PVal :=\n  eval generatedFns {paramBinds} fuel {name}Expr"
   -- Build theorem stubs
   let theoremStubs := extracted.map fun e =>
-    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    let name := leanSymbol e.qualName
     let paramSig := " ".intercalate (e.params.map fun p => s!"({p} : Int)")
     let paramBinds := e.params.foldl (fun acc p =>
       if acc.isEmpty then s!"(Env.empty.bind \"{p}\" (.int {p}))"
@@ -2690,7 +2747,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
   | some e =>
     if !(e.eligible && e.extracted.isSome) then
       return s!"-- `{qualName}` is not extractable (excluded or blocked); no Lean stub to emit.\n"
-    let name := leanIdent (qualName.splitOn "." |>.getLast!)
+    let name := leanSymbol qualName
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsList := "[" ++ ", ".intercalate (e.params.map (s!"\"{·}\"")) ++ "]"
     let paramSig := " ".intercalate (e.params.map fun p => s!"({p} : Int)")
@@ -2726,9 +2783,13 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
     let kitSection := if featLemmas.isEmpty then "Concrete.ProofKit (general)" else ", ".intercalate featLemmas
     -- Split at the last dot: the defining module and declaration name come from
     -- the qualified name, never reconstructed later from a display string.
-    let proveSegs := qualName.splitOn "."
-    let proveDeclN := proveSegs.getLast!
-    let proveDefMod := ".".intercalate (proveSegs.dropLast)
+    -- READ the carried identity. This previously split `qualName` at the last
+    -- dot — re-deriving identity from a rendering, and dropping namespace,
+    -- schema version and type arguments in the process, so a builtin or a
+    -- specialization would have been emitted as a plain user callable.
+    let proveIdLit := match e.callableId with
+      | some cid => renderCallableId cid
+      | none     => "sorry  -- UNMAPPABLE: no CallableId carried from ProofCore"
     return String.join [
       s!"-- Lean proof stub for `{qualName}` — fill in the spec and replace `sorry`.\n",
       s!"-- Suggested ProofKit lemmas: {kitSection}\n",
@@ -2736,7 +2797,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"namespace Concrete.Proof.Generated.{name}\nopen Concrete.Proof\n\n",
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
       s!"/-- Semantic identity of `{qualName}`. Generated, not hand-written. -/\n" ++
-      s!"def {name}Id : CallableId :=\n  \{ ns := .user, defModule := \"{proveDefMod}\", declName := \"{proveDeclN}\" }\n\n",
+      s!"def {name}Id : CallableId :=\n  {proveIdLit}\n\n",
       s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }\n\n",
       s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
       s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++

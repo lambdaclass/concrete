@@ -338,6 +338,27 @@ probe "renaming a display name changes the root" "true" \
 "$mk"'def eAr : Proof.PFnDef := { eA with displayName := "renamed" }
 #eval (tbl #[eA]).root != (tbl #[eAr]).root'
 
+echo "--- the root BINDS FUNCTION BODIES (it must identify behaviour) ---"
+# Measured defect: with the body omitted, two tables with the same identities and
+# parameters but bodies `1` and `999` had EQUAL roots while evaluating to 1 and
+# 999. A root that does not identify behaviour cannot back a receipt, and the
+# nine-table migration would have moved proofs onto it.
+probe "bodies differ => roots differ" "false" \
+"$mk"'def eOne : Proof.PFnDef := { eA with body := .lit (.int 1) }
+def eNineNineNine : Proof.PFnDef := { eA with body := .lit (.int 999) }
+#eval (tbl #[eOne]).root == (tbl #[eNineNineNine]).root'
+# ...and the two tables really do behave differently, so the probe is not just
+# comparing two arbitrary strings.
+probe "and those tables evaluate differently" "999" \
+"$mk"'def e999 : Proof.PFnDef := { eA with body := .lit (.int 999) }
+def g999 : Proof.FnTable :=
+  { entries := #[e999], globals := fun n => if n == "a" then some e999 else none }
+#eval Proof.eval g999 Proof.Env.empty 5 (.call "a" [.lit (.int 0)])'
+# `call` and `applyVar` must not digest alike either — R-0442 made them different
+# nodes, and a body digest that flattened them would undo that.
+probe "a definition call and a local application digest differently" "false" \
+"$mk"'#eval Proof.pexprCanonical (.call "f" []) == Proof.pexprCanonical (.applyVar "f" [])'
+
 echo "--- the root encoding is length-prefixed, not delimiter-joined ---"
 # `a;b` and `a` + `;b` are different entry lists that a plain join renders
 # identically, so a delimiter-only encoding lets two distinct tables collide.

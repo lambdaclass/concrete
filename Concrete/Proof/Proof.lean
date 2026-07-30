@@ -406,6 +406,93 @@ def FnTable.empty : FnTable := { globals := fun _ => none }
     rather than in one flag-day rewrite. -/
 def FnTable.ofGlobals (g : String → Option PFnDef) : FnTable := { globals := g }
 
+/-! ## Canonical body rendering, for the table root
+
+A table root that omits function BODIES does not identify behaviour. Measured
+before writing this: two tables with the same identities and parameters but
+bodies `1` and `999` produced EQUAL roots while evaluating to 1 and 999. A root
+like that cannot back a receipt — it says "these callables" without saying what
+they do.
+
+Explicit and structural rather than derived `Repr`: `Repr` output is formatting,
+and formatting can shift with a Lean version or a width setting, which is not
+something a durable receipt may depend on. Every variable-length piece is
+length-prefixed and every constructor tagged, so two structurally different
+bodies cannot render alike — the same discipline as the table root itself, and
+for the same reason (`a;b` versus `a` + `;b`).
+-/
+
+private def lpx (tag s : String) : String := tag ++ toString s.length ++ ":" ++ s
+
+mutual
+
+def pvalCanonical : PVal → String
+  | .int n => lpx "vi" (toString n)
+  | .bool b => lpx "vb" (if b then "1" else "0")
+  | .struct_ n fs => lpx "vs" n ++ lpx "F" (pvalFieldsCanonical fs)
+  | .enum_ e v fs => lpx "ve" e ++ lpx "V" v ++ lpx "F" (pvalFieldsCanonical fs)
+  | .array_ es => lpx "va" (pvalListCanonical es)
+
+def pvalListCanonical : List PVal → String
+  | [] => ""
+  | v :: vs => lpx "e" (pvalCanonical v) ++ pvalListCanonical vs
+
+def pvalFieldsCanonical : List (String × PVal) → String
+  | [] => ""
+  | (k, v) :: fs => lpx "k" k ++ lpx "v" (pvalCanonical v) ++ pvalFieldsCanonical fs
+
+end
+
+def pmatchPatCanonical : PMatchPat → String
+  | .enumPat e v bs => lpx "pe" e ++ lpx "V" v ++ lpx "B" (String.join (bs.map (lpx "b")))
+  | .litPat v => lpx "pl" (pvalCanonical v)
+  | .varPat n => lpx "pv" n
+
+mutual
+
+/-- Canonical, injective rendering of a proof-fragment body. -/
+def pexprCanonical : PExpr → String
+  | .lit v => lpx "L" (pvalCanonical v)
+  | .var n => lpx "V" n
+  | .binOp op l r =>
+    lpx "B" (toString (repr op)) ++ lpx "l" (pexprCanonical l) ++ lpx "r" (pexprCanonical r)
+  | .letIn n v b => lpx "T" n ++ lpx "v" (pexprCanonical v) ++ lpx "b" (pexprCanonical b)
+  | .ifThenElse c t e =>
+    lpx "I" (pexprCanonical c) ++ lpx "t" (pexprCanonical t) ++ lpx "e" (pexprCanonical e)
+  -- `call` and `applyVar` are TAGGED DIFFERENTLY: a definition call and an
+  -- application of a locally bound callable are different nodes (R-0442), and a
+  -- digest that rendered them alike would undo that distinction.
+  | .call f as => lpx "C" f ++ lpx "a" (pexprListCanonical as)
+  | .applyVar b as => lpx "A" b ++ lpx "a" (pexprListCanonical as)
+  | .structLit n fs => lpx "S" n ++ lpx "f" (pexprFieldsCanonical fs)
+  | .fieldAccess o f => lpx "D" (pexprCanonical o) ++ lpx "n" f
+  | .enumLit e v fs => lpx "E" e ++ lpx "V" v ++ lpx "f" (pexprFieldsCanonical fs)
+  | .arrayIndex a i => lpx "X" (pexprCanonical a) ++ lpx "i" (pexprCanonical i)
+  | .match_ sc arms => lpx "M" (pexprCanonical sc) ++ lpx "m" (pexprArmsCanonical arms)
+  | .cast i => lpx "K" (pexprCanonical i)
+  | .arrayLit es => lpx "R" (pexprListCanonical es)
+  | .arraySet a i v =>
+    lpx "P" (pexprCanonical a) ++ lpx "i" (pexprCanonical i) ++ lpx "v" (pexprCanonical v)
+  | .while_ c asg cont =>
+    lpx "W" (pexprCanonical c) ++ lpx "g" (pexprFieldsCanonical asg) ++ lpx "c" (pexprCanonical cont)
+  | .while_step c carried st cont =>
+    lpx "Y" (pexprCanonical c) ++ lpx "y" (String.join (carried.map (lpx "s")))
+      ++ lpx "p" (pexprCanonical st) ++ lpx "c" (pexprCanonical cont)
+
+def pexprListCanonical : List PExpr → String
+  | [] => ""
+  | e :: es => lpx "e" (pexprCanonical e) ++ pexprListCanonical es
+
+def pexprFieldsCanonical : List (String × PExpr) → String
+  | [] => ""
+  | (k, e) :: fs => lpx "k" k ++ lpx "v" (pexprCanonical e) ++ pexprFieldsCanonical fs
+
+def pexprArmsCanonical : List (PMatchPat × PExpr) → String
+  | [] => ""
+  | (p, e) :: as => lpx "p" (pmatchPatCanonical p) ++ lpx "v" (pexprCanonical e) ++ pexprArmsCanonical as
+
+end
+
 /-- Compare two entries by semantic identity, for canonical ordering.
 
     Ordering is by rendered `CallableId`, which is deterministic and
@@ -515,11 +602,33 @@ def FnTable.root (t : FnTable) : Option String :=
     let lp := fun (tag s : String) => s!"{tag}{s.length}:{s}"
     let parts := t.canonicalEntries.toList.map fun d =>
       let ps := String.intercalate "," (d.params.map fun p => lp "p" p)
-      lp "i" d.identityKey ++ lp "P" ps
+      -- The BODY is bound in. Without it, two tables with the same identities and
+      -- parameters but different bodies had EQUAL roots while evaluating to 1 and
+      -- 999 — measured, not hypothetical. A root that does not identify behaviour
+      -- cannot back a receipt, and step 5 would have migrated proofs onto it.
+      lp "i" d.identityKey ++ lp "P" ps ++ lp "B" (pexprCanonical d.body)
     -- The operational key index is INSIDE the root: while calls select by
     -- string, a receipt must commit to the mapping it was produced under.
     let idx := t.keyIndex.map fun (k, v) => lp "k" k ++ lp "v" v
     some (s!"tblv{t.schemaVersion}:" ++ lp "E" (String.join parts) ++ lp "K" (String.join idx))
+
+/-! ## The step-5 dual comparison
+
+Agreement between the canonical entries and the legacy operational dispatch is
+stated PER ENTRY as an `rfl` proposition, not as a `Bool` predicate:
+
+    example : combineFns.globals "inc" = some incFn := by rfl
+
+A `Bool` version (`entries.all fun d => globals d.displayName == some d`) compares
+`PExpr` bodies through `BEq`, which does not kernel-reduce — `by decide` gets
+stuck. The `rfl` form also asserts FULL structural equality rather than a chosen
+subset of fields, so it is the stronger statement as well as the decidable one.
+
+One direction only, by necessity: `globals` is a function and cannot be
+enumerated, so "every key the dispatch answers has an entry" is not expressible.
+That asymmetry is precisely why the function form cannot bear evidence, and why
+`keyIndexUnique` is required alongside — together they say each entry is reachable
+by its own key and no key reaches two entries. -/
 
 /-- Look an entry up by semantic identity.
 
