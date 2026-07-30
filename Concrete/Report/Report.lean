@@ -2837,7 +2837,11 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
     -- dot — re-deriving identity from a rendering, and dropping namespace,
     -- schema version and type arguments in the process, so a builtin or a
     -- specialization would have been emitted as a plain user callable.
-    let proveKey := leanIdent (qualName.splitOn "." |>.getLast!)
+    -- The OPERATIONAL KEY is the bare SOURCE name, verbatim. Not `leanIdent`-ed:
+    -- that is a Lean-identifier transformation, and a generated symbol name must
+    -- never double as a semantic key. `PExpr.call` selects by the source name, so
+    -- any mangling here produces a key evaluation never asks for.
+    let proveKey := qualName.splitOn "." |>.getLast!
     let proveIdLit := match e.callableId with
       | some cid => renderCallableId cid
       | none     => "sorry  -- UNMAPPABLE: no CallableId carried from ProofCore"
@@ -2850,7 +2854,14 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"/-- Semantic identity of `{qualName}`. Generated, not hand-written. -/\n" ++
       s!"def {name}Id : CallableId :=\n  {proveIdLit}\n\n",
       s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{proveKey}\",\n    displayName := \"{proveKey}\", params := {paramsList}, body := {name}Expr }\n\n",
-      s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
+      -- Dispatch on the OPERATIONAL KEY, not on the Lean symbol. This keyed the
+      -- generated symbol (`straight__line_add__three`) while the entry's
+      -- operationalKey was the bare name (`add_three`), so `globals` answered
+      -- nothing for its own entry: `dispatchResolves` false, no root, and the
+      -- table could not bear evidence. The same defect was fixed in the
+      -- lean-stubs generator; this second surface still had it, and the typed
+      -- check is what surfaced it.
+      s!"def fnsGlobals : String → Option PFnDef\n  | \"{proveKey}\" => some {name}Fn\n  | _ => none\n\n",
       s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++
       s!"    that is an `.applyVar` node and must be bound HERE, not above: a\n" ++
       s!"    definition of the same name will not answer it (R-0442). -/\n" ++

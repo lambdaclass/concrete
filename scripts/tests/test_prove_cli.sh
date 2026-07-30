@@ -170,9 +170,15 @@ assert_json "nearest-lemmas unknown id → error" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas O9 --json
 
 echo "=== prove --emit-lean (compilable single-function Lean stub) ==="
-assert_contains "emit-lean namespace"  "namespace Concrete.Proof.Generated.count_up" \
+# Generated symbols are derived from the FULL qualified name, so these are
+# `loop__invariant_count__up`, not the bare `count_up`. That is deliberate: a
+# program with `Alpha.compute`, `Beta.compute` and `Gamma.compute` previously
+# generated three identically-named declarations — invalid Lean — and three
+# entries all keyed "compute", an ambiguous operational key. `_` doubles to `__`
+# so the escaping stays injective.
+assert_contains "emit-lean namespace"  "namespace Concrete.Proof.Generated.loop__invariant_count__up" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
-assert_contains "emit-lean theorem"    "theorem count_up_refines_spec" \
+assert_contains "emit-lean theorem"    "theorem loop__invariant_count__up_refines_spec" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
 assert_contains "emit-lean ends sorry" "= sorry := by" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
@@ -254,7 +260,9 @@ assert_json "workspace obligation file (recipe + commands)" \
   '"recipe" in d and "tactic" in d["recipe"] and "replay_command" in d and "check_command" in d and "#" in d["id"]' \
   cat "$OBL_FILE"
 assert_contains "workspace link.con.txt block" "#[proof_by(" cat "$WS/link.con.txt"
-assert_contains "workspace stub theorem"       "theorem count_up_refines_spec" cat "$WS/Count_upProofs.lean"
+# Qualified for the same collision reason as the emit-lean legs above. The FILE
+# name stays bare, which is fine: a workspace holds one function.
+assert_contains "workspace stub theorem"       "theorem loop__invariant_count__up_refines_spec" cat "$WS/Count_upProofs.lean"
 # Workspace is a build output, NOT a proof registry: no proof-registry.json anywhere.
 if find "$WS" -name 'proof-registry.json' | grep -q .; then
   echo "  FAIL workspace contains a proof-registry.json (must not)"; FAIL=$((FAIL+1))

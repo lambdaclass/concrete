@@ -7998,8 +7998,12 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
+# Generated symbols carry the MODULE and escape `_` as `__` (so `check_nonce` in
+# module `main` is `main_check__nonce`). That derivation is what makes symbols
+# collision-proof across modules and keeps the escaping injective; these patterns
+# were pinned to the older bare names.
 # 27. Lean stubs: check_nonce has .ifThenElse constructor
-if grep <<<"$pp_lean" -A5 "check_nonceExpr" | grep -q ".ifThenElse"; then
+if grep <<<"$pp_lean" -A5 "main_check__nonceExpr" | grep -q ".ifThenElse"; then
     echo "  ok  pressure-lean: check_nonce uses .ifThenElse constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8008,7 +8012,7 @@ else
 fi
 
 # 28. Lean stubs: validate_header has .letIn and .call constructors
-if grep <<<"$pp_lean" -A5 "validate_headerExpr" | grep -q ".letIn"; then
+if grep <<<"$pp_lean" -A5 "main_validate__headerExpr" | grep -q ".letIn"; then
     echo "  ok  pressure-lean: validate_header uses .letIn constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8017,7 +8021,7 @@ else
 fi
 
 # 29. Lean stubs: compute_checksum has .binOp .add constructor
-if grep <<<"$pp_lean" -A5 "compute_checksumExpr" | grep -q ".binOp .add"; then
+if grep <<<"$pp_lean" -A5 "main_compute__checksumExpr" | grep -q ".binOp .add"; then
     echo "  ok  pressure-lean: compute_checksum uses .binOp .add"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8036,10 +8040,10 @@ else
 fi
 
 # 31. Lean stubs: theorem names match function names
-if grep <<<"$pp_lean" -q "theorem check_nonce_correct" && \
-   grep <<<"$pp_lean" -q "theorem validate_header_correct" && \
-   grep <<<"$pp_lean" -q "theorem compute_checksum_correct" && \
-   grep <<<"$pp_lean" -q "theorem clamp_value_correct"; then
+if grep <<<"$pp_lean" -q "theorem main_check__nonce_correct" && \
+   grep <<<"$pp_lean" -q "theorem main_validate__header_correct" && \
+   grep <<<"$pp_lean" -q "theorem main_compute__checksum_correct" && \
+   grep <<<"$pp_lean" -q "theorem main_clamp__value_correct"; then
     echo "  ok  pressure-lean: theorem names match function names"
     evidence_pass=$((evidence_pass + 1))
 else
