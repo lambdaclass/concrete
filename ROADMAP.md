@@ -1317,6 +1317,10 @@ and sibling-arm cases; interpreter/native agreement; formatter round-trip; and
 mutations that omit each binder kind or accidentally reject assignment rebind.
 Land the cross-cutting migration in a worktree and merge once green.
 
+   Falsification probe first: rename the same-name binders in ONE std file
+   and review the result. If the renamed form is visibly worse (`s1`/`s2`/
+   `s3` noise), narrow the ban before the migration, not after.
+
 ### Task R-0006
 
 **Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
@@ -2040,6 +2044,13 @@ enforce target stack budgets, R-0416–R-0419 measure generated code, and R-0405
 researches hardware WCET under a fixed target model. Backend cost preservation,
 formal discharge, benchmark infrastructure, and hardware timing are explicit
 non-goals here.
+
+   Falsification probes before the machinery: (1) hand-write the symbolic
+   bound for five real functions (HashMap.find_slot, one parse loop, one
+   Vec grow, two others) — if the bounds cannot be stated cleanly for real
+   std code, the cost model is wrong; (2) the step-count vs measured-time
+   correlation experiment on the R-0416–R-0419 workloads — poor correlation
+   kills every timing-adjacent reading early, by design.
 
 ### Task R-0011
 
@@ -5822,6 +5833,11 @@ forged graph/certificate; and mutations that delete a direct edge, one indirect
 target, a capability declaration, the artifact binding, or the gateway-bypass
 path. The checker must reject each false-clean mutation without importing the
 compiler’s authority-report implementation.
+
+   Falsification probe first: run the algorithm by hand on kvstore and
+   httpget. If the conservative address-taken approximation is so coarse
+   that everything reaches everything, V1's design is wrong — refine it
+   before building the certificate machinery.
 
 ### Task R-0276
 
