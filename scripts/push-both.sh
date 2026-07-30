@@ -9,8 +9,19 @@
 # would be advertising code the primary rejected — and remote parity is process
 # state, so nothing in the compiler would have said so.
 #
-# Order is the whole point: primary gates -> primary lands -> mirror
-# fast-forwards to exactly the primary's tip.
+# Order is the whole point: primary gates -> primary lands -> primary CI is
+# GREEN -> mirror fast-forwards to exactly the primary's tip.
+#
+# Why the mirror waits for remote CI and not just the local hook: the hook runs a
+# SUBSET of CI, and this tree has been bitten by exactly that gap — CI sat
+# silently dead for 40+ pushes, and when it was resurrected it immediately
+# exposed two real regressions the local suite had passed. The mirror is what
+# other people consume, so publishing a tip that CI then rejects advertises
+# broken code, and a fast-forward cannot retract it. Waiting is cheap and rare;
+# unpublishing is neither.
+#
+# `--no-ci-wait` exists for when that judgement does not apply, but it has to be
+# passed deliberately and it says what it skipped.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -19,6 +30,19 @@ PRIMARY="${PRIMARY:-origin}"
 MIRROR="${MIRROR:-lambdaclass}"
 BRANCH="${BRANCH:-main}"
 LOCAL="$(git rev-parse HEAD)"
+CI_WAIT=1
+CI_WORKFLOW="${CI_WORKFLOW:-CI}"
+# Bounded so this cannot hang a session forever; on timeout the mirror is left
+# alone, which is the fail-closed direction.
+CI_TIMEOUT="${CI_TIMEOUT:-2400}"
+CI_INTERVAL="${CI_INTERVAL:-30}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-ci-wait) CI_WAIT=0; shift ;;
+    *) echo "push-both: unknown option $1" >&2; exit 2 ;;
+  esac
+done
 
 echo "push-both: $PRIMARY (gated) then $MIRROR (fast-forward)"
 if ! git push "$PRIMARY" "HEAD:$BRANCH"; then
@@ -34,9 +58,57 @@ if [ "$got" != "$LOCAL" ]; then
   exit 1
 fi
 
+# ------------------------------------------------------------------
+# Wait for the PRIMARY's CI on exactly this commit.
+# ------------------------------------------------------------------
+if [ "$CI_WAIT" -eq 1 ]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "push-both: gh not available, cannot confirm CI for ${LOCAL:0:8} — mirror NOT touched." >&2
+    echo "push-both: re-run with --no-ci-wait to publish without that confirmation." >&2
+    exit 1
+  fi
+  echo "push-both: waiting for $CI_WORKFLOW on ${LOCAL:0:8} (timeout ${CI_TIMEOUT}s)"
+  deadline=$(( $(date +%s) + CI_TIMEOUT ))
+  conclusion=""
+  while :; do
+    # Query by COMMIT, not by branch: a branch query races with anyone else's
+    # push and could report a green run for a different tip.
+    row="$(gh run list --workflow "$CI_WORKFLOW" --commit "$LOCAL" \
+             --limit 1 --json status,conclusion,url 2>/dev/null || true)"
+    status="$(sed -n 's/.*"status":"\([^"]*\)".*/\1/p' <<<"$row")"
+    conclusion="$(sed -n 's/.*"conclusion":"\([^"]*\)".*/\1/p' <<<"$row")"
+    if [ "$status" = "completed" ]; then break; fi
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "push-both: CI for ${LOCAL:0:8} did not conclude within ${CI_TIMEOUT}s (status='${status:-none}') — mirror NOT touched." >&2
+      exit 1
+    fi
+    sleep "$CI_INTERVAL"
+  done
+  if [ "$conclusion" != "success" ]; then
+    echo "push-both: CI for ${LOCAL:0:8} concluded '$conclusion' — mirror NOT touched." >&2
+    echo "push-both: $PRIMARY is red. Stop the line and fix it before publishing." >&2
+    exit 1
+  fi
+  echo "push-both: CI green on ${LOCAL:0:8}"
+else
+  echo "push-both: --no-ci-wait — publishing to $MIRROR WITHOUT remote CI confirmation." >&2
+fi
+
 # The mirror gets exactly the primary's tip. Gates are skipped because they
 # already ran for this exact commit on the primary; running them twice proves
 # nothing and doubles the wait.
+# Fast-forward ONLY, and say so before attempting it. If the mirror holds a
+# commit we do not contain, that is the exact anomaly this script was written
+# after — a mirror carrying work the primary never accepted. Report it as such
+# instead of letting a bare push failure stand in for the diagnosis.
+mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH" | cut -f1)"
+if [ -n "$mnow" ] && ! git merge-base --is-ancestor "$mnow" "$LOCAL" 2>/dev/null; then
+  echo "push-both: $MIRROR/$BRANCH is at ${mnow:0:8}, which is NOT an ancestor of ${LOCAL:0:8}." >&2
+  echo "push-both: the mirror holds commits the primary does not. Reconcile before publishing;" >&2
+  echo "push-both: do NOT force-push the mirror." >&2
+  exit 1
+fi
+
 if ! CONCRETE_SKIP_GATES=1 git push "$MIRROR" "HEAD:$BRANCH"; then
   echo "push-both: mirror push failed; $PRIMARY is correct and ahead." >&2
   exit 1
