@@ -161,6 +161,34 @@ if command -v lake >/dev/null 2>&1; then
   STUB="$(mktemp -d)/Patterns/SL.lean"; mkdir -p "$(dirname "$STUB")"
   "$COMPILER" prove "$SL" straight_line.add_three --emit-lean --out "$STUB" --force >/dev/null 2>&1
   if lake env lean "$STUB" >/dev/null 2>&1; then ok "emit-lean stub typechecks"; else no "emit-lean stub failed to typecheck"; fi
+  # R-0004 step 4: the GENERATED table must carry identity and prove its own
+  # integrity at build time. A generator that emits an unusable table is worse
+  # than none, because the author would hand-edit it back into string dispatch.
+  stub_src="$(cat "$STUB")"
+  grep -q "identity := .semantic" <<<"$stub_src" \
+    && ok "generated entries carry a semantic identity" \
+    || no "generated entries have no identity — the table cannot bear evidence"
+  grep -qE "def [A-Za-z]*[Ee]ntries : Array PFnDef" <<<"$stub_src" \
+    && ok "the generated table has canonical entries" \
+    || no "the generated table is function-shaped, so it has no root"
+  grep -qE "example : [A-Za-z]+\.isEvidenceBearing := by decide" <<<"$stub_src" \
+    && ok "the generated table proves its own integrity by kernel decision" \
+    || no "the generated table asserts no integrity check"
+  grep -qE "@\[simp\] theorem [A-Za-z]+_lookup_" <<<"$stub_src" \
+    && ok "per-entry [simp] lookup lemmas are generated with the table" \
+    || no "no lookup lemmas — an Array has no equation lemmas, so proofs lose simp"
+  # ...and the whole thing must typecheck INCLUDING those, which the leg above
+  # covers: `decide`/`rfl` failures are errors, not warnings.
+  # BOTH generators must satisfy this. There are two — `--report lean-stubs` and
+  # `prove --emit-lean` — and updating only one is exactly the drift this checks:
+  # the first pass of step 4 did that, and this gate caught it.
+  stubs_src="$("$COMPILER" "$CO" --report lean-stubs 2>&1)"
+  grep -q "identity := .semantic" <<<"$stubs_src" \
+    && ok "lean-stubs entries carry a semantic identity too" \
+    || no "the lean-stubs generator emits identity-less entries"
+  grep -qE "example : [A-Za-z]+\.isEvidenceBearing := by decide" <<<"$stubs_src" \
+    && ok "lean-stubs asserts table integrity too" \
+    || no "the lean-stubs generator asserts no integrity check"
   rm -rf "$(dirname "$(dirname "$STUB")")"
   echo "=== kernel: agent repair fixture maps failure to obligation id ==="
   assert_json "repair --check → missing_theorem on obligation" \

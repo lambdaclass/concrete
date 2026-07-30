@@ -1496,7 +1496,17 @@ def leanStubsReport (pc : Concrete.ProofCore)
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsLean := e.params.map fun p => s!"\"{p}\""
     let paramsList := "[" ++ ", ".intercalate paramsLean ++ "]"
-    s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\ndef {name}Fn : PFnDef :=\n  \{ displayName := \"{name}\", params := {paramsList}, body := {name}Expr }"
+    -- The entry carries a SEMANTIC IDENTITY, split at the last dot so the
+    -- defining module and the declaration name come from the qualified name
+    -- rather than being reconstructed later from a display string (R-0004 step 4).
+    let segs := e.qualName.splitOn "."
+    let declN := segs.getLast!
+    let defMod := ".".intercalate (segs.dropLast)
+    s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n" ++
+    s!"/-- Semantic identity of `{e.qualName}`. Generated, not hand-written: an\n" ++
+    s!"    identity an author can type is an identity an author can get wrong. -/\n" ++
+    s!"def {name}Id : CallableId :=\n  \{ ns := .user, defModule := \"{defMod}\", declName := \"{declN}\" }\n\n" ++
+    s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }"
   -- Build function table
   let tableCases := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
@@ -1506,13 +1516,41 @@ def leanStubsReport (pc : Concrete.ProofCore)
   -- since R-0442, and a bare pattern match no longer typechecks against it. The
   -- wrapper also keeps `simp`'s equation lemmas available, which a structure
   -- instance built from an anonymous match would not.
+  let entryNames := extracted.map fun e => (leanIdent (e.qualName.splitOn "." |>.getLast!)) ++ "Fn"
+  -- Per-entry `[simp]` LOOKUP LEMMAS. An `Array` has no equation lemmas, so the
+  -- `simp [XFnsGlobals]` idiom that every existing proof relies on has nothing to
+  -- rewrite with. These restore that behaviour, and they are GENERATED with the
+  -- table so the lemma set cannot drift from the entries it describes.
+  let lookupLemmas := extracted.map fun e =>
+    let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    s!"@[simp] theorem generatedFns_lookup_{name} :\n" ++
+    -- `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
+    -- deliberately has no `DecidableEq` (see PVal's note), so `decide` cannot
+    -- synthesize an instance. Lookup reduces to the entry definitionally, which
+    -- is the stronger statement anyway.
+    s!"    generatedFns.lookupById {name}Id = ({name}Fn).identified? := by\n  rfl"
   let tableStr :=
+    -- CANONICAL entries — the evidence-bearing form. The legacy string dispatch
+    -- is still emitted because `PExpr.call` selects by name, and it is labelled
+    -- as operational lookup rather than as identity.
+    s!"/-- Canonical entries: the evidence-bearing form. Ordered by the table\n" ++
+    s!"    itself, never by emission order. -/\n" ++
+    s!"def generatedEntries : Array PFnDef := #[{", ".intercalate entryNames}]\n\n" ++
+    s!"/-- LEGACY OPERATIONAL LOOKUP. `PExpr.call \"f\"` still selects by name, so\n" ++
+    s!"    this mapping survives; it is not identity, and the table root binds it. -/\n" ++
     s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n" ++
     s!"/-- Locally bound callables (fn-typed parameters). Applications of these\n" ++
     s!"    extract to `.applyVar` and are answered ONLY here — a definition of the\n" ++
     s!"    same name cannot satisfy them (R-0442). -/\n" ++
     s!"def generatedFnsCallables : String → Option PFnDef := fun _ => none\n\n" ++
-    s!"def generatedFns : FnTable :=\n  FnTable.withCallables generatedFnsGlobals generatedFnsCallables"
+    s!"def generatedFns : FnTable :=\n" ++
+    s!"  \{ entries := generatedEntries,\n" ++
+    s!"    globals := generatedFnsGlobals, callables := generatedFnsCallables }\n\n" ++
+    s!"/-- The table must be able to bear evidence: every entry identified, no\n" ++
+    s!"    duplicate identity, and no string key reaching two entries. Checked by\n" ++
+    s!"    the kernel at build time, so a generator bug fails the build. -/\n" ++
+    s!"example : generatedFns.isEvidenceBearing := by decide\n\n" ++
+    s!"{"\n\n".intercalate lookupLemmas}"
   -- Build eval helpers
   let evalHelpers := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
@@ -2665,19 +2703,34 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
     let oblSection := if oblTodos.isEmpty then "--   (no generated loop/ensures obligations)"
                       else "\n".intercalate oblTodos
     let kitSection := if featLemmas.isEmpty then "Concrete.ProofKit (general)" else ", ".intercalate featLemmas
+    -- Split at the last dot: the defining module and declaration name come from
+    -- the qualified name, never reconstructed later from a display string.
+    let proveSegs := qualName.splitOn "."
+    let proveDeclN := proveSegs.getLast!
+    let proveDefMod := ".".intercalate (proveSegs.dropLast)
     return String.join [
       s!"-- Lean proof stub for `{qualName}` — fill in the spec and replace `sorry`.\n",
       s!"-- Suggested ProofKit lemmas: {kitSection}\n",
       "import Concrete.Proof.Proof\nimport Concrete.ProofKit\n\n",
       s!"namespace Concrete.Proof.Generated.{name}\nopen Concrete.Proof\n\n",
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
-      s!"def {name}Fn : PFnDef :=\n  \{ displayName := \"{name}\", params := {paramsList}, body := {name}Expr }\n\n",
+      s!"/-- Semantic identity of `{qualName}`. Generated, not hand-written. -/\n" ++
+      s!"def {name}Id : CallableId :=\n  \{ ns := .user, defModule := \"{proveDefMod}\", declName := \"{proveDeclN}\" }\n\n",
+      s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }\n\n",
       s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
       s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++
       s!"    that is an `.applyVar` node and must be bound HERE, not above: a\n" ++
       s!"    definition of the same name will not answer it (R-0442). -/\n" ++
       s!"def fnsCallables : String → Option PFnDef := fun _ => none\n\n",
-      s!"def fns : FnTable := FnTable.withCallables fnsGlobals fnsCallables\n\n",
+      s!"/-- Canonical entries: the evidence-bearing form (R-0004 step 3). -/\n" ++
+      s!"def fnsEntries : Array PFnDef := #[{name}Fn]\n\n",
+      s!"def fns : FnTable :=\n  \{ entries := fnsEntries, globals := fnsGlobals, callables := fnsCallables }\n\n",
+      s!"/-- Integrity, checked by the kernel at build time: every entry\n" ++
+      s!"    identified, no duplicate identity, no string key reaching two. -/\n" ++
+      s!"example : fns.isEvidenceBearing := by decide\n\n",
+      s!"/-- Lookup lemma. An `Array` has no equation lemmas, so `simp` needs this\n" ++
+      s!"    to rewrite a table lookup; generated with the table so it cannot drift. -/\n" ++
+      s!"@[simp] theorem fns_lookup_{name} :\n    fns.lookupById {name}Id = ({name}Fn).identified? := by\n  rfl\n\n",
       s!"def eval_{name} {paramSig} (fuel : Nat := 20) : Option PVal :=\n  eval fns {paramBinds} fuel {name}Expr\n\n",
       "-- Obligations to discharge:\n", oblSection, "\n\n",
       s!"/-- TODO: replace `sorry` (RHS) with the spec, then prove it. -/\n",

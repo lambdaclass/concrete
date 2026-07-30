@@ -38,27 +38,28 @@ namespace Concrete
     VARIABLES are rendered too: an unsubstituted `T` reaching an identity means
     something upstream failed to monomorphize, and it should be visible rather
     than blank. -/
-partial def tyCanonical : Ty → String
-  | .int => "Int" | .uint => "Uint"
-  | .i8 => "i8" | .i16 => "i16" | .i32 => "i32"
-  | .u8 => "u8" | .u16 => "u16" | .u32 => "u32"
-  | .bool => "Bool" | .char => "Char" | .unit => "Unit"
-  | .float64 => "Float64" | .float32 => "Float32"
-  | .string => "String"
-  | .never => "Never"
-  | .placeholder => "?"
-  | .named n => n
-  | .typeVar n => "'" ++ n
-  | .ref inner => "&" ++ tyCanonical inner
-  | .refMut inner => "&mut " ++ tyCanonical inner
-  | .ptrMut inner => "*mut " ++ tyCanonical inner
-  | .ptrConst inner => "*const " ++ tyCanonical inner
-  | .heap inner => "Heap<" ++ tyCanonical inner ++ ">"
-  | .heapArray inner => "HeapArray<" ++ tyCanonical inner ++ ">"
-  | .array elem size => "[" ++ tyCanonical elem ++ ";" ++ toString size ++ "]"
-  | .generic n args => n ++ "<" ++ String.intercalate "," (args.map tyCanonical) ++ ">"
-  | .fn_ params caps ret =>
-    let ps := String.intercalate "," (params.map tyCanonical)
+def tyCanonicalFuel : Nat → Ty → String
+  | 0, _ => "?depth"
+  | _+1, .int => "Int" | _+1, .uint => "Uint"
+  | _+1, .i8 => "i8" | _+1, .i16 => "i16" | _+1, .i32 => "i32"
+  | _+1, .u8 => "u8" | _+1, .u16 => "u16" | _+1, .u32 => "u32"
+  | _+1, .bool => "Bool" | _+1, .char => "Char" | _+1, .unit => "Unit"
+  | _+1, .float64 => "Float64" | _+1, .float32 => "Float32"
+  | _+1, .string => "String"
+  | _+1, .never => "Never"
+  | _+1, .placeholder => "?"
+  | _+1, .named n => n
+  | _+1, .typeVar n => "'" ++ n
+  | f+1, .ref inner => "&" ++ tyCanonicalFuel f inner
+  | f+1, .refMut inner => "&mut " ++ tyCanonicalFuel f inner
+  | f+1, .ptrMut inner => "*mut " ++ tyCanonicalFuel f inner
+  | f+1, .ptrConst inner => "*const " ++ tyCanonicalFuel f inner
+  | f+1, .heap inner => "Heap<" ++ tyCanonicalFuel f inner ++ ">"
+  | f+1, .heapArray inner => "HeapArray<" ++ tyCanonicalFuel f inner ++ ">"
+  | f+1, .array elem size => "[" ++ tyCanonicalFuel f elem ++ ";" ++ toString size ++ "]"
+  | f+1, .generic n args => n ++ "<" ++ String.intercalate "," (args.map (tyCanonicalFuel f)) ++ ">"
+  | f+1, .fn_ params caps ret =>
+    let ps := String.intercalate "," (params.map (tyCanonicalFuel f))
     -- Through `CapSet.normalize`, which sorts and dedups: `with(File, Net)` and
     -- `with(Net) ∪ with(File)` are the same capability set and must not produce
     -- two identities. Variables are kept in their own group so a capability
@@ -66,7 +67,19 @@ partial def tyCanonical : Ty → String
     let (concrete, vars) := caps.normalize
     let cs := String.intercalate "+" concrete
     let vs := if vars.isEmpty then "" else "|" ++ String.intercalate "+" vars
-    "fn(" ++ ps ++ ")with(" ++ cs ++ vs ++ ")->" ++ tyCanonical ret
+    "fn(" ++ ps ++ ")with(" ++ cs ++ vs ++ ")->" ++ tyCanonicalFuel f ret
+
+
+/-- Canonical type rendering.
+
+    Fuel-based rather than `partial`: a `partial def` is OPAQUE TO THE KERNEL, so
+    any `by decide` that reaches it gets stuck — and the generated tables assert
+    `example : generatedFns.isEvidenceBearing := by decide`, which reaches here
+    through `CallableId.render`. An identity encoding that the kernel cannot
+    evaluate cannot back a build-time guarantee. 64 exceeds any realistic nesting
+    depth; exhaustion renders `?depth`, which is deliberately distinguishable
+    rather than silently equal to something else. -/
+def tyCanonical (t : Ty) : String := tyCanonicalFuel 64 t
 
 /-- Which world a callable comes from.
 

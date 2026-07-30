@@ -424,7 +424,12 @@ def FnTable.canonicalEntries (t : FnTable) : Array PFnDef :=
     mint a receipt — evidence requires identity for the WHOLE table, not most
     of it. -/
 def FnTable.allIdentified (t : FnTable) : Bool :=
-  t.entries.all (fun d => d.identified?.isSome)
+  -- `toList.all`, not `Array.all`: the latter goes through `Array.foldlM` and does
+  -- not kernel-reduce, so `by decide` on the generated
+  -- `example : generatedFns.isEvidenceBearing` got stuck. Isolated by checking
+  -- each conjunct separately rather than guessing — `hasDuplicateIds` already
+  -- reduced because it was written over `toList`.
+  t.entries.toList.all (fun d => d.identified?.isSome)
 
 /-- No two entries share an identity.
 
@@ -449,6 +454,17 @@ def FnTable.hasDuplicateIds (t : FnTable) : Bool :=
 def FnTable.keyIndex (t : FnTable) : List (String × String) :=
   t.canonicalEntries.toList.map fun d => (d.displayName, d.identityKey)
 
+/-- The same pairs in ENTRY order, for the uniqueness check only.
+
+    Uniqueness is order-independent, so this deliberately skips
+    `canonicalEntries`: `Array.qsort` is well-founded and does not kernel-reduce,
+    so a `by decide` over a sorted list gets stuck. The generated
+    `example : … .isEvidenceBearing := by decide` is exactly such a check, and it
+    has to reduce or the build-time guarantee is not there. The ROOT still uses
+    canonical order — that is where order matters. -/
+def FnTable.keyPairs (t : FnTable) : List (String × String) :=
+  t.entries.toList.map fun d => (d.displayName, d.identityKey)
+
 /-- Is the operational key → identity mapping unambiguous?
 
     Two entries reachable by one string key means a call by that name selects
@@ -456,7 +472,7 @@ def FnTable.keyIndex (t : FnTable) : List (String × String) :=
     duplicate IDENTITIES: distinct callables sharing a display name is a
     different fault from one callable listed twice. -/
 def FnTable.keyIndexUnique (t : FnTable) : Bool :=
-  let keys := t.keyIndex.map (·.1)
+  let keys := t.keyPairs.map (·.1)
   keys.length == keys.eraseDups.length
 
 /-- May this table take part in minting a receipt?

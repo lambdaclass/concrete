@@ -1019,9 +1019,30 @@ Land this task in seven explicit slices:
       equations do not exist, so the lemmas must be GENERATED with the table
       (step 4), not hand-written. The bar is the same KERNEL THEOREM RESULTS,
       not identical proof terms or delta-unfolding behaviour.
-   4. **Generate tables from the compiler** — IDs, proof bodies, source-subject
-      digests and the canonical root. Hand-written string dispatch stops being
-      evidence-bearing.
+   4. **Generate tables from the compiler** — LANDED for IDs, canonical entries,
+      the integrity guarantee and the lookup lemmas. Both generators emit them
+      (`--report lean-stubs` and `prove --emit-lean`); updating only one is the
+      drift `check_proof_patterns` now catches, having caught exactly that.
+
+      A generated table carries `identity := .semantic <name>Id` per entry with
+      the module/declaration split taken from the qualified name, canonical
+      `entries : Array PFnDef`, and — the part that makes it self-checking —
+      `example : fns.isEvidenceBearing := by decide`, so a generator bug fails the
+      BUILD rather than producing a table nobody validates. Per-entry `@[simp]`
+      lookup lemmas ship with the table, since an `Array` has no equation lemmas
+      and `simp [XFnsGlobals]` would otherwise have nothing to rewrite with.
+
+      Making that `decide` actually reduce required three fixes, each a place
+      where the kernel could not evaluate what it was asked to trust:
+      `tyCanonical` was `partial` (opaque to the kernel) and is now fuel-based;
+      `allIdentified` used `Array.all` (via `foldlM`, which does not reduce) and
+      now goes through `toList`; and the key-uniqueness check no longer sorts,
+      because `Array.qsort` is well-founded and gets stuck — uniqueness is
+      order-independent, so only the ROOT needs canonical order. The lookup
+      lemmas use `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
+      deliberately has no `DecidableEq`.
+
+      Still to do here: source-subject digests in the generated output.
    5. **Migrate the nine**, one at a time, with dual comparison: same theorem
       results, same evaluation behaviour, stable generated root, kernel replay,
       and no new hand-written entries.
