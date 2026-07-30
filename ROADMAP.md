@@ -1321,6 +1321,16 @@ Land the cross-cutting migration in a worktree and merge once green.
    and review the result. If the renamed form is visibly worse (`s1`/`s2`/
    `s3` noise), narrow the ban before the migration, not after.
 
+   Probe result (2026-07-30, preliminary hand-sample, ~20 sites across
+   std option/result/deque/map + envcfg/kvstore/conlog/error_conventions):
+   the pervasive `Variant { value }` idiom is arm-local and immediately
+   consumed (exempt); the one nested case found (envcfg) is sibling-arm
+   exempt under the ratified rule; the live consuming-rebind shape
+   `let s = transform(s)` did not appear. Zero forced renames in the
+   sample — preliminary evidence to proceed as ratified. A systematic
+   pass over the ~25 sites DECISIONS cites should confirm before the
+   migration lands.
+
 ### Task R-0006
 
 **Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
