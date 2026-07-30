@@ -1339,6 +1339,10 @@ private partial def renderPExpr : Proof.PExpr → String
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
   qualName    : String
+  /-- Semantic identity, CARRIED from ProofCore where it was minted from resolved
+      compiler facts. The generator reads this; it does not split `qualName`.
+      Optional only because excluded entries have no ProofCore identity yet. -/
+  callableId  : Option CallableId := none
   eligible    : Bool
   extracted   : Option Proof.PExpr
   excluded    : List String  -- reasons if not eligible
@@ -1361,7 +1365,8 @@ private def extractionEntriesFromPC (pc : Concrete.ProofCore)
     (_registry : ProofRegistry := []) : List ExtractionEntry :=
   let eligible := pc.entries.map fun e =>
     let (sName, pName) := specNames e.spec
-    { qualName := e.qualName, eligible := true, extracted := e.extracted
+    { qualName := e.qualName, callableId := some e.callableId
+    , eligible := true, extracted := e.extracted
     , excluded := [], unsupported := e.unsupported, fingerprint := e.fingerprint
     , params := e.params, specName := sName, proofName := pName, loc := e.loc }
   let excludedEntries := pc.excluded.map fun e =>
@@ -1499,9 +1504,12 @@ def leanStubsReport (pc : Concrete.ProofCore)
     -- The entry carries a SEMANTIC IDENTITY, split at the last dot so the
     -- defining module and the declaration name come from the qualified name
     -- rather than being reconstructed later from a display string (R-0004 step 4).
-    let segs := e.qualName.splitOn "."
-    let declN := segs.getLast!
-    let defMod := ".".intercalate (segs.dropLast)
+    -- READ the identity that ProofCore minted from resolved compiler facts.
+    -- Splitting `qualName` here is what this replaces: it re-derived identity
+    -- from a rendering, one layer away from the facts.
+    let (defMod, declN) := match e.callableId with
+      | some cid => (cid.defModule, cid.declName)
+      | none     => ("", "")   -- unmappable; fails the guard below
     s!"/-- Extracted from `{e.qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n" ++
     s!"/-- Semantic identity of `{e.qualName}`. Generated, not hand-written: an\n" ++
     s!"    identity an author can type is an identity an author can get wrong. -/\n" ++
@@ -1516,14 +1524,27 @@ def leanStubsReport (pc : Concrete.ProofCore)
   -- since R-0442, and a bare pattern match no longer typechecks against it. The
   -- wrapper also keeps `simp`'s equation lemmas available, which a structure
   -- instance built from an anonymous match would not.
-  let entryNames := extracted.map fun e => (leanIdent (e.qualName.splitOn "." |>.getLast!)) ++ "Fn"
+  -- Emitted in strict CallableId order. `isEvidenceBearing` kernel-checks the
+  -- ordering, so a generator emitting source order fails the BUILD — which is
+  -- how this omission was caught rather than shipping an unsortable table. The
+  -- key mirrors `CallableId.render` exactly; sorting by anything else would be a
+  -- second, drifting notion of order.
+  -- Sorted by the RENDERED carried identity, so the order the generator emits and
+  -- the order the table asserts come from the same function.
+  let identityKeyOf := fun (e : ExtractionEntry) =>
+    match e.callableId with
+    | some cid => cid.render
+    | none     => ""
+  let sortedEntries := extracted.toArray.qsort
+    (fun a b => identityKeyOf a < identityKeyOf b) |>.toList
+  let entryNames := sortedEntries.map fun e => (leanIdent (e.qualName.splitOn "." |>.getLast!)) ++ "Fn"
   -- Per-entry `[simp]` LOOKUP LEMMAS. An `Array` has no equation lemmas, so the
   -- `simp [XFnsGlobals]` idiom that every existing proof relies on has nothing to
   -- rewrite with. These restore that behaviour, and they are GENERATED with the
   -- table so the lemma set cannot drift from the entries it describes.
   let lookupLemmas := extracted.map fun e =>
     let name := leanIdent (e.qualName.splitOn "." |>.getLast!)
-    s!"@[simp] theorem generatedFns_lookup_{name} :\n" ++
+    s!"@[proofTable] theorem generatedFns_lookup_{name} :\n" ++
     -- `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
     -- deliberately has no `DecidableEq` (see PVal's note), so `decide` cannot
     -- synthesize an instance. Lookup reduces to the entry definitionally, which
@@ -2728,9 +2749,11 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"/-- Integrity, checked by the kernel at build time: every entry\n" ++
       s!"    identified, no duplicate identity, no string key reaching two. -/\n" ++
       s!"example : fns.isEvidenceBearing := by decide\n\n",
-      s!"/-- Lookup lemma. An `Array` has no equation lemmas, so `simp` needs this\n" ++
-      s!"    to rewrite a table lookup; generated with the table so it cannot drift. -/\n" ++
-      s!"@[simp] theorem fns_lookup_{name} :\n    fns.lookupById {name}Id = ({name}Fn).identified? := by\n  rfl\n\n",
+      s!"/-- Lookup lemma. An `Array` has no equation lemmas, so a table lookup needs\n" ++
+      s!"    this to rewrite; generated with the table so it cannot drift. Tagged\n" ++
+      s!"    `proofTable`, NOT `simp`: a generated artifact must not enlarge the\n" ++
+      s!"    default simp set for the whole project. Use `simp [proofTable]`. -/\n" ++
+      s!"@[proofTable] theorem fns_lookup_{name} :\n    fns.lookupById {name}Id = ({name}Fn).identified? := by\n  rfl\n\n",
       s!"def eval_{name} {paramSig} (fuel : Nat := 20) : Option PVal :=\n  eval fns {paramBinds} fuel {name}Expr\n\n",
       "-- Obligations to discharge:\n", oblSection, "\n\n",
       s!"/-- TODO: replace `sorry` (RHS) with the spec, then prove it. -/\n",

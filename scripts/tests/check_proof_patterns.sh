@@ -174,7 +174,7 @@ if command -v lake >/dev/null 2>&1; then
   grep -qE "example : [A-Za-z]+\.isEvidenceBearing := by decide" <<<"$stub_src" \
     && ok "the generated table proves its own integrity by kernel decision" \
     || no "the generated table asserts no integrity check"
-  grep -qE "@\[simp\] theorem [A-Za-z]+_lookup_" <<<"$stub_src" \
+  grep -qE "@\[proofTable\] theorem [A-Za-z]+_lookup_" <<<"$stub_src" \
     && ok "per-entry [simp] lookup lemmas are generated with the table" \
     || no "no lookup lemmas — an Array has no equation lemmas, so proofs lose simp"
   # ...and the whole thing must typecheck INCLUDING those, which the leg above
@@ -189,6 +189,27 @@ if command -v lake >/dev/null 2>&1; then
   grep -qE "example : [A-Za-z]+\.isEvidenceBearing := by decide" <<<"$stubs_src" \
     && ok "lean-stubs asserts table integrity too" \
     || no "the lean-stubs generator asserts no integrity check"
+  # SCOPED simp, not global. A generated artifact emits one lemma per entry, and
+  # `@[simp]` would make every `simp` in the project carry — and be rewritable
+  # by — machine-generated table facts it never asked about.
+  for src in "$stub_src" "$stubs_src"; do
+    grep -q "@\[proofTable\]" <<<"$src" \
+      && ok "lookup lemmas use the scoped proofTable set" \
+      || no "lookup lemmas are not scoped to proofTable"
+    grep -q "@\[simp\]" <<<"$src" \
+      && no "a generated lemma is tagged @[simp] and pollutes global simplification" \
+      || ok "no generated lemma enlarges the default simp set"
+  done
+  # PROVENANCE: identity must be carried from ProofCore, not re-derived by
+  # splitting a qualified name in the report layer.
+  if grep -n "splitOn" Concrete/Report/Report.lean | grep -qE "declN|defMod"; then
+    no "the generator still splits a qualified name to build an identity"
+  else
+    ok "the generator reads a carried CallableId, not a split qualName"
+  fi
+  grep -q "callableId  : CallableId" Concrete/Proof/ProofCore.lean \
+    && ok "ProofCore mints the identity from resolved compiler facts" \
+    || no "ProofCoreEntry carries no CallableId — identity has no single origin"
   rm -rf "$(dirname "$(dirname "$STUB")")"
   echo "=== kernel: agent repair fixture maps failure to obligation id ==="
   assert_json "repair --check → missing_theorem on obligation" \

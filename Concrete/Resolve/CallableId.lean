@@ -24,62 +24,64 @@ text and re-introduce exactly the drift this prevents.
 
 namespace Concrete
 
-/-- Canonical, TOTAL rendering of a type, for identity purposes.
+/-! Canonical, TOTAL rendering of a type, for identity purposes.
 
-    Deliberately not `Resolve.Shared.tyName`, which is lossy in exactly the
-    places identity depends on: it renders `.generic n args` as just `n`, so
-    `Box<Int>` and `Box<u8>` collapse to one string, and it answers `""` for
-    refs, arrays, pointers and fn types. Reusing it would have made distinct
-    monomorphized instances share an identity — the defect this whole slice
-    exists to prevent.
+    STRUCTURALLY recursive, via a mutual list helper. Three earlier shapes were
+    all wrong in ways worth recording:
 
-    Every constructor is spelled out, and each carries a distinguishing prefix or
-    bracket, so two structurally different types cannot render alike. Type
-    VARIABLES are rendered too: an unsubstituted `T` reaching an identity means
-    something upstream failed to monomorphize, and it should be visible rather
-    than blank. -/
-def tyCanonicalFuel : Nat → Ty → String
-  | 0, _ => "?depth"
-  | _+1, .int => "Int" | _+1, .uint => "Uint"
-  | _+1, .i8 => "i8" | _+1, .i16 => "i16" | _+1, .i32 => "i32"
-  | _+1, .u8 => "u8" | _+1, .u16 => "u16" | _+1, .u32 => "u32"
-  | _+1, .bool => "Bool" | _+1, .char => "Char" | _+1, .unit => "Unit"
-  | _+1, .float64 => "Float64" | _+1, .float32 => "Float32"
-  | _+1, .string => "String"
-  | _+1, .never => "Never"
-  | _+1, .placeholder => "?"
-  | _+1, .named n => n
-  | _+1, .typeVar n => "'" ++ n
-  | f+1, .ref inner => "&" ++ tyCanonicalFuel f inner
-  | f+1, .refMut inner => "&mut " ++ tyCanonicalFuel f inner
-  | f+1, .ptrMut inner => "*mut " ++ tyCanonicalFuel f inner
-  | f+1, .ptrConst inner => "*const " ++ tyCanonicalFuel f inner
-  | f+1, .heap inner => "Heap<" ++ tyCanonicalFuel f inner ++ ">"
-  | f+1, .heapArray inner => "HeapArray<" ++ tyCanonicalFuel f inner ++ ">"
-  | f+1, .array elem size => "[" ++ tyCanonicalFuel f elem ++ ";" ++ toString size ++ "]"
-  | f+1, .generic n args => n ++ "<" ++ String.intercalate "," (args.map (tyCanonicalFuel f)) ++ ">"
-  | f+1, .fn_ params caps ret =>
-    let ps := String.intercalate "," (params.map (tyCanonicalFuel f))
-    -- Through `CapSet.normalize`, which sorts and dedups: `with(File, Net)` and
-    -- `with(Net) ∪ with(File)` are the same capability set and must not produce
-    -- two identities. Variables are kept in their own group so a capability
+    * `Resolve.Shared.tyName` is lossy — `.generic n args` renders as just `n`,
+      and refs/arrays/pointers/fn types render `""`. Reusing it would have made
+      `Box<Int>` and `Box<u8>` share an identity.
+    * `partial def` is OPAQUE TO THE KERNEL, so `by decide` over anything
+      reaching it gets stuck — and generated tables assert
+      `example : fns.isEvidenceBearing := by decide`.
+    * fuel with a `?depth` sentinel on exhaustion INTRODUCED A COLLISION: two
+      sufficiently deep types would both render `?depth` and become one identity.
+      That is precisely the failure this type exists to prevent, so a sentinel
+      must never appear in identity bytes or a table root.
+
+    Structural recursion has none of those properties: it is total, it reduces in
+    the kernel, and exhaustion is impossible, so there is no failure case to
+    encode. Type VARIABLES still render — an unsubstituted `T` reaching an
+    identity means something upstream failed to monomorphize, and it should be
+    visible rather than blank. -/
+mutual
+
+def tyCanonical : Ty → String
+  | .int => "Int" | .uint => "Uint"
+  | .i8 => "i8" | .i16 => "i16" | .i32 => "i32"
+  | .u8 => "u8" | .u16 => "u16" | .u32 => "u32"
+  | .bool => "Bool" | .char => "Char" | .unit => "Unit"
+  | .float64 => "Float64" | .float32 => "Float32"
+  | .string => "String"
+  | .never => "Never"
+  | .placeholder => "?"
+  | .named n => n
+  | .typeVar n => "'" ++ n
+  | .ref inner => "&" ++ tyCanonical inner
+  | .refMut inner => "&mut " ++ tyCanonical inner
+  | .ptrMut inner => "*mut " ++ tyCanonical inner
+  | .ptrConst inner => "*const " ++ tyCanonical inner
+  | .heap inner => "Heap<" ++ tyCanonical inner ++ ">"
+  | .heapArray inner => "HeapArray<" ++ tyCanonical inner ++ ">"
+  | .array elem size => "[" ++ tyCanonical elem ++ ";" ++ toString size ++ "]"
+  | .generic n args => n ++ "<" ++ tyCanonicalList args ++ ">"
+  | .fn_ params caps ret =>
+    -- Capabilities through `CapSet.normalize`, which sorts and dedups:
+    -- `with(File, Net)` and `with(Net) ∪ with(File)` are one set and must not
+    -- yield two identities. Variables stay in their own group, so a capability
     -- VARIABLE is never conflated with a concrete capability of the same name.
     let (concrete, vars) := caps.normalize
     let cs := String.intercalate "+" concrete
     let vs := if vars.isEmpty then "" else "|" ++ String.intercalate "+" vars
-    "fn(" ++ ps ++ ")with(" ++ cs ++ vs ++ ")->" ++ tyCanonicalFuel f ret
+    "fn(" ++ tyCanonicalList params ++ ")with(" ++ cs ++ vs ++ ")->" ++ tyCanonical ret
 
+def tyCanonicalList : List Ty → String
+  | [] => ""
+  | [t] => tyCanonical t
+  | t :: ts => tyCanonical t ++ "," ++ tyCanonicalList ts
 
-/-- Canonical type rendering.
-
-    Fuel-based rather than `partial`: a `partial def` is OPAQUE TO THE KERNEL, so
-    any `by decide` that reaches it gets stuck — and the generated tables assert
-    `example : generatedFns.isEvidenceBearing := by decide`, which reaches here
-    through `CallableId.render`. An identity encoding that the kernel cannot
-    evaluate cannot back a build-time guarantee. 64 exceeds any realistic nesting
-    depth; exhaustion renders `?depth`, which is deliberately distinguishable
-    rather than silently equal to something else. -/
-def tyCanonical (t : Ty) : String := tyCanonicalFuel 64 t
+end
 
 /-- Which world a callable comes from.
 

@@ -41,18 +41,51 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "       '-- MUTATION' markers: grep -rn 'MUTATION' Concrete/ --include='*.lean'" >&2
   exit 2
 fi
+# Backups live in a unique temp dir, not beside the source: a `<file>.mutbak`
+# sitting in the tree is itself a way to leave state behind, and two runs racing
+# on the same path is what corrupted Proof.lean.
+MUT_BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/concrete-mutation.XXXXXX")"
+
+# Hashes of every target file, captured BEFORE any mutation. Restoration is
+# verified against these, so "restored" means byte-identical rather than "the
+# restore command ran".
+declare -A MUT_HASH0=()
+hash_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
+
 cleanup_lock() {
+  local rc=$?
   rmdir "$LOCK_DIR" 2>/dev/null || true
-  # A mutation left applied is worse than a failed run: the next build, gate or
-  # commit would silently use it. Say so loudly.
+  # POSTCONDITION, not a warning. A mutation left applied is worse than a failed
+  # run: the next build, gate or commit silently uses it, and a green result then
+  # describes mutated code. This must make the harness FAIL.
+  local bad=0
   local stray
-  stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete --include='*.lean' 2>/dev/null || true)"
+  stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete "$ROOT_DIR"/std 2>/dev/null || true)"
   if [ -n "$stray" ]; then
     echo "" >&2
-    echo "WARNING: a mutation is still applied in the source tree:" >&2
+    echo "FATAL: a mutation is still applied in the source tree:" >&2
     printf '%s\n' "$stray" >&2
-    echo "restore it before building, gating or committing." >&2
+    bad=1
   fi
+  # Exact restoration, per target file.
+  for f in "${!MUT_HASH0[@]}"; do
+    local now; now="$(hash_of "$ROOT_DIR/$f")"
+    if [ "$now" != "${MUT_HASH0[$f]}" ]; then
+      echo "" >&2
+      echo "FATAL: $f was not restored exactly" >&2
+      echo "  before: ${MUT_HASH0[$f]}" >&2
+      echo "  after : $now" >&2
+      bad=1
+    fi
+  done
+  rm -rf "$MUT_BACKUP_DIR" 2>/dev/null || true
+  if [ "$bad" = 1 ]; then
+    echo "" >&2
+    echo "restore the tree before building, gating or committing:" >&2
+    echo "  git diff -- Concrete std   # then git checkout -- <files>" >&2
+    exit 3
+  fi
+  exit $rc
 }
 trap cleanup_lock EXIT INT TERM
 
@@ -482,9 +515,11 @@ gate_for_last "scripts/tests/check_proof_freshness.sh"
 # insertion order instead makes two identical tables hash differently, so a
 # receipt would depend on how the generator happened to emit entries.
 MUT_FILE+=("Concrete/Proof/Proof.lean")
-MUT_OLD+=("  t.entries.qsort (fun a b => a.identityKey < b.identityKey)")
-MUT_NEW+=("  t.entries -- MUTATION: insertion order leaks into the root")
-MUT_DESC+=("FnTable: root depends on entry order (R-0004 step 3)")
+# Retargeted: the root no longer sorts (qsort does not kernel-reduce), so
+# canonical order is now an ASSERTED property. Accepting any order is the defect.
+MUT_OLD+=("  (keys.zip (keys.drop 1)).all fun (a, b) => a < b")
+MUT_NEW+=("  (keys.zip (keys.drop 1)).all fun (a, b) => a <= b -- MUTATION: order not strict")
+MUT_DESC+=("FnTable: entry order only non-decreasing, not strict (R-0004 step 3)")
 gate_for_last "scripts/tests/check_callable_identity.sh"
 
 # 38. FnTable: duplicate identities accepted (R-0004 step 3)
@@ -682,6 +717,27 @@ run_mutation() {
 
 echo "=== Mutation Testing ($NUM_MUTATIONS mutations) ==="
 echo ""
+
+# Preflight: no target file may be dirty. A mutation applied on top of
+# uncommitted work cannot be distinguished from that work on restore, and the
+# hash postcondition would then compare against an already-modified baseline.
+# Only the files this RUN will touch. Checking the whole target set would refuse
+# a single-mutation run because some unrelated target happens to be dirty, which
+# makes the guard obstructive rather than protective — and an obstructive guard
+# gets bypassed.
+if [ "$MODE" = "single" ]; then
+  MUT_TARGETS=("${MUT_FILE[$((SINGLE_IDX - 1))]}")
+else
+  mapfile -t MUT_TARGETS < <(printf '%s\n' "${MUT_FILE[@]}" | sort -u)
+fi
+for f in "${MUT_TARGETS[@]}"; do
+  if ! git -C "$ROOT_DIR" diff --quiet -- "$f" 2>/dev/null; then
+    echo "error: target file has uncommitted changes: $f" >&2
+    echo "       this harness edits targets in place; commit or stash first." >&2
+    exit 2
+  fi
+  MUT_HASH0["$f"]="$(hash_of "$ROOT_DIR/$f")"
+done
 
 # Preflight: the PRISTINE tree must build. Otherwise every mutation reports
 # "KILLED (build)" and the run claims perfect coverage while having tested

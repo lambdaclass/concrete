@@ -1753,6 +1753,14 @@ structure ProofDiagnostic where
 structure ProofCoreEntry where
   qualName    : String
   bareName    : String
+  /-- Semantic identity, minted HERE from resolved compiler facts — the defining
+      module path and the checked declaration's own name — not reconstructed
+      downstream by splitting `qualName`.
+
+      A consumer that string-splits a qualified name has re-derived identity from
+      a rendering, which is the drift `CallableId` exists to remove. The generator
+      reads this field; it does not compute one. -/
+  callableId  : CallableId
   fn          : CFnDef
   extracted   : Option Proof.PExpr
   unsupported : List String
@@ -2141,6 +2149,9 @@ private partial def extractModule
   let (entries, excluded) := m.functions.foldl (fun (accE, accX) f =>
     let qualName := qualPrefix ++ "." ++ f.name
     let bareName := f.name
+    -- From the resolved module path and the checked declaration name, at the one
+    -- point where both are facts rather than substrings.
+    let cid : CallableId := CallableId.ofUser qualPrefix f.name
     let fp := bodyFingerprint f.body
     let elig := assessEligibility f qualName externNames recMap locMap
     let sa := resolveSpec qualName registry
@@ -2165,7 +2176,8 @@ private partial def extractModule
           | [] => ["unmodelled statement or control-flow structure (no ProofCore form)"]
           | rs => rs
         else []
-      (accE ++ [{ qualName, bareName, fn := f, extracted, unsupported := unsup
+      (accE ++ [{ qualName, bareName, callableId := cid, fn := f, extracted
+                 , unsupported := unsup
                  , fingerprint := fp, params := f.params.map Prod.fst
                  , eligibility := elig, loc := elig.loc
                  , spec := sa : ProofCoreEntry }], accX)

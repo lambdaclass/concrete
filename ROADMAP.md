@@ -1042,7 +1042,46 @@ Land this task in seven explicit slices:
       lemmas use `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
       deliberately has no `DecidableEq`.
 
-      Still to do here: source-subject digests in the generated output.
+      **Not yet met, and named rather than implied.** Step 4's acceptance
+      criteria include several this slice does NOT satisfy:
+
+      - ~~provenance from a report entry~~ FIXED: `ProofCoreEntry.callableId` is
+        minted where the resolved module path and the checked declaration name are
+        FACTS, and carried through `ExtractionEntry` to the generator, which now
+        reads it. The generator no longer splits `qualName` — that had re-derived
+        identity from a rendering, one layer away from the facts. Sorting uses the
+        same carried `render`, so emission order and asserted order come from one
+        function. Specializations still need `typeArgs` populated from Mono;
+      - no source-subject digest per entry. When added it must NOT reuse the
+        legacy body fingerprint under an authoritative name — it is
+        `sourceBodyDigestV1`, `digest_scope = body_only`,
+        `receipt_eligible = false`, with schema and scope in the table root, so it
+        can support step-5 comparison without pretending to cover signatures and
+        contracts;
+      - generated artifacts still go to stdout/caller-chosen paths, not
+        `.build/proofs/`;
+      - ~~globally-polluting simp lemmas~~ FIXED: generated lemmas are tagged
+        `@[proofTable]`, a scoped set declared in `Concrete/Proof/SimpAttr.lean`
+        (its own module because `register_simp_attr` needs `import Lean` and must
+        be imported by its users). Proofs opt in with `simp [proofTable]`. Gated
+        both ways: the scoped tag must be present AND no generated lemma may
+        carry `@[simp]`;
+      - lemma names are `<entry>` -based and not collision-proof;
+      - "exactly one lemma per entry" and "identical inputs produce
+        byte-identical modules and roots" are not asserted;
+      - builtins/intrinsics/externs/specializations are representable but no
+        generated table exercises them;
+      - no mutations yet for deleting an entry, swapping an ID/body, duplicating
+        an ID/key, or emitting an incorrect lemma;
+      - generator coverage tests today's TWO emission surfaces by name, so a
+        third would silently join without a matrix entry — the same omission this
+        slice already made once.
+
+      And a limit worth stating plainly: `example : fns.isEvidenceBearing := by
+      decide` proves INTERNAL CONSISTENCY, not source correspondence. A generator
+      that emits a wrong ID, a wrong body and a matching lemma consistently still
+      passes. Provenance needs the source-subject digest plus an independent
+      comparison against compiler facts.
    5. **Migrate the nine**, one at a time, with dual comparison: same theorem
       results, same evaluation behaviour, stable generated root, kernel replay,
       and no new hand-written entries.

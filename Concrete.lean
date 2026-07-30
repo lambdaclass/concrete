@@ -5,6 +5,7 @@ import Concrete.Semantics.IntArith
 import Concrete.Semantics.Capabilities
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.BuiltinSigs
+import Concrete.Proof.SimpAttr
 import Concrete.Resolve.CallableId
 import Concrete.Resolve.Shared
 import Concrete.Resolve.Resolve

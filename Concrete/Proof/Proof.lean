@@ -1,4 +1,5 @@
 import Concrete.Elab.Core
+import Concrete.Proof.SimpAttr
 import Concrete.Resolve.CallableId
 
 namespace Concrete.Proof
@@ -416,9 +417,24 @@ def PFnDef.identityKey (d : PFnDef) : String :=
   | .semantic id => id.render
   | .legacy      => ""
 
-/-- Canonical entry order: deterministic, and a function of identity only. -/
+/-- Are the entries in strictly increasing identity order?
+
+    Strict, not merely non-decreasing: equal adjacent keys would be a duplicate
+    identity, which is an integrity error rather than an ordering question. -/
+def FnTable.entriesSorted (t : FnTable) : Bool :=
+  let keys := t.entries.toList.map PFnDef.identityKey
+  (keys.zip (keys.drop 1)).all fun (a, b) => a < b
+
+/-- The entries, in their stored order.
+
+    NOT a sort. `Array.qsort` is well-founded and does not kernel-reduce, so a
+    root built on it puts the generated `example : fns.isEvidenceBearing := by
+    decide` out of reach. Canonical order is therefore an ASSERTED property
+    (`entriesSorted`, above) rather than one imposed here — which is stronger: a
+    generator emitting source order fails the build instead of being silently
+    repaired, and that is exactly how such an omission was caught. -/
 def FnTable.canonicalEntries (t : FnTable) : Array PFnDef :=
-  t.entries.qsort (fun a b => a.identityKey < b.identityKey)
+  t.entries
 
 /-- Every entry carries an identity. A table with even one legacy entry cannot
     mint a receipt — evidence requires identity for the WHOLE table, not most
@@ -480,7 +496,8 @@ def FnTable.keyIndexUnique (t : FnTable) : Bool :=
     Requires canonical entries, every one identified, and no duplicate identity.
     One predicate, so no consumer invents its own answer. -/
 def FnTable.isEvidenceBearing (t : FnTable) : Bool :=
-  !t.entries.isEmpty && t.allIdentified && !t.hasDuplicateIds && t.keyIndexUnique
+  !t.entries.isEmpty && t.allIdentified && !t.hasDuplicateIds
+    && t.keyIndexUnique && t.entriesSorted
 
 /-- Deterministic root over every evidence-bearing field of the table.
 

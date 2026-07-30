@@ -268,8 +268,17 @@ probe "a canonical table has a root" "some" \
 "$mk"'#eval (tbl #[eA, eB]).root'
 
 echo "--- ordering is canonical, not insertion order ---"
-probe "entry order does not change the root" "true" \
-"$mk"'#eval (tbl #[eA, eB]).root == (tbl #[eB, eA]).root'
+# STRONGER than "sorting fixes it": an out-of-order table is REJECTED. The root
+# no longer calls qsort (it does not kernel-reduce, which would put the generated
+# `by decide` integrity check out of reach), so canonical order is an asserted
+# property and a generator emitting source order fails the build — which is
+# exactly how that omission was caught.
+probe "an out-of-order table has NO root" "none" \
+"$mk"'#eval (tbl #[eB, eA]).root'
+probe "an out-of-order table cannot bear evidence" "false" \
+"$mk"'#eval (tbl #[eB, eA]).isEvidenceBearing'
+probe "a sorted table is accepted" "true" \
+"$mk"'#eval (tbl #[eA, eB]).entriesSorted'
 probe "the root is stable across calls" "true" \
 "$mk"'#eval (tbl #[eA, eB]).root == (tbl #[eA, eB]).root'
 # ...but the root must still DEPEND on content, or "stable" is vacuous.
