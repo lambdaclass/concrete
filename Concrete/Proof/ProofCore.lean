@@ -2150,8 +2150,13 @@ private partial def extractModule
     let qualName := qualPrefix ++ "." ++ f.name
     let bareName := f.name
     -- From the resolved module path and the checked declaration name, at the one
-    -- point where both are facts rather than substrings.
-    let cid : CallableId := CallableId.ofUser qualPrefix f.name
+    -- point where both are facts rather than substrings. The type-parameter
+    -- ARITY comes from the same declaration: without it, a generic extracted
+    -- with its instantiation erased is indistinguishable from a non-generic
+    -- callable, and one erased entry would answer for instantiations that do not
+    -- agree (`i8` arithmetic wraps where `Int` does not). Carrying the arity
+    -- makes `CallableId.isComplete` refuse it instead.
+    let cid : CallableId := CallableId.ofUser qualPrefix f.name f.typeParams.length
     let fp := bodyFingerprint f.body
     let elig := assessEligibility f qualName externNames recMap locMap
     let sa := resolveSpec qualName registry

@@ -126,6 +126,15 @@ def CallableNamespace.all : List CallableNamespace :=
       for a non-generic callable. `Box<Int>` and `Box<u8>` specializations are
       therefore different identities rather than one name reused, which is the
       distinction R-0007 needs and bug 054 lacked.
+    * `typeParams` — how many type parameters the DECLARATION has. Without it,
+      `typeArgs = []` is ambiguous between "not generic" and "generic, but the
+      instantiation was erased", and those must never be one identity. Measured:
+      `fn addt<T>(x: T, y: T)` instantiated at `i8` and `Int` produced ONE
+      type-erased entry whose body used width-free `.add`, on a table that still
+      reported `isEvidenceBearing = true`. A proof of `addt x y = x + y` over
+      unbounded `Int` is kernel-true and FALSE of the `i8` instantiation, where
+      `100 + 100` wraps. An identity that cannot say which instantiation it means
+      may not stand in for all of them.
     * `schemaVersion` — the encoding is evidence-bearing, so it is versioned.
       A receipt recorded under one version must not be silently compared against
       another.
@@ -144,11 +153,20 @@ structure CallableId where
   declName      : String
   /-- Monomorphization arguments; `[]` when the callable is not specialized. -/
   typeArgs      : List Ty := []
+  /-- Arity of the declaration's type-parameter list. `0` for a non-generic
+      callable, so the common case is unchanged and `typeArgs = []` stops being
+      ambiguous. An identity is COMPLETE only when the two agree. -/
+  typeParams    : Nat := 0
 deriving BEq, Repr, Inhabited
 
-/-- A user callable defined at `defModule.declName`. -/
-def CallableId.ofUser (defModule declName : String) : CallableId :=
-  { ns := .user, defModule := defModule, declName := declName }
+/-- A user callable defined at `defModule.declName`.
+
+    `typeParams` defaults to 0, the non-generic case. A caller that has a
+    declaration in hand should pass its type-parameter arity; passing nothing for
+    a generic declaration produces an identity that `isComplete` rejects, which
+    is the fail-closed direction. -/
+def CallableId.ofUser (defModule declName : String) (typeParams : Nat := 0) : CallableId :=
+  { ns := .user, defModule := defModule, declName := declName, typeParams := typeParams }
 
 /-- A specialization of `base` at `args`. Built from the base identity so a
     specialization can never disagree with its generic about namespace or
@@ -169,6 +187,19 @@ def CallableId.ofExtern (declName : String) : CallableId :=
 def CallableId.isSpecialized (id : CallableId) : Bool :=
   !id.typeArgs.isEmpty
 
+/-- Does this identity say WHICH callable it means?
+
+    A generic declaration with no recorded type arguments does not: one such
+    identity would have to answer for every instantiation, and the
+    instantiations do not agree (`i8` arithmetic wraps where `Int` does not).
+    Under-approximating there is the failure mode R-0004 exists to remove, so an
+    incomplete identity is refused rather than assumed to cover everything.
+
+    Over-application is refused too: more arguments than parameters means the
+    caller built the identity from something other than the declaration. -/
+def CallableId.isComplete (id : CallableId) : Bool :=
+  id.typeArgs.length == id.typeParams
+
 /-- Canonical, deterministic rendering — for DISPLAY and DIGESTS only.
 
     One-way on purpose. There is no `parse : String → CallableId`, because a
@@ -177,12 +208,23 @@ def CallableId.isSpecialized (id : CallableId) : Bool :=
     identity must be handed one.
 
     The `v<N>:` prefix makes the schema version part of the rendered form, so two
-    encodings can never be compared as if they were the same scheme. -/
+    encodings can never be compared as if they were the same scheme.
+
+    The type-parameter arity is rendered ONLY when non-zero. That keeps it
+    injective — a non-generic form never carries `/n`, a generic one always does,
+    so `f` with no type parameters and `f<T>` with its instantiation erased can no
+    longer render alike — while leaving every non-generic identity byte-identical
+    to what it rendered before. `schemaVersion` therefore stays 1 deliberately:
+    the change only SPLITS a form that was previously a collision, no valid v1
+    encoding changes meaning, and no generic callable could mint a sound receipt
+    under the colliding form anyway. Bumping would have invalidated the sound
+    non-generic receipts to fix the unsound generic ones. -/
 def CallableId.render (id : CallableId) : String :=
   let qual := if id.defModule.isEmpty then id.declName else id.defModule ++ "." ++ id.declName
   let args :=
     if id.typeArgs.isEmpty then ""
     else "<" ++ String.intercalate "," (id.typeArgs.map tyCanonical) ++ ">"
-  s!"v{id.schemaVersion}:{id.ns.canonical}:{qual}{args}"
+  let arity := if id.typeParams == 0 then "" else "/" ++ toString id.typeParams
+  s!"v{id.schemaVersion}:{id.ns.canonical}:{qual}{args}{arity}"
 
 end Concrete

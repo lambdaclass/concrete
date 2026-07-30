@@ -88,6 +88,42 @@ done
 [ "$hazard" -eq 0 ] && ok "no errexit gate script caps output with '| head -N'"
 
 echo ""
+echo "=== no 'lake'/'lean' piped into a short-circuiting grep whose status is used ==="
+# Same SIGPIPE family as the check above, but it INVERTS a gate leg instead of
+# aborting the script. `lake env lean f.lean 2>&1 | grep -q PAT && ok || no`:
+# grep exits at the first match, the elaborator is still writing, it dies of
+# SIGPIPE, and under `pipefail` the pipeline's status is that death — so the leg
+# reports FAIL against output that plainly contained PAT. Measured: a
+# same-name-generator leg failed this way while the pattern was present.
+#
+# Scoped to lake/lean producers deliberately. `grep -q` after a fast, small
+# producer finishes writing before grep exits and is fine; there are ~170 such
+# uses in this directory and banning them all would be noise. An elaborator is
+# slow and verbose, so it reliably loses the race.
+#
+# Fix: capture once into a variable, then grep the variable with a here-string.
+# That is faster too — these gates elaborated the same file three times.
+pipehazard=0
+for f in "$ROOT_DIR"/scripts/tests/*.sh; do
+  head -20 "$f" | grep -q "pipefail" || continue
+  # Scan CODE only. Full-line comments are stripped first: prose describing this
+  # very hazard matched it three times, and the same class (a docstring matching
+  # a structural scan) has cost this tree several false failures already. Keeping
+  # the line numbers means grep -n then filtering, not stripping in place.
+  #
+  # The producer must be an elaborator INVOCATION. A bare `lean ` alternative
+  # also matched `Report.lean | grep -q…`, i.e. a filename followed by a pipe —
+  # so the toolchain word must be anchored as a command.
+  hits="$(grep -nE '^[0-9]+: *#' -v <<<"$(grep -n "" "$f")" \
+    | grep -E "(lake +env +lean|lake +build|(^|[;(|&] *)lean +)[^|]*\| *grep -[a-zA-Z]*[q]" || true)"
+  if [ -n "$hits" ]; then
+    no "$(basename "$f") — elaborator piped into 'grep -q' under pipefail: line $(head -1 <<<"$hits" | cut -d: -f1). Capture to a variable first."
+    pipehazard=1
+  fi
+done
+[ "$pipehazard" -eq 0 ] && ok "no gate pipes an elaborator into a short-circuiting grep"
+
+echo ""
 echo "=== no 'local' statement reads a variable it assigns in the same statement ==="
 # A builtin's arguments are word-expanded BEFORE the builtin runs, so in
 #     local name="$1" f="$TMP/$name.con"

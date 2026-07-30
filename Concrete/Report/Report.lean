@@ -1524,7 +1524,13 @@ private def renderCallableId (cid : Concrete.CallableId) : String :=
   let argsLit :=
     if cid.typeArgs.isEmpty then ""
     else ", typeArgs := [" ++ ", ".intercalate (cid.typeArgs.map reprStr) ++ "]"
-  s!"\{ schemaVersion := {cid.schemaVersion}, ns := {nsLit}, defModule := \"{cid.defModule}\", declName := \"{cid.declName}\"{argsLit} }"
+  -- The type-parameter ARITY is part of the identity: emitted whenever non-zero,
+  -- so a generic extracted with its instantiation erased is not indistinguishable
+  -- from a non-generic callable. Dropping it here would hand the kernel a
+  -- complete-looking identity for an incomplete one.
+  let paramsLit :=
+    if cid.typeParams == 0 then "" else s!", typeParams := {cid.typeParams}"
+  s!"\{ schemaVersion := {cid.schemaVersion}, ns := {nsLit}, defModule := \"{cid.defModule}\", declName := \"{cid.declName}\"{argsLit}{paramsLit} }"
 
 /-- Generate Lean theorem stubs for all extracted functions. -/
 def leanStubsReport (pc : Concrete.ProofCore)
@@ -1621,6 +1627,13 @@ def leanStubsReport (pc : Concrete.ProofCore)
   let opKeys := extracted.map fun e => leanIdent (e.qualName.splitOn "." |>.getLast!)
   let dupKeys := (opKeys.filter fun k => (opKeys.filter (· == k)).length > 1).eraseDups
   let keysAmbiguous := !dupKeys.isEmpty
+  -- Generic declarations extracted with the instantiation erased. Reported by
+  -- NAME so the author knows which ones to specialize, and detected from the
+  -- carried identity rather than by re-inspecting the source.
+  let erasedGenerics := extracted.filterMap fun e =>
+    match e.callableId with
+    | some cid => if cid.isComplete then none else some e.qualName
+    | none     => none
   let tableStr :=
     -- CANONICAL entries — the evidence-bearing form. The legacy string dispatch
     -- is still emitted because `PExpr.call` selects by name, and it is labelled
@@ -1641,6 +1654,19 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"/-- The table must be able to bear evidence: every entry identified, no\n" ++
     s!"    duplicate identity, and no string key reaching two entries. Checked by\n" ++
     s!"    the kernel at build time, so a generator bug fails the build. -/\n" ++
+    (if !erasedGenerics.isEmpty then
+       s!"-- TYPE-ERASED GENERICS: these are declared with type parameters but were\n" ++
+       s!"-- extracted with no instantiation recorded:\n" ++
+       s!"--   {", ".intercalate erasedGenerics}\n" ++
+       s!"-- One erased entry cannot answer for every monomorphization, because the\n" ++
+       s!"-- monomorphizations disagree: extracted arithmetic is width-free and the\n" ++
+       s!"-- parameters are typed as unbounded `Int`, so a kernel-true proof here\n" ++
+       s!"-- would be FALSE of an `i8` instance where `100 + 100` wraps.\n" ++
+       s!"-- The assertion below is emitted ANYWAY and will FAIL: an incomplete\n" ++
+       s!"-- identity invalidates `isEvidenceBearing` itself. Covering all\n" ++
+       s!"-- instantiations from one erased entry would be an under-approximation,\n" ++
+       s!"-- so it is refused rather than assumed.\n"
+     else "") ++
     (if keysAmbiguous then
        s!"-- AMBIGUOUS OPERATIONAL KEYS: these reach more than one entry, so\n" ++
        s!"-- `PExpr.call` by name would select arbitrarily:\n" ++

@@ -648,14 +648,35 @@ def FnTable.dispatchResolves (t : FnTable) : Bool :=
     | some d' => d'.identityKey == d.identityKey
     | none    => false
 
+/-- Every entry's identity says WHICH callable it means.
+
+    A generic declaration whose instantiation was erased fails this. One
+    type-erased entry cannot answer for every monomorphization, because the
+    monomorphizations disagree: `fn addt<T>(x: T, y: T) -> T` extracted once, with
+    a width-free `.add` and parameters typed as unbounded `Int`, while the program
+    instantiated it at both `i8` and `Int`. A kernel-true proof over `Int` would
+    then be a false claim about the `i8` instance, where `100 + 100` wraps.
+
+    Measured before this check existed: that table reported
+    `isEvidenceBearing = true`. Refusing is the only non-under-approximating
+    answer available — covering all instantiations from one erased entry would be
+    a guess about which arithmetic applies. -/
+def FnTable.allIdentitiesComplete (t : FnTable) : Bool :=
+  -- `toList.all` for kernel reduction, as in `allIdentified` above.
+  t.entries.toList.all fun d =>
+    match d.identity.id? with
+    | some id => id.isComplete
+    | none    => false
+
 /-- May this table take part in minting a receipt?
 
-    Canonical entries, all identified, no duplicate identity, no key reaching two
-    entries, strictly ordered, AND the dispatch resolving each key to its own
-    entry. One predicate, so no consumer invents its own answer. -/
+    Canonical entries, all identified with COMPLETE identities, no duplicate
+    identity, no key reaching two entries, strictly ordered, AND the dispatch
+    resolving each key to its own entry. One predicate, so no consumer invents
+    its own answer. -/
 def FnTable.isEvidenceBearing (t : FnTable) : Bool :=
-  !t.entries.isEmpty && t.allIdentified && !t.hasDuplicateIds
-    && t.keyIndexUnique && t.entriesSorted && t.dispatchResolves
+  !t.entries.isEmpty && t.allIdentified && t.allIdentitiesComplete
+    && !t.hasDuplicateIds && t.keyIndexUnique && t.entriesSorted && t.dispatchResolves
 
 /-- Deterministic root over every evidence-bearing field of the table.
 

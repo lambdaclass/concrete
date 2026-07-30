@@ -88,7 +88,12 @@ grep -qE "def loadProject" Concrete/Resolve/Project.lean && grep -qE "partial de
 # dynamic: compile + run the probe so we prove it actually loads a project (only
 # when a Lean toolchain is available — never a false fail on a bare runner).
 if command -v lake >/dev/null 2>&1; then
-  if lake env lean --run "$PROBE" 2>/dev/null | grep -q "PROBE-OK:"; then
+  # Capture, then match. Piping an elaborator straight into `grep -q` lets grep
+  # exit at the first match while lake is still writing; lake dies of SIGPIPE and
+  # under `pipefail` the pipeline's status is that death, so the leg fails with
+  # the pattern present.
+  probe_out="$(lake env lean --run "$PROBE" 2>/dev/null || true)"
+  if grep -q "PROBE-OK:" <<<"$probe_out"; then
     ok "the probe loads a project at runtime via the boundary (PROBE-OK)"
   else
     no "the probe failed to load a project through the boundary"

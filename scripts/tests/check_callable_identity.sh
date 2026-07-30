@@ -174,11 +174,11 @@ LEAN
 refl "CallableId's fields are exactly the identity-bearing ones" "true" \
 '#eval show MetaM Bool from do
    return (← fieldsOf `Concrete.CallableId).toList
-     == [`schemaVersion, `ns, `defModule, `declName, `typeArgs]'
-refl "PFnDef exposes identity + displayName, and no `name`" "true" \
+     == [`schemaVersion, `ns, `defModule, `declName, `typeArgs, `typeParams]'
+refl "PFnDef's fields are exactly the intended ones" "true" \
 '#eval show MetaM Bool from do
    return (← fieldsOf `Concrete.Proof.PFnDef).toList
-     == [`identity, `displayName, `params, `body]'
+     == [`identity, `operationalKey, `sourceBodyDigest, `displayName, `params, `body]'
 refl "IdentifiedPFnDef requires a callableId (not an Option)" "true" \
 '#eval show MetaM Bool from do
    let fs := (← fieldsOf `Concrete.Proof.IdentifiedPFnDef).toList
@@ -255,10 +255,15 @@ echo
 echo "=== step 3: canonical finite tables are the evidence-bearing form ==="
 mk='def idA : CallableId := CallableId.ofUser "m" "a"
 def idB : CallableId := CallableId.ofUser "m" "b"
-def eA : Proof.PFnDef := { identity := .semantic idA, displayName := "a", params := ["x"], body := .lit (.int 1) }
-def eB : Proof.PFnDef := { identity := .semantic idB, displayName := "b", params := ["y"], body := .lit (.int 2) }
-def legacyE : Proof.PFnDef := { displayName := "c", params := [], body := .lit (.int 3) }
-def tbl (es : Array Proof.PFnDef) : Proof.FnTable := { entries := es, globals := fun _ => none }
+def eA : Proof.PFnDef := { identity := .semantic idA, operationalKey := "a", displayName := "a", params := ["x"], body := .lit (.int 1) }
+def eB : Proof.PFnDef := { identity := .semantic idB, operationalKey := "b", displayName := "b", params := ["y"], body := .lit (.int 2) }
+def legacyE : Proof.PFnDef := { operationalKey := "c", displayName := "c", params := [], body := .lit (.int 3) }
+-- The dispatch must ANSWER each entry key, or `dispatchResolves` fails and every
+-- root is `none` — which would make several probes below pass on `none == none`
+-- rather than on the property they name. (A stale fixture did exactly that.)
+def tbl (es : Array Proof.PFnDef) : Proof.FnTable :=
+  { entries := es
+  , globals := fun n => es.find? (fun d => d.operationalKey == n) }
 '
 # A legacy (function-shaped) table has NO root — that is the whole point: a Lean
 # function cannot be enumerated, hashed or ordered, so there is nothing to digest.
@@ -266,6 +271,19 @@ probe "a legacy table has no root" "none" \
 "$mk"'#eval (Proof.FnTable.ofGlobals (fun _ => none)).root'
 probe "a canonical table has a root" "some" \
 "$mk"'#eval (tbl #[eA, eB]).root'
+# FIXTURE GUARD: if the base fixture stopped being evidence-bearing, several
+# probes below would compare `none` with `none` and pass vacuously.
+probe "the base fixture is evidence-bearing" "true" \
+"$mk"'#eval (tbl #[eA, eB]).isEvidenceBearing'
+probe "the dispatch resolves each entry key" "true" \
+"$mk"'#eval (tbl #[eA, eB]).dispatchResolves'
+# ...and a table whose dispatch does NOT answer its keys is refused, typed.
+probe "a table whose dispatch misses its key is refused" "false" \
+"$mk"'def orphan : Proof.FnTable := { entries := #[eA], globals := fun _ => none }
+#eval orphan.isEvidenceBearing'
+probe "and that table gets no root" "none" \
+"$mk"'def orphan2 : Proof.FnTable := { entries := #[eA], globals := fun _ => none }
+#eval orphan2.root'
 
 echo "--- ordering is canonical, not insertion order ---"
 # STRONGER than "sorting fixes it": an out-of-order table is REJECTED. The root
@@ -324,19 +342,25 @@ echo "--- calls still select by STRING, so the key index is part of the root ---
 # selects by name: the string key is a second, parallel identity. Until calls
 # carry a CallableId, the mapping is exposed as legacy operational lookup and
 # bound into the root, so a receipt commits to the mapping it was made under.
-probe "two entries reachable by one string key is rejected" "false" \
-"$mk"'def eBdup : Proof.PFnDef := { eB with displayName := "a" }
+probe "two entries reachable by one operational key is rejected" "false" \
+"$mk"'def eBdup : Proof.PFnDef := { eB with operationalKey := "a" }
 #eval (tbl #[eA, eBdup]).keyIndexUnique'
 probe "an ambiguous key index yields no root" "none" \
-"$mk"'def eBdup2 : Proof.PFnDef := { eB with displayName := "a" }
+"$mk"'def eBdup2 : Proof.PFnDef := { eB with operationalKey := "a" }
 #eval (tbl #[eA, eBdup2]).root'
 probe "distinct keys are accepted" "true" \
 "$mk"'#eval (tbl #[eA, eB]).keyIndexUnique'
-# ...and changing only a display NAME must move the root, because the key index
-# is inside it — otherwise a receipt would not commit to the mapping.
-probe "renaming a display name changes the root" "true" \
-"$mk"'def eAr : Proof.PFnDef := { eA with displayName := "renamed" }
-#eval (tbl #[eA]).root != (tbl #[eAr]).root'
+# The OPERATIONAL KEY is in the root, so changing it moves the root — a receipt
+# must commit to the key->identity mapping it was produced under.
+probe "renaming the operational key changes the root" "true" \
+"$mk"'def eAk : Proof.PFnDef := { eA with operationalKey := "renamed" }
+#eval (tbl #[eA]).root != (tbl #[eAk]).root'
+# ...while a purely human displayName does NOT, because it is not identity and not
+# the dispatch key. Conflating the two is what produced a root recording a key map
+# evaluation did not use.
+probe "renaming only the display name leaves the root alone" "true" \
+"$mk"'def eAd : Proof.PFnDef := { eA with displayName := "cosmetic" }
+#eval (tbl #[eA]).root == (tbl #[eAd]).root'
 
 echo "--- the root BINDS FUNCTION BODIES (it must identify behaviour) ---"
 # Measured defect: with the body omitted, two tables with the same identities and
@@ -372,6 +396,162 @@ probe "param-list boundaries cannot be forged" "true" \
 "$mk"'def f1 : Proof.PFnDef := { eA with params := ["a", "b"] }
 def f2 : Proof.PFnDef := { eA with params := ["a,b"] }
 #eval (tbl #[f1]).root != (tbl #[f2]).root'
+
+CC=".lake/build/bin/concrete"
+
+echo "=== a generic's instantiation cannot be erased into a complete identity ==="
+# `typeArgs = []` used to mean two different things: "not generic" and "generic,
+# instantiation unknown". Those are not one identity. Measured before this split:
+# `fn addt<T>(x: T, y: T) -> T` instantiated at both `i8` and `Int` extracted to
+# ONE entry, arithmetic width-free, parameters typed as unbounded `Int` — on a
+# table reporting `isEvidenceBearing = true`. A kernel-true proof over `Int` is a
+# FALSE claim about the `i8` instance, where 100 + 100 wraps.
+probe "an erased generic identity is incomplete" "false" \
+'#eval (CallableId.ofUser "m" "f" 1).isComplete'
+probe "a non-generic identity is complete" "true" \
+'#eval (CallableId.ofUser "m" "f").isComplete'
+probe "a fully applied specialization is complete" "true" \
+'#eval ((CallableId.ofUser "m" "f" 1).specialize [.int]).isComplete'
+# Over-application means the identity was not built from the declaration.
+probe "more type arguments than parameters is incomplete" "false" \
+'#eval ((CallableId.ofUser "m" "f" 1).specialize [.int, .bool]).isComplete'
+# The collision itself: these two rendered IDENTICALLY before the arity was
+# carried, which is how one erased entry could stand in for every instantiation.
+probe "generic and non-generic no longer render alike" "false" \
+'#eval (CallableId.ofUser "m" "f").render == (CallableId.ofUser "m" "f" 1).render'
+# ...and NO CHURN for the common case: a non-generic identity must render exactly
+# what it rendered before, byte for byte, or every stored receipt and golden that
+# is still sound would be invalidated to fix the generic case. Pinned literally.
+probe "non-generic identity bytes are unchanged" '"v1:user:m.f"' \
+'#eval (CallableId.ofUser "m" "f").render'
+probe "an applied specialization renders args and arity" '"v1:user:m.f<Int>/1"' \
+'#eval ((CallableId.ofUser "m" "f" 1).specialize [.int]).render'
+
+# TYPED REFUSAL, not a warning: incompleteness must invalidate the predicate.
+probe "one incomplete identity makes a table unfit for evidence" "false" \
+"$mk"'def gid : CallableId := CallableId.ofUser "m" "g" 1
+def ge : Proof.PFnDef := { identity := .semantic gid, operationalKey := "g", displayName := "g", params := ["x"], body := .lit (.int 1) }
+#eval (tbl #[ge]).isEvidenceBearing'
+probe "and it therefore gets no root" "none" \
+"$mk"'def gid2 : CallableId := CallableId.ofUser "m" "g" 1
+def ge2 : Proof.PFnDef := { identity := .semantic gid2, operationalKey := "g", displayName := "g", params := ["x"], body := .lit (.int 1) }
+#eval (tbl #[ge2]).root'
+# CONTROL: the same entry with its instantiation recorded IS fit, so the leg
+# above fails for incompleteness and not for some unrelated reason.
+probe "control: the same entry specialized is fit for evidence" "true" \
+"$mk"'def gid3 : CallableId := (CallableId.ofUser "m" "g" 1).specialize [.int]
+def ge3 : Proof.PFnDef := { identity := .semantic gid3, operationalKey := "g", displayName := "g", params := ["x"], body := .lit (.int 1) }
+#eval (tbl #[ge3]).isEvidenceBearing'
+
+# END TO END, over a COMMITTED fixture: one generic, five instantiations.
+MANYI="tests/programs/adversarial_mono_many_instantiations.con"
+[ -f "$MANYI" ] \
+  && ok "the many-instantiations fixture is committed" \
+  || no "the many-instantiations fixture is missing"
+"$CC" "$MANYI" --report lean-stubs > "$TMP/manyi.lean" 2>&1
+grep -q "typeParams := 1" "$TMP/manyi.lean" \
+  && ok "the generator carries the type-parameter arity" \
+  || no "the generated identity drops the type-parameter arity"
+grep -q "TYPE-ERASED GENERICS" "$TMP/manyi.lean" \
+  && ok "the generated file names the erased generic" \
+  || no "the erased generic is not reported to the author"
+grep -q 'example : generatedFns.isEvidenceBearing := by decide' "$TMP/manyi.lean" \
+  && ok "the evidence assertion is still emitted for an erased generic" \
+  || no "the assertion was omitted rather than allowed to fail (fail-open)"
+MI_OUT="$(lake env lean "$TMP/manyi.lean" 2>&1 || true)"
+grep -q 'proved that the proposition' <<<"$MI_OUT" \
+  && ok "the kernel refuses the type-erased table" \
+  || no "the kernel ACCEPTED a table whose generic lost its instantiation"
+
+echo "=== both generators over a same-name program (merge blocker 4) ==="
+# `Alpha.compute`, `Beta.compute` and `Gamma.compute` are one committed fixture
+# away from every generator, and three functions that share a DECLARED NAME are
+# precisely the case a name-keyed table gets wrong. The fixture existed but only
+# ever drove LLVM codegen, so the proof generators were never asked the question.
+SAMENAME="tests/programs/adversarial_module_same_name.con"
+[ -f "$SAMENAME" ] \
+  && ok "the same-name fixture is committed" \
+  || no "the same-name fixture is missing (a gate cannot rest on an absent input)"
+
+"$CC" "$SAMENAME" --report lean-stubs > "$TMP/samename.lean" 2>&1
+
+# 1. DISTINCT SYMBOLS. One `def computeFn` per module would be a redeclaration:
+# the generator would emit a file that cannot elaborate at all.
+n_fn=$(grep -c '^def [A-Za-z_]*computeFn : PFnDef :=' "$TMP/samename.lean" || true)
+[ "$n_fn" = "3" ] \
+  && ok "three same-named functions get three distinct entry symbols" \
+  || no "expected 3 distinct *computeFn symbols, got $n_fn"
+
+# 2. DISTINCT, COMPLETE IDENTITIES. The defining module is what separates them,
+# so it must appear in the identity — and schemaVersion/ns must survive too,
+# since a partial identity is a different identity (blocker 3).
+for m in Alpha Beta Gamma; do
+  if grep -q "defModule := \"$m\", declName := \"compute\"" "$TMP/samename.lean" \
+     && grep -q "{ schemaVersion := 1, ns := .user, defModule := \"$m\"" "$TMP/samename.lean"; then
+    ok "$m.compute carries a complete, module-distinguished identity"
+  else
+    no "$m.compute's generated identity is missing or incomplete"
+  fi
+done
+
+# 3. NO REDECLARATION. This is the generator bug as distinct from the refusal
+# below: a collision makes the file un-elaborable, which is not a typed refusal.
+# Elaborate ONCE and reuse the text. Two reasons: each kernel run is seconds,
+# and `lake env lean … | grep -q …` is a trap under `set -o pipefail` — grep
+# exits at the first match, lake dies of SIGPIPE, and the PIPELINE reports
+# failure even though the pattern matched. This leg reported "not the refusal"
+# against output that plainly contained it.
+SN_OUT="$(lake env lean "$TMP/samename.lean" 2>&1 || true)"
+dup=$(grep -ci "has already been declared" <<<"$SN_OUT" || true)
+[ "$dup" = "0" ] \
+  && ok "the generated file declares no symbol twice" \
+  || no "$dup duplicate declaration(s) — generated symbols collide"
+
+# 4. THE AMBIGUITY IS REFUSED, AND TYPED. All three share the operational key
+# `compute`, so a `PExpr.call "compute"` would select arbitrarily. The generator
+# must still EMIT the assertion and let it fail: dropping it (or downgrading it
+# to a comment) leaves a table that can bear evidence while its dispatch is
+# ambiguous, which is the failure mode this whole step exists to remove.
+grep -q 'example : generatedFns.isEvidenceBearing := by decide' "$TMP/samename.lean" \
+  && ok "the evidence assertion is emitted even when it will fail" \
+  || no "the evidence assertion was omitted for an ambiguous table (fail-open)"
+errs="$(grep -c "error:" <<<"$SN_OUT" || true)"
+[ "$errs" = "1" ] \
+  && ok "exactly one error: the ambiguity refusal itself" \
+  || no "expected exactly 1 error (the refusal), got $errs"
+# No backticks in the pattern either: inside a double-quoted bash string they
+# open a command substitution, so the check would grep for the OUTPUT of decide.
+grep -q 'proved that the proposition' <<<"$SN_OUT" \
+  && ok "the refusal comes from the kernel deciding the table unfit" \
+  || no "the single error is not the isEvidenceBearing refusal"
+
+# 5. POSITIVE CONTROL. Without it, leg 4 could pass because EVERY generated file
+# errors once for some unrelated reason. A program with distinct names must
+# generate Lean that elaborates with NO errors at all.
+cat > "$TMP/distinct.con" <<'CON'
+mod Main {
+    fn add_ten(x: Int) -> Int { return x + 10; }
+    fn add_twenty(x: Int) -> Int { return x + 20; }
+    fn main() -> Int { return add_ten(0) + add_twenty(0); }
+}
+CON
+"$CC" "$TMP/distinct.con" --report lean-stubs > "$TMP/distinct.lean" 2>&1
+CTRL_OUT="$(lake env lean "$TMP/distinct.lean" 2>&1 || true)"
+cerrs="$(grep -c "error:" <<<"$CTRL_OUT" || true)"
+[ "$cerrs" = "0" ] \
+  && ok "control: distinctly-named functions generate error-free Lean" \
+  || no "control: unambiguous program still generates $cerrs error(s) — leg 4 is vacuous"
+
+# 6. THE SINGLE-FUNCTION GENERATOR RESOLVES THE RIGHT ONE (blocker 2). It used
+# to rebuild identity by splitting a qualified name, so asking for `Beta.compute`
+# could answer with Alpha's.
+"$CC" prove "$SAMENAME" Beta.compute --emit-lean --out "$TMP/beta.lean" --force >/dev/null 2>&1
+if grep -q 'defModule := "Beta", declName := "compute"' "$TMP/beta.lean" \
+   && ! grep -q 'defModule := "Alpha"' "$TMP/beta.lean"; then
+  ok "prove --emit-lean Beta.compute resolves to Beta, not the first match"
+else
+  no "prove --emit-lean picked the wrong same-named function"
+fi
 
 echo "--- legacy tables still evaluate, so migration can be incremental ---"
 probe "the nine hand-written tables still resolve" "int 7" \

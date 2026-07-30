@@ -11,6 +11,7 @@ cd "$ROOT_DIR"
 # Usage:
 #   bash scripts/tests/test_mutation.sh              # run all mutations
 #   bash scripts/tests/test_mutation.sh --list       # list mutations without running
+#   bash scripts/tests/test_mutation.sh --check-patterns  # assert none would SKIP
 #   bash scripts/tests/test_mutation.sh --mutation N # run only mutation N
 
 # Resolve `lake`: PATH first (the nix devshell puts it there, as does elan's
@@ -141,9 +142,13 @@ gate_for_last() { MUT_GATE[$(( ${#MUT_FILE[@]} - 1 ))]="$1"; }
 # 1. Layout: i32/u32/f32 size 4 → 8  (tySize)
 MUT_FILE+=("Concrete/Check/Layout.lean")
 MUT_OLD+=("  | .i32 | .u32 | .float32 => 4
-  | .i16 | .u16 => 2")
+  | .i16 | .u16 => 2
+  | .i8 | .u8 | .char | .bool => 1
+  | .unit => 0")
 MUT_NEW+=("  | .i32 | .u32 | .float32 => 8
-  | .i16 | .u16 => 2")
+  | .i16 | .u16 => 2
+  | .i8 | .u8 | .char | .bool => 1
+  | .unit => 0")
 MUT_DESC+=("Layout: tySize i32/u32/f32 4 → 8")
 
 # 2. Layout: i32/u32/f32 alignment 4 → 1  (tyAlign)
@@ -210,26 +215,26 @@ MUT_DESC+=("Shared: isInteger excludes i32")
 
 # 9. Check: disable use-after-move detection
 MUT_FILE+=("Concrete/Check/Check.lean")
-MUT_OLD+=("    | .consumed =>
-      throwCheck (.variableUsedAfterMove name) span")
-MUT_NEW+=("    | .consumed => return () -- MUTATION: skip use-after-move
-      -- throwCheck (.variableUsedAfterMove name) span")
+MUT_OLD+=("        if !info.isCopy && info.state == .consumed then
+          -- secondary span: where the value was moved (Phase 4 #11).")
+MUT_NEW+=("        if false then -- MUTATION: use-after-move disabled
+          -- secondary span: where the value was moved (Phase 4 #11).")
 MUT_DESC+=("Check: disable use-after-move")
 
-# 10. Check: disable loop-depth linearity check
-MUT_FILE+=("Concrete/Check/Check.lean")
-MUT_OLD+=("      if info.loopDepth < env.loopDepth then
+# 10. Check: disable loop-depth linearity check (enforcement lives in CheckHelpers)
+MUT_FILE+=("Concrete/Check/CheckHelpers.lean")
+MUT_OLD+=("      if info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
+          && env.rebindingVar != some name then
         throwCheck (.cannotConsumeLinearInLoop name) span")
-MUT_NEW+=("      if false then -- MUTATION: loop-depth disabled
+MUT_NEW+=("      if false && (info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
+          && env.rebindingVar != some name) then -- MUTATION: loop-depth disabled
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_DESC+=("Check: disable loop-depth linearity")
 
-# 11. Check: disable scope-exit unconsumed check
-MUT_FILE+=("Concrete/Check/Check.lean")
-MUT_OLD+=("      if !info.isCopy && info.state != .consumed && info.state != .reserved then
-        throwCheck (.linearVariableNeverConsumed name) span")
-MUT_NEW+=("      if false then -- MUTATION: scope check disabled
-        throwCheck (.linearVariableNeverConsumed name) span")
+# 11. Check: disable scope-exit unconsumed check (enforcement lives in CheckHelpers)
+MUT_FILE+=("Concrete/Check/CheckHelpers.lean")
+MUT_OLD+=("      if !info.isCopy && info.state != .consumed && info.state != .reserved then")
+MUT_NEW+=("      if false then -- MUTATION: scope check disabled")
 MUT_DESC+=("Check: disable scope-exit linearity")
 
 # 12. CoreCheck: disable match exhaustiveness
@@ -242,10 +247,10 @@ MUT_DESC+=("CoreCheck: disable match exhaustiveness")
 
 # 13. CoreCheck: disable capability discipline
 MUT_FILE+=("Concrete/Check/CoreCheck.lean")
-MUT_OLD+=("      if !capsContain env.currentCapSet calleeCaps then
-        addCCError (.insufficientCapabilities fn (capSetToString calleeCaps) (capSetToString env.currentCapSet))")
-MUT_NEW+=("      if !capsContain env.currentCapSet calleeCaps then
-        pure () -- MUTATION: capability check disabled")
+MUT_OLD+=("      if !capD.satisfied then
+        addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))")
+MUT_NEW+=("      if false then -- MUTATION: capability check disabled
+        addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))")
 MUT_DESC+=("CoreCheck: disable capability check")
 
 # 14. CoreCheck: allow break outside loop
@@ -472,8 +477,10 @@ gate_for_last "scripts/tests/check_fnptr_values.sh"
 # parameter named `f` and a definition named `f` become the same node and the
 # evaluator resolves the parameter through the global function table.
 MUT_FILE+=("Concrete/Proof/ProofCore.lean")
-MUT_OLD+=("    some (.applyVar binding pargs)")
-MUT_NEW+=("    some (.call binding pargs) -- MUTATION: parameter application as a definition call")
+MUT_OLD+=("    some (.applyVar binding pargs)
+  | .structLit name _ fields _ => do")
+MUT_NEW+=("    some (.call binding pargs) -- MUTATION: parameter application as a definition call
+  | .structLit name _ fields _ => do")
 MUT_DESC+=("ProofCore: applied parameter extracts as a global call (bug 061)")
 gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
 
@@ -622,6 +629,10 @@ while [[ $# -gt 0 ]]; do
       SINGLE_IDX="$2"
       shift 2
       ;;
+    --check-patterns)
+      MODE="check-patterns"
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
       echo "Usage: bash scripts/tests/test_mutation.sh [--list] [--mutation N]"
@@ -629,6 +640,53 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# ============================================================
+# Pattern-freshness mode
+# ============================================================
+# A mutation whose MUT_OLD no longer occurs in its file reports
+# "SKIPPED (pattern not found in file)" — it stops testing anything while still
+# LOOKING like part of the suite. Refactoring the compiler silently retires
+# mutations this way, and a suite that has quietly stopped covering a property
+# is worse than a missing one, because the summary line still counts it.
+#
+# This iterates the REAL arrays the harness applies, so it cannot drift from
+# them the way a separate parser of this file would (a re-parsing check
+# mis-handled multi-line MUT_OLD entries and reported 17 false stalenesses).
+# It touches no files and runs in about a second, so it is a cheap gate.
+if [[ "$MODE" == "check-patterns" ]]; then
+  echo "=== Mutation pattern freshness ($NUM_MUTATIONS mutations) ==="
+  stale=0
+  for (( i=0; i<NUM_MUTATIONS; i++ )); do
+    f="${MUT_FILE[$i]}"
+    if [[ ! -f "$f" ]]; then
+      printf "  STALE  [%2d] missing file %s\n" "$((i+1))" "$f"
+      stale=$((stale + 1)); continue
+    fi
+    # Count exact literal occurrences; awk avoids regex interpretation of the
+    # pattern (these contain ., |, =>, ( and would misbehave under grep).
+    n=$(awk -v pat="${MUT_OLD[$i]}" '
+      BEGIN { RS="\0"; n=0 }
+      { s=$0; l=length(pat); if (l==0) { print 0; exit }
+        p=1
+        while ((k=index(substr(s,p),pat)) > 0) { n++; p=p+k+l-1 }
+        print n }' "$f")
+    if [[ "$n" != "1" ]]; then
+      printf "  STALE  [%2d] %s occurs %s time(s) in %s\n      %s\n" \
+        "$((i+1))" "MUT_OLD" "$n" "$f" "${MUT_DESC[$i]}"
+      stale=$((stale + 1))
+    fi
+  done
+  if [[ $stale -gt 0 ]]; then
+    echo ""
+    echo "FAIL: $stale mutation(s) would SKIP rather than test."
+    echo "A mutation must match its target EXACTLY ONCE: zero means the code moved,"
+    echo "more than one means the harness would patch an unintended site too."
+    exit 1
+  fi
+  echo "PASS: all $NUM_MUTATIONS mutation patterns match their target exactly once"
+  exit 0
+fi
 
 # ============================================================
 # List mode
@@ -713,8 +771,11 @@ run_mutation() {
     echo "SKIPPED (pattern not found in file)"
     ERRORS=$((ERRORS + 1))
     TOTAL=$((TOTAL + 1))
-    # Restore if backup was created
-    [[ -f "${MUT_FILE[$idx]}.mutbak" ]] && restore_mutation "$idx"
+    # Restore if a backup was created. This guard tested `<file>.mutbak` for a
+    # while after backups MOVED to $MUT_BACKUP_DIR, so it was never true and a
+    # skipped mutation restored nothing — the source stayed mutated and the next
+    # mutation backed up the ALREADY-MUTATED file. Test the real backup path.
+    [[ -f "$MUT_BACKUP_DIR/${MUT_FILE[$idx]}" ]] && restore_mutation "$idx"
     return
   fi
 
