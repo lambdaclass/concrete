@@ -609,6 +609,47 @@ MUT_NEW+=("  (t.entries.find? fun d => d.displayName == id.declName).bind PFnDef
 MUT_DESC+=("FnTable: lookupById resolves by display name, not identity (step 3)")
 gate_for_last "scripts/tests/check_callable_identity.sh"
 
+# 43. FnTable: the root stops binding entry BODIES (R-0004 step 3)
+# The original defect, kept as a permanent mutation: with bodies unbound, two
+# tables with identical identities and parameters but different bodies had EQUAL
+# roots while evaluating to 1 and 999. A root blind to behaviour cannot back a
+# receipt, and the nine-table migration would have moved proofs onto it.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("      lp \"i\" d.identityKey ++ lp \"P\" ps ++ lp \"B\" (pexprCanonical d.body) ++ lp \"S\" sd")
+MUT_NEW+=("      lp \"i\" d.identityKey ++ lp \"P\" ps ++ lp \"S\" sd -- MUTATION: root blind to bodies")
+MUT_DESC+=("FnTable: root omits entry bodies (R-0004 step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 44. FnTable: a type-erased generic identity is accepted as complete
+# One entry standing in for every monomorphization, when the monomorphizations
+# disagree: extracted arithmetic is width-free, so a kernel-true proof over `Int`
+# is FALSE of an `i8` instance where 100 + 100 wraps. This is the fail-closed
+# direction, so removing the check must not be silent.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("    | some id => id.isComplete")
+MUT_NEW+=("    | some id => id.isComplete || true -- MUTATION: erased generics accepted")
+MUT_DESC+=("FnTable: incomplete (type-erased) identities accepted")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 45. Generator: a lookup lemma for the FIRST entry only
+# Missing lemmas make an entry unreachable to the kernel while the table still
+# looks complete — a proof about that identity cannot be used, and nothing says
+# so. The incorrect/missing-lemma class.
+MUT_FILE+=("Concrete/Report/Report.lean")
+MUT_OLD+=("  let lookupLemmas := extracted.map fun e =>")
+MUT_NEW+=("  let lookupLemmas := (extracted.take 1).map fun e => -- MUTATION: one lemma only")
+MUT_DESC+=("Generator: lookup lemma emitted for one entry only")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 46. Generator: an entry is dropped from the table but keeps its lemma
+# The entry-deletion class. The table shrinks while the lemmas still claim the
+# missing entry is reachable, so `rfl` on that lookup no longer holds.
+MUT_FILE+=("Concrete/Report/Report.lean")
+MUT_OLD+=("\", \".intercalate entryNames}]")
+MUT_NEW+=("\", \".intercalate entryNames.dropLast}]")
+MUT_DESC+=("Generator: an entry is dropped but keeps its lookup lemma")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

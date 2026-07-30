@@ -553,6 +553,68 @@ else
   no "prove --emit-lean picked the wrong same-named function"
 fi
 
+echo "=== generated evidence is deterministic and path-independent ==="
+# A receipt is only worth something if the thing it attests to is reproducible.
+# Two properties, both required, and neither implied by the other:
+#   determinism      — same input, same bytes, run to run.
+#   path-independence — identity is the PROGRAM, not where the file happens to
+#                       sit. A durable receipt must not use the absolute
+#                       workspace path as identity, so the same content compiled
+#                       from another directory must produce the same bytes.
+DET_A="$("$CC" "$SAMENAME" --report lean-stubs 2>&1 | shasum -a 256 | cut -d' ' -f1)"
+DET_B="$("$CC" "$SAMENAME" --report lean-stubs 2>&1 | shasum -a 256 | cut -d' ' -f1)"
+[ "$DET_A" = "$DET_B" ] \
+  && ok "lean-stubs is byte-identical across runs" \
+  || no "lean-stubs output differs between two runs of the same input"
+
+ELSEWHERE="$TMP/elsewhere"; mkdir -p "$ELSEWHERE"
+cp "$SAMENAME" "$ELSEWHERE/renamed_copy.con"
+DET_C="$("$CC" "$ELSEWHERE/renamed_copy.con" --report lean-stubs 2>&1 | shasum -a 256 | cut -d' ' -f1)"
+[ "$DET_A" = "$DET_C" ] \
+  && ok "lean-stubs depends on the program, not on its path or file name" \
+  || no "lean-stubs output changed when the same program moved — path is leaking into evidence"
+
+# No absolute path anywhere in generated evidence. Checked directly rather than
+# inferred from the hash comparison above: two runs from different directories
+# could agree and still both embed a path prefix.
+if "$CC" "$SAMENAME" --report lean-stubs 2>&1 | grep -q "$ROOT_DIR"; then
+  no "the generated file embeds the absolute workspace path"
+else
+  ok "no absolute workspace path appears in generated evidence"
+fi
+
+# The single-function generator has the same obligations.
+"$CC" prove "$SAMENAME" Beta.compute --emit-lean --out "$TMP/d1.lean" --force >/dev/null 2>&1
+"$CC" prove "$ELSEWHERE/renamed_copy.con" Beta.compute --emit-lean --out "$TMP/d2.lean" --force >/dev/null 2>&1
+if cmp -s "$TMP/d1.lean" "$TMP/d2.lean"; then
+  ok "prove --emit-lean is path-independent too"
+else
+  no "prove --emit-lean output depends on the input's location"
+fi
+
+echo ""
+echo "=== every entry gets exactly one lookup lemma ==="
+# The lookup lemmas are what let a proof about an identity be USED. One missing
+# lemma silently makes that entry unreachable to the kernel while the table still
+# looks complete; a duplicate would mean two lemmas about one entry could
+# disagree. Counted against the entry count rather than eyeballed.
+N_ENTRIES="$(grep -c '^def [A-Za-z_0-9]*Fn : PFnDef :=' "$TMP/samename.lean" || true)"
+N_LEMMAS="$(grep -c '^@\[proofTable\] theorem generatedFns_lookup_' "$TMP/samename.lean" || true)"
+[ "$N_ENTRIES" = "$N_LEMMAS" ] && [ "$N_ENTRIES" != "0" ] \
+  && ok "$N_ENTRIES entries, $N_LEMMAS lookup lemmas — exactly one each" \
+  || no "entry/lemma count mismatch: $N_ENTRIES entries but $N_LEMMAS lemmas"
+
+echo ""
+echo "=== the set of emission surfaces is pinned ==="
+# Two generators emit CallableId literals today. A THIRD would have to satisfy
+# every property above, and the usual way that fails is that nobody notices a new
+# surface exists. This pins the count: adding a surface fails here until its
+# author extends this gate to cover it.
+SURFACES="$(grep -c "renderCallableId" Concrete/Report/Report.lean || true)"
+[ "$SURFACES" = "3" ] \
+  && ok "renderCallableId has exactly 3 references (1 definition + 2 generators)" \
+  || no "renderCallableId reference count is $SURFACES, expected 3 — a new emission surface must be covered by this gate"
+
 echo "--- legacy tables still evaluate, so migration can be incremental ---"
 probe "the nine hand-written tables still resolve" "int 7" \
 '#eval Proof.eval (Proof.FnTable.ofGlobals (fun n =>
