@@ -26,6 +26,36 @@ if ! "$LAKE" --version >/dev/null 2>&1; then
   exit 2
 fi
 
+# EXCLUSIVE LOCK. This harness mutates source IN PLACE and restores from
+# `<file>.mutbak`. Two concurrent runs in one worktree therefore clobber each
+# other's backups: on 2026-07-30 a second run overwrote the first's .mutbak,
+# leaving `keys.length == keys.length -- MUTATION` committed-adjacent in
+# Concrete/Proof/Proof.lean, one run reporting "mv: cannot stat …mutbak" and
+# another "SKIPPED (pattern not found)". Test machinery that can corrupt the tree
+# it is testing must refuse to run twice, not rely on the operator remembering.
+LOCK_DIR="$ROOT_DIR/.mutation.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "error: another mutation run holds $LOCK_DIR" >&2
+  echo "       this harness edits source in place; concurrent runs corrupt it." >&2
+  echo "       if no run is active, remove the directory and check for stray" >&2
+  echo "       '-- MUTATION' markers: grep -rn 'MUTATION' Concrete/ --include='*.lean'" >&2
+  exit 2
+fi
+cleanup_lock() {
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+  # A mutation left applied is worse than a failed run: the next build, gate or
+  # commit would silently use it. Say so loudly.
+  local stray
+  stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete --include='*.lean' 2>/dev/null || true)"
+  if [ -n "$stray" ]; then
+    echo "" >&2
+    echo "WARNING: a mutation is still applied in the source tree:" >&2
+    printf '%s\n' "$stray" >&2
+    echo "restore it before building, gating or committing." >&2
+  fi
+}
+trap cleanup_lock EXIT INT TERM
+
 KILLED=0
 SURVIVED=0
 ERRORS=0
@@ -446,6 +476,69 @@ MUT_NEW+=("  | .proved | .trusted | .stale => true -- MUTATION: stale counts as 
   | .missing | .blocked | .ineligible | .unbound | .depsNotCurrent => false")
 MUT_DESC+=("ProofCore: trap inventory of dependency currency admits stale (slice 3)")
 gate_for_last "scripts/tests/check_proof_freshness.sh"
+
+# 37. FnTable: entry order leaks into the root (R-0004 step 3)
+# Canonical ordering is what makes the root a function of CONTENT. Sorting by
+# insertion order instead makes two identical tables hash differently, so a
+# receipt would depend on how the generator happened to emit entries.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("  t.entries.qsort (fun a b => a.identityKey < b.identityKey)")
+MUT_NEW+=("  t.entries -- MUTATION: insertion order leaks into the root")
+MUT_DESC+=("FnTable: root depends on entry order (R-0004 step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 38. FnTable: duplicate identities accepted (R-0004 step 3)
+# Two entries claiming one identity means the table disagrees with itself.
+# Accepting it makes lookup arbitrary and the root insertion-order dependent.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("  keys.length != keys.eraseDups.length")
+MUT_NEW+=("  keys.length != keys.length -- MUTATION: duplicate identities accepted")
+MUT_DESC+=("FnTable: duplicate CallableIds no longer rejected (R-0004 step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 39. FnTable: the body/params are dropped from the root (R-0004 step 3)
+# A root over identities alone cannot detect an altered body — the caller would
+# keep a `current` verdict across a real semantic change, which is the whole
+# class R-0004 exists to close.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+# The INNER per-param prefix is what makes the param list injective. Removing the
+# outer one only changes formatting: each param is already self-delimiting, so
+# two distinct tables still get distinct roots and there is nothing to catch — a
+# first draft of this mutation SURVIVED for exactly that reason, correctly.
+# Dropping the inner prefix is the real defect: ["a","b"] and ["a,b"] both render
+# "a,b", so two different signatures collide on one root.
+MUT_OLD+=("      let ps := String.intercalate \",\" (d.params.map fun p => lp \"p\" p)")
+MUT_NEW+=("      let ps := String.intercalate \",\" d.params -- MUTATION: params not self-delimiting")
+MUT_DESC+=("FnTable: param list not injective in the root (step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 40. FnTable: the operational key index leaves the root (R-0004 step 3)
+# Calls still select entries by STRING. Dropping the key index from the root
+# means a receipt does not commit to the name->identity mapping it was produced
+# under, so renaming a displayName silently keeps the old root.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("    some (s!\"tblv{t.schemaVersion}:\" ++ lp \"E\" (String.join parts) ++ lp \"K\" (String.join idx))")
+MUT_NEW+=("    some (s!\"tblv{t.schemaVersion}:\" ++ lp \"E\" (String.join parts) ++ lp \"K\" (String.join (idx.take 0))) -- MUTATION: key index dropped")
+MUT_DESC+=("FnTable: root omits the string-key index (R-0004 step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 41. FnTable: one key reaching two entries is allowed (R-0004 step 3)
+# While calls select by name, an ambiguous key means a call picks arbitrarily.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("  keys.length == keys.eraseDups.length")
+MUT_NEW+=("  keys.length == keys.length -- MUTATION: ambiguous keys accepted")
+MUT_DESC+=("FnTable: ambiguous string-key index accepted (R-0004 step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
+# 42. lookupById matches on the display NAME (R-0004 step 3)
+# The mismatched-lookup-key case: resolving by name rather than identity is
+# exactly the keyed identity the finite table exists to remove, and it makes a
+# same-named callable in another module answer for this one.
+MUT_FILE+=("Concrete/Proof/Proof.lean")
+MUT_OLD+=("  (t.entries.find? fun d => d.identityKey == id.render).bind PFnDef.identified?")
+MUT_NEW+=("  (t.entries.find? fun d => d.displayName == id.declName).bind PFnDef.identified? -- MUTATION: lookup by name")
+MUT_DESC+=("FnTable: lookupById resolves by display name, not identity (step 3)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
 
 NUM_MUTATIONS=${#MUT_FILE[@]}
 

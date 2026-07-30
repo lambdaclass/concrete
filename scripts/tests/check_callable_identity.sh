@@ -148,24 +148,60 @@ echo "=== alpha-renaming cannot silently change identity ==="
 # digest, evidence is invalidated conservatively — it never silently persists.
 probe "identity is independent of parameter names" "true" \
 '#eval (CallableId.ofUser "m" "f") == (CallableId.ofUser "m" "f")'
-# A field DECLARATION, which has a colon — `^\s+alias` also matched the prose
-# "aliases, and anything else a rename can move" in the docstring and reported a
-# field that does not exist. Grepping text for a structural property is the same
-# mistake as classifying theorems by pretty-printed output.
-struct_body="$(awk '/^structure CallableId where/{f=1;next} f&&/^deriving/{exit} f' Concrete/Resolve/CallableId.lean | grep -v '^\s*--' | grep -v '^\s*/-')"
-for field in loc span line alias binder file path pos; do
-  if grep -qE "^[[:space:]]+${field}[a-zA-Z]*[[:space:]]*:" <<<"$struct_body"; then
-    no "CallableId carries a rename-sensitive field: $field"
-  else
-    ok "CallableId carries no '$field' field"
-  fi
-done
-# ...and the check must be able to SEE the fields, or it passes vacuously.
-if grep -qE "^[[:space:]]+declName[[:space:]]*:" <<<"$struct_body"; then
-  ok "the field scan reads the real structure body"
-else
-  no "the field scan found no known field — it is checking nothing"
-fi
+# REFLECTION, not grep. Every earlier version of this scan read source text and
+# was wrong: `^\s+alias` matched the docstring prose "aliases, and anything else
+# a rename can move" and reported a field that does not exist. A structural claim
+# about a structure should be asked of the ENVIRONMENT, which knows its fields.
+# The shell comment-stripper below stays as containment for the remaining
+# style-level greps; it is not trusted structural infrastructure.
+refl() {
+  local label="$1" want="$2" body="$3"
+  cat > "$TMP/refl.lean" <<LEAN
+import Lean
+import Concrete
+open Lean Lean.Meta
+def fieldsOf (n : Name) : MetaM (Array Name) := do
+  return (getStructureFields (← getEnv) n)
+$body
+LEAN
+  local out; out="$(cd "$ROOT_DIR" && lake env lean "$TMP/refl.lean" 2>&1)"
+  if grep -q -- "$want" <<<"$out"; then ok "$label"
+  else no "$label — got: $(printf '%s' "$out" | tr '\n' ' ' | head -c 240)"; fi
+}
+
+# EXACT field set, so a rename-sensitive field cannot be added without this
+# failing — a deny-list only catches the names someone thought of.
+refl "CallableId's fields are exactly the identity-bearing ones" "true" \
+'#eval show MetaM Bool from do
+   return (← fieldsOf `Concrete.CallableId).toList
+     == [`schemaVersion, `ns, `defModule, `declName, `typeArgs]'
+refl "PFnDef exposes identity + displayName, and no `name`" "true" \
+'#eval show MetaM Bool from do
+   return (← fieldsOf `Concrete.Proof.PFnDef).toList
+     == [`identity, `displayName, `params, `body]'
+refl "IdentifiedPFnDef requires a callableId (not an Option)" "true" \
+'#eval show MetaM Bool from do
+   let fs := (← fieldsOf `Concrete.Proof.IdentifiedPFnDef).toList
+   return fs == [`callableId, `displayName, `params, `body]'
+refl "FnTable carries the canonical entries and a schema version" "true" \
+'#eval show MetaM Bool from do
+   let fs := (← fieldsOf `Concrete.Proof.FnTable).toList
+   return fs.contains `entries && fs.contains `schemaVersion'
+
+# The no-parser claim canNOT be asked this way, and the attempt is instructive.
+# "No declaration has type `String → CallableId`" reported false — because
+# `ofBuiltin` / `ofIntrinsic` / `ofExtern` have exactly that type. Those are
+# LEGITIMATE: they construct from a resolved declaration name, which a builtin
+# has instead of a module. The rule is not "never take a String"; it is "never
+# reconstruct identity from RENDERED output".
+#
+# So the direction is what reflection can state: `render` goes one way. The
+# absence of an inverse stays a name-level style guard below, honestly labelled,
+# because "no function parses render's output" is not a typeable property.
+refl "render is one-way (CallableId → String)" "true" \
+'#eval show MetaM Bool from do
+   let some ci := (← getEnv).find? `Concrete.CallableId.render | return false
+   return (← ppExpr ci.type).pretty == "Concrete.CallableId → String"'
 
 echo "=== identity comes from the DEFINITION site (imported aliases preserve it) ==="
 # `import a.{x as y}` must give `y` the identity of `a.x`. The field is named
