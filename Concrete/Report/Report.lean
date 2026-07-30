@@ -1499,8 +1499,16 @@ private def leanIdent (name : String) : String :=
     any punctuation collapse; the qualified name is unique per callable, so the
     result is too. -/
 private def leanSymbol (qualName : String) : String :=
-  qualName.map fun c =>
-    if ('a' ≤ c && c ≤ 'z') || ('A' ≤ c && c ≤ 'Z') || ('0' ≤ c && c ≤ '9') then c else '_'
+  -- INJECTIVE. A plain "map every non-alphanumeric to `_`" is NOT: `A.b_c` and
+  -- `A_b.c` both become `A_b_c`, so two callables would share a declaration name
+  -- and generate invalid Lean — the very defect the qualification was added to
+  -- fix. Escaping `_` as `__` first means a literal underscore always appears
+  -- doubled, so a single underscore can only be a separator.
+  String.join (qualName.toList.map fun c =>
+    if c == '_' then "__"
+    else if ('a' ≤ c && c ≤ 'z') || ('A' ≤ c && c ≤ 'Z') || ('0' ≤ c && c ≤ '9') then
+      String.singleton c
+    else "_")
 
 /-- Emit a `CallableId` literal that preserves the COMPLETE carried value.
 
@@ -1529,6 +1537,9 @@ def leanStubsReport (pc : Concrete.ProofCore)
   -- Build function table entries
   let fnDefs := extracted.map fun e =>
     let name := leanSymbol e.qualName
+    -- The operational key is the BARE name; the Lean symbol is qualified. These
+    -- are different jobs and must not be conflated (see below).
+    let key := leanIdent (e.qualName.splitOn "." |>.getLast!)
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsLean := e.params.map fun p => s!"\"{p}\""
     let paramsList := "[" ++ ", ".intercalate paramsLean ++ "]"
@@ -1548,9 +1559,24 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"    Every field is carried from the compiler — namespace, schema version and\n" ++
     s!"    type arguments included, since a partial identity is a different one. -/\n" ++
     s!"def {name}Id : CallableId :=\n  {idLit}\n\n" ++
-    s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }"
+    -- `displayName` is the OPERATIONAL KEY — the bare name `PExpr.call` selects
+    -- by — NOT the Lean symbol. Emitting the qualified symbol here made the
+    -- table's keyIndex record `calls_inc -> id` while evaluation resolved `"inc"`,
+    -- so the ROOT committed to a key map that was not the one in use, defeating
+    -- the point of binding the index at all.
+    s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{key}\",\n    displayName := \"{key}\", params := {paramsList}, body := {name}Expr }"
   -- Build function table
-  let tableCases := extracted.map fun e =>
+  -- DEDUPLICATED arms. Emitting one arm per entry produced two `| "compute" =>`
+  -- alternatives and Lean rejected the file outright, so the artifact was invalid
+  -- rather than merely refused. First-wins keeps it well-formed; the AMBIGUITY is
+  -- then caught by `isEvidenceBearing` (via keyIndexUnique and dispatchResolves),
+  -- which is a typed refusal rather than a parse error.
+  let seenKeys := extracted.foldl (fun acc e =>
+    let k := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    if acc.contains k then acc else acc ++ [k]) []
+  let firstForKey := fun (k : String) =>
+    extracted.find? fun e => leanIdent (e.qualName.splitOn "." |>.getLast!) == k
+  let tableCases := seenKeys.filterMap fun k => (firstForKey k).map fun e =>
     -- The operational KEY stays the bare name (that is what `PExpr.call`
     -- selects by), but the SYMBOL is qualified so declarations cannot collide.
     let name := leanSymbol e.qualName
@@ -1604,11 +1630,7 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"def generatedEntries : Array PFnDef := #[{", ".intercalate entryNames}]\n\n" ++
     s!"/-- LEGACY OPERATIONAL LOOKUP. `PExpr.call \"f\"` still selects by name, so\n" ++
     s!"    this mapping survives; it is not identity, and the table root binds it. -/\n" ++
-    (if keysAmbiguous then
-       s!"-- legacy dispatch omitted: ambiguous keys (see the note below)\n" ++
-       s!"def generatedFnsGlobals : String → Option PFnDef := fun _ => none\n\n"
-     else
-       s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n") ++
+    s!"def generatedFnsGlobals : String → Option PFnDef\n{"\n".intercalate tableCases}\n  | _ => none\n\n" ++
     s!"/-- Locally bound callables (fn-typed parameters). Applications of these\n" ++
     s!"    extract to `.applyVar` and are answered ONLY here — a definition of the\n" ++
     s!"    same name cannot satisfy them (R-0442). -/\n" ++
@@ -1620,14 +1642,16 @@ def leanStubsReport (pc : Concrete.ProofCore)
     s!"    duplicate identity, and no string key reaching two entries. Checked by\n" ++
     s!"    the kernel at build time, so a generator bug fails the build. -/\n" ++
     (if keysAmbiguous then
-       s!"-- CANNOT BEAR EVIDENCE: these operational keys reach more than one\n" ++
-       s!"-- entry, so `PExpr.call` by name would select arbitrarily:\n" ++
+       s!"-- AMBIGUOUS OPERATIONAL KEYS: these reach more than one entry, so\n" ++
+       s!"-- `PExpr.call` by name would select arbitrarily:\n" ++
        s!"--   {", ".intercalate dupKeys}\n" ++
-       s!"-- Migrate those calls to CallableId, or disambiguate the names. The\n" ++
-       s!"-- integrity assertion and the legacy dispatch are deliberately OMITTED:\n" ++
-       s!"-- a table that cannot bear evidence must not look like one that can.\n\n"
-     else
-       s!"example : generatedFns.isEvidenceBearing := by decide\n\n") ++
+       s!"-- Migrate those calls to CallableId, or disambiguate the names.\n" ++
+       s!"-- The assertion below is emitted ANYWAY and will FAIL: ambiguity\n" ++
+       s!"-- invalidates `isEvidenceBearing` itself, so this is a typed refusal,\n" ++
+       s!"-- not a comment. Omitting the assertion was cosmetic — the table could\n" ++
+       s!"-- still bear evidence.\n"
+     else "") ++
+    s!"example : generatedFns.isEvidenceBearing := by decide\n\n" ++
     s!"{"\n\n".intercalate lookupLemmas}"
   -- Build eval helpers
   let evalHelpers := extracted.map fun e =>
@@ -2787,6 +2811,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
     -- dot — re-deriving identity from a rendering, and dropping namespace,
     -- schema version and type arguments in the process, so a builtin or a
     -- specialization would have been emitted as a plain user callable.
+    let proveKey := leanIdent (qualName.splitOn "." |>.getLast!)
     let proveIdLit := match e.callableId with
       | some cid => renderCallableId cid
       | none     => "sorry  -- UNMAPPABLE: no CallableId carried from ProofCore"
@@ -2798,7 +2823,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
       s!"/-- Semantic identity of `{qualName}`. Generated, not hand-written. -/\n" ++
       s!"def {name}Id : CallableId :=\n  {proveIdLit}\n\n",
-      s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, displayName := \"{name}\",\n    params := {paramsList}, body := {name}Expr }\n\n",
+      s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{proveKey}\",\n    displayName := \"{proveKey}\", params := {paramsList}, body := {name}Expr }\n\n",
       s!"def fnsGlobals : String → Option PFnDef\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
       s!"/-- Locally bound callables. If this spec applies a fn-typed PARAMETER,\n" ++
       s!"    that is an `.applyVar` node and must be bound HERE, not above: a\n" ++

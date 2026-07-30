@@ -304,6 +304,29 @@ inductive PExpr where
                (step cont : PExpr)
   deriving Repr, BEq
 
+/-- A digest of the SOURCE body, with its scope stated on its face.
+
+    Deliberately NOT named anything authoritative. It comes from the legacy body
+    fingerprint, which covers the body ONLY — not the signature, not generics or
+    bounds, not capabilities, not contracts. Reusing an incomplete digest under a
+    name like `subjectDigest` would let a caller believe it establishes more than
+    it does; bugs 059 and 060 are that mistake, still open.
+
+    `receiptEligible := false` is the point: it supports the step-5 dual comparison
+    without pretending to be the semantic subject digest step 8 owes. -/
+structure SourceBodyDigest where
+  schema          : String := "sourceBodyDigestV1"
+  scope           : String := "body_only"
+  receiptEligible : Bool := false
+  value           : String
+deriving Repr, BEq, Inhabited
+
+/-- Canonical rendering, schema and scope included — a root binding only the VALUE
+    would let a body_only digest collide with a future complete digest of the same
+    body. -/
+def SourceBodyDigest.canonical (d : SourceBodyDigest) : String :=
+  s!"{d.schema}/{d.scope}/{if d.receiptEligible then "1" else "0"}:{d.value}"
+
 /-- Whether an entry carries semantic identity.
 
     A TYPED distinction, not `Option CallableId` + an `isSome` test. The
@@ -325,7 +348,19 @@ def PFnIdentity.id? : PFnIdentity → Option CallableId
 structure PFnDef where
   /-- Semantic identity, or `legacy` (R-0004 step 2). -/
   identity : PFnIdentity := .legacy
-  /-- Human-readable name. EXPLICITLY NOT IDENTITY.
+  /-- The key OPERATIONAL DISPATCH uses — what `PExpr.call "f"` selects by.
+
+      A separate field from `displayName` on purpose. While they were one, a
+      generator putting a qualified Lean symbol in `displayName` produced a table
+      whose `keyIndex` recorded `Alpha_compute -> id` while `globals` answered
+      `"compute"`: `isEvidenceBearing` true, `root` some, yet `call "compute"`
+      evaluated to `none`. A confident evidence root for a table whose calls did
+      not match it. Generated Lean SYMBOLS must never double as semantic keys. -/
+  operationalKey : String := ""
+  /-- Digest of the source body this was extracted from, when known. Carries its
+      own scope; see `SourceBodyDigest`. -/
+  sourceBodyDigest : Option SourceBodyDigest := none
+  /-- Human-readable name. EXPLICITLY NOT IDENTITY, and not the dispatch key.
 
       Measured 2026-07-29: this field is write-only — set at 26 construction
       sites and projected at none. It never identified anything; operational
@@ -424,6 +459,29 @@ for the same reason (`a;b` versus `a` + `;b`).
 
 private def lpx (tag s : String) : String := tag ++ toString s.length ++ ":" ++ s
 
+/-- Canonical tag per binary operator.
+
+    Explicit, not `toString (repr op)`. `repr` is derived FORMATTING and can change
+    with a Lean version or printer setting; an identity digest may not rest on
+    that. EIGHT constructors carry width and signedness, and both are semantic —
+    wrapping or dividing at 8 bits is not the same operation as at 32, signed is
+    not unsigned. A first draft dropped them and would have collided. -/
+def pbinOpCanonical : PBinOp → String
+  | .add => "add" | .sub => "sub" | .mul => "mul"
+  | .eq => "eq" | .ne => "ne"
+  | .lt => "lt" | .le => "le" | .gt => "gt" | .ge => "ge"
+  | .addw w sg => wtag "addw" w sg
+  | .mod w sg => wtag "mod" w sg
+  | .div w sg => wtag "div" w sg
+  | .bitxor w sg => wtag "bxor" w sg
+  | .bitor w sg => wtag "bor" w sg
+  | .bitand w sg => wtag "band" w sg
+  | .shr w sg => wtag "shr" w sg
+  | .shl w sg => wtag "shl" w sg
+where
+  wtag (t : String) (w : Nat) (sg : Bool) : String :=
+    s!"{t}:{w}:{if sg then "s" else "u"}"
+
 mutual
 
 def pvalCanonical : PVal → String
@@ -455,7 +513,7 @@ def pexprCanonical : PExpr → String
   | .lit v => lpx "L" (pvalCanonical v)
   | .var n => lpx "V" n
   | .binOp op l r =>
-    lpx "B" (toString (repr op)) ++ lpx "l" (pexprCanonical l) ++ lpx "r" (pexprCanonical r)
+    lpx "B" (pbinOpCanonical op) ++ lpx "l" (pexprCanonical l) ++ lpx "r" (pexprCanonical r)
   | .letIn n v b => lpx "T" n ++ lpx "v" (pexprCanonical v) ++ lpx "b" (pexprCanonical b)
   | .ifThenElse c t e =>
     lpx "I" (pexprCanonical c) ++ lpx "t" (pexprCanonical t) ++ lpx "e" (pexprCanonical e)
@@ -555,7 +613,7 @@ def FnTable.hasDuplicateIds (t : FnTable) : Bool :=
     Keys come from `displayName`, which is explicitly not identity; that is the
     point. This index records the coupling rather than pretending it is absent. -/
 def FnTable.keyIndex (t : FnTable) : List (String × String) :=
-  t.canonicalEntries.toList.map fun d => (d.displayName, d.identityKey)
+  t.canonicalEntries.toList.map fun d => (d.operationalKey, d.identityKey)
 
 /-- The same pairs in ENTRY order, for the uniqueness check only.
 
@@ -566,7 +624,7 @@ def FnTable.keyIndex (t : FnTable) : List (String × String) :=
     has to reduce or the build-time guarantee is not there. The ROOT still uses
     canonical order — that is where order matters. -/
 def FnTable.keyPairs (t : FnTable) : List (String × String) :=
-  t.entries.toList.map fun d => (d.displayName, d.identityKey)
+  t.entries.toList.map fun d => (d.operationalKey, d.identityKey)
 
 /-- Is the operational key → identity mapping unambiguous?
 
@@ -578,13 +636,26 @@ def FnTable.keyIndexUnique (t : FnTable) : Bool :=
   let keys := t.keyPairs.map (·.1)
   keys.length == keys.eraseDups.length
 
+/-- Does the DISPATCH answer each entry's operational key with that entry?
+
+    Typed fail-closed. A generator that merely declined to emit
+    `example : … isEvidenceBearing := by decide` left the table still able to bear
+    evidence — the omission was cosmetic. This makes the mismatch invalidate the
+    predicate itself. -/
+def FnTable.dispatchResolves (t : FnTable) : Bool :=
+  t.entries.toList.all fun d =>
+    match t.globals d.operationalKey with
+    | some d' => d'.identityKey == d.identityKey
+    | none    => false
+
 /-- May this table take part in minting a receipt?
 
-    Requires canonical entries, every one identified, and no duplicate identity.
-    One predicate, so no consumer invents its own answer. -/
+    Canonical entries, all identified, no duplicate identity, no key reaching two
+    entries, strictly ordered, AND the dispatch resolving each key to its own
+    entry. One predicate, so no consumer invents its own answer. -/
 def FnTable.isEvidenceBearing (t : FnTable) : Bool :=
   !t.entries.isEmpty && t.allIdentified && !t.hasDuplicateIds
-    && t.keyIndexUnique && t.entriesSorted
+    && t.keyIndexUnique && t.entriesSorted && t.dispatchResolves
 
 /-- Deterministic root over every evidence-bearing field of the table.
 
@@ -606,10 +677,17 @@ def FnTable.root (t : FnTable) : Option String :=
       -- parameters but different bodies had EQUAL roots while evaluating to 1 and
       -- 999 — measured, not hypothetical. A root that does not identify behaviour
       -- cannot back a receipt, and step 5 would have migrated proofs onto it.
-      lp "i" d.identityKey ++ lp "P" ps ++ lp "B" (pexprCanonical d.body)
+      let sd := match d.sourceBodyDigest with | some x => x.canonical | none => "nodigest"
+      lp "i" d.identityKey ++ lp "P" ps ++ lp "B" (pexprCanonical d.body) ++ lp "S" sd
     -- The operational key index is INSIDE the root: while calls select by
     -- string, a receipt must commit to the mapping it was produced under.
-    let idx := t.keyIndex.map fun (k, v) => lp "k" k ++ lp "v" v
+    -- Each pair records whether the DISPATCH actually answers that key with that
+    -- entry, so the root cannot claim a mapping evaluation does not implement.
+    let idx := t.keyIndex.map fun (k, v) =>
+      let resolves := match t.globals k with
+        | some d => if d.identityKey == v then "1" else "0"
+        | none   => "0"
+      lp "k" k ++ lp "v" v ++ lp "d" resolves
     some (s!"tblv{t.schemaVersion}:" ++ lp "E" (String.join parts) ++ lp "K" (String.join idx))
 
 /-! ## The step-5 dual comparison

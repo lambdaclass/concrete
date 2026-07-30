@@ -63,7 +63,9 @@ hash_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 
 cleanup_lock() {
   local rc=$?
-  rmdir "$LOCK_DIR" 2>/dev/null || true
+  # The lock is released at the END, after restoration. Releasing it first let a
+  # second run start while this one still had a mutation applied — the exact race
+  # the lock exists to prevent.
   # POSTCONDITION, not a warning. A mutation left applied is worse than a failed
   # run: the next build, gate or commit silently uses it, and a green result then
   # describes mutated code. This must make the harness FAIL.
@@ -73,21 +75,15 @@ cleanup_lock() {
   # run must not be able to leave the developer's source semantically changed.
   # Backups live in $MUT_BACKUP_DIR, so this works even on INT/TERM mid-mutation.
   if [ -d "$MUT_BACKUP_DIR" ]; then
-    for bak in "$MUT_BACKUP_DIR"/*.bak; do
-      [ -f "$bak" ] || continue
-      local base rel
-      base="$(basename "$bak" .bak)"
-      rel="$(printf '%s' "$base" | tr '_' '/')"
-      # Recover the real path from the hash table rather than guessing: the
-      # flattening is not invertible when a path component contains '_'.
-      for f in "${!MUT_HASH0[@]}"; do
-        if [ "$(printf '%s' "$f" | tr '/' '_')" = "$base" ]; then rel="$f"; fi
-      done
+    # The backup dir mirrors the repo layout, so the relative path IS the target —
+    # no guessing, no flattening to invert.
+    while IFS= read -r bak; do
+      local rel="${bak#$MUT_BACKUP_DIR/}"
       if [ -f "$ROOT_DIR/$rel" ]; then
         cp "$bak" "$ROOT_DIR/$rel"
         echo "  restored $rel from backup" >&2
       fi
-    done
+    done < <(find "$MUT_BACKUP_DIR" -type f 2>/dev/null)
   fi
   local stray
   stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete "$ROOT_DIR"/std 2>/dev/null || true)"
@@ -109,6 +105,7 @@ cleanup_lock() {
     fi
   done
   rm -rf "$MUT_BACKUP_DIR" 2>/dev/null || true
+  rmdir "$LOCK_DIR" 2>/dev/null || true
   if [ "$bad" = 1 ]; then
     echo "" >&2
     echo "restore the tree before building, gating or committing:" >&2
@@ -660,7 +657,11 @@ apply_mutation() {
   # the tree is itself state left behind — one was staged into a commit before
   # being caught — and two runs racing on that path is what corrupted
   # Proof.lean. The key flattens the path so nested files cannot collide.
-  cp "$file" "$MUT_BACKUP_DIR/$(printf '%s' "$file" | tr '/' '_').bak"
+  # Mirror the path INSIDE the backup dir rather than flattening it. `tr / _`
+  # collides (`a/b_c` and `a_b/c` both become `a_b_c`) and is not invertible, so
+  # the restore loop had to guess which file a backup belonged to.
+  mkdir -p "$MUT_BACKUP_DIR/$(dirname "$file")"
+  cp "$file" "$MUT_BACKUP_DIR/$file"
 
   # Use python for reliable multi-line string replacement
   python3 -c "
@@ -681,7 +682,7 @@ with open(path, 'w') as f:
 restore_mutation() {
   local idx=$1
   local file="${MUT_FILE[$idx]}"
-  local bak="$MUT_BACKUP_DIR/$(printf '%s' "$file" | tr '/' '_').bak"
+  local bak="$MUT_BACKUP_DIR/$file"
   if [ -f "$bak" ]; then
     cp "$bak" "$file"
     rm -f "$bak"
@@ -770,7 +771,11 @@ else
   mapfile -t MUT_TARGETS < <(printf '%s\n' "${MUT_FILE[@]}" | sort -u)
 fi
 for f in "${MUT_TARGETS[@]}"; do
-  if ! git -C "$ROOT_DIR" diff --quiet -- "$f" 2>/dev/null; then
+  # `--quiet` alone misses STAGED changes: a file that is `git add`-ed but not
+  # committed reads as clean to `git diff`, so a mutation could be applied on top
+  # of staged work and restored over it. Check the index too.
+  if ! git -C "$ROOT_DIR" diff --quiet -- "$f" 2>/dev/null \
+     || ! git -C "$ROOT_DIR" diff --quiet --cached -- "$f" 2>/dev/null; then
     echo "error: target file has uncommitted changes: $f" >&2
     echo "       this harness edits targets in place; commit or stash first." >&2
     exit 2
