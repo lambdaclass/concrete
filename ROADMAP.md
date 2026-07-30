@@ -1154,6 +1154,42 @@ proving no old body-only or advisory-`staleDeps` path can emit
 std fingerprints in their already-landed commit; do not mix that repair with
 these new evidence gates.
 
+### Task R-0450
+
+**Objective:** Unify obligation lowering into one prover-neutral IR with per-backend drivers (Why3 shape) — implementation already in progress off-repo; land it in a worktree and merge once green per the operating rules. Today `toLeanProp` (Lean path) and `exprToSmt` (solver path) are two hard-coded, monolithic lowerings of the same obligation expressions: two answers to one question, free to drift — and drift here means the Lean proof and the SMT check silently prove DIFFERENT obligations, an evidence-integrity defect in the system R-0004 is hardening. Define one typed obligation IR (linear integer arithmetic, bitvectors, bools, arrays: the deliberate intersection fragment; everything else `not_supported`), one semantics (a single `eval` in Lean, the IntArith single-source discipline), lowering as small named transforms, and per-backend drivers that select which transforms run.
+
+   Slice 1 unifies the two existing backends only — no new provers; the diff
+   should be net-negative in lowering code. Gates: constructor coverage
+   (every transform/emitter handles or explicitly rejects every IR
+   constructor, fail-closed), Lean/SMT verdict agreement on generated
+   obligations including identical `unsupported`s, and identity carried as
+   resolved callable references (R-0442's output), never name strings.
+   R-0170's auto-discharge must generate INTO the IR, not the ad-hoc
+   lowerings. Version-stamp the IR in every emitted artifact so R-0004
+   receipts record what produced them.
+
+### Task R-0448
+
+**Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). Positioned immediately after R-0450 because the owner is executing it now to test the idea; the spike branch is the experiment vehicle, this task is its graduation bar.
+
+   Merge bar (the graduation note's verified list): badge-teeth negative
+   case (a weakly-bounded `a * b` closes with no kernel and stays
+   `unproven`), kernel-absent honesty (no `coqc` → no attestation), class
+   distinctness, no laundering past `trusted`, and a mutation proving the
+   badge disappears when a kernel leaves the agreement set. The
+   emitter-agreement differential runs generated obligations across kernels
+   and reports DISAGREEMENT as signal (a lowering defect or a
+   decision-procedure discrepancy), never noise. Credibility gate: one
+   flagship row (`hmac_sha256` or `vc_suite`) showing
+   `proved_by_two_kernels`, replayable by an outsider with either kernel.
+   Provers stay optional tooling (`nix develop .#provers`); the linear
+   fragment boundary stays a gate, with scope growth only through R-0450's
+   named transforms. Dependencies: R-0450 (the IR), R-0004 (receipts),
+   R-0440 (the independence field ships inline here as its first consumer
+   if the full model has not landed). On merge, TRUSTED_COMPUTING_BASE.md
+   records both trust directions: agreement reduces kernel-soundness
+   trust; bridge trust is untouched until realization (R-0449).
+
 ### Task R-0435
 
 **Objective:** Ban lexical value shadowing while preserving explicit assignment
@@ -2373,6 +2409,9 @@ and compiled-coverage machinery; do not create a parallel review database.
 
 **Objective:** Generate the semantically-dark-construct inventory from compiler
 constructors, and make the docs-drift gate check claims rather than paths.
+Also expand the gate's coverage: `PRESENT_DOCS` currently lists five files,
+while `docs/NOTES/` and `research/` accumulate claim-bearing design notes
+outside any drift check — bring both under the path check at minimum.
 
 `docs/PROOF_STORY_MATRIX.md` is what `docs/README.md` calls "the 'no semantically
 dark constructs' inventory": every construct must be `proved`, `enforced`,
@@ -7524,6 +7563,10 @@ Source-level step/space bounds stay with R-0445, R-0244/R-0248, and R-0417's
 `complexity_guarded` evidence; none of them imply hardware timing. A future
 WCET bridge consumes those exported facts under a named hardware model and
 must not silently reinterpret or overwrite their source scope.
+
+### Task R-0449
+
+**Objective:** Research Why3-style realization for the prover backends — proving, in Rocq and Isabelle themselves, that the obligation IR's built-in theories are sound in that prover's model — only after R-0448 has a real multi-kernel user who needs bridge-level trust rather than agreement-level trust. Each realization proof converts a slice of the trusted Core→obligation bridge into kernel-checked evidence; without it, "three kernels" means three syntaxes over one trusted bridge. Pulled by an audited consumer requiring it, not by symmetry.
 
 ### Task R-0406
 
