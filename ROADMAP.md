@@ -46,6 +46,19 @@ Deferred work stays in the phase where its trigger lives. Do not build machinery
 because the roadmap can imagine it; build it when a workload, proof, failing gate,
 or public API forces it.
 
+### Spike-First / Kill Criteria
+
+Large investments are validated before they are built. Any task whose cost is
+measured in weeks or more should name a cheap falsification probe — an
+afternoon-to-days experiment whose result decides whether the task proceeds —
+and its kill criteria: the outcome that stops the work. Precedents: the
+combinator count before the parser arc (seven shapes, not forty, made the
+EverParse economics real), the cap-inference probes before the capability
+verdict, the step-count correlation experiment before any timing claim. The
+roadmap is a hypothesis list, not a build list; a task that survives its probe
+is built with evidence, and a task killed by one is a success recorded in the
+changelog, not a failure.
+
 ### Where Execution Starts
 
 Execution starts at the first `Task R-NNNN` heading and advances by file
