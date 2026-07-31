@@ -687,6 +687,17 @@ MUT_NEW+=("\", \".intercalate entryNames.dropLast}]")
 MUT_DESC+=("Generator: an entry is dropped but keeps its lookup lemma")
 gate_for_last "scripts/tests/check_callable_identity.sh"
 
+# 47. Generator: the body digest is computed over a CONSTANT, not the body
+# A digest blind to the body cannot detect that a generated table's body literal
+# drifted from what the compiler extracts — which is its whole job. The field was
+# representable but never emitted for a while; this keeps "emitted" from decaying
+# back into "emitted, but meaningless".
+MUT_FILE+=("Concrete/Report/Report.lean")
+MUT_OLD+=("  let v := Concrete.shortHash (Proof.pexprCanonical pexpr)")
+MUT_NEW+=("  let v := Concrete.shortHash \"\" -- MUTATION: digest ignores the body")
+MUT_DESC+=("Generator: body digest does not depend on the body")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================

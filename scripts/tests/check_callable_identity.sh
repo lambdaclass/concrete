@@ -593,6 +593,65 @@ else
 fi
 
 echo ""
+echo "=== sourceBodyDigestV1 is emitted, honest, and bound into the root ==="
+# The field was representable but NEVER EMITTED — a schema with no values behind
+# it. These legs assert it is populated, that it distinguishes bodies, that it is
+# bound into the root, and that it does not overstate what it covers.
+n_dig=$(grep -c 'sourceBodyDigest := some { value := "' "$TMP/samename.lean" || true)
+[ "$n_dig" = "3" ] \
+  && ok "every generated entry carries a source body digest" \
+  || no "expected 3 body digests, got $n_dig"
+
+# DISTINGUISHES BODIES. The three same-named functions differ only in their body
+# (+10 / +20 / +12), so three identical digests would mean the digest is blind to
+# exactly what it exists to track.
+n_uniq=$("$CC" "$SAMENAME" --report lean-stubs 2>/dev/null \
+  | grep -o 'value := "[a-f0-9]*"' | sort -u | wc -l | tr -d ' ')
+[ "$n_uniq" = "3" ] \
+  && ok "three different bodies produce three different digests" \
+  || no "3 differing bodies produced $n_uniq distinct digests"
+
+# HONEST SCOPE. `body_only` and `receiptEligible := false` are what keep this from
+# being mistaken for the complete subject digest that step 8 still owes. They are
+# structure defaults, so a generated literal must not override them.
+if grep -q 'sourceBodyDigest := some { value := "[a-f0-9]*", *scope' "$TMP/samename.lean" \
+   || grep -q 'receiptEligible := true' "$TMP/samename.lean"; then
+  no "a generated digest overrides its scope or receipt-eligibility"
+else
+  ok "generated digests keep the body_only, non-receipt-eligible defaults"
+fi
+probe "the digest declares its schema and scope, and is not receipt-eligible" "true" \
+'#eval
+  let d : Proof.SourceBodyDigest := { value := "abc" }
+  d.schema == "sourceBodyDigestV1" && d.scope == "body_only" && d.receiptEligible == false'
+# The canonical form carries schema+scope, so a body_only digest can never collide
+# with a future COMPLETE digest of the same body.
+probe "canonical form binds schema and scope, not just the value" "true" \
+'#eval
+  let a : Proof.SourceBodyDigest := { value := "v" }
+  let b : Proof.SourceBodyDigest := { schema := "completeV1", value := "v" }
+  a.canonical != b.canonical'
+
+# BOUND INTO THE ROOT. A digest the root ignores cannot detect drift.
+probe "changing only the body digest moves the table root" "true" \
+"$mk"'def eD1 : Proof.PFnDef := { eA with sourceBodyDigest := some { value := "d1" } }
+def eD2 : Proof.PFnDef := { eA with sourceBodyDigest := some { value := "d2" } }
+#eval (tbl #[eD1]).root != (tbl #[eD2]).root'
+probe "an absent digest is distinguishable from a present one" "true" \
+"$mk"'def eD3 : Proof.PFnDef := { eA with sourceBodyDigest := some { value := "d1" } }
+#eval (tbl #[eA]).root != (tbl #[eD3]).root'
+
+# NOT THE LEGACY FINGERPRINT. Reusing that value would put one string in two
+# roles — the proof-freshness fingerprint bugs 058-060 are filed against, and a
+# body-only comparison key — and let a reader treat one as the other.
+if "$CC" "$SAMENAME" --report lean-stubs 2>/dev/null | grep -o 'value := "[a-f0-9]*"' \
+   | grep -qFf <("$CC" "$SAMENAME" --report proof 2>/dev/null | grep -oE '\b[a-f0-9]{32}\b' | sed 's/^/value := "/; s/$/"/') ; then
+  no "a generated body digest equals a legacy proof fingerprint — one value in two roles"
+else
+  ok "body digests are distinct from the legacy proof fingerprints"
+fi
+
+echo ""
 echo "=== every entry gets exactly one lookup lemma ==="
 # The lookup lemmas are what let a proof about an identity be USED. One missing
 # lemma silently makes that entry unreachable to the kernel while the table still

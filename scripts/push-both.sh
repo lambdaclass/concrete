@@ -59,7 +59,14 @@ CI_WAIT=1
 CI_WORKFLOW="${CI_WORKFLOW:-CI}"
 # Bounded so this cannot hang a session forever; on timeout the mirror is left
 # alone, which is the fail-closed direction.
-CI_TIMEOUT="${CI_TIMEOUT:-2400}"
+#
+# CALIBRATED against observed runs, not guessed. A first version used 2400s
+# (40min) and timed out on a run that was still in progress — this workflow's
+# recent full runs took 41m42s and 42m39s, so the timeout was SHORTER than the
+# job it was waiting for. A timeout below the expected duration does not bound a
+# hang, it manufactures a failure on every healthy push. 4200s leaves real
+# headroom above ~43min while still being finite.
+CI_TIMEOUT="${CI_TIMEOUT:-4200}"
 CI_INTERVAL="${CI_INTERVAL:-30}"
 
 while [ $# -gt 0 ]; do

@@ -1532,6 +1532,35 @@ private def renderCallableId (cid : Concrete.CallableId) : String :=
     if cid.typeParams == 0 then "" else s!", typeParams := {cid.typeParams}"
   s!"\{ schemaVersion := {cid.schemaVersion}, ns := {nsLit}, defModule := \"{cid.defModule}\", declName := \"{cid.declName}\"{argsLit}{paramsLit} }"
 
+/-- Render a `sourceBodyDigestV1` literal for one extracted body.
+
+    Computed over `pexprCanonical` of the EXTRACTED body, hashed with the same
+    truncated SHA-256 (`Concrete.shortHash`) the in-source
+    `#[proof_fingerprint]` uses — a spec already in the repo, so no new trusted
+    code. `pexprCanonical` is length-prefixed and tagged, so the digest inherits
+    its injectivity: two structurally different bodies cannot hash alike by
+    rendering alike.
+
+    DELIBERATELY NOT the legacy `bodyFingerprint`. That hashes Core statements
+    and is the proof-freshness fingerprint that bugs 058-060 are filed against;
+    reusing its VALUE here would put one string in two roles, and the next reader
+    would be free to treat a body-only digest as the authoritative subject digest.
+    Different input domain means the two can never be silently substituted.
+
+    WHAT THIS CATCHES: a generated table whose body literal no longer matches
+    what the compiler extracts — a hand-edited generated file, or a stale one
+    after a source change. The digest is bound into the table root, so drift
+    moves the root.
+
+    WHAT IT DOES NOT CATCH, stated rather than implied: a consistent generator
+    bug. A generator emitting a wrong body AND a digest computed from that same
+    wrong body agrees with itself. This is `receiptEligible := false` and
+    `scope := "body_only"` for exactly that reason — it is a comparison key for
+    step 5, not evidence, and it covers no signature, capability or contract. -/
+private def renderSourceBodyDigest (pexpr : Proof.PExpr) : String :=
+  let v := Concrete.shortHash (Proof.pexprCanonical pexpr)
+  s!"some \{ value := \"{v}\" }"
+
 /-- Generate Lean theorem stubs for all extracted functions. -/
 def leanStubsReport (pc : Concrete.ProofCore)
     (registry : ProofRegistry := []) : String :=
@@ -1547,6 +1576,12 @@ def leanStubsReport (pc : Concrete.ProofCore)
     -- are different jobs and must not be conflated (see below).
     let key := leanIdent (e.qualName.splitOn "." |>.getLast!)
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
+    -- `none` when extraction produced no body: an entry with no body has no body
+    -- digest, and emitting one over a `sorry` placeholder would be a digest of
+    -- nothing wearing the name of a digest of something.
+    let sbd := match e.extracted with
+      | some p => renderSourceBodyDigest p
+      | none   => "none"
     let paramsLean := e.params.map fun p => s!"\"{p}\""
     let paramsList := "[" ++ ", ".intercalate paramsLean ++ "]"
     -- The entry carries a SEMANTIC IDENTITY, split at the last dot so the
@@ -1570,7 +1605,7 @@ def leanStubsReport (pc : Concrete.ProofCore)
     -- table's keyIndex record `calls_inc -> id` while evaluation resolved `"inc"`,
     -- so the ROOT committed to a key map that was not the one in use, defeating
     -- the point of binding the index at all.
-    s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{key}\",\n    displayName := \"{key}\", params := {paramsList}, body := {name}Expr }"
+    s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{key}\",\n    sourceBodyDigest := {sbd},\n    displayName := \"{key}\", params := {paramsList}, body := {name}Expr }"
   -- Build function table
   -- DEDUPLICATED arms. Emitting one arm per entry produced two `| "compute" =>`
   -- alternatives and Lean rejected the file outright, so the artifact was invalid
@@ -2800,6 +2835,12 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
     let name := leanSymbol qualName
     let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
     let paramsList := "[" ++ ", ".intercalate (e.params.map (s!"\"{·}\"")) ++ "]"
+    -- Same body digest as the lean-stubs generator. BOTH surfaces or neither:
+    -- updating one generator and not the other is the drift check_proof_patterns
+    -- exists to catch, having already caught exactly that.
+    let sbd := match e.extracted with
+      | some p => renderSourceBodyDigest p
+      | none   => "none"
     let paramSig := " ".intercalate (e.params.map fun p => s!"({p} : Int)")
     let paramBinds := e.params.foldl (fun acc p =>
       s!"({acc}.bind \"{p}\" (.int {p}))") "Env.empty"
@@ -2853,7 +2894,7 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
       s!"/-- Semantic identity of `{qualName}`. Generated, not hand-written. -/\n" ++
       s!"def {name}Id : CallableId :=\n  {proveIdLit}\n\n",
-      s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{proveKey}\",\n    displayName := \"{proveKey}\", params := {paramsList}, body := {name}Expr }\n\n",
+      s!"def {name}Fn : PFnDef :=\n  \{ identity := .semantic {name}Id, operationalKey := \"{proveKey}\",\n    sourceBodyDigest := {sbd},\n    displayName := \"{proveKey}\", params := {paramsList}, body := {name}Expr }\n\n",
       -- Dispatch on the OPERATIONAL KEY, not on the Lean symbol. This keyed the
       -- generated symbol (`straight__line_add__three`) while the entry's
       -- operationalKey was the bare name (`add_three`), so `globals` answered
