@@ -694,7 +694,7 @@ gate_for_last "scripts/tests/check_callable_identity.sh"
 # back into "emitted, but meaningless".
 MUT_FILE+=("Concrete/Report/Report.lean")
 MUT_OLD+=("  let v := Concrete.shortHash (Proof.pexprCanonical pexpr)")
-MUT_NEW+=("  let v := Concrete.shortHash ((Proof.pexprCanonical pexpr).take 0) -- MUTATION: digest ignores the body")
+MUT_NEW+=("  let v := Concrete.shortHash (toString (Proof.pexprCanonical pexpr).length) -- MUTATION: digest sees only the body LENGTH")
 MUT_DESC+=("Generator: body digest does not depend on the body")
 gate_for_last "scripts/tests/check_callable_identity.sh"
 
