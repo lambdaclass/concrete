@@ -1065,12 +1065,22 @@ Land this task in seven explicit slices:
         identity from a rendering, one layer away from the facts. Sorting uses the
         same carried `render`, so emission order and asserted order come from one
         function. Specializations still need `typeArgs` populated from Mono;
-      - no source-subject digest per entry. When added it must NOT reuse the
-        legacy body fingerprint under an authoritative name — it is
-        `sourceBodyDigestV1`, `digest_scope = body_only`,
-        `receipt_eligible = false`, with schema and scope in the table root, so it
-        can support step-5 comparison without pretending to cover signatures and
-        contracts;
+      - ~~no source-subject digest per entry~~ FIXED: both generators emit
+        `sourceBodyDigestV1` per entry, computed as
+        `shortHash (pexprCanonical body)` — the truncated SHA-256 the in-source
+        `#[proof_fingerprint]` already uses, over a length-prefixed tagged
+        encoding, so the digest inherits that injectivity. Deliberately NOT the
+        legacy `bodyFingerprint`: that hashes Core statements and is the
+        proof-freshness fingerprint bugs 058-060 are filed against, so reusing its
+        VALUE would put one string in two roles; a gate leg asserts the two never
+        coincide. `scope = body_only` and `receipt_eligible = false` are kept, and
+        both are inside the root, so a body-only digest cannot collide with a
+        future complete digest of the same body. It catches a generated table
+        whose body literal drifted from what the compiler extracts (hand-edited or
+        stale file), and drift moves the root. It does NOT catch a consistent
+        generator bug — a wrong body plus a digest over that same wrong body
+        agrees with itself — which is why it is a step-5 comparison key and not
+        evidence;
       - generated artifacts still go to stdout/caller-chosen paths, not
         `.build/proofs/`;
       - ~~globally-polluting simp lemmas~~ FIXED: generated lemmas are tagged
@@ -1082,13 +1092,32 @@ Land this task in seven explicit slices:
       - lemma names are `<entry>` -based and not collision-proof;
       - "exactly one lemma per entry" and "identical inputs produce
         byte-identical modules and roots" are not asserted;
-      - builtins/intrinsics/externs/specializations are representable but no
-        generated table exercises them;
-      - no mutations yet for deleting an entry, swapping an ID/body, duplicating
-        an ID/key, or emitting an incorrect lemma;
-      - generator coverage tests today's TWO emission surfaces by name, so a
-        third would silently join without a matrix entry — the same omission this
-        slice already made once.
+      - builtins/intrinsics/externs/specializations are representable, and the
+        TYPE is now gated against conflating them (all four namespaces render
+        distinctly for one `declName`; a builtin `len` and a user `len` are
+        different identities; `specialize` cannot disagree with its base about
+        namespace or defining module; a user and a builtin entry sharing a
+        `declName` coexist when their operational keys differ, and are refused in
+        non-canonical order). But NO GENERATED TABLE exercises them, and none can
+        yet: nothing in the compiler mints `ofBuiltin`/`ofIntrinsic`/`ofExtern`/
+        `specialize`, because extraction covers user functions only and callees
+        are still selected by string. Entries for non-user callables arrive with
+        callee identity, which is step 6/7. A TRIPWIRE leg asserts the absence of
+        any producer, so it fails the moment one appears and this coverage stops
+        being owed silently;
+      - mutations now cover deleting an entry (46), duplicating an ID (38) or a
+        key (41), emitting an incorrect lemma (45), unbinding bodies from the root
+        (43), accepting an incomplete identity (44) and a body digest that does
+        not depend on the body (47). Still missing: SWAPPING an ID between two
+        entries, which duplicate-detection does not catch because both identities
+        remain present and distinct;
+      - ~~generator coverage tests today's TWO emission surfaces by name~~
+        FIXED: the number of `renderCallableId` references is pinned, so a third
+        emission surface fails the gate until its author extends the coverage to
+        it. Both surfaces are additionally driven over the committed same-name and
+        many-instantiations fixtures, with determinism, path-independence and
+        one-lemma-per-entry asserted, and positive controls so the "exactly one
+        error" legs cannot pass vacuously.
 
       And a limit worth stating plainly: `example : fns.isEvidenceBearing := by
       decide` proves INTERNAL CONSISTENCY, not source correspondence. A generator

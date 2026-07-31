@@ -593,6 +593,77 @@ else
 fi
 
 echo ""
+echo "=== namespaces and specializations: the TYPE distinguishes them ==="
+# HONEST SCOPE OF THIS SECTION. The step-4 criterion asks that a GENERATED table
+# exercise builtins, intrinsics, externs and specializations. It cannot yet, and
+# these legs do not pretend otherwise: nothing in the compiler mints
+# `ofBuiltin`/`ofIntrinsic`/`ofExtern`/`specialize` (asserted below), because
+# extraction covers user functions only and callees are still selected by STRING.
+# Entries for non-user callables arrive with callee identity, which is a later
+# step. What IS closable now is that the type cannot conflate them, so the
+# distinction is load-bearing the moment a producer exists.
+probe "a builtin and a user callable of the same name are different identities" "false" \
+'#eval (CallableId.ofUser "" "len").render == (CallableId.ofBuiltin "len").render'
+probe "all four namespaces render distinctly for one declName" "4" \
+'#eval ((CallableNamespace.all.map fun ns =>
+    ({ ns := ns, defModule := "", declName := "len" } : CallableId).render).eraseDups).length'
+# The namespace list is the checkable copy: a new namespace that no consumer
+# handles would otherwise be invisible.
+probe "CallableNamespace.all covers every constructor" "true" \
+'#eval CallableNamespace.all.length == 4
+  && (CallableNamespace.all.map CallableNamespace.canonical).eraseDups.length == 4'
+probe "a specialization differs from its generic" "false" \
+'#eval (CallableId.ofUser "m" "id" 1).render == ((CallableId.ofUser "m" "id" 1).specialize [.int]).render'
+probe "two specializations at different types differ" "false" \
+'#eval ((CallableId.ofUser "m" "id" 1).specialize [.int]).render
+     == ((CallableId.ofUser "m" "id" 1).specialize [.u8]).render'
+# `specialize` must not be able to disagree with its base about namespace or
+# defining module — that is why it is built FROM the base.
+probe "specialize preserves namespace and defining module" "true" \
+'#eval
+  let b := CallableId.ofBuiltin "f"
+  let s := b.specialize [.int]
+  s.ns == b.ns && s.defModule == b.defModule && s.declName == b.declName'
+
+# A table holding a user and a builtin of the same declName is coherent as long as
+# their OPERATIONAL keys differ — identity separates them even though the source
+# name does not.
+probe "a user and a builtin entry with one declName can coexist" "true" \
+"$mk"'def uId : CallableId := CallableId.ofUser "m" "len"
+def bId : CallableId := CallableId.ofBuiltin "len"
+def uE : Proof.PFnDef := { identity := .semantic uId, operationalKey := "len", displayName := "len", params := ["x"], body := .lit (.int 1) }
+def bE : Proof.PFnDef := { identity := .semantic bId, operationalKey := "builtin.len", displayName := "len", params := ["x"], body := .lit (.int 2) }
+#eval (tbl #[bE, uE]).isEvidenceBearing'
+# ...and source order is REFUSED rather than quietly repaired.
+probe "the same two entries in non-canonical order are refused" "false" \
+"$mk"'def uE3 : Proof.PFnDef := { identity := .semantic (CallableId.ofUser "m" "len"), operationalKey := "len", displayName := "len", params := ["x"], body := .lit (.int 1) }
+def bE3 : Proof.PFnDef := { identity := .semantic (CallableId.ofBuiltin "len"), operationalKey := "builtin.len", displayName := "len", params := ["x"], body := .lit (.int 2) }
+#eval (tbl #[uE3, bE3]).isEvidenceBearing'
+probe "and lookupById tells them apart" "true" \
+"$mk"'def uId2 : CallableId := CallableId.ofUser "m" "len"
+def bId2 : CallableId := CallableId.ofBuiltin "len"
+def uE2 : Proof.PFnDef := { identity := .semantic uId2, operationalKey := "len", displayName := "len", params := ["x"], body := .lit (.int 1) }
+def bE2 : Proof.PFnDef := { identity := .semantic bId2, operationalKey := "builtin.len", displayName := "len", params := ["x"], body := .lit (.int 2) }
+#eval
+  let t := tbl #[uE2, bE2]
+  (t.lookupById uId2).map (fun d => d.body) == some (Proof.PExpr.lit (.int 1))
+    && (t.lookupById bId2).map (fun d => d.body) == some (Proof.PExpr.lit (.int 2))'
+
+# THE GAP, ASSERTED AS A TRIPWIRE. While no compiler code mints a non-user
+# identity, the criterion above is open. This leg PASSES because the gap is
+# present, and FAILS when a producer appears — at which point a generated table
+# must exercise it and this note must be replaced by that coverage. Without a
+# tripwire, "representable" quietly reads as "covered".
+minters=$(grep -rn "ofBuiltin\|ofIntrinsic\|ofExtern\|CallableId.specialize" \
+  --include="*.lean" "$ROOT_DIR/Concrete" 2>/dev/null \
+  | grep -v "Resolve/CallableId.lean" | wc -l | tr -d ' ')
+if [ "$minters" = "0" ]; then
+  ok "TRIPWIRE: no compiler code mints a non-user identity yet — generated-table coverage is still owed (step 4)"
+else
+  no "a producer of non-user identities now exists ($minters sites): a GENERATED table must exercise it, and this tripwire must become real coverage"
+fi
+
+echo ""
 echo "=== sourceBodyDigestV1 is emitted, honest, and bound into the root ==="
 # The field was representable but NEVER EMITTED — a schema with no values behind
 # it. These legs assert it is populated, that it distinguishes bodies, that it is
