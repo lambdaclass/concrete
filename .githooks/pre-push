@@ -137,9 +137,6 @@ while IFS= read -r f; do
   esac
 done <<< "$changed"
 
-CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
-JOBS_N=$(( CORES > 8 ? 8 : CORES ))
-
 if [ -n "$jobs_to_run" ]; then
   # while-read, not `for j in $(...)`: CI job names contain SPACES, so word
   # splitting would turn "Proof evidence gate" into three bogus job names and
@@ -148,7 +145,7 @@ if [ -n "$jobs_to_run" ]; then
   while IFS= read -r j; do
     [ -z "$j" ] && continue
     echo "pre-push: all gates in CI job '$j'"
-    JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh --job "$j" || {
+    bash scripts/tests/run_ci_gates_local.sh --job "$j" || {
       echo "pre-push: GATES FAILED in CI job '$j' — fix, or bypass deliberately." >&2; exit 1; }
   done <<< "$(printf '%s' "$jobs_to_run" | sed 's/^|//; s/|$//; s/||/\n/g')"
 fi
@@ -156,7 +153,7 @@ fi
 if [ -n "$areas" ]; then
   for a in $areas; do
     echo "pre-push: gates matching '$a'"
-    JOBS="$JOBS_N" bash scripts/tests/run_ci_gates_local.sh "$a" || {
+    bash scripts/tests/run_ci_gates_local.sh "$a" || {
       echo "pre-push: GATES FAILED for area '$a' — fix, or bypass deliberately." >&2; exit 1; }
   done
 fi

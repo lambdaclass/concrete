@@ -46,10 +46,28 @@ fi
 SEED="${SEED:-$(date -u +%Y%m%d)}"
 
 # Gates are independent processes (each uses its own mktemp -d), so they
-# parallelize cleanly. Set JOBS>1 to run a bounded concurrent pool — on a
-# multicore box this cuts a full pass from ~20min to a few. Default stays
-# sequential (JOBS=1) for deterministic streaming output.
-JOBS="${JOBS:-1}"
+# parallelize cleanly, and PARALLEL IS THE DEFAULT: on a multicore box this cuts
+# a full pass from ~20min to a few, and CI itself fans out (ten jobs all declare
+# `needs: build`), so a sequential local pass is slower than the thing it is
+# meant to pre-empt.
+#
+# What makes a parallel default safe is the sequential RE-RUN of any failure
+# below: a contention flake self-corrects, so the verdict does not get noisier as
+# JOBS rises. What it costs is interleaved output ordering — failures still print,
+# but not in list order. `JOBS=1` restores sequential streaming when a run needs
+# to be read live.
+#
+# The cap lives HERE and nowhere else. The pre-push hook used to compute its own
+# `min(cores, 8)` and pass it in, which is the same fact stated in two places —
+# the defect class this tree keeps paying for. The hook now just calls the script.
+CORES="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 4 )"
+# Leave two cores for the OS and the editor; cap at 8 because the heavy gates
+# each spawn the compiler over many .con files and contention past that buys
+# little while making flakes (and their re-runs) more likely.
+JOBS_DEFAULT=$(( CORES - 2 ))
+[ "$JOBS_DEFAULT" -lt 1 ] && JOBS_DEFAULT=1
+[ "$JOBS_DEFAULT" -gt 8 ] && JOBS_DEFAULT=8
+JOBS="${JOBS:-$JOBS_DEFAULT}"
 export SEED
 
 # When --job is given, narrow the workflow text to that job's block first, so
