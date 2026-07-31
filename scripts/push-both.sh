@@ -77,7 +77,10 @@ while [ $# -gt 0 ]; do
 done
 
 echo "push-both: $PRIMARY (gated) then $MIRROR (fast-forward)"
-if ! git push "$PRIMARY" "HEAD:$BRANCH"; then
+# Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —
+# the primary verification, the CI wait, the parity check — is about $LOCAL, so
+# pushing HEAD means publishing something other than what was checked.
+if ! git push "$PRIMARY" "$LOCAL:$BRANCH"; then
   echo "push-both: PRIMARY push failed — mirror deliberately NOT touched." >&2
   exit 1
 fi
@@ -141,7 +144,21 @@ if [ -n "$mnow" ] && ! git merge-base --is-ancestor "$mnow" "$LOCAL" 2>/dev/null
   exit 1
 fi
 
-if ! CONCRETE_SKIP_GATES=1 git push "$MIRROR" "HEAD:$BRANCH"; then
+# $LOCAL, emphatically not HEAD. MEASURED FAILURE: this line pushed `HEAD` while
+# the CI wait above had been polling $LOCAL. A commit made in the same worktree
+# during the ~45min wait moved HEAD, so the mirror received a30a18f9 — a commit
+# the primary did not have and CI never validated — leaving the MIRROR AHEAD OF
+# THE PRIMARY, the exact anomaly this script was written to prevent. The parity
+# check below caught it, but only after publication.
+#
+# Re-verify first: if HEAD has moved, say so, because it means the caller kept
+# working and the SHA being mirrored is deliberately not their latest.
+head_now="$(git rev-parse HEAD)"
+if [ "$head_now" != "$LOCAL" ]; then
+  echo "push-both: NOTE HEAD has moved to ${head_now:0:8} since this run began." >&2
+  echo "push-both: mirroring ${LOCAL:0:8} — the commit the primary accepted and CI validated." >&2
+fi
+if ! CONCRETE_SKIP_GATES=1 git push "$MIRROR" "$LOCAL:$BRANCH"; then
   echo "push-both: mirror push failed; $PRIMARY is correct and ahead." >&2
   exit 1
 fi

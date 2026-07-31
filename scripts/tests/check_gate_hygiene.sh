@@ -208,6 +208,25 @@ else
 fi
 
 echo ""
+echo "=== publication names a recorded SHA, never a moving ref ==="
+# MEASURED: push-both mirrored `HEAD` while its CI wait had polled the SHA
+# recorded at start. A commit made during the ~45min wait moved HEAD, so the
+# mirror received a commit the primary did not have and CI never validated — the
+# mirror ended up AHEAD of the primary, the one thing that script exists to
+# prevent. Everything it checks is about the recorded SHA, so everything it
+# pushes must be too.
+if grep -nE 'git push .*"(HEAD)?:?\$BRANCH"' "$ROOT_DIR/scripts/push-both.sh" | grep -q 'HEAD:'; then
+  no "push-both pushes HEAD — a ref that can move between the CI check and the push"
+else
+  ok "push-both pushes only the recorded SHA, not HEAD"
+fi
+# Both pushes, primary and mirror, must name it.
+npush="$(grep -c 'git push .*"\$LOCAL:\$BRANCH"' "$ROOT_DIR/scripts/push-both.sh" || true)"
+[ "$npush" = "2" ] \
+  && ok "both the primary and mirror push name the recorded SHA" \
+  || no "expected 2 pushes naming \$LOCAL, found $npush"
+
+echo ""
 echo "=== the pre-push hook is installed in this clone ==="
 # Advisory, not a failure: core.hooksPath is per-clone local config and cannot be
 # versioned, so a gate cannot assert it for anyone else. It CAN tell the person
