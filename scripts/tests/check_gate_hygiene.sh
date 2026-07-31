@@ -221,6 +221,14 @@ else
   ok "push-both pushes only the recorded SHA, not HEAD"
 fi
 # Both pushes, primary and mirror, must name it.
+# The primary must be re-checked after the CI wait, not only before it: the wait is
+# ~45min and the primary is shared, so it can advance in that window.
+if grep -q 'pnow=' "$ROOT_DIR/scripts/push-both.sh" \
+   && grep -q 'has advanced to' "$ROOT_DIR/scripts/push-both.sh"; then
+  ok "the primary is re-verified after the CI wait, before mirroring"
+else
+  no "push-both mirrors without re-checking that the primary still holds the validated SHA"
+fi
 npush="$(grep -c 'git push .*"\$LOCAL:\$BRANCH"' "$ROOT_DIR/scripts/push-both.sh" || true)"
 [ "$npush" = "2" ] \
   && ok "both the primary and mirror push name the recorded SHA" \

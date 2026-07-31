@@ -158,6 +158,21 @@ if [ "$head_now" != "$LOCAL" ]; then
   echo "push-both: NOTE HEAD has moved to ${head_now:0:8} since this run began." >&2
   echo "push-both: mirroring ${LOCAL:0:8} — the commit the primary accepted and CI validated." >&2
 fi
+
+# RE-VERIFY THE PRIMARY. The CI wait is ~45 minutes, and the primary is shared:
+# another worktree or another agent can advance it in that window. If it has moved,
+# ${LOCAL:0:8} is no longer what the primary publishes, and mirroring it would put
+# the mirror behind the primary on a commit nobody is tracking — not harmful the way
+# being AHEAD is, but still not the invariant this script promises (the mirror
+# equals what the primary accepted). The newer tip needs its own gates and its own
+# CI, so hand the job to that publish rather than half-doing it here.
+pnow="$(git ls-remote "$PRIMARY" "refs/heads/$BRANCH" | cut -f1)"
+if [ "$pnow" != "$LOCAL" ]; then
+  echo "push-both: $PRIMARY/$BRANCH has advanced to ${pnow:0:8} during the CI wait." >&2
+  echo "push-both: ${LOCAL:0:8} is CI-green but no longer the primary's tip, so the mirror is" >&2
+  echo "push-both: NOT updated — publishing ${pnow:0:8} is that commit's own job." >&2
+  exit 1
+fi
 if ! CONCRETE_SKIP_GATES=1 git push "$MIRROR" "$LOCAL:$BRANCH"; then
   echo "push-both: mirror push failed; $PRIMARY is correct and ahead." >&2
   exit 1
