@@ -698,6 +698,22 @@ MUT_NEW+=("  let v := Concrete.shortHash (toString (Proof.pexprCanonical pexpr).
 MUT_DESC+=("Generator: body digest does not depend on the body")
 gate_for_last "scripts/tests/check_callable_identity.sh"
 
+# 48. Generator: identities are PERMUTED among entries (R-0004 step 4)
+# The ID-swap class. Deliberately a rotation rather than a duplication, because
+# every cheap check survives a permutation: the SET of identities is unchanged, so
+# "the expected identities are present" passes; both identities remain distinct, so
+# duplicate detection passes; and the Id definition and the lookup lemma name the
+# same symbol, so the generated file stays internally consistent and the kernel has
+# nothing to object to. Only CORRESPONDENCE catches it — the identity must sit on
+# the body that belongs to it — which is why the correspondence legs exist and why
+# this mutation is the thing that proves they are load-bearing.
+MUT_FILE+=("Concrete/Report/Report.lean")
+MUT_OLD+=("    let idLit := match e.callableId with")
+MUT_NEW+=("    let rotIdx := (((extracted.findIdx? (·.qualName == e.qualName)).getD 0) + 1) % extracted.length
+    let idLit := match (extracted[rotIdx]?).bind (·.callableId) with -- MUTATION: identities rotated among entries")
+MUT_DESC+=("Generator: identities permuted among entries (ID swap)")
+gate_for_last "scripts/tests/check_callable_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 
 # ============================================================
