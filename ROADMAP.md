@@ -849,16 +849,33 @@ notes become work only when their named workload or failing gate pulls them.
 
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
-reducer, plus a four-part proof-freshness class. The unbound-proof containment
-and the R-0005 trap inventory have landed, closing the last reproduced
-silent-wrong-code defect in that set; generation of the inventory continues as
-R-0446. ProofCore callable identity R-0442 follows immediately because the
-final R-0004 subject digest, dependency facts, and replay receipts must bind an
-unambiguous application model. R-0004 then resumes and completes the
-evidence-integrity migration. The no-shadowing migration in R-0435 follows
-those correctness foundations. This ordering is deliberate: silent wrong code
-precedes a language-design migration, and proof automation remains behind both
-honest semantics and the external-user trial.
+reducer, plus a four-part proof-freshness class. The unbound-proof containment,
+R-0005 trap inventory, and R-0442 callable-identity foundation have landed.
+R-0004 is now the frontier: every later proof multiplier depends on its subject
+digests, typed dependency roots, and replay receipts meaning what they claim.
+
+The immediate sequence is normative:
+
+1. R-0004 completes evidence integrity.
+2. R-0450 may land the common obligation IR immediately afterward only if its
+   existing implementation is merge-ready and does not mint authoritative
+   evidence; otherwise it yields rather than blocking the defect queue.
+3. R-0006, R-0007, R-0008, and R-0434 close the remaining structural
+   destruction, semantic-symbol/import identity, and aggregate-layout
+   verification defects.
+4. R-0009, R-0010, and R-0439 make reduction, bug-corpus truth, and unlanded
+   work mechanically honest.
+5. R-0435 performs the ratified no-shadowing language migration only after the
+   correctness queue above.
+6. R-0440 supplies the evidence dimensions required by R-0448; R-0448 then
+   graduates multi-kernel evidence only after R-0004 and R-0450 satisfy its
+   merge bar.
+7. The existing sequence resumes with R-0437, R-0447, and the remaining
+   workload-pulled tasks.
+
+This preserves one narrow exception for already-active semantic-unification
+work without letting proof-product expansion repeatedly displace known defects.
+Proof automation remains behind honest semantics and the external-user trial.
 
 ### Task R-0004
 
@@ -880,6 +897,20 @@ Treat the following as one evidence-integrity defect class:
   the number becomes stable only when its document and executable control land.
 
 Land this task in seven explicit slices:
+
+| slice | outcome | status |
+| --- | --- | --- |
+| 1 | executable witnesses | LANDED |
+| 2 | missing-fingerprint containment | LANDED |
+| 3 | dependency containment | LANDED |
+| 4 | replay/table foundation and receipt-envelope plumbing | ACTIVE |
+| 5 | complete semantic `ProofSubjectDigest` | PENDING |
+| 6 | deterministic SCC/Merkle dependency root | PENDING |
+| 7 | receipt issuance, honest corpus migration, and coverage baseline | PENDING |
+
+This table is the only top-level progress numbering for R-0004. Slice 4 has a
+normative internal build order because its representation migration must be
+incremental; that internal order does not duplicate slices 5-7.
 
 1. **Executable witnesses first.** This slice has landed:
    `scripts/tests/check_proof_freshness.sh` drives copies of the real
@@ -1012,129 +1043,145 @@ Land this task in seven explicit slices:
       inside the root; and `lookupById` resolves by identity, never by name or
       position — a same-named entry in another module is not found.
 
-      **Calls still select by STRING.** `PExpr.call "f"` picks an entry by name,
-      so an ID-bearing table does not by itself remove keyed identity — the
-      string key is a second, parallel identity. Until calls carry a
-      `CallableId`, `FnTable.keyIndex` exposes the mapping as what it is (legacy
-      operational lookup), `keyIndexUnique` rejects a table where one key reaches
-      two entries, and the index is bound INTO the root so a receipt commits to
-      the mapping it was produced under. Renaming a `displayName` therefore
-      moves the root.
+      **Calls still select by an operational STRING key.** `PExpr.call "f"`
+      does not make that key semantic identity. The evidence-bearing entry
+      therefore separates three facts: `callableId` is semantic identity,
+      `operationalKey` is the key used by evaluation, and `displayName` is
+      diagnostic rendering only. A generated Lean declaration symbol is an
+      emitter detail and is none of those three. `FnTable.keyIndex` binds the
+      exact `operationalKey -> CallableId` mapping INTO the root. Ambiguous or
+      unresolved operational keys make `isEvidenceBearing = false`; omitting a
+      generated assertion or dispatch arm is not fail-closed if the typed table
+      can still return a root.
 
       The root is LENGTH-PREFIXED and tagged, not delimiter-joined: `a;b` and
       `a` + `;b` are different entry lists that a plain join renders identically,
       which would let two distinct tables share a root.
 
-      Still to do here: the per-entry `[simp]` lookup lemmas that preserve proof
+      Step 4 supplies the per-entry scoped lookup lemmas that preserve proof
       behaviour. Every proof currently does
       `simp [XFns_globals, XFnsGlobals, …]`, relying on a projection lemma plus
       the equation lemmas of a pattern-matching function. Under `Array` those
       equations do not exist, so the lemmas must be GENERATED with the table
-      (step 4), not hand-written. The bar is the same KERNEL THEOREM RESULTS,
-      not identical proof terms or delta-unfolding behaviour.
-   4. **Generate tables from the compiler** — LANDED for IDs, canonical entries,
-      the integrity guarantee and the lookup lemmas. Both generators emit them
-      (`--report lean-stubs` and `prove --emit-lean`); updating only one is the
-      drift `check_proof_patterns` now catches, having caught exactly that.
+      and tagged `@[proofTable]`, not hand-written or registered globally with
+      `@[simp]`. The bar is the same KERNEL THEOREM RESULTS, not identical proof
+      terms or delta-unfolding behaviour.
+   4. **Generate tables from compiler facts** — LANDED at `d2dd1eb3`, with the
+      unsupported-specialization boundary below. Resolved `CallableId`s are
+      carried through `ProofCoreEntry` and `ExtractionEntry`; neither generator
+      splits `qualName` or reconstructs identity from rendered text. Both current
+      emission surfaces (`--report lean-stubs` and `prove --emit-lean`)
+      participate in one generated surface inventory, so a third cannot appear
+      without joining the matrix.
 
-      A generated table carries `identity := .semantic <name>Id` per entry with
-      the module/declaration split taken from the qualified name, canonical
-      `entries : Array PFnDef`, and — the part that makes it self-checking —
-      `example : fns.isEvidenceBearing := by decide`, so a generator bug fails the
-      BUILD rather than producing a table nobody validates. Per-entry `@[simp]`
-      lookup lemmas ship with the table, since an `Array` has no equation lemmas
-      and `simp [XFnsGlobals]` would otherwise have nothing to rewrite with.
+      The target evidence-bearing entry is explicit:
 
-      Making that `decide` actually reduce required three fixes, each a place
-      where the kernel could not evaluate what it was asked to trust:
-      `tyCanonical` was `partial` (opaque to the kernel) and is now fuel-based;
-      `allIdentified` used `Array.all` (via `foldlM`, which does not reduce) and
-      now goes through `toList`; and the key-uniqueness check no longer sorts,
-      because `Array.qsort` is well-founded and gets stuck — uniqueness is
-      order-independent, so only the ROOT needs canonical order. The lookup
-      lemmas use `rfl`, not `decide`: `IdentifiedPFnDef` contains a `PExpr`, which
-      deliberately has no `DecidableEq`.
+      ```text
+      callableId          semantic identity from resolved/checked/mono facts
+      operationalKey      exact key used by PExpr.call and evaluation
+      displayName         diagnostics only; excluded from semantic identity
+      params              canonical parameter names/order used by ProofCore
+      body                canonical PExpr over the complete constructor set
+      sourceBodyDigestV1  body_only; receipt_eligible = false
+      ```
 
-      **Not yet met, and named rather than implied.** Step 4's acceptance
-      criteria include several this slice does NOT satisfy:
+      `sourceBodyDigestV1` is a migration-comparison fact, not the final subject
+      digest. Its schema and `body_only` scope are inside the table root, and no
+      code path may promote it into a receipt. Specializations receive
+      `CallableId.typeArgs` from Mono facts; type erasure or reconstruction from
+      a display name is an integrity failure.
 
-      - ~~provenance from a report entry~~ FIXED: `ProofCoreEntry.callableId` is
-        minted where the resolved module path and the checked declaration name are
-        FACTS, and carried through `ExtractionEntry` to the generator, which now
-        reads it. The generator no longer splits `qualName` — that had re-derived
-        identity from a rendering, one layer away from the facts. Sorting uses the
-        same carried `render`, so emission order and asserted order come from one
-        function. Specializations still need `typeArgs` populated from Mono;
-      - ~~no source-subject digest per entry~~ FIXED: both generators emit
-        `sourceBodyDigestV1` per entry, computed as
-        `shortHash (pexprCanonical body)` — the truncated SHA-256 the in-source
-        `#[proof_fingerprint]` already uses, over a length-prefixed tagged
-        encoding, so the digest inherits that injectivity. Deliberately NOT the
-        legacy `bodyFingerprint`: that hashes Core statements and is the
-        proof-freshness fingerprint bugs 058-060 are filed against, so reusing its
-        VALUE would put one string in two roles; a gate leg asserts the two never
-        coincide. `scope = body_only` and `receipt_eligible = false` are kept, and
-        both are inside the root, so a body-only digest cannot collide with a
-        future complete digest of the same body. It catches a generated table
-        whose body literal drifted from what the compiler extracts (hand-edited or
-        stale file), and drift moves the root. It does NOT catch a consistent
-        generator bug — a wrong body plus a digest over that same wrong body
-        agrees with itself — which is why it is a step-5 comparison key and not
-        evidence;
-      - generated artifacts still go to stdout/caller-chosen paths, not
-        `.build/proofs/`;
-      - ~~globally-polluting simp lemmas~~ FIXED: generated lemmas are tagged
-        `@[proofTable]`, a scoped set declared in `Concrete/Proof/SimpAttr.lean`
-        (its own module because `register_simp_attr` needs `import Lean` and must
-        be imported by its users). Proofs opt in with `simp [proofTable]`. Gated
-        both ways: the scoped tag must be present AND no generated lemma may
-        carry `@[simp]`;
-      - lemma names are `<entry>` -based and not collision-proof;
-      - "exactly one lemma per entry" and "identical inputs produce
-        byte-identical modules and roots" are not asserted;
-      - builtins/intrinsics/externs/specializations are representable, and the
-        TYPE is now gated against conflating them (all four namespaces render
-        distinctly for one `declName`; a builtin `len` and a user `len` are
-        different identities; `specialize` cannot disagree with its base about
-        namespace or defining module; a user and a builtin entry sharing a
-        `declName` coexist when their operational keys differ, and are refused in
-        non-canonical order). But NO GENERATED TABLE exercises them, and none can
-        yet: nothing in the compiler mints `ofBuiltin`/`ofIntrinsic`/`ofExtern`/
-        `specialize`, because extraction covers user functions only and callees
-        are still selected by string. Entries for non-user callables arrive with
-        callee identity, which is step 6/7. A TRIPWIRE leg asserts the absence of
-        any producer, so it fails the moment one appears and this coverage stops
-        being owed silently;
-      - mutations now cover deleting an entry (46), duplicating an ID (38) or a
-        key (41), emitting an incorrect lemma (45), unbinding bodies from the root
-        (43), accepting an incomplete identity (44) and a body digest that does
-        not depend on the body (47). Still missing: SWAPPING an ID between two
-        entries, which duplicate-detection does not catch because both identities
-        remain present and distinct;
-      - ~~generator coverage tests today's TWO emission surfaces by name~~
-        FIXED: the number of `renderCallableId` references is pinned, so a third
-        emission surface fails the gate until its author extends the coverage to
-        it. Both surfaces are additionally driven over the committed same-name and
-        many-instantiations fixtures, with determinism, path-independence and
-        one-lemma-per-entry asserted, and positive controls so the "exactly one
-        error" legs cannot pass vacuously.
+      **Current implementation state.** `ProofCoreEntry.callableId` is minted
+      where resolved module path and checked declaration name are facts, carried
+      through `ExtractionEntry`, and consumed directly by both generators.
+      Neither generator splits `qualName`. Sorting and asserted ordering consume
+      that same carried identity.
 
-      And a limit worth stating plainly: `example : fns.isEvidenceBearing := by
-      decide` proves INTERNAL CONSISTENCY, not source correspondence. A generator
-      that emits a wrong ID, a wrong body and a matching lemma consistently still
-      passes. Provenance needs the source-subject digest plus an independent
-      comparison against compiler facts.
+      Both generators also emit `sourceBodyDigestV1 := shortHash
+      (pexprCanonical body)`, using a length-prefixed tagged encoding rather
+      than the incomplete legacy `bodyFingerprint`. Its `body_only` scope and
+      `receipt_eligible = false` marker are inside the root. It detects a stale
+      or hand-edited generated body but deliberately proves no more: a
+      consistently wrong generator can emit the wrong body and a matching
+      digest. This is a step-5 comparison key, never authoritative evidence.
+
+      Generated lookup lemmas use the scoped `@[proofTable]` set, not global
+      `@[simp]`. Determinism, path independence, one lemma per entry, the two
+      current emission surfaces, same-name modules, many instantiations, and
+      namespace distinctions have executable coverage. User functions are the
+      only generated callable class today; builtin/intrinsic/extern entries and
+      positive specialization identities remain blocked until later extraction
+      and Mono facts supply them. A tripwire makes that unsupported boundary
+      explicit. Mutations cover deletion (46), duplicate identity/key (38/41),
+      an incorrect lemma (45), a root unbound from bodies (43), incomplete
+      identity (44), a body digest independent of its body (47), and permuting
+      distinct identities among entries (48). Independent identity/body
+      correspondence legs catch the same permutation without relying on the
+      table's internally consistent root. Generated artifacts still use
+      stdout/caller-selected paths rather than R-0447's `.build/proofs/` home,
+      and lemma names still need a collision-proof scheme.
+
+      **Exit contract.** A generated table is evidence-bearing only when all of
+      these hold:
+
+      - entries are strictly ordered by rendered semantic identity, with
+        duplicate IDs and duplicate/ambiguous operational keys rejected;
+      - the root length-prefixes and version-tags every field, includes each
+        canonical body, and binds the exact operational-key dispatch mapping;
+      - canonical encoders are total, structural, exhaustive over constructors,
+        and independent of `Repr`, pretty-printing, filesystem paths, comments,
+        source spans, and Lean formatting;
+      - builtins, intrinsics, externs, user functions, and monomorphized
+        specializations retain distinct namespaces;
+      - every entry has exactly one collision-proof, scoped `@[proofTable]`
+        lookup lemma proving its exact key/ID/index relationship, while no
+        generated lemma joins global `simp`;
+      - identical compiler facts produce byte-identical modules and roots from
+        different working directories and output paths;
+      - deleting an entry, swapping an ID or body, duplicating an ID/key,
+        corrupting dispatch, or emitting an incorrect lemma is killed by a
+        well-typed mutation or committed adversarial fixture; and
+      - generated artifacts follow R-0447's `.build/proofs/` ownership rule
+        rather than becoming canonical source beside the program.
+
+      `example : fns.isEvidenceBearing := by decide` proves INTERNAL
+      CONSISTENCY only. It cannot prove source correspondence: a generator could
+      emit a wrong ID, body, and matching lemma consistently. An independent
+      comparison against resolved, checked, monomorphized compiler facts is
+      therefore part of this step's exit gate.
+
+      The `d2dd1eb3` slice landed the generator portion with semantic versus
+      operational identity separated, bodies and dispatch bound into roots,
+      explicit `PBinOp` canonicalization, `sourceBodyDigestV1`, scoped lookup
+      lemmas, same-name module fixtures, deterministic/path-independent output,
+      and mutation coverage. It refuses type-erased generic entries rather than
+      emitting a false identity; positive specialized entries remain blocked
+      until Mono supplies `typeArgs`. R-0447 owns moving generated output under
+      `.build/proofs/`. Step 5 remains unstarted.
    5. **Migrate the nine**, one at a time, with dual comparison: same theorem
       results, same evaluation behaviour, stable generated root, kernel replay,
       and no new hand-written entries.
-   6. **Enable typed classification** (§1.1-1.2).
+   6. **Enable typed classification** (§1.1-1.2). Classify the ELABORATED
+      theorem type, never source text: an `FnTable` represented by a bound
+      theorem variable is a `contract` dependency (the theorem holds for any
+      table), while a named table constant or an inline expression whose type
+      returns `FnTable` is a `body` dependency. A 2026-07-31 metaprogram spike
+      measured 271 corpus theorems that mention `FnTable`: 113 contract, 158
+      body, and zero mixed. The basic discriminator is therefore small and
+      unambiguous on the live corpus. Preserve the hostile control: checking
+      only constants *of* type `FnTable` misses inline constructors/combinators
+      and fails open. Four table-producing constants and eight current
+      FnTable-metatheory lemmas exercise that latent boundary; any unresolved or
+      mixed future program claim is `missing`, not guessed.
    7. **Enforce never-under-approximate** — static access binds the exact
       reachable entries; dynamic access binds the entire canonical root; if
       exact coverage cannot be established the answer is `missing`, never a
       guessed subset.
-   8. **Complete the `ProofSubjectDigest`** last: signatures, generics,
-      capabilities, contracts, theorem/spec identity, dependency roots,
-      workspace closure, toolchain/schema versions.
+   8. **Define receipt-envelope plumbing only.** Establish the versioned data
+      structure, deterministic workspace/import/toolchain identities, and replay
+      serialization without issuing authoritative receipts. Slice 5 owns the
+      semantic `ProofSubjectDigest`; slice 6 owns the dependency root; slice 7
+      is the first point allowed to combine them into a receipt.
 
    Contract edges are unaffected throughout, since they never name a table.
 
@@ -1235,9 +1282,49 @@ proving no old body-only or advisory-`staleDeps` path can emit
 std fingerprints in their already-landed commit; do not mix that repair with
 these new evidence gates.
 
+**R-0004 completion gate.** This task closes only when all of the following are
+true together:
+
+- bugs 058, 059, 060, and 062 are closed by positive, mutation-sensitive gates;
+- no hand-written evidence-bearing `FnTable` remains, and every declared and
+  missing operational key agrees between generated evaluation and kernel replay;
+- semantic edits to identity, signature, types, generics, capabilities, body,
+  contracts, selected specification, or claim scope move the subject digest,
+  while comments, formatting, source paths, spans, and capture-avoiding alpha
+  renaming do not;
+- direct, transitive, and recursive dependencies produce the correct typed
+  edges and deterministic SCC/Merkle root, with dynamic access binding the
+  whole canonical table rather than a guessed subset;
+- every friendly `proved_by_lean` claim has a current complete subject, a
+  current dependency root, and a successful replay receipt with theorem,
+  toolchain, schema, and workspace/import-closure identity;
+- legacy body fingerprints and old receipt schemas become `needs_recheck` and
+  cannot upgrade themselves by copying a newly computed hash;
+- repository proofs are replayed into receipts or remain honestly classified as
+  missing, unbound, stale, dependency-not-current, failed, or trusted;
+- root/project-directory invocation and clean-machine replay agree, generated
+  artifacts are deterministic, and every weakening mutation above is killed;
+  and
+- the first eligibility-denominated proof-coverage baseline is published with
+  stable discharge-route and blocker classifications.
+
+**Proof-feature dependency fence.** Until this completion gate holds, no task
+may graduate a new automatically discharged, multi-kernel, certificate-backed,
+or otherwise friendly `proved` claim as authoritative. Spikes may run and
+representation/lowering infrastructure may land, but their evidence remains
+experimental and non-authoritative. R-0450 may land its versioned common IR
+without issuing receipts; R-0440 consumes the receipt dimensions; R-0448 is
+blocked by R-0004, R-0450, and the required R-0440 fields; and R-0169/R-0170 may
+not promote automated verdicts into authoritative claims before this gate.
+
 ### Task R-0450
 
 **Objective:** Unify obligation lowering into one prover-neutral IR with per-backend drivers (Why3 shape) — implementation already in progress off-repo; land it in a worktree and merge once green per the operating rules. Today `toLeanProp` (Lean path) and `exprToSmt` (solver path) are two hard-coded, monolithic lowerings of the same obligation expressions: two answers to one question, free to drift — and drift here means the Lean proof and the SMT check silently prove DIFFERENT obligations, an evidence-integrity defect in the system R-0004 is hardening. Define one typed obligation IR (linear integer arithmetic, bitvectors, bools, arrays: the deliberate intersection fragment; everything else `not_supported`), one semantics (a single `eval` in Lean, the IntArith single-source discipline), lowering as small named transforms, and per-backend drivers that select which transforms run.
+
+This task's pulled-forward position is conditional: it may land representation,
+semantics, and differential gates after R-0004 only when the existing branch is
+merge-ready. It does not issue receipts or upgrade any verdict to authoritative
+evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
    Slice 1 unifies the two existing backends only — no new provers; the diff
    should be net-negative in lowering code. Gates: constructor coverage
@@ -1249,90 +1336,174 @@ these new evidence gates.
    lowerings. Version-stamp the IR in every emitted artifact so R-0004
    receipts record what produced them.
 
-### Task R-0448
+### Task R-0006
 
-**Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). Positioned immediately after R-0450 because the owner is executing it now to test the idea; the spike branch is the experiment vehicle, this task is its graduation bar.
+**Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
 
-   Merge bar (the graduation note's verified list): badge-teeth negative
-   case (a weakly-bounded `a * b` closes with no kernel and stays
-   `unproven`), kernel-absent honesty (no `coqc` → no attestation), class
-   distinctness, no laundering past `trusted`, and a mutation proving the
-   badge disappears when a kernel leaves the agreement set. The
-   emitter-agreement differential runs generated obligations across kernels
-   and reports DISAGREEMENT as signal (a lowering defect or a
-   decision-procedure discrepancy), never noise. Credibility gate: one
-   flagship row (`hmac_sha256` or `vc_suite`) showing
-   `proved_by_two_kernels`, replayable by an outsider with either kernel.
-   Provers stay optional tooling (`nix develop .#provers`); the linear
-   fragment boundary stays a gate, with scope growth only through R-0450's
-   named transforms. Dependencies: R-0450 (the IR), R-0004 (receipts),
-   R-0440 (the independence field ships inline here as its first consumer
-   if the full model has not landed). On merge, TRUSTED_COMPUTING_BASE.md
-   records both trust directions: agreement reduces kernel-soundness
-   trust; bridge trust is untouched until realization (R-0449).
+### Task R-0007
 
-### Task R-0440
+**Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
 
-**Objective:** Make evidence multidimensional instead of a ladder, and record
-compiler trust per claim.
+   The TYPE-name half of "first fail closed" already landed with R-0001 (E0809:
+   a specialization whose mangled name is declared, or two instantiations
+   mangling to one name, are refused; gated in
+   `scripts/tests/check_mono_name_collision.sh`). It had to, because
+   per-instantiation enum mono made forged ENUM specialization names reachable
+   for the first time. What remains here is the rest: the FUNCTION-symbol half
+   (fn specializations use a different mangler and are not covered), the
+   injective unforgeable encoding that would let a program spelling
+   `Box_Int` compile instead of being refused, semantic identity separate from
+   link/display symbols, and by-identity layout lookup with diagnosing
+   missing-field access.
 
-**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
-remain as a policy preference among claims with the same subject and semantic
-scope, but it is not a universal ordering of unlike evidence.
+   This task also turns PRINCIPLES #12 into an adversarial metamorphic gate.
+   A strict, capture-avoiding alpha rename of source binders must preserve
+   acceptance, observable behavior, and semantic artifacts modulo honest
+   display names and source spans. A second hostile-spelling leg deliberately
+   pressures generated mangles, builtin/intrinsic names, import aliases, and
+   local/global collisions. That leg may preserve behavior or fail closed with
+   a phase-appropriate collision diagnostic; it may never silently change
+   behavior or trigger an internal error. Random fresh-name substitution is
+   insufficient because bugs 044/050/051/054 were collision-sensitive.
+   Lowering-only sentinels such as `@fnref.*` are exercised by IR mutation
+   fixtures, not treated as legal source identifiers. Land the semantic
+   contract and fixed historical/adversarial legs here; R-0272 later scales
+   the same oracle across generated and corpus programs rather than defining a
+   second identity-testing semantics.
 
-`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
-not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
-*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
-`reported` is an observation, not evidence at all; `runtime_checked` is a
-disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
-on one axis produces false comparisons: a native differential-oracle test covers
-the backend and runtime, while a ProofCore theorem reasons more strongly over a
-narrower semantic layer. Neither is "below" the other — they are incomparable
-evidence about different scopes, and the current model cannot say so.
+### Task R-0008
 
-Represent a claim as orthogonal fields — subject binding, claim kind, semantic
-scope, evidence method, status, assumptions, producer, validated_by,
-trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
-friendly composites like `proved_by_lean`. The scope axis is the one genuinely
-missing today, and it is the axis where the compiler already has the facts.
+**Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
 
-Trust is three fields, not one, because "who emitted the artifact", "who checked
-it", and "what must be trusted for the claim to hold" are different questions.
-The compiler may *produce* a Lean proof term that the kernel independently
-replays: the producer need not be trusted for proof-term validity, while the
-compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
-those into one `producer_trust` would lose exactly the distinction that makes
-independent checking worth building.
+### Task R-0434
 
-What must stop being elided is that "compiler-enforced" reads as trust-free and
-is not: until checker soundness and artifact production are independently
-verified, enforcement depends on this compiler being correct. Being implemented in
-Lean does not remove that dependency; mutation testing and duplicate boundary
-checks are strong engineering evidence, not a soundness proof.
-`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
-compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
-the change is that the dependency appears per claim.
+**Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
 
-Migration scope is larger than the two evidence documents. Residual total-ladder
-language elsewhere in this file recreates the ordering this task rejects —
-`tested_by_property` described as "always below proof and below solver evidence",
-and a cross-checked solver result as "stronger than" another method. A
-policy-specific partial order is fine, but it may only compare claims of
-equivalent scope and subject; rewrite those sites as part of this task rather than
-leaving a third vocabulary.
+   The gate for R-0001 asserts this structurally for its own programs (distinct
+   declarations, differing footprints) and mutation #19 proves those programs are
+   discriminating, but a NEW way of desynchronizing a declaration from a write —
+   another aggregate kind, a second backend, a future layout change — would not be
+   caught by fixtures that predate it.
 
-Gate: a fixture set covering one claim per (scope × method) cell that exists
-today, a negative fixture proving two incomparable claims cannot be ordered by
-the renderer, a fixture proving a claim without the producer/validator/trusted-
-dependency accounting required by its method is rejected, and a red-team case
-proving no rendering path can present a weaker-scope claim under a stronger
-composite name. Reconcile both documents against the implemented model rather
-than leaving a third vocabulary.
+   Add a post-Lower/SSA check that walks payload GEP + store chains rooted at an
+   alloca of known type and rejects any write whose offset plus size exceeds the
+   declared footprint, keying on layout identity rather than on type NAME. Report
+   it as a compiler-internal containment failure (the E0808 class) so a codegen
+   bug fails closed instead of corrupting memory. Gate it with programs that are
+   correct today, plus mutations that shrink a declaration or inflate an offset,
+   and require each mutation to be caught by the verifier rather than only by a
+   value mismatch. This is the criterion-7 remainder recorded in
+   `docs/bugs/051_generic_enums_not_monomorphized.md`; it hardens a closed defect
+   rather than fixing an open one, so it follows the confirmed defect queue.
 
-ProofCore callable identity is pulled forward as R-0442 in the global sequence.
-Every Phase 11 dependency/completeness task consumes that direct-call versus
-callable-value distinction; none may recover callable identity from a source
-spelling or reintroduce the old ambiguous `PExpr.call` representation.
+### Task R-0009
+
+**Objective:** Fix bug 049 — vacuous `reduce --predicate crash` Remove the predicate from help/CLI immediately unless the same slice evaluates candidates in an isolated subprocess with bounded time/memory/output and preserves the original crash boundary/class. Parse success is never a crash predicate.
+
+    The reducer must verify the final candidate still satisfies the predicate,
+    report stage/error-class drift, and say explicitly when a multi-module
+    input has no supported reductions. Gate a healthy program (must not reduce
+    as crash), signal/tool/compiler/runtime crash classes, timeout, changed
+    failure class, empty candidate, and reducer self-failure.
+
+### Task R-0010
+
+**Objective:** Make the bug-corpus truth gate honest Replace the current skip-based audit summary with an explicit per-bug state:
+
+
+```text
+fixed_with_regression
+open_with_reproducer
+documented_no_fixture
+missing
+```
+
+Only `fixed_with_regression` contributes to “regression coverage.” An open bug
+requires a checked-in minimal reproducer plus exact expected bad observation,
+watchdog/resource limits where needed, owner/priority/containment, and replay
+command; it remains red or explicitly quarantined and can never be summarized
+as covered/fixed. Mutation-sensitive class gates replace individual reproducers
+when the fix lands. The reverse inventory fails on undocumented `bug_*.con`
+files and on numbered bug docs absent from the state table.
+
+**Untracked audit corpus prerequisite.** Before the reverse inventory becomes
+enforcing, classify every file under `.audit_me/`: promote a minimal reproducer
+with its control, expected observation, and case manifest into
+`tests/bugs/<id>/`, or delete it deliberately after recording why it is
+superseded. Existing `tests/wrong-code`/fixture paths may migrate when touched,
+but no second bug registry is created. The directory currently contains the
+bug-050–055 audit probes, four mini-projects, and generated binaries/LLVM files;
+leaving them untracked makes `git clean` a data-loss event and makes the future
+reverse inventory fail for reasons no owner has adjudicated. Generated
+artifacts are never promoted as source fixtures, and new `.audit_me/` files are
+forbidden once this gate lands.
+
+**Publication discipline.** A milestone is not “pushed everywhere” until the
+same intended tip and bug/roadmap artifacts are present on every declared
+remote and required CI conclusions are recorded. Remote parity is process
+state, not a compiler bug; report it separately and do not let a green origin
+implicitly describe a lagging mirror.
+
+The publication state machine is fixed: run the required local gates; push the
+primary; wait for the named remote-CI conclusions; verify the primary ref still
+equals the intended tip; then fast-forward the mirror and verify both refs.
+The mirror may never lead the primary, and local hook success is not a synonym
+for hosted CI success. A divergence requiring anything other than a
+fast-forward stops publication for an explicit reconciliation; the helper may
+not hide it with a force push.
+
+### Task R-0439
+
+**Objective:** Gate work that is finished but not landed — the local counterpart
+of publication discipline.
+
+The Definition of Done covers *done*. Nothing represents "evidence exists, not
+merged", and that state has now cost real work twice. R-0001's root fix sat as
+uncommitted working-tree state in a locked worktree for a day while three
+documents on `main` described the pre-fix language. `worktree-h18-drop-glue`
+still holds three commits — a bug reproducer, a `MonoVerify` residual verifier,
+and classified fuzzer legs — that no merged branch contains, on a branch named
+after unrelated work.
+
+Do not merge that branch wholesale: R-0001's enum-monomorphization
+implementation already landed independently. Review and promote unique hunks by
+owner: `MonoVerify` type/layout invariants to R-0434;
+callable/application-identity material to R-0442; classified generator cases to
+R-0272/R-0095; and an independently reproduced user-Option defect to a newly
+numbered bug record. Discard superseded R-0001 implementation hunks only after
+that inventory is recorded. This selective review is the required disposition
+for the named worktree, not permission to mix implementation into a
+documentation slice.
+
+This is not a request for task/branch status tags in this file: those are
+forbidden, and for good reason. A task-internal slice table such as R-0004's may
+record landed versus pending acceptance boundaries while that one migration is
+active, but it cannot represent unmerged work as landed. R-0439 is a gate —
+scoped in three levels, because a pre-push hook
+that fails whenever *any* local branch has unmerged commits would fire on
+ordinary feature work, depend on unrelated local state, and behave differently
+from CI. An opt-out registry under that design becomes mandatory bookkeeping.
+
+1. **Pre-push, narrow:** only the branch being published. Dirty tracked state,
+   commits that belong to the milestone but are not in the push, and the required
+   gate evidence for what is being published. This level must remain routinely
+   usable: target under five minutes. If measurement shows the full CI gate set
+   exceeds that budget or regularly hits the hook timeout, run
+   `make test-fast-surface-gates` plus path-matched load-bearing gates locally
+   and leave the exhaustive `make test-ci-gates` run mandatory in CI. Do not
+   preserve a predictably bypassed hook merely because it is stricter on paper.
+2. **Repository audit, explicit command:** report worktrees and branches with no
+   upstream and no recorded parked status past an age threshold. This is where
+   `worktree-h18-drop-glue` should surface — reported, not blocking.
+3. **Milestone gate:** every slice a milestone claims is merged or explicitly
+   retired. This is the level that would have caught R-0001's root fix sitting
+   uncommitted while three documents described the pre-fix language.
+
+Gate: fixtures for a dirty publishing branch (must fail at level 1), an unrelated
+unmerged feature branch (must NOT fail level 1, must appear at level 2), an aged
+branch with no upstream, a parked branch with its recorded status, a clean tree,
+and a milestone with an unmerged owned slice; plus a mutation removing the
+dirty-state leg. Cheap to run — level 1 must not need a compiler build.
 
 ### Task R-0435
 
@@ -1399,163 +1570,90 @@ Land the cross-cutting migration in a worktree and merge once green.
    pass over the ~25 sites DECISIONS cites should confirm before the
    migration lands.
 
-### Task R-0006
+### Task R-0440
 
-**Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
+**Objective:** Make evidence multidimensional instead of a ladder, and record
+compiler trust per claim.
 
-### Task R-0007
+**Decision status:** ratified 2026-07-25; implementation pending. A ladder may
+remain as a policy preference among claims with the same subject and semantic
+scope, but it is not a universal ordering of unlike evidence.
 
-**Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
+`docs/EVIDENCE_CLASSES.md` and `docs/CLAIM_TAXONOMY.md` mix categories that are
+not comparable. `proved`, `tested`, `enforced`, and `trusted` are evidence
+*methods*; `stale`, `partial`, `missing`, and `counterexample` are *statuses*;
+`reported` is an observation, not evidence at all; `runtime_checked` is a
+disposition; and source / Core / SSA / native / target are *scopes*. Ranking them
+on one axis produces false comparisons: a native differential-oracle test covers
+the backend and runtime, while a ProofCore theorem reasons more strongly over a
+narrower semantic layer. Neither is "below" the other — they are incomparable
+evidence about different scopes, and the current model cannot say so.
 
-   The TYPE-name half of "first fail closed" already landed with R-0001 (E0809:
-   a specialization whose mangled name is declared, or two instantiations
-   mangling to one name, are refused; gated in
-   `scripts/tests/check_mono_name_collision.sh`). It had to, because
-   per-instantiation enum mono made forged ENUM specialization names reachable
-   for the first time. What remains here is the rest: the FUNCTION-symbol half
-   (fn specializations use a different mangler and are not covered), the
-   injective unforgeable encoding that would let a program spelling
-   `Box_Int` compile instead of being refused, semantic identity separate from
-   link/display symbols, and by-identity layout lookup with diagnosing
-   missing-field access.
+Represent a claim as orthogonal fields — subject binding, claim kind, semantic
+scope, evidence method, status, assumptions, producer, validated_by,
+trusted_dependencies, freshness, replay receipt — and let the CLI keep rendering
+friendly composites like `proved_by_lean`. The scope axis is the one genuinely
+missing today, and it is the axis where the compiler already has the facts.
 
-   This task also turns PRINCIPLES #12 into an adversarial metamorphic gate.
-   A strict, capture-avoiding alpha rename of source binders must preserve
-   acceptance, observable behavior, and semantic artifacts modulo honest
-   display names and source spans. A second hostile-spelling leg deliberately
-   pressures generated mangles, builtin/intrinsic names, import aliases, and
-   local/global collisions. That leg may preserve behavior or fail closed with
-   a phase-appropriate collision diagnostic; it may never silently change
-   behavior or trigger an internal error. Random fresh-name substitution is
-   insufficient because bugs 044/050/051/054 were collision-sensitive.
-   Lowering-only sentinels such as `@fnref.*` are exercised by IR mutation
-   fixtures, not treated as legal source identifiers. Land the semantic
-   contract and fixed historical/adversarial legs here; R-0272 later scales
-   the same oracle across generated and corpus programs rather than defining a
-   second identity-testing semantics.
+Trust is three fields, not one, because "who emitted the artifact", "who checked
+it", and "what must be trusted for the claim to hold" are different questions.
+The compiler may *produce* a Lean proof term that the kernel independently
+replays: the producer need not be trusted for proof-term validity, while the
+compiler is still trusted for the source-to-ProofCore correspondence. Collapsing
+those into one `producer_trust` would lose exactly the distinction that makes
+independent checking worth building.
 
-### Task R-0008
+What must stop being elided is that "compiler-enforced" reads as trust-free and
+is not: until checker soundness and artifact production are independently
+verified, enforcement depends on this compiler being correct. Being implemented in
+Lean does not remove that dependency; mutation testing and duplicate boundary
+checks are strong engineering evidence, not a soundness proof.
+`docs/ARCHITECTURE.md` already admits `ValidatedCore` does not remove the
+compiler from the TCB and `docs/TRUSTED_COMPUTING_BASE.md` holds the accounting —
+the change is that the dependency appears per claim.
 
-**Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
+Migration scope is larger than the two evidence documents. Residual total-ladder
+language elsewhere in this file recreates the ordering this task rejects —
+`tested_by_property` described as "always below proof and below solver evidence",
+and a cross-checked solver result as "stronger than" another method. A
+policy-specific partial order is fine, but it may only compare claims of
+equivalent scope and subject; rewrite those sites as part of this task rather than
+leaving a third vocabulary.
 
-### Task R-0009
+Gate: a fixture set covering one claim per (scope × method) cell that exists
+today, a negative fixture proving two incomparable claims cannot be ordered by
+the renderer, a fixture proving a claim without the producer/validator/trusted-
+dependency accounting required by its method is rejected, and a red-team case
+proving no rendering path can present a weaker-scope claim under a stronger
+composite name. Reconcile both documents against the implemented model rather
+than leaving a third vocabulary.
 
-**Objective:** Fix bug 049 — vacuous `reduce --predicate crash` Remove the predicate from help/CLI immediately unless the same slice evaluates candidates in an isolated subprocess with bounded time/memory/output and preserves the original crash boundary/class. Parse success is never a crash predicate.
+ProofCore callable identity is pulled forward as R-0442 in the global sequence.
+Every Phase 11 dependency/completeness task consumes that direct-call versus
+callable-value distinction; none may recover callable identity from a source
+spelling or reintroduce the old ambiguous `PExpr.call` representation.
 
-    The reducer must verify the final candidate still satisfies the predicate,
-    report stage/error-class drift, and say explicitly when a multi-module
-    input has no supported reductions. Gate a healthy program (must not reduce
-    as crash), signal/tool/compiler/runtime crash classes, timeout, changed
-    failure class, empty candidate, and reducer self-failure.
+### Task R-0448
 
-### Task R-0010
+**Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). The spike branch may continue as an experiment, but supported-feature graduation follows R-0004, R-0450, R-0440, and the pulled-forward correctness queue; active ownership is not permission to displace known semantic defects.
 
-**Objective:** Make the bug-corpus truth gate honest Replace the current skip-based audit summary with an explicit per-bug state:
-
-
-```text
-fixed_with_regression
-open_with_reproducer
-documented_no_fixture
-missing
-```
-
-Only `fixed_with_regression` contributes to “regression coverage.” An open bug
-requires a checked-in minimal reproducer plus exact expected bad observation,
-watchdog/resource limits where needed, owner/priority/containment, and replay
-command; it remains red or explicitly quarantined and can never be summarized
-as covered/fixed. Mutation-sensitive class gates replace individual reproducers
-when the fix lands. The reverse inventory fails on undocumented `bug_*.con`
-files and on numbered bug docs absent from the state table.
-
-**Untracked audit corpus prerequisite.** Before the reverse inventory becomes
-enforcing, classify every file under `.audit_me/`: promote a minimal reproducer
-with its control, expected observation, and case manifest into
-`tests/bugs/<id>/`, or delete it deliberately after recording why it is
-superseded. Existing `tests/wrong-code`/fixture paths may migrate when touched,
-but no second bug registry is created. The directory currently contains the
-bug-050–055 audit probes, four mini-projects, and generated binaries/LLVM files;
-leaving them untracked makes `git clean` a data-loss event and makes the future
-reverse inventory fail for reasons no owner has adjudicated. Generated
-artifacts are never promoted as source fixtures, and new `.audit_me/` files are
-forbidden once this gate lands.
-
-**Publication discipline.** A milestone is not “pushed everywhere” until the
-same intended tip and bug/roadmap artifacts are present on every declared
-remote and required CI conclusions are recorded. Remote parity is process
-state, not a compiler bug; report it separately and do not let a green origin
-implicitly describe a lagging mirror.
-
-### Task R-0439
-
-**Objective:** Gate work that is finished but not landed — the local counterpart
-of publication discipline.
-
-The Definition of Done covers *done*. Nothing represents "evidence exists, not
-merged", and that state has now cost real work twice. R-0001's root fix sat as
-uncommitted working-tree state in a locked worktree for a day while three
-documents on `main` described the pre-fix language. `worktree-h18-drop-glue`
-still holds three commits — a bug reproducer, a `MonoVerify` residual verifier,
-and classified fuzzer legs — that no merged branch contains, on a branch named
-after unrelated work.
-
-Do not merge that branch wholesale: R-0001's enum-monomorphization
-implementation already landed independently. Review and promote unique hunks by
-owner: `MonoVerify` type/layout invariants to R-0434;
-callable/application-identity material to R-0442; classified generator cases to
-R-0272/R-0095; and an independently reproduced user-Option defect to a newly
-numbered bug record. Discard superseded R-0001 implementation hunks only after
-that inventory is recorded. This selective review is the required disposition
-for the named worktree, not permission to mix implementation into a
-documentation slice.
-
-This is not a request for status tags in this file: those are forbidden, and for
-good reason. It is a gate — but scoped in three levels, because a pre-push hook
-that fails whenever *any* local branch has unmerged commits would fire on
-ordinary feature work, depend on unrelated local state, and behave differently
-from CI. An opt-out registry under that design becomes mandatory bookkeeping.
-
-1. **Pre-push, narrow:** only the branch being published. Dirty tracked state,
-   commits that belong to the milestone but are not in the push, and the required
-   gate evidence for what is being published. This level must remain routinely
-   usable: target under five minutes. If measurement shows the full CI gate set
-   exceeds that budget or regularly hits the hook timeout, run
-   `make test-fast-surface-gates` plus path-matched load-bearing gates locally
-   and leave the exhaustive `make test-ci-gates` run mandatory in CI. Do not
-   preserve a predictably bypassed hook merely because it is stricter on paper.
-2. **Repository audit, explicit command:** report worktrees and branches with no
-   upstream and no recorded parked status past an age threshold. This is where
-   `worktree-h18-drop-glue` should surface — reported, not blocking.
-3. **Milestone gate:** every slice a milestone claims is merged or explicitly
-   retired. This is the level that would have caught R-0001's root fix sitting
-   uncommitted while three documents described the pre-fix language.
-
-Gate: fixtures for a dirty publishing branch (must fail at level 1), an unrelated
-unmerged feature branch (must NOT fail level 1, must appear at level 2), an aged
-branch with no upstream, a parked branch with its recorded status, a clean tree,
-and a milestone with an unmerged owned slice; plus a mutation removing the
-dirty-state leg. Cheap to run — level 1 must not need a compiler build.
-
-### Task R-0434
-
-**Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
-
-   The gate for R-0001 asserts this structurally for its own programs (distinct
-   declarations, differing footprints) and mutation #19 proves those programs are
-   discriminating, but a NEW way of desynchronizing a declaration from a write —
-   another aggregate kind, a second backend, a future layout change — would not be
-   caught by fixtures that predate it.
-
-   Add a post-Lower/SSA check that walks payload GEP + store chains rooted at an
-   alloca of known type and rejects any write whose offset plus size exceeds the
-   declared footprint, keying on layout identity rather than on type NAME. Report
-   it as a compiler-internal containment failure (the E0808 class) so a codegen
-   bug fails closed instead of corrupting memory. Gate it with programs that are
-   correct today, plus mutations that shrink a declaration or inflate an offset,
-   and require each mutation to be caught by the verifier rather than only by a
-   value mismatch. This is the criterion-7 remainder recorded in
-   `docs/bugs/051_generic_enums_not_monomorphized.md`; it hardens a closed defect
-   rather than fixing an open one, so it follows the confirmed defect queue.
+   Merge bar (the graduation note's verified list): badge-teeth negative
+   case (a weakly-bounded `a * b` closes with no kernel and stays
+   `unproven`), kernel-absent honesty (no `coqc` → no attestation), class
+   distinctness, no laundering past `trusted`, and a mutation proving the
+   badge disappears when a kernel leaves the agreement set. The
+   emitter-agreement differential runs generated obligations across kernels
+   and reports DISAGREEMENT as signal (a lowering defect or a
+   decision-procedure discrepancy), never noise. Credibility gate: one
+   flagship row (`hmac_sha256` or `vc_suite`) showing
+   `proved_by_two_kernels`, replayable by an outsider with either kernel.
+   Provers stay optional tooling (`nix develop .#provers`); the linear
+   fragment boundary stays a gate, with scope growth only through R-0450's
+   named transforms. Dependencies: R-0450 (the IR), R-0004 (receipts),
+   R-0440 (the independence field ships inline here as its first consumer
+   if the full model has not landed). On merge, TRUSTED_COMPUTING_BASE.md
+   records both trust directions: agreement reduces kernel-soundness
+   trust; bridge trust is untouched until realization (R-0449).
 
 ### Task R-0437
 
@@ -1835,6 +1933,19 @@ affected job explicitly. A broad `Concrete/*` or filename-substring catch-all
 may be a temporary enumerated fallback, but may not silently override exact
 ownership or count as complete coverage.
 
+The same records own the COMMAND, not only membership. Local execution and
+hosted CI consume a generated command registry with a stable gate ID, argv,
+working-directory policy, timeout/resource policy, and liveness assertion.
+Do not recover commands by scraping workflow YAML with a shell regular
+expression: the local runner once truncated the trust gate at `2>&1`, produced
+an invalid `--trust-gate 2>` command, and counted that permanent parser failure
+as a red tree while never executing the named gate. Generation validates every
+command syntactically before a run, but syntax alone is containment—a
+syntactically valid truncation must also fail the per-gate start/end or expected
+assertion-count liveness check. Gate the redirection, pipeline, multiline,
+environment, and timeout command shapes, and require exact local/hosted command
+identity except for declared platform adapters.
+
 This is forced by four measured misses in the hand-written router:
 `check_operational_vc_auto_discharge.sh` was invisible to Proof changes,
 `example_manifest.txt` was omitted for new examples, the release-bundle proof
@@ -1882,6 +1993,16 @@ Ignoring a leaked artifact is not a passing fix. Session/worktree metadata
 lives outside the repository; minimized reproducers are either temporary
 `.build/reductions/` outputs or promoted manifest-backed bug cases.
 
+Source-mutating mutation tests run in disposable worktrees under
+`.build/tests/`, never in the developer's active source tree. Until every
+mutation suite migrates, the compatibility harness takes a per-worktree
+exclusive lock, refuses staged or unstaged dirty target files, stores backups
+under a unique directory without flattening path names, restores on normal
+exit/INT/TERM, compares every target hash before releasing the lock, and fails
+on any stray mutation marker or inexact restoration. Shell traps are only
+containment: a foreground build may defer them, so they do not satisfy the
+steady-state isolation requirement.
+
 Every legacy-area migration is one reviewable ownership transaction: add and
 validate its source manifests, run old and generated selection in comparison,
 move the owned files, update imports/links/gates, remove the old registry or
@@ -1919,8 +2040,9 @@ Land these slices in order:
    generated registry. Fixture prefixes such as `adversarial_`, `regress_`,
    and `error_` are migration evidence for area ownership, not a request for a
    one-shot directory rename. Generate pre-push path-to-job routing from the
-   same ownership records and prove local/hosted job parity; do not create a
-   second routing manifest.
+   same ownership records, generate the local/hosted command registry rather
+   than scraping workflow text, and prove selection, command, and liveness
+   parity; do not create a second routing manifest.
 4. **Canonical corpus homes.** User-facing programs are classified as
    tutorial, showcase, workload, evidence example, or known-hole example.
    Compiler regressions and bug witnesses live under a checked test-corpus
@@ -1943,7 +2065,9 @@ Land these slices in order:
    replay bundles, reductions, and test outputs go under the canonical
    project-local artifact root. `.audit_me/` is emptied through R-0010's
    promote-or-delete decision; worktree/session state is ignored or stored
-   outside the repository.
+   outside the repository. Move every source-mutating mutation harness into a
+   disposable worktree; the locked backup/restore harness is only an interim
+   migration aid.
 
 The migration is ratcheted, not big-bang: publish counts for unclassified
 files, flat test scripts, wrong-layer imports, regression-shaped examples,
@@ -1979,9 +2103,12 @@ research notes merely because they are at repository root.
   end;
 - pre-push routing is generated from the ownership records, every path and gate
   is owned, central consumers fan out explicitly, and local/hosted job
-  membership agrees;
+  membership, command identity, and liveness agree without workflow-text
+  scraping;
 - generated output has one enforced artifact root and a clean build leaves
   source directories unchanged;
+- source-mutating mutation suites execute in disposable worktrees and cannot
+  modify the developer's active source tree;
 - site reference content cannot drift from its canonical document;
 - the generated Lean import graph rejects every new wrong-direction edge;
 - examples, regressions, example proofs, reusable proof infrastructure,
@@ -2655,6 +2782,12 @@ those references must resolve through the shared ownership map. R-0438
 generates semantic and claim coverage, while R-0447 classifies where the
 supporting artifacts belong—the two schemas join by stable IDs and neither
 copies the other's facts.
+
+An `owning_gate` in a claim record is one of R-0447's stable gate IDs, not a
+workflow filename or extracted shell fragment. Claim validation consumes the
+registered verdict and liveness record for that ID. This keeps the claims gate
+from blessing an assertion because a permanently failing command extractor was
+mistaken for a compiler/test failure.
 
 Gate: the generated matrix fails on a newly added constructor with no declared
 story, in each of the AST, Core, resolve, and project inventories; the claim gate
