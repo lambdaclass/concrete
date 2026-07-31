@@ -60,6 +60,12 @@ MUT_BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/concrete-mutation.XXXXXX")"
 # verified against these, so "restored" means byte-identical rather than "the
 # restore command ran".
 declare -A MUT_HASH0=()
+# Hash of the MUTATED content this harness wrote, per file. The difference
+# between this and what is on disk at restore time is a THIRD PARTY's edit.
+declare -A MUT_HASH_APPLIED=()
+# Set when a restore was REFUSED because another writer owned the file. The run
+# must then fail: a refused restore leaves the tree in a state nobody chose.
+MUT_CONCURRENT=0
 hash_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 
 cleanup_lock() {
@@ -80,11 +86,31 @@ cleanup_lock() {
     # no guessing, no flattening to invert.
     while IFS= read -r bak; do
       local rel="${bak#$MUT_BACKUP_DIR/}"
+      # Skip rescued copies of a third party's work — they are evidence, not backups.
+      case "$rel" in CONCURRENT-EDIT/*) continue ;; esac
       if [ -f "$ROOT_DIR/$rel" ]; then
+        # Same non-clobber rule as restore_mutation: on INT/TERM we must not
+        # "restore" over an edit that was never ours.
+        local now applied
+        now="$(hash_of "$ROOT_DIR/$rel")"
+        applied="${MUT_HASH_APPLIED[$rel]:-}"
+        if [ -n "$applied" ] && [ "$now" != "$applied" ] && [ "$now" != "${MUT_HASH0[$rel]:-}" ]; then
+          mkdir -p "$(dirname "$MUT_BACKUP_DIR/CONCURRENT-EDIT/$rel")"
+          cp "$ROOT_DIR/$rel" "$MUT_BACKUP_DIR/CONCURRENT-EDIT/$rel"
+          echo "  REFUSED to restore $rel — changed by another writer; theirs kept" >&2
+          bad=1
+          continue
+        fi
         cp "$bak" "$ROOT_DIR/$rel"
         echo "  restored $rel from backup" >&2
       fi
     done < <(find "$MUT_BACKUP_DIR" -type f 2>/dev/null)
+  fi
+  if [ "$MUT_CONCURRENT" != 0 ]; then
+    echo "" >&2
+    echo "FATAL: a restore was refused because another writer held a target file." >&2
+    echo "       The tree is in a state neither party chose — reconcile by hand." >&2
+    bad=1
   fi
   local stray
   stray="$(grep -rn -- "-- MUTATION" "$ROOT_DIR"/Concrete "$ROOT_DIR"/std 2>/dev/null || true)"
@@ -105,7 +131,18 @@ cleanup_lock() {
       bad=1
     fi
   done
-  rm -rf "$MUT_BACKUP_DIR" 2>/dev/null || true
+  # KEEP the backup dir when a concurrent edit was refused. It holds both the
+  # rescued foreign version and our original, which is exactly what reconciling
+  # needs — and the refusal message names that path. A first version of this fix
+  # printed the path and then deleted it two lines later.
+  if [ "$MUT_CONCURRENT" != 0 ]; then
+    echo "" >&2
+    echo "  PRESERVED for reconciliation: $MUT_BACKUP_DIR" >&2
+    echo "    CONCURRENT-EDIT/<path>  the other writer's version" >&2
+    echo "    <path>                  the original this harness backed up" >&2
+  else
+    rm -rf "$MUT_BACKUP_DIR" 2>/dev/null || true
+  fi
   rmdir "$LOCK_DIR" 2>/dev/null || true
   if [ "$bad" = 1 ]; then
     echo "" >&2
@@ -776,6 +813,13 @@ content = content.replace(old, new, 1)
 with open(path, 'w') as f:
     f.write(content)
 " "$file" "$old" "$new"
+  local rc=$?
+  # Record the EXACT content this harness wrote. Restoration compares against it,
+  # so "the file changed" can be told apart from "we changed the file". Without
+  # this, a concurrent editor's save is indistinguishable from our own mutation
+  # and gets silently overwritten by the restore below.
+  [ "$rc" -eq 0 ] && MUT_HASH_APPLIED["$file"]="$(hash_of "$file")"
+  return $rc
 }
 
 restore_mutation() {
@@ -783,6 +827,28 @@ restore_mutation() {
   local file="${MUT_FILE[$idx]}"
   local bak="$MUT_BACKUP_DIR/$file"
   if [ -f "$bak" ]; then
+    # DO NOT clobber someone else's work. If the file on disk is neither what we
+    # wrote nor the original, a concurrent writer edited it while the mutation was
+    # applied, and copying the backup over it DESTROYS that edit — then the
+    # postcondition check compares against the PRE-mutation hash and reports
+    # "restored exactly", confirming the loss. That happened: an edit to
+    # ProofCore.lean vanished mid-session and the file dropped out of git status.
+    local now; now="$(hash_of "$file")"
+    local applied="${MUT_HASH_APPLIED[$file]:-}"
+    if [ -n "$applied" ] && [ "$now" != "$applied" ] && [ "$now" != "${MUT_HASH0[$file]:-}" ]; then
+      local rescue="$MUT_BACKUP_DIR/CONCURRENT-EDIT/$file"
+      mkdir -p "$(dirname "$rescue")"; cp "$file" "$rescue"
+      echo "" >&2
+      echo "  FATAL: $file changed while a mutation was applied." >&2
+      echo "         On-disk content is neither our mutation nor the original, so" >&2
+      echo "         another writer edited it. Refusing to overwrite." >&2
+      echo "         Their version: $rescue" >&2
+      echo "         Our backup   : $bak" >&2
+      echo "         Reconcile by hand. This harness needs exclusive use of the" >&2
+      echo "         worktree; use a separate one (scripts/worktree-new.sh)." >&2
+      MUT_CONCURRENT=1
+      return 1
+    fi
     cp "$bak" "$file"
     rm -f "$bak"
   else

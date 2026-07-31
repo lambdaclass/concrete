@@ -26,6 +26,31 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# EXCLUSIVE, repo-wide. Two publishes at once is not hypothetical: on 2026-07-31
+# two agents sharing a worktree both ran this script and both sat in the CI-wait
+# loop for the same SHA. That instance was harmless (same commit, fast-forward,
+# idempotent), but the general case is not — two runs can push different tips and
+# then race to mirror, and the mirror would end up at whichever finished last
+# rather than at what the primary accepted.
+#
+# The lock lives in the COMMON git dir, not the worktree, because remotes are
+# shared across worktrees: two different worktrees publishing at once is exactly
+# the case a per-worktree lock would miss.
+COMMON_GIT_DIR="$(git rev-parse --git-common-dir 2>/dev/null || echo .git)"
+PUSH_LOCK="$COMMON_GIT_DIR/concrete-push-both.lock"
+if ! mkdir "$PUSH_LOCK" 2>/dev/null; then
+  echo "error: another push-both holds $PUSH_LOCK" >&2
+  echo "       remotes are shared across worktrees, so two publishes can race to" >&2
+  echo "       mirror different tips. Wait for it, or if no run is active:" >&2
+  echo "         rmdir $PUSH_LOCK" >&2
+  if [ -f "$PUSH_LOCK/owner" ]; then
+    echo "       holder: $(cat "$PUSH_LOCK/owner" 2>/dev/null)" >&2
+  fi
+  exit 2
+fi
+printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || true
+trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
+
 PRIMARY="${PRIMARY:-origin}"
 MIRROR="${MIRROR:-lambdaclass}"
 BRANCH="${BRANCH:-main}"

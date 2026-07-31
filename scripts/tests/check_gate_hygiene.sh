@@ -169,6 +169,45 @@ for f in "$ROOT_DIR"/scripts/tests/*.sh; do
 done
 [ "$selfref" -eq 0 ] && ok "no 'local' statement depends on its own earlier assignment"
 echo ""
+echo "=== concurrency guards are at the point of danger (docs/CONCURRENT_WORK.md) ==="
+# Two agents shared one worktree on 2026-07-31 and the mutation harness restored a
+# backup OVER a concurrent edit, then verified against the pre-edit hash and
+# reported success — work destroyed, with the tool saying nothing was wrong. These
+# legs keep the guards that close that from being quietly removed.
+
+# 1. The harness must compare against what IT wrote, not only against the
+#    original. Without the applied-hash it cannot tell its own mutation from a
+#    third party's edit, which is precisely how the overwrite went unnoticed.
+if grep -q "MUT_HASH_APPLIED" "$ROOT_DIR/scripts/tests/test_mutation.sh"; then
+  ok "the mutation harness records the content it wrote"
+else
+  no "the mutation harness no longer records its own applied content — it cannot detect a foreign edit"
+fi
+
+# 2. It must REFUSE, not warn. A warning still leaves the file overwritten.
+if grep -q "REFUSED to restore" "$ROOT_DIR/scripts/tests/test_mutation.sh" \
+   && grep -q "CONCURRENT-EDIT" "$ROOT_DIR/scripts/tests/test_mutation.sh"; then
+  ok "a foreign edit is refused and preserved, not overwritten"
+else
+  no "the mutation harness does not refuse/preserve a foreign edit"
+fi
+
+# 3. The push lock must live in the COMMON git dir. A per-worktree lock would let
+#    two worktrees publish at once, and remotes are shared.
+if grep -q "git-common-dir" "$ROOT_DIR/scripts/push-both.sh"; then
+  ok "the publish lock is repo-wide (common git dir), not per-worktree"
+else
+  no "push-both's lock is not in the common git dir — two worktrees could publish at once"
+fi
+
+# 4. The one-command default must exist and be executable, or the rule is advice.
+if [ -x "$ROOT_DIR/scripts/worktree-new.sh" ]; then
+  ok "scripts/worktree-new.sh exists and is executable"
+else
+  no "scripts/worktree-new.sh is missing or not executable — isolation is not the cheap default"
+fi
+
+echo ""
 echo "=== the pre-push hook is installed in this clone ==="
 # Advisory, not a failure: core.hooksPath is per-clone local config and cannot be
 # versioned, so a gate cannot assert it for anyone else. It CAN tell the person
