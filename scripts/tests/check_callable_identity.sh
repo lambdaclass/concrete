@@ -593,6 +593,55 @@ else
 fi
 
 echo ""
+echo "=== each identity sits on the body that belongs to it ==="
+# WHY THIS EXISTS. Every other identity leg checks that the EXPECTED identities are
+# PRESENT. A swap — entry A carrying B's identity and B carrying A's — leaves the
+# set of identities unchanged, so all of those legs pass. Duplicate detection also
+# passes: both identities are still there and still distinct. And the generated
+# file stays internally consistent, because the Id definition and the lookup lemma
+# both name the same symbol, so the kernel has nothing to object to.
+#
+# So the only thing that can catch a permuted identity is CORRESPONDENCE: the
+# identity must sit on the body that actually belongs to it. The three same-named
+# functions differ only in their body (+10 / +20 / +12), which makes them a precise
+# instrument for this — the identities are otherwise interchangeable.
+#
+# This is a first, fixture-scoped instance of the source-correspondence check that
+# step 4 owes in general; `isEvidenceBearing := by decide` cannot supply it, since
+# a consistently wrong generator satisfies it.
+declare -a MODS=(Alpha Beta Gamma)
+declare -a LITS=(10 20 12)
+corr_ok=1
+for i in 0 1 2; do
+  m="${MODS[$i]}"; lit="${LITS[$i]}"
+  # the entry must reference ITS OWN Id and ITS OWN Expr
+  if ! grep -q "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" \
+     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | grep -q "identity := .semantic ${m}_computeId" \
+     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | grep -q "body := ${m}_computeExpr"; then
+    no "$m's entry does not bind $m's own identity and body (a swap would look like this)"
+    corr_ok=0; continue
+  fi
+  # that Id must name that module
+  if ! grep -A1 "def ${m}_computeId : CallableId :=" "$TMP/samename.lean" | grep -q "defModule := \"$m\""; then
+    no "${m}_computeId does not name module $m"
+    corr_ok=0; continue
+  fi
+  # and that Expr must be the body the SOURCE gives module m
+  if ! grep -A3 "def ${m}_computeExpr : PExpr :=" "$TMP/samename.lean" | grep -q "(.lit (.int $lit))"; then
+    no "${m}_computeExpr is not the body source module $m has (+$lit)"
+    corr_ok=0; continue
+  fi
+  ok "$m: identity, body and source literal (+$lit) all correspond"
+done
+# The instrument only works while the three bodies actually differ. If the fixture
+# were edited so two agreed, a swap between them would become undetectable here and
+# this section would silently stop testing anything.
+n_lits=$(grep -oE '\(\.lit \(\.int (10|20|12)\)\)' "$TMP/samename.lean" | sort -u | wc -l | tr -d ' ')
+[ "$n_lits" = "3" ] \
+  && ok "the three fixture bodies are still distinct, so a swap remains detectable" \
+  || no "the fixture's bodies are no longer three distinct literals — this section cannot detect a swap"
+
+echo ""
 echo "=== namespaces and specializations: the TYPE distinguishes them ==="
 # HONEST SCOPE OF THIS SECTION. The step-4 criterion asks that a GENERATED table
 # exercise builtins, intrinsics, externs and specializations. It cannot yet, and
