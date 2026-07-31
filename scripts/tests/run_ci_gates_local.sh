@@ -70,10 +70,36 @@ if [ -n "$JOB" ]; then
 fi
 
 # Extract the gate command list once (same filter as before).
+# Strip any trailing REDIRECTION from the extracted command. The character
+# class stops at `&`, so a workflow line ending `... --trust-gate 2>&1 | tee
+# /tmp/trust-gate.log` was captured as `... --trust-gate 2>` — a redirect with no
+# target. `eval` then died of a parse error and the gate was counted FAIL, every
+# run, on a clean tree. So the trust gate was never actually EXECUTED locally
+# while appearing in the failure list: the loudest possible way to be silent.
+# Output is discarded by the runner anyway, so redirections are noise here.
 mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$SRC" \
          | grep -v 'check_gate_mutation_coverage\.sh' \
+         | sed 's/[[:space:]][0-9]*[<>].*$//' \
          | sed 's/[[:space:]]*$//' \
          | sort -u)
+
+# Every extracted command must be SYNTACTICALLY VALID before anything is run. A
+# truncated command otherwise reports as a failing gate, which reads as "the tree
+# is red" rather than "the extractor is broken" — and those demand opposite
+# responses. Checked up front so the whole list is trustworthy before a ~20min
+# pass, not discovered gate by gate.
+bad=0
+for cmd in "${CMDS[@]}"; do
+  if ! bash -n -c "$cmd" 2>/dev/null; then
+    echo "error: extracted gate command is not valid shell: $cmd" >&2
+    bad=1
+  fi
+done
+if [ "$bad" -ne 0 ]; then
+  echo "error: gate extraction produced unrunnable commands — fix the extractor," >&2
+  echo "       not the gates. A truncated command cannot be told from a red gate." >&2
+  exit 2
+fi
 
 PASS=0; FAIL=0; FAILED=""
 
