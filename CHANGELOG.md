@@ -136,6 +136,21 @@ This corrects the *checker*, not the evidence semantics: it makes `with(...)` me
 claimed for required authority. The separation R-0484 is about — required versus carried versus
 performed authority — is untouched, and no proof or receipt depended on the gap.
 
+### Sound Zero-Copy Views (R-0483)
+
+_Safe-library repair, landed 2026-09-16._
+
+`ByteCursor` is pointer-free and takes the buffer on every access; `ByteView`'s length brand is
+removed and its coordinate contract stated; `Text` owns immutable storage; raw access moved to
+`RawCursor` behind `with(Unsafe)`. `examples/packet` migrated — its parsing core is genuinely
+effect-free and its predictable profile is unchanged at 1 failed / 13 passed.
+
+The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired,
+42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0
+stale and 0 closure-unjustified, so no authoritative evidence transition was introduced and R-0208
+is untouched. Gated by `check_view_lifetime.sh` 13/0 in both the fast suite and CI; stdlib 313/0,
+suite 1713/0. Owner-bound parsed results remain future work.
+
 ### Postfix `?` Removed; Explicit Result Propagation Is Permanent
 
 _Language surface and trust-story reconciliation, landed 2026-09-13 at `4fcc6a79`, `303f7223`,

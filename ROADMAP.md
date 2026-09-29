@@ -1391,7 +1391,7 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0483 REPAIRED AND GATED; R-0484 reporting/eligibility defect measured** | **R-0483 done 2026-09-16:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated — its parsing core is now genuinely `(pure)` and its predictable profile is unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified, so no authoritative evidence transition was introduced and R-0208 is untouched. Gated by `check_view_lifetime.sh` 13/0 in both the fast suite and CI; stdlib 313/0, suite 1713/0. Owner-bound parsed results remain future work. **R-0484 reports repaired; admission repair LIVE 2026-09-26:** `--report caps`/`effects` no longer claim purity they cannot establish. The admission rule refuses a function whose effects may enter through an indirect call, transitively, and names the reason. It had been inert for a release because enabling it moved three `pureCoreFns` links out of drift coverage (11 → 8) and out of `replayTargetsOf` — which turned out to be a COUPLING, not a cost of the rule: obligation status was derived from the admission predicate through a parameter merely *named* `eligible`. Status now derives from *extractable* with admission carried beside it, so the four questions (extractable / admissible / replayable / proved) stay apart and an admission failure cannot erase an artifact from maintenance. Drift coverage is 11 with the rule on; `check_purecore_proofs.sh` 38/0; `check_effect_opacity.sh` 18/0 plus two mutations. Report wording fixed to `obligation: extractable` / `admission: REFUSED — <reason>`, which previously read "is eligible for proof" directly above the refusal. **Still open:** the conservative repair makes `print_bytes` *opaque*, not *reporting that it performs output* — the `requires`/`carries`/`performs` split, whose `carries` leg is blocked on `Writer<E>` being inexpressible (`capParams` exists on functions, not `StructDef`) |
+| 0 | **R-0484: `with(...)` is the complete statement of what a function can do (design decided 2026-09-29)** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rule:** handles carry their capability in their type (`Writer<C>`, `Reader<C>`); using a handle requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else. **Slices, in order:** (1) design doc stating the rule, the enforcement mechanism for effectful externs, and the revision of R-0487; (2) `trusted` honesty: `console_write`/`console_err_write` declare `Console`, and effectful `trusted extern` declarations in `std/src/libc.con` (`write`, `read`, `fopen`, `socket`, `send`, `recv`, `getenv`, `exit`, …) stop being capability-free; (3) capability parameters on `StructDef` and capability arguments on struct types through parse, resolve, check, monomorphization and reports; (4) migrate `Writer`/`Reader` and their 14 consumers (6 in `std/src/fmt.con`, 8 in examples), inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) correct the four pages that still say an empty capability set means pure. | `print_bytes` declares `with(C)` and reports `Console` at its call site; a function with an empty `with(...)` cannot reach an effect through a handle, a `trusted` body or a dependency; a gate carries a positive control (a `Writer<{}>` helper stays capability-free) and a negative one (a handle-using helper without `with(C)` is refused); stdlib and suite unchanged apart from the migrated headers |
 | 1 | **Post-R-0004 mutation qualification checkpoint** | **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
 | 2 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
 | 3 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
@@ -1430,7 +1430,7 @@ The remaining design work has existing owners:
 | area | owner | decision or completion required |
 |---|---|---|
 | Safe library abstractions | R-0483, with R-0485 for review clarity | Make views, cursors, text and resource APIs preserve the existing ownership rules; distinguish reusable coordinates from access tied to an encapsulated owner, and preserve validated content against mutation. This is primarily library/API work, not a presumption that a new lifetime system is needed. |
-| Authority and effects | R-0484 | Define what headers promise when resource handles also supply authority; make checking, effect reports, proof eligibility and policy use consistent facts. This is an unresolved semantic boundary. |
+| Authority and effects | R-0484 | **Decided 2026-09-29:** a header's `with(...)` is the complete list of what the function can do. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implementation is order 0 of the current queue. |
 | Compositional contract semantics | R-0473/R-0474/R-0477, Phase 9 and the existing VC bridge tasks | Complete typed contracts, binding/substitution, call composition, narrow mutation/frame semantics and checked totality. This is the largest remaining language-design area; R-0486 supplies the forcing workload. |
 
 **First bounded verification milestone — planned, not shipped:** one sequential
@@ -1459,8 +1459,8 @@ waive the current queue's evidence-integrity prerequisites or the broader releas
 
 ### Design-review priorities (ratified 2026-09-15)
 
-The next milestone is **sound, usable zero-copy parsing** (R-0483), with authority
-semantics clarified by R-0484. R-0485 improves review clarity within the existing
+R-0483 (sound, usable zero-copy parsing) is repaired and gated; the next milestone is
+R-0484's authority semantics, decided 2026-09-29 and now order 0 of the current queue. R-0485 improves review clarity within the existing
 error model. R-0486 carries the same workload into the typed-contract and external-user
 rows above; it is not an additional public flagship or a parallel execution queue.
 The ByteCursor defect and Text/ByteView lifetime, identity and content-validity
@@ -10692,8 +10692,67 @@ heap proofs or emitted-binary correctness.
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
 
-**Status (2026-09-26): reports REPAIRED; admission repair LIVE. Remaining work is the
-`requires`/`carries`/`performs` model, not the admission rule.**
+**Status (2026-09-29): DESIGN DECIDED; this is order 0 of the current queue.** Reports
+were repaired and the admission repair went live 2026-09-26; both remain as the conservative
+backstop. The remaining work implements the decision below.
+
+**THE DECISION (2026-09-29): `with(...)` is the complete statement of what a function can
+do.** The goal it serves: reading a function's header tells you everything it can do to the
+outside world, in one place, however it came by the authority. Three rules:
+
+1. **Handles carry their capability in their type.** `Writer<C>` and `Reader<C>`, with `C`
+   a capability parameter (the existing `cap C` mechanism, extended from functions to
+   structs). `console_writer() with(Console) -> Writer<Console>`; an in-memory writer is
+   `Writer<{}>`.
+2. **Using a handle requires its capability.** `Writer<C>::write` requires `with(C)`, so a
+   helper reads `fn print_bytes<cap C>(w: &Writer<C>, b: &Bytes) with(C)`. At each call `C`
+   is instantiated, and the ordinary rule — a caller's `with(...)` covers its callees' —
+   applies unchanged. This is the callable-values rule (a `fn() with(Console)` value
+   requires `Console` to call) applied to the one type that escaped it: a `Writer` is a
+   function pointer plus a context.
+3. **`trusted` absorbs `Unsafe` and nothing else.** A trusted body vouches for memory
+   safety; it never hides an effect. `console_write`/`console_err_write` violate this today,
+   and so do the effectful `trusted extern` declarations in `std/src/libc.con` (`write`,
+   `read`, `fopen`, `socket`, `send`, `recv`, `getenv`, `exit`, …), which require nothing and
+   are how a trusted body performs I/O undeclared. `docs/platform/FFI.md` already reserves
+   `trusted extern` for side-effect-free foreign functions; std does not follow it.
+
+**Style rule:** concrete by default (`&Writer<Console>` with `with(Console)`); generic `C`
+only where a function is genuinely used with more than one kind of handle — std, and helpers
+tested against an in-memory writer. `with(C)` reads as "exactly what the caller hands me",
+which is a precise bound, not a vague one.
+
+**Alternatives rejected, and why.** A broad `IO` capability says "does some I/O through
+something" — vague, duplicative of the parameter, and forces in-memory helpers to claim I/O
+they do not perform. Authority-by-possession (R-0487's original plan: headers stay silent,
+reports infer `performs`) fails the one-place test: the header of `print_bytes` would still
+be empty and only a tool could say it writes.
+
+**Measured cost (2026-09-29).** 14 of 4,767 functions in the repository take a `Writer` or
+`Reader` outside `io.con` (6 in `std/src/fmt.con`, 8 in `examples/hexdump`, `cli_tool`,
+`png_chunks`, `base64_cli`); no struct holds one as a field. The requirement does not
+cascade: to call a handle-using function you must pass a handle, which you either received
+(so you are in the chain and gain `C`) or created (so you already declare the concrete
+capability, because constructors require it). Everything above the creator is unchanged.
+The cost grows where handles are stored in long-lived structs (`App<C>`), one capability
+name per method.
+
+**Slices:** (1) design doc stating the three rules and the enforcement mechanism for
+effectful externs; (2) `trusted` honesty in std; (3) capability parameters on `StructDef`
+and capability arguments on struct types through parse, resolve, check, monomorphization and
+reports; (4) migrate `Writer`/`Reader` and the 14 consumers, inverting
+`check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) correct
+the four pages (Spec, Why Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition
+Labels) that still say an empty capability set means pure.
+
+**Exit:** `print_bytes` declares `with(C)` and its call site reports `Console`; a function
+with an empty `with(...)` cannot reach an effect through a handle, a `trusted` body or a
+dependency; a gate carries a positive control (a `Writer<{}>` helper stays capability-free)
+and a negative one (a handle-using helper without `with(C)` is refused).
+
+**History before the decision (2026-09-26).** The remaining work was then framed as the
+`requires`/`carries`/`performs` model; that framing is superseded by the decision above and
+R-0487 is revised accordingly.
 
 **THE DECISION THAT UNBLOCKED IT (2026-09-26).** The admission rule sat inert for a
 release because enabling it moved three `pureCoreFns` links out of drift coverage
@@ -10730,9 +10789,9 @@ three-way split — **requires** (ambient authority the caller supplies) / **car
 `carries` leg is blocked on a language gap: `Writer` dispatches through a bare
 `fn(*mut u8, *const u8, u64) -> Result<u64, IoError>` pointer, and `capParams` exists only
 on functions (`AST.lean:355`), not on `StructDef`. So `Writer<E>` is not expressible and
-call-graph inference cannot resolve where a handle's authority came from. Note this is a
-different axis from the `Writer<cap C>` proposal rejected earlier: that one parameterised
-*required* authority, this one parameterises *performed* effects. Inference-first, with
+call-graph inference cannot resolve where a handle's authority came from. (Superseded 2026-09-29: the
+decision below adopts `Writer<C>` parameterising *required* authority, overturning the
+earlier rejection; see R-0487's revision.) Inference-first, with
 declarations as checked assertions rather than the primary input; `performs(no File, no
 Network)` is harder than `performs(Output)`, because proving absence needs a completeness
 the `unknown` state denies.
@@ -16659,21 +16718,34 @@ this write to the network?* gets `unknown` where it needs `no`.
 | **carries** | authority travelling inside a value, checked at acquisition | unrepresented |
 | **performs** | operational effects the body actually causes | unrepresented |
 
-The object-capability model is why `carries` must exist separately: `Writer` is authority
-checked once at acquisition and then carried by the handle, so a function taking a
-`Writer` requires nothing ambient and still performs output. Conflating that with
-`requires` would force every `Writer` consumer to declare `Console`, which is precisely
-the ambient-authority model the language rejected.
+**Revised 2026-09-29 by the R-0484 decision.** This task originally argued that `carries`
+must stay separate from `requires`, because "conflating that with `requires` would force
+every `Writer` consumer to declare `Console`, which is precisely the ambient-authority model
+the language rejected." That argument does not hold. Concrete never rejected declared
+ambient authority — `with(Console)` on `println` is exactly that, and it is the language's
+whole model; what it rejects is *undeclared* authority. The language had also already chosen
+use-site capabilities for the same shape: calling a `fn() with(Console)` value requires
+`Console`, and a `Writer` is a function pointer plus a context. And the consumer declares
+`with(C)`, not `Console` — an in-memory writer costs nothing. What the argument did name
+correctly is a trade-off, authority-by-possession against authority-by-declaration, and
+R-0484 chose declaration because only it puts everything a function can do in its header.
+
+**What this task becomes.** `requires` is now complete for handles, so `carries` is expressed
+in types (`Writer<C>`) rather than as a separate fact. Inference of `performs` remains
+valuable as a CHECK, not a replacement: it verifies that declared capabilities cover what
+bodies do (the `trusted` honesty rule), and it answers negative questions (*does this
+touch the network?*) under the completeness condition below. The original framing follows
+for the record.
 
 **The blocking language gap, and it is structural rather than polish.** `Writer`
 dispatches through a bare function pointer —
 `write_fn: fn(*mut u8, *const u8, u64) -> Result<u64, IoError>` — and `capParams` exists
 only on functions (`AST.lean:355`), not on `StructDef` (`AST.lean:289`/`305`/`320`). So
 `Writer<E>` cannot be written, and call-graph inference cannot resolve where a handle's
-authority came from: every handle-mediated call is a hole. This is **not** the
-`Writer<cap C>` proposal rejected earlier — that one parameterised *required* authority
-and would have spread capability variables through ordinary data types; this
-parameterises *performed* effects, which is the axis that was missing.
+authority came from: every handle-mediated call is a hole. The earlier rejection of a
+`Writer<cap C>` that parameterises *required* authority is overturned by R-0484
+(2026-09-29): measured, capability variables reach 14 functions and no struct, and the
+declaration model is the one that puts the fact in the header.
 
 **Inference first.** Declarations should be checked assertions, not the primary input:
 the library is already written, and a model that demands 890 annotations before it
