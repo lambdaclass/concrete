@@ -213,13 +213,23 @@ if [ -n "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
   # never matched and the ordinary invocation walked straight past the check written to catch it.
   # A comparison between paths of different kinds is not a comparison.
   _self_abs="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")"
-  case "$_self_abs" in
-    "$ROOT_DIR"/*)
-      echo "FATAL: CONCRETE_MUT_SNAPSHOT is set but this file is inside the repository." >&2
-      echo "       A snapshot is a copy taken OUTSIDE the tree; the repository's own driver is" >&2
-      echo "       never one. Honouring it would skip the lock and the invalidation." >&2
-      exit 2 ;;
-  esac
+  # A CANDIDATE ROOT COUNTS ONLY IF IT IS A REPOSITORY. `ROOT_DIR` here is still derived from this
+  # file's location, two levels up — for a real snapshot that is the temp directory's grandparent,
+  # not a repository. On Linux (`/tmp/concrete-mut.X/driver.sh`) it is `/`, whose pattern `//*`
+  # matches nothing, so the check passed by accident; on macOS (`/var/folders/../T/concrete-mut.X/`)
+  # it is a real ancestor of the snapshot and EVERY legitimate snapshot was refused as "inside the
+  # repository". The launcher-named root is checked too, so the guard does not depend on which
+  # candidate an inherited value happens to supply.
+  for _cand_root in "$ROOT_DIR" "${CONCRETE_MUT_ROOT:-}"; do
+    [ -n "$_cand_root" ] && [ -f "$_cand_root/scripts/tests/lib/fresh.sh" ] || continue
+    case "$_self_abs" in
+      "$_cand_root"/*)
+        echo "FATAL: CONCRETE_MUT_SNAPSHOT is set but this file is inside the repository." >&2
+        echo "       A snapshot is a copy taken OUTSIDE the tree; the repository's own driver is" >&2
+        echo "       never one. Honouring it would skip the lock and the invalidation." >&2
+        exit 2 ;;
+    esac
+  done
   case "$_self_abs" in
     "${CONCRETE_MUT_SNAPDIR:-/nonexistent}"/*) ;;
     *) echo "FATAL: CONCRETE_MUT_SNAPSHOT is set but this file is not inside the snapshot" >&2
@@ -321,6 +331,13 @@ if [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
     _gate_lock_release 2>/dev/null || true; exit 2; }
   [ -n "$_snap_dir" ] && [ -d "$_snap_dir" ] || {
     echo "FATAL: temp directory for the driver snapshot is not usable" >&2
+    _gate_lock_release 2>/dev/null || true; exit 2; }
+  # NORMALIZED THE SAME WAY THE SNAPSHOT WILL LOCATE ITSELF (`cd && pwd`). macOS's `TMPDIR` ends in
+  # `/`, so `mktemp` returned `.../T//concrete-mut.X`, while the snapshot's self-check resolves to
+  # `.../T/concrete-mut.X` — two spellings of one directory, compared as strings, and every
+  # legitimate snapshot was refused as "not inside the snapshot directory".
+  _snap_dir="$(cd "$_snap_dir" && pwd)" || {
+    echo "FATAL: temp directory for the driver snapshot cannot be resolved" >&2
     _gate_lock_release 2>/dev/null || true; exit 2; }
   printf 'owner_pid=%s\nstarted_head=driver-snapshot\n' "$$" > "$_snap_dir/.concrete-mutation-workspace"
   _snap="$_snap_dir/driver.sh"
