@@ -78,8 +78,10 @@ GATES=36
 # is the population baked into this gate's synthetic candidate records, which are
 # self-consistent at 36, while the real inventory grows whenever a family targets a gate
 # no earlier family named. Collapsing the two made every fixture incoherent the moment
-# bug 071 added `check_cross_package_caps.sh` as a new target.
-DRIVER_GATES=37
+# bug 071 added `check_cross_package_caps.sh` as a new target. It moved again 37 -> 38 when
+# R-0484's two admission/maintenance families (2026-09-26) introduced
+# `check_effect_opacity.sh`; that commit left this pin behind and CI stayed red for three days.
+DRIVER_GATES=38
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2
