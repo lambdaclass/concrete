@@ -146,8 +146,13 @@ _rm_snapdir() {
   case "$d" in
     *..*) echo "warning: refusing to remove CONCRETE_MUT_SNAPDIR='$d' — contains '..'" >&2; return 1 ;;
   esac
+  # The namespace root is normalized the same way the snapshot directory is when created (`cd && pwd`):
+  # macOS's TMPDIR ends in `/`, so the raw prefix `.../T//concrete-mut.` never matched the normalized
+  # directory and every snapshot was refused cleanup and leaked.
+  local tmp_root
+  tmp_root="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd)" || tmp_root="${TMPDIR:-/tmp}"
   case "$d" in
-    "${TMPDIR:-/tmp}/concrete-mut."*) ;;
+    "$tmp_root/concrete-mut."*) ;;
     *) echo "warning: refusing to remove CONCRETE_MUT_SNAPDIR='$d' — not a campaign-created path" >&2; return 1 ;;
   esac
   # OURS, not merely in the namespace. A prefix test alone let a STALE exported CONCRETE_MUT_SNAPDIR —
