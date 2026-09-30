@@ -1391,7 +1391,7 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0484: `with(...)` is the complete statement of what a function can do (design decided 2026-09-29)** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rule:** handles carry their capability in their type (`Writer<C>`, `Reader<C>`); using a handle requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else. **Slices, in order:** (1) design doc stating the rule, the enforcement mechanism for effectful externs, and the revision of R-0487; (2) `trusted` honesty: `console_write`/`console_err_write` declare `Console`, and effectful `trusted extern` declarations in `std/src/libc.con` (`write`, `read`, `fopen`, `socket`, `send`, `recv`, `getenv`, `exit`, …) stop being capability-free; (3) capability parameters on `StructDef` and capability arguments on struct types through parse, resolve, check, monomorphization and reports; (4) migrate `Writer`/`Reader` and their 14 consumers (6 in `std/src/fmt.con`, 8 in examples), inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) correct the four pages that still say an empty capability set means pure. | `print_bytes` declares `with(C)` and reports `Console` at its call site; a function with an empty `with(...)` cannot reach an effect through a handle, a `trusted` body or a dependency; a gate carries a positive control (a `Writer<{}>` helper stays capability-free) and a negative one (a handle-using helper without `with(C)` is refused); stdlib and suite unchanged apart from the migrated headers |
+| 0 | **R-0484: `with(...)` is the complete list of a function's external authority (decided 2026-09-29/30; design in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md))** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rules:** handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else, including the `Unsafe` of calling a plain `extern` (this reverses the current rule in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md`); every foreign binding declares its effects and an undeclared one is refused; foreign declarations and descriptor conversions are audited assumptions shown in reports. **Slices:** (1) design doc — drafted; encoding A (per-effect raw-integer bindings to one C symbol) selected for the first implementation, B (`Fd<C>`) a later option; still open: the construction/caller audit; (2) compiler: effect declarations on externs, symbol aliasing (extending the import-alias path), the `trusted` rule, capability parameters on structs, dependency-summary transport, the assumptions section; (3) std FFI migration: bindings reclassified under the `trusted extern` criterion (`memcpy`/`memcmp` become plain `extern` behind wrappers), sinks declare `Console`/`File`; (4) `Writer<C>`/`Reader<C>` and the 14 consumers outside `io.con`, inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) docs and README restated as "no external authority". The first cut excludes descriptor replacement (std binds no `dup`/`dup2`; unused `fdopen` removed) and relies on linear handles for reuse; a second step adds typed bindings/descriptors and defines replacement and cross-classification aliasing. | `print_bytes` declares `with(C)` and its call site reports `Console`; a function with an empty `with(...)` cannot reach external authority through a handle, a `trusted` body, a foreign binding or a dependency; the design doc's acceptance cases exist as fixtures, with mutation tests where marked; every foreign effect declaration and descriptor conversion appears in the reports' assumptions section |
 | 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
 | 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
 | 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
@@ -1431,7 +1431,7 @@ The remaining design work has existing owners:
 | area | owner | decision or completion required |
 |---|---|---|
 | Safe library abstractions | R-0483, with R-0485 for review clarity | Make views, cursors, text and resource APIs preserve the existing ownership rules; distinguish reusable coordinates from access tied to an encapsulated owner, and preserve validated content against mutation. This is primarily library/API work, not a presumption that a new lifetime system is needed. |
-| Authority and effects | R-0484 | **Decided 2026-09-29:** a header's `with(...)` is the complete list of what the function can do. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implementation is order 0 of the current queue. |
+| Authority and effects | R-0484 | **Decided 2026-09-29/30:** a header's `with(...)` is the complete list of the function's external authority. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implementation is order 0 of the current queue. |
 | Compositional contract semantics | R-0473/R-0474/R-0477, Phase 9 and the existing VC bridge tasks | Complete typed contracts, binding/substitution, call composition, narrow mutation/frame semantics and checked totality. This is the largest remaining language-design area; R-0486 supplies the forcing workload. |
 
 **First bounded verification milestone — planned, not shipped:** one sequential
@@ -1441,6 +1441,9 @@ two-state, totality and VC tasks own the semantics. Graduation requires:
 
 1. A stated admitted subset with bounded iteration and explicit failure behavior;
    contract-callable helpers have a checked logical interpretation and required totality.
+   An empty `with(...)` is not sufficient for that: it still permits mutation through
+   `&mut` parameters, so contract evaluation needs its own purity and admissibility rule
+   (recorded 2026-09-30 by R-0484's design, `HANDLE_CAPABILITIES.md` §1).
 2. Calls establish preconditions and use exported postconditions without callee inlining;
    `old` and frame/`modifies` conditions describe the admitted record/array mutations.
 3. Bounds, arithmetic traps, assertions and call obligations have explicit evidence or
@@ -10697,9 +10700,14 @@ one coherent meaning that checking, reports, proof eligibility and policy share.
 were repaired and the admission repair went live 2026-09-26; both remain as the conservative
 backstop. The remaining work implements the decision below.
 
-**THE DECISION (2026-09-29): `with(...)` is the complete statement of what a function can
-do.** The goal it serves: reading a function's header tells you everything it can do to the
-outside world, in one place, however it came by the authority. Three rules:
+**THE DECISION (2026-09-29, refined 2026-09-30): `with(...)` is the complete list of a
+function's external authority.** The goal it serves: reading a function's header tells you
+what external authority it can use, in one place, however it came by that authority. It
+does not say which file is touched, what is mutated through arguments, whether the
+function terminates, or which inputs influence which outputs — those need separate
+contracts. The canonical statement is
+[docs/language/HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md) (rules R1–R10);
+the summary below is the original three rules plus the 2026-09-30 additions.
 
 1. **Handles carry their capability in their type.** `Writer<C>` and `Reader<C>`, with `C`
    a capability parameter (the existing `cap C` mechanism, extended from functions to
@@ -10717,6 +10725,17 @@ outside world, in one place, however it came by the authority. Three rules:
    `read`, `fopen`, `socket`, `send`, `recv`, `getenv`, `exit`, …), which require nothing and
    are how a trusted body performs I/O undeclared. `docs/platform/FFI.md` already reserves
    `trusted extern` for side-effect-free foreign functions; std does not follow it.
+4. **(2026-09-30) `trusted` also absorbs the `Unsafe` of calling a plain `extern`.** This
+   reverses the rule stated in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md:142` and
+   pinned by `error_trusted_extern_needs_unsafe.con`/`error_trusted_no_extern.con`, which
+   change with the implementation. Without it, `Unsafe` would spread into every `Writer`
+   user.
+5. **(2026-09-30) Every foreign binding declares its effects; an undeclared binding is
+   refused.** There is no "unknown" state. `trusted extern` requires being safe for every
+   argument the types permit, with no undeclared effects, so `memcpy`/`memcmp` become
+   plain `extern` behind trusted wrappers. Foreign declarations and descriptor
+   conversions are audited assumptions, listed in reports with their site, responsible
+   boundary and dependent claims.
 
 **Style rule:** concrete by default (`&Writer<Console>` with `with(Console)`); generic `C`
 only where a function is genuinely used with more than one kind of handle — std, and helpers
@@ -10738,13 +10757,19 @@ capability, because constructors require it). Everything above the creator is un
 The cost grows where handles are stored in long-lived structs (`App<C>`), one capability
 name per method.
 
-**Slices:** (1) design doc stating the three rules and the enforcement mechanism for
-effectful externs; (2) `trusted` honesty in std; (3) capability parameters on `StructDef`
-and capability arguments on struct types through parse, resolve, check, monomorphization and
-reports; (4) migrate `Writer`/`Reader` and the 14 consumers, inverting
-`check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) correct
-the four pages (Spec, Why Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition
-Labels) that still say an empty capability set means pure.
+**Slices (revised 2026-09-30):** (1) design doc — drafted as
+[docs/language/HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md); encoding A
+selected for the first implementation (B a later option); open: the construction/caller
+audit and the per-handle `close` arguments; (2) compiler:
+effect declarations on externs, symbol aliasing, rules 4–5, capability parameters on
+`StructDef` and struct types through parse, resolve, check, monomorphization and reports,
+dependency-summary transport, and the assumptions section; (3) std FFI migration;
+(4) migrate `Writer`/`Reader` and the 14 consumers, inverting `check_effect_opacity.sh`'s
+pinned assertion that `print_bytes` is admitted; (5) correct the four pages (Spec, Why
+Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition Labels) and `README.md`,
+restating an empty capability set as "no external authority". **Second step,** after the
+hole is closed: typed bindings and descriptors, and defined behaviour for binding
+`dup`/`dup2`/`fdopen` and for cross-classification aliasing.
 
 **Exit:** `print_bytes` declares `with(C)` and its call site reports `Console`; a function
 with an empty `with(...)` cannot reach an effect through a handle, a `trusted` body or a
@@ -11119,6 +11144,59 @@ diffs. A non-author builds and consumes the component and replays its admitted
 evidence. Measure proof effort, source review clarity, callback/context friction and
 runtime costs; use those observations to prioritize subsequent features. Unsupported
 heap, relational, resource-proof and backend claims remain explicit.
+
+### Task R-0488
+
+**Objective:** After R-0484, audit parameter-mutation guarantees, then pressure-test
+the library model before adding more language machinery.
+
+**Status (2026-09-30): planned; depends on R-0484, not yet scheduled in the execution queue.**
+Preserve R-0483 and the existing safety priorities; schedule this checkpoint explicitly
+after those priorities are reviewed. Qualify
+existing `&T`, `&mut T` and ownership semantics before proposing new syntax. This is
+distinct from the post-R-0004 **mutation-testing qualification** campaign. The
+bounded audit does not bypass identity, receipt or typed-contract prerequisites.
+
+1. **Parameter mutation first.** Inventory mutation through parameters, nested
+   fields, aliases, callbacks, trusted wrappers and imported APIs. Verify that safe
+   read-only access cannot become mutable and that intended mutation is visible in
+   parameter types. Retain an accepted mutable-buffer update, a rejected read-only
+   write, and an indirect/cross-package laundering case. An empty `with(...)` may
+   coexist with parameter mutation; reports and contract admission must not infer
+   purity from it. Repair concrete violations, with causal mutation tests where
+   they demonstrate enforcement.
+2. **Library usability next.** Exercise buffered I/O, fixed and growable buffers,
+   sockets, stored callbacks, explicit cleanup and package boundaries in existing
+   libraries/examples. Include closing an owned handle versus transferring it, and
+   `Writer<{}>` versus `Writer<Alloc>`. Record annotation propagation, diagnostic
+   clarity, duplicated cleanup, missed errors and audit effort. Reuse R-0485's
+   review criteria and R-0486's flagship component; no new public flagship. Require
+   repeated workload evidence before introducing more expressive language features.
+3. **Optional read/write footprints — existing contract owners.** Feed a concrete
+   preservation need into R-0473/R-0474, the queue's two-state mutation contracts,
+   and R-0175. Start with bounded records/fixed arrays: update a cache or counter
+   while preserving configuration. Specify permitted reads and writes, with a valid
+   update control and a rejected out-of-footprint access. Keep footprints distinct
+   from external authority and input/output dependencies. Preserve R-0175's workload
+   gate; this does not authorize a general heap or separation-logic implementation.
+4. **Auditable dependency upgrades — R-0182/R-0183/R-0184/R-0372.** Review diffs must
+   expose added `Network`, new foreign assumptions, and widened mutation contracts
+   once supported. Include an unchanged-contract control and a transitive dependency
+   change. Configured policies reject forbidden widening. Reports retain assumption
+   provenance and distinguish checked declarations from audited foreign behavior.
+   Reuse package/evidence infrastructure and its existing prerequisites.
+5. **Explanations at failure sites — R-0137/R-0466.** Missing-capability diagnostics
+   trace the source-located path from caller through helper to `Writer<Console>` and
+   name the required permission. Assumption reports identify the declaration or
+   conversion where trust entered, including across packages. Gate structured paths
+   and valid remedies, not exact prose; do not suggest broad authority simply to
+   silence an error.
+
+**Exit:** the parameter audit and bounded library pass have reproducible results,
+positive/negative controls and owned follow-ups. Items 3–5 strengthen their existing
+owners' acceptance criteria; their later implementation is not required to close this
+checkpoint and does not advance ahead of the strict queue's prerequisites. Capability
+completeness alone does not establish that everything touched is known.
 
 ## Phase 7.5: Usable QBE Backend And Independent Validation
 

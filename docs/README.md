@@ -45,6 +45,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [PRINCIPLES.md](project/PRINCIPLES.md) — the stable language principles: minimalist systems programming, no GC, linear/resource-aware ownership, explicit boundaries, predictable execution, and Lean-backed proof direction
 - [INFLUENCES.md](project/INFLUENCES.md) — which external language ideas Concrete copies, adapts, or rejects
 - [SAFETY.md](language/SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
+- [HANDLE_CAPABILITIES.md](language/HANDLE_CAPABILITIES.md) — R-0484 design: `with(...)` as the complete list of external authority, handle capabilities (`Writer<C>`), `trusted` and the foreign boundary
 - [PROFILES.md](platform/PROFILES.md) — named user-facing profiles: `safe`, `predictable`, `provable`, and the long-term `high-integrity` direction
 - [CLAIMS_TODAY.md](verification/CLAIMS_TODAY.md) — the short public claim surface: what Concrete claims today, what it does not, and what remains trusted
 - [VERIFICATION_CHARTER.md](verification/VERIFICATION_CHARTER.md) — the product-level verification commitment and its limits
