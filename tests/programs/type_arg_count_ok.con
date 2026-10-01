@@ -1,0 +1,15 @@
+// Bug 073 positive control: correct arities, including the builtin Option and Result,
+// still compile and run. Without this the gate would pass on a compiler that rejected
+// every generic type.
+struct Copy Pair<A, B> { a: A, b: B }
+
+fn first(p: Pair<i32, bool>) -> i32 {
+    return p.a;
+}
+
+fn main() -> i32 {
+    let p: Pair<i32, bool> = Pair::<i32, bool> { a: 7, b: true };
+    let o: Option<i32> = Option::<i32>::Some { value: 1 };
+    let r: Result<i32, bool> = Result::<i32, bool>::Ok { value: 2 };
+    return first(p);
+}

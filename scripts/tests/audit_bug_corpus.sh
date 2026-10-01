@@ -23,6 +23,7 @@ SKIP=0
 # Explicit mapping: bug number -> regression test file(s) in tests/programs/.
 # Multiple files separated by space.
 declare -A BUG_TEST_MAP=(
+  [073]="error_type_arg_count_extra.con error_type_arg_count_missing.con type_arg_count_ok.con"
   [001]="bug_cross_module_struct_field.con"
   [002]="bug_i32_literal_type.con"
   [003]="bug_cross_module_mut_borrow.con"

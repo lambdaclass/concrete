@@ -1425,6 +1425,9 @@ run_err "$TESTDIR/error_defer_move.con"          "reserved by defer"
 run_err "$TESTDIR/error_copy_destroy.con"        "implements Destroy and cannot be Copy"
 run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discriminant values are not supported"
 run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
+run_err "$TESTDIR/error_type_arg_count_extra.con"   "E0113"   # bug 073: extra type argument
+run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing type argument
+run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
 run_err "$TESTDIR/error_copy_linear_field.con"   "contains non-copy field"
 # Conditional Copy (Phase 7 #3): Box<MyResource> silently LOSES Copy (not an
 # instantiation error) — the move-after-use is what rejects, matching the

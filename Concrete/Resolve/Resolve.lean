@@ -54,6 +54,7 @@ inductive ResolveError where
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
   | recursiveTypeAlias (name : String)
+  | wrongTypeArgCount (name : String) (expected : Nat) (got : Nat)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -69,6 +70,8 @@ def ResolveError.message : ResolveError → String
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .recursiveTypeAlias name => s!"recursive type alias '{name}' (a type alias may not refer to itself, directly or through other aliases)"
+  | .wrongTypeArgCount name expected got =>
+    s!"'{name}' takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
 
 structure Scope where
   symbols : List (String × SymKind)
@@ -132,6 +135,7 @@ def ResolveError.code : ResolveError → String
   | .unknownModule _ => "E0110"
   | .notPublicInModule _ _ => "E0111"
   | .recursiveTypeAlias _ => "E0112"
+  | .wrongTypeArgCount _ _ _ => "E0113"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -174,6 +178,33 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
 -- Deep type validation
 -- ============================================================
 
+/-- How many type arguments a generic type name takes, when that is known.
+
+    The declaration wins over the builtin table, because a program may define its own
+    `Result`/`Option` (`hasUserResultEnum`). `none` means "not known here" — an imported
+    or otherwise unresolved name — and the arity check is skipped rather than guessed:
+    rejecting a valid program is a different bug, not a safer one. -/
+private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  match lookupSymKind ctx name with
+  | some (.struct d) => some d.typeParams.length
+  | some (.enum d) => some d.typeParams.length
+  | some (.newtype d) => some d.typeParams.length
+  | _ => match name with
+    | "Heap" | "HeapArray" | "Vec" | "Option" => some 1
+    | "Result" => some 2
+    | _ => none
+
+/-- An explicit type-argument list must match the declaration's arity (bug 073). Before
+    this, `Box1<i32, bool>` for a one-parameter struct compiled and ran with the extra
+    argument silently dropped, and a missing argument surfaced only as an unrelated
+    linearity error on the unresolved parameter. -/
+private def checkTypeArgCount (ctx : ResolveCtx) (name : String) (got : Nat)
+    (span : Option Span) : ResolveCtx :=
+  match declaredTypeArity ctx name with
+  | some expected => if expected == got then ctx
+                     else addError ctx (.wrongTypeArgCount name expected got) span
+  | none => ctx
+
 /-- Recursively check that all type names in a Ty are known. -/
 private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none) : ResolveCtx :=
   match ty with
@@ -185,7 +216,7 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
     else if isKnownType ctx name then ctx
     else addError ctx (.unknownType name) span
   | .generic name args =>
-    let ctx := if isKnownType ctx name then ctx
+    let ctx := if isKnownType ctx name then checkTypeArgCount ctx name args.length span
                else addError ctx (.unknownType name) span
     args.foldl (fun ctx ty => checkTyDeep ctx ty span) ctx
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner
@@ -216,8 +247,9 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
                else addError ctx (.unknownFunction fn) (some sp)
     args.foldl resolveExpr ctx
   | .paren _ inner => resolveExpr ctx inner
-  | .structLit sp name _typeArgs fields base =>
-    let ctx := if isKnownType ctx name then ctx
+  | .structLit sp name typeArgs fields base =>
+    let ctx := if isKnownType ctx name then
+                 (if typeArgs.isEmpty then ctx else checkTypeArgCount ctx name typeArgs.length (some sp))
                else addError ctx (.unknownStructType name) (some sp)
     let ctx := fields.foldl (fun ctx (_, e) => resolveExpr ctx e) ctx
     match base with | some b => resolveExpr ctx b | none => ctx

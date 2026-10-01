@@ -1,0 +1,8 @@
+// Bug 073: an extra type argument used to be dropped silently, and this program
+// compiled and returned 7. It must be rejected with E0113.
+struct Copy Box1<T> { v: T }
+
+fn main() -> i32 {
+    let b: Box1<i32, bool> = Box1::<i32, bool> { v: 7 };
+    return b.v;
+}

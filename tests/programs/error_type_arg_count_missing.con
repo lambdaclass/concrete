@@ -1,0 +1,11 @@
+// Bug 073: a missing type argument used to surface only as an unrelated linearity
+// error on the unresolved parameter. It must be reported as E0113.
+struct Copy Pair<A, B> { a: A, b: B }
+
+fn first(p: Pair<i32>) -> i32 {
+    return p.a;
+}
+
+fn main() -> i32 {
+    return 0;
+}
