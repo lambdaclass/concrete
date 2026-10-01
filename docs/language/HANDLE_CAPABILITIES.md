@@ -202,10 +202,15 @@ required C.** Possession grants nothing; using the descriptor independently requ
 - `C` says which authority. Which operations a handle allows is a separate question,
   answered by types. `Reader` and `Writer` are already separate; a read-only socket would
   be its own type exposing only reads, not a second capability parameter.
-- **Closing requires `C`,** argued per handle type: closing acts on the resource.
-  Closing a buffered writer may flush user-space buffers; closing a socket tells the
-  peer; closing a raw file descriptor releases OS state. The design doc for each handle
-  type states which of these applies.
+- **Closing requires `C`.** The argument differs by handle type (from the audit, §2 of
+  [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)):
+
+  | handle | what `close` does | why it requires `C` |
+  |---|---|---|
+  | file-backed (`TextFile`, `fs.File`, file `Writer`/`Reader`) | releases the `FILE*` and may flush buffered output | it releases an external resource and may perform output: an effect under `File` |
+  | socket (`TcpListener`, `TcpStream`) | releases the endpoint; what the peer observes depends on aliases (for example after `fork`) and socket state | it acts on an external endpoint: an effect under `Network` |
+  | console (`console_writer`, `console_error_writer`) | nothing today: `close` is `console_noop` | **not** because of an effect. Requiring `Console` is a deliberate uniform-interface rule, so that closing any `Writer<C>` requires `C` and an implementation change never changes the rule |
+  | fixed buffer (`fixed_writer`, `fixed_reader`) | no external effect | `C` is empty, so the requirement is vacuous |
 - **Ownership transfer does not require `C`.** Only using the handle does, and closing
   counts as use. A function that takes an owned writer and closes it needs `C`; one that
   passes it on or returns it does not. Under linear ownership every owner does one or the
@@ -455,7 +460,5 @@ and for cross-classification aliasing.
   excludes them (§10).
 - **Justification format for reclassification** (R5): what an audited reclassification
   must record.
-- **Per-handle `close` arguments** (R6): which of flush, peer notification or OS
-  release applies to each handle type.
 - **Who owns the known-effectful symbol list** (R3), and how it is kept current when a
   new binding is added.

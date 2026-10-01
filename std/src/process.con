@@ -1,5 +1,5 @@
 mod process {
-    import std.libc.{exit as libc_exit, getpid as libc_getpid, fork as libc_fork, kill as libc_kill, waitpid as libc_waitpid, execvp as libc_execvp};
+    import std.libc.{exit as libc_exit, _exit as libc_exit_now, getpid as libc_getpid, fork as libc_fork, kill as libc_kill, waitpid as libc_waitpid, execvp as libc_execvp};
     import std.alloc.{grow,dealloc};
 
     pub enum Copy ProcessError {
@@ -100,8 +100,10 @@ mod process {
         if pid == 0 {
             // Child process: exec
             libc_execvp(ccmd as *const u8, args);
-            // If execvp returns, it failed
-            libc_exit(127);
+            // If execvp returns, it failed. `_exit`, not `exit`: this child's stdio
+            // buffers are copies of the parent's, and `exit` would flush them, writing
+            // the parent's pending output twice (bug 072).
+            libc_exit_now(127);
             // unreachable
             return Result::<Child, ProcessError>::Err { error: ProcessError::SpawnFailed };
         }

@@ -1,0 +1,46 @@
+// Bug 072 regression. One byte is written through a buffered `fs.File` and left
+// unflushed, then `spawn` runs a command that does not exist, so the child's `execvp`
+// fails. The child must terminate without flushing the stdio buffers it inherited
+// from the parent; otherwise the byte reaches the file twice.
+//
+// The gate runs this in a scratch directory and asserts exit code 0 (the child exited
+// 127, so the exec-failure path ran) and that `spawn_exit_out.txt` holds exactly one byte.
+import std.fs.{File};
+import std.process.{spawn, Child, ExitStatus, ProcessError};
+import std.string.{String};
+import std.alloc.{dealloc};
+
+fn main() with(File, Process, Alloc, Unsafe) -> i32 {
+    let path: String = "spawn_exit_out.txt";
+    let f: File = match File::create(&path) {
+        Result::Ok { value } => value,
+        Result::Err { error } => { path.drop(); return 2; }
+    };
+    let byte: String = "X";
+    f.write_bytes(byte.raw_ptr() as *const u8, 1);
+
+    let cmd: String = "/nonexistent/concrete-bug-072";
+    let ccmd: *mut u8 = cmd.to_cstr();
+    let argv: [*const u8; 2] = [ccmd as *const u8, 0 as *const u8];
+    let spawned: Result<Child, ProcessError> = spawn(&cmd, &argv as *const *const u8);
+    let rc: i32 = match spawned {
+        Result::Ok { value } => {
+            let child: Child = value;
+            // 127 proves the child took the exec-failure path this test is about.
+            match child.wait() {
+                Result::Ok { value } => match value {
+                    ExitStatus::Exited { code } => if code == 127 { 0 } else { 5 },
+                    ExitStatus::Signaled { raw } => 6,
+                },
+                Result::Err { error } => 3,
+            }
+        },
+        Result::Err { error } => 4,
+    };
+    dealloc::<u8>(ccmd);
+    f.close();
+    byte.drop();
+    cmd.drop();
+    path.drop();
+    return rc;
+}

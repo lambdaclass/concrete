@@ -716,6 +716,9 @@ jobs:
       - name: "Effect opacity (R-0484 — an empty capability set is not a claim of purity)"
         run: bash scripts/tests/check_effect_opacity.sh
 
+      - name: "Spawn exec failure (bug 072 — a child that fails to exec must not flush the parent's buffers)"
+        run: bash scripts/tests/check_spawn_exit.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

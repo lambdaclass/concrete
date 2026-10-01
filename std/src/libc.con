@@ -33,6 +33,10 @@ mod libc {
     trusted extern fn fseek(file: *const u8, offset: i64, whence: i32) -> i32;
     trusted extern fn ftell(file: *const u8) -> i64;
     trusted extern fn exit(status: i32);
+    // Terminates WITHOUT running atexit handlers or flushing stdio. Required in a forked
+    // child that failed to exec: its stdio buffers are copies of the parent's, and
+    // flushing them writes the parent's pending output a second time (bug 072).
+    trusted extern fn _exit(status: i32);
     trusted extern fn raise(signal: i32);
     trusted extern fn strlen(ptr: *const u8) -> u64;
     trusted extern fn memcpy(dest: *mut u8, src: *const u8, n: u64) -> *mut u8;

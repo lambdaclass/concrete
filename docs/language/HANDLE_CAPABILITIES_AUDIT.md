@@ -37,8 +37,10 @@ entry states the evidence for it.
 - **`fork` duplicates owning handles and buffered output** across processes (F9), and
   `spawn`'s exec-failure path flushes copied buffers (F10).
 - **Remaining assumptions** (reported, not proved): foreign effect declarations; which
-  descriptor each binding receives; no signal handlers installed by foreign code (D3);
-  no threads at `fork` (§3.4); excluded `errno`/floating-point effects (D4).
+  descriptor each binding receives; excluded `errno`/floating-point effects (D4).
+- **Conditions the supported runtime profile requires** (§7): no signal handlers that
+  run before an abort completes, and a single-threaded process at `fork`. Listing them
+  does not establish that a deployment satisfies them.
 
 ## 2. Handles
 
@@ -317,9 +319,12 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
   twice. Unique ownership (§2) is a per-process property. Options for slice 3: restrict
   `fork` to `spawn`'s fork-then-exec pattern and remove `process_fork` from the public
   surface, or document the duplication and flush before forking.
-- **F10. `spawn`'s exec-failure path calls `exit(127)` in the child** (`process.con:104`).
-  `exit` runs `atexit` handlers and flushes stdio buffers copied from the parent, so
-  buffered output can be written twice. The child path should use `_exit`.
+- **F10. `spawn`'s exec-failure path called `exit(127)` in the child — bug 072, FIXED
+  2026-10-01.** `exit` runs `atexit` handlers and flushes stdio buffers copied from the
+  parent, so buffered output was written twice (measured: `XX` for one byte). The child
+  now calls `_exit`. Regression: `tests/regressions/spawn_exit/exec_failure_no_double_flush`,
+  run by `check_spawn_exit.sh`, shown to fail with the fix reverted. See
+  [docs/bugs/072](../bugs/072_spawn_exec_failure_flushes_parent_buffers.md).
 
 ## 5. Classification decisions
 
@@ -361,5 +366,20 @@ Numbered after the design doc's cases (§8 there).
 | 21 | `args::count` without `Env` | refused (D2) |
 | 23 | a `Child` from a pid of `0`, a negative pid, or a pid that is not this process's unowned child | not constructible |
 | 24 | user-requested `abort()` without `Process` | refused (unchanged rule, D3) |
-| 25 | `spawn` exec failure with unflushed buffered output | output not duplicated (F10) |
+| 25 | `spawn` exec failure with unflushed buffered output | output written once (bug 072; `check_spawn_exit.sh`, in place) |
 | 22 | binding `fdopen` or `dup`/`dup2` | refused until the second step (design §10) |
+
+## 7. Conditions the supported runtime profile requires
+
+These are not facts about std; they are conditions a deployment must meet for the
+audit's conclusions to hold. Each states its scope and how it is enforced, or that it
+is not.
+
+| condition | scope | why it matters | enforcement today |
+|---|---|---|---|
+| No signal handler runs code before an abort completes | the hosted profile; every abort, language-defined or user-requested | libc `abort` raises `SIGABRT`, and an installed handler runs before termination (D3) | std installs none and binds no `sigaction`/`signal`, and the unused `raise` is removed (F6). **Not enforced** against foreign code linked into the program, which can install handlers. |
+| The process is single-threaded at `fork` | every `fork`: `spawn` and `process_fork` | after `fork` in a multithreaded process, the child may call only async-signal-safe functions until `exec` (§3.4) | Concrete creates no threads and std binds no thread API. **Not enforced** against foreign code, which can create threads. `process_fork` additionally runs arbitrary code in the child (F9). |
+
+Reports should name both conditions next to any conclusion that depends on them, and a
+profile that cannot meet them (for example one that links threaded foreign libraries)
+must not claim those conclusions.

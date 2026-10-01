@@ -1954,6 +1954,18 @@ else
 fi
 rm -f /tmp/effect_opacity.$$
 
+echo "=== spawn exec-failure flush (bug 072) ==="
+if bash "$ROOT_DIR/scripts/tests/check_spawn_exit.sh" > /tmp/spawn_exit.$$ 2>&1; then
+    _se_pass=$(grep -c "^  ok  " /tmp/spawn_exit.$$ || true)
+    echo "  ok  spawn exec-failure gate ($_se_pass checks)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  spawn exec-failure gate"
+    grep "^  FAIL" /tmp/spawn_exit.$$ | awk "NR<=5"
+    FAIL=$((FAIL + 1))
+fi
+rm -f /tmp/spawn_exit.$$
+
 echo "=== view lifetime (R-0483) ==="
 if bash "$ROOT_DIR/scripts/tests/check_view_lifetime.sh" > /tmp/view_lifetime.$$ 2>&1; then
     _vl_pass=$(grep -c "^  ok  " /tmp/view_lifetime.$$ || true)
