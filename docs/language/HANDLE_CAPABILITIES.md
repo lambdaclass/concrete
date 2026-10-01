@@ -446,7 +446,10 @@ and for cross-classification aliasing.
 ## 11. Open questions
 
 - **When, if ever, to move to B** (§5), once duplicate bindings can be measured.
-- **The construction/caller audit** (R5, §10), to be produced in this slice.
+- **The construction/caller audit** (R5, §10): taken 2026-09-30 in
+  [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md), revised 2026-10-01. Its
+  classification decisions are settled (D1–D2 accepted, D3–D4 revised); its findings
+  F1–F10 are the slice 3 work list, and its remaining assumptions are listed in §1 there.
 - **Replacement and cross-classification aliasing** (R5), for the second step: binding
   `dup`/`dup2`/`fdopen`, and aliases whose classifications differ. The first cut
   excludes them (§10).
