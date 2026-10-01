@@ -273,7 +273,9 @@ mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|pyt
 # not itself a CI gate, so nothing noticed; GitHub ran the five new gates the whole
 # time. Worth stating plainly: a pin that only a local tool enforces detects drift
 # whenever someone runs it, not when the drift happens.
-EXPECTED_GATE_COMMANDS=229
+# 229 -> 230: check_spawn_exit.sh (bug 072). The pin went stale again in the commit
+# that added the gate, and the pre-push hook — which does run this — refused the push.
+EXPECTED_GATE_COMMANDS=230
 if [ -n "$JOB" ]; then
   [ "${#CMDS[@]}" -ge 1 ] || { echo "error: --job '$JOB' yielded no gate commands." >&2
     ci_write_summary 0 " job_selected_nothing"; _gate_lock_release; exit 2; }
