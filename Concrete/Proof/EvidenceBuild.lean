@@ -227,8 +227,13 @@ partial def evTypeRef (nominal? : String → Option TypeId) (binders : List Stri
   | .heap inner => .heap (evTypeRef nominal? binders inner)
   | .heapArray inner => .heapArray (evTypeRef nominal? binders inner)
   | .array elem size => .array (evTypeRef nominal? binders elem) size
-  | .generic n args =>
-      match nominal? n with
+  -- A type with capability arguments has no evidence representation yet. Dropping them
+  -- would give `Writer<Console>` and `Writer<File>` one evidence identity, so it is an
+  -- explicit gap — fail-closed, never a silent erasure (R-0484).
+  | .generic n args caps =>
+      if !caps.isEmpty then
+        .gap { code := .unresolvedType, detail := s!"capability arguments are not yet represented in evidence types" }
+      else match nominal? n with
       | some id => .app id (args.map (evTypeRef nominal? binders))
       | none => .gap { code := .unresolvedType, detail := s!"generic head has no identity" }
   | .fn_ _ _ _ =>

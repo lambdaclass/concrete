@@ -34,6 +34,15 @@ def CapSet.normalize : CapSet → List String × List String
     let (bc, bv) := b.normalize
     ((ac ++ bc).mergeSort (· < ·) |>.eraseDups, (av ++ bv).eraseDups)
 
+/-- A capability ARGUMENT as written in a type: `{}`, `Console`, `Console + File`, `C`.
+    Normalized (sorted, deduplicated, variables after concrete names), so two spellings of
+    one set print, and therefore identify, the same way. The one printer for capability
+    arguments: formatting, diagnostics and callable identity all use it. -/
+def CapSet.toTypeArg (cs : CapSet) : String :=
+  let (names, vars) := cs.normalize
+  let parts := names ++ vars.mergeSort (· < ·)
+  if parts.isEmpty then "{}" else " + ".intercalate parts
+
 /-- Get the concrete capabilities from a CapSet (ignoring variables). -/
 def CapSet.concreteCaps : CapSet → List String
   | .empty => []
@@ -73,7 +82,12 @@ inductive Ty where
   | string                -- String type
   | ref (inner : Ty)      -- &T
   | refMut (inner : Ty)   -- &mut T
-  | generic (name : String) (args : List Ty)  -- e.g. Pair<Int, Bool>
+  /-- `Pair<Int, Bool>`, `Writer<Console>`, `Writer<Console + File>`, `Writer<{}>`.
+      Type arguments and capability arguments are kept in SEPARATE lists so a capability
+      can never be read where a type is expected, or the reverse (R-0484). `caps` has no
+      default on purpose: every construction site must either carry capability arguments
+      through or state that there are none, so none is dropped by omission. -/
+  | generic (name : String) (args : List Ty) (caps : List CapSet)
   | typeVar (name : String)                   -- e.g. T
   | array (elem : Ty) (size : Nat)            -- [T; N]
   | ptrMut (inner : Ty)   -- *mut T
@@ -106,7 +120,7 @@ def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
     | .heap t => .heap (expandAliasDeep m fuel t)
     | .heapArray t => .heapArray (expandAliasDeep m fuel t)
     | .array e n => .array (expandAliasDeep m fuel e) n
-    | .generic nm args => .generic nm (args.map (expandAliasDeep m fuel))
+    | .generic nm args caps => .generic nm (args.map (expandAliasDeep m fuel)) caps
     | .fn_ ps cs r => .fn_ (ps.map (expandAliasDeep m fuel)) cs (expandAliasDeep m fuel r)
     | other => other
 
@@ -500,7 +514,8 @@ partial def Ty.expandCapAliases (aliases : List (String × List String)) : Ty �
   | .ptrMut t => .ptrMut (t.expandCapAliases aliases)
   | .ptrConst t => .ptrConst (t.expandCapAliases aliases)
   | .array t n => .array (t.expandCapAliases aliases) n
-  | .generic n args => .generic n (args.map (Ty.expandCapAliases aliases))
+  | .generic n args caps =>
+    .generic n (args.map (Ty.expandCapAliases aliases)) (caps.map (·.expandAliases aliases))
   | .heap t => .heap (t.expandCapAliases aliases)
   | .heapArray t => .heapArray (t.expandCapAliases aliases)
   | t => t

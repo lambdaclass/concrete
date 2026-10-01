@@ -46,7 +46,8 @@ partial def fmtTy : Ty → String
   | .string => "String"
   | .ref inner => s!"&{fmtTy inner}"
   | .refMut inner => s!"&mut {fmtTy inner}"
-  | .generic n args => s!"{n}<{", ".intercalate (args.map fmtTy)}>"
+  | .generic n args caps =>
+    s!"{n}<{", ".intercalate (args.map fmtTy ++ caps.map CapSet.toTypeArg)}>"
   | .typeVar n => n
   | .array elem size => s!"[{fmtTy elem}; {size}]"
   | .ptrMut inner => s!"*mut {fmtTy inner}"

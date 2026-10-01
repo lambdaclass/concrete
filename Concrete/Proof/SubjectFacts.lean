@@ -102,7 +102,19 @@ def boundTyCanonical (typeBinders capBinders : List String) : Ty → String
   | .heap t => "Heap<" ++ boundTyCanonical typeBinders capBinders t ++ ">"
   | .heapArray t => "HeapArray<" ++ boundTyCanonical typeBinders capBinders t ++ ">"
   | .array t n => "[" ++ boundTyCanonical typeBinders capBinders t ++ ";" ++ toString n ++ "]"
-  | .generic n args => n ++ "<" ++ boundTyListCanonical typeBinders capBinders args ++ ">"
+  -- Capability arguments are appended ONLY when present (no existing subject identity
+  -- moves), with capability variables canonicalized through the binders like `fn_`'s.
+  | .generic n args caps =>
+      let capArg : CapSet → String := fun cs =>
+        let (names, vars) := cs.normalize
+        let vs := vars.map fun v =>
+          match binderIndex? capBinders v with
+          | some i => s!"c{i}"
+          | none => "free:" ++ v
+        let parts := names ++ vs
+        if parts.isEmpty then "{}" else String.intercalate "+" parts
+      let capPart := if caps.isEmpty then "" else ";caps:" ++ String.intercalate "," (caps.map capArg)
+      n ++ "<" ++ boundTyListCanonical typeBinders capBinders args ++ capPart ++ ">"
   | .fn_ params caps ret =>
       let (concrete, vars) := caps.normalize
       let cs := String.intercalate "+" concrete

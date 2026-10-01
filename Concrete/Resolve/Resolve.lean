@@ -215,7 +215,8 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       | none => addError ctx .selfOutsideImpl span
     else if isKnownType ctx name then ctx
     else addError ctx (.unknownType name) span
-  | .generic name args =>
+  -- CAPS-PLACEHOLDER(kind-check): capability-argument arity and kind are checked here.
+  | .generic name args _caps =>
     let ctx := if isKnownType ctx name then checkTypeArgCount ctx name args.length span
                else addError ctx (.unknownType name) span
     args.foldl (fun ctx ty => checkTyDeep ctx ty span) ctx

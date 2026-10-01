@@ -296,7 +296,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- For generic newtypes, infer type args from hint
       let inferredTypeArgs := if nt.typeParams.isEmpty then []
         else match hint with
-          | some (.generic n hintArgs) => if n == fnName then hintArgs else []
+          | some (.generic n hintArgs _) => if n == fnName then hintArgs else []
           | _ => []
       let mapping := nt.typeParams.zip inferredTypeArgs
       let resolvedInnerTy := substTy mapping nt.innerTy
@@ -304,7 +304,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let argTy ← checkExpr arg (some resolvedInnerTy)
       expectTy resolvedInnerTy argTy s!"newtype '{fnName}' constructor" (some e.getSpan)
       if inferredTypeArgs.isEmpty then return .named fnName
-      else return .generic fnName inferredTypeArgs
+      else return .generic fnName inferredTypeArgs []
     | none =>
     let env ← getEnv
     let isUserFn := env.userFnNames.contains fnName
@@ -387,7 +387,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Look up impl Destroy for the type
       let typeName := match argTy with
         | .named n => n
-        | .generic n _ => n
+        | .generic n _ _ => n
         | _ => ""
       if typeName == "" then throwCheck (.destroyRequiresNamed (tyToString argTy)) (some e.getSpan)
       -- Search function signatures for TypeName_destroy
@@ -427,7 +427,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       if args.length != 0 then throwCheck (.builtinWrongArgCount "vec_new" 0) (some e.getSpan)
       if typeArgs.length != 1 then throwCheck (.builtinWrongTypeArgCount "vec_new" "1 type argument: vec_new::<T>()") (some e.getSpan)
       let elemTy := match typeArgs with | t :: _ => t | [] => Ty.int
-      return .generic "Vec" [elemTy]
+      return .generic "Vec" [elemTy] []
     -- Intercept string_push_char(&mut s, ch)
     if intrinsic == some .stringPushChar then
       if args.length != 2 then throwCheck (.builtinWrongArgCount "string_push_char" 2) (some e.getSpan)
@@ -495,7 +495,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let valArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
-        | .refMut (.generic "Vec" [et]) => et
+        | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_push" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
       let valTy ← checkExpr valArg (some elemTy)
@@ -508,8 +508,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let idxArg := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
-        | .ref (.generic "Vec" [et]) => et
-        | .refMut (.generic "Vec" [et]) => et
+        | .ref (.generic "Vec" [et] _) => et
+        | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_get" "&Vec<T> or &mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
@@ -523,7 +523,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let valArg := match args with | _ :: _ :: c :: _ => c | _ => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
-        | .refMut (.generic "Vec" [et]) => et
+        | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_set" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
@@ -537,8 +537,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let ok := match vecTy with
-        | .ref (.generic "Vec" _) => true
-        | .refMut (.generic "Vec" _) => true
+        | .ref (.generic "Vec" _ _) => true
+        | .refMut (.generic "Vec" _ _) => true
         | _ => false
       if !ok then throwCheck (.builtinWrongFirstArg "vec_len" "&Vec<T> or &mut Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
       return .int
@@ -548,17 +548,17 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let elemTy := match vecTy with
-        | .refMut (.generic "Vec" [et]) => et
+        | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_pop" "&mut Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
-      return .generic optionEnumName [elemTy]
+      return .generic optionEnumName [elemTy] []
     -- Intercept vec_free(v)
     if intrinsic == some .vecFree then
       if args.length != 1 then throwCheck (.builtinWrongArgCount "vec_free" 1) (some e.getSpan)
       let vecArg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let vecTy ← checkExpr vecArg none .callArg
       let ok := match vecTy with
-        | .generic "Vec" _ => true
+        | .generic "Vec" _ _ => true
         | _ => false
       if !ok then throwCheck (.builtinWrongFirstArg "vec_free" "Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
       match vecArg with
@@ -750,7 +750,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         | none => pure ()
       -- Build type substitution from struct type params + provided type args
       let mapping := sd.typeParams.zip typeArgs
-      let structTy := if typeArgs.isEmpty then Ty.named name else .generic name typeArgs
+      -- CAPS-PLACEHOLDER(literal-caps)
+      let structTy := if typeArgs.isEmpty then Ty.named name else .generic name typeArgs []
       -- A `..base` functional-update source must itself be this struct type.
       match base with
       | some b =>
@@ -804,7 +805,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Extract struct name and type args for generic type substitution
     let (structName, typeArgs) := match innerTy with
       | .named n => (n, ([] : List Ty))
-      | .generic n args => (n, args)
+      | .generic n args _ => (n, args)
       | .string => ("String", [])
       | _ => ("", [])
     if structName == "" then throwCheck .fieldAccessNonStruct (some e.getSpan)
@@ -854,7 +855,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Infer type args from hint if not explicitly provided
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
-        | some (.generic n args) => if n == enumName then args else []
+        | some (.generic n args _) => if n == enumName then args else []
         | _ => []
       else typeArgs
       let mapping := ed.typeParams.zip effectiveTypeArgs
@@ -872,7 +873,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         if effectiveTypeArgs.isEmpty then return .named enumName
-        else return .generic enumName effectiveTypeArgs
+        else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
     | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
   | .match_ _ scrutinee arms =>
@@ -885,7 +886,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     let innerTyR ← resolveType innerTy
     let (enumName, enumTypeArgs) := match innerTyR with
       | .named n => (n, ([] : List Ty))
-      | .generic n args => (n, args)
+      | .generic n args _ => (n, args)
       | _ => ("", [])
     if enumName != "" then
       match ← lookupEnum enumName with
@@ -1299,7 +1300,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       checkCallBorrowConflicts (receiverPart ++ (← borrowArgParts args)) (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
       let objTypeArgs := match innerTy with
-        | .generic _ args => args
+        | .generic _ args _ => args
         | _ => []
       let implTypeParams := sig.typeParams.take objTypeArgs.length
       let methodTypeParams := sig.typeParams.drop objTypeArgs.length
@@ -1648,7 +1649,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- ("non-struct") for both — surfaced by the H12 std migration.
     let (structName, typeArgs) := match innerTy with
       | .named n => (n, ([] : List Ty))
-      | .generic n args => (n, args)
+      | .generic n args _ => (n, args)
       | .string => ("String", [])
       | _ => ("", [])
     if structName == "" then throwCheck .fieldAccessNonStruct (some stmt.getSpan)
@@ -1866,7 +1867,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- The destructure moves the source — value-mode checkExpr auto-consumes.
     -- Resolve any generic type arguments so field types are concrete.
     let typeArgs := match ← resolveType valTy with
-      | .generic _ args => args
+      | .generic _ args _ => args
       | _ => []
     let typeParams := match ← lookupStruct structName with
       | some sd => sd.typeParams
@@ -1973,7 +1974,7 @@ private def resolveTypeParams (ty : Ty) (typeParams : List String) : Ty :=
   | .ptrMut t => .ptrMut (resolveTypeParams t typeParams)
   | .ptrConst t => .ptrConst (resolveTypeParams t typeParams)
   | .array t n => .array (resolveTypeParams t typeParams) n
-  | .generic name args => .generic name (args.map fun a => resolveTypeParams a typeParams)
+  | .generic name args caps => .generic name (args.map fun a => resolveTypeParams a typeParams) caps
   | _ => ty
 
 def checkFn (f : FnDef) : CheckM Unit := do
@@ -2487,14 +2488,16 @@ def checkModule (m : Module) (summary : FileSummary)
   let regularFns : List (FnDef × Option Ty) := m.functions.map fun f => (f, none)
   let implMethodPairs : List (FnDef × Option Ty) := m.implBlocks.foldl (fun acc ib =>
     let implTy := if ib.typeParams.isEmpty then tyFromName ib.typeName
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self)
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
               , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
-                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self)
+                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
               , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)

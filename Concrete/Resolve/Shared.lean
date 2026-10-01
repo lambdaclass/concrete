@@ -70,7 +70,7 @@ def resolveSelfTy : Ty → Ty → Ty
   | .refMut inner, implTy => .refMut (resolveSelfTy inner implTy)
   | .ptrMut inner, implTy => .ptrMut (resolveSelfTy inner implTy)
   | .ptrConst inner, implTy => .ptrConst (resolveSelfTy inner implTy)
-  | .generic name args, implTy => .generic name (args.map (resolveSelfTy · implTy))
+  | .generic name args caps, implTy => .generic name (args.map (resolveSelfTy · implTy)) caps
   | .array elem n, implTy => .array (resolveSelfTy elem implTy) n
   | .fn_ params cs ret, implTy => .fn_ (params.map (resolveSelfTy · implTy)) cs (resolveSelfTy ret implTy)
   | .heap inner, implTy => .heap (resolveSelfTy inner implTy)
@@ -99,7 +99,7 @@ def tyName : Ty → String
   | .u8 => "u8" | .u16 => "u16" | .u32 => "u32"
   | .float64 => "Float64" | .float32 => "Float32"
   | .bool => "Bool" | .char => "Char" | .string => "String"
-  | .named n => n | .generic n _ => n
+  | .named n => n | .generic n _ _ => n
   | _ => ""
 
 /-- Replace every occurrence of `.named "Self"` with `replacement` inside a Ty. -/
@@ -111,7 +111,7 @@ partial def substSelf (ty : Ty) (replacement : Ty) : Ty :=
   | .ptrMut t => .ptrMut (substSelf t replacement)
   | .ptrConst t => .ptrConst (substSelf t replacement)
   | .array t n => .array (substSelf t replacement) n
-  | .generic n args => .generic n (args.map (substSelf · replacement))
+  | .generic n args caps => .generic n (args.map (substSelf · replacement)) caps
   | .fn_ params caps ret => .fn_ (params.map (substSelf · replacement)) caps (substSelf ret replacement)
   | t => t
 
@@ -132,8 +132,9 @@ partial def unifyTypes (pattern actual : Ty) (typeParams : List String) : List (
   | .refMut inner => match actual with
     | .refMut a => unifyTypes inner a typeParams
     | _ => []
-  | .generic _ pArgs => match actual with
-    | .generic _ aArgs =>
+  -- Type parameters only; capability arguments bind capability variables, a separate step.
+  | .generic _ pArgs _ => match actual with
+    | .generic _ aArgs _ =>
       (pArgs.zip aArgs).foldl (fun acc (pp, ap) => acc ++ unifyTypes pp ap typeParams) []
     | _ => []
   | .heap inner => match actual with

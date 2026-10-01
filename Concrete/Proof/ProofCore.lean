@@ -313,7 +313,7 @@ def isFreeCall (name : String) : Bool :=
 
 def returnsAllocation : Ty → Bool
   | .heap _ | .heapArray _ => true
-  | .generic "Vec" _ => true
+  | .generic "Vec" _ _ => true
   | _ => false
 
 -- ============================================================

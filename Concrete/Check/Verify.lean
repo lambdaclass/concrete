@@ -42,7 +42,7 @@ partial def Ty.containsPlaceholder : Ty → Bool
   | .heap inner     => inner.containsPlaceholder
   | .heapArray inner => inner.containsPlaceholder
   | .array elem _   => elem.containsPlaceholder
-  | .generic _ args => args.any Ty.containsPlaceholder
+  | .generic _ args _ => args.any Ty.containsPlaceholder
   | .fn_ params _ retTy => params.any Ty.containsPlaceholder || retTy.containsPlaceholder
   | _ => false
 
@@ -56,7 +56,7 @@ partial def Ty.containsTypeVar : Ty → Bool
   | .heap inner     => inner.containsTypeVar
   | .heapArray inner => inner.containsTypeVar
   | .array elem _   => elem.containsTypeVar
-  | .generic _ args => args.any Ty.containsTypeVar
+  | .generic _ args _ => args.any Ty.containsTypeVar
   | .fn_ params _ retTy => params.any Ty.containsTypeVar || retTy.containsTypeVar
   | _ => false
 
@@ -289,7 +289,7 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
     rejected separately in Check. -/
 partial def tyExposesRef : Ty → Bool
   | .ref _ | .refMut _ => true
-  | .generic _ args => args.any tyExposesRef
+  | .generic _ args _ => args.any tyExposesRef
   | .array elem _ => tyExposesRef elem
   | _ => false
 

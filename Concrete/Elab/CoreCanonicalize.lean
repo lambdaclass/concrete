@@ -18,14 +18,14 @@ recursing through all top-level modules and nested submodules:
 
 /-- Normalize Ty.generic "Heap"/"HeapArray" to Ty.heap/Ty.heapArray. -/
 private def canonTy : Ty → Ty
-  | .generic "Heap" [inner] => .heap (canonTy inner)
-  | .generic "HeapArray" [inner] => .heapArray (canonTy inner)
+  | .generic "Heap" [inner] _ => .heap (canonTy inner)
+  | .generic "HeapArray" [inner] _ => .heapArray (canonTy inner)
   | .ref t => .ref (canonTy t)
   | .refMut t => .refMut (canonTy t)
   | .heap t => .heap (canonTy t)
   | .heapArray t => .heapArray (canonTy t)
   | .array t n => .array (canonTy t) n
-  | .generic name args => .generic name (args.map canonTy)
+  | .generic name args caps => .generic name (args.map canonTy) caps
   | .ptrMut t => .ptrMut (canonTy t)
   | .ptrConst t => .ptrConst (canonTy t)
   | .fn_ ps cs ret => .fn_ (ps.map canonTy) cs (canonTy ret)

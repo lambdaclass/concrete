@@ -143,7 +143,7 @@ private def enumAllocaAlign (s : EmitSSAState) (ty : Ty) : Option Nat :=
       | none => none
   match ty with
   | .named n => needs n
-  | .generic n _ => needs n
+  | .generic n _ _ => needs n
   | _ => none
 
 /-- Alloca for a value of SSA type `ty` rendered as `llTy`, attaching
@@ -173,11 +173,11 @@ partial def tyToLLVMTy (s : EmitSSAState) : Ty → LLVMTy
   | .unit | .never => .void
   | .string => .struct_ "String"
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => .ptr
-  | .generic "Heap" _ | .heap _ => .ptr
-  | .generic "HeapArray" _ | .heapArray _ => .ptr
-  | .generic "Vec" _ => .struct_ "Vec"
-  | .generic "HashMap" _ => .struct_ "HashMap"
-  | .generic name args =>
+  | .generic "Heap" _ _ | .heap _ => .ptr
+  | .generic "HeapArray" _ _ | .heapArray _ => .ptr
+  | .generic "Vec" _ _ => .struct_ "Vec"
+  | .generic "HashMap" _ _ => .struct_ "HashMap"
+  | .generic name args caps =>
     match ssaLookupEnum s name with
     | some _ => .enum_ name
     | none =>
@@ -185,7 +185,7 @@ partial def tyToLLVMTy (s : EmitSSAState) : Ty → LLVMTy
       | some _ => .struct_ name
       | none =>
         match Layout.lookupNewtype (layoutCtxOf s) name with
-        | some _ => tyToLLVMTy s (Layout.resolveNewtype (layoutCtxOf s) (.generic name args))
+        | some _ => tyToLLVMTy s (Layout.resolveNewtype (layoutCtxOf s) (.generic name args caps))
         | none => .struct_ name
   | .typeVar _ => .i64
   | .array elem n => .array n (tyToLLVMTy s elem)
@@ -424,9 +424,9 @@ private def externABIFlattenRet (s : EmitSSAState) (ty : Ty) : LLVMTy :=
 
 /-- Extract the Vec element type from a type like `Vec<T>`, `&Vec<T>`, or `&mut Vec<T>`. -/
 private def vecElemTy : Ty → Option Ty
-  | .generic "Vec" (t :: _) => some t
-  | .ref (.generic "Vec" (t :: _)) => some t
-  | .refMut (.generic "Vec" (t :: _)) => some t
+  | .generic "Vec" (t :: _) _ => some t
+  | .ref (.generic "Vec" (t :: _) _) => some t
+  | .refMut (.generic "Vec" (t :: _) _) => some t
   | _ => none
 
 /-- The set of vec intrinsic names that need per-size specialization.
@@ -446,7 +446,7 @@ private def resolveVecCall (s : EmitSSAState) (fn : String) (args : List SVal) (
       else if fn == "vec_get" then some retTy
       else if fn == "vec_pop" then
         match retTy with
-        | .generic _ (t :: _) => some t  -- Option<T> → T
+        | .generic _ (t :: _) _ => some t  -- Option<T> → T
         | _ => none
       else
         -- vec_push, vec_set: get from first arg (the Vec ref)
@@ -1390,7 +1390,7 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       -- Generic struct: find concrete type args from function types
       match moduleTys.findSome? fun t =>
         match t with
-        | .generic n args => if n == sd.name then some args else none
+        | .generic n args _ => if n == sd.name then some args else none
         | _ => none
       with
       | some args =>
@@ -1409,7 +1409,7 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       -- Generic enum: find concrete type args from function types
       match moduleTys.findSome? fun t =>
         match t with
-        | .generic n args => if n == ed.name then some args else none
+        | .generic n args _ => if n == ed.name then some args else none
         | _ => none
       with
       | some args =>
@@ -1499,11 +1499,11 @@ private def scanBuiltinEnumArgs (ctx : Layout.Ctx) (modules : List SModule) :
   -- Find all Option<T> and Result<T, E> instantiations
   let optPayloads := allTys.filterMap fun t =>
     match t with
-    | .generic n [arg] => if n == optionEnumName then some arg else none
+    | .generic n [arg] _ => if n == optionEnumName then some arg else none
     | _ => none
   let resPayloads := allTys.filterMap fun t =>
     match t with
-    | .generic n [ok, err] => if n == resultEnumName then some (ok, err) else none
+    | .generic n [ok, err] _ => if n == resultEnumName then some (ok, err) else none
     | _ => none
   -- Footprint of one payload: where its writes end (tag aligned to payload
   -- align, then size) — the quantity the union declaration must cover.

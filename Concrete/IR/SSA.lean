@@ -147,7 +147,7 @@ private def ssaTyToStr : Ty → String
   | .string => "%String"
   | .ref inner => s!"ptr({ssaTyToStr inner})"
   | .refMut inner => s!"ptr(mut {ssaTyToStr inner})"
-  | .generic n args => s!"%{n}<{", ".intercalate (args.map ssaTyToStr)}>"
+  | .generic n args _ => s!"%{n}<{", ".intercalate (args.map ssaTyToStr)}>"
   | .typeVar n => s!"%{n}"
   | .array elem size => s!"[{size} x {ssaTyToStr elem}]"
   | .ptrMut _ => "ptr"

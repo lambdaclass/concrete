@@ -301,7 +301,7 @@ private def variantFields (enumName : String) (variantName : String) (typeArgs :
 private def structNameFromTy (ty : Ty) : LowerM String :=
   match ty with
   | .named n => return n
-  | .generic n _ => return n
+  | .generic n _ _ => return n
   | .string => return "String"
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => structNameFromTy inner
   | other =>
@@ -334,12 +334,12 @@ private def isAggregateForPromotion (ty : Ty) : LowerM Bool := do
   -- True aggregates: structs, enums, strings, vecs, hashmaps, arrays
   | .string => return true
   | .array _ _ => return true
-  | .generic "Vec" _ | .generic "HashMap" _ => return true
-  | .generic "Heap" _ | .generic "HeapArray" _ => return false
+  | .generic "Vec" _ _ | .generic "HashMap" _ _ => return true
+  | .generic "Heap" _ _ | .generic "HeapArray" _ _ => return false
   | .named name =>
     let ctx ← getLayoutCtx
     return (Layout.lookupStruct ctx name).isSome || (Layout.lookupEnum ctx name).isSome
-  | .generic name _ =>
+  | .generic name _ _ =>
     let ctx ← getLayoutCtx
     return (Layout.lookupStruct ctx name).isSome || (Layout.lookupEnum ctx name).isSome
 
@@ -362,7 +362,7 @@ private def removePromotedAllocas (names : List String) : LowerM Unit := do
 
 /-- Extract type args from a Ty, unwrapping references/pointers. -/
 private def typeArgsFromTy : Ty → List Ty
-  | .generic _ args => args
+  | .generic _ args _ => args
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => typeArgsFromTy inner
   | _ => []
 
@@ -874,7 +874,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         let ptrVal ← lowerExpr arg
         let innerTy := match arg.ty with
           | .heap t => t
-          | .generic "Heap" [t] => t
+          | .generic "Heap" [t] _ => t
           | t => t
         if ty == .unit || ty == .never then
           emit (.call none (.direct "free") [ptrVal] .unit)
@@ -1723,7 +1723,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let promote ← if !mutable then pure false else
       match ty with
       | .array _ _ => pure true
-      | .named n | .generic n _ => do
+      | .named n | .generic n _ _ => do
         let ctx ← getLayoutCtx
         pure ((Layout.lookupStruct ctx n).isSome || (Layout.lookupEnum ctx n).isSome)
       | _ => pure false

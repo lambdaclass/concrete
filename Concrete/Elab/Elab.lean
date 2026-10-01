@@ -252,7 +252,7 @@ private partial def eraseNewtypeTy (newtypes : List NewtypeDef) : Ty → Ty
     match newtypes.find? fun nt => nt.name == name with
     | some nt => eraseNewtypeTy newtypes nt.innerTy
     | none => .named name
-  | .generic name args =>
+  | .generic name args caps =>
     let args' := args.map (eraseNewtypeTy newtypes)
     match newtypes.find? fun nt => nt.name == name with
     | some nt =>
@@ -265,11 +265,11 @@ private partial def eraseNewtypeTy (newtypes : List NewtypeDef) : Ty → Ty
         | .ptrMut i => .ptrMut (subst i)
         | .ptrConst i => .ptrConst (subst i)
         | .array e n => .array (subst e) n
-        | .generic n as => .generic n (as.map subst)
+        | .generic n as caps => .generic n (as.map subst) caps
         | .fn_ ps c r => .fn_ (ps.map subst) c (subst r)
         | t => t
       eraseNewtypeTy newtypes (subst nt.innerTy)
-    | none => .generic name args'
+    | none => .generic name args' caps
   | .ref inner => .ref (eraseNewtypeTy newtypes inner)
   | .refMut inner => .refMut (eraseNewtypeTy newtypes inner)
   | .ptrMut inner => .ptrMut (eraseNewtypeTy newtypes inner)
@@ -287,7 +287,7 @@ private def substTy (mapping : List (String × Ty)) : Ty → Ty
   | .ptrMut inner => .ptrMut (substTy mapping inner)
   | .ptrConst inner => .ptrConst (substTy mapping inner)
   | .array elem n => .array (substTy mapping elem) n
-  | .generic name args => .generic name (args.map (substTy mapping))
+  | .generic name args caps => .generic name (args.map (substTy mapping)) caps
   | .fn_ params capSet retTy => .fn_ (params.map (substTy mapping)) capSet (substTy mapping retTy)
   | .heap inner => .heap (substTy mapping inner)
   | .heapArray inner => .heapArray (substTy mapping inner)
@@ -320,12 +320,12 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
   | .ptrMut inner => return .ptrMut (← resolveTypeE inner)
   | .ptrConst inner => return .ptrConst (← resolveTypeE inner)
   | .array elem n => return .array (← resolveTypeE elem) n
-  | .generic "Heap" [inner] => return .heap (← resolveTypeE inner)
-  | .generic "HeapArray" [inner] => return .heapArray (← resolveTypeE inner)
-  | .generic name args =>
+  | .generic "Heap" [inner] _ => return .heap (← resolveTypeE inner)
+  | .generic "HeapArray" [inner] _ => return .heapArray (← resolveTypeE inner)
+  | .generic name args caps =>
     -- Same: newtype generics survive here so method dispatch on
     -- e.g. `Wrapper<T>` instances reaches `Wrapper`'s inherent impls.
-    return .generic name (← args.mapM resolveTypeE)
+    return .generic name (← args.mapM resolveTypeE) caps
   | .fn_ params capSet retTy =>
     return .fn_ (← params.mapM resolveTypeE) capSet (← resolveTypeE retTy)
   | _ => return ty
@@ -438,9 +438,11 @@ private partial def peekExprType (e : Expr) : ElabM Ty := do
         return .fn_ paramTys sig.capSet sig.retTy
       | none => return .placeholder
   | .structLit _ name typeArgs _ _ =>
-    if typeArgs.isEmpty then return .named name else return .generic name typeArgs
+    -- CAPS-PLACEHOLDER(literal-caps): a struct literal's capability arguments are inferred in S2.1.
+    if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
   | .enumLit _ enumName _ typeArgs _ =>
-    if typeArgs.isEmpty then return .named enumName else return .generic enumName typeArgs
+    -- Enums take no capability parameters.
+    if typeArgs.isEmpty then return .named enumName else return .generic enumName typeArgs []
   | .fnRef _ name =>
     let env ← getEnv
     match env.allFnSigPairs.lookup name with
@@ -611,7 +613,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       recordStructTypeUse sd
       let typeArgs ← typeArgs.mapM resolveTypeE
       let mapping := sd.typeParams.zip typeArgs
-      let resultTy := if typeArgs.isEmpty then Ty.named name else Ty.generic name typeArgs
+      -- CAPS-PLACEHOLDER(literal-caps)
+      let resultTy := if typeArgs.isEmpty then Ty.named name else Ty.generic name typeArgs []
       -- Functional update `..base`: elaborate the base once; any field not given
       -- explicitly is filled with `base.field`. (Use a variable as the base — a
       -- complex base expression is re-read per copied field.)
@@ -669,7 +672,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .ref t => t | .refMut t => t | t => t
     let (structName, typeArgs) := match innerTy with
       | .named n => (n, ([] : List Ty))
-      | .generic n args => (n, args)
+      | .generic n args _ => (n, args)
       | .string => ("String", [])
       | _ => ("", [])
     -- For `.0` on a borrowed newtype (`&Port`, `&mut Port`), deref to the
@@ -699,7 +702,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let mapping := nt.typeParams.zip typeArgs
             let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
             let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
-                                   else .generic structName typeArgs
+                                   else .generic structName typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
             return ElaboratedExprV2.mk (CExpr.cast (derefIfBorrowed cObj newtypeTy) innerTy) (Proof.evUnhandledExpr "newtype rebrand cast")
           | none => return ElaboratedExprV2.mk (cObj) (cObjEv.evidence)
         else throwElab (.structHasNoField structName field) (some e.getSpan)
@@ -714,7 +717,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let mapping := nt.typeParams.zip typeArgs
           let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
           let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
-                                 else .generic structName typeArgs
+                                 else .generic structName typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
           return ElaboratedExprV2.mk (CExpr.cast (derefIfBorrowed cObj newtypeTy) innerTy) (Proof.evUnhandledExpr "newtype rebrand cast")
         | none => return ElaboratedExprV2.mk (cObj) (cObjEv.evidence)
       else throwElab .fieldAccessNonStruct (some e.getSpan)
@@ -725,7 +728,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let typeArgs ← typeArgs.mapM resolveTypeE
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
-        | some (.generic n args) => if n == enumName then args else []
+        | some (.generic n args _) => if n == enumName then args else []
         | some (.named n) => if n == enumName then [] else []
         | _ => []
       else typeArgs
@@ -745,7 +748,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             fieldEvsRev := (sf.name, cExprEv.evidence) :: fieldEvsRev
           | none => throwElab (.missingFieldInVariant sf.name enumName variant) (some e.getSpan)
         let resultTy := if effectiveTypeArgs.isEmpty then Ty.named enumName
-                         else Ty.generic enumName effectiveTypeArgs
+                         else Ty.generic enumName effectiveTypeArgs [] -- enums take no capability parameters
         return ElaboratedExprV2.mk (CExpr.enumLit enumName variant effectiveTypeArgs cFields resultTy)
           (match ed.typeId? with
            | some owner =>
@@ -764,7 +767,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let innerTyR ← resolveTypeE innerTy
     let (enumName, enumTypeArgs) := match innerTyR with
       | .named n => (n, ([] : List Ty))
-      | .generic n args => (n, args)
+      | .generic n args _ => (n, args)
       | _ => ("", [])
     let mut cArms : List CMatchArm := []
     -- Arm evidence, PREPENDED and reversed once: arm ORDER is semantic (first match wins).
@@ -1067,7 +1070,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let mangledName := mangledMethodName typeName methodName
       match ← lookupFnSig mangledName with
       | some sig =>
-        let objTypeArgs := match innerTy with | .generic _ args => args | _ => []
+        let objTypeArgs := match innerTy with | .generic _ args _ => args | _ => []
         let implTypeParams := sig.typeParams.take objTypeArgs.length
         let methodTypeParams := sig.typeParams.drop objTypeArgs.length
         let implMapping := implTypeParams.zip objTypeArgs
@@ -1170,7 +1173,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let cArgEv ← elabExprEv arg
     let cArg := cArgEv.core
     let typeName := match cArg.ty with
-      | .named n => n | .generic n _ => n | _ => ""
+      | .named n => n | .generic n _ _ => n | _ => ""
     return ElaboratedExprV2.mk (CExpr.call (destroyFnNameFor typeName) [] [cArg] .unit)
       (Proof.evCall (CallableId.ofIntrinsic (destroyFnNameFor typeName)) [cArgEv.evidence])
   -- Intercept discard(arg) — acknowledged discard of a Copy value (slice 5).
@@ -1228,14 +1231,14 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let effectiveTypeArgs :=
       if !typeArgs.isEmpty then typeArgs
       else match hint with
-        | some (.generic n args) => if n == fnName then args else []
+        | some (.generic n args _) => if n == fnName then args else []
         | _ => []
     let mapping := nt.typeParams.zip effectiveTypeArgs
     let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
     let cArgEv ← elabExprEv arg (some innerTy)
     let cArg := cArgEv.core
     let resultTy := if effectiveTypeArgs.isEmpty then Ty.named fnName
-                     else Ty.generic fnName effectiveTypeArgs
+                     else Ty.generic fnName effectiveTypeArgs []
     return ElaboratedExprV2.mk (CExpr.cast cArg resultTy)
       (Proof.evUnhandledExpr "intrinsic cast: target TypeId not minted here")
   | none => pure ()
@@ -1275,7 +1278,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
   -- Intercept vec_new::<T>()
   if intrinsic == some .vecNew then
     let elemTy := match typeArgs with | t :: _ => t | [] => .int
-    return ElaboratedExprV2.mk (CExpr.call "vec_new" typeArgs [] (.generic "Vec" [elemTy]))
+    return ElaboratedExprV2.mk (CExpr.call "vec_new" typeArgs [] (.generic "Vec" [elemTy] []))
       (Proof.evCall (CallableId.ofIntrinsic "vec_new") [])
   -- Intercept string_push_char(&mut s, ch)
   if intrinsic == some .stringPushChar then
@@ -1383,8 +1386,8 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
         cArgs := cArgs ++ [cArg]
         argEvs := cArgEv.evidence :: argEvs
     let elemTy := match (cArgs.head?.map CExpr.ty) with
-      | some (.ref (.generic "Vec" [et])) => et
-      | some (.refMut (.generic "Vec" [et])) => et
+      | some (.ref (.generic "Vec" [et] _)) => et
+      | some (.refMut (.generic "Vec" [et] _)) => et
       | _ => .placeholder
     return ElaboratedExprV2.mk (CExpr.call "vec_get" [] cArgs elemTy)
       (Proof.evCall (CallableId.ofIntrinsic "vec_get") [])
@@ -1438,9 +1441,9 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
       cArgs := cArgs ++ [cArg]
       argEvs := cArgEv.evidence :: argEvs
     let elemTy := match (cArgs.head?.map CExpr.ty) with
-      | some (.refMut (.generic "Vec" [et])) => et
+      | some (.refMut (.generic "Vec" [et] _)) => et
       | _ => .placeholder
-    return ElaboratedExprV2.mk (CExpr.call "vec_pop" [] cArgs (.generic optionEnumName [elemTy]))
+    return ElaboratedExprV2.mk (CExpr.call "vec_pop" [] cArgs (.generic optionEnumName [elemTy] []))
       (Proof.evCall (CallableId.ofIntrinsic "vec_pop") [])
   -- Intercept vec_free
   if intrinsic == some .vecFree then
@@ -1735,7 +1738,7 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
       | t => t
     let (sName, tArgs) := match innerObjTy with
       | .named n => (n, ([] : List Ty))
-      | .generic n a => (n, a)
+      | .generic n a _ => (n, a)
       | _ => ("", [])
     let env ← getEnv
     -- Resolve the field's TYPE and its IDENTITY in one pass. Two lookups keyed on the
@@ -1976,9 +1979,9 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
       | .refMut t => .refMut (go t)
       | .ptrMut t => .ptrMut (go t)
       | .ptrConst t => .ptrConst (go t)
-      | .generic "Heap" [inner] => .heap (go inner)
-      | .generic "HeapArray" [inner] => .heapArray (go inner)
-      | .generic n args => .generic n (args.map go)
+      | .generic "Heap" [inner] _ => .heap (go inner)
+      | .generic "HeapArray" [inner] _ => .heapArray (go inner)
+      | .generic n args caps => .generic n (args.map go) caps
       | .array t n => .array (go t) n
       | .fn_ ps cs rt => .fn_ (ps.map go) cs (go rt)
       | .heap t => .heap (go t)
@@ -2236,7 +2239,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let regularFns := m.functions.map fun f => (f, (none : Option Ty))
   let implMethodPairs := m.implBlocks.foldl (fun acc ib =>
     let implTy := if ib.typeParams.isEmpty then tyFromName ib.typeName
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self)
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
                 typeBounds := ib.typeBounds ++ f.typeBounds,
@@ -2244,7 +2248,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
-                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self)
+                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,
                 typeBounds := tb.typeBounds ++ f.typeBounds,

@@ -241,6 +241,12 @@ def structFieldEnv (modules : List Module) : StructFieldEnv :=
 /-- Peel references/pointers to reach a named struct. -/
 def namedStructOf : Ty → Option String
   | .named n => some n
+  -- A struct whose only arguments are CAPABILITIES has the same fields for every
+  -- instantiation, so field paths through it resolve exactly as through `.named n`.
+  -- Without this arm, giving a struct a capability parameter would silently remove it
+  -- from bounds discovery. (Structs with TYPE arguments stay excluded, as before: their
+  -- field types would need substituting.)
+  | .generic n [] _ => some n
   | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => namedStructOf t
   | _ => none
 

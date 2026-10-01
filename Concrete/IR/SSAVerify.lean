@@ -353,7 +353,7 @@ private def isAggregateType : Ty → Bool
   | .named _ => true
   | .string => true
   | .array _ _ => true
-  | .generic name _ =>
+  | .generic name _ _ =>
     name != "Vec" && name != "HashMap" && name != "HashSet" &&
     name != "Heap" && name != "HeapArray"
   | _ => false

@@ -29,7 +29,7 @@ private def substTy (typeParams : List String) (mapping : List (String × Ty)) :
   | .heap t => .heap (substTy typeParams mapping t)
   | .heapArray t => .heapArray (substTy typeParams mapping t)
   | .array t n => .array (substTy typeParams mapping t) n
-  | .generic name args => .generic name (args.map (substTy typeParams mapping))
+  | .generic name args caps => .generic name (args.map (substTy typeParams mapping)) caps
   | .ptrMut t => .ptrMut (substTy typeParams mapping t)
   | .ptrConst t => .ptrConst (substTy typeParams mapping t)
   | .fn_ ps cs ret => .fn_ (ps.map (substTy typeParams mapping)) cs (substTy typeParams mapping ret)
@@ -260,7 +260,19 @@ private partial def tyToSuffix : Ty → String
   | .named n => n
   | .typeVar n => "TV_" ++ n          -- should not survive mono; encoded for safety
   | .placeholder => "Placeholder"     -- ditto
-  | .generic n args => n ++ "_T_" ++ "_".intercalate (args.map tyToSuffix) ++ "_E"
+  -- Capability arguments are part of the instance's identity (the instance key compares
+  -- whole types), so they are part of its name: otherwise `Foo<Writer<Console>>` and
+  -- `Foo<Writer<File>>` would be two instances claiming one symbol (E0809). Appended ONLY
+  -- when present, so no existing symbol changes. Count-prefixed so the encoding stays
+  -- injective; the empty set has its own token. No code sharing across capability
+  -- instantiations is claimed here — that would need its own correctness argument.
+  | .generic n args caps =>
+    let capPart := if caps.isEmpty then "" else
+      "_C" ++ toString caps.length ++ "_" ++ "_".intercalate (caps.map fun cs =>
+        let (names, vars) := cs.normalize
+        let parts := names ++ vars.mergeSort (· < ·)
+        if parts.isEmpty then "Nocaps" else toString parts.length ++ "_" ++ "_".intercalate parts)
+    n ++ "_T_" ++ "_".intercalate (args.map tyToSuffix) ++ capPart ++ "_E"
   | .array elem size => "Arr" ++ toString size ++ "_T_" ++ tyToSuffix elem ++ "_E"
   | .ref t => "Ref_T_" ++ tyToSuffix t ++ "_E"
   | .refMut t => "RefMut_T_" ++ tyToSuffix t ++ "_E"
@@ -310,8 +322,8 @@ private partial def matchFormalActual (typeParams : List String) (formal : Ty) (
   | .ptrConst f => match actual with
     | .ptrConst a | .ref a => matchFormalActual typeParams f a acc
     | _ => acc
-  | .generic _ fArgs => match actual with
-    | .generic _ aArgs =>
+  | .generic _ fArgs _ => match actual with
+    | .generic _ aArgs _ =>
       fArgs.zip aArgs |>.foldl (fun acc (f, a) => matchFormalActual typeParams f a acc) acc
     | _ => acc
   | _ => acc
@@ -664,7 +676,7 @@ private partial def collectGenericEnumNames (modules : List CModule) : List Stri
 
 /-- Collect all unique (name, args) pairs of generic struct instantiations from a Ty. -/
 private partial def collectGenericTyInstances (genericNames : List String) : Ty → List (String × List Ty)
-  | .generic name args =>
+  | .generic name args _ =>
     let self := if genericNames.contains name && !builtinGenericNames.contains name
                 then [(name, args)]
                 else []
@@ -761,7 +773,7 @@ private def collectFnInstances (gn : List String) (f : CFnDef) : List (String ×
 private partial def hasTypeVar : Ty → Bool
   | .typeVar _ => true
   | .named _ => false  -- named types are concrete
-  | .generic _ args => args.any hasTypeVar
+  | .generic _ args _ => args.any hasTypeVar
   | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t | .heapArray t => hasTypeVar t
   | .array t _ => hasTypeVar t
   | .fn_ ps _ ret => ps.any hasTypeVar || hasTypeVar ret
@@ -777,10 +789,14 @@ private def dedupInstances (insts : List (String × List Ty)) : List (String × 
 /-- Rewrite a Ty, replacing generic struct references with named monomorphized types.
     `mapping` is a list of (baseName, args, mangledName). -/
 private partial def rewriteTy (mapping : List (String × List Ty × String)) : Ty → Ty
-  | .generic name args =>
+  -- Struct instances are keyed by (name, TYPE arguments): capability arguments have no
+  -- runtime representation, so instantiations differing only in capabilities share one
+  -- layout. Mono runs after every semantic check (Check, Elab, CoreCheck), so the
+  -- capability arguments dropped here can no longer affect any judgment.
+  | .generic name args caps =>
     match mapping.find? (fun (n, a, _) => n == name && a == args) with
     | some (_, _, mangledName) => .named mangledName
-    | none => .generic name (args.map (rewriteTy mapping))
+    | none => .generic name (args.map (rewriteTy mapping)) caps
   | .ref t => .ref (rewriteTy mapping t)
   | .refMut t => .refMut (rewriteTy mapping t)
   | .ptrMut t => .ptrMut (rewriteTy mapping t)
@@ -803,7 +819,7 @@ private partial def rewriteTy (mapping : List (String × List Ty × String)) : T
     so both sides agree on which instantiation is being named. -/
 private partial def monoTypeNameFor (mapping : List (String × List Ty × String))
     (base : String) : Ty → String
-  | .generic n args =>
+  | .generic n args _ =>
     match mapping.find? (fun (nm, a, _) => nm == n && a == args) with
     | some (_, _, mangled) => mangled
     | none => base

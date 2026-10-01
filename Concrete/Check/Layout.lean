@@ -42,7 +42,7 @@ partial def ntSubstTy (mapping : List (String × Ty)) : Ty → Ty
   | .heap i => .heap (ntSubstTy mapping i)
   | .heapArray i => .heapArray (ntSubstTy mapping i)
   | .array e n => .array (ntSubstTy mapping e) n
-  | .generic n args => .generic n (args.map (ntSubstTy mapping))
+  | .generic n args caps => .generic n (args.map (ntSubstTy mapping)) caps
   | .fn_ ps c r => .fn_ (ps.map (ntSubstTy mapping)) c (ntSubstTy mapping r)
   | t => t
 
@@ -53,12 +53,12 @@ partial def resolveNewtype (ctx : Ctx) : Ty → Ty
     match lookupNewtype ctx name with
     | some nt => resolveNewtype ctx nt.innerTy
     | none => .named name
-  | .generic name args =>
+  | .generic name args caps =>
     match lookupNewtype ctx name with
     | some nt =>
       let mapping := nt.typeParams.zip args
       resolveNewtype ctx (ntSubstTy mapping nt.innerTy)
-    | none => .generic name args
+    | none => .generic name args caps
   | t => t
 
 -- ============================================================
@@ -103,7 +103,7 @@ partial def substTyVars (subst : List (String × Ty)) : Ty → Ty
   | .ptrConst inner => .ptrConst (substTyVars subst inner)
   | .heap inner => .heap (substTyVars subst inner)
   | .heapArray inner => .heapArray (substTyVars subst inner)
-  | .generic name args => .generic name (args.map (substTyVars subst))
+  | .generic name args caps => .generic name (args.map (substTyVars subst)) caps
   | .array elem n => .array (substTyVars subst elem) n
   | .fn_ params capSet retTy => .fn_ (params.map (substTyVars subst)) capSet (substTyVars subst retTy)
   | ty => ty
@@ -161,7 +161,7 @@ partial def isCopyTyGeneric
     | none => match lookupNewtype name with
       | some inner => isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy inner
       | none => false
-  | .generic name args =>
+  | .generic name args _ =>
     match lookupAgg name with
     | some (isC, typeParams, fieldTys) =>
       isC && fieldTys.all fun fty =>
@@ -222,16 +222,16 @@ partial def tyAlign (ctx : Ctx) : Ty → Nat
   | .string => Builtin.stringAlign
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => 8
   | .fn_ _ _ _ | .heap _ | .heapArray _ => 8
-  | .generic "Heap" _ | .generic "HeapArray" _ => 8
-  | .generic "Vec" _ => Builtin.vecAlign
-  | .generic "HashMap" _ => Builtin.hashmapAlign
+  | .generic "Heap" _ _ | .generic "HeapArray" _ _ => 8
+  | .generic "Vec" _ _ => Builtin.vecAlign
+  | .generic "HashMap" _ _ => Builtin.hashmapAlign
   | .named name =>
     match lookupNewtype ctx name with
     | some _ => tyAlign ctx (resolveNewtype ctx (.named name))
     | none => tyAlign_namedOrGeneric ctx tyAlign name []
-  | .generic name args =>
+  | .generic name args caps =>
     match lookupNewtype ctx name with
-    | some _ => tyAlign ctx (resolveNewtype ctx (.generic name args))
+    | some _ => tyAlign ctx (resolveNewtype ctx (.generic name args caps))
     | none => tyAlign_namedOrGeneric ctx tyAlign name args
   | .array elem _ => tyAlign ctx elem
   | .never | .placeholder => 1
@@ -253,7 +253,7 @@ private partial def tySize_namedOrGeneric (ctx : Ctx) (tySizeFn : Ctx → Ty →
       let (sz, _) := sd.fields.foldl (fun (acc, _) (_, ft) =>
         let aligned := alignUp acc (tyAlignFn ctx ft)
         (aligned + tySizeFn ctx ft, ())) (0, ())
-      let structAlign := if typeArgs.isEmpty then tyAlignFn ctx (.named name) else tyAlignFn ctx (.generic name typeArgs)
+      let structAlign := if typeArgs.isEmpty then tyAlignFn ctx (.named name) else tyAlignFn ctx (.generic name typeArgs [] /- layout erasure: capabilities have no runtime representation -/)
       alignUp sz structAlign
   | none =>
     match lookupEnum ctx name with
@@ -281,16 +281,16 @@ partial def tySize (ctx : Ctx) : Ty → Nat
   | .string => Builtin.stringSize
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => 8
   | .fn_ _ _ _ | .heap _ | .heapArray _ => 8
-  | .generic "Heap" _ | .generic "HeapArray" _ => 8
-  | .generic "Vec" _ => Builtin.vecSize
-  | .generic "HashMap" _ => Builtin.hashmapSize
+  | .generic "Heap" _ _ | .generic "HeapArray" _ _ => 8
+  | .generic "Vec" _ _ => Builtin.vecSize
+  | .generic "HashMap" _ _ => Builtin.hashmapSize
   | .named name =>
     match lookupNewtype ctx name with
     | some _ => tySize ctx (resolveNewtype ctx (.named name))
     | none => tySize_namedOrGeneric ctx tySize tyAlign name []
-  | .generic name args =>
+  | .generic name args caps =>
     match lookupNewtype ctx name with
-    | some _ => tySize ctx (resolveNewtype ctx (.generic name args))
+    | some _ => tySize ctx (resolveNewtype ctx (.generic name args caps))
     | none => tySize_namedOrGeneric ctx tySize tyAlign name args
   | .array elem n => tySize ctx elem * n
   | .never | .placeholder => 0
@@ -369,8 +369,8 @@ partial def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
         | some _ => isPassByPtr ctx (resolveNewtype ctx (.named name))
         | none =>
           panic! s!"Layout.isPassByPtr: unknown named type '{name}'"
-  | .generic "Vec" _ | .generic "HashMap" _ => true
-  | .generic name args =>
+  | .generic "Vec" _ _ | .generic "HashMap" _ _ => true
+  | .generic name args caps =>
     match lookupStruct ctx name with
     | some _ => true
     | none =>
@@ -378,7 +378,7 @@ partial def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
       | some _ => true
       | none =>
         match lookupNewtype ctx name with
-        | some _ => isPassByPtr ctx (resolveNewtype ctx (.generic name args))
+        | some _ => isPassByPtr ctx (resolveNewtype ctx (.generic name args caps))
         | none =>
           panic! s!"Layout.isPassByPtr: unknown generic type '{name}'"
   | _ => false
@@ -401,11 +401,11 @@ partial def tyToLLVM (ctx : Ctx) : Ty → String
   | .unit => "void"
   | .string => "%struct.String"
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => "ptr"
-  | .generic "Heap" _ | .heap _ => "ptr"
-  | .generic "HeapArray" _ | .heapArray _ => "ptr"
-  | .generic "Vec" _ => "%struct.Vec"
-  | .generic "HashMap" _ => "%struct.HashMap"
-  | .generic name args =>
+  | .generic "Heap" _ _ | .heap _ => "ptr"
+  | .generic "HeapArray" _ _ | .heapArray _ => "ptr"
+  | .generic "Vec" _ _ => "%struct.Vec"
+  | .generic "HashMap" _ _ => "%struct.HashMap"
+  | .generic name args caps =>
     match lookupEnum ctx name with
     | some _ => "%enum." ++ name
     | none =>
@@ -413,7 +413,7 @@ partial def tyToLLVM (ctx : Ctx) : Ty → String
       | some _ => "%struct." ++ name
       | none =>
         match lookupNewtype ctx name with
-        | some _ => tyToLLVM ctx (resolveNewtype ctx (.generic name args))
+        | some _ => tyToLLVM ctx (resolveNewtype ctx (.generic name args caps))
         | none => "%struct." ++ name
   | .typeVar _ => "i64"
   | .array elem n => "[" ++ toString n ++ " x " ++ tyToLLVM ctx elem ++ "]"

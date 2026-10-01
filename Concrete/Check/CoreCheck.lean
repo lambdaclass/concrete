@@ -373,9 +373,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       -- Skip check when types involve named/generic/typeVar or ref/deref differences
       -- (match arms rebind names with different types; auto-deref also causes ref vs value differences)
       let isLenient := fun (t : Ty) => match t with
-        | .named _ | .generic _ _ | .typeVar _ => true
+        | .named _ | .generic _ _ _ | .typeVar _ => true
         | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => match inner with
-          | .named _ | .generic _ _ | .typeVar _ => true | _ => false
+          | .named _ | .generic _ _ _ | .typeVar _ => true | _ => false
         | _ => false
       let isRefCompat := match varTy, ty with
         | .ref inner, t | t, .ref inner => typesCompatible inner t
@@ -521,7 +521,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- Auto-deref through references (match on &T should check T)
     let scrTy := match scrutinee.ty with
       | .ref t => t | .refMut t => t | t => t
-    let tyName := match scrTy with | .named n => some n | .generic n _ => some n | _ => none
+    let tyName := match scrTy with | .named n => some n | .generic n _ _ => some n | _ => none
     let hasWildcard := arms.any fun arm =>
       -- Only an UNGUARDED var arm is a true catch-all; a guarded one can fall through.
       match arm with | .varArm _ _ none _ => true | _ => false
@@ -656,7 +656,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         match env.newtypes.find? fun nt => nt.name == n with
         | some nt => some nt.innerTy
         | none => none
-      | .generic n args =>
+      | .generic n args _ =>
         match env.newtypes.find? fun nt => nt.name == n with
         | some nt =>
           let mapping := nt.typeParams.zip args
@@ -746,7 +746,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     let valueTy := value.ty
     -- Skip check for types containing named/generic/typeVar (could be newtypes, aliases, or polymorphic)
     let rec containsResolvable : Ty → Bool
-      | .named _ | .generic _ _ | .typeVar _ | .unit | .placeholder => true
+      | .named _ | .generic _ _ _ | .typeVar _ | .unit | .placeholder => true
       | .ptrMut inner | .ptrConst inner | .ref inner | .refMut inner => containsResolvable inner
       | .array inner _ => containsResolvable inner
       | _ => false
@@ -847,7 +847,7 @@ private def tyToString : Ty → String
   | .named n => n
   | .ref inner => "&" ++ tyToString inner
   | .refMut inner => "&mut " ++ tyToString inner
-  | .generic name args => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
+  | .generic name args _ => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
   | .typeVar name => name
   | .array elem size => "[" ++ tyToString elem ++ "; " ++ toString size ++ "]"
   | .ptrMut inner => "*mut " ++ tyToString inner

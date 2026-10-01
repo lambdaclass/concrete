@@ -219,7 +219,8 @@ partial def parseType : ParseM Ty := do
         tyArgs := tyArgs ++ [ty2]
         tkInner ← peek
       expect .gt
-      return .generic name tyArgs
+      -- CAPS-PLACEHOLDER(parse-type-args): capability arguments not parsed yet.
+      return .generic name tyArgs []
     else if next == .lt then
       advance
       -- Inline parseTypeArgList
@@ -232,7 +233,8 @@ partial def parseType : ParseM Ty := do
         tyArgs := tyArgs ++ [ty2]
         tk3 ← peek
       expect .gt
-      return .generic name tyArgs
+      -- CAPS-PLACEHOLDER(parse-type-args): capability arguments not parsed yet.
+      return .generic name tyArgs []
     else
       return .named name
   | other =>
@@ -1726,7 +1728,8 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       if isTrustedM then advance; tk ← peek
       let (f, selfKind) ← parseMethodDef
       let selfTy := if typeParams.isEmpty then tyFromName typeName
-                     else Ty.generic typeName (typeParams.map Ty.typeVar)
+                     -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
+                     else Ty.generic typeName (typeParams.map Ty.typeVar) []
       let selfParam : List Param := match selfKind with
         | some .value => [{ name := "self", ty := selfTy }]
         | some .ref => [{ name := "self", ty := .ref selfTy }]
@@ -1776,7 +1779,8 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       let f := { f0 with proofLink := mProofLink }
       -- Inject self parameter based on selfKind
       let selfTy := if typeParams.isEmpty then tyFromName typeName
-                     else Ty.generic typeName (typeParams.map Ty.typeVar)
+                     -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
+                     else Ty.generic typeName (typeParams.map Ty.typeVar) []
       let selfParam : List Param := match selfKind with
         | some .value => [{ name := "self", ty := selfTy }]
         | some .ref => [{ name := "self", ty := .ref selfTy }]

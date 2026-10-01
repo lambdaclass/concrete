@@ -65,7 +65,12 @@ def tyCanonical : Ty → String
   | .heap inner => "Heap<" ++ tyCanonical inner ++ ">"
   | .heapArray inner => "HeapArray<" ++ tyCanonical inner ++ ">"
   | .array elem size => "[" ++ tyCanonical elem ++ ";" ++ toString size ++ "]"
-  | .generic n args => n ++ "<" ++ tyCanonicalList args ++ ">"
+  -- Capability arguments are appended ONLY when present, so every type without them keeps
+  -- exactly its previous canonical string and no existing callable identity moves.
+  | .generic n args caps =>
+    let capPart := if caps.isEmpty then "" else
+      ";caps:" ++ ",".intercalate (caps.map CapSet.toTypeArg)
+    n ++ "<" ++ tyCanonicalList args ++ capPart ++ ">"
   | .fn_ params caps ret =>
     -- Capabilities through `CapSet.normalize`, which sorts and dedups:
     -- `with(File, Net)` and `with(Net) ∪ with(File)` are one set and must not

@@ -55,7 +55,7 @@ def tyToString : Ty → String
   | .named n => n
   | .ref inner => "&" ++ tyToString inner
   | .refMut inner => "&mut " ++ tyToString inner
-  | .generic name args => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
+  | .generic name args _ => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
   | .typeVar name => name
   | .array elem size => "[" ++ tyToString elem ++ "; " ++ toString size ++ "]"
   | .ptrMut inner => "*mut " ++ tyToString inner
@@ -80,7 +80,7 @@ def tyToString : Ty → String
     an error unless explicitly acknowledged. -/
 def mustUseEnumName? : Ty → Option String
   | .named n => if n == resultEnumName || n == optionEnumName then some n else none
-  | .generic n _ => if n == resultEnumName || n == optionEnumName then some n else none
+  | .generic n _ _ => if n == resultEnumName || n == optionEnumName then some n else none
   | _ => none
 
 /-- Is this a float type? -/
@@ -106,7 +106,7 @@ partial def tyContainsRef : Ty → Bool
   | .ref _ | .refMut _ => true
   | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner
   | .array elem _ => tyContainsRef elem
-  | .generic _ args => args.any tyContainsRef
+  | .generic _ args _ => args.any tyContainsRef
   | .fn_ params _ retTy => params.any tyContainsRef || tyContainsRef retTy
   | _ => false
 
@@ -117,7 +117,7 @@ partial def tyParamOccursIn (name : String) : Ty → Bool
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner =>
     tyParamOccursIn name inner
   | .array elem _ => tyParamOccursIn name elem
-  | .generic _ args => args.any (tyParamOccursIn name)
+  | .generic _ args _ => args.any (tyParamOccursIn name)
   | .fn_ params _ retTy => params.any (tyParamOccursIn name) || tyParamOccursIn name retTy
   | _ => false
 
@@ -158,15 +158,15 @@ def resolveType (ty : Ty) : CheckM Ty := do
   | .array elem n =>
     let elem' ← resolveType elem
     return .array elem' n
-  | .generic "Heap" [inner] =>
+  | .generic "Heap" [inner] _ =>
     let inner' ← resolveType inner
     return .heap inner'
-  | .generic "HeapArray" [inner] =>
+  | .generic "HeapArray" [inner] _ =>
     let inner' ← resolveType inner
     return .heapArray inner'
-  | .generic name args =>
+  | .generic name args caps =>
     let args' ← args.mapM resolveType
-    return .generic name args'
+    return .generic name args' caps
   | .fn_ params capSet retTy =>
     let params' ← params.mapM resolveType
     let retTy' ← resolveType retTy
@@ -253,7 +253,7 @@ partial def tyContainsTypeVar : Ty → Bool
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner =>
     tyContainsTypeVar inner
   | .array elem _ => tyContainsTypeVar elem
-  | .generic _ args => args.any tyContainsTypeVar
+  | .generic _ args _ => args.any tyContainsTypeVar
   | .fn_ params _ retTy => params.any tyContainsTypeVar || tyContainsTypeVar retTy
   | _ => false
 
@@ -305,7 +305,7 @@ def normalizeTyForCmp : Ty → Ty
   | .refMut t => .refMut (normalizeTyForCmp t)
   | .heap t => .heap (normalizeTyForCmp t)
   | .heapArray t => .heapArray (normalizeTyForCmp t)
-  | .generic n args => .generic n (args.map normalizeTyForCmp)
+  | .generic n args caps => .generic n (args.map normalizeTyForCmp) caps
   | .array t n => .array (normalizeTyForCmp t) n
   | t => t
 
@@ -585,10 +585,10 @@ def peekExprType (e : Expr) : CheckM Ty := do
       | none => return .placeholder
   | .structLit _ name typeArgs _ _ =>
     if typeArgs.isEmpty then return .named name
-    else return .generic name typeArgs
+    else return .generic name typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
   | .enumLit _ enumName _ typeArgs _ =>
     if typeArgs.isEmpty then return .named enumName
-    else return .generic enumName typeArgs
+    else return .generic enumName typeArgs [] -- enums take no capability parameters
   | .fnRef _ name =>
     let env ← getEnv
     match env.allFnSummarys.lookup name with
@@ -613,11 +613,11 @@ def peekExprType (e : Expr) : CheckM Ty := do
     let structName? : Option String :=
       match objTy with
       | .named n => some n
-      | .generic n _ => some n
+      | .generic n _ _ => some n
       | .ref (.named n) => some n
       | .refMut (.named n) => some n
-      | .ref (.generic n _) => some n
-      | .refMut (.generic n _) => some n
+      | .ref (.generic n _ _) => some n
+      | .refMut (.generic n _ _) => some n
       | _ => none
     match structName? with
     | some sn =>
@@ -686,7 +686,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
       | none => match ← lookupEnum n with
         | some ed => ed.variants.anyM (fun v => v.fields.anyM (fun f => ownsResource fuel f.ty))
         | none => return false
-    | .generic n args =>
+    | .generic n args _ =>
       if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
         return true
       if (← lookupFn (destroyFnNameFor n)).isSome then return true
@@ -722,7 +722,7 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
       for traitName in requiredTraits do
         if traitName == "Copy" then
           if !(← isCopyType concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ => n | .typeVar n => n | _ => "<type>"
+            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | _ => "<type>"
             throwCheck (.traitBoundNotSatisfied tn "Copy" context)
         else if traitName == "Destroy" then
           -- H18 drop-glue: a `Destroy` BOUND means "destroyable" — satisfied by
@@ -745,7 +745,7 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
               else match t with
               | .named tn =>
                 return env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy"
-              | .generic tn args =>
+              | .generic tn args _ =>
                 if env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy" then
                   args.allM (destroyable fuel)
                 else return false
@@ -754,11 +754,11 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
                 return callerBounds.contains "Destroy" || callerBounds.contains "Copy"
               | _ => return true  -- primitives
           if !(← destroyable 8 concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ => n | .typeVar n => n | _ => "<type>"
+            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | _ => "<type>"
             throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
         else
           match concreteType with
-          | .named tn | .generic tn _ =>
+          | .named tn | .generic tn _ _ =>
             if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
               throwCheck (.traitBoundNotSatisfied tn traitName context)
           | .typeVar n =>

@@ -20,7 +20,7 @@ def builtinFnSigs : List (String × FnSummary) := [
   ("string_contains", { params := [("haystack", .ref .string), ("needle", .ref .string)], retTy := .bool }),
   ("string_eq", { params := [("a", .ref .string), ("b", .ref .string)], retTy := .bool }),
   ("int_to_string", { params := [("n", .int)], retTy := .string }),
-  ("string_to_int", { params := [("s", .ref .string)], retTy := .generic "Result" [.int, .int] }),
+  ("string_to_int", { params := [("s", .ref .string)], retTy := .generic "Result" [.int, .int] [] }),
   ("bool_to_string", { params := [("b", .bool)], retTy := .string }),
   ("float_to_string", { params := [("f", .float64)], retTy := .string }),
   ("get_args", { params := [], retTy := .heapArray .string, capSet := .concrete ["Process"] }),

@@ -104,7 +104,18 @@ probe "argument ORDER is significant" "true" \
 # `.generic "Box" args` and "" for refs, so reusing it would have collapsed
 # exactly the distinctions above.
 probe "nested generic args are distinguished" "true" \
-'#eval tyCanonical (.generic "Box" [.int]) != tyCanonical (.generic "Box" [.u8])'
+'#eval tyCanonical (.generic "Box" [.int] []) != tyCanonical (.generic "Box" [.u8] [])'
+# R-0484: capability arguments are part of a type's identity...
+probe "capability arguments are distinguished" "true" \
+'#eval tyCanonical (.generic "Writer" [] [.concrete ["Console"]]) != tyCanonical (.generic "Writer" [] [.concrete ["File"]])'
+probe "an empty capability argument differs from none" "true" \
+'#eval tyCanonical (.generic "Writer" [] [.empty]) != tyCanonical (.generic "Writer" [] [])'
+probe "capability-argument order within a set does not matter" "true" \
+'#eval tyCanonical (.generic "Writer" [] [.concrete ["File", "Console"]]) == tyCanonical (.generic "Writer" [] [.union (.concrete ["Console"]) (.concrete ["File"])])'
+# ...and a type WITHOUT them keeps exactly its pre-R-0484 rendering, so no existing
+# callable identity moved when the field was added.
+probe "a type without capability arguments renders as before" "Box<Int>" \
+'#eval tyCanonical (.generic "Box" [.int] [])'
 probe "references are not erased" "true" \
 '#eval tyCanonical (.ref .int) != tyCanonical .int && tyCanonical (.ref .int) != ""'
 probe "array length is part of the type" "true" \

@@ -301,7 +301,8 @@ def tyToStr : Ty → String
   | .string => "String"
   | .ref inner => s!"&{tyToStr inner}"
   | .refMut inner => s!"&mut {tyToStr inner}"
-  | .generic n args => s!"{n}<{", ".intercalate (args.map tyToStr)}>"
+  | .generic n args caps =>
+    s!"{n}<{", ".intercalate (args.map tyToStr ++ caps.map CapSet.toTypeArg)}>"
   | .typeVar n => n
   | .array elem size => s!"[{tyToStr elem}; {size}]"
   | .ptrMut inner => s!"*mut {tyToStr inner}"

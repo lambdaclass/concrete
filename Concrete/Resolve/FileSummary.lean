@@ -127,12 +127,14 @@ def resolveImplMethodSigs
     : List (String × FnSummary) :=
   let tyMap := implBlocks.foldl (fun acc ib =>
     let implTy := if ib.typeParams.isEmpty then Ty.named ib.typeName
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
     acc ++ ib.methods.map fun f => (ib.typeName ++ "_" ++ f.name, implTy)
   ) []
   let tyMap := traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then Ty.named tb.typeName
-                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar)
+                  -- CAPS-PLACEHOLDER(impl-self): no capability parameters on trait impls yet.
+                  else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f => (tb.typeName ++ "_" ++ f.name, implTy)
   ) tyMap
   sigs.map fun (name, sig) =>
@@ -152,7 +154,7 @@ private partial def resolveAliasesInTy (aliases : List (String × Ty)) : Ty → 
   | .ptrMut inner => .ptrMut (resolveAliasesInTy aliases inner)
   | .heap inner => .heap (resolveAliasesInTy aliases inner)
   | .heapArray inner => .heapArray (resolveAliasesInTy aliases inner)
-  | .generic name args => .generic name (args.map (resolveAliasesInTy aliases))
+  | .generic name args caps => .generic name (args.map (resolveAliasesInTy aliases)) caps
   | .fn_ params capSet retTy =>
     .fn_ (params.map (resolveAliasesInTy aliases)) capSet (resolveAliasesInTy aliases retTy)
   | ty => ty
@@ -264,7 +266,7 @@ def buildSummaryTable (modules : List Module) : List (String × FileSummary) :=
     closure): `.named`/`.generic` heads, recursing through wrappers. -/
 partial def tyHeadNames : Ty → List String
   | .named n => [n]
-  | .generic n args => n :: args.flatMap tyHeadNames
+  | .generic n args _ => n :: args.flatMap tyHeadNames
   | .ref i | .refMut i | .ptrMut i | .ptrConst i | .heap i | .heapArray i => tyHeadNames i
   | .array e _ => tyHeadNames e
   | .fn_ ps _ r => ps.flatMap tyHeadNames ++ tyHeadNames r
