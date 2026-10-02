@@ -1,0 +1,10 @@
+// Positive: the imported Sink<cap C> works across the package boundary — built as
+// Sink<{}>, used through the imported helper and the imported method.
+import sinklib.{Sink, apply};
+
+fn twice(x: i32) -> i32 { return x * 2; }
+
+fn main() -> i32 {
+    let s: Sink<{}> = Sink { f: twice };
+    return apply(&s, 10) + s.run(11);
+}

@@ -1,0 +1,17 @@
+// R-0484 cross-package fixture: a library declaring a struct with a capability
+// parameter, a capability-generic helper over it, and a method on impl<cap C>.
+mod sinklib {
+    pub struct Copy Sink<cap C> { pub f: fn(i32) with(C) -> i32 }
+
+    impl<cap C> Sink<C> {
+        pub fn run(&self, x: i32) with(C) -> i32 {
+            let g: fn(i32) with(C) -> i32 = self.f;
+            return g(x);
+        }
+    }
+
+    pub fn apply<cap C>(s: &Sink<C>, x: i32) with(C) -> i32 {
+        let g: fn(i32) with(C) -> i32 = s.f;
+        return g(x);
+    }
+}

@@ -1,0 +1,11 @@
+// Negative: nor through the imported method (E0240).
+import sinklib.{Sink};
+
+fn shout(x: i32) with(Console) -> i32 { print_int(x as i64); return x; }
+
+fn sneaky(s: &Sink<Console>) -> i32 { return s.run(1); }
+
+fn main() with(Console) -> i32 {
+    let s: Sink<Console> = Sink { f: shout };
+    return sneaky(&s);
+}

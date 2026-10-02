@@ -1,0 +1,6 @@
+[package]
+name = "method_leak_refused"
+version = "0.1.0"
+
+[dependencies]
+sinklib = { path = "../sinklib" }

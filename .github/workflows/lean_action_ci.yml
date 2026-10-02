@@ -719,6 +719,9 @@ jobs:
       - name: "Spawn exec failure (bug 072 — a child that fails to exec must not flush the parent's buffers)"
         run: bash scripts/tests/check_spawn_exit.sh
 
+      - name: "Capability parameters across packages (R-0484 — Sink<cap C> imported from another package keeps its authority)"
+        run: bash scripts/tests/check_cap_struct_cross_package.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

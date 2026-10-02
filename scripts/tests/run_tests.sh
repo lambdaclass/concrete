@@ -1970,6 +1970,18 @@ else
 fi
 rm -f /tmp/effect_opacity.$$
 
+echo "=== capability parameters across packages (R-0484) ==="
+if bash "$ROOT_DIR/scripts/tests/check_cap_struct_cross_package.sh" > /tmp/cap_struct_xp.$$ 2>&1; then
+    _cx_pass=$(grep -c "^  ok  " /tmp/cap_struct_xp.$$ || true)
+    echo "  ok  cap-struct cross-package gate ($_cx_pass checks)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  cap-struct cross-package gate"
+    grep "^  FAIL" /tmp/cap_struct_xp.$$ | awk "NR<=5"
+    FAIL=$((FAIL + 1))
+fi
+rm -f /tmp/cap_struct_xp.$$
+
 echo "=== spawn exec-failure flush (bug 072) ==="
 if bash "$ROOT_DIR/scripts/tests/check_spawn_exit.sh" > /tmp/spawn_exit.$$ 2>&1; then
     _se_pass=$(grep -c "^  ok  " /tmp/spawn_exit.$$ || true)

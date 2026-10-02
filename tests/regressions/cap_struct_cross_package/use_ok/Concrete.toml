@@ -1,0 +1,6 @@
+[package]
+name = "use_ok"
+version = "0.1.0"
+
+[dependencies]
+sinklib = { path = "../sinklib" }
