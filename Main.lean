@@ -1551,7 +1551,7 @@ def compileAndReport (inputPath : String) (reportType : String)
   -- means one answer; carrying it here is what makes that true rather than intended.
   let frontendResult : Except UInt32
       (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
-       Except Proof.PackageIdentityRefusal Proof.PackageIdentity) ←
+       Except Proof.PackageIdentityRefusal Proof.PackageIdentity × List CModule) ←
     match ← findProjectRoot inputDir with
     | some root =>
       match ← loadProject root with
@@ -1562,7 +1562,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         let fullValidCore : ValidatedCore := { validCore with coreModules := userModules }
         let scopedModules ← scopeUserModulesToFile userModules inputPath root
         let scopedValidCore : ValidatedCore := { validCore with coreModules := scopedModules }
-        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity))
+        -- The dependency modules travel too (R-0484 R10): the unsafe report lists the
+        -- foreign-binding assumptions a program inherits from them.
+        let depModules := validCore.coreModules.filter fun m => depNames.contains m.name
+        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
       | .error ds =>
@@ -1574,10 +1577,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- the same package, which is the collision content-binding exists to prevent.
         pure (Except.ok (parsed, validCore, validCore, srcMap,
           Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name))
-            (srcMap.map (·.2))))
+            (srcMap.map (·.2)), ([] : List CModule)))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity) =>
+  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules) =>
     -- THE REPORT'S SOURCE MAP MUST CONTAIN THE KEY ITS LOCATION MAP USES. `buildFnLocMap` records
     -- every function under `inputPath` — the path the user typed — while a project's `allSrcMap` is
     -- keyed by the resolved, absolute entry path. Those are the same file under two names, and a
@@ -2664,7 +2667,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (Report.capabilityReport validCore.coreModules)
       return 0
     if reportType == "unsafe" then
-      IO.println (Report.unsafeReport validCore.coreModules pc)
+      IO.println (Report.unsafeReport validCore.coreModules pc depModules)
       return 0
     if reportType == "trust-edges" then
       IO.println (Report.trustEdgeReport validCore.coreModules)

@@ -393,9 +393,79 @@ partial def unsafeReportModule (externNames : List String)
     without the words the policy/assumption gates grep for, so it cannot be mistaken for
     a listed signature. -/
 def dependencyCoverageNote : String :=
-  "Dependency coverage: incomplete. Foreign-binding effect assumptions made by dependencies (including std) are enforced on callers but not listed in this report (R-0484 R10, in progress)."
+  "Dependency coverage: incomplete. This report was produced without the program's dependency modules (single-file mode), so foreign-binding effect assumptions made by dependencies (including std) are enforced on callers but not listed here. Build as a project to list them."
 
-def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
+/-- Stated when dependencies WERE analysed, so the reader knows exactly what "reached"
+    means and where it stops. -/
+def dependencyReachNote : String :=
+  "Dependency coverage: dependencies analysed. A binding is listed as reached when a program function can get to it through direct calls or through a function stored as a value; an effect reached only through a value constructed outside the analysed program is attributed to where that value was constructed."
+
+/-- Every foreign binding in a module tree: (module path, binding, declared effects, trusted). -/
+partial def foreignBindingsOf (m : CModule) (path : String) : List (String × String × CapSet × Bool) :=
+  let here := m.externFns.map fun (n, _, _, t) => (path, n, (m.externFnCaps.lookup n).getD .empty, t)
+  here ++ m.submodules.flatMap fun sub => foreignBindingsOf sub (path ++ "." ++ sub.name)
+
+/-- The spellings a definition can be called by from elsewhere in the program: its own
+    name, and the module-prefixed forms Elab gives submodule members (`io_console_write`,
+    `std_io_console_write`). -/
+private def callSpellings (path name : String) : List String :=
+  let segs := path.splitOn "."
+  let suffixes := (List.range segs.length).map fun i => "_".intercalate (segs.drop i)
+  name :: suffixes.map (· ++ "_" ++ name)
+
+/-- Function nodes for reachability: (module path, qualified name, spellings, edges). Edges
+    are DIRECT callees and functions taken as VALUES (`ProofCore.collectFnValueRefsStmts`),
+    with import renames (`write as libc_write`) normalized back to the binding's name. -/
+private partial def reachNodesOf (m : CModule) (path : String)
+    : List (String × String × List String × List String) :=
+  let norm (n : String) : String := (m.linkerAliases.lookup n).getD n
+  let here := m.functions.map fun f =>
+    let edges := (collectCallsStmts f.body ++ collectFnValueRefsStmts f.body).eraseDups.map norm
+    (path, path ++ "." ++ f.name, callSpellings path f.name, edges)
+  here ++ m.submodules.flatMap fun sub => reachNodesOf sub (path ++ "." ++ sub.name)
+
+/-- R-0484 R10, across packages: for each foreign binding declared in a DEPENDENCY, the
+    program functions that can reach it, by direct calls or through a function stored as a
+    value. Returns (binding path, binding, effects, trusted, reaching program functions). -/
+def inheritedForeignAssumptions (userModules depModules : List CModule)
+    : List (String × String × CapSet × Bool × List String) :=
+  let all := userModules ++ depModules
+  let nodes := all.flatMap fun m => reachNodesOf m m.name
+  let depBindings := depModules.flatMap fun m => foreignBindingsOf m m.name
+  let bindingSpellings := depBindings.map fun (p, n, _, _) => ((p, n), callSpellings p n)
+  -- A name resolves like a call does: to a definition in the CALLING module when one has
+  -- that spelling, and only otherwise to definitions elsewhere. Without this, two modules
+  -- that each bind `realloc` would both be reported as reached.
+  let bindingsFor (fromPath name : String) : List (String × String) :=
+    let local_ := bindingSpellings.filterMap fun ((p, n), sp) =>
+      if p == fromPath && sp.contains name then some (p, n) else none
+    if !local_.isEmpty then local_
+    else bindingSpellings.filterMap fun (key, sp) => if sp.contains name then some key else none
+  let fnsFor (fromPath name : String) : List (String × String × List String × List String) :=
+    let local_ := nodes.filter fun (p, _, sp, _) => p == fromPath && sp.contains name
+    if !local_.isEmpty then local_ else nodes.filter fun (_, _, sp, _) => sp.contains name
+  let userNodes := nodes.filter fun (p, _, _, _) =>
+    userModules.any fun um => p == um.name || p.startsWith (um.name ++ ".")
+  let reached : List (String × List (String × String)) := userNodes.map fun (p0, q, _, edges0) =>
+    let rec go (fuel : Nat) (frontier : List (String × String)) (seenFns : List String)
+        (found : List (String × String)) : List (String × String) :=
+      match fuel with
+      | 0 => found
+      | fuel + 1 =>
+        if frontier.isEmpty then found else
+        let hits := frontier.flatMap fun (fp, nm) => bindingsFor fp nm
+        let found := found ++ (hits.eraseDups.filter fun k => !found.contains k)
+        let nextFns := (frontier.flatMap fun (fp, nm) => fnsFor fp nm).filter fun (_, q2, _, _) =>
+          !seenFns.contains q2
+        let nextFns := nextFns.foldl (fun acc n => if acc.any (·.2.1 == n.2.1) then acc else acc ++ [n]) []
+        let seen := seenFns ++ nextFns.map (·.2.1)
+        go fuel (nextFns.flatMap fun (p, _, _, es) => es.map fun e => (p, e)) seen found
+    (q, go (nodes.length + 1) (edges0.map fun e => (p0, e)) [q] [])
+  depBindings.filterMap fun (p, n, cs, t) =>
+    let users := reached.filterMap fun (q, keys) => if keys.contains (p, n) then some q else none
+    if users.isEmpty then none else some (p, n, cs, t, users)
+
+def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) (depModules : List CModule := []) : String :=
   let header := "=== Unsafe Signature Summary ==="
   let externNames := pc.externNames
   let body := modules.filterMap (unsafeReportModule externNames · "")
@@ -404,7 +474,18 @@ def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
       let (a', b', c', d', e') := unsafeCounts m
       (a + a', b + b', c + c', d + d', e + e')) (0, 0, 0, 0, 0)
   let total := unsafeCount + externCount + trustedExternCount + ptrCount + trustedCount
-  if body.isEmpty then s!"{header}\n\nNo unsafe signatures found.\n\n{dependencyCoverageNote}\n"
+  let inherited := inheritedForeignAssumptions modules depModules
+  let inheritedLines : List String := inherited.foldl (fun acc (p, n, cs, t, users) =>
+    let (names, vars) := cs.normalize
+    -- Worded without the bare word the policy/assumption gates grep for: these are the
+    -- dependency's bindings, not foreign signatures the program itself declares.
+    let kind := if t then "trusted foreign binding" else "plain foreign binding"
+    acc ++ [s!"  {p}.{n}: assumed to perform only with({", ".intercalate (names ++ vars)}) — {kind}",
+            s!"    reached by: {", ".intercalate users}"]) []
+  let inheritedSection := if inheritedLines.isEmpty then ""
+    else "\n\nInherited foreign assumptions (from dependencies):\n" ++ "\n".intercalate inheritedLines
+  let note := if depModules.isEmpty then dependencyCoverageNote else dependencyReachNote
+  if body.isEmpty then s!"{header}\n\nNo unsafe signatures found.{inheritedSection}\n\n{note}\n"
   else
     let parts : List String := []
     let parts := if unsafeCount > 0 then parts ++ [s!"{unsafeCount} unsafe"] else parts
@@ -413,7 +494,7 @@ def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
     let parts := if ptrCount > 0 then parts ++ [s!"{ptrCount} raw-pointer"] else parts
     let parts := if trustedCount > 0 then parts ++ [s!"{trustedCount} trusted"] else parts
     let summary := s!"\nTotals: {total} unsafe-related signatures ({", ".intercalate parts})"
-    s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n\n{dependencyCoverageNote}\n"
+    s!"{header}\n\n{"\n\n".intercalate body}\n{summary}{inheritedSection}\n\n{note}\n"
 
 -- ============================================================
 -- Report 3: Layout Report (--report layout)

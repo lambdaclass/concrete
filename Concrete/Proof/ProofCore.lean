@@ -97,6 +97,71 @@ partial def collectCallsStmts (ss : List CStmt) : List String :=
   ss.foldl (fun acc s => acc ++ collectCallsStmt s) []
 end
 
+/-! ### Function values
+
+A function taken as a VALUE (`write_fn: console_write`) may be called later through that
+value, by code that no direct-call edge connects to it. `collectCalls*` above deliberately
+omits such references — extraction and proof dependency edges must not treat a mention as a
+call. Reachability for REPORTING foreign assumptions (R-0484 R10) needs them: a
+`Writer<Console>` reaches libc `write` only because its constructor stored `console_write`.
+Counting a reference as a possible call is a sound over-approximation for that purpose,
+and it is used only there. -/
+mutual
+partial def collectFnValueRefsExpr (e : CExpr) : List String :=
+  match e with
+  | .fnRef name _ => [name]
+  | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectFnValueRefsExpr a) []
+  | .binOp _ l r _ => collectFnValueRefsExpr l ++ collectFnValueRefsExpr r
+  | .unaryOp _ e _ => collectFnValueRefsExpr e
+  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
+  | .fieldAccess obj _ _ => collectFnValueRefsExpr obj
+  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
+  | .match_ scrut arms _ =>
+    collectFnValueRefsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectFnValueRefsArm a) []
+  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectFnValueRefsExpr inner
+  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectFnValueRefsExpr e) []
+  | .arrayIndex arr idx _ => collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx
+  | .cast inner _ => collectFnValueRefsExpr inner
+  | .allocCall inner alloc _ => collectFnValueRefsExpr inner ++ collectFnValueRefsExpr alloc
+  | .ifExpr cond th el _ =>
+    collectFnValueRefsExpr cond ++ collectFnValueRefsStmts th ++ collectFnValueRefsStmts el
+  | _ => []
+
+partial def collectFnValueRefsArm (arm : CMatchArm) : List String :=
+  match arm with
+  | .enumArm _ _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
+  | .litArm v guard body =>
+    collectFnValueRefsExpr v ++ (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
+  | .varArm _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
+  | .rangeArm lo hi _ guard body =>
+    collectFnValueRefsExpr lo ++ collectFnValueRefsExpr hi ++ (guard.map collectFnValueRefsExpr).getD []
+      ++ collectFnValueRefsStmts body
+
+partial def collectFnValueRefsStmt (s : CStmt) : List String :=
+  match s with
+  | .letDecl _ _ _ v => collectFnValueRefsExpr v
+  | .assign _ v => collectFnValueRefsExpr v
+  | .return_ (some v) _ => collectFnValueRefsExpr v
+  | .return_ none _ => []
+  | .expr e _ => collectFnValueRefsExpr e
+  | .ifElse c t el =>
+    collectFnValueRefsExpr c ++ collectFnValueRefsStmts t ++
+    match el with | some stmts => collectFnValueRefsStmts stmts | none => []
+  | .while_ c body _ step =>
+    collectFnValueRefsExpr c ++ collectFnValueRefsStmts body ++ collectFnValueRefsStmts step
+  | .fieldAssign obj _ v => collectFnValueRefsExpr obj ++ collectFnValueRefsExpr v
+  | .derefAssign t v => collectFnValueRefsExpr t ++ collectFnValueRefsExpr v
+  | .arrayIndexAssign arr idx v =>
+    collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx ++ collectFnValueRefsExpr v
+  | .break_ (some v) _ => collectFnValueRefsExpr v
+  | .break_ none _ | .continue_ _ => []
+  | .defer body => collectFnValueRefsExpr body
+  | .borrowIn _ _ _ _ _ body => collectFnValueRefsStmts body
+
+partial def collectFnValueRefsStmts (ss : List CStmt) : List String :=
+  ss.foldl (fun acc s => acc ++ collectFnValueRefsStmt s) []
+end
+
 /-! ### Indirect calls
 
 `collectCalls*` above records only DIRECT callees, and says so: an indirect callee is a fn-typed

@@ -18,13 +18,19 @@ are **not** complete.
   E0117 for a known-effectful symbol declared `with()`); R4 reclassification (40 std
   bindings now plain `extern`); R9 enforcement across packages (`FileSummary` carries
   declared effects). `print_bytes` declares `with(Console)` and is excluded for it.
-- **Incomplete — R10 cross-package assumptions.** `--report unsafe` lists a module's OWN
-  foreign bindings with their assumed effects, trust kind and dependents, but not the
-  bindings a program inherits from dependencies (std above all): reports see only the
-  program's modules. Every report says so ("Dependency coverage: incomplete"), so an
-  empty listing never reads as "no foreign assumptions". Completion transports binding
-  identity, declared effects, trust classification and dependency edges through the
-  existing dependency summaries (`FileSummary`), not a second report pipeline.
+- **R10 cross-package assumptions — implemented in project mode, with stated limits.**
+  `--report unsafe` lists a module's own foreign bindings (assumed effects, trust kind,
+  dependents) and, in project mode, every DEPENDENCY binding the program can reach, under
+  "Inherited foreign assumptions (from dependencies)", with the program functions that
+  reach it. Reachability follows direct calls and functions stored as values
+  (`ProofCore.collectFnValueRefsStmts`), resolving a name in the calling module first; the
+  dependency modules are the ones the project build already loads, so no second pipeline
+  exists. Limits, stated on every report: an effect reached only through a value built
+  outside the analysed program is attributed to where the value was constructed (precise
+  handle-mediated explanation is R-0487); single-file mode does not load dependencies and
+  says "Dependency coverage: incomplete". Gate: `check_foreign_assumptions_report.sh`,
+  shown to fail when the inherited facts are dropped. R10 is not called complete until this
+  lands on main and CI.
 - **Incomplete — documentation outside the language docs.** SAFETY, FFI, CAPABILITY_FACTS,
   TWO_AXIS_SAFETY, PREDICTABLE_BOUNDARIES, WHY_CONCRETE and README are updated. The four
   pages originally named as stating "no capabilities means pure" — the Spec, Why Concrete

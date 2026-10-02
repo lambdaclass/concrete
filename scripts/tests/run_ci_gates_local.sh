@@ -276,7 +276,8 @@ mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|pyt
 # 229 -> 230: check_spawn_exit.sh (bug 072). The pin went stale again in the commit
 # that added the gate, and the pre-push hook — which does run this — refused the push.
 # 230 -> 231: check_cap_struct_cross_package.sh (R-0484), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=231
+# 231 -> 232: check_foreign_assumptions_report.sh (R-0484 R10), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=232
 if [ -n "$JOB" ]; then
   [ "${#CMDS[@]}" -ge 1 ] || { echo "error: --job '$JOB' yielded no gate commands." >&2
     ci_write_summary 0 " job_selected_nothing"; _gate_lock_release; exit 2; }

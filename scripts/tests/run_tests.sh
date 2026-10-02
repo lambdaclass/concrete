@@ -1972,6 +1972,18 @@ else
 fi
 rm -f /tmp/effect_opacity.$$
 
+echo "=== inherited foreign assumptions in reports (R-0484 R10) ==="
+if bash "$ROOT_DIR/scripts/tests/check_foreign_assumptions_report.sh" > /tmp/foreign_assum.$$ 2>&1; then
+    _fa_pass=$(grep -c "^  ok  " /tmp/foreign_assum.$$ || true)
+    echo "  ok  foreign-assumptions report gate ($_fa_pass checks)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  foreign-assumptions report gate"
+    grep "^  FAIL" /tmp/foreign_assum.$$ | awk "NR<=5"
+    FAIL=$((FAIL + 1))
+fi
+rm -f /tmp/foreign_assum.$$
+
 echo "=== capability parameters across packages (R-0484) ==="
 if bash "$ROOT_DIR/scripts/tests/check_cap_struct_cross_package.sh" > /tmp/cap_struct_xp.$$ 2>&1; then
     _cx_pass=$(grep -c "^  ok  " /tmp/cap_struct_xp.$$ || true)
