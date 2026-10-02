@@ -563,7 +563,7 @@ def checkBlockLocalsConsumed
 -- ============================================================
 
 /-- Peek at an expression's type without consuming any linear variables. -/
-def peekExprType (e : Expr) : CheckM Ty := do
+partial def peekExprType (e : Expr) : CheckM Ty := do
   match e with
   | .intLit _ _ => return .int
   | .floatLit _ _ => return .float64
@@ -583,9 +583,27 @@ def peekExprType (e : Expr) : CheckM Ty := do
         let paramTys := sig.params.map fun (_, t) => t
         return .fn_ paramTys sig.capSet sig.retTy
       | none => return .placeholder
-  | .structLit _ name typeArgs _ _ =>
-    if typeArgs.isEmpty then return .named name
-    else return .generic name typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
+  | .structLit _ name typeArgs fields _ =>
+    -- R-0484: capability arguments are read off the fields' peeked types, the same rule
+    -- the full check uses, so a peeked literal and a checked one have one type.
+    match ← lookupStruct name with
+    | some sd =>
+      if sd.capParams.isEmpty then
+        if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
+      else
+        let mapping := sd.typeParams.zip typeArgs
+        let mut capMap : List (String × CapSet) := []
+        for sf in sd.fields do
+          if (tyCapNames sf.ty).any sd.capParams.contains then
+            match fields.find? fun (fn, _) => fn == sf.name with
+            | some (_, fe) =>
+              let fty ← peekExprType fe
+              for (k, v) in inferCapBindings sd.capParams (substTy mapping sf.ty) fty do
+                if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
+            | none => pure ()
+        return .generic name typeArgs (sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg)
+    | none =>
+      if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
   | .enumLit _ enumName _ typeArgs _ =>
     if typeArgs.isEmpty then return .named enumName
     else return .generic enumName typeArgs [] -- enums take no capability parameters
@@ -782,6 +800,7 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
 partial def inferMethodParamAndRetTys
     (sig : FnSummary) (implMapping : List (String × Ty)) (methodTypeParams : List String)
     (explicitTypeArgs : List Ty) (args : List Expr) (callName : String) (sp : Span)
+    (recvTy : Ty := .placeholder)
     : CheckM (List (String × Ty) × Ty) := do
   -- Method param types (self dropped) with the impl mapping applied.
   let methodParamTys := (sig.params.drop 1).map fun (n, t) => (n, substTy implMapping t)
@@ -810,9 +829,17 @@ partial def inferMethodParamAndRetTys
   for (pName, pTy) in fullMapping do
     if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
       throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
-  -- 2. Infer capability-variable bindings from fn-typed arguments.
+  -- 2. Infer capability-variable bindings: from the RECEIVER first (R-0484 — on
+  --    `impl<cap C> Sink<C>`, `s.run(..)` with `s: &Sink<Console>` binds C := Console),
+  --    then from the arguments.
   let mut capBindings : List (String × List String) := []
   if !sig.capParams.isEmpty then
+    match sig.params.head? with
+    | some (_, selfTy) =>
+      let selfInner := match selfTy with | .ref t | .refMut t => t | t => t
+      for (k, v) in inferCapBindings sig.capParams selfInner recvTy do
+        if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
+    | none => pure ()
     for (arg, (_, pTy)) in args.zip methodParamTys do
       match pTy with
       | .fn_ _ (.concrete caps) _ =>
@@ -849,7 +876,12 @@ partial def inferMethodParamAndRetTys
               let (argCaps, _) := cs.normalize
               capBindings := capBindings ++ [(cap, argCaps)]
             | none => pure ()
-      | _ => pure ()
+      | _ =>
+        -- A capability parameter carried by a capability argument (`s: &Sink<C>`).
+        if (tyCapNames pTy).any sig.capParams.contains then
+          let argTy ← peekExprType arg
+          for (k, v) in inferCapBindings sig.capParams pTy argTy do
+            if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
   -- 3. Resolve the method's declared capset against the inferred bindings, and
   --    check the caller holds the result.
   if !sig.capParams.isEmpty then
@@ -874,8 +906,12 @@ partial def inferMethodParamAndRetTys
         else acc ++ [cap]) []
       .fn_ ps (.concrete newCaps) ret
     | t => t
-  let resolvedParamTys := (sig.params.drop 1).map fun (n, t) => (n, resolveCapInTy (substTy fullMapping t))
-  let resolvedRetTy := resolveCapInTy (substTy fullMapping sig.retTy)
+  -- ...and inside capability arguments (`&Sink<C>`), by the same bindings.
+  let capArgMap : List (String × CapSet) := capBindings.map fun (k, names) =>
+    (k, (if names.isEmpty then CapSet.empty else CapSet.concrete names).canonArg)
+  let resolvedParamTys := (sig.params.drop 1).map fun (n, t) =>
+    (n, substCapNamesTy capArgMap (resolveCapInTy (substTy fullMapping t)))
+  let resolvedRetTy := substCapNamesTy capArgMap (resolveCapInTy (substTy fullMapping sig.retTy))
   return (resolvedParamTys, resolvedRetTy)
 
 -- ============================================================

@@ -209,32 +209,94 @@ partial def parseType : ParseM Ty := do
       -- Turbofish on type: Name::<T, U> (committed after ::)
       advance
       expect .lt
-      -- Inline parseTypeArgList (not yet in scope)
-      let firstTy ← parseType
-      let mut tyArgs := [firstTy]
-      let mut tkInner ← peek
-      while tkInner == .comma do
-        advance
-        let ty2 ← parseType
-        tyArgs := tyArgs ++ [ty2]
-        tkInner ← peek
+      -- Generic arguments: type arguments, then capability arguments (R-0484).
+      -- `{}` and `A + B` can only be capabilities, so they are taken as such here. A
+      -- lone identifier (`Writer<Console>`, `Vec<File>`) stays a type argument: only
+      -- the declaration can say which kind it is (`File` is both a capability and
+      -- std's `fs.File`), and the shared classifier decides by position. After a
+      -- capability argument, every further argument must be a capability.
+      let mut tyArgs : List Ty := []
+      let mut capArgs : List CapSet := []
+      let mut moreArgs := true
+      while moreArgs do
+        let tkA ← peek
+        if tkA == .lbrace then
+          advance
+          expect .rbrace
+          capArgs := CapSet.empty :: capArgs
+        else
+          let t ← parseType
+          let tkP ← peek
+          if tkP == .plus then
+            let firstName ← match t with
+              | .named n => pure n
+              | .typeVar n => pure n
+              | _ => throwParse "a capability argument combines capability names with `+`, e.g. `Console + File`"
+            let mut names := [firstName]
+            let mut tkQ ← peek
+            while tkQ == .plus do
+              advance
+              let n ← expectIdent
+              names := n :: names
+              tkQ ← peek
+            capArgs := CapSet.concrete names.reverse :: capArgs
+          else if !capArgs.isEmpty then
+            match t with
+            | .named n => capArgs := CapSet.concrete [n] :: capArgs
+            | .typeVar n => capArgs := CapSet.concrete [n] :: capArgs
+            | _ => throwParse "a type argument cannot follow a capability argument"
+          else
+            tyArgs := t :: tyArgs
+        let tkC ← peek
+        if tkC == .comma then advance else moreArgs := false
       expect .gt
-      -- CAPS-PLACEHOLDER(parse-type-args): capability arguments not parsed yet.
-      return .generic name tyArgs []
+      -- Built in reverse (cons), so reversed once here: argument order is positional.
+      return .generic name tyArgs.reverse capArgs.reverse
     else if next == .lt then
       advance
-      -- Inline parseTypeArgList
-      let firstTy ← parseType
-      let mut tyArgs := [firstTy]
-      let mut tk3 ← peek
-      while tk3 == .comma do
-        advance
-        let ty2 ← parseType
-        tyArgs := tyArgs ++ [ty2]
-        tk3 ← peek
+      -- Generic arguments: type arguments, then capability arguments (R-0484).
+      -- `{}` and `A + B` can only be capabilities, so they are taken as such here. A
+      -- lone identifier (`Writer<Console>`, `Vec<File>`) stays a type argument: only
+      -- the declaration can say which kind it is (`File` is both a capability and
+      -- std's `fs.File`), and the shared classifier decides by position. After a
+      -- capability argument, every further argument must be a capability.
+      let mut tyArgs : List Ty := []
+      let mut capArgs : List CapSet := []
+      let mut moreArgs := true
+      while moreArgs do
+        let tkA ← peek
+        if tkA == .lbrace then
+          advance
+          expect .rbrace
+          capArgs := CapSet.empty :: capArgs
+        else
+          let t ← parseType
+          let tkP ← peek
+          if tkP == .plus then
+            let firstName ← match t with
+              | .named n => pure n
+              | .typeVar n => pure n
+              | _ => throwParse "a capability argument combines capability names with `+`, e.g. `Console + File`"
+            let mut names := [firstName]
+            let mut tkQ ← peek
+            while tkQ == .plus do
+              advance
+              let n ← expectIdent
+              names := n :: names
+              tkQ ← peek
+            capArgs := CapSet.concrete names.reverse :: capArgs
+          else if !capArgs.isEmpty then
+            match t with
+            | .named n => capArgs := CapSet.concrete [n] :: capArgs
+            | .typeVar n => capArgs := CapSet.concrete [n] :: capArgs
+            | _ => throwParse "a type argument cannot follow a capability argument"
+          else
+            tyArgs := t :: tyArgs
+        let tkC ← peek
+        if tkC == .comma then advance else moreArgs := false
       expect .gt
-      -- CAPS-PLACEHOLDER(parse-type-args): capability arguments not parsed yet.
-      return .generic name tyArgs []
+      -- Built in reverse (cons), so reversed once here: argument order is positional.
+      return .generic name tyArgs.reverse capArgs.reverse
     else
       return .named name
   | other =>
@@ -1502,6 +1564,13 @@ private def resolveCapVars (capParams : List String) (cs : CapSet) : CapSet :=
     vars.foldl (fun acc v => match acc with | .empty => .var v | other => .union other (.var v)) base
   | other => other
 
+/-- `resolveCapVars` through every `.concrete` leaf of an already-resolved set, for when
+    more capability parameters come into scope (an impl's, joined to a method's). -/
+private def reresolveCapVars (capParams : List String) : CapSet → CapSet
+  | .concrete caps => resolveCapVars capParams (.concrete caps)
+  | .union a b => .union (reresolveCapVars capParams a) (reresolveCapVars capParams b)
+  | other => other
+
 partial def parseMethodParamList (selfKind : Option SelfKind) : ParseM (List Param) := do
   -- If we already consumed self/&self/&mut self, check for comma then rest
   if selfKind.isSome then
@@ -1687,7 +1756,7 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
 partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let declSp ← peekSpan
   expect .impl_
-  let (typeParams, typeBounds) ← parseTypeParams
+  let (typeParams, typeBounds, implCapParams) ← parseTypeAndCapParams
   let firstName ← expectIdent
   -- Check for turbofish on impl type: impl<T> Name<T> { ... }
   let next0 ← peek
@@ -1702,6 +1771,8 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   match tk with
   | .for_ =>
     -- Trait impl: impl TraitName for TypeName with(Caps) { ... }
+    if !implCapParams.isEmpty then
+      throwParse "capability parameters on a trait impl are not supported; declare them on an inherent impl (`impl<cap C> Writer<C>`)"
     advance
     let typeName ← expectIdent
     -- Conditional trait impl target may be generic: `impl<T: Destroy> Destroy
@@ -1728,7 +1799,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       if isTrustedM then advance; tk ← peek
       let (f, selfKind) ← parseMethodDef
       let selfTy := if typeParams.isEmpty then tyFromName typeName
-                     -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
+                     -- Trait impls take no capability parameters (refused above).
                      else Ty.generic typeName (typeParams.map Ty.typeVar) []
       let selfParam : List Param := match selfKind with
         | some .value => [{ name := "self", ty := selfTy }]
@@ -1776,11 +1847,18 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       let isTrustedM := tk == .trusted_
       if isTrustedM then advance; tk ← peek
       let (f0, selfKind) ← parseMethodDef
-      let f := { f0 with proofLink := mProofLink }
-      -- Inject self parameter based on selfKind
-      let selfTy := if typeParams.isEmpty then tyFromName typeName
-                     -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
-                     else Ty.generic typeName (typeParams.map Ty.typeVar) []
+      -- Methods of `impl<cap C> Writer<C>` can name `C`: the impl's capability
+      -- parameters join the method's own, and its `with(...)` is re-resolved so `C`
+      -- is a variable there rather than an unknown capability named "C".
+      let mergedCaps := implCapParams ++ f0.capParams.filter (fun c => !implCapParams.contains c)
+      let f := { f0 with proofLink := mProofLink, capParams := mergedCaps,
+                         capSet := reresolveCapVars mergedCaps f0.capSet }
+      -- Inject self parameter based on selfKind. A capability argument in a type is
+      -- written as the capability NAME (the convention `fn(..) with(C)` already uses),
+      -- so the self type `Writer<C>` equals a parameter written `Writer<C>`.
+      let selfTy := if typeParams.isEmpty && implCapParams.isEmpty then tyFromName typeName
+                     else Ty.generic typeName (typeParams.map Ty.typeVar)
+                            (implCapParams.map fun c => CapSet.concrete [c])
       let selfParam : List Param := match selfKind with
         | some .value => [{ name := "self", ty := selfTy }]
         | some .ref => [{ name := "self", ty := .ref selfTy }]
@@ -1791,7 +1869,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, typeBounds, methods, span := declSp }
+    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp }
 
 partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan
@@ -1912,7 +1990,7 @@ partial def parseStructDef : ParseM StructDef := do
     | .ident "Copy" => advance; pure true
     | _ => pure false
   let name ← expectIdent
-  let (typeParams, typeBounds) ← parseTypeParams
+  let (typeParams, typeBounds, capParams) ← parseTypeAndCapParams
   expect .lbrace
   let mut fields : List StructField := []
   let mut tk ← peek
@@ -1930,7 +2008,7 @@ partial def parseStructDef : ParseM StructDef := do
       advance
       tk ← peek
   expect .rbrace
-  return { name, typeParams, typeBounds, fields, isCopy, span := declSp }
+  return { name, typeParams, typeBounds, capParams, fields, isCopy, span := declSp }
 
 partial def parseEnumDef : ParseM EnumDef := do
   let declSp ← peekSpan

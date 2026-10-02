@@ -1428,6 +1428,19 @@ run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
 run_err "$TESTDIR/error_type_arg_count_extra.con"   "E0113"   # bug 073: extra type argument
 run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing type argument
 run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
+# R-0484: structs with capability parameters (`struct Sink<cap C>`). Positives build and use
+# them; negatives are the authority escapes they must refuse, and the kind/count checks.
+run_ok  "$TESTDIR/cap_struct_generic_helper.con"    42
+run_ok  "$TESTDIR/cap_struct_method.con"            42
+run_ok  "$TESTDIR/cap_struct_inferred.con"          42
+run_err "$TESTDIR/error_cap_struct_leak_generic.con"   "E0240"
+run_err "$TESTDIR/error_cap_struct_leak_field.con"     "E0240"
+run_err "$TESTDIR/error_cap_struct_leak_method.con"    "E0240"
+run_err "$TESTDIR/error_cap_struct_mislabel.con"       "E0220"
+run_err "$TESTDIR/error_cap_struct_assign_launder.con" "E0220"
+run_err "$TESTDIR/error_cap_arg_type_where_cap.con"    "E0114"
+run_err "$TESTDIR/error_cap_arg_cap_where_type.con"    "E0114"
+run_err "$TESTDIR/error_cap_arg_count.con"             "E0115"
 run_err "$TESTDIR/error_copy_linear_field.con"   "contains non-copy field"
 # Conditional Copy (Phase 7 #3): Box<MyResource> silently LOSES Copy (not an
 # instantiation error) — the move-after-use is what rejects, matching the

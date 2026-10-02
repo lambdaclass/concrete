@@ -1,0 +1,3 @@
+// R-0484 kind check: Vec takes no capability arguments; {} is one (E0114).
+fn take(v: Vec<{}>) -> i32 { return 0; }
+fn main() -> i32 { return 0; }

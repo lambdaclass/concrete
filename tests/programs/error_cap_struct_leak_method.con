@@ -1,0 +1,21 @@
+// R-0484 negative: a method on impl<cap C> Sink<C> called on a Sink<Console> without
+// Console must be refused (E0240).
+struct Copy Sink<cap C> { f: fn(i32) with(C) -> i32 }
+
+impl<cap C> Sink<C> {
+    fn run(&self, x: i32) with(C) -> i32 {
+        let g: fn(i32) with(C) -> i32 = self.f;
+        return g(x);
+    }
+}
+
+fn apply<cap C>(s: &Sink<C>, x: i32) with(C) -> i32 {
+    let g: fn(i32) with(C) -> i32 = s.f;
+    return g(x);
+}
+
+fn twice(x: i32) -> i32 { return x * 2; }
+fn shout(x: i32) with(Console) -> i32 { print_int(x as i64); return x; }
+
+fn sneaky(s: &Sink<Console>) -> i32 { return s.run(1); }
+fn main() with(Console) -> i32 { let s: Sink<Console> = Sink { f: shout }; return sneaky(&s); }

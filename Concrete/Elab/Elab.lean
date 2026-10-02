@@ -437,9 +437,26 @@ private partial def peekExprType (e : Expr) : ElabM Ty := do
         let paramTys := sig.params.map Prod.snd
         return .fn_ paramTys sig.capSet sig.retTy
       | none => return .placeholder
-  | .structLit _ name typeArgs _ _ =>
-    -- CAPS-PLACEHOLDER(literal-caps): a struct literal's capability arguments are inferred in S2.1.
-    if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
+  | .structLit _ name typeArgs fields _ =>
+    -- R-0484: capability arguments read off the fields' peeked types (same rule as Check).
+    match ← lookupStruct name with
+    | some sd =>
+      if sd.capParams.isEmpty then
+        if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
+      else
+        let mapping := sd.typeParams.zip typeArgs
+        let mut capMap : List (String × CapSet) := []
+        for sf in sd.fields do
+          if (tyCapNames sf.ty).any sd.capParams.contains then
+            match fields.find? fun (fn, _) => fn == sf.name with
+            | some (_, fe) =>
+              let fty ← peekExprType fe
+              for (k, v) in inferCapBindings sd.capParams (substTy mapping sf.ty) fty do
+                if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
+            | none => pure ()
+        return .generic name typeArgs (sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg)
+    | none =>
+      if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
   | .enumLit _ enumName _ typeArgs _ =>
     -- Enums take no capability parameters.
     if typeArgs.isEmpty then return .named enumName else return .generic enumName typeArgs []
@@ -613,8 +630,17 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       recordStructTypeUse sd
       let typeArgs ← typeArgs.mapM resolveTypeE
       let mapping := sd.typeParams.zip typeArgs
-      -- CAPS-PLACEHOLDER(literal-caps)
-      let resultTy := if typeArgs.isEmpty then Ty.named name else Ty.generic name typeArgs []
+      -- Capability arguments (R-0484), by the same rule as Check: from the expected type
+      -- when it names this struct, otherwise read off the elaborated field values below.
+      let hintCapMap : Option (List (String × CapSet)) := match hint with
+        | some (.generic hn _ hc) =>
+          if hn == name && !sd.capParams.isEmpty && hc.length == sd.capParams.length
+          then some (sd.capParams.zip hc) else none
+        | _ => none
+      let provisionalCaps := sd.capParams.map fun c =>
+        (((hintCapMap.getD []).lookup c).getD .empty).canonArg
+      let resultTy := if typeArgs.isEmpty && sd.capParams.isEmpty then Ty.named name
+                      else Ty.generic name typeArgs provisionalCaps
       -- Functional update `..base`: elaborate the base once; any field not given
       -- explicitly is filled with `base.field`. (Use a variable as the base — a
       -- complex base expression is re-read per copied field.)
@@ -637,15 +663,28 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       for (fname, expr) in fields do
         match sd.fields.find? fun sf => sf.name == fname with
         | some sf =>
-          let fieldTy := substTy mapping sf.ty
+          let fieldTy := substCapNamesTy (hintCapMap.getD []) (substTy mapping sf.ty)
           recordFieldUse sd sf.name
           let cExprEv ← elabExprEv expr (some fieldTy)
           cFields := cFields ++ [(sf.name, cExprEv.core)]
           structFieldEvsRev := (sf.name, cExprEv.evidence) :: structFieldEvsRev
         | none => pure ()  -- unknown field: reported by the checker, not here
+      -- Without an expected type, read the capability arguments off the elaborated
+      -- fields (each was elaborated exactly once, above).
+      let capMap : List (String × CapSet) := match hintCapMap with
+        | some m => m
+        | none => sd.fields.foldl (fun acc sf =>
+            match cFields.lookup sf.name with
+            | some ce =>
+              let found := inferCapBindings sd.capParams (substTy mapping sf.ty) ce.ty
+              acc ++ found.filter fun (k, _) => !(acc.any (·.1 == k))
+            | none => acc) []
+      let capArgs := sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg
+      let resultTy := if typeArgs.isEmpty && sd.capParams.isEmpty then Ty.named name
+                      else Ty.generic name typeArgs capArgs
       for sf in sd.fields do
         if !(fields.any fun (fn, _) => fn == sf.name) then
-          let fieldTy := substTy mapping sf.ty
+          let fieldTy := substCapNamesTy capMap (substTy mapping sf.ty)
           match cBase with
           | some cb =>
             recordFieldUse sd sf.name
@@ -670,11 +709,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let objTy := cObj.ty
     let innerTy := match objTy with
       | .ref t => t | .refMut t => t | t => t
-    let (structName, typeArgs) := match innerTy with
-      | .named n => (n, ([] : List Ty))
-      | .generic n args _ => (n, args)
-      | .string => ("String", [])
-      | _ => ("", [])
+    let (structName, typeArgs, capArgs) := match innerTy with
+      | .named n => (n, ([] : List Ty), ([] : List CapSet))
+      | .generic n args caps => (n, args, caps)
+      | .string => ("String", [], [])
+      | _ => ("", [], [])
     -- For `.0` on a borrowed newtype (`&Port`, `&mut Port`), deref to the
     -- newtype value first so the rebrand cast is `Newtype -> Inner`, not
     -- `&Newtype -> Inner` (which fails CoreCheck and confuses codegen).
@@ -687,7 +726,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       match sd.fields.find? fun f => f.name == field with
       | some f =>
         recordFieldUse sd field
-        let fieldTy := substTy mapping f.ty
+        -- R-0484: the field's type at this instantiation (same rule as Check).
+        let fieldTy := substCapNamesTy (sd.capParams.zip capArgs) (substTy mapping f.ty)
         let fieldTy ← resolveTypeE fieldTy
         return ElaboratedExprV2.mk (CExpr.fieldAccess cObj field fieldTy)
           (match sd.typeId? with
@@ -702,7 +742,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let mapping := nt.typeParams.zip typeArgs
             let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
             let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
-                                   else .generic structName typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
+                                   else .generic structName typeArgs [] -- newtypes take no capability parameters
             return ElaboratedExprV2.mk (CExpr.cast (derefIfBorrowed cObj newtypeTy) innerTy) (Proof.evUnhandledExpr "newtype rebrand cast")
           | none => return ElaboratedExprV2.mk (cObj) (cObjEv.evidence)
         else throwElab (.structHasNoField structName field) (some e.getSpan)
@@ -717,7 +757,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let mapping := nt.typeParams.zip typeArgs
           let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
           let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
-                                 else .generic structName typeArgs [] -- CAPS-PLACEHOLDER(literal-caps)
+                                 else .generic structName typeArgs [] -- newtypes take no capability parameters
           return ElaboratedExprV2.mk (CExpr.cast (derefIfBorrowed cObj newtypeTy) innerTy) (Proof.evUnhandledExpr "newtype rebrand cast")
         | none => return ElaboratedExprV2.mk (cObj) (cObjEv.evidence)
       else throwElab .fieldAccessNonStruct (some e.getSpan)
@@ -2238,9 +2278,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
     if proofFnPrefix.isEmpty then localName else proofFnPrefix ++ "_" ++ localName
   let regularFns := m.functions.map fun f => (f, (none : Option Ty))
   let implMethodPairs := m.implBlocks.foldl (fun acc ib =>
-    let implTy := if ib.typeParams.isEmpty then tyFromName ib.typeName
-                  -- CAPS-PLACEHOLDER(impl-self)
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
+    -- `impl<cap C> Writer<C>`: the self type carries the impl's capability parameters
+    -- by name (R-0484); the parser already joined them to each method's own.
+    let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                         (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
                 typeBounds := ib.typeBounds ++ f.typeBounds,
@@ -2248,7 +2290,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
-                  -- CAPS-PLACEHOLDER(impl-self)
+                  -- Trait impls take no capability parameters (refused at parse).
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,

@@ -678,7 +678,14 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
                     let (argCaps, _) := cs.normalize
                     capBindings := capBindings ++ [(cap, argCaps)]
                   | none => pure ()
-            | _ => pure ()
+            | _ =>
+              -- R-0484: a capability parameter carried by a capability ARGUMENT
+              -- (`s: &Sink<C>`) is read off the argument's type (`&Sink<{}>`). The
+              -- argument is only peeked here; it is checked, once, below.
+              if (tyCapNames pTy).any sig.capParams.contains then
+                let argTy ← peekExprType arg
+                for (k, v) in inferCapBindings sig.capParams pTy argTy do
+                  if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
           -- Resolve the cap-poly signature against the bindings (shared with the
           -- method-call path: Capabilities.resolveCaps). Error carries the cap
           -- variable that could not be inferred.
@@ -702,7 +709,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             else acc ++ [cap]) []
           .fn_ params (.concrete newCaps) ret
         | t => t
-      let paramTypes := paramTypes.map fun (n, t) => (n, resolveCapInTy t)
+      -- Capability parameters inside capability arguments (`&Sink<C>`) get the same
+      -- bindings, so the parameter is compared at its instantiated type.
+      let capArgMap : List (String × CapSet) := capBindings'.map fun (cp, caps) =>
+        (cp, (if caps.isEmpty then CapSet.empty else CapSet.concrete caps).canonArg)
+      let paramTypes := paramTypes.map fun (n, t) => (n, substCapNamesTy capArgMap (resolveCapInTy t))
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
@@ -750,8 +761,37 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         | none => pure ()
       -- Build type substitution from struct type params + provided type args
       let mapping := sd.typeParams.zip typeArgs
-      -- CAPS-PLACEHOLDER(literal-caps)
-      let structTy := if typeArgs.isEmpty then Ty.named name else .generic name typeArgs []
+      -- Capability arguments (R-0484): taken from the expected type when it names this
+      -- struct, otherwise read off the values of the fields whose types mention them.
+      -- Each field expression is checked exactly once — the ones used for inference
+      -- here, the rest below — so linearity is never counted twice.
+      let capParams := sd.capParams
+      let hintCaps : Option (List CapSet) := match hint with
+        | some (.generic hn _ hc) =>
+          if hn == name && !capParams.isEmpty && hc.length == capParams.length then some hc else none
+        | _ => none
+      let mut capMap : List (String × CapSet) := []
+      let mut prechecked : List (String × Ty) := []
+      if !capParams.isEmpty then
+        match hintCaps with
+        | some hc => capMap := capParams.zip hc
+        | none =>
+          for sf in sd.fields do
+            if (tyCapNames sf.ty).any capParams.contains then
+              match fields.find? fun (fn, _) => fn == sf.name with
+              | some (_, fexpr) =>
+                let exprTy ← checkExpr fexpr none
+                prechecked := (sf.name, exprTy) :: prechecked
+                let raw ← resolveType (substTy mapping sf.ty)
+                for (k, v) in inferCapBindings capParams raw exprTy do
+                  if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
+              | none => pure ()
+          for c in capParams do
+            if !(capMap.any (·.1 == c)) then
+              throwCheck (.cannotInferCapVariable c name) (some e.getSpan)
+      let capArgs := capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg
+      let structTy := if typeArgs.isEmpty && capParams.isEmpty then Ty.named name
+                      else .generic name typeArgs capArgs
       -- A `..base` functional-update source must itself be this struct type.
       match base with
       | some b =>
@@ -761,10 +801,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         expectTy structTy bTy s!"`..base` of struct '{name}'" (some e.getSpan)
       | none => pure ()
       for sf in sd.fields do
-        let fieldTy ← resolveType (substTy mapping sf.ty)
+        let fieldTy ← resolveType (substCapNamesTy capMap (substTy mapping sf.ty))
         match fields.find? fun (fn, _) => fn == sf.name with
         | some (_, expr) =>
-          let exprTy ← checkExpr expr (some fieldTy)
+          let exprTy ← match prechecked.lookup sf.name with
+            | some t => pure t
+            | none => checkExpr expr (some fieldTy)
           expectTy fieldTy exprTy s!"field '{sf.name}' of struct '{name}'" (some e.getSpan)
         | none =>
           -- A missing field is supplied by `..base` if present; otherwise it is a
@@ -802,12 +844,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     let isHeapShell := match objTy with
       | .heap _ | .heapArray _ | .ref (.heap _) | .refMut (.heap _) => true
       | _ => false
-    -- Extract struct name and type args for generic type substitution
-    let (structName, typeArgs) := match innerTy with
-      | .named n => (n, ([] : List Ty))
-      | .generic n args _ => (n, args)
-      | .string => ("String", [])
-      | _ => ("", [])
+    -- Extract struct name, type args and capability args for substitution
+    let (structName, typeArgs, capArgs) := match innerTy with
+      | .named n => (n, ([] : List Ty), ([] : List CapSet))
+      | .generic n args caps => (n, args, caps)
+      | .string => ("String", [], [])
+      | _ => ("", [], [])
     if structName == "" then throwCheck .fieldAccessNonStruct (some e.getSpan)
     else
       -- Check for newtype .0 unwrap
@@ -839,7 +881,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           if !f.isPublic && !(← getEnv).localStructNames.contains structName then
             throwCheck (.fieldAccessPrivate structName field) (some e.getSpan)
           let mapping := sd.typeParams.zip typeArgs
-          let fieldTy ← resolveType (substTy mapping f.ty)
+          -- R-0484: the field's type at THIS instantiation — `s.f` on a `&Sink<Console>`
+          -- is `fn(..) with(Console)`, not the declared `with(C)`.
+          let fieldTy ← resolveType (substCapNamesTy (sd.capParams.zip capArgs) (substTy mapping f.ty))
           -- H11: a by-value read of a non-Copy field duplicates it (the struct
           -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
           -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
@@ -1309,7 +1353,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- (mirrors free-fn inference), so capability-polymorphic methods work
       -- without turbofish.
       let (methodParams, retTy) ←
-        inferMethodParamAndRetTys sig implMapping methodTypeParams typeArgs args methodName e.getSpan
+        inferMethodParamAndRetTys sig implMapping methodTypeParams typeArgs args methodName e.getSpan innerTy
       if args.length != methodParams.length then
         throwCheck (.wrongArgCount s!"method '{methodName}'" methodParams.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip methodParams do
@@ -1647,11 +1691,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- substitutes the type args, and `String` is std's struct behind the
     -- builtin type. The old `.named`-only match threw a wrong E0254
     -- ("non-struct") for both — surfaced by the H12 std migration.
-    let (structName, typeArgs) := match innerTy with
-      | .named n => (n, ([] : List Ty))
-      | .generic n args _ => (n, args)
-      | .string => ("String", [])
-      | _ => ("", [])
+    let (structName, typeArgs, capArgs) := match innerTy with
+      | .named n => (n, ([] : List Ty), ([] : List CapSet))
+      | .generic n args caps => (n, args, caps)
+      | .string => ("String", [], [])
+      | _ => ("", [], [])
     if structName == "" then throwCheck .fieldAccessNonStruct (some stmt.getSpan)
     else
       match ← lookupStruct structName with
@@ -1663,7 +1707,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           if !f.isPublic && !(← getEnv).localStructNames.contains structName then
             throwCheck (.fieldAccessPrivate structName field) (some stmt.getSpan)
           let mapping := sd.typeParams.zip typeArgs
-          let fieldTy ← resolveType (substTy mapping f.ty)
+          -- R-0484: assignment compares against the field's type at this instantiation.
+          let fieldTy ← resolveType (substCapNamesTy (sd.capParams.zip capArgs) (substTy mapping f.ty))
           -- Overwriting a non-Copy field would leak the old linear value AND cannot
           -- soundly move the RHS in (a linear value must be used exactly once). Reject
           -- it (mirrors the "linear variables cannot be reassigned" rule for places).
@@ -2487,16 +2532,18 @@ def checkModule (m : Module) (summary : FileSummary)
   -- reference functions not in scope here).
   let regularFns : List (FnDef × Option Ty) := m.functions.map fun f => (f, none)
   let implMethodPairs : List (FnDef × Option Ty) := m.implBlocks.foldl (fun acc ib =>
-    let implTy := if ib.typeParams.isEmpty then tyFromName ib.typeName
-                  -- CAPS-PLACEHOLDER(impl-self)
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
+    -- `impl<cap C> Writer<C>`: the self type carries the impl's capability parameters
+    -- by name (R-0484); the parser already joined them to each method's own.
+    let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                         (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
               , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
-                  -- CAPS-PLACEHOLDER(impl-self)
+                  -- Trait impls take no capability parameters (refused at parse).
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams

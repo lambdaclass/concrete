@@ -115,6 +115,75 @@ partial def substSelf (ty : Ty) (replacement : Ty) : Ty :=
   | .fn_ params caps ret => .fn_ (params.map (substSelf · replacement)) caps (substSelf ret replacement)
   | t => t
 
+/-- Every capability name a type mentions, in function-pointer sets and capability
+    arguments, at any depth. -/
+partial def tyCapNames : Ty → List String
+  | .fn_ ps cs r => cs.allNames ++ ps.flatMap tyCapNames ++ tyCapNames r
+  | .generic _ args caps => caps.flatMap CapSet.allNames ++ args.flatMap tyCapNames
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t | .heapArray t => tyCapNames t
+  | .array t _ => tyCapNames t
+  | _ => []
+
+/-- Substitute capability parameters, by name, inside function-pointer capability sets
+    and nested capability arguments. `m` maps a parameter name to the set it stands for.
+    A name not in `m` is kept. -/
+partial def substCapNamesTy (m : List (String × CapSet)) : Ty → Ty
+  | .fn_ ps cs r =>
+    .fn_ (ps.map (substCapNamesTy m)) (substCapNamesSet m cs) (substCapNamesTy m r)
+  | .generic n args caps =>
+    .generic n (args.map (substCapNamesTy m)) (caps.map fun c => (substCapNamesSet m c).canonArg)
+  | .ref t => .ref (substCapNamesTy m t)
+  | .refMut t => .refMut (substCapNamesTy m t)
+  | .ptrMut t => .ptrMut (substCapNamesTy m t)
+  | .ptrConst t => .ptrConst (substCapNamesTy m t)
+  | .heap t => .heap (substCapNamesTy m t)
+  | .heapArray t => .heapArray (substCapNamesTy m t)
+  | .array t k => .array (substCapNamesTy m t) k
+  | t => t
+where
+  substCapNamesSet (m : List (String × CapSet)) (cs : CapSet) : CapSet :=
+    let names := cs.allNames.flatMap fun n =>
+      match m.lookup n with
+      | some sub => sub.allNames
+      | none => [n]
+    let names := names.mergeSort (· < ·) |>.eraseDups
+    match cs with
+    | .empty => .empty
+    | _ => if names.isEmpty then .empty else .concrete names
+
+/-- Read capability-parameter bindings off `actual` by matching it against `pattern`
+    (R-0484). Where the pattern has `with(C)` (or `with(C, Alloc)`) and the actual
+    function-pointer type has `with(Console, Alloc)`, `C` is bound to what the actual set
+    has beyond the pattern's own concrete names. Where the pattern has capability argument
+    `C` (`Sink<C>`) and the actual has `Sink<Console>`, `C` is bound to `Console`. A
+    parameter that cannot be read off is simply not bound: the caller decides whether
+    that is an error. -/
+partial def inferCapBindings (capParams : List String) (pattern actual : Ty) : List (String × CapSet) :=
+  match pattern, actual with
+  | .fn_ pps pcs pr, .fn_ aps acs ar =>
+    let pNames := pcs.allNames
+    let vars := pNames.filter capParams.contains
+    let fixed := pNames.filter (fun n => !capParams.contains n)
+    let here := match vars with
+      | [v] =>
+        let rest := acs.allNames.filter (fun n => !fixed.contains n)
+        [(v, (if rest.isEmpty then CapSet.empty else CapSet.concrete rest).canonArg)]
+      | _ => []
+    here ++ (pps.zip aps).flatMap (fun (p, a) => inferCapBindings capParams p a)
+         ++ inferCapBindings capParams pr ar
+  | .generic pn pargs pcaps, .generic an aargs acaps =>
+    if pn != an then [] else
+    let here := (pcaps.zip acaps).filterMap fun (pc, ac) =>
+      match pc.allNames with
+      | [v] => if capParams.contains v then some (v, ac.canonArg) else none
+      | _ => none
+    here ++ (pargs.zip aargs).flatMap (fun (p, a) => inferCapBindings capParams p a)
+  | .ref p, .ref a | .refMut p, .refMut a | .ref p, .refMut a => inferCapBindings capParams p a
+  | .ptrMut p, .ptrMut a | .ptrConst p, .ptrConst a => inferCapBindings capParams p a
+  | .heap p, .heap a | .heapArray p, .heapArray a => inferCapBindings capParams p a
+  | .array p _, .array a _ => inferCapBindings capParams p a
+  | _, _ => []
+
 /-- Infer generic type-argument bindings by structurally matching a parameter
     `pattern` type against the `actual` argument type, collecting `(typeParam,
     ty)` pairs (Phase 6.5 InstantiationJudgment axis). This is the ONE type-arg

@@ -43,6 +43,21 @@ def CapSet.toTypeArg (cs : CapSet) : String :=
   let parts := names ++ vars.mergeSort (· < ·)
   if parts.isEmpty then "{}" else " + ".intercalate parts
 
+/-- One canonical form for a capability ARGUMENT: names sorted and deduplicated, and the
+    empty set as `.empty`. Applied wherever a capability argument is built or compared,
+    so `Sink<File + Console>` and an inferred `Console + File` are one type. Capability
+    variables keep the name convention `fn(..) with(C)` uses: a name, recognized by
+    membership in the parameters in scope. -/
+def CapSet.canonArg (cs : CapSet) : CapSet :=
+  let (names, vars) := cs.normalize
+  let all := (names ++ vars).mergeSort (· < ·) |>.eraseDups
+  if all.isEmpty then .empty else .concrete all
+
+/-- The capability names a set mentions (concrete names and variables alike). -/
+def CapSet.allNames (cs : CapSet) : List String :=
+  let (names, vars) := cs.normalize
+  names ++ vars
+
 /-- Get the concrete capabilities from a CapSet (ignoring variables). -/
 def CapSet.concreteCaps : CapSet → List String
   | .empty => []
@@ -318,6 +333,10 @@ structure StructDef where
   definitionName : String := ""
   typeParams : List String := []
   typeBounds : List (String × List String) := []  -- type param bounds: T -> [Trait1, Trait2]
+  /-- Capability parameters, `struct Writer<cap C>` (R-0484). Written after the type
+      parameters; a use `Writer<Console>` supplies them positionally after the type
+      arguments, and the shared classifier checks the kind of each. -/
+  capParams : List String := []
   fields : List StructField
   isPublic : Bool := false
   isUnion : Bool := false
@@ -454,6 +473,9 @@ structure FnSigDef where
 structure ImplBlock where
   typeName : String
   typeParams : List String := []
+  /-- `impl<cap C> Writer<C>`: the self type's capability parameters. Every method in
+      the block can name `C` in its `with(...)` and in its types. -/
+  capParams : List String := []
   typeBounds : List (String × List String) := []  -- impl-level param bounds: V -> [Copy], enforced at method-call sites
   methods : List FnDef
   isTrusted : Bool := false        -- trusted impl: all methods inherit trusted boundary

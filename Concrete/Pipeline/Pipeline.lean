@@ -3,6 +3,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Resolve
 import Concrete.Frontend.Parser
+import Concrete.Frontend.CapArgs
 import Concrete.Check.Check
 import Concrete.Elab.Core
 import Concrete.Elab.Elab
@@ -62,7 +63,9 @@ namespace Pipeline
 /-- Parse source code into a `ParsedProgram`. Expands capability aliases. -/
 def parse (source : String) : Except Diagnostics ParsedProgram :=
   match Concrete.parse source with
-  | .ok modules => .ok { modules := modules.map Module.expandCapAliases }
+  -- Capability arguments are normalized against LOCAL declarations here, and again once
+  -- imports are loaded (resolveFiles, Project merge); the pass is idempotent.
+  | .ok modules => .ok { modules := normalizeProgramCapArgs (modules.map Module.expandCapAliases) }
   | .error ds => .error ds
 
 /-- Parse error-tolerantly: returns the (best-effort) program ALONGSIDE every
@@ -70,7 +73,7 @@ def parse (source : String) : Except Diagnostics ParsedProgram :=
     (ROADMAP Phase 4 #12c). For the tolerant diagnostics path only. -/
 def parsePartial (source : String) : ParsedProgram × Diagnostics :=
   let (modules, ds) := Concrete.parseProgramPartial source
-  ({ modules := modules.map Module.expandCapAliases }, ds)
+  ({ modules := normalizeProgramCapArgs (modules.map Module.expandCapAliases) }, ds)
 
 /-- Resolve `mod X;` declarations by reading sub-module files from disk.
     Wraps `resolveAllModules` (IO because it reads files).
@@ -82,7 +85,7 @@ def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
   | .error e =>
     return .error [{ severity := .error, message := e, pass := "resolve", span := none, hint := none }]
   | .ok (modules, srcMap) =>
-    return .ok ({ modules }, srcMap)
+    return .ok ({ modules := normalizeProgramCapArgs modules }, srcMap)
 
 /-- Build the cross-file summary table from parsed modules. -/
 def buildSummary (prog : ParsedProgram) : SummaryTable :=

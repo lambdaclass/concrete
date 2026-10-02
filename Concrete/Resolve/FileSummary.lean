@@ -126,14 +126,16 @@ def resolveImplMethodSigs
     (traitImpls : List ImplTraitBlock)
     : List (String × FnSummary) :=
   let tyMap := implBlocks.foldl (fun acc ib =>
-    let implTy := if ib.typeParams.isEmpty then Ty.named ib.typeName
-                  -- CAPS-PLACEHOLDER(impl-self): no capability parameters on impl blocks yet.
-                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar) []
+    -- `impl<cap C> Writer<C>`: the self type carries the impl's capability parameters,
+    -- by name, the convention capability arguments in types use (R-0484).
+    let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then Ty.named ib.typeName
+                  else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
+                         (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f => (ib.typeName ++ "_" ++ f.name, implTy)
   ) []
   let tyMap := traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then Ty.named tb.typeName
-                  -- CAPS-PLACEHOLDER(impl-self): no capability parameters on trait impls yet.
+                  -- Trait impls take no capability parameters (refused at parse).
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f => (tb.typeName ++ "_" ++ f.name, implTy)
   ) tyMap

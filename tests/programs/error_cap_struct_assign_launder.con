@@ -1,0 +1,19 @@
+// R-0484 negative: nor assigned into one after construction (E0220).
+struct Copy Sink<cap C> { f: fn(i32) with(C) -> i32 }
+
+impl<cap C> Sink<C> {
+    fn run(&self, x: i32) with(C) -> i32 {
+        let g: fn(i32) with(C) -> i32 = self.f;
+        return g(x);
+    }
+}
+
+fn apply<cap C>(s: &Sink<C>, x: i32) with(C) -> i32 {
+    let g: fn(i32) with(C) -> i32 = s.f;
+    return g(x);
+}
+
+fn twice(x: i32) -> i32 { return x * 2; }
+fn shout(x: i32) with(Console) -> i32 { print_int(x as i64); return x; }
+
+fn main() with(Console) -> i32 { let mut s: Sink<{}> = Sink { f: twice }; s.f = shout; return apply(&s, 1); }

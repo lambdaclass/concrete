@@ -55,6 +55,8 @@ inductive ResolveError where
   | notPublicInModule (symbol : String) (moduleName : String)
   | recursiveTypeAlias (name : String)
   | wrongTypeArgCount (name : String) (expected : Nat) (got : Nat)
+  | capArgKindMismatch (name : String) (detail : String)
+  | wrongCapArgCount (name : String) (expected : Nat) (got : Nat)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -70,6 +72,9 @@ def ResolveError.message : ResolveError → String
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .recursiveTypeAlias name => s!"recursive type alias '{name}' (a type alias may not refer to itself, directly or through other aliases)"
+  | .capArgKindMismatch name detail => s!"wrong kind of argument for '{name}': {detail}"
+  | .wrongCapArgCount name expected got =>
+    s!"'{name}' takes {expected} capability argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
   | .wrongTypeArgCount name expected got =>
     s!"'{name}' takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
 
@@ -136,6 +141,8 @@ def ResolveError.code : ResolveError → String
   | .notPublicInModule _ _ => "E0111"
   | .recursiveTypeAlias _ => "E0112"
   | .wrongTypeArgCount _ _ _ => "E0113"
+  | .capArgKindMismatch _ _ => "E0114"
+  | .wrongCapArgCount _ _ _ => "E0115"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -184,6 +191,14 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
     `Result`/`Option` (`hasUserResultEnum`). `none` means "not known here" — an imported
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
+private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  match lookupSymKind ctx name with
+  | some (.struct d) => some d.capParams.length
+  | some (.enum _) | some (.newtype _) => some 0
+  | _ => match name with
+    | "Heap" | "HeapArray" | "Vec" | "Option" | "Result" => some 0
+    | _ => none
+
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   match lookupSymKind ctx name with
   | some (.struct d) => some d.typeParams.length
@@ -205,6 +220,26 @@ private def checkTypeArgCount (ctx : ResolveCtx) (name : String) (got : Nat)
                      else addError ctx (.wrongTypeArgCount name expected got) span
   | none => ctx
 
+/-- Type and capability arguments against the declaration. Normalization leaves an
+    argument in the type list only when it could not be a capability, so a type list
+    LONGER than the declaration's, on a struct that takes capabilities, is a type
+    written where a capability is expected. -/
+private def checkGenericArgs (ctx : ResolveCtx) (name : String) (args : List Ty)
+    (caps : List CapSet) (span : Option Span) : ResolveCtx :=
+  match declaredTypeArity ctx name, declaredCapArity ctx name with
+  | some tp, some cp =>
+    if args.length > tp && cp > 0 then
+      addError ctx (.capArgKindMismatch name
+        s!"a type was given where a capability is expected (it takes {tp} type argument{if tp == 1 then "" else "s"} and {cp} capability argument{if cp == 1 then "" else "s"})") span
+    else if !caps.isEmpty && cp == 0 then
+      addError ctx (.capArgKindMismatch name
+        "a capability was given, but it takes no capability arguments") span
+    else
+      let ctx := if args.length == tp then ctx else addError ctx (.wrongTypeArgCount name tp args.length) span
+      if caps.length == cp then ctx else addError ctx (.wrongCapArgCount name cp caps.length) span
+  | some _, none => checkTypeArgCount ctx name args.length span
+  | _, _ => ctx
+
 /-- Recursively check that all type names in a Ty are known. -/
 private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none) : ResolveCtx :=
   match ty with
@@ -215,9 +250,10 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       | none => addError ctx .selfOutsideImpl span
     else if isKnownType ctx name then ctx
     else addError ctx (.unknownType name) span
-  -- CAPS-PLACEHOLDER(kind-check): capability-argument arity and kind are checked here.
-  | .generic name args _caps =>
-    let ctx := if isKnownType ctx name then checkTypeArgCount ctx name args.length span
+  -- Capability arguments were already classified by position (Frontend/CapArgs), so
+  -- what remains here is the kind and count check, in both directions (R-0484).
+  | .generic name args caps =>
+    let ctx := if isKnownType ctx name then checkGenericArgs ctx name args caps span
                else addError ctx (.unknownType name) span
     args.foldl (fun ctx ty => checkTyDeep ctx ty span) ctx
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner

@@ -1,0 +1,4 @@
+// R-0484 kind check: Sink takes one capability argument; i32 is a type (E0114).
+struct Copy Sink<cap C> { f: fn(i32) with(C) -> i32 }
+fn take(s: Sink<i32>) -> i32 { return 0; }
+fn main() -> i32 { return 0; }

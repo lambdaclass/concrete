@@ -69,6 +69,8 @@ import Concrete.Proof.ImplementationIdentity
 -- The compiler references their theorems by name/fingerprint (Concrete.Proof), it
 -- does NOT import example proof code; only the `Examples` lib build kernel-checks them.
 import Concrete.Frontend.Format
+import Concrete.Frontend.TypeMap
+import Concrete.Frontend.CapArgs
 import Concrete.Check.Verify
 import Concrete.Report.DebugBundle
 import Concrete.Report.Reduce

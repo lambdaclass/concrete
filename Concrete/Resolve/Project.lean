@@ -396,7 +396,9 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     else depModules
     let allModules : List Module := depModulesUsed ++ resolvedParsed.modules
     let allSrcMap : SourceMap := [(mainPath, source)] ++ subSrcMap ++ depSrcMap
-    let merged : ParsedProgram := { modules := allModules }
+    -- Dependency structs (std's `Writer<cap C>`) are only visible once merged, so capability
+    -- arguments are normalized again over the whole program.
+    let merged : ParsedProgram := { modules := normalizeProgramCapArgs allModules }
     let summary := Pipeline.buildSummary merged
     match Pipeline.resolve merged summary with
     | .error ds =>
