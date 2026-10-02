@@ -722,6 +722,9 @@ jobs:
       - name: "Capability parameters across packages (R-0484 — Sink<cap C> imported from another package keeps its authority)"
         run: bash scripts/tests/check_cap_struct_cross_package.sh
 
+      - name: "Inherited foreign assumptions (R-0484 R10 — a report names the dependency bindings a program relies on)"
+        run: bash scripts/tests/check_foreign_assumptions_report.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

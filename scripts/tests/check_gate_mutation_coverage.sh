@@ -596,9 +596,13 @@ add "walker-constructor" "Concrete/Check/CoreCheck.lean" "check_constructor_cove
 add "source-span-stamping" "Concrete/Elab/Elab.lean" "check_source_maps.sh" no \
   'declSpan := some f.span' \
   'declSpan := none'
+# Re-anchored for R-0484: the suffix also carries capability arguments (`capPart`). The
+# experiment is unchanged — erase what distinguishes the type arguments, so distinct
+# instantiations share a name. Every binding stays used: an unused one fails the build, and
+# a mutant that does not build proves nothing about the gate.
 add "mono-name-hygiene" "Concrete/IR/Mono.lean" "check_mono_name_collision.sh" yes \
-  '| .generic n args => n ++ "_T_" ++ "_".intercalate (args.map tyToSuffix) ++ "_E"' \
-  '| .generic n _args => n'
+  '    n ++ "_T_" ++ "_".intercalate (args.map tyToSuffix) ++ capPart ++ "_E"' \
+  '    n ++ "_T_" ++ "_".intercalate (args.map fun _ => "X") ++ capPart ++ "_E"'
 add "diagnostic-quality" "Concrete/Check/CoreCheck.lean" "check_diagnostics_quality.sh" yes \
   '| .insufficientCapabilities _ required _ => some s!"add '"'"'with({required})'"'"' to the calling function, or wrap the call in a trusted function"' \
   '| .insufficientCapabilities _ _ _ => none'
