@@ -228,7 +228,7 @@ In exchange, it gives you compiler-visible boundaries:
 - which functions allocate;
 - which functions can perform I/O;
 - which code is trusted;
-- which functions are pure;
+- which functions have no external authority (and what mutation their parameters allow);
 - which loops are bounded or have obligations;
 - which claims are proved, tested, assumed, or stale.
 

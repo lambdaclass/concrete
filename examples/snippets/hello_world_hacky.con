@@ -1,6 +1,6 @@
 mod HelloWorld {
-    pub extern fn malloc(size: u64) -> *mut u8;
-    pub extern fn puts(data: *mut u8) -> i32;
+    pub extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+    pub extern fn puts(data: *mut u8) with(Console) -> i32;
 
     fn main() -> i32 {
         let origin: *mut u8 = malloc(12);

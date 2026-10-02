@@ -209,7 +209,13 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
     -- conservatively, with missing information reading as Unknown rather than as none.
     -- Recorded in docs/project/ABSENCE_IS_NOT_A_FACT.md; this line is the reason the
     -- effect model is a language change and not a checker patch.
-    let capSet := if ef.isTrusted then CapSet.empty else CapSet.concrete ["Unsafe"]
+    -- R-0484 (2026-10-01) settled this site differently from the note above, which is
+    -- kept as the record of the earlier plan: a foreign binding DECLARES its effects
+    -- (`extern fn write(..) with(Console)`), and that declaration is part of what a
+    -- caller requires, across packages too. `Unsafe` is added unless the binding is a
+    -- `trusted extern`. Resolve refuses a binding with no declaration, so `getD` only
+    -- covers the tolerant path that continues after that error.
+    let capSet := Capabilities.externFnRequiredCaps ef.isTrusted (ef.capSet.getD .empty)
     let sig : FnSummary := {
       params := ef.params.map fun p => (p.name, p.ty)
       retTy := ef.retTy

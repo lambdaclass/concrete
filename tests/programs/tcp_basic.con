@@ -1,14 +1,14 @@
 // Test: create a listening socket, verify fd >= 0, close it
-trusted extern fn socket(domain: i32, typ: i32, protocol: i32) -> i32;
-trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
-trusted extern fn listen(sockfd: i32, backlog: i32) -> i32;
-trusted extern fn close(fd: i32) -> i32;
-trusted extern fn htons(hostshort: u16) -> u16;
-trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) -> i32;
-trusted extern fn malloc(size: u64) -> *mut u8;
-trusted extern fn free(ptr: *mut u8);
+trusted extern fn socket(domain: i32, typ: i32, protocol: i32) with(Network) -> i32;
+trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) with(Network) -> i32;
+trusted extern fn listen(sockfd: i32, backlog: i32) with(Network) -> i32;
+trusted extern fn close(fd: i32) with(Network) -> i32;
+trusted extern fn htons(hostshort: u16) with() -> u16;
+trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) with(Network) -> i32;
+trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+trusted extern fn free(ptr: *mut u8) with(Alloc);
 
-trusted fn tcp_listen(port: i64, backlog: i64) with(Network) -> Int {
+trusted fn tcp_listen(port: i64, backlog: i64) with(Network, Alloc) -> Int {
     let lsock: i32 = socket(2, 1, 0);
     let reuse_buf: *mut u8 = malloc(4);
     let reuse_ptr: *mut i32 = reuse_buf as *mut i32;

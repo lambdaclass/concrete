@@ -107,7 +107,7 @@ mod tcpserve {
         return sent;
     }
 
-    trusted fn serve(port: u16) with(Network, Alloc, Console) -> u8 {
+    trusted fn serve(port: u16) with(Network, Alloc, Console, Env) -> u8 {
         let addr: String = "127.0.0.1";
         match TcpListener::bind(&addr, port) {
             Result::Err { error } => {

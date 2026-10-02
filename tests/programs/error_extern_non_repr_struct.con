@@ -4,7 +4,7 @@ struct Point {
     y: Int,
 }
 
-extern fn process_point(p: Point) -> i32;
+extern fn process_point(p: Point) with() -> i32;
 
 fn main() with(Unsafe) -> Int {
     return 0;

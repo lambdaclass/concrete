@@ -110,7 +110,7 @@ mod wordfreq {
                                 return 1;
                             },
                             Result::Ok { value } => {
-                                let r: Reader = reader_from_file(value);
+                                let r: Reader<File> = reader_from_file(value);
                                 let data: Bytes = read_all(&r);
                                 let rc: Result<u64, IoError> = r.close();
                                 discard(rc.is_ok());

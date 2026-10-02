@@ -173,9 +173,25 @@ def parse_fns(src):
             rest = rest[j:]
         # optional -> ret, up to body '{' or decl ';'
         ret = ""
-        rm = re.match(r"\s*->\s*([^\{;]+)", rest)
+        rm = re.match(r"\s*->\s*", rest)
         if rm:
-            ret = rm.group(1)
+            # Up to the body '{' or a declaration ';' OUTSIDE angle brackets: a return
+            # type may contain braces (`Writer<{}>`, R-0484) and arrows (`fn(i32) -> i32`,
+            # whose '>' is not a closing bracket).
+            k, depth = rm.end(), 0
+            while k < len(rest):
+                c = rest[k]
+                if rest.startswith("->", k):
+                    k += 2
+                    continue
+                if c == "<":
+                    depth += 1
+                elif c == ">":
+                    depth -= 1
+                elif c in "{;" and depth == 0:
+                    break
+                k += 1
+            ret = rest[rm.end():k]
         in_trusted_impl = any(b <= m.start() < e and t for (b, e, t) in impl_regions)
         yield {
             "start": m.start(),

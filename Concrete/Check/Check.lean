@@ -629,9 +629,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let paramTypes := sig.params.map fun (n, t) => (n, substTy mapping t)
       let retTy := substTy mapping sig.retTy
       -- Resolve capability variables from argument types
-      let resolvedCapSet ← do
+      -- The inferred bindings are returned alongside the resolved set: substituting a
+      -- capability parameter inside a capability argument (`&Reader<C>`) needs what C
+      -- was bound to, which cannot be recovered from the resolved set (that also holds
+      -- the signature's own capabilities, and drops names that coincide with C).
+      let (resolvedCapSet, inferredCapBindings) ← do
         if sig.capParams.isEmpty then
-          pure sig.capSet
+          pure (sig.capSet, ([] : List (String × List String)))
         else
           let mut capBindings : List (String × List String) := []
           -- Infer cap variable bindings from fn-typed arguments
@@ -690,7 +694,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- method-call path: Capabilities.resolveCaps). Error carries the cap
           -- variable that could not be inferred.
           match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
-          | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps)
+          | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps, capBindings)
           | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
       -- Resolve cap variables in parameter types for type comparison
       let capBindings' := if sig.capParams.isEmpty then [] else
@@ -711,8 +715,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         | t => t
       -- Capability parameters inside capability arguments (`&Sink<C>`) get the same
       -- bindings, so the parameter is compared at its instantiated type.
-      let capArgMap : List (String × CapSet) := capBindings'.map fun (cp, caps) =>
-        (cp, (if caps.isEmpty then CapSet.empty else CapSet.concrete caps).canonArg)
+      let capArgMap : List (String × CapSet) := sig.capParams.filterMap fun cp =>
+        (inferredCapBindings.find? (·.1 == cp)).map fun (_, caps) =>
+          (cp, (if caps.isEmpty then CapSet.empty else CapSet.concrete caps).canonArg)
       let paramTypes := paramTypes.map fun (n, t) => (n, substCapNamesTy capArgMap (resolveCapInTy t))
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
@@ -720,7 +725,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         -- One shared direct-call decision (Capabilities.missingCaps): the caps the
         -- caller lacks for this call. Same computation CoreCheck's satisfaction
         -- check and the reports read, so they cannot disagree.
-        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+        -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge and checks
+        -- every call (see the method path in CheckHelpers).
+        for cap in (Capabilities.missingCaps env.currentCapSet resolvedCapSet).filter (· != unsafeCapName) do
           throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)

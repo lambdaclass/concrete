@@ -73,8 +73,11 @@ fn report(result: i32) with(Console) {
 }
 ```
 
-The first function is pure and creates bounds/arithmetic obligations; the second
-can print only because it declares `with(Console)`. From that surface the tools
+The first function declares no capabilities, so it has no external authority — it
+cannot print, open files or touch the network, however it is called — and it creates
+bounds/arithmetic obligations; the second can print only because it declares
+`with(Console)`. An empty `with(...)` is not a claim of purity in the stronger sense: a
+function can still modify what it is handed through `&mut`. From that surface the tools
 answer, per function: what authority it needs, what can fail at runtime, what
 Lean's kernel proved, what a decision procedure discharged, what an external
 solver was trusted for, what an oracle tested, and what remains assumed, trusted,

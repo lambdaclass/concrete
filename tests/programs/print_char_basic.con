@@ -1,5 +1,5 @@
 // print_char: print 'A' (char code 65), return 0
-trusted extern fn putchar(c: i32) -> i32;
+trusted extern fn putchar(c: i32) with(Console) -> i32;
 
 trusted fn print_char(c: i64) with(Console) {
     putchar(c as i32);

@@ -1,6 +1,6 @@
 mod vec {
-    extern fn malloc(size: u64) -> *mut u8;
-    extern fn realloc(ptr: *mut u8, size: u64) -> *mut u8;
+    extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+    extern fn realloc(ptr: *mut u8, size: u64) with(Alloc) -> *mut u8;
 
     #[intrinsic = "sizeof"]
     fn sizeof<T>() -> u64;

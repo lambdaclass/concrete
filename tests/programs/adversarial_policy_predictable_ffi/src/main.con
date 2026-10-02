@@ -3,7 +3,7 @@
 // profile forbids extern/FFI calls regardless.
 // Expected: compiler rejects with E0610 (calls extern).
 
-extern fn external_function() -> Int;
+extern fn external_function() with() -> Int;
 
 pub fn call_extern() with(Unsafe) -> Int {
     return external_function();

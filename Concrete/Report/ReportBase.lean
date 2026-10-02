@@ -186,7 +186,7 @@ abbrev CapLookup := List (String × CapSet)
 partial def buildCapLookupModule (m : CModule) : CapLookup :=
   let fnEntries := m.functions.map fun f => (f.name, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
-    (n, Capabilities.externFnRequiredCaps trusted)
+    (n, Capabilities.externFnRequiredCaps trusted ((m.externFnCaps.lookup n).getD .empty))
   fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildCapLookupModule sub) []
 
@@ -200,7 +200,7 @@ partial def buildQualCapLookupModule (m : CModule) (pfx : String := "")
   let fnEntries := m.functions.map fun f =>
     (qualPrefix ++ "." ++ f.name, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
-    (n, Capabilities.externFnRequiredCaps trusted)
+    (n, Capabilities.externFnRequiredCaps trusted ((m.externFnCaps.lookup n).getD .empty))
   fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildQualCapLookupModule sub qualPrefix) []
 

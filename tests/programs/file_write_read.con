@@ -1,13 +1,13 @@
 // File I/O: write a string to a file, read it back, check length
-trusted extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
-trusted extern fn fclose(file: *const u8) -> i32;
-trusted extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) -> u64;
-trusted extern fn fseek(file: *const u8, offset: i64, whence: i32) -> i32;
-trusted extern fn ftell(file: *const u8) -> i64;
-trusted extern fn malloc(size: u64) -> *mut u8;
-trusted extern fn free(ptr: *mut u8);
+trusted extern fn fopen(name: *mut u8, mode: *mut u8) with(File) -> *const u8;
+trusted extern fn fclose(file: *const u8) with(File) -> i32;
+trusted extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) with(File) -> u64;
+trusted extern fn fseek(file: *const u8, offset: i64, whence: i32) with(File) -> i32;
+trusted extern fn ftell(file: *const u8) with(File) -> i64;
+trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+trusted extern fn free(ptr: *mut u8) with(Alloc);
 
-trusted fn string_to_cstr(s: &String) -> *mut u8 {
+trusted fn string_to_cstr(s: &String) with(Alloc) -> *mut u8 {
     let len: Int = string_length(s);
     let buf: *mut u8 = malloc((len + 1) as u64);
     let mut i: Int = 0;
@@ -22,7 +22,7 @@ trusted fn string_to_cstr(s: &String) -> *mut u8 {
     return buf;
 }
 
-trusted fn string_to_buf(s: &String) -> *mut u8 {
+trusted fn string_to_buf(s: &String) with(Alloc) -> *mut u8 {
     let len: Int = string_length(s);
     let buf: *mut u8 = malloc(len as u64);
     let mut i: Int = 0;
@@ -35,7 +35,7 @@ trusted fn string_to_buf(s: &String) -> *mut u8 {
     return buf;
 }
 
-trusted fn mode_cstr(ch: u8) -> *mut u8 {
+trusted fn mode_cstr(ch: u8) with(Alloc) -> *mut u8 {
     let buf: *mut u8 = malloc(2);
     *buf = ch;
     let p1: *mut u8 = buf + 1;
@@ -43,7 +43,7 @@ trusted fn mode_cstr(ch: u8) -> *mut u8 {
     return buf;
 }
 
-trusted fn write_file_str(path: &String, data: &String) with(File) -> Int {
+trusted fn write_file_str(path: &String, data: &String) with(File, Alloc) -> Int {
     let path_buf: *mut u8 = string_to_cstr(path);
     let mode_buf: *mut u8 = mode_cstr(119); // 'w'
     let fp: *const u8 = fopen(path_buf, mode_buf);
@@ -57,7 +57,7 @@ trusted fn write_file_str(path: &String, data: &String) with(File) -> Int {
     return written as Int;
 }
 
-trusted fn read_file_len(path: &String) with(File) -> Int {
+trusted fn read_file_len(path: &String) with(File, Alloc) -> Int {
     let path_buf: *mut u8 = string_to_cstr(path);
     let mode_buf: *mut u8 = mode_cstr(114); // 'r'
     let fp: *const u8 = fopen(path_buf, mode_buf);

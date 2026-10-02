@@ -1,5 +1,5 @@
 // Error: read_file requires File capability
-trusted extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
+trusted extern fn fopen(name: *mut u8, mode: *mut u8) with(File) -> *const u8;
 
 trusted fn read_file(path: &String) with(File) -> Int {
     return 0;

@@ -9,13 +9,13 @@ mod cli_tool {
     import std.io.{Writer, console_writer, eprintln, IoError};
     import std.fmt.{write_uint};
 
-    fn w_str(w: &Writer, s: String) with(Alloc) {
+    fn w_str(w: &Writer<Console>, s: String) with(Alloc, Console) {
         let r: Result<u64, IoError> = w.write_str(&s);
         discard(r.is_ok());
         s.drop();
     }
 
-    fn w_num(w: &Writer, v: u64) {
+    fn w_num(w: &Writer<Console>, v: u64) with(Console) {
         let r: Result<u64, IoError> = write_uint(w, v);
         discard(r.is_ok());
     }
@@ -34,7 +34,7 @@ mod cli_tool {
                 return 2;
             },
             CliResult::Ok { flags, positionals } => {
-                let w: Writer = console_writer();
+                let w: Writer<Console> = console_writer();
                 w_str(&w, "n=");
                 w_num(&w, flags.get_u64(f_n));
                 w_str(&w, " s=");

@@ -57,6 +57,8 @@ inductive ResolveError where
   | wrongTypeArgCount (name : String) (expected : Nat) (got : Nat)
   | capArgKindMismatch (name : String) (detail : String)
   | wrongCapArgCount (name : String) (expected : Nat) (got : Nat)
+  | externEffectsUndeclared (name : String)
+  | effectfulSymbolDeclaredPure (name : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -73,6 +75,10 @@ def ResolveError.message : ResolveError → String
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .recursiveTypeAlias name => s!"recursive type alias '{name}' (a type alias may not refer to itself, directly or through other aliases)"
   | .capArgKindMismatch name detail => s!"wrong kind of argument for '{name}': {detail}"
+  | .externEffectsUndeclared name =>
+    s!"foreign binding '{name}' does not declare its effects: write `with(...)` naming the capabilities it exercises, or `with()` if it has none — an undeclared binding is never read as having no effects"
+  | .effectfulSymbolDeclaredPure name =>
+    s!"foreign binding '{name}' is declared with no effects, but '{name}' is a known effectful C symbol; declare the capability it exercises"
   | .wrongCapArgCount name expected got =>
     s!"'{name}' takes {expected} capability argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
   | .wrongTypeArgCount name expected got =>
@@ -143,6 +149,8 @@ def ResolveError.code : ResolveError → String
   | .wrongTypeArgCount _ _ _ => "E0113"
   | .capArgKindMismatch _ _ => "E0114"
   | .wrongCapArgCount _ _ _ => "E0115"
+  | .externEffectsUndeclared _ => "E0116"
+  | .effectfulSymbolDeclaredPure _ => "E0117"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -248,7 +256,13 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       match ctx.currentImplType with
       | some _ => ctx
       | none => addError ctx .selfOutsideImpl span
-    else if isKnownType ctx name then ctx
+    else if isKnownType ctx name then
+      -- A struct with capability parameters cannot be named bare: `Writer` alone says
+      -- nothing about what the handle may do, so it is an E0115 (0 capability
+      -- arguments given), not something to infer later.
+      match declaredCapArity ctx name with
+      | some cp => if cp > 0 then addError ctx (.wrongCapArgCount name cp 0) span else ctx
+      | none => ctx
     else addError ctx (.unknownType name) span
   -- Capability arguments were already classified by position (Frontend/CapArgs), so
   -- what remains here is the kind and count check, in both directions (R-0484).
@@ -570,7 +584,18 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let traitImplErrors := m.traitImpls.foldl (fun acc ti =>
     acc ++ ti.methods.foldl (fun acc method =>
       acc ++ resolveFnBody globalScope (knownTypes ++ ti.typeParams) method (some ti.typeName) traitMethods traitImpls_) []) []
-  let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors
+  -- R-0484 R3: every foreign binding declares its effects, and a known-effectful
+  -- symbol may not be declared effect-free.
+  let externCtx0 : ResolveCtx :=
+    { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
+  let externErrors := (m.externFns.foldl (fun ctx ef =>
+    match ef.capSet with
+    | none => addError ctx (.externEffectsUndeclared ef.name) (some ef.span)
+    | some cs =>
+      if cs.isEmpty && Capabilities.knownEffectfulForeignSymbols.contains ef.name
+      then addError ctx (.effectfulSymbolDeclaredPure ef.name) (some ef.span)
+      else ctx) externCtx0).errors
+  let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 
 -- ============================================================

@@ -16,8 +16,8 @@ mod http_server {
     import std.fs.{read_to_string, file_exists, FsError};
     import std.args.{count, get};
     import std.parse.{parse_uint};
-    trusted extern fn malloc(size: u64) -> *mut u8;
-    trusted extern fn free(ptr: *mut u8);
+    trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+    trusted extern fn free(ptr: *mut u8) with(Alloc);
 
     // --- Helpers for consuming linear types ---
 

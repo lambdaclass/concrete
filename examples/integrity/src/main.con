@@ -16,7 +16,7 @@ mod fcheck {
     import std.hex.{encode_u32_vec};
     import std.string.{String};
 
-    trusted extern fn free(ptr: *mut u8);
+    trusted extern fn free(ptr: *mut u8) with(Alloc);
 
     // File reading
 

@@ -1584,7 +1584,8 @@ run_ok "$TESTDIR/trusted_fn_ptr_deref.con" 0
 run_ok "$TESTDIR/trusted_impl_basic.con" 0
 run_ok "$TESTDIR/trusted_ptr_assign.con" 0
 run_ok "$TESTDIR/trusted_ptr_cast.con" 0
-run_err "$TESTDIR/error_trusted_extern_needs_unsafe.con" "but caller has"
+run_ok  "$TESTDIR/trusted_absorbs_extern_unsafe.con" 0   # R-0484 R2: trusted absorbs extern Unsafe
+run_err "$TESTDIR/error_trusted_extern_effect_not_absorbed.con" "requires Console"   # ...never its declared effect
 run_err "$TESTDIR/error_trusted_on_struct.con" "trusted"
 run_ok "$TESTDIR/trusted_trait_impl.con" 0
 run_ok "$TESTDIR/trusted_ptr_arith.con" 0
@@ -1690,7 +1691,8 @@ run_err "$TESTDIR/error_cap_superset_missing.con" "requires File, Network but ca
 run_err "$TESTDIR/error_cap_poly_insufficient.con" "requires capability"
 run_err "$TESTDIR/error_trusted_not_viral.con" "requires capability"
 run_err "$TESTDIR/error_extern_needs_unsafe.con" "requires Unsafe"
-run_err "$TESTDIR/error_trusted_no_extern.con" "requires Unsafe"
+run_err "$TESTDIR/error_extern_undeclared.con" "E0116"   # R-0484 R3: an extern must declare its effects
+run_err "$TESTDIR/error_extern_effectful_declared_pure.con" "E0117"   # ...and a known-effectful one is not with()
 
 # === Cross-module and parser tests ===
 run_ok "$TESTDIR/test_module_nested.con" 42

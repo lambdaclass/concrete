@@ -1,6 +1,6 @@
 mod test_direct_use {
     mod ffi {
-        extern fn malloc(size: u64) -> *mut u8;
+        extern fn malloc(size: u64) with(Alloc) -> *mut u8;
     }
 
     mod intrinsics {

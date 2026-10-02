@@ -1,5 +1,5 @@
-trusted extern fn exp(x: Float64) -> Float64;
-trusted extern fn log(x: Float64) -> Float64;
+trusted extern fn exp(x: Float64) with() -> Float64;
+trusted extern fn log(x: Float64) with() -> Float64;
 
 fn main() -> Int {
     let e: Float64 = exp(0.0);

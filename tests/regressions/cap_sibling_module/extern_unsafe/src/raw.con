@@ -1,5 +1,5 @@
 mod raw {
     // A non-trusted extern. `externFnRequiredCaps false` types this as requiring
     // Unsafe — the one capability the language promises `extern` costs.
-    pub extern fn write(fd: i32, buf: *const u8, count: u64) -> i64;
+    pub extern fn write(fd: i32, buf: *const u8, count: u64) with(Console) -> i64;
 }

@@ -13,3 +13,5 @@ module fixed_capacity:
 
 Totals: 4 unsafe-related signatures (4 trusted)
 
+Dependency coverage: incomplete. Foreign-binding effect assumptions made by dependencies (including std) are enforced on callers but not listed in this report (R-0484 R10, in progress).
+

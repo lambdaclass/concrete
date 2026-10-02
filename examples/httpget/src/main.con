@@ -53,7 +53,7 @@ mod httpget {
         return (h - 48) * 100 + (t - 48) * 10 + (o - 48);
     }
 
-    trusted fn fetch(host: &String, port: u16, path: &String) with(Network, Alloc, Console) -> u8 {
+    trusted fn fetch(host: &String, port: u16, path: &String) with(Network, Alloc, Console, Env) -> u8 {
         let mut req: String = "GET ";
         req.append(path);
         let mid: String = " HTTP/1.0\r\nHost: ";

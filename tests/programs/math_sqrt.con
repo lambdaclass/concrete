@@ -1,4 +1,4 @@
-trusted extern fn sqrt(x: Float64) -> Float64;
+trusted extern fn sqrt(x: Float64) with() -> Float64;
 
 fn main() -> Int {
     let x: Float64 = 25.0;

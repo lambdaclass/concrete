@@ -182,7 +182,7 @@ if [ -z "${TD_LC:-}" ]; then
 else
   cat > "$TD_LC/ffi.con" <<'CON'
 mod ffitrans {
-    trusted extern fn c_abs(x: i32) -> i32;
+    trusted extern fn c_abs(x: i32) with() -> i32;
     fn direct(x: i32) -> i32 { return c_abs(x); }
     fn reaches(x: i32) -> i32 { return direct(x); }
 }

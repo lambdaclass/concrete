@@ -12,10 +12,10 @@ impl<T> Container<T> {
     }
 }
 
-extern fn malloc(size: u64) -> *mut u8;
-extern fn free(ptr: *mut u8);
+extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+extern fn free(ptr: *mut u8) with(Alloc);
 
-fn main() with(Unsafe) -> i32 {
+fn main() with(Unsafe, Alloc) -> i32 {
     let ptr: *mut i32 = malloc(16) as *mut i32;
     let mut c: Container<i32> = Container::<i32> { data: ptr, len: 2 };
     c.set(0, 42);

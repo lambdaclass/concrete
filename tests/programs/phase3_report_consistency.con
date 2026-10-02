@@ -46,7 +46,7 @@ trusted fn trusted_read(p: *const i32) -> i32 {
     return *p;
 }
 
-trusted extern fn safe_abs(x: Int) -> Int;
+trusted extern fn safe_abs(x: Int) with() -> Int;
 
 // --- Generic functions (appear in mono) ---
 

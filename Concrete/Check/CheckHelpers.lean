@@ -55,7 +55,7 @@ def tyToString : Ty → String
   | .named n => n
   | .ref inner => "&" ++ tyToString inner
   | .refMut inner => "&mut " ++ tyToString inner
-  | .generic name args _ => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
+  | .generic name args caps => name ++ "<" ++ ", ".intercalate (args.map tyToString ++ caps.map CapSet.toTypeArg) ++ ">"
   | .typeVar name => name
   | .array elem size => "[" ++ tyToString elem ++ "; " ++ toString size ++ "]"
   | .ptrMut inner => "*mut " ++ tyToString inner
@@ -891,7 +891,10 @@ partial def inferMethodParamAndRetTys
       | .error cv => throwCheck (.cannotInferCapVariable cv callName) (some sp)
     let env ← getEnv
     -- Shared direct-call decision (Capabilities.missingCaps) — see Check.lean.
-    for cap in Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps) do
+    -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge (an audited
+    -- body vouches for a callee's `Unsafe` obligation) and checks every call. Checking it
+    -- here too would refuse a trusted body for what CoreCheck correctly accepts.
+    for cap in (Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps)).filter (· != unsafeCapName) do
       throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
   -- 4. Resolve cap variables inside fn-typed param types so a pure/empty-cap
   --    callback argument matches the declared `with(C)` parameter.

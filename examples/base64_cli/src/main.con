@@ -11,7 +11,7 @@ mod base64_cli {
     import std.io.{Writer, console_writer, console_error_writer, IoError, println, eprintln};
     import std.base64.{encode, decode};
 
-    fn print_bytes(w: &Writer, b: &Bytes) -> Result<u64, IoError> {
+    fn print_bytes(w: &Writer<Console>, b: &Bytes) with(Console) -> Result<u64, IoError> {
         return w.write(b);
     }
 
@@ -30,7 +30,7 @@ mod base64_cli {
         enc.drop(); dec.drop(); cmd.drop();
         let input: Bytes = Bytes::from_string(&arg);  // pull 2 (FRICTION #7), now std
         arg.drop();
-        let w: Writer = console_writer();
+        let w: Writer<Console> = console_writer();
         let mut rc: Int = 0;
         if is_enc {
             let out: Bytes = encode(&input);

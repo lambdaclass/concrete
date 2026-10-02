@@ -1,23 +1,23 @@
 // Integration test: real TCP listener/client pair via fork
-trusted extern fn socket(domain: i32, typ: i32, protocol: i32) -> i32;
-trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
-trusted extern fn listen(sockfd: i32, backlog: i32) -> i32;
-trusted extern fn accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> i32;
-trusted extern fn connect(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
-trusted extern fn close(fd: i32) -> i32;
-trusted extern fn send(sockfd: i32, buf: *const u8, len: u64, flags: i32) -> i64;
-trusted extern fn recv(sockfd: i32, buf: *mut u8, len: u64, flags: i32) -> i64;
-trusted extern fn htons(hostshort: u16) -> u16;
-trusted extern fn inet_pton(af: i32, src: *const u8, dst: *mut u8) -> i32;
-trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) -> i32;
-trusted extern fn malloc(size: u64) -> *mut u8;
-trusted extern fn free(ptr: *mut u8);
+trusted extern fn socket(domain: i32, typ: i32, protocol: i32) with(Network) -> i32;
+trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) with(Network) -> i32;
+trusted extern fn listen(sockfd: i32, backlog: i32) with(Network) -> i32;
+trusted extern fn accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) with(Network) -> i32;
+trusted extern fn connect(sockfd: i32, addr: *const u8, addrlen: u32) with(Network) -> i32;
+trusted extern fn close(fd: i32) with(Network) -> i32;
+trusted extern fn send(sockfd: i32, buf: *const u8, len: u64, flags: i32) with(Network) -> i64;
+trusted extern fn recv(sockfd: i32, buf: *mut u8, len: u64, flags: i32) with(Network) -> i64;
+trusted extern fn htons(hostshort: u16) with() -> u16;
+trusted extern fn inet_pton(af: i32, src: *const u8, dst: *mut u8) with() -> i32;
+trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) with(Network) -> i32;
+trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+trusted extern fn free(ptr: *mut u8) with(Alloc);
 
-extern fn fork() -> i32;
-extern fn _exit(status: i32);
-extern fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+extern fn fork() with(Process) -> i32;
+extern fn _exit(status: i32) with(Process);
+extern fn waitpid(pid: i32, status: *mut i32, options: i32) with(Process) -> i32;
 
-trusted fn string_to_cstr(s: &String) -> *mut u8 {
+trusted fn string_to_cstr(s: &String) with(Alloc) -> *mut u8 {
     let len: Int = string_length(s);
     let buf: *mut u8 = malloc((len + 1) as u64);
     let mut i: Int = 0;
@@ -32,7 +32,7 @@ trusted fn string_to_cstr(s: &String) -> *mut u8 {
     return buf;
 }
 
-trusted fn string_to_buf(s: &String) -> *mut u8 {
+trusted fn string_to_buf(s: &String) with(Alloc) -> *mut u8 {
     let len: Int = string_length(s);
     let buf: *mut u8 = malloc(len as u64);
     let mut i: Int = 0;
@@ -45,7 +45,7 @@ trusted fn string_to_buf(s: &String) -> *mut u8 {
     return buf;
 }
 
-trusted fn tcp_listen(port: i64, backlog: i64) with(Network) -> Int {
+trusted fn tcp_listen(port: i64, backlog: i64) with(Network, Alloc) -> Int {
     let lsock: i32 = socket(2, 1, 0);
     let reuse_buf: *mut u8 = malloc(4);
     let reuse_ptr: *mut i32 = reuse_buf as *mut i32;
@@ -93,7 +93,7 @@ trusted fn tcp_listen(port: i64, backlog: i64) with(Network) -> Int {
     return lsock as Int;
 }
 
-trusted fn tcp_connect_addr(addr: &String, port: i64) with(Network) -> Int {
+trusted fn tcp_connect_addr(addr: &String, port: i64) with(Network, Alloc) -> Int {
     let sockfd: i32 = socket(2, 1, 0);
     let saddr: *mut u8 = malloc(16);
     let mut i: u64 = 0;
@@ -127,7 +127,7 @@ trusted fn tcp_connect_addr(addr: &String, port: i64) with(Network) -> Int {
     return sockfd as Int;
 }
 
-trusted fn socket_send_str(fd: Int, data: &String) with(Network) -> Int {
+trusted fn socket_send_str(fd: Int, data: &String) with(Network, Alloc) -> Int {
     let len: Int = string_length(data);
     let buf: *mut u8 = string_to_buf(data);
     let sent: i64 = send(fd as i32, buf as *const u8, len as u64, 0);
@@ -144,7 +144,7 @@ trusted fn tcp_accept(fd: Int) with(Network) -> Int {
     return newfd as Int;
 }
 
-fn main() with(Network, Unsafe, Process) -> Int {
+fn main() with(Network, Unsafe, Process, Alloc) -> Int {
     let server_fd: Int = tcp_listen(39878, 1);
     if server_fd < 0 { return 1; }
 

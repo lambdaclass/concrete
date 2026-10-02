@@ -23,7 +23,7 @@ mod png_chunks {
             && b.get_unchecked(6) == 26  && b.get_unchecked(7) == 10;
     }
 
-    fn w_str(w: &Writer, s: String) with(Alloc) {
+    fn w_str(w: &Writer<Console>, s: String) with(Alloc, Console) {
         let r: Result<u64, IoError> = w.write_str(&s);
         discard(r.is_ok());
         s.drop();
@@ -36,7 +36,7 @@ mod png_chunks {
     }
 
     // Walk and print chunks; return process status.
-    fn walk(data: &Bytes, w: &Writer) with(Alloc) -> u8 {
+    fn walk(data: &Bytes, w: &Writer<Console>) with(Alloc, Console) -> u8 {
         let mut off: u64 = 8;
         let mut bad_crc: u64 = 0;
         let total: u64 = data.len();
@@ -95,7 +95,7 @@ mod png_chunks {
                 return fail("error: cannot open file");
             },
             Result::Ok { value } => {
-                let r: Reader = reader_from_file(value);
+                let r: Reader<File> = reader_from_file(value);
                 let data: Bytes = read_all(&r);
                 let rc: Result<u64, IoError> = r.close();
                 discard(rc.is_ok());
@@ -103,7 +103,7 @@ mod png_chunks {
                     data.drop();
                     return fail("error: not a PNG (bad signature)");
                 }
-                let w: Writer = console_writer();
+                let w: Writer<Console> = console_writer();
                 let status: u8 = walk(&data, &w);
                 let wc: Result<u64, IoError> = w.close();
                 discard(wc.is_ok());

@@ -139,14 +139,17 @@ acceptance as a KNOWN HOLE, which is why CI could not tell the difference. Close
 by collecting dependency `implMethodSigs` recursively through `submoduleSummaries`
 and keying them by the mangled `<Type>_<method>` spelling the call site emits.
 
-**`trusted` does NOT grant `Unsafe` for a CALL,** only for a raw operation on
-memory the body already holds (`capsAllowUnsafeOp`). An `extern` call inside a
-`trusted` wrapper still needs an explicit `with(Unsafe)`;
-`error_trusted_extern_needs_unsafe.con` and `error_trusted_no_extern.con` hold
-that. Vouching for a foreign symbol is `trusted extern fn`
-(`externFnRequiredCaps`), which is how `std/src/libc.con` declares its 50 libc
-symbols — without it `String::eq` calls `memcmp` and every string comparison in
-every program would have to declare `with(Unsafe)`.
+**Superseded 2026-10-01 (R-0484): `trusted` now absorbs an extern call's `Unsafe`**,
+as it already absorbed any other callee's `Unsafe` obligation. It absorbs nothing
+else: every `extern` declares its effects (`extern fn write(..) with(Console)`,
+`with()` for none; undeclared is E0116), `externFnRequiredCaps isTrusted declared`
+returns those effects plus `Unsafe` unless the binding is `trusted extern`, and the
+declared effects bind every caller, trusted bodies included. The previous rule (an
+extern call inside a `trusted` wrapper needed `with(Unsafe)`, pinned by
+`error_trusted_extern_needs_unsafe.con` / `error_trusted_no_extern.con`) pushed every
+effectful C function into `trusted extern`, callable with no capability at all — the
+`console_write` hole. Fixtures now: `trusted_absorbs_extern_unsafe.con`,
+`error_trusted_extern_effect_not_absorbed.con`. Design: `HANDLE_CAPABILITIES.md` R2–R3.
 
 ## Per-method `trusted`, and the two safety axes (2026-09-25)
 

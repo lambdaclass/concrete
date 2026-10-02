@@ -218,20 +218,30 @@ else
   no "the consequence sentence asserts an artifact that may not exist"
 fi
 
-echo "=== KNOWN GAP: the original cross-package instance ==="
-# The measured instance R-0484 came from. Even once the rule is fixed, this one needs
-# the proof call graph to contain dependency modules: a call into `std` resolves to a
-# name with no node, so nothing propagates.
+echo "=== the original instance is CLOSED: print_bytes declares what it does ==="
+# This is where R-0484 came from: `base64_cli.print_bytes` takes a writer, performs
+# output, and used to declare nothing, so it was admitted ON THE GROUNDS OF PURITY.
+# Until 2026-10-01 this block pinned that as a known gap. The gap closed at the source,
+# not by opacity: the writer is `Writer<Console>`, using it requires `Console`, so the
+# header says `with(Console)` and the function is excluded for a stated, true reason.
 b64="$ROOT_DIR/examples/base64_cli"
 if [ -d "$b64" ]; then
   bout="$(cd "$b64" && $TO "$CC" src/main.con --report eligibility 2>&1)"
   if printf '%s' "$bout" | grep -qE 'eligible +`base64_cli\.print_bytes`'; then
-    ok "base64_cli.print_bytes is STILL eligible — cross-package opacity remains open (expected)"
+    no "print_bytes is eligible again — a writer's capability has stopped reaching its user's header"
+  elif printf '%s' "$bout" | grep -A1 'base64_cli.print_bytes' | grep -q 'has capabilities: Console'; then
+    ok "print_bytes is excluded because it declares Console (the effect is in the header)"
   else
-    no "print_bytes is no longer eligible: the gap closed, so invert this check and update R-0484"
+    no "print_bytes is excluded, but not for declaring Console: $(printf '%s' "$bout" | grep -A1 'print_bytes' | tr '\n' ' ' | cut -c1-160)"
+  fi
+  cout="$(cd "$b64" && $TO "$CC" src/main.con --report caps 2>&1)"
+  if printf '%s' "$cout" | grep -qE 'print_bytes : Console$'; then
+    ok "the capability report shows print_bytes : Console — declared, neither pure nor unknown"
+  else
+    no "the capability report does not show print_bytes : Console: $(printf '%s' "$cout" | grep 'print_bytes' | head -1)"
   fi
 else
-  no "examples/base64_cli is missing; the known-gap check did not run"
+  no "examples/base64_cli is missing; the closed-instance check did not run"
 fi
 
 echo

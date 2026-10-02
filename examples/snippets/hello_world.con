@@ -1,6 +1,6 @@
 mod hello {
-    extern fn malloc(size: u64) -> *mut u8;
-    extern fn puts(ptr: *mut u8) -> i32;
+    extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+    extern fn puts(ptr: *mut u8) with(Console) -> i32;
 
     #[langitem = "String"]
     struct String {
@@ -9,9 +9,9 @@ mod hello {
         cap: u64,
     }
 
-    extern fn free(ptr: *mut u8);
+    extern fn free(ptr: *mut u8) with(Alloc);
 
-    fn main() with(Unsafe) -> u64 {
+    fn main() with(Unsafe, Console, Alloc) -> u64 {
         let x: String = "hello \nworld!";
         puts(x.ptr);
         let String { ptr, len, cap } = x;

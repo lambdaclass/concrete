@@ -1,8 +1,8 @@
 // Test: trusted impl with pointer ops inside a loop
 // (pointer arithmetic on Copy fields is always fine, not a linearity issue)
 
-extern fn malloc(size: u64) -> *mut u8;
-extern fn free(ptr: *mut u8);
+extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+extern fn free(ptr: *mut u8) with(Alloc);
 
 struct Buf {
     ptr: *mut u8,

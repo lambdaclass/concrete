@@ -3,11 +3,13 @@ mod args {
     import std.libc.{strlen,memcpy};
     import std.text.{validate_utf8};
 
-    trusted extern fn __concrete_get_argc() -> i32;
-    trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+    trusted extern fn __concrete_get_argc() with(Env) -> i32;
+    extern fn __concrete_get_argv(idx: i32) with(Env) -> *const u8;
 
     /// Returns the number of command-line arguments (including the program name).
-    pub fn count() -> Int {
+    /// Requires `Env`: counting the arguments observes the environment as reading them
+    /// does (audit D2).
+    pub fn count() with(Env) -> Int {
         let c: i32 = __concrete_get_argc();
         return c as Int;
     }

@@ -85,9 +85,10 @@ call. Scoped three ways so it stays a discharge and not an erasure:
 
 - **only `Unsafe`** — operational capabilities are untouched, so trust never
   confers authority to reach a sink;
-- **only a non-`extern` callee** — an `extern` still demands it, which is what
-  `error_trusted_extern_needs_unsafe.con` holds; the audited-leaf escape remains
-  `trusted extern fn`. Both negative fixtures still refuse under the change;
+- **`extern` callees included since R-0484 (2026-10-01)** — previously an `extern`
+  still demanded it (`error_trusted_extern_needs_unsafe.con`, since replaced). The
+  reversal is safe only because every `extern` now declares its effects (E0116) and
+  those effects still bind the trusted caller;
 - **only the call** — the raw-operation gate (E0521) is untouched.
 
 ## Harness

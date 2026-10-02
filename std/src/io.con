@@ -75,66 +75,69 @@ mod io {
     //
     // A Writer is a linear handle: a trusted-internal raw context plus
     // explicit function pointers (the callable-values pattern — no trait
-    // object, no hidden vtable). AUTHORITY IS CHECKED AT ACQUISITION: the
-    // constructor carries the capability (`with(File)` / `with(Console)` /
-    // `with(Unsafe)` for caller-owned fixed buffers); calls through the
-    // handle are capability-free because the sink functions are `trusted`
-    // boundaries over already-authorized resources. Linearity forces
-    // `close(self)` exactly once.
+    // object, no hidden vtable). Linearity forces `close(self)` exactly once.
+    //
+    // THE HANDLE CARRIES ITS CAPABILITY IN ITS TYPE (R-0484). A console writer
+    // is `Writer<Console>`, a file writer `Writer<File>`, a fixed-buffer writer
+    // `Writer<{}>`, and USING one requires that capability: holding a writer
+    // grants nothing. Before, authority was checked only at acquisition and
+    // every call through the handle was capability-free, so a helper taking a
+    // `&Writer` performed output while its header declared nothing.
     // ================================================================
-    pub struct Writer {
+    pub struct Writer<cap C> {
         ctx: *mut u8,
-        write_fn: fn(*mut u8, *const u8, u64) -> Result<u64, IoError>,
-        flush_fn: fn(*mut u8) -> Result<u64, IoError>,
-        close_fn: fn(*mut u8) -> Result<u64, IoError>,
+        write_fn: fn(*mut u8, *const u8, u64) with(C) -> Result<u64, IoError>,
+        flush_fn: fn(*mut u8) with(C) -> Result<u64, IoError>,
+        close_fn: fn(*mut u8) with(C) -> Result<u64, IoError>,
     }
 
-    trusted impl Writer {
+    trusted impl<cap C> Writer<C> {
         /// Write `len` bytes from `data`. Returns bytes written.
-        pub fn write_raw(&self, data: *const u8, len: u64) with(Unsafe) -> Result<u64, IoError> {
-            let f: fn(*mut u8, *const u8, u64) -> Result<u64, IoError> = self.write_fn;
+        pub fn write_raw(&self, data: *const u8, len: u64) with(Unsafe, C) -> Result<u64, IoError> {
+            let f: fn(*mut u8, *const u8, u64) with(C) -> Result<u64, IoError> = self.write_fn;
             return f(self.ctx, data, len);
         }
 
         /// Write the contents of a `Bytes` buffer.
-        pub fn write(&self, data: &Bytes) -> Result<u64, IoError> {
+        pub fn write(&self, data: &Bytes) with(C) -> Result<u64, IoError> {
             let raw: BytesRaw = data.raw_view();
             return self.write_raw(raw.ptr as *const u8, raw.len);
         }
 
         /// Write the bytes of a `String`.
-        pub fn write_str(&self, data: &String) -> Result<u64, IoError> {
+        pub fn write_str(&self, data: &String) with(C) -> Result<u64, IoError> {
             return self.write_raw(data.raw_ptr() as *const u8, data.len());
         }
 
-        pub fn flush(&self) -> Result<u64, IoError> {
-            let f: fn(*mut u8) -> Result<u64, IoError> = self.flush_fn;
+        pub fn flush(&self) with(C) -> Result<u64, IoError> {
+            let f: fn(*mut u8) with(C) -> Result<u64, IoError> = self.flush_fn;
             return f(self.ctx);
         }
 
-        /// Consume the handle; flushes/releases the sink.
-        pub fn close(self) -> Result<u64, IoError> {
+        /// Consume the handle; flushes/releases the sink. Closing requires C: it
+        /// acts on the resource (HANDLE_CAPABILITIES.md R6).
+        pub fn close(self) with(C) -> Result<u64, IoError> {
             let Writer { ctx, write_fn, flush_fn, close_fn } = self;
-            let f: fn(*mut u8) -> Result<u64, IoError> = close_fn;
+            let f: fn(*mut u8) with(C) -> Result<u64, IoError> = close_fn;
             return f(ctx);
         }
     }
 
-    // ---- file sink (authority: File at acquisition) ----
-    trusted fn file_write(ctx: *mut u8, data: *const u8, len: u64) -> Result<u64, IoError> {
+    // ---- file sink: every operation performs file I/O, and says so ----
+    trusted fn file_write(ctx: *mut u8, data: *const u8, len: u64) with(File) -> Result<u64, IoError> {
         if len == 0 { return Result::<u64, IoError>::Ok { value: 0 }; }
         let n: u64 = fwrite(data, 1, len, ctx as *const u8);
         if n != len { return Result::<u64, IoError>::Err { error: IoError::WriteFailed }; }
         return Result::<u64, IoError>::Ok { value: n };
     }
-    trusted fn file_flush(ctx: *mut u8) -> Result<u64, IoError> {
+    trusted fn file_flush(ctx: *mut u8) with(File) -> Result<u64, IoError> {
         // H3 IO honesty: surface the real OS result.
         if fflush(ctx as *const u8) != 0 {
             return Result::<u64, IoError>::Err { error: IoError::FlushFailed };
         }
         return Result::<u64, IoError>::Ok { value: 0 };
     }
-    trusted fn file_close(ctx: *mut u8) -> Result<u64, IoError> {
+    trusted fn file_close(ctx: *mut u8) with(File) -> Result<u64, IoError> {
         // H3 IO honesty: a failed flush-at-close is a lost-data signal the
         // caller must see (the whole reason close(self) returns Result).
         let flush_rc: i32 = fflush(ctx as *const u8);
@@ -144,14 +147,14 @@ mod io {
         }
         return Result::<u64, IoError>::Ok { value: 0 };
     }
-    /// Consume an open `TextFile` into a `Writer`. Authority: `File`.
-    pub trusted fn writer_from_file(f: TextFile) with(File) -> Writer {
+    /// Consume an open `TextFile` into a `Writer<File>`.
+    pub trusted fn writer_from_file(f: TextFile) with(File) -> Writer<File> {
         let TextFile { ptr } = f;
         return Writer { ctx: ptr as *mut u8, write_fn: file_write, flush_fn: file_flush, close_fn: file_close };
     }
 
-    // ---- console sink (authority: Console at acquisition) ----
-    trusted fn console_write(ctx: *mut u8, data: *const u8, len: u64) -> Result<u64, IoError> {
+    // ---- console sink: writes to a standard stream, and says so ----
+    trusted fn console_write(ctx: *mut u8, data: *const u8, len: u64) with(Console) -> Result<u64, IoError> {
         // H3 IO honesty: report short/failed writes (closed pipe, full disk
         // behind a redirect) instead of pretending len bytes always landed.
         if len > 0 {
@@ -162,20 +165,28 @@ mod io {
         }
         return Result::<u64, IoError>::Ok { value: len };
     }
-    trusted fn console_noop(ctx: *mut u8) -> Result<u64, IoError> {
+    // No-op flush/close. Two spellings because a function-pointer type must match
+    // exactly: a `Writer<Console>`'s fields are `with(Console)`, a `Writer<{}>`'s
+    // are `with()`. The console variant declares `Console` without using it — closing
+    // ANY `Writer<C>` requires C, a uniform-interface rule (R6), not an effect of
+    // this implementation.
+    trusted fn console_noop(ctx: *mut u8) with(Console) -> Result<u64, IoError> {
         return Result::<u64, IoError>::Ok { value: 0 };
     }
-    /// A `Writer` over stdout. Authority: `Console`.
-    pub trusted fn console_writer() with(Console) -> Writer {
+    trusted fn buffer_noop(ctx: *mut u8) -> Result<u64, IoError> {
+        return Result::<u64, IoError>::Ok { value: 0 };
+    }
+    /// A `Writer<Console>` over stdout.
+    pub trusted fn console_writer() with(Console) -> Writer<Console> {
         return Writer { ctx: 0 as *mut u8, write_fn: console_write, flush_fn: console_noop, close_fn: console_noop };
     }
 
-    trusted fn console_err_write(ctx: *mut u8, data: *const u8, len: u64) -> Result<u64, IoError> {
+    trusted fn console_err_write(ctx: *mut u8, data: *const u8, len: u64) with(Console) -> Result<u64, IoError> {
         if len > 0 { libc_write(2, data, len); }
         return Result::<u64, IoError>::Ok { value: len };
     }
-    /// A `Writer` over stderr. Authority: `Console`.
-    pub trusted fn console_error_writer() with(Console) -> Writer {
+    /// A `Writer<Console>` over stderr.
+    pub trusted fn console_error_writer() with(Console) -> Writer<Console> {
         return Writer { ctx: 0 as *mut u8, write_fn: console_err_write, flush_fn: console_noop, close_fn: console_noop };
     }
 
@@ -202,10 +213,10 @@ mod io {
         (*st).len = cur + len;
         return Result::<u64, IoError>::Ok { value: len };
     }
-    /// A `Writer` into a caller-owned region — writes without `Alloc`.
-    /// Authority: `Unsafe` at acquisition (raw caller memory), never at write.
-    pub trusted fn fixed_writer(state: *mut FixedSinkState) with(Unsafe) -> Writer {
-        return Writer { ctx: state as *mut u8, write_fn: fixed_write, flush_fn: console_noop, close_fn: console_noop };
+    /// A `Writer<{}>` into a caller-owned region: no external authority, and no
+    /// `Alloc`. `Unsafe` at acquisition only (raw caller memory).
+    pub trusted fn fixed_writer(state: *mut FixedSinkState) with(Unsafe) -> Writer<{}> {
+        return Writer { ctx: state as *mut u8, write_fn: fixed_write, flush_fn: buffer_noop, close_fn: buffer_noop };
     }
 
     // ================================================================
@@ -215,29 +226,29 @@ mod io {
     // Results (13t bucket 1); invalid buffers/bounds remain traps.
     // Authority at ACQUISITION, methods capability-free, linear close.
     // ================================================================
-    pub struct Reader {
+    pub struct Reader<cap C> {
         ctx: *mut u8,
-        read_fn: fn(*mut u8, *mut u8, u64) -> Result<u64, IoError>,
-        close_fn: fn(*mut u8) -> Result<u64, IoError>,
+        read_fn: fn(*mut u8, *mut u8, u64) with(C) -> Result<u64, IoError>,
+        close_fn: fn(*mut u8) with(C) -> Result<u64, IoError>,
     }
 
-    trusted impl Reader {
+    trusted impl<cap C> Reader<C> {
         /// Read up to `len` bytes into caller-owned `buf`. Ok(0) = EOF.
-        pub fn read(&self, buf: *mut u8, len: u64) with(Unsafe) -> Result<u64, IoError> {
-            let f: fn(*mut u8, *mut u8, u64) -> Result<u64, IoError> = self.read_fn;
+        pub fn read(&self, buf: *mut u8, len: u64) with(Unsafe, C) -> Result<u64, IoError> {
+            let f: fn(*mut u8, *mut u8, u64) with(C) -> Result<u64, IoError> = self.read_fn;
             return f(self.ctx, buf, len);
         }
 
         /// Consume the handle; releases the source.
-        pub fn close(self) -> Result<u64, IoError> {
+        pub fn close(self) with(C) -> Result<u64, IoError> {
             let Reader { ctx, read_fn, close_fn } = self;
-            let f: fn(*mut u8) -> Result<u64, IoError> = close_fn;
+            let f: fn(*mut u8) with(C) -> Result<u64, IoError> = close_fn;
             return f(ctx);
         }
     }
 
-    // ---- file source (authority: File at acquisition) ----
-    trusted fn file_read(ctx: *mut u8, buf: *mut u8, len: u64) -> Result<u64, IoError> {
+    // ---- file source ----
+    trusted fn file_read(ctx: *mut u8, buf: *mut u8, len: u64) with(File) -> Result<u64, IoError> {
         if len == 0 { return Result::<u64, IoError>::Ok { value: 0 }; }
         let n: u64 = fread(buf, 1, len, ctx as *const u8);
         // H3 IO honesty: a short read is EOF (Ok, possibly 0) ONLY if the
@@ -249,8 +260,8 @@ mod io {
         }
         return Result::<u64, IoError>::Ok { value: n };
     }
-    /// Consume an open `TextFile` into a `Reader`. Authority: `File`.
-    pub trusted fn reader_from_file(f: TextFile) with(File) -> Reader {
+    /// Consume an open `TextFile` into a `Reader<File>`.
+    pub trusted fn reader_from_file(f: TextFile) with(File) -> Reader<File> {
         let TextFile { ptr } = f;
         return Reader { ctx: ptr as *mut u8, read_fn: file_read, close_fn: file_close };
     }
@@ -260,7 +271,7 @@ mod io {
     /// the chunk-buffer loop. Read errors end the drain (partial data is
     /// returned — the caller sees a short/invalid payload, the recoverable
     /// shape for parsers); EOF is Ok(0) per the Reader contract.
-    pub trusted fn read_all(r: &Reader) with(Alloc) -> Bytes {
+    pub trusted fn read_all<cap C>(r: &Reader<C>) with(Alloc, C) -> Bytes {
         let mut out: Bytes = Bytes::with_capacity(4096);
         // Chunk staging buffer as Bytes (heap) with POINTER reads — an
         // indexed stack array here would add an unproven bounds obligation
@@ -308,8 +319,8 @@ mod io {
     }
     /// A `Reader` over a caller-owned region — reads without `Alloc`.
     /// Authority: `Unsafe` at acquisition (raw caller memory), never at read.
-    pub trusted fn fixed_reader(state: *mut FixedSrcState) with(Unsafe) -> Reader {
-        return Reader { ctx: state as *mut u8, read_fn: fixed_read, close_fn: console_noop };
+    pub trusted fn fixed_reader(state: *mut FixedSrcState) with(Unsafe) -> Reader<{}> {
+        return Reader { ctx: state as *mut u8, read_fn: fixed_read, close_fn: buffer_noop };
     }
 
     /// Write a string to stdout without a trailing newline.
@@ -366,7 +377,7 @@ mod io {
     trusted fn test_read_all_drains() with(Alloc) -> i32 {
         let data: [u8; 5] = [10, 20, 30, 40, 50];
         let mut st: FixedSrcState = FixedSrcState { buf: &data as *const u8, len: 5, pos: 0 };
-        let r: Reader = fixed_reader(&mut st as *mut FixedSrcState);
+        let r: Reader<{}> = fixed_reader(&mut st as *mut FixedSrcState);
         let out: Bytes = read_all(&r);
         let rc: Result<u64, IoError> = r.close();
         discard(rc.is_ok());
@@ -382,7 +393,7 @@ mod io {
         let region: Bytes = Bytes::with_capacity(8);
         let raw: BytesRaw = region.raw_view();
         let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 8, len: 0 };
-        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
         let mut payload: Bytes = Bytes::with_capacity(5);
         payload.push(104); payload.push(101); payload.push(108); payload.push(108); payload.push(111);
         let r1: Result<u64, IoError> = w.write(&payload);
@@ -407,7 +418,7 @@ mod io {
         src.push(104); src.push(105); src.push(33);
         let sraw: BytesRaw = src.raw_view();
         let mut st: FixedSrcState = FixedSrcState { buf: sraw.ptr as *const u8, len: 3, pos: 0 };
-        let r: Reader = fixed_reader(&mut st as *mut FixedSrcState);
+        let r: Reader<{}> = fixed_reader(&mut st as *mut FixedSrcState);
         // destination region: 8 bytes
         let dst: Bytes = Bytes::with_capacity(8);
         let draw: BytesRaw = dst.raw_view();

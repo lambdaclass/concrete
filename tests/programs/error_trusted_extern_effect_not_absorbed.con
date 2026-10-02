@@ -1,0 +1,11 @@
+// R-0484 R2: trust absorbs only `Unsafe`. A trusted body calling an extern that declares
+// Console must itself declare Console; otherwise it would hide the effect (E0520).
+extern fn putchar(c: i32) with(Console) -> i32;
+
+trusted fn hidden(c: i32) -> i32 {
+    return putchar(c);
+}
+
+fn main() -> i32 {
+    return 0;
+}

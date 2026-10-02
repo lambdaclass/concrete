@@ -178,7 +178,7 @@ fi
 # It must be the ONLY thing held back: a local or sibling Unsafe requirement still binds.
 if [ -d "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" ]; then
   sout="$(cd "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" && $TO "$CC" check . 2>&1)"
-  if printf '%s' "$sout" | grep -q "requires Unsafe"; then
+  if printf '%s' "$sout" | grep -qE "requires ([A-Za-z]+, )*Unsafe"; then
     ok "a SIBLING-module Unsafe requirement binds too — local, sibling and dependency agree"
   else
     no "Unsafe stopped binding within a package"

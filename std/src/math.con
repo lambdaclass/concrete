@@ -1,13 +1,13 @@
 mod math {
-    pub trusted extern fn sqrt(x: Float64) -> Float64;
-    pub trusted extern fn sin(x: Float64) -> Float64;
-    pub trusted extern fn cos(x: Float64) -> Float64;
-    pub trusted extern fn tan(x: Float64) -> Float64;
-    pub trusted extern fn pow(x: Float64, y: Float64) -> Float64;
-    pub trusted extern fn log(x: Float64) -> Float64;
-    pub trusted extern fn exp(x: Float64) -> Float64;
-    pub trusted extern fn floor(x: Float64) -> Float64;
-    pub trusted extern fn ceil(x: Float64) -> Float64;
+    pub trusted extern fn sqrt(x: Float64) with() -> Float64;
+    pub trusted extern fn sin(x: Float64) with() -> Float64;
+    pub trusted extern fn cos(x: Float64) with() -> Float64;
+    pub trusted extern fn tan(x: Float64) with() -> Float64;
+    pub trusted extern fn pow(x: Float64, y: Float64) with() -> Float64;
+    pub trusted extern fn log(x: Float64) with() -> Float64;
+    pub trusted extern fn exp(x: Float64) with() -> Float64;
+    pub trusted extern fn floor(x: Float64) with() -> Float64;
+    pub trusted extern fn ceil(x: Float64) with() -> Float64;
 
     pub fn max<T: Copy>(a: T, b: T) -> T {
         if a >= b {

@@ -64,7 +64,7 @@ fi
 
 echo "=== and an extern reached through a sibling still costs Unsafe ==="
 eout="$(cd "$FIX/extern_unsafe" && $TO "$CC" check . 2>&1)"
-if printf '%s' "$eout" | grep -q "function 'raw_write' requires Unsafe but caller has (none)"; then
+if printf '%s' "$eout" | grep -qE "function 'raw_write' requires ([A-Za-z]+, )*Unsafe but caller has \(none\)"; then
   ok "the sibling-module extern call is refused under its PREFIXED spelling"
 else
   no "the extern's Unsafe requirement is lost across a submodule boundary"
@@ -91,22 +91,25 @@ else
   no "the positive control does not build"
 fi
 
-echo "=== trusted still does NOT grant Unsafe for a CALL ==="
-# Closing the hole made it tempting to let `trusted` confer `Unsafe` on extern calls the
-# way it already does for raw-pointer ops. Two fixtures older than this repair say
-# otherwise, and the second is named for the rule. std reaches libc through
-# `trusted extern` declarations instead — the mechanism the language already had.
-for f in error_trusted_extern_needs_unsafe error_trusted_no_extern; do
-  if [ -f "$ROOT_DIR/tests/programs/$f.con" ]; then
-    ok "$f.con is still present to hold the rule"
-  else
-    no "$f.con is gone — the trusted/Unsafe decision lost its fixture"
-  fi
-done
-if grep -q "trusted extern fn" "$ROOT_DIR/std/src/libc.con"; then
-  ok "std reaches libc through trusted extern declarations, not a checker exemption"
+echo "=== trusted absorbs an extern call's Unsafe, never its declared effect (R-0484 R2) ==="
+# Until 2026-10-01 a trusted body could NOT absorb an extern call's Unsafe, so effectful
+# C functions were bound `trusted extern` — callable with no capability at all — and a
+# trusted wrapper could perform I/O while declaring nothing. The rule is reversed, and the
+# reversal is coupled to mandatory effect declarations (E0116): trust discharges the
+# memory-safety obligation and nothing else. Both halves are compiled here, not just
+# checked for presence.
+pos="$ROOT_DIR/tests/programs/trusted_absorbs_extern_unsafe.con"
+neg="$ROOT_DIR/tests/programs/error_trusted_extern_effect_not_absorbed.con"
+if [ -f "$pos" ] && $TO "$CC" "$pos" -o "$TMP/absorb" >/dev/null 2>&1; then
+  ok "a trusted body declaring Console calls a plain extern with(Console): Unsafe absorbed"
 else
-  no "std/src/libc.con no longer declares its externs trusted — Unsafe will go viral"
+  no "trusted_absorbs_extern_unsafe.con does not build — trusted no longer absorbs extern Unsafe"
+fi
+nout="$( [ -f "$neg" ] && $TO "$CC" "$neg" -o "$TMP/noabsorb" 2>&1 )"
+if printf '%s' "$nout" | grep -qE "function 'putchar' requires Console"; then
+  ok "a trusted body without Console calling that extern is refused for Console — the effect is not absorbed"
+else
+  no "error_trusted_extern_effect_not_absorbed.con is not refused for Console: $(printf '%s' "$nout" | grep error | head -1 | cut -c1-160)"
 fi
 
 echo "=== a BODY-LESS declaration keeps the trusted modifier the author wrote ==="

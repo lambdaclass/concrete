@@ -32,14 +32,14 @@
 // These extern declarations are the only OS contact points.
 // An auditor sees: trusted + with(File) = reads a file, nothing else.
 
-trusted extern fn fopen(path: *const u8, mode: *const u8) -> *const u8;
-trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) -> u64;
-trusted extern fn fclose(fp: *const u8) -> i32;
+trusted extern fn fopen(path: *const u8, mode: *const u8) with(File) -> *const u8;
+trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) with(File) -> u64;
+trusted extern fn fclose(fp: *const u8) with(File) -> i32;
 
 // === Trusted FFI boundary (command-line args) ===
 
-trusted extern fn __concrete_get_argc() -> i32;
-trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+trusted extern fn __concrete_get_argc() with(Env) -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) with(Env) -> *const u8;
 
 // Read the first `count` bytes of the file at `path` into `buf`.
 // Returns the number of bytes actually read, or 0 on failure.

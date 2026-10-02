@@ -220,6 +220,9 @@ structure CModule where
   enums : List CEnumDef
   functions : List CFnDef
   externFns : List (String × List (String × Ty) × Ty × Bool)  -- (name, params, retTy, isTrusted)
+  /-- Each foreign binding's DECLARED effects (R-0484), keyed by binding name. Resolve has
+      already refused a binding with no declaration, so every extern has an entry. -/
+  externFnCaps : List (String × CapSet) := []
   constants : List (String × Ty × CExpr)
   submodules : List CModule := []
   traitDefs : List CTraitDef := []

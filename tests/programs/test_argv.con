@@ -2,11 +2,11 @@
 // The test binary is invoked without extra args, so argc should be >= 1
 // (the program name itself).
 
-trusted extern fn __concrete_get_argc() -> i32;
-trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
-trusted extern fn strlen(s: *const u8) -> u64;
+trusted extern fn __concrete_get_argc() with(Env) -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) with(Env) -> *const u8;
+trusted extern fn strlen(s: *const u8) with() -> u64;
 
-trusted fn argv_to_string(idx: i32) with(Alloc) -> String {
+trusted fn argv_to_string(idx: i32) with(Alloc, Env) -> String {
     let raw: *const u8 = __concrete_get_argv(idx);
     if raw == (0 as *const u8) { return ""; }
     let len: u64 = strlen(raw);

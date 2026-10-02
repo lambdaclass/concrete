@@ -1,5 +1,5 @@
-trusted extern fn sin(x: Float64) -> Float64;
-trusted extern fn cos(x: Float64) -> Float64;
+trusted extern fn sin(x: Float64) with() -> Float64;
+trusted extern fn cos(x: Float64) with() -> Float64;
 
 fn main() -> Int {
     let zero: Float64 = 0.0;

@@ -2543,6 +2543,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- Build extern fns
   let cExterns := m.externFns.map fun ef =>
     (ef.name, ef.params.map fun p => (p.name, p.ty), ef.retTy, ef.isTrusted)
+  let cExternCaps := m.externFns.map fun ef => (ef.name, ef.capSet.getD .empty)
   -- Build constants
   let cConstants := m.constants.map fun c =>
     -- Uses elabExprEv, the single producer. Its EVIDENCE is dropped here only because
@@ -2694,6 +2695,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
         declSpan := some ed.span : CEnumDef }
     functions := fns
     externFns := cExterns
+    externFnCaps := cExternCaps
     constants := cConstants
     submodules := subs
     newtypes := m.newtypes ++ imports.newtypes

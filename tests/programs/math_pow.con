@@ -1,4 +1,4 @@
-trusted extern fn pow(x: Float64, y: Float64) -> Float64;
+trusted extern fn pow(x: Float64, y: Float64) with() -> Float64;
 
 fn main() -> Int {
     let base: Float64 = 3.0;

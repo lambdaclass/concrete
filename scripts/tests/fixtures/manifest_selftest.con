@@ -14,10 +14,10 @@ mod selftest {
     }
 
     // 3. trusted extern fn (unrecognized-form class)
-    pub trusted extern fn raw_hook(p: *const u8) -> i32;
+    pub trusted extern fn raw_hook(p: *const u8) with() -> i32;
 
     // 4. plain extern fn
-    pub extern fn plain_hook(n: i32) -> i32;
+    pub extern fn plain_hook(n: i32) with() -> i32;
 
     // 5. trusted classification from the ENCLOSING impl
     pub struct Thing { n: u64 }

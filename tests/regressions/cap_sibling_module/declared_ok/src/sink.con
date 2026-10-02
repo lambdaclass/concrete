@@ -4,5 +4,5 @@ mod sink {
     pub fn shout(s: &String) with(Console, Alloc) { println(s); }
 
     // A non-trusted extern: requires Unsafe, reached from a parent module.
-    pub extern fn write(fd: i32, buf: *const u8, count: u64) -> i64;
+    pub extern fn write(fd: i32, buf: *const u8, count: u64) with(Console) -> i64;
 }

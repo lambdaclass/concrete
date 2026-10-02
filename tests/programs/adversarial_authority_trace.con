@@ -57,14 +57,14 @@ fn entry() with(Alloc) -> Int {
 }
 
 // --- Trusted extern: should not contribute Unsafe ---
-trusted extern fn safe_math(x: Int) -> Int;
+trusted extern fn safe_math(x: Int) with() -> Int;
 
 fn uses_trusted(x: Int) -> Int {
     return safe_math(x);
 }
 
 // --- Extern (untrusted): contributes Unsafe ---
-extern fn raw_op(x: Int) -> Int;
+extern fn raw_op(x: Int) with() -> Int;
 
 fn uses_raw(x: Int) with(Unsafe) -> Int {
     return raw_op(x);

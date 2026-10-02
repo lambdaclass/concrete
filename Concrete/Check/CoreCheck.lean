@@ -482,15 +482,21 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       -- renders the whole-set E0520 from the record's satisfaction, Check renders
       -- the per-cap E0240 from the record's `missing` — one decision, two views.
       -- An AUDITED body discharges a callee's `Unsafe` OBLIGATION: vouching that it
-      -- satisfies the callee's precondition is what `trusted` means. Scoped three ways
-      -- so it stays a discharge and never an erasure:
+      -- satisfies the callee's precondition is what `trusted` means. Scoped so it stays
+      -- a discharge and never an erasure:
       --   * only `Unsafe` — File/Console/Network/Alloc untouched, so trust never
-      --     confers authority to reach a sink;
-      --   * only a non-EXTERN callee — an `extern` still demands it
-      --     (error_trusted_extern_needs_unsafe.con); the audited leaf is `trusted extern fn`;
+      --     confers authority to reach a sink. For an `extern` that matters most: its
+      --     DECLARED effects (`extern fn write(..) with(Console)`) still bind the
+      --     trusted caller, which is what stops a trusted wrapper hiding them;
+      --   * extern callees INCLUDED since R-0484 (2026-10-01; HANDLE_CAPABILITIES.md
+      --     R2). Before, an extern call demanded `Unsafe` even in a trusted body, so
+      --     effectful C functions were bound `trusted extern` — callable with no
+      --     capability at all — which is how `console_write` performed I/O
+      --     undeclared. The reversal is coupled to mandatory effect declarations
+      --     (Resolve refuses an extern without `with(..)`), so trust can absorb only
+      --     the memory-safety obligation, never an unclassified effect;
       --   * only the CALL — the raw-operation gate (E0521) is untouched.
-      let calleeCaps := if env.inTrusted && !env.externNames.contains fn
-                        then dropCrossPackageUnsafe calleeCaps else calleeCaps
+      let calleeCaps := if env.inTrusted then dropCrossPackageUnsafe calleeCaps else calleeCaps
       let capD := Capabilities.decideCall env.currentCapSet calleeCaps
       if !capD.satisfied then
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
@@ -847,7 +853,7 @@ private def tyToString : Ty → String
   | .named n => n
   | .ref inner => "&" ++ tyToString inner
   | .refMut inner => "&mut " ++ tyToString inner
-  | .generic name args _ => name ++ "<" ++ ", ".intercalate (args.map tyToString) ++ ">"
+  | .generic name args caps => name ++ "<" ++ ", ".intercalate (args.map tyToString ++ caps.map CapSet.toTypeArg) ++ ">"
   | .typeVar name => name
   | .array elem size => "[" ++ tyToString elem ++ "; " ++ toString size ++ "]"
   | .ptrMut inner => "*mut " ++ tyToString inner
@@ -1013,14 +1019,10 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
   setEnv { env with
     currentFnName' := f.name
     vars := f.params
-    -- The DECLARED set, deliberately. `trusted` does not confer `Unsafe` on a
-    -- call: `error_trusted_extern_needs_unsafe.con` and `error_trusted_no_extern.con`
-    -- have required an explicit `with(Unsafe)` on a trusted wrapper's extern call
-    -- since long before the sibling-submodule repair, and the second is named for
-    -- exactly that rule. `trusted` lets a body manipulate raw memory it already
-    -- holds (Capabilities.capsAllowUnsafeOp); reaching OUT through an extern stays
-    -- a separate fact the header must state. Granting it here would have deleted a
-    -- tested language decision as a side effect of a checker fix.
+    -- The DECLARED set, deliberately: the header is what callers rely on. A trusted
+    -- body's discharge of a callee's `Unsafe` (extern calls included since R-0484)
+    -- happens at the call site, not by widening this set, so it can never widen what
+    -- the function is reported or checked to require.
     currentCapSet := f.capSet
     currentRetTy := f.retTy
     inLoop := false
@@ -1062,7 +1064,7 @@ private partial def collectAllFnSigsAux (pfx : String) (m : CModule)
     : List (String × CapSet × List (String × Ty) × Ty) :=
   m.functions.map (fun f => (f.name, f.capSet, f.params, f.retTy))
   ++ m.externFns.flatMap (fun (name, params, retTy, isTrusted) =>
-       let cap := Capabilities.externFnRequiredCaps isTrusted
+       let cap := Capabilities.externFnRequiredCaps isTrusted ((m.externFnCaps.lookup name).getD .empty)
        -- Submodule FUNCTIONS arrive here already renamed by
        -- `prefixModuleFnNames`, but externs are deliberately left alone there —
        -- they name real C symbols. The call site still emits the prefixed
@@ -1107,7 +1109,7 @@ partial def ccCheckModule (m : CModule)
     (f.name, f.capSet, f.params, f.retTy)
   -- Extern functions: trusted ones need no cap, others require Unsafe
   let externSigs := m.externFns.map fun (name, params, retTy, isTrusted) =>
-    let cap := Capabilities.externFnRequiredCaps isTrusted
+    let cap := Capabilities.externFnRequiredCaps isTrusted ((m.externFnCaps.lookup name).getD .empty)
     (name, cap, params, retTy)
   let initEnv : CoreCheckEnv := {
     -- Own signatures FIRST so a local definition wins a name it shares with

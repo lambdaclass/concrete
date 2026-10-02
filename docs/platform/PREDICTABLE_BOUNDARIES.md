@@ -383,7 +383,7 @@ Functions with `evidence: proved` have all predictable properties plus a Lean-ve
 |----------|-----------|
 | Stated theorem holds over PExpr | Lean 4 kernel checking |
 | Fingerprint matches current body | Stale detection via structural fingerprint |
-| Function is pure (no capabilities) | Proof eligibility gate |
+| Function has no external authority (empty `with(...)`, no effects reachable through a handle or foreign binding) | Proof eligibility gate |
 | Only admitted state/loop forms | ProofCore extraction and boundedness gates |
 
 ### What "proved" does NOT add

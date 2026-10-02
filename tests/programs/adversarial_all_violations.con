@@ -1,7 +1,7 @@
 // Adversarial: one function that triggers ALL 5 predictable profile violations.
 // Must show all 5 violation reasons in the report.
 
-extern fn external_call(x: Int) -> Int;
+extern fn external_call(x: Int) with() -> Int;
 
 fn everything_bad(n: Int) with(File, Alloc, Unsafe) -> Int {
     if n <= 0 { return 0; }

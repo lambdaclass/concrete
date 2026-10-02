@@ -6,6 +6,35 @@ an implemented guarantee. Items marked **[decided]** are settled
 design, not yet built; **[open]** must be resolved before the compiler slice starts;
 **[current]** describes today's behaviour. Nothing here is implemented yet.
 
+## Implementation status (branch `r0484-struct-caps`, 2026-10-02)
+
+Implemented on the branch, not yet merged or validated on CI. R10 and the slice as a whole
+are **not** complete.
+
+- **Implemented:** capability parameters on structs (`Sink<cap C>`, kind/count checks
+  E0114/E0115, inference, instantiated field types, cross-package normalization); R1
+  `Writer<C>`/`Reader<C>` in std with the consumers migrated; R2 trusted bodies absorb
+  extern-call `Unsafe` and nothing else; R3 every `extern` declares its effects (E0116,
+  E0117 for a known-effectful symbol declared `with()`); R4 reclassification (40 std
+  bindings now plain `extern`); R9 enforcement across packages (`FileSummary` carries
+  declared effects). `print_bytes` declares `with(Console)` and is excluded for it.
+- **Incomplete — R10 cross-package assumptions.** `--report unsafe` lists a module's OWN
+  foreign bindings with their assumed effects, trust kind and dependents, but not the
+  bindings a program inherits from dependencies (std above all): reports see only the
+  program's modules. Every report says so ("Dependency coverage: incomplete"), so an
+  empty listing never reads as "no foreign assumptions". Completion transports binding
+  identity, declared effects, trust classification and dependency edges through the
+  existing dependency summaries (`FileSummary`), not a second report pipeline.
+- **Incomplete — documentation outside the language docs.** SAFETY, FFI, CAPABILITY_FACTS,
+  TWO_AXIS_SAFETY, PREDICTABLE_BOUNDARIES, WHY_CONCRETE and README are updated. The four
+  pages originally named as stating "no capabilities means pure" — the Spec, Why Concrete
+  Exists, Can I prove Concrete programs in Lean?, Nutrition Labels — are **unresolved
+  locations**: the publishing sources in this repository are `site/` (Zola, deployed to
+  `unbalancedparentheses.github.io/concrete2`) and `docs/book/` (`.github/workflows/book.yml`),
+  and no page with those titles exists in either. "Why Concrete Exists" is a SECTION in
+  `site/content/guide/landing.md` and `docs/book/src/landing.md`, and neither states the
+  rule. Their actual location must be confirmed before this pass is called complete.
+
 ## 0. The hole this closes
 
 `examples/base64_cli`'s `print_bytes` takes a `&Writer`, calls `Writer::write`, and
@@ -399,7 +428,9 @@ per the repository's gate discipline.
 - `docs/language/SAFETY.md`, `docs/platform/FFI.md`, `docs/language/CAPABILITY_FACTS.md`:
   the R2 reversal and the R4 criterion.
 - `tests/programs/error_trusted_extern_needs_unsafe.con`, `error_trusted_no_extern.con`:
-  flipped by R2.
+  replaced by `trusted_absorbs_extern_unsafe.con` and
+  `error_trusted_extern_effect_not_absorbed.con`; `error_extern_needs_unsafe.con` keeps the
+  ordinary-caller control (a non-trusted caller of a plain extern still needs `Unsafe`).
 - `scripts/tests/check_effect_opacity.sh`: case 15.
 - The four pages that say an empty capability set means pure (the Spec, Why Concrete
   Exists, Can I prove Concrete programs in Lean?, Nutrition Labels) and `README.md`'s

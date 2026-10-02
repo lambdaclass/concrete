@@ -13,13 +13,13 @@
 
 // === Layer 1: FFI declarations (C standard library) ===
 
-trusted extern fn abs(x: i32) -> i32;
+trusted extern fn abs(x: i32) with() -> i32;
 
 // strlen takes a pointer to a null-terminated string
-trusted extern fn strlen(s: *const u8) -> u64;
+trusted extern fn strlen(s: *const u8) with() -> u64;
 
 // memcmp compares two memory regions
-trusted extern fn memcmp(s1: *const u8, s2: *const u8, n: u64) -> i32;
+trusted extern fn memcmp(s1: *const u8, s2: *const u8, n: u64) with() -> i32;
 
 // === Layer 2: Trusted wrappers ===
 

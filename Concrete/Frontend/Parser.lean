@@ -2134,6 +2134,13 @@ partial def parseExternFn : ParseM ExternFnDecl := do
   expect .lparen
   let params ← parseParamList
   expect .rparen
+  -- Declared effects (R-0484). Absent and `with()` are different: absent is NO
+  -- declaration (refused by Resolve), `with()` is the audited claim of no effects.
+  let tkW ← peek
+  let capSet ← if tkW == .with_ then do
+      let cs ← parseWithCaps
+      pure (some (match cs with | .concrete [] => CapSet.empty | other => other))
+    else pure none
   let tk ← peek
   let retTy ← if tk == .arrow then
     advance
@@ -2141,7 +2148,7 @@ partial def parseExternFn : ParseM ExternFnDecl := do
   else
     pure .unit
   expect .semicolon
-  return { name, params, retTy }
+  return { name, params, retTy, capSet }
 
 /-- Tokens that begin a new top-level item — the resync points for error recovery
     (ROADMAP Phase 4 #12c). When a declaration fails to parse we skip to the next of

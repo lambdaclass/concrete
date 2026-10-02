@@ -429,6 +429,12 @@ structure ExternFnDecl where
   retTy : Ty
   isPublic : Bool := false
   isTrusted : Bool := false
+  /-- The effects the foreign binding declares, `extern fn write(..) with(Console)`
+      (R-0484). `none` means NO DECLARATION was written, which Resolve refuses: absence
+      is not "no effects" (that is SPARK's reading of an undeclared import, and the way
+      an omission becomes indistinguishable from a deliberate claim). `some .empty`
+      — written `with()` — is the audited claim that the binding has no effects. -/
+  capSet : Option CapSet := none
   span : Span := default
   deriving Repr
 

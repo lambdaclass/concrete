@@ -19,7 +19,7 @@ mod hexdump {
     // workload's FRICTION #1 pulled it (second ask), then switched over as
     // proof-of-pull.
 
-    fn w_str(w: &Writer, s: String) with(Alloc) {
+    fn w_str(w: &Writer<Console>, s: String) with(Alloc, Console) {
         let r: Result<u64, IoError> = w.write_str(&s);
         discard(r.is_ok());
         s.drop();
@@ -39,7 +39,7 @@ mod hexdump {
     }
 
     // One xxd-format line for data[off .. off+n) where 1 <= n <= 16.
-    fn dump_line(data: &Bytes, off: u64, n: u64, w: &Writer) with(Alloc) {
+    fn dump_line(data: &Bytes, off: u64, n: u64, w: &Writer<Console>) with(Alloc, Console) {
         let mut line: String = String::new();
         push_hex(&mut line, off, 8);
         line.push_char(':');
@@ -70,7 +70,7 @@ mod hexdump {
         w_str(w, line);
     }
 
-    fn dump(data: &Bytes, skip: u64, limit: u64, has_limit: bool, w: &Writer) with(Alloc) {
+    fn dump(data: &Bytes, skip: u64, limit: u64, has_limit: bool, w: &Writer<Console>) with(Alloc, Console) {
         let total: u64 = data.len();
         if skip >= total { return; }
         let mut end: u64 = total;
@@ -99,11 +99,11 @@ mod hexdump {
                 return fail("hexdump: cannot open file");
             },
             Result::Ok { value } => {
-                let r: Reader = reader_from_file(value);
+                let r: Reader<File> = reader_from_file(value);
                 let data: Bytes = read_all(&r);
                 let rc: Result<u64, IoError> = r.close();
                 discard(rc.is_ok());
-                let w: Writer = console_writer();
+                let w: Writer<Console> = console_writer();
                 dump(&data, skip, limit, has_limit, &w);
                 let wc: Result<u64, IoError> = w.close();
                 discard(wc.is_ok());

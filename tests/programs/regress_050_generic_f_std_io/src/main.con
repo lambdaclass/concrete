@@ -21,7 +21,7 @@ mod main {
     fn main() with(Std) -> u8 {
         // Exercise the generic so it is actually specialized.
         let n: Int = f::<Int>(1);
-        let w: Writer = console_writer();
+        let w: Writer<Console> = console_writer();
         let s: String = "r050";
         let wr: Result<u64, IoError> = w.write_str(&s);
         discard(wr.is_ok());

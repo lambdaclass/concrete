@@ -1,4 +1,4 @@
-trusted extern fn putchar(c: i32) -> i32;
+trusted extern fn putchar(c: i32) with(Console) -> i32;
 
 trusted fn print_int(n: i64) with(Console) {
     let s: String = int_to_string(n);

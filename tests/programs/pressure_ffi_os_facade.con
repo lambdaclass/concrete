@@ -14,10 +14,10 @@
 // === Layer 1: FFI declarations (POSIX) ===
 
 // POSIX write: fd, buf, count -> bytes written
-trusted extern fn write(fd: i32, buf: *const u8, count: u64) -> i64;
+trusted extern fn write(fd: i32, buf: *const u8, count: u64) with(Console) -> i64;
 
 // POSIX getpid: returns process ID
-trusted extern fn getpid() -> i32;
+trusted extern fn getpid() with(Process) -> i32;
 
 // === Layer 2: Trusted wrappers ===
 

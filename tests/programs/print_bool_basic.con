@@ -1,5 +1,5 @@
 // print_bool: use trusted extern fn to print via putchar
-trusted extern fn putchar(c: i32) -> i32;
+trusted extern fn putchar(c: i32) with(Console) -> i32;
 
 trusted fn print_str(s: &String) with(Console) {
     let len: Int = string_length(s);

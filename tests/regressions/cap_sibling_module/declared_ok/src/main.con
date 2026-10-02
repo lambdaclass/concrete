@@ -16,14 +16,14 @@ mod declared_ok {
     }
 
     // `Unsafe` declared explicitly rather than borrowed from `trusted`.
-    fn direct(data: *const u8, len: u64) with(Unsafe) -> i64 {
+    fn direct(data: *const u8, len: u64) with(Unsafe, Console) -> i64 {
         return raw_write(1, data, len);
     }
 
     // `trusted` does NOT grant Unsafe for a CALL — the wrapper must still say so.
     // (error_trusted_extern_needs_unsafe.con has held that rule since long before the
     // sibling-submodule repair; std reaches libc through `trusted extern` instead.)
-    trusted fn wrapped(data: *const u8, len: u64) with(Unsafe) -> i64 {
+    trusted fn wrapped(data: *const u8, len: u64) with(Unsafe, Console) -> i64 {
         return raw_write(1, data, len);
     }
 

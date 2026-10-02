@@ -26,7 +26,7 @@ Concrete's safety model is organized around a three-way split:
 |-----------|---------------|------------|---------|
 | **Capabilities** | Semantic effects visible to callers | In function signatures | `with(File, Alloc)` |
 | **`trusted`** | Containment of pointer-level implementation unsafety behind safe APIs | At declaration site only; callers see a safe signature | `trusted impl Vec<T> { ... }` |
-| **`with(Unsafe)`** | Authority to cross foreign boundaries (FFI, transmute) | In function signatures, even inside trusted code | `extern fn read(...)` requires `with(Unsafe)` |
+| **`with(Unsafe)`** | The memory-safety obligation of crossing a foreign boundary (FFI, transmute) | In function signatures; a `trusted` body absorbs it (R-0484) | `extern fn read(...) with(Console)` requires `with(Unsafe, Console)` outside trusted code |
 
 This split applies uniformly across compiler builtins, stdlib internals, and user code. No layer is silently exempt.
 
@@ -82,10 +82,10 @@ trusted impl Vec<T> {
 
 **What `trusted` does not do:**
 - Does **not** suppress capabilities — callers still need the declared capabilities
-- Does **not** permit `extern fn` calls without `with(Unsafe)` — foreign boundaries stay explicit
+- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](HANDLE_CAPABILITIES.md) R2–R3
 - Does **not** relax linearity rules — linear values follow the same ownership rules everywhere
 - Does **not** hide any caller-visible semantic fact
-- `trusted extern fn` is a separate, narrower mechanism for audited pure foreign bindings (e.g., `sqrt`)
+- `trusted extern fn` is a separate, narrower mechanism: a binding safe for every argument its types permit, with no undeclared effects (e.g., `sqrt`). Its declared effects still bind every caller
 
 **Syntactic surfaces** (intentionally narrow):
 - `trusted fn` — standalone function
@@ -98,7 +98,7 @@ The stdlib demonstrates this pattern throughout: `trusted impl Vec<T>`, `trusted
 
 `with(Unsafe)` gates the explicit low-level boundary:
 
-- calling `extern fn` (but not `trusted extern fn`)
+- calling `extern fn` (but not `trusted extern fn`) outside a `trusted` body; the binding's declared effects are required in addition, everywhere
 - raw pointer dereference and assignment (outside `trusted` code)
 - pointer-involving casts (outside `trusted` code)
 

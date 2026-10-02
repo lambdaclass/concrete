@@ -1,0 +1,15 @@
+// R-0484 R2: a `trusted` body absorbs the `Unsafe` of calling a plain `extern` — it
+// vouches for memory safety — while the binding's DECLARED effect still binds it. This
+// body declares Console and nothing else, and calls a plain extern with(Console).
+// (Replaces error_trusted_extern_needs_unsafe.con / error_trusted_no_extern.con, which
+// pinned the previous rule.)
+extern fn putchar(c: i32) with(Console) -> i32;
+
+trusted fn emit(c: i32) with(Console) -> i32 {
+    return putchar(c);
+}
+
+fn main() with(Console) -> i32 {
+    emit(10);
+    return 0;
+}

@@ -7,11 +7,12 @@ mod fmt {
     // Writer-based rendering (Phase 7 item 14b) — the PRIMARY path.
     //
     // Built-ins render into a small stack buffer and hand the bytes to the
-    // one Writer contract (14a): no allocation, no capability (authority was
-    // at Writer acquisition). The String-producing helpers below
+    // one Writer contract (14a): no allocation. Each helper is generic over the
+    // writer's capability and requires exactly it (R-0484): rendering into a
+    // console writer needs Console, into a fixed buffer nothing. The String-producing helpers below
     // (format_int/format_uint) are the SECONDARY wrappers and carry
     // with(Alloc). User types opt in by convention, not trait object:
-    //   pub fn write_to(&self, w: &Writer) -> Result<u64, IoError>
+    //   pub fn write_to<cap C>(&self, w: &Writer<C>) with(C) -> Result<u64, IoError>
     // called only where the type is statically known.
     // ================================================================
 
@@ -21,7 +22,7 @@ mod fmt {
     // only accepts constants / #[requires]-bounded indices) and avoids the
     // bug-029 array-merge shape entirely. Sinks see <= 20 one-byte writes;
     // buffered writers can batch later.
-    trusted fn emit_digits(w: &Writer, magnitude: u64) -> Result<u64, IoError> {
+    trusted fn emit_digits<cap C>(w: &Writer<C>, magnitude: u64) with(C) -> Result<u64, IoError> {
         let mut rev: u64 = 0;
         let mut n: u64 = 0;
         let mut v: u64 = magnitude;
@@ -44,7 +45,7 @@ mod fmt {
     }
 
     /// Render a signed integer through the Writer. No Alloc, no array buffer.
-    pub trusted fn write_int(w: &Writer, value: i64) -> Result<u64, IoError> {
+    pub trusted fn write_int<cap C>(w: &Writer<C>, value: i64) with(C) -> Result<u64, IoError> {
         if value == 0 {
             let z: u8 = 48;
             return w.write_raw(&z as *const u8, 1);
@@ -71,7 +72,7 @@ mod fmt {
     }
 
     /// Render an unsigned integer through the Writer. No Alloc, no array buffer.
-    pub trusted fn write_uint(w: &Writer, value: u64) -> Result<u64, IoError> {
+    pub trusted fn write_uint<cap C>(w: &Writer<C>, value: u64) with(C) -> Result<u64, IoError> {
         if value == 0 {
             let z: u8 = 48;
             return w.write_raw(&z as *const u8, 1);
@@ -80,7 +81,7 @@ mod fmt {
     }
 
     /// Render `true` / `false`. No Alloc. (K-shape; docs/bugs/029.)
-    pub trusted fn write_bool(w: &Writer, value: bool) -> Result<u64, IoError> {
+    pub trusted fn write_bool<cap C>(w: &Writer<C>, value: bool) with(C) -> Result<u64, IoError> {
         let mut buf: [u8; 5] = [0; 5];
         let mut n: u64 = 5;
         if value {
@@ -93,7 +94,7 @@ mod fmt {
     }
 
     /// Render a single ASCII char (one byte). No Alloc.
-    pub trusted fn write_char(w: &Writer, value: char) -> Result<u64, IoError> {
+    pub trusted fn write_char<cap C>(w: &Writer<C>, value: char) with(C) -> Result<u64, IoError> {
         let b: u8 = value as u8;
         return w.write_raw(&b as *const u8, 1);
     }
@@ -385,7 +386,7 @@ mod fmt {
     // dispatched, renders through the same Writer path as the built-ins.
     struct Copy Point { x: i64, y: i64 }
     impl Point {
-        pub fn write_to(&self, w: &Writer) -> Result<u64, IoError> {
+        pub fn write_to<cap C>(&self, w: &Writer<C>) with(C) -> Result<u64, IoError> {
             let a: Result<u64, IoError> = write_char(w, '(');
             let b: Result<u64, IoError> = write_int(w, self.x);
             let c: Result<u64, IoError> = write_char(w, ',');
@@ -409,7 +410,7 @@ mod fmt {
         let region: Bytes = Bytes::with_capacity(16);
         let raw: BytesRaw = region.raw_view();
         let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 16, len: 0 };
-        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
         let r: Result<u64, IoError> = write_int(&w, -1234567890);
         let n: u64 = r.unwrap_or(0);
         let rc: Result<u64, IoError> = w.close();
@@ -429,7 +430,7 @@ mod fmt {
         let region: Bytes = Bytes::with_capacity(32);
         let raw: BytesRaw = region.raw_view();
         let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 32, len: 0 };
-        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
         let r1: Result<u64, IoError> = write_int(&w, -42);
         let n1: u64 = r1.unwrap_or(0);
         let r0: Result<u64, IoError> = write_int(&w, 0);
@@ -455,7 +456,7 @@ mod fmt {
         let region: Bytes = Bytes::with_capacity(32);
         let raw: BytesRaw = region.raw_view();
         let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 32, len: 0 };
-        let w: Writer = fixed_writer(&mut st as *mut FixedSinkState);
+        let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
         let p: Point = Point { x: 3, y: -7 };
         let r: Result<u64, IoError> = p.write_to(&w);
         let n: u64 = r.unwrap_or(0);

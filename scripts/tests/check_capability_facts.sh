@@ -57,7 +57,7 @@ frontend_accepts trusted_wrapper 'mod m { trusted fn f(p: *const i32) -> i32 { r
 frontend_accepts with_unsafe 'mod m { fn f(p: *const i32) with(Unsafe) -> i32 { return *p; } fn main() -> Int { return 0; } }'
 
 echo "=== extern-fn cap fact: untrusted extern requires Unsafe (rejected without it) ==="
-rejects_cap extern_needs_unsafe 'mod m { extern fn raw_op() -> i32; fn main() -> Int { return raw_op() as Int; } }'
+rejects_cap extern_needs_unsafe 'mod m { extern fn raw_op() with() -> i32; fn main() -> Int { return raw_op() as Int; } }'
 
 echo "=== report ⇔ checker agreement: the fn the checker accepts as Unsafe is the one the report lists ==="
 prog='mod m { fn f(p: *const i32) with(Unsafe) -> i32 { return *p; } fn main() -> Int { return 0; } }'

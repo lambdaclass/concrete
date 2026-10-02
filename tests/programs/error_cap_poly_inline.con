@@ -1,5 +1,5 @@
 // Error: polymorphic capability propagation fails without capability
-trusted extern fn putchar(c: i32) -> i32;
+trusted extern fn putchar(c: i32) with(Console) -> i32;
 
 trusted fn print_int(x: i64) with(Console) {
     let s: String = int_to_string(x);

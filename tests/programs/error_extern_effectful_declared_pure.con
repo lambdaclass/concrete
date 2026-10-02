@@ -1,0 +1,7 @@
+// R-0484 R3: `write` is a known effectful C symbol, so declaring it effect-free is refused
+// (E0117) — the likeliest audit mistake, caught mechanically.
+extern fn write(fd: i32, buf: *const u8, count: u64) with() -> i64;
+
+fn main() -> i32 {
+    return 0;
+}

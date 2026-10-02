@@ -17,12 +17,12 @@
 
 // === Trusted FFI boundary (POSIX file I/O) ===
 
-trusted extern fn fopen(path: *const u8, mode: *const u8) -> *const u8;
-trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) -> u64;
-trusted extern fn fclose(fp: *const u8) -> i32;
+trusted extern fn fopen(path: *const u8, mode: *const u8) with(File) -> *const u8;
+trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) with(File) -> u64;
+trusted extern fn fclose(fp: *const u8) with(File) -> i32;
 
-trusted extern fn __concrete_get_argc() -> i32;
-trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+trusted extern fn __concrete_get_argc() with(Env) -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) with(Env) -> *const u8;
 
 trusted fn read_header_bytes(path: *const u8, buf: *mut u8, count: u64) with(File) -> u64 {
     let mode: [u8; 3] = [114, 98, 0];

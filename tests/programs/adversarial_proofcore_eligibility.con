@@ -9,7 +9,7 @@
 //   ffi_caller     → excluded, source: Unsafe caps, profile: FFI
 //   main           → excluded, source: Std caps + entry, profile: allocation + blocking I/O
 
-extern fn external_op(x: Int) -> Int;
+extern fn external_op(x: Int) with() -> Int;
 
 fn pure_eligible(a: Int, b: Int) -> Int {
     return a + b;

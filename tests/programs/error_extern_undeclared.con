@@ -1,0 +1,7 @@
+// R-0484 R3: a foreign binding must declare its effects. No declaration is refused
+// (E0116) — it is never read as "no effects".
+extern fn mystery(x: i32) -> i32;
+
+fn main() -> i32 {
+    return 0;
+}

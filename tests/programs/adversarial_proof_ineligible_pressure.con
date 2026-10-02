@@ -17,7 +17,7 @@
 //   combo_fn        → ineligible: has capabilities: File, recursion (direct), blocking I/O
 //   clean_fn        → eligible (control: should be missing, not ineligible)
 
-extern fn external_op(x: Int) -> Int;
+extern fn external_op(x: Int) with() -> Int;
 
 fn caps_file(x: Int) with(File) -> Int {
     return x + 1;

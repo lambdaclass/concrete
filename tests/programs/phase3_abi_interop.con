@@ -22,15 +22,15 @@ struct Copy Aligned64 {
 }
 
 // C functions (defined in phase3_abi_interop.c)
-trusted extern fn c_sizeof_point() -> i64;
-trusted extern fn c_sizeof_rect() -> i64;
-trusted extern fn c_sizeof_aligned64() -> i64;
-trusted extern fn c_offsetof_rect_size() -> i64;
-trusted extern fn c_offsetof_aligned64_c() -> i64;
+trusted extern fn c_sizeof_point() with() -> i64;
+trusted extern fn c_sizeof_rect() with() -> i64;
+trusted extern fn c_sizeof_aligned64() with() -> i64;
+trusted extern fn c_offsetof_rect_size() with() -> i64;
+trusted extern fn c_offsetof_aligned64_c() with() -> i64;
 
 // By-value struct passing (tests C ABI register flattening)
-trusted extern fn c_sum_point(p: Point) -> i64;
-trusted extern fn c_sum_rect(r: Rect) -> i64;
+trusted extern fn c_sum_point(p: Point) with() -> i64;
+trusted extern fn c_sum_rect(r: Rect) with() -> i64;
 
 fn main() with(Std) -> i32 {
     // Check sizeof matches between C and Concrete

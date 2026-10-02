@@ -82,29 +82,61 @@ def capSetHasUnsafe (cs : CapSet) : Bool :=
 def capsAllowUnsafeOp (inTrusted : Bool) (cs : CapSet) : Bool :=
   inTrusted || capsContain cs (.concrete [unsafeCapName])
 
-/-- WHAT `trusted` DOES NOT DO, recorded here because closing the
-    sibling-submodule signature hole made it tempting to change.
+/-- WHAT `trusted` DOES WITH AN EXTERN CALL (R-0484, 2026-10-01 — reversed).
 
-    `trusted` grants `Unsafe` for a raw OPERATION on memory the body already
-    holds (`capsAllowUnsafeOp`, above). It does NOT grant `Unsafe` for a CALL —
-    an `extern` call inside a `trusted` wrapper still requires an explicit
-    `with(Unsafe)` on the header. That is a deliberate language decision with two
-    negative fixtures behind it, `error_trusted_extern_needs_unsafe.con` and
-    `error_trusted_no_extern.con`, the second named for the rule itself.
+    Until 2026-10-01, `trusted` granted `Unsafe` for a raw OPERATION on memory the
+    body already holds (`capsAllowUnsafeOp`) but NOT for a call to a plain `extern`,
+    which still required `with(Unsafe)` on the header. That rule, pinned by
+    `error_trusted_extern_needs_unsafe.con` and `error_trusted_no_extern.con`, pushed
+    every effectful C function into `trusted extern` — callable with no capability at
+    all — and that is how `console_write` performed I/O while declaring nothing.
 
-    The distinction is coherent: manipulating memory you were handed is what the
-    trust boundary vouches for; reaching OUT through a foreign symbol is a
-    separate fact a reader of the header is entitled to see. Uniformity would
-    have been the wrong instinct — the two questions look alike and are not, and
-    a checker repair is not the place to settle a language question by accident. -/
-def trustedGrantsUnsafeOnCalls : Bool := false
+    Now a trusted body absorbs an extern call's `Unsafe`, exactly as it absorbs any
+    callee's `Unsafe` obligation (CoreCheck, `dropCrossPackageUnsafe`): trust vouches
+    for memory safety. It absorbs NOTHING ELSE. The binding's declared effects
+    (`extern fn write(..) with(Console)`) still bind the trusted caller, and every
+    binding must declare them (Resolve, E0116), so trust can never absorb an
+    unclassified effect. Fixtures: `trusted_absorbs_extern_unsafe.con` and
+    `error_trusted_extern_effect_not_absorbed.con`. Design:
+    `docs/language/HANDLE_CAPABILITIES.md` R2. -/
+def trustedGrantsUnsafeOnCalls : Bool := true
+
+/-- C symbols known to have external effects (R-0484 R3). Binding one of them with an
+    EMPTY effect declaration is refused: the likeliest audit mistake, caught mechanically.
+    It suppresses nothing — a binding that declares an effect is checked like any other.
+    From the construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md` §3).
+    `abort` is deliberately absent: a language-defined failure carries no capability (D3).
+    The list is incomplete by nature; its completeness is itself an audited assumption. -/
+def knownEffectfulForeignSymbols : List String :=
+  [ -- standard streams and files
+    "write", "read", "open", "fopen", "fdopen", "fclose", "fflush", "ferror", "fread",
+    "fwrite", "fseek", "ftell", "puts", "putchar", "printf", "fprintf", "dup", "dup2",
+    "unlink", "mkdir", "rmdir", "rename",
+    -- network
+    "socket", "bind", "listen", "accept", "connect", "close", "send", "recv",
+    "setsockopt", "getaddrinfo",
+    -- environment and arguments
+    "getenv", "setenv", "unsetenv", "uname", "__concrete_get_argc", "__concrete_get_argv",
+    -- process
+    "exit", "_exit", "fork", "execvp", "waitpid", "kill", "getpid", "raise", "signal",
+    "sigaction",
+    -- time and randomness
+    "time", "clock_gettime", "nanosleep", "sleep", "rand", "srand", "getrandom" ]
 
 /-- The capability set an `extern fn` requires: none if it is `trusted`
     (the trust boundary is the author's responsibility), otherwise `Unsafe`.
     One definition of the fact that CoreCheck's signature table and every
     report/audit cap-lookup builder must agree on. -/
-def externFnRequiredCaps (isTrusted : Bool) : CapSet :=
-  if isTrusted then .empty else .concrete [unsafeCapName]
+def externFnRequiredCaps (isTrusted : Bool) (declared : CapSet) : CapSet :=
+  -- What calling a foreign binding requires (R-0484): the effects it DECLARES, plus
+  -- `Unsafe` unless it is a `trusted extern` (safe for every argument its types
+  -- permit). The declared effects are never dropped, by `trusted` or anything else.
+  if isTrusted then declared
+  else
+    -- One normalized set, so it renders `Console, Unsafe`, never `(none) + Unsafe`.
+    let (names, vars) := declared.normalize
+    let base : CapSet := .concrete ((names ++ [unsafeCapName]).mergeSort (· < ·) |>.eraseDups)
+    vars.foldl (fun acc v => .union acc (.var v)) base
 
 /-- The concrete capabilities a `callee` requires that a `caller` does NOT hold
     (in its concrete caps or as a capability variable). This is the specific

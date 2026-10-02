@@ -325,14 +325,31 @@ partial def unsafeReportModule (externNames : List String)
       else lines ++ [s!"{indent}  Functions with Unsafe capability:"] ++
         unsafeFns.map fun f =>
           s!"{indent}    fn {f.name}({ppTyList f.params}) -> {tyToStr f.retTy}"
+    let declaredOf (n : String) : String :=
+      let (names, vars) := ((m.externFnCaps.lookup n).getD .empty).normalize
+      s!"with({", ".intercalate (names ++ vars)})"
     let lines := if externFns.isEmpty then lines
       else lines ++ [s!"{indent}  Extern functions:"] ++
         externFns.map fun (n, ps, rt, _) =>
-          s!"{indent}    extern fn {n}({ppTyList ps}) -> {tyToStr rt}"
+          s!"{indent}    extern fn {n}({ppTyList ps}) {declaredOf n} -> {tyToStr rt}"
     let lines := if trustedExternFns.isEmpty then lines
       else lines ++ [s!"{indent}  Trusted extern functions:"] ++
         trustedExternFns.map fun (n, ps, rt, _) =>
-          s!"{indent}    trusted extern fn {n}({ppTyList ps}) -> {tyToStr rt}"
+          s!"{indent}    trusted extern fn {n}({ppTyList ps}) {declaredOf n} -> {tyToStr rt}"
+    -- R-0484 R10: a foreign binding's effect declaration is an ASSUMPTION, checked on
+    -- every caller but not proved about the C code. Each one is listed with its site
+    -- (the binding), its kind of trust, and the functions here whose own declarations
+    -- rely on it, so a reader can see what an audit of the binding would have to cover.
+    let allExterns := m.externFns
+    let lines := if allExterns.isEmpty then lines
+      else lines ++ [s!"{indent}  Foreign effect declarations (audited assumptions):"] ++
+        allExterns.foldl (fun acc (n, _, _, t) =>
+          let dependents := (m.functions.filter fun f =>
+            (collectCallsStmts f.body).contains n).map (·.name)
+          let kind := if t then "trusted extern (safe for every argument, audited)"
+                      else "extern (callers need Unsafe; trusted bodies absorb it)"
+          acc ++ [s!"{indent}    {n}: assumed to perform only {declaredOf n} — {kind}",
+                  s!"{indent}      relied on by: {if dependents.isEmpty then "(no caller in this module)" else ", ".intercalate dependents}"]) []
     let lines := if ptrFns.isEmpty then lines
       else lines ++ [s!"{indent}  Functions with raw pointer signatures:"] ++
         ptrFns.map fun f =>
@@ -369,6 +386,15 @@ partial def unsafeReportModule (externNames : List String)
     let lines := lines ++ subReports
     some ("\n".intercalate lines)
 
+/-- R-0484 R10 is not finished: the effect assumptions a program inherits from its
+    dependencies (std's foreign bindings above all) are ENFORCED on every caller but not
+    yet LISTED here, because this report sees only the program's own modules. Saying so on
+    every report keeps an empty listing from reading as "no foreign assumptions". Worded
+    without the words the policy/assumption gates grep for, so it cannot be mistaken for
+    a listed signature. -/
+def dependencyCoverageNote : String :=
+  "Dependency coverage: incomplete. Foreign-binding effect assumptions made by dependencies (including std) are enforced on callers but not listed in this report (R-0484 R10, in progress)."
+
 def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
   let header := "=== Unsafe Signature Summary ==="
   let externNames := pc.externNames
@@ -378,7 +404,7 @@ def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
       let (a', b', c', d', e') := unsafeCounts m
       (a + a', b + b', c + c', d + d', e + e')) (0, 0, 0, 0, 0)
   let total := unsafeCount + externCount + trustedExternCount + ptrCount + trustedCount
-  if body.isEmpty then s!"{header}\n\nNo unsafe signatures found.\n"
+  if body.isEmpty then s!"{header}\n\nNo unsafe signatures found.\n\n{dependencyCoverageNote}\n"
   else
     let parts : List String := []
     let parts := if unsafeCount > 0 then parts ++ [s!"{unsafeCount} unsafe"] else parts
@@ -387,7 +413,7 @@ def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore) : String :=
     let parts := if ptrCount > 0 then parts ++ [s!"{ptrCount} raw-pointer"] else parts
     let parts := if trustedCount > 0 then parts ++ [s!"{trustedCount} trusted"] else parts
     let summary := s!"\nTotals: {total} unsafe-related signatures ({", ".intercalate parts})"
-    s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n"
+    s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n\n{dependencyCoverageNote}\n"
 
 -- ============================================================
 -- Report 3: Layout Report (--report layout)

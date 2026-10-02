@@ -1,9 +1,9 @@
 // Test: generic struct with fn pointer fields, linear values consumed in loops.
 // This exercises the same pattern as HashMap but avoids the builtin intercept.
 
-extern fn malloc(size: u64) -> *mut u8;
-extern fn free(ptr: *mut u8);
-extern fn memset(ptr: *mut u8, val: i32, size: u64) -> *mut u8;
+extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+extern fn free(ptr: *mut u8) with(Alloc);
+extern fn memset(ptr: *mut u8, val: i32, size: u64) with() -> *mut u8;
 
 fn alloc_i32(cap: u64) with(Alloc, Unsafe) -> *mut i32 {
     return malloc(cap * 4) as *mut i32;
