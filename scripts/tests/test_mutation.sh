@@ -901,12 +901,15 @@ gate_for_last "scripts/tests/check_type_identity.sh"
 # because that gate asked only whether the text was PRESENT, never whether it was UNIQUE. Both sites
 # feed evidence inputs, so each gets its own mutation; the extra adjacent line makes each unique.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
+# Re-anchored for R-0484: the field's type is now instantiated at the object's capability
+# arguments, so the line after `recordFieldUse` changed. The experiment is unchanged —
+# drop the recorded field use and keep everything else.
 MUT_OLD+=("      | some f =>
         recordFieldUse sd field
-        let fieldTy := substTy mapping f.ty")
+        -- R-0484: the field's type at this instantiation (same rule as Check).")
 MUT_NEW+=("      | some f =>
         pure () -- MUTATION: resolved field omitted from evidence input
-        let fieldTy := substTy mapping f.ty")
+        -- R-0484: the field's type at this instantiation (same rule as Check).")
 MUT_DESC+=("Elab V2 input: resolved field use omitted (field access)")
 gate_for_last "scripts/tests/check_type_identity.sh"
 
