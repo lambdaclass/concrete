@@ -2492,7 +2492,14 @@ run_one(){
       # reason legitimately appears on later lines. This keeps the blocks whose header names the
       # mutated file — header until the next header — and searches only inside them.
       if awk -v f="$file" '
-           /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/ { inblk = (index($0, f ":") == 1) }
+           { h = $0; hdr = 0
+             # Two header layouts. `path:line:col: error: msg` is the Lean layout; Lake prints
+             # `error: path:line:col: msg`. Recognising only the first meant no build kill was
+             # ever attributed, and every proof-rejected mutation scored INVALID "for an
+             # unrecognised reason" (four campaign families, measured 2026-10-03).
+             if (h ~ /^(error|warning|info): [^ ]+:[0-9]+:[0-9]+: /) { sub(/^(error|warning|info): /, "", h); hdr = 1 }
+             else if (h ~ /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/) hdr = 1
+             if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
            inblk { print }
          ' "$TMP/build.log" \
            | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\
@@ -2564,7 +2571,14 @@ rather than counting it as a kill)"
       # legitimate build kills as INVALID. Fail-closed either way, but wrong, and it would push the
       # operator to declare families that do not need declaring.
       if awk -v f="$file" '
-           /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/ { inblk = (index($0, f ":") == 1) }
+           { h = $0; hdr = 0
+             # Two header layouts. `path:line:col: error: msg` is the Lean layout; Lake prints
+             # `error: path:line:col: msg`. Recognising only the first meant no build kill was
+             # ever attributed, and every proof-rejected mutation scored INVALID "for an
+             # unrecognised reason" (four campaign families, measured 2026-10-03).
+             if (h ~ /^(error|warning|info): [^ ]+:[0-9]+:[0-9]+: /) { sub(/^(error|warning|info): /, "", h); hdr = 1 }
+             else if (h ~ /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/) hdr = 1
+             if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
            inblk { print }
          ' "$TMP/gate.log" \
            | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\

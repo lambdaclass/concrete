@@ -1862,7 +1862,14 @@ run_mutation() {
     # `grep -A2` also swept in whatever came next, letting an UNRELATED file's diagnostic supply the
     # reason. This keeps only the blocks whose header names the mutated file (header to next header).
     if awk -v f="$mfile" '
-         /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/ { inblk = (index($0, f ":") == 1) }
+         { h = $0; hdr = 0
+           # Two header layouts. `path:line:col: error: msg` is the Lean layout; Lake prints
+           # `error: path:line:col: msg`. Recognising only the first meant no build kill was
+           # ever attributed, and every proof-rejected mutation scored INVALID "for an
+           # unrecognised reason" (four campaign families, measured 2026-10-03).
+           if (h ~ /^(error|warning|info): [^ ]+:[0-9]+:[0-9]+: /) { sub(/^(error|warning|info): /, "", h); hdr = 1 }
+           else if (h ~ /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/) hdr = 1
+           if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
          inblk { print }
        ' "$MUT_LOG_DIR/build.log" \
          | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|failed to synthesize|Missing cases|declaration uses 'sorry'"; then
