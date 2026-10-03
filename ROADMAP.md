@@ -1173,9 +1173,11 @@ batch: each changes a different trust boundary, so each lands and is verified on
    harnesses already refuse to count a mutant that does not build as a semantic kill. The
    supervised campaign scores it INVALID; `test_mutation.sh` credits a build failure only
    when the family declares it, and scores an unused-binding lint as an invalid ERROR.
-   What remains: `test_mutation.sh` reports invalid mutations and infrastructure failures
-   in one ERROR bucket, and comments at lines 1037, 1064, 1097 and 1111 still describe the
-   retired `KILLED (build)` scoring. Anchor matching stays a structural check;
+   The remaining gap closed 2026-10-03: `test_mutation.sh` now counts every ERROR as
+   INVALID (drifted anchor, lint, undeclared build kill) or INFRA (no verdict reachable),
+   reports both, and names the fix for each; comments no longer describe the retired
+   `KILLED (build)` scoring. Verified by a deliberately drifted anchor reporting
+   `[1 invalid, 0 infrastructure]`. Anchor matching stays a structural check;
    compilation and causal failure stay with campaign qualification.
 2. **Worktree support for the mutation harness.** It assumes `.git` is a directory and
    reports `isolated workspace has no .git` only after lock and cleanup output, so a golden

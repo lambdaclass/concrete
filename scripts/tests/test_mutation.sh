@@ -288,6 +288,15 @@ trap 'MUT_SIGNALLED=1; cleanup_lock' INT TERM
 KILLED=0
 SURVIVED=0
 ERRORS=0
+# ERRORS is the total; it splits two ways, and both are failures of the RUN, not results about a gate.
+#   INVALID — the mutation is not a valid experiment: its anchor is gone, it trips a lint instead of
+#             the rule, or it dies in the build without declaring that a build kill is its verdict.
+#   INFRA   — no verdict could be reached: a gate red on pristine source, died early, a precondition
+#             failed, a restore or rebuild failed, or the build failed for a reason not attributable
+#             to the mutation (a missing toolchain looks exactly like this).
+# Neither may be read as a kill. The fix differs, which is why they are counted apart.
+INVALID=0
+INFRA=0
 TOTAL=0
 
 # ============================================================
@@ -581,9 +590,8 @@ gate_for_last "scripts/tests/check_trap_inventory.sh"
 # single-source claim is false.
 #
 # Inverted rather than constant-`false` on purpose: `| .neg => false` leaves
-# `ty` unused, so Lean's linter rejects the file and the harness reports
-# "KILLED (build)" — a kill that says nothing about whether any test can see
-# the semantics. A mutation killed by the wrong mechanism is a mutation that
+# `ty` unused, so Lean's linter rejects the file and the mutation is INVALID —
+# it never reaches anything that could see the semantics. A mutation killed by the wrong mechanism is a mutation that
 # never ran.
 MUT_FILE+=("Concrete/Semantics/IntArith.lean")
 MUT_OLD+=("  | .neg => isIntTy ty
@@ -669,8 +677,8 @@ gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
 # `.applyVar f` is stuck when `f` lives in the wrong namespace. So the proofs
 # themselves are load-bearing evidence for the separation; the gate's structural
 # assertions are a second, independent line rather than the only one.
-# (A `KILLED (build)` is weak when a LINTER rejects the file; it is the strongest
-# possible signal when the kernel rejects the theorem.)
+# (A build failure is INVALID when a LINTER rejects the file; it is the strongest
+# possible signal when the kernel rejects the theorem — a declared build kill.)
 MUT_FILE+=("Concrete/Proof/Proof.lean")
 MUT_OLD+=("  FnTable.withCallables (fun _ => none) pureCoreCallables")
 MUT_NEW+=("  FnTable.withCallables pureCoreCallables (fun _ => none) -- MUTATION: callback as a global")
@@ -980,8 +988,8 @@ gate_for_last "scripts/tests/check_binder_refs.sh"
 # so each part must be present or the evidence describes a loop the program does not run.
 #
 # `stepEv.drop 1` rather than `[]`: dropping the binding outright leaves it unused, Lean's
-# linter rejects the file, and the mutation scores KILLED (build) — which proves the
-# compiler noticed, not that the gate did.
+# linter rejects the file, and the mutation is INVALID — the compiler noticing, not the
+# gate.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
 MUT_OLD+=("(cBodyEv.map (·.evidence) ++ stepEv)")
 MUT_NEW+=("(cBodyEv.map (·.evidence) ++ stepEv.drop 1) -- MUTATION: step omitted from the loop body")
@@ -1034,7 +1042,7 @@ MUT_DESC+=("method call: self receiver dropped from the argument list")
 gate_for_last "scripts/tests/check_shadow_body_v2.sh"
 
 # Parenthesised so it PARSES. Written `(cElseEv.map (·.evidence)).drop 1` without the outer
-# parens it is a syntax error, and the mutation scores KILLED (build) — the compiler
+# parens it is a syntax error, and the build fails unattributably — the compiler
 # noticing, not the gate.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
 MUT_OLD+=("        (cThenEv.map (·.evidence)) (cElseEv.map (·.evidence)))")
@@ -1061,7 +1069,7 @@ MUT_DESC+=("evTypeRef: type variable keyed on spelling, not binder position")
 gate_for_last "scripts/tests/check_shadow_body_v2.sh"
 
 # `.drop 9` rather than `[]`: an empty list leaves `elemEvs` unused, the linter rejects the
-# file, and the mutation scores KILLED (build) instead of exercising the gate.
+# file, and the mutation is INVALID instead of exercising the gate.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
 MUT_OLD+=("        (Proof.evArrayLit elemRef elemEvs)")
 MUT_NEW+=("        (Proof.evArrayLit elemRef (elemEvs.drop 9)) -- MUTATION: elements dropped")
@@ -1094,7 +1102,7 @@ MUT_DESC+=("assume encoded as assert (collides, and empties the assumption axis)
 gate_for_last "scripts/tests/check_shadow_body_v2.sh"
 
 # Discards the elaborated predicate while keeping the binding used — returning a constant
-# with `r` still bound would leave it unused and score KILLED (build).
+# with `r` still bound would leave it unused, and the mutation would be INVALID.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
 MUT_OLD+=("  | (.ok r, after) =>
     setEnv { saved with freshBinder := after.freshBinder }
@@ -1108,7 +1116,7 @@ gate_for_last "scripts/tests/check_shadow_body_v2.sh"
 # An imported impl method must be identified by its DEFINING module. Erasing that makes
 # a.P_get and b.P_get one identity — an import laundering one type's method into another.
 # Written as an `if` rather than `""` so `defModule` stays referenced; both the bare
-# constant and `.take 0` leave it unused and score KILLED (build).
+# constant and `.take 0` leave it unused, which makes the mutation INVALID.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
 MUT_OLD+=("          some (localKey, CallableId.ofUser defModule declName sig.typeParams.length)")
 MUT_NEW+=("          some (localKey, CallableId.ofUser (if defModule == \"\" then \"\" else \"\") declName sig.typeParams.length) -- MUTATION: defining module erased")
@@ -1506,7 +1514,7 @@ restore_mutation() {
       echo "  FATAL: could not stage the restore of $file." >&2
       echo "         The backup is PRESERVED at: $bak" >&2
       rm -f "$tmp_in"
-      ERRORS=$((ERRORS + 1)); RESTORE_BUILD_FAILED=1
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1)); RESTORE_BUILD_FAILED=1
       return 1
     fi
     if [ "$(hash_of "$tmp_in")" != "$(hash_of "$bak")" ]; then
@@ -1514,7 +1522,7 @@ restore_mutation() {
       echo "  FATAL: staged restore of $file does not match the backup — the copy was partial." >&2
       echo "         The backup is PRESERVED at: $bak" >&2
       rm -f "$tmp_in"
-      ERRORS=$((ERRORS + 1)); RESTORE_BUILD_FAILED=1
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1)); RESTORE_BUILD_FAILED=1
       return 1
     fi
     local recheck; recheck="$(hash_of "$file")"
@@ -1530,7 +1538,7 @@ restore_mutation() {
       echo "" >&2
       echo "  FATAL: could not install the restored $file. Backup PRESERVED at: $bak" >&2
       rm -f "$tmp_in"
-      ERRORS=$((ERRORS + 1)); RESTORE_BUILD_FAILED=1
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1)); RESTORE_BUILD_FAILED=1
       return 1
     fi
     rm -f "$bak"
@@ -1538,7 +1546,7 @@ restore_mutation() {
     # FATAL, not a warning. A warning returned zero and the run continued with real source possibly
     # still mutated.
     echo "  FATAL: no backup for $file — cannot restore. The file may still be mutated." >&2
-    ERRORS=$((ERRORS + 1))
+    ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     RESTORE_BUILD_FAILED=1
   fi
   # Rebuild so the tree's BINARY matches its restored SOURCE. Restoring only the
@@ -1556,7 +1564,7 @@ restore_mutation() {
     echo "  FATAL: rebuild after restore FAILED — .lake now holds a binary built from a mutation." >&2
     echo "         Every later verdict would describe that binary while the source looks clean." >&2
     echo "         See $MUT_LOG_DIR/restore_build.log, then rebuild before running anything else." >&2
-    ERRORS=$((ERRORS + 1))
+    ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     RESTORE_BUILD_FAILED=1
     return 1
   fi
@@ -1719,7 +1727,7 @@ run_mutation() {
   # Apply mutation
   if ! apply_mutation "$idx"; then
     echo "SKIPPED (pattern not found in file)"
-    ERRORS=$((ERRORS + 1))
+    ERRORS=$((ERRORS + 1)); INVALID=$((INVALID + 1))
     TOTAL=$((TOTAL + 1))
     # Restore if a backup was created. This guard tested `<file>.mutbak` for a
     # while after backups MOVED to $MUT_BACKUP_DIR, so it was never true and a
@@ -1772,16 +1780,16 @@ run_mutation() {
     fi
     if [[ "$gate_verdict" == "invalid-baseline" ]]; then
       result="ERROR (gate red on clean source — not evidence)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "died-early" ]]; then
       result="ERROR ($gate exited 97, its documented died-early code — no verdict, not evidence)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "precondition" ]]; then
       result="ERROR (a precondition of $gate failed — its assertions never ran, not evidence)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "no-verdict" ]]; then
       result="ERROR ($gate never reached the end it reaches on pristine source — no verdict, not evidence)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "red" ]]; then
       # CONFIRMED AGAINST RESTORED SOURCE, as the campaign does. Without this, a one-off unrelated
       # gate failure was valid evidence in this harness while the campaign rejected it — two producers
@@ -1795,12 +1803,12 @@ run_mutation() {
         KILLED=$((KILLED + 1))
       else
         result="ERROR ($gate: $CONFIRM_WHY)"
-        ERRORS=$((ERRORS + 1))
+        ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       fi
     elif [[ "$MUT_CLEAN_FAST" != "yes" ]]; then
       # The fast suite is not a usable producer in this run, so it cannot supply a kill.
       result="ERROR (fast suite red on pristine source — not evidence)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     else
       # THE FAST SUITE IS AUTHENTICATED THE SAME WAY, and written as a plain sequence rather than a
       # compound condition — the first version of this was a single `elif` with nested `&&`/`||` and
@@ -1815,14 +1823,14 @@ run_mutation() {
         # Its own documented contract: 97 means the summary file was never written, so no verdict was
         # reached. A code no assertion produces cannot be read as an assertion failing.
         result="ERROR (fast suite exited 97 — died early, no verdict, not evidence)"
-        ERRORS=$((ERRORS + 1))
+        ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       elif grep -q 'GATE-PRECONDITION-FAILED:' "$MUT_LOG_DIR/test.log" 2>/dev/null; then
         result="ERROR (a precondition of the fast suite failed — its assertions never ran)"
-        ERRORS=$((ERRORS + 1))
+        ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       elif [[ -n "${MUT_CLEAN_FAST_TAIL:-}" ]] \
            && [[ "$(_mut_tail_shape "$MUT_LOG_DIR/test.log")" != "$MUT_CLEAN_FAST_TAIL" ]]; then
         result="ERROR (fast suite never reached the end it reaches on pristine source — no verdict)"
-        ERRORS=$((ERRORS + 1))
+        ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       else
         # The fast suite caught it but the named gate did not. Reported as such: a real kill, but not
         # evidence that the named gate is load-bearing.
@@ -1834,7 +1842,7 @@ run_mutation() {
           KILLED=$((KILLED + 1))
         else
           result="ERROR (fast suite: $CONFIRM_WHY)"
-          ERRORS=$((ERRORS + 1))
+          ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
         fi
       fi
     fi
@@ -1872,14 +1880,14 @@ run_mutation() {
         KILLED=$((KILLED + 1))
       else
         result="ERROR (UNDECLARED build kill — ${MUT_GATE[$idx]:-no gate} never ran, so it is not shown load-bearing)"
-        ERRORS=$((ERRORS + 1))
+        ERRORS=$((ERRORS + 1)); INVALID=$((INVALID + 1))
       fi
     elif grep -qE "unused variable|This simp argument is unused|unused binding" "$MUT_LOG_DIR/build.log"; then
       result="ERROR (invalid mutation — unused-binding lint, not the rule)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INVALID=$((INVALID + 1))
     else
       result="ERROR (build failed unattributably — inspect $MUT_LOG_DIR/build.log)"
-      ERRORS=$((ERRORS + 1))
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     fi
   fi
 
@@ -1932,9 +1940,9 @@ for f in "${MUT_TARGETS[@]}"; do
   MUT_HASH0["$f"]="$(hash_of "$ROOT_DIR/$f")"
 done
 
-# Preflight: the PRISTINE tree must build. Otherwise every mutation reports
-# "KILLED (build)" and the run claims perfect coverage while having tested
-# nothing — the same shape as a CI job that is green because it never ran.
+# Preflight: the PRISTINE tree must build. Otherwise every mutation fails the build
+# and the run tests nothing — the same shape as a CI job that is green because it never
+# ran. (This once scored as "KILLED (build)" and read as perfect coverage.)
 printf "preflight: pristine tree builds ... "
 if $LAKE build > /tmp/mutation_preflight.log 2>&1; then
   echo "ok"
@@ -1965,9 +1973,9 @@ if [ "${MUT_FRESHNESS_TAINT:-0}" = "1" ]; then
   echo ""
   echo "FRESHNESS UNVERIFIED: at least one gate ran against a binary nobody verified against source." >&2
   echo "  Every verdict below describes that binary. This run is not evidence." >&2
-  ERRORS=$((ERRORS + 1))
+  ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
 fi
-echo "=== Results: $KILLED killed, $SURVIVED survived, $ERRORS errors ($TOTAL total) ==="
+echo "=== Results: $KILLED killed, $SURVIVED survived, $ERRORS errors [$INVALID invalid, $INFRA infrastructure] ($TOTAL total) ==="
 
 if [[ "$SURVIVED" -gt 0 ]]; then
   echo ""
@@ -1982,8 +1990,15 @@ fi
 # stale, three of them found only because someone happened to be editing nearby.
 if [[ "$ERRORS" -gt 0 ]]; then
   echo ""
-  echo "FAILED: $ERRORS mutation(s) could not be applied — their anchors have drifted from"
-  echo "the source, so they test nothing. Re-anchor them on the current code shape; do not"
-  echo "delete them, and do not leave them skipped."
+  echo "FAILED: $ERRORS mutation(s) produced no verdict about any gate."
+  if [[ "$INVALID" -gt 0 ]]; then
+    echo "  $INVALID invalid: the mutation itself is not a valid experiment (drifted anchor, lint,"
+    echo "    or an undeclared build kill). Re-anchor or rewrite it on the current code shape, so"
+    echo "    it builds and reaches its gate; do not delete it, and do not leave it skipped."
+  fi
+  if [[ "$INFRA" -gt 0 ]]; then
+    echo "  $INFRA infrastructure: no verdict could be reached (see the per-mutation lines above)."
+    echo "    Fix the environment or the gate on pristine source, then re-run; the mutation may be fine."
+  fi
   exit 1
 fi
