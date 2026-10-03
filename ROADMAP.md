@@ -1193,6 +1193,20 @@ batch: each changes a different trust boundary, so each lands and is verified on
    suite should report or a mutant that breaks the harness). The campaign job also exceeds
    GitHub's 6-hour limit on a dispatched run, so the full campaign has no CI home today;
    it runs only on the mirror's schedule, which is pinned to an old commit.
+
+   **Incomplete qualification, recorded at the R-0484 checkpoint merge (2026-10-04).** The
+   checkpoint merges under an approved exception: the full campaign is not a merge blocker
+   because it cannot finish within the job limit and behaves identically on main. The
+   exception required every other CI job to pass on the merged revision, targeted
+   qualification of every changed family on that revision, and a passing campaign golden.
+   It does not close R-0484 and does not certify the campaign. Still open:
+   - the 6-hour timeout: no complete campaign run exists for the merged revision;
+   - campaign survivors `freshfacts-requires-proved-status` and
+     `freshfacts-carries-trusted-boundaries` (diagnosis above);
+   - `test_mutation.sh` mutation 52, "Elab V2 input: resolved field use omitted (field
+     access)" in `Concrete/Elab/Elab.lean`, survives on main and on the branch alike —
+     re-anchored for R-0484 with the experiment unchanged, not newly weakened;
+   - `reference-division` and `divergence-detection` remain INVALID (above).
 2. **Worktree support for the mutation harness.** It assumes `.git` is a directory and
    reports `isolated workspace has no .git` only after lock and cleanup output, so a golden
    check failed 4/7 twice before the cause was visible. Discover paths with
