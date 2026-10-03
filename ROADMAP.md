@@ -1166,6 +1166,40 @@ rediscovered:**
 lets, loops, patterns and temporary scopes. Nothing depends on it — relative frame positions
 are used instead — and it must not enter canonical bytes until measured.
 
+**Found while landing the R-0484 checkpoint (2026-10-03).** Four separate items, not one
+batch: each changes a different trust boundary, so each lands and is verified on its own.
+
+1. **Mutation scoring: split invalid from infrastructure failure.** Verified first: both
+   harnesses already refuse to count a mutant that does not build as a semantic kill. The
+   supervised campaign scores it INVALID; `test_mutation.sh` credits a build failure only
+   when the family declares it, and scores an unused-binding lint as an invalid ERROR.
+   What remains: `test_mutation.sh` reports invalid mutations and infrastructure failures
+   in one ERROR bucket, and comments at lines 1037, 1064, 1097 and 1111 still describe the
+   retired `KILLED (build)` scoring. Anchor matching stays a structural check;
+   compilation and causal failure stay with campaign qualification.
+2. **Worktree support for the mutation harness.** It assumes `.git` is a directory and
+   reports `isolated workspace has no .git` only after lock and cleanup output, so a golden
+   check failed 4/7 twice before the cause was visible. Discover paths with
+   `git rev-parse --git-dir`/`--git-common-dir`/`--show-toplevel`, separate
+   checkout-local state from shared Git state, and test the repository lock across two
+   worktrees. A clear early refusal lands first, before full support.
+3. **Gate inventory checked in CI, by content.** `EXPECTED_GATE_COMMANDS` went stale four
+   times because only local tools enforce it, and a count of 232 can still hide a
+   duplicate alongside an omitted gate. Check the extracted command inventory against a
+   committed list in the Branch health workflow, so drift fails on push.
+4. **Std identity refresh, with safeguards.** A std edit needs `attestation_refs.sh`, a
+   content-keyed migration of renamed references, `refresh_classifications.sh` and
+   `build_identity.sh`, in order, by hand. Automate it so that it emits a reviewable
+   migration diff, refuses ambiguous content matches, and runs the freshness gates
+   afterwards. It must never bless changed evidence or rewrite a golden to make a
+   failure go away.
+
+Also: a full-CI dispatch-and-watch script for branches, so "broad migrations merge green"
+is the easy path. It pins the commit it validates and reports failure, cancellation and
+success as three distinct outcomes. And `knownEffectfulForeignSymbols` should have one
+machine-readable authoritative source with generated documentation; moving the list
+beside prose would add no guarantee.
+
 ### Multi-prover merge: what it took, and what it left open (2026-08-05)
 
 Merged the spike pinned at `80be5368` into main after the quarantine review. The merge

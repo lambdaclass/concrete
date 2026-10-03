@@ -123,14 +123,12 @@ def knownEffectfulForeignSymbols : List String :=
     -- time and randomness
     "time", "clock_gettime", "nanosleep", "sleep", "rand", "srand", "getrandom" ]
 
-/-- The capability set an `extern fn` requires: none if it is `trusted`
-    (the trust boundary is the author's responsibility), otherwise `Unsafe`.
+/-- What calling a foreign binding requires (R-0484): the effects it DECLARES, plus
+    `Unsafe` unless it is a `trusted extern` (safe for every argument its types
+    permit). The declared effects are never dropped, by `trusted` or anything else.
     One definition of the fact that CoreCheck's signature table and every
     report/audit cap-lookup builder must agree on. -/
 def externFnRequiredCaps (isTrusted : Bool) (declared : CapSet) : CapSet :=
-  -- What calling a foreign binding requires (R-0484): the effects it DECLARES, plus
-  -- `Unsafe` unless it is a `trusted extern` (safe for every argument its types
-  -- permit). The declared effects are never dropped, by `trusted` or anything else.
   if isTrusted then declared
   else
     -- One normalized set, so it renders `Console, Unsafe`, never `(none) + Unsafe`.

@@ -82,6 +82,16 @@ checker and report output would otherwise disagree. Later gates add a
 capability-polymorphic callback, scoped callback, trusted wrapper, Unsafe
 intrinsic, and dependency/package boundary.
 
+**Observed pull (R-0484, 2026-10-03).** Check (E0240, per capability) and CoreCheck
+(E0520, whole set) each judge call capabilities, and during R-0484 they disagreed about
+who owns `Unsafe` in a trusted body; the fix had to be made in both. `decideCall` already
+single-sources the predicate. What is still duplicated is the caller authority each pass
+feeds it: inference bindings, trusted discharge, cross-package `Unsafe`. The fix is to
+share those semantic rules, not to make CoreCheck trust Check's verdict. CoreCheck checks
+a different compiler boundary (elaborated, cross-module Core) and can catch
+transformation defects, so it keeps validating independently wherever an invariant could
+change between the two.
+
 ## Why it matters
 
 Every stage now reads the same fact, so the capability answer a diagnostic
