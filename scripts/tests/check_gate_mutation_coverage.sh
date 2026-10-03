@@ -257,10 +257,14 @@ fi
 # protect. The same refusal used to fire only after the workspace was built, buried under lock and
 # sweep output, and a golden check failed 4/7 twice before the cause was visible. Full worktree
 # support (separating checkout-local paths from shared git state) is a separate change.
-if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ] && [ ! -d "$ROOT_DIR/.git" ]; then
+# NARROWED to the worktree case (`.git` is a FILE). The first version refused any checkout whose
+# `.git` was not a directory, which also refused check_campaign_supervisor.sh's sandbox — a copy
+# with no `.git` at all — before the injected failure that control exists to observe. A missing
+# `.git` is still refused by the backstop after the copy.
+if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ] && [ -f "$ROOT_DIR/.git" ]; then
   _wt_gitdir="$(git -C "$ROOT_DIR" rev-parse --git-dir 2>/dev/null || echo '?')"
   _wt_common="$(git -C "$ROOT_DIR" rev-parse --git-common-dir 2>/dev/null || echo '?')"
-  echo "error: the mutation campaign cannot run in a git worktree (or any checkout whose .git is not a directory)." >&2
+  echo "error: the mutation campaign cannot run in a git worktree (.git here is a file naming a shared git dir)." >&2
   echo "       checkout: $ROOT_DIR" >&2
   echo "       git dir:  $_wt_gitdir   shared git dir: $_wt_common" >&2
   echo "       Run it in a clone:  git clone --local \"$ROOT_DIR\" <dir> && cd <dir>" >&2
