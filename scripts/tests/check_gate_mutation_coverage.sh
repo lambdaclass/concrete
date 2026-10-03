@@ -250,6 +250,24 @@ if [ -n "${CONCRETE_MUT_SNAPSHOT:-}" ] && [ "$0" != "${CONCRETE_MUT_SNAPSHOT}" ]
   echo "       record, and still publish authoritatively. Refusing." >&2
   exit 2
 fi
+# A GIT WORKTREE IS REFUSED HERE, BEFORE THE LOCK, THE SWEEP AND THE COPY — not at the end of them.
+# The isolated workspace is a `cp -a` of this checkout, and per-family restore runs git inside it.
+# In a worktree `.git` is a FILE naming the shared git dir, so the copy would share HEAD and index
+# with the real worktree: a restore inside the copy could rewrite the checkout it was meant to
+# protect. The same refusal used to fire only after the workspace was built, buried under lock and
+# sweep output, and a golden check failed 4/7 twice before the cause was visible. Full worktree
+# support (separating checkout-local paths from shared git state) is a separate change.
+if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ] && [ ! -d "$ROOT_DIR/.git" ]; then
+  _wt_gitdir="$(git -C "$ROOT_DIR" rev-parse --git-dir 2>/dev/null || echo '?')"
+  _wt_common="$(git -C "$ROOT_DIR" rev-parse --git-common-dir 2>/dev/null || echo '?')"
+  echo "error: the mutation campaign cannot run in a git worktree (or any checkout whose .git is not a directory)." >&2
+  echo "       checkout: $ROOT_DIR" >&2
+  echo "       git dir:  $_wt_gitdir   shared git dir: $_wt_common" >&2
+  echo "       Run it in a clone:  git clone --local \"$ROOT_DIR\" <dir> && cd <dir>" >&2
+  echo "       This run wrote NOTHING. .mutation-campaign-summary may still hold an EARLIER" >&2
+  echo "       run's result. Do not read it as describing this attempt." >&2
+  exit 2
+fi
 if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
   # shellcheck source=scripts/tests/lib/fresh.sh
   # THE ONE GAP THAT CANNOT BE CLOSED BY ORDERING, so it is stated instead of papered over.

@@ -1184,7 +1184,10 @@ batch: each changes a different trust boundary, so each lands and is verified on
    check failed 4/7 twice before the cause was visible. Discover paths with
    `git rev-parse --git-dir`/`--git-common-dir`/`--show-toplevel`, separate
    checkout-local state from shared Git state, and test the repository lock across two
-   worktrees. A clear early refusal lands first, before full support.
+   worktrees. The early refusal landed 2026-10-03: a campaign run in a worktree now stops
+   in milliseconds, before the lock, sweep or copy, naming both git dirs and the clone
+   command (the copied `.git` file would have shared HEAD and index with the real
+   worktree). Full support remains.
 3. **Gate inventory checked in CI, by content.** `EXPECTED_GATE_COMMANDS` went stale four
    times because only local tools enforce it, and a count of 232 can still hide a
    duplicate alongside an omitted gate. Check the extracted command inventory against a
