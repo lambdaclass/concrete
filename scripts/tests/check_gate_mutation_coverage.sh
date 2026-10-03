@@ -2423,7 +2423,15 @@ publish_evidence() { # nm index file gate killed invalid note [disposition]
   fi
   return 0
 }
-EXPECT_BUILD_KILL=" trap-quotient-condition reference-division transform-has-effect "
+# DECLARED, each with the lock that rejects it. Until 2026-10-03 none of these could be
+# attributed (the header-layout bug above), so the list was never exercised by a build kill:
+#   attestation-precondition — `rfl` locks at Report.lean (multiKernelAdapter.admits on
+#     unproven/planned VCs is false) refuse `actsOn := fun _ => true` at compile time.
+#   kernel-foundation        — `rfl` locks at Evidence.lean (foundationSummary with isabelle
+#     is (2, "CIC×HOL")) refuse collapsing Isabelle into CIC at compile time.
+# A compile-time lock rejecting the mutation is the strongest kill; it also means the named
+# gate never ran for that family, which is why each declaration is deliberate, not inferred.
+EXPECT_BUILD_KILL=" trap-quotient-condition reference-division transform-has-effect attestation-precondition kernel-foundation "
 build_kill_declared(){ case "$EXPECT_BUILD_KILL" in *" $1 "*) return 0;; *) return 1;; esac; }
 
 run_one(){
