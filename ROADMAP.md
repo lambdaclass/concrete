@@ -1179,6 +1179,20 @@ batch: each changes a different trust boundary, so each lands and is verified on
    `KILLED (build)` scoring. Verified by a deliberately drifted anchor reporting
    `[1 invalid, 0 infrastructure]`. Anchor matching stays a structural check;
    compilation and causal failure stay with campaign qualification.
+
+   **Found by the first dispatched full campaign (2026-10-03), identical on main and on the
+   R-0484 branch.** Six families scored INVALID. Four were a harness defect: build-kill
+   attribution recognised only the `path:line:col: error` header, and Lake prints
+   `error: path:line:col:`, so no build kill was ever attributed. Fixed in both harnesses;
+   `trap-quotient-condition`, `attestation-precondition`, `kernel-foundation` and
+   `transform-has-effect` now score KILLED by build, and the two that compile-time `rfl`
+   locks reject are declared with the lock named. Two remain open qualification gaps:
+   `reference-division` (its mutant trips an unused-binding lint — rewrite it so every
+   binding stays live) and `divergence-detection` (under the mutant `run_tests.sh` never
+   reaches the end it reaches on pristine source — find out whether that is a hang the
+   suite should report or a mutant that breaks the harness). The campaign job also exceeds
+   GitHub's 6-hour limit on a dispatched run, so the full campaign has no CI home today;
+   it runs only on the mirror's schedule, which is pinned to an old commit.
 2. **Worktree support for the mutation harness.** It assumes `.git` is a directory and
    reports `isolated workspace has no .git` only after lock and cleanup output, so a golden
    check failed 4/7 twice before the cause was visible. Discover paths with
