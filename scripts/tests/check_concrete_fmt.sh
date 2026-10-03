@@ -90,6 +90,29 @@ else
   no "fingerprint-stability probe example missing: $EX"
 fi
 
+echo "=== 6b. every declaration-level form survives formatting ==="
+# ONE EXAMPLE WAS NOT ENOUGH. Section 6 formats elf_header, which happens to declare no
+# capability parameters and no Copy enum, so it stayed green while `fmt` dropped `enum Copy`,
+# a function's or impl's `cap C`, and `-> ()` on function-pointer types it printed unparseably.
+# It went red only when R-0484 made extern effect declarations mandatory and `fmt` dropped
+# those too. A sweep of every single-file program found 56 such programs on 2026-10-03. This
+# fixture holds one instance of each lost form; a dropped form makes the formatted copy
+# fail to compile, which empties its fingerprints and fails the comparison.
+FX="tests/regressions/fmt_roundtrip/declarations.con"
+if [ -f "$FX" ]; then
+  "$C" "$FX" --report fingerprints 2>/dev/null > "$TMP/fx_orig.txt"
+  "$C" fmt "$FX" > "$TMP/fx_fmted.con" 2>/dev/null
+  "$C" "$TMP/fx_fmted.con" --report fingerprints 2>/dev/null > "$TMP/fx_fmt.txt"
+  if grep -q Fingerprints "$TMP/fx_orig.txt" && cmp -s "$TMP/fx_orig.txt" "$TMP/fx_fmt.txt"; then
+    ok "fingerprints identical before/after formatting ($FX)"
+  else
+    no "formatting CHANGED the meaning of $FX"
+    "$C" "$TMP/fx_fmted.con" --report fingerprints 2>&1 | grep -E 'error' | head -3 | sed 's/^/      /'
+  fi
+else
+  no "declaration round-trip fixture missing: $FX"
+fi
+
 echo "=== 7. legacy --fmt flag still works (golden baselines depend on it) ==="
 "$C" "$TMP/u.con" --fmt > "$TMP/legacy.txt" 2>/dev/null
 cmp -s "$TMP/legacy.txt" "$TMP/file_out.txt" && ok "legacy --fmt output matches 'concrete fmt'" \

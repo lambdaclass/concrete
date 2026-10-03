@@ -55,7 +55,9 @@ partial def fmtTy : Ty → String
   | .fn_ params cs ret =>
     let capsStr := fmtCapSet cs
     let capsStr := if capsStr.isEmpty then "" else s!" {capsStr}"
-    s!"fn({", ".intercalate (params.map fmtTy)}){capsStr} -> {fmtTy ret}"
+    -- A unit return is omitted, as on a function header: `fn(T) -> ()` does not parse.
+    let retStr := if ret == .unit then "" else s!" -> {fmtTy ret}"
+    s!"fn({", ".intercalate (params.map fmtTy)}){capsStr}{retStr}"
   | .never => "!"
   | .heap inner => s!"Heap<{fmtTy inner}>"
   | .heapArray inner => s!"HeapArray<{fmtTy inner}>"
@@ -92,14 +94,18 @@ private def fmtCapSetTop : CapSet → String
 -- Type param / bound formatting
 -- ============================================================
 
-private def fmtTypeParams (typeParams : List String) (typeBounds : List (String × List String) := []) : String :=
-  if typeParams.isEmpty then ""
+/-- Type parameters, then capability parameters (`<T, cap C>`). The parser keeps the two
+    in separate lists, so printing only `typeParams` silently dropped every `cap C` — and
+    a formatted program then named a capability variable nothing declared. -/
+private def fmtTypeParams (typeParams : List String) (typeBounds : List (String × List String) := [])
+    (capParams : List String := []) : String :=
+  if typeParams.isEmpty && capParams.isEmpty then ""
   else
     let parts := typeParams.map fun tp =>
       match typeBounds.find? fun (n, _) => n == tp with
       | some (_, bounds) => s!"{tp}: {" + ".intercalate bounds}"
       | none => tp
-    s!"<{", ".intercalate parts}>"
+    s!"<{", ".intercalate (parts ++ capParams.map (s!"cap {·}"))}>"
 
 -- ============================================================
 -- Expression formatting
@@ -331,13 +337,26 @@ def fmtTypeAlias (ta : TypeAlias) (ind : Nat) : String :=
   let pubStr := if ta.isPublic then "pub " else ""
   s!"{pfx}{pubStr}type {ta.name} = {fmtTy ta.targetTy};"
 
+/-- `cap IO = File + Console;`. There was no printer at all, so formatting deleted every
+    capability alias and left each `with(IO)` naming a capability nothing defined. -/
+def fmtCapAlias (ca : CapAlias) (ind : Nat) : String :=
+  let pubStr := if ca.isPublic then "pub " else ""
+  s!"{indent ind}{pubStr}cap {ca.name} = {" + ".intercalate ca.caps};"
+
 def fmtExternFn (ext : ExternFnDecl) (ind : Nat) : String :=
   let pfx := indent ind
   let pubStr := if ext.isPublic then "pub " else ""
   let trustedStr := if ext.isTrusted then "trusted " else ""
   let paramsStr := ext.params.map fun p => s!"{p.name}: {fmtTy p.ty}"
+  -- The effect declaration is printed exactly as declared (R-0484). `with()` is an audited
+  -- claim of no effects and must survive formatting: `fmtCapSetTop` renders `.empty` as
+  -- nothing, which would turn the claim into an undeclared binding that Resolve refuses.
+  let capStr := match ext.capSet with
+    | none => ""
+    | some .empty => " with()"
+    | some cs => fmtCapSetTop cs
   let retStr := if ext.retTy == .unit then "" else s!" -> {fmtTy ext.retTy}"
-  s!"{pfx}{pubStr}{trustedStr}extern fn {ext.name}({", ".intercalate paramsStr}){retStr};"
+  s!"{pfx}{pubStr}{trustedStr}extern fn {ext.name}({", ".intercalate paramsStr}){capStr}{retStr};"
 
 def fmtNewtypeDef (nt : NewtypeDef) (ind : Nat) : String :=
   let pfx := indent ind
@@ -351,7 +370,7 @@ def fmtStructDef (s : StructDef) (ind : Nat) : String :=
   let pubStr := if s.isPublic then "pub " else ""
   let copyStr := if s.isCopy then "Copy " else ""
   let unionStr := if s.isUnion then "union " else "struct "
-  let tparamsStr := fmtTypeParams s.typeParams s.typeBounds
+  let tparamsStr := fmtTypeParams s.typeParams s.typeBounds s.capParams
   -- repr attributes
   let reprParts : List String := []
   let reprParts := if s.isReprC then reprParts ++ ["C"] else reprParts
@@ -374,14 +393,17 @@ def fmtEnumDef (e : EnumDef) (ind : Nat) : String :=
       let fpfx := indent (ind + 2)
       let fs := v.fields.map fun f => s!"{fpfx}{if f.isPublic then "pub " else ""}{f.name}: {fmtTy f.ty},"
       s!"{vpfx}{v.name} \{\n{"\n".intercalate fs}\n{vpfx}},"
-  s!"{pfx}{pubStr}enum {e.name}{tparamsStr} \{\n{"\n".intercalate variants}\n{pfx}}"
+  -- `enum Copy E` must survive: dropping it makes every value of E linear, and a program
+  -- that duplicated one no longer type-checks.
+  let copyStr := if e.isCopy then "Copy " else ""
+  s!"{pfx}{pubStr}enum {copyStr}{e.name}{tparamsStr} \{\n{"\n".intercalate variants}\n{pfx}}"
 
 def fmtFnDef (f : FnDef) (ind : Nat) : String :=
   let pfx := indent ind
   let pubStr := if f.isPublic then "pub " else ""
   let trustedStr := if f.isTrusted then "trusted " else ""
   let testStr := if f.isTest then s!"{pfx}#[test]\n" else ""
-  let tparamsStr := fmtTypeParams f.typeParams f.typeBounds
+  let tparamsStr := fmtTypeParams f.typeParams f.typeBounds f.capParams
   let paramsStr := f.params.map fmtParam
   let capStr := fmtCapSetTop f.capSet
   let retStr := if f.retTy == .unit then "" else s!" -> {fmtTy f.retTy}"
@@ -409,10 +431,11 @@ def fmtTraitDef (t : TraitDef) (ind : Nat) : String :=
 def fmtImplBlock (ib : ImplBlock) (ind : Nat) : String :=
   let pfx := indent ind
   let trustedStr := if ib.isTrusted then "trusted " else ""
-  let tparamsStr := fmtTypeParams ib.typeParams
-  -- Include type params on the type name: impl<T, E> Result<T, E> { ... }
-  let typeNameArgs := if ib.typeParams.isEmpty then ""
-    else s!"<{", ".intercalate ib.typeParams}>"
+  let tparamsStr := fmtTypeParams ib.typeParams ib.typeBounds ib.capParams
+  -- Include type params on the type name: impl<T, E> Result<T, E> { ... }, and the self
+  -- type's capability arguments after them: impl<cap C> Writer<C> { ... }
+  let typeNameArgs := if ib.typeParams.isEmpty && ib.capParams.isEmpty then ""
+    else s!"<{", ".intercalate (ib.typeParams ++ ib.capParams)}>"
   let methods := ib.methods.map fun m => fmtFnDef m (ind + 1)
   s!"{pfx}{trustedStr}impl{tparamsStr} {ib.typeName}{typeNameArgs} \{\n{"\n\n".intercalate methods}\n{pfx}}"
 
@@ -435,6 +458,8 @@ partial def fmtModuleBody (m : Module) (ind : Nat) : String :=
   let groups : List (List String) := []
   let imps := m.imports.map fun i => fmtImport i ind
   let groups := if imps.isEmpty then groups else groups ++ [imps]
+  let capAliases := m.capAliases.map fun ca => fmtCapAlias ca ind
+  let groups := if capAliases.isEmpty then groups else groups ++ [capAliases]
   let exts := m.externFns.map fun e => fmtExternFn e ind
   let groups := if exts.isEmpty then groups else groups ++ [exts]
   let aliases := m.typeAliases.map fun ta => fmtTypeAlias ta ind

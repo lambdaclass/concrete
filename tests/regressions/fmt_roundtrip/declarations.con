@@ -1,0 +1,66 @@
+// Every declaration-level form `concrete fmt` once dropped, in one program whose
+// fingerprints must survive formatting (check_concrete_fmt.sh, section 6b). Each loss
+// below produced a formatted program that no longer compiled, or meant something else.
+
+// A capability alias: there was no printer, so every alias was deleted and `with(Out)`
+// named a capability nothing defined.
+cap Out = Console + Unsafe;
+
+// `enum Copy`: dropped, so every Dir became linear and `to_int(d)` twice was a use-after-move.
+enum Copy Dir {
+    Up,
+    Down,
+}
+
+// `struct ... <cap C>` (R-0484): dropped, so `Sink<C>` named a parameter nothing declared.
+struct Sink<cap C> {
+    fd: i32,
+}
+
+// Effect declarations on foreign bindings (R-0484): dropped, so every binding became
+// undeclared and was refused (E0116). `with()` is an audited claim and must survive too.
+extern fn putchar(c: i32) with(Console) -> i32;
+trusted extern fn abs(x: i32) with() -> i32;
+
+// `impl<cap C> Sink<C>`: the impl's capability parameter and the self type's argument.
+impl<cap C> Sink<C> {
+    fn fd(&self) -> i32 {
+        return self.fd;
+    }
+}
+
+fn to_int(d: Dir) -> i32 {
+    match d {
+        Dir::Up => {
+            return 1;
+        },
+        Dir::Down => {
+            return 2;
+        },
+    }
+}
+
+// `fn f<cap C>`: dropped, so `with(C)` named a capability variable nothing declared.
+fn emit<cap C>(s: &Sink<C>) with(C) -> i32 {
+    return s.fd();
+}
+
+// A function-pointer type with a unit return: printed `-> ()`, which does not parse.
+fn apply<cap C>(x: i32, f: fn(i32) with(C)) with(C) -> i32 {
+    f(x);
+    return x;
+}
+
+fn noop(x: i32) {
+}
+
+fn main() with(Out) -> i32 {
+    let d: Dir = Dir::Down;
+    let a: i32 = to_int(d);
+    let b: i32 = to_int(d);
+    putchar(65 + abs(0));
+    let s: Sink<{}> = Sink { fd: a + b };
+    let n: i32 = emit(&s);
+    let Sink { fd } = s;
+    return apply(n + fd, noop) - 8;
+}
