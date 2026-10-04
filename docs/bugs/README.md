@@ -80,6 +80,7 @@ Those belong in:
 - [062_proof_dependency_staleness_does_not_propagate.md](062_proof_dependency_staleness_does_not_propagate.md) — fixed in R-0004 slice 3: a reachable non-current dependency downgrades its dependent to `deps_not_current`, at one hop and transitively
 - [072_spawn_exec_failure_flushes_parent_buffers.md](072_spawn_exec_failure_flushes_parent_buffers.md) — fixed 2026-10-01: a child whose exec failed called `exit`, flushing stdio buffers copied from the parent, so pending output was written twice; it now calls `_exit`
 - [073_generic_type_argument_arity_unchecked.md](073_generic_type_argument_arity_unchecked.md) — fixed 2026-10-01: `Box1<i32, bool>` for a one-parameter struct compiled with the extra argument dropped; Resolve now checks type-argument arity (E0113)
+- [074_duplicate_module_names_across_packages.md](074_duplicate_module_names_across_packages.md) — fixed 2026-10-04: two packages defining the same top-level module name failed only in LLVM validation, and report modes merged their declarations; `loadProject` now refuses the collision naming both packages
 
 ## Open Numbered Bugs
 

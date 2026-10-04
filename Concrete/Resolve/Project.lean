@@ -310,7 +310,9 @@ structure ProjectContext where
   pc            : Concrete.ProofCore
   /-- Which package each source file belongs to: (file, package key, package name). The key is
       the package's `PackageIdentity.digest`, formed by the same `packageIdentityOf` the root uses
-      from the package's OWN manifest, or `unscoped:<name>` when it has none — never `""`. Module
+      from the package's OWN manifest, or — with no usable manifest — the canonical synthetic
+      (manifestless) identity over its module inventory and source content. Never `""`, and
+      never a bare name label, which two manifestless packages could share. Module
       names cannot scope a declaration: two packages may each define a module `util` (R-0484 R10
       assumption identity). -/
   filePackages  : List (String × String × String) := []
@@ -352,6 +354,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
   let mut depModules : List Module := []
   let mut depSrcMap : SourceMap := []
   let mut filePackages : List (String × String × String) := []
+  let mut moduleOwners : List (String × String × String) := []  -- (module, package, file)
   for (depName, depPath) in deps do
     let resolvedPath := if depPath.startsWith "/" then depPath
       else resolveDependencyPath projectRoot depPath
@@ -363,13 +366,21 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
       let depToml ← try pure (some (← readFile (resolvedPath ++ "/Concrete.toml"))) catch _ => pure none
+      -- No manifest, or one that refuses an identity: the CANONICAL manifestless identity, the
+      -- synthetic one standalone builds use, digested from the package's module inventory and
+      -- source CONTENT. A name label (`unscoped:<name>`) would let two manifestless dependencies
+      -- that share a name merge into one package.
+      let synthetic := match Proof.PackageIdentity.syntheticForModules (modules.map (·.name)) (srcMap.map (·.2)) with
+        | .ok pid => pid.digest
+        | .error _ => s!"unidentified:{depName}"
       let key := match depToml with
-        | none => s!"unscoped:{depName}"
+        | none => synthetic
         | some t =>
           match Proof.packageIdentityOf t (modules.map (·.name)) [] (srcMap.map (·.2)) with
           | .ok pid => pid.digest
-          | .error _ => s!"unscoped:{depName}"
+          | .error _ => synthetic
       filePackages := filePackages ++ srcMap.map fun (f, _) => (f, key, depName)
+      moduleOwners := moduleOwners ++ modules.map fun m => (m.name, depName, m.sourceFile)
   let tDepsLoaded ← IO.monoMsNow
 
   -- The project's entry source: `src/main.con`, or `src/lib.con` for a library package.
@@ -410,6 +421,20 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       depModules.map stripTests
     else depModules
     let allModules : List Module := depModulesUsed ++ resolvedParsed.modules
+    -- BUG 074: a top-level module name defined by two packages is REFUSED here, before anything
+    -- downstream sees the merged program. Both definitions used to pass every frontend check and
+    -- reach code generation as one module, where LLVM validation failed on a duplicate symbol
+    -- ("invalid redefinition of function") with no compiler diagnostic — and report modes, which
+    -- generate no code, silently merged the two packages' declarations. Packages cannot yet
+    -- share a module path, so the collision is an error naming both owners.
+    let owners := moduleOwners ++ resolvedParsed.modules.map fun m =>
+      (m.name, (if selfName.isEmpty then "the project" else selfName), m.sourceFile)
+    let dup := owners.findSome? fun (n, pkg, file) =>
+      (owners.find? fun (n2, pkg2, file2) => n2 == n && (pkg2 != pkg || file2 != file)).map
+        fun (_, pkg2, file2) => (n, pkg, file, pkg2, file2)
+    if let some (n, pkg, file, pkg2, file2) := dup then
+      IO.eprintln s!"error: module '{n}' is defined by two packages: '{pkg}' ({file}) and '{pkg2}' ({file2})\nhint: packages cannot yet share a top-level module name; rename one of the modules (bug 074)"
+      return Except.error 1
     let allSrcMap : SourceMap := [(mainPath, source)] ++ subSrcMap ++ depSrcMap
     -- Dependency structs (std's `Writer<cap C>`) are only visible once merged, so capability
     -- arguments are normalized again over the whole program.
@@ -517,7 +542,11 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       ledger := ledger.recordDiagnostic d
     let rootKey := match packageIdentity with
       | .ok pid => pid.digest
-      | .error _ => s!"unscoped:{selfName}"
+      | .error _ =>
+        match Proof.PackageIdentity.syntheticForModules (resolvedParsed.modules.map (·.name))
+            ([source] ++ subSrcMap.map (·.2)) with
+        | .ok pid => pid.digest
+        | .error _ => s!"unidentified:{selfName}"
     let rootFiles := [mainPath] ++ subSrcMap.map (·.1)
     let allFilePackages := filePackages ++ rootFiles.map fun f => (f, rootKey, selfName)
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,

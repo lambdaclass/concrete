@@ -1586,7 +1586,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
       | .ok pid => (pid.digest, "program")
-      | .error _ => ("unscoped:program", "program")
+      | .error _ => ("unidentified:program", "program")
     let assumptionPackageOf : String → Option (String × String) := fun f =>
       (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
     -- THE REPORT'S SOURCE MAP MUST CONTAIN THE KEY ITS LOCATION MAP USES. `buildFnLocMap` records

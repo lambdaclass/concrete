@@ -49,8 +49,10 @@ def Kind.tag : Kind → String
   | .trustedBoundary => "trusted-boundary"
 
 /-- Exactly one Concrete declaration: package scope, module path, declared name. The package is
-    the package's canonical identity (`PackageIdentity.digest`, or `unscoped:<name>` when it has
-    no manifest), because module names do not scope a declaration — two packages may each define
+    the package's canonical identity (`PackageIdentity.digest` — from its manifest, or the
+    canonical synthetic identity over its module inventory and content when it has none). Only
+    when NO identity can be formed is it `unidentified:<name>`, and then every report marks the
+    attribution ambiguous (`AssumptionId.ambiguous`). Module names do not scope a declaration — two packages may each define
     a module `util` binding `putchar`. -/
 structure AssumptionId where
   kind : Kind
@@ -61,6 +63,8 @@ structure AssumptionId where
   deriving BEq, Repr, Inhabited
 
 def AssumptionId.qualified (i : AssumptionId) : String := i.module ++ "." ++ i.name
+/-- No package identity could be formed, so two declarations may share this attribution. -/
+def AssumptionId.ambiguous (i : AssumptionId) : Bool := i.package.startsWith "unidentified:"
 /-- The identity key: length-prefixed so no split of the components collides. -/
 def AssumptionId.key (i : AssumptionId) : String :=
   s!"{i.kind.tag}:P{i.package.length}:{i.package}|{i.qualified}"
@@ -261,7 +265,7 @@ private def sccsOf (succ : Array (Array Nat)) : Array (Array Nat) :=
     loaded dependency). Pure and deterministic. -/
 def build (modules : List CModule)
     (packageOf : String → Option (String × String) := fun _ => none)
-    (defaultPackage : String × String := ("unscoped:program", "program")) : Table := Id.run do
+    (defaultPackage : String × String := ("unidentified:program", "program")) : Table := Id.run do
   let (nodes, bindings, facts) := modules.foldl (fun (ns, bs, fs) m =>
       let (ns', bs', fs') := collect packageOf m m.name defaultPackage
       (ns ++ ns', bs ++ bs', fs ++ fs')) (#[], #[], #[])
@@ -466,6 +470,7 @@ def Table.toJson (t : Table) (programRoots : List String) (depsLoaded : Bool) : 
           s!"\"trusted_extern\":{if f.trustedExtern then "true" else "false"}",
           s!"\"package\":{jq f.id.package}",
           s!"\"package_name\":{jq f.id.packageName}",
+          s!"\"package_identity_ambiguous\":{if f.id.ambiguous then "true" else "false"}",
           s!"\"witness_path\":{jarr ((t.explain s.fnKey r.key).map jq)}" ] ++ "}")
     let gaps := s.gaps.toList.map fun g =>
       "{" ++ s!"\"site\":{jq g.site},\"binding\":{jq g.binding}" ++ "}"
@@ -479,6 +484,33 @@ def Table.toJson (t : Table) (programRoots : List String) (depsLoaded : Bool) : 
     "\"schema\":\"concrete.assumptions.v1\"",
     s!"\"dependencies_analysed\":{if depsLoaded then "true" else "false"}",
     s!"\"functions\":{jarr (fns.map fnJson)}" ] ++ "}"
+
+end Assumptions
+end Concrete
+
+namespace Concrete
+namespace Assumptions
+
+/-! ## Package scope is part of identity — checked at build time
+
+Two packages may define the same module path and the same declaration names. The frontend
+refuses that collision for a whole program (bug 074), but the summary must not depend on that:
+built directly from two modules both named `util`, each binding `putchar`, mapped to different
+packages, it must hold TWO foreign-binding identities. A key without the package would merge
+them, and this build would fail. -/
+private def packageScopeProbe : Table :=
+  let mk (file : String) : CModule :=
+    { name := "util", structs := [], enums := [], functions := [], constants := []
+      externFns := [("putchar", [], .i32, false)]
+      externFnCaps := [("putchar", .concrete ["Console"])], sourceFile := file }
+  build [mk "p1/src/lib.con", mk "p2/src/lib.con"] (fun f =>
+    if f == "p1/src/lib.con" then some ("pkgA", "p1")
+    else if f == "p2/src/lib.con" then some ("pkgB", "p2") else none)
+
+#guard (packageScopeProbe.facts.toList.filter fun (_, f) =>
+          f.id.kind == .foreignBinding && f.id.qualified == "util.putchar").length == 2
+#guard ((packageScopeProbe.facts.toList.filter fun (_, f) => f.id.qualified == "util.putchar").map
+          (·.2.id.packageName)).mergeSort (· ≤ ·) == ["p1", "p2"]
 
 end Assumptions
 end Concrete

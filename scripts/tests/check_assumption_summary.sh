@@ -17,6 +17,7 @@
 #   pure_one       genuinely assumption-free                                   -> complete, none
 #   main           inherits both the facts and the gap                         -> INCOMPLETE
 #   factlib.other.putchar  same C symbol, other declaration, never reached     -> never listed
+#   bug 074        the same module in two packages                             -> refused
 # plus a whole program that is assumption-free (pure_app), a dependency of a dependency that
 # must still be REFUSED (transitive loading is not implemented), and the same text/JSON
 # agreement on a real example (base64_cli).
@@ -148,18 +149,30 @@ else
   no "pure_app is not reported as complete and assumption-free"
 fi
 
-echo "=== identity is package-scoped: the same module and names in two packages stay two ==="
-(cd "$ROOT_DIR/tests/regressions/assumption_summary_two_packages/app" && $TO "$CC" src/main.con --report assumptions) > "$TMP/two.json" 2>/dev/null
-if python3 - "$TMP/two.json" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1]))
-seen = {(a["package_name"], a["package"], a["declaration"]) for f in d["functions"] for a in f["assumes"]
-        if a["kind"] == "foreign-binding" and a["declaration"] == "util.putchar"}
-names = {p for p, _, _ in seen}; keys = {k for _, k, _ in seen}
-sys.exit(0 if names == {"p1", "p2"} and len(keys) == 2 else 1)
-PY
-then ok "util.putchar from p1 and from p2 are two identities with distinct package keys"
-else no "identically named declarations in two packages were merged (or not scoped): $(head -c 300 "$TMP/two.json")"
+echo "=== bug 074: the same module in two packages is refused before LLVM, naming both ==="
+# Packages cannot yet share a top-level module path. Both the build and report mode must stop
+# with the diagnostic — before the fix the build died in LLVM validation and report mode
+# silently merged the two packages' declarations. Package scoping of assumption identity
+# itself is enforced at BUILD time by the #guard in Concrete/Report/AssumptionSummary.lean.
+D74="$ROOT_DIR/tests/regressions/bug074_duplicate_module_packages/app"
+bout="$(cd "$D74" && $TO "$CC" build . -o "$TMP/dup" 2>&1)"; brc=$?
+rout="$(cd "$D74" && $TO "$CC" src/main.con --report assumptions 2>&1)"; rrc=$?
+want="module 'util' is defined by two packages: 'p1'"
+if [ "$brc" -ne 0 ] && printf '%s' "$bout" | grep -q "$want" && printf '%s' "$bout" | grep -q "'p2'" \
+   && ! printf '%s' "$bout" | grep -q 'LLVM IR validation failed'; then
+  ok "build refused with the diagnostic naming p1 and p2, before LLVM"
+else
+  no "the duplicate-module build was not refused as bug 074 requires (rc=$brc): $(printf '%s' "$bout" | head -2)"
+fi
+if [ "$rrc" -ne 0 ] && printf '%s' "$rout" | grep -q "$want"; then
+  ok "report mode refused too — it can no longer merge two packages' declarations"
+else
+  no "report mode was not refused (rc=$rrc)"
+fi
+if grep -q '^#guard (packageScopeProbe' "$ROOT_DIR/Concrete/Report/AssumptionSummary.lean"; then
+  ok "the build-time package-scope guard is present (two util.putchar identities from two packages)"
+else
+  no "the build-time package-scope guard was removed"
 fi
 
 echo "=== a dependency of a dependency is still refused, not silently skipped ==="

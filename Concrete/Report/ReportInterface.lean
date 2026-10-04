@@ -433,7 +433,11 @@ def inheritedAssumptionsSection (assumptions : Assumptions.Table) (programRoots 
       let gapLines := incomplete.toList.map fun (fn, gs) =>
         s!"  {assumptions.displayOf fn}: {"; ".intercalate (gs.toList.map (·.render))}"
       s!"Call-graph coverage: INCOMPLETE for {incomplete.size} program function(s). An indirect call has no statically known target, so these may reach foreign bindings not listed:\n" ++ "\n".intercalate gapLines
-  let coverage := depNote ++ "\n" ++ graphNote
+  let ambiguous := inherited.toList.filter (·.1.id.ambiguous)
+  let attributionNote :=
+    if ambiguous.isEmpty then ""
+    else s!"\nPackage attribution: AMBIGUOUS for {ambiguous.length} declaration(s) — no package identity could be formed, so declarations with the same module and name in different packages cannot be told apart: " ++ ", ".intercalate (ambiguous.map (·.1.id.qualified))
+  let coverage := depNote ++ "\n" ++ graphNote ++ attributionNote
   listing ++ "\n\n" ++ coverage
 
 def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore)

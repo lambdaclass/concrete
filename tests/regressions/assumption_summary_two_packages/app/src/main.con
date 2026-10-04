@@ -1,6 +1,0 @@
-// Reaches util.say/util.putchar, declared identically in p1 and p2. Assumption identity is
-// package-scoped, so the report must keep them as two declarations, not merge them into one.
-// (A full BUILD of this program fails later, in LLVM: duplicate module names across packages are
-// not refused by the frontend. The gate uses report mode only.)
-import util.{say};
-fn main() with(Console) -> i32 { return say(65) - 65; }

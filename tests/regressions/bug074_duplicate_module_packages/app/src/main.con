@@ -1,0 +1,6 @@
+// Bug 074 regression: p1 and p2 both define top-level module `util`. Packages cannot yet share a
+// module path, so the build — and report mode — must be REFUSED with a diagnostic naming both
+// packages, before LLVM. (Package scoping of assumption identities is shown independently by the
+// build-time #guard in Concrete/Report/AssumptionSummary.lean.)
+import util.{say};
+fn main() with(Console) -> i32 { return say(65) - 65; }
