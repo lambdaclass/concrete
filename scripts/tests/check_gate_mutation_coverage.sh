@@ -2427,16 +2427,29 @@ publish_evidence() { # nm index file gate killed invalid note [disposition]
   fi
   return 0
 }
-# DECLARED, each with the lock that rejects it. Until 2026-10-03 none of these could be
-# attributed (the header-layout bug above), so the list was never exercised by a build kill:
-#   attestation-precondition — `rfl` locks at Report.lean (multiKernelAdapter.admits on
-#     unproven/planned VCs is false) refuse `actsOn := fun _ => true` at compile time.
-#   kernel-foundation        — `rfl` locks at Evidence.lean (foundationSummary with isabelle
-#     is (2, "CIC×HOL")) refuse collapsing Isabelle into CIC at compile time.
-# A compile-time lock rejecting the mutation is the strongest kill; it also means the named
-# gate never ran for that family, which is why each declaration is deliberate, not inferred.
-EXPECT_BUILD_KILL=" trap-quotient-condition reference-division transform-has-effect attestation-precondition kernel-foundation "
-build_kill_declared(){ case "$EXPECT_BUILD_KILL" in *" $1 "*) return 0;; *) return 1;; esac; }
+# A BUILD KILL QUALIFIES ONLY THROUGH ITS NAMED CHECK. Each declared family names the exact
+# diagnostic its compile-time check produces (the goal or expected type, as Lean prints it). The
+# build failing in the mutated file is NOT enough: a mutation can also break an unrelated proof or
+# trip a lint on the way, and "the build failed" would then credit a check that never fired. The
+# named text must appear in a diagnostic block attributed to the mutated file; otherwise the
+# result is INVALID. Captured 2026-10-04 at d634935b by applying each mutant and reading the
+# attributed blocks — none of these could be attributed at all before the header-layout fix.
+build_kill_check(){
+  case "$1" in
+    # rfl lock on the trap-condition table (IntArith); trapConditions_sufficient also fails.
+    trap-quotient-condition) printf '%s' 'trapConditions BinOp.div = [TrapCondition.divisorNonZero, TrapCondition.quotientInRange]' ;;
+    # rfl lock on the reference division convention (TermIR.lean, -7 tdiv 2 = -3).
+    reference-division) printf '%s' 'evalInt [("a", -7), ("b", 2)] eSym (Term.bin Op.tdiv (Term.var "a") (Term.var "b")) = some (-3)' ;;
+    # rfl locks that the tmod-elimination transform removes every tmod (TermIR).
+    transform-has-effect) printf '%s' 'hasTmod (elimTmod (Term.bin Op.tmod (Term.var "a") (Term.var "b"))) = false' ;;
+    # rfl locks: attestation never admits an unproven/planned VC (Report).
+    attestation-precondition) printf '%s' 'multiKernelAdapter.admits "planned" "proved_by_multi_kernel" = false' ;;
+    # rfl locks: Isabelle is a second foundation (Evidence).
+    kernel-foundation) printf '%s' 'foundationSummary ["lean", "isabelle"] = (2, "CIC×HOL")' ;;
+    *) return 1 ;;
+  esac
+}
+build_kill_declared(){ build_kill_check "$1" >/dev/null; }
 
 run_one(){
   local i="$1"
@@ -2503,7 +2516,7 @@ run_one(){
       # A Lean diagnostic is a `path:line:col: error:` header followed by an indented message, so the
       # reason legitimately appears on later lines. This keeps the blocks whose header names the
       # mutated file — header until the next header — and searches only inside them.
-      if awk -v f="$file" '
+      awk -v f="$file" '
            { h = $0; hdr = 0
              # Two header layouts. `path:line:col: error: msg` is the Lean layout; Lake prints
              # `error: path:line:col: msg`. Recognising only the first meant no build kill was
@@ -2513,11 +2526,18 @@ run_one(){
              else if (h ~ /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/) hdr = 1
              if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
            inblk { print }
-         ' "$TMP/build.log" \
-           | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\
-failed to synthesize|Missing cases|declaration uses 'sorry'"; then
-        killed=1
-        note="(killed by build — the type system or a proof rejected the mutation in $file)"
+         ' "$TMP/build.log" > "$TMP/attributed.log"
+      if grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\
+failed to synthesize|Missing cases|declaration uses 'sorry'" "$TMP/attributed.log"; then
+        _want="$(build_kill_check "$nm" || true)"
+        if [ -n "$_want" ] && ! grep -qF -- "$_want" "$TMP/attributed.log"; then
+          invalid=1
+          note="(INVALID — the build rejected the mutation in $file, but not through its declared \
+check; a build kill qualifies only when the named check fired: $_want)"
+        else
+          killed=1
+          note="(killed by build — the type system or a proof rejected the mutation in $file)"
+        fi
       elif grep -qE "unused variable|This simp argument is unused|unused binding" "$TMP/build.log"; then
         invalid=1
         note="(INVALID mutation — build failed on an unused-binding lint, not on the rule; \
@@ -2582,7 +2602,7 @@ rather than counting it as a kill)"
       # died compiling never reaches its usual end. Testing the predicate first would therefore reclass
       # legitimate build kills as INVALID. Fail-closed either way, but wrong, and it would push the
       # operator to declare families that do not need declaring.
-      if awk -v f="$file" '
+      awk -v f="$file" '
            { h = $0; hdr = 0
              # Two header layouts. `path:line:col: error: msg` is the Lean layout; Lake prints
              # `error: path:line:col: msg`. Recognising only the first meant no build kill was
@@ -2592,13 +2612,20 @@ rather than counting it as a kill)"
              else if (h ~ /^[^ ].*:[0-9]+:[0-9]+: (error|warning)/) hdr = 1
              if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
            inblk { print }
-         ' "$TMP/gate.log" \
-           | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\
-failed to synthesize|Missing cases|declaration uses 'sorry'"; then
-        killed=1
-        note="(killed by build INSIDE ${GATE[$i]} — the gate's own assertions did not run)"
-        KILLED_BY_BUILD=$((KILLED_BY_BUILD+1))
-        build_kill_declared "$nm" || UNDECLARED_BUILD_KILLS="$UNDECLARED_BUILD_KILLS $nm"
+         ' "$TMP/gate.log" > "$TMP/attributed.log"
+      if grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|\
+failed to synthesize|Missing cases|declaration uses 'sorry'" "$TMP/attributed.log"; then
+        _want="$(build_kill_check "$nm" || true)"
+        if [ -n "$_want" ] && ! grep -qF -- "$_want" "$TMP/attributed.log"; then
+          invalid=1
+          note="(INVALID — the build inside ${GATE[$i]} rejected the mutation in $file, but not \
+through its declared check: $_want)"
+        else
+          killed=1
+          note="(killed by build INSIDE ${GATE[$i]} — the gate's own assertions did not run)"
+          KILLED_BY_BUILD=$((KILLED_BY_BUILD+1))
+          build_kill_declared "$nm" || UNDECLARED_BUILD_KILLS="$UNDECLARED_BUILD_KILLS $nm"
+        fi
       elif ! _red_leg_is_gate_evidence "$TMP/gate.log" "$_gate_rc" "${GATE[$i]}"; then
         # The SHARED predicate — died-early, precondition failure, or never reached its own end.
         invalid=1

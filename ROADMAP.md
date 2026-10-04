@@ -1185,12 +1185,15 @@ batch: each changes a different trust boundary, so each lands and is verified on
    attribution recognised only the `path:line:col: error` header, and Lake prints
    `error: path:line:col:`, so no build kill was ever attributed. Fixed in both harnesses;
    `trap-quotient-condition`, `attestation-precondition`, `kernel-foundation` and
-   `transform-has-effect` now score KILLED by build, and the two that compile-time `rfl`
-   locks reject are declared with the lock named. Two remain open qualification gaps:
-   `reference-division` (its mutant trips an unused-binding lint — rewrite it so every
-   binding stays live) and `divergence-detection` (under the mutant `run_tests.sh` never
-   reaches the end it reaches on pristine source — find out whether that is a hang the
-   suite should report or a mutant that breaks the harness). The campaign job also exceeds
+   `transform-has-effect` now score KILLED by build. A build kill qualifies only through
+   its NAMED check: each declared family carries the exact diagnostic its compile-time
+   `rfl` lock produces, and a build failure without that diagnostic in the mutated file's
+   own blocks is INVALID (negative control: a wrong declared check scores INVALID).
+   `reference-division` qualifies the same way — its lint was incidental; the declared
+   `-7 tdiv 2 = some (-3)` lock fires. One remains an open qualification gap:
+   `divergence-detection` (under the mutant `run_tests.sh` never reaches the end it
+   reaches on pristine source — find out whether that is a hang the suite should report
+   or a mutant that breaks the harness). The campaign job also exceeds
    GitHub's 6-hour limit on a dispatched run, so the full campaign has no CI home today;
    it runs only on the mirror's schedule, which is pinned to an old commit.
 
@@ -1206,7 +1209,7 @@ batch: each changes a different trust boundary, so each lands and is verified on
    - `test_mutation.sh` mutation 52, "Elab V2 input: resolved field use omitted (field
      access)" in `Concrete/Elab/Elab.lean`, survives on main and on the branch alike —
      re-anchored for R-0484 with the experiment unchanged, not newly weakened;
-   - `reference-division` and `divergence-detection` remain INVALID (above).
+   - `divergence-detection` remains INVALID (above).
 2. **Worktree support for the mutation harness.** It assumes `.git` is a directory and
    reports `isolated workspace has no .git` only after lock and cleanup output, so a golden
    check failed 4/7 twice before the cause was visible. Discover paths with
