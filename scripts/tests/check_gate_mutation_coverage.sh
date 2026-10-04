@@ -1122,16 +1122,16 @@ add "cross-package-caps-empty-not-unknown" "Concrete/Check/CoreCheck.lean" "chec
   $'    match env.importedCaps.lookup name with\n    | some _ => return some CapSet.empty'
 
 add "attestation-conversion-complete" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of checkDataFn       GeneratedAttestations.elfFns_0b4c54cf_check_data\n    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_0b4c54cf_check_magic' \
-  $'    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_0b4c54cf_check_magic'
+  $'    , AttestedPFnDef.of checkDataFn       GeneratedAttestations.elfFns_e7882240_check_data\n    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_e7882240_check_magic' \
+  $'    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_e7882240_check_magic'
 
 # ...and the same mutation PER CONVERTED TABLE, because the reconciliation is per table: a version
 # that only reconciled the table someone happened to mutate would leave every other conversion
 # unmeasured. `elfFns` above has a named exclusion, so its arithmetic is rows = attested + 1;
 # `fixedCapacityFns` has none, so it is the control for the simple case rows = attested.
 add "attestation-conversion-complete-fixedcapacity" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_push' \
-  $'    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_push'
+  $'    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_push' \
+  $'    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_push'
 
 # R-0004 package 2, and the same family for the table whose manifest rows are FEWER than its entries.
 # `parseValidateFns` has 8 entries and 3 rows, so a reader could mistake a dropped attestation for
@@ -1141,8 +1141,8 @@ add "attestation-conversion-complete-fixedcapacity" "Concrete/Proof/Proof.lean" 
 # `validateVersionFn`, which are FOUR lines apart in the attested list — each line was present, so a
 # line-wise check saw a match while an exact substring could never apply. Adjacent lines only.
 add "attestation-conversion-complete-parsevalidate" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of validateHeaderFieldsFn GeneratedAttestations.parseValidateFns_5b60e3b6_validate_header_fields\n    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_5b60e3b6_validate_msg_type' \
-  $'    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_5b60e3b6_validate_msg_type'
+  $'    , AttestedPFnDef.of validateHeaderFieldsFn GeneratedAttestations.parseValidateFns_be672785_validate_header_fields\n    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_be672785_validate_msg_type' \
+  $'    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_be672785_validate_msg_type'
 
 # R-0004 package 2. A DRIFTED IMPLEMENTATION ATTESTED. This is the exclusion that is NOT a
 # judgement call: `evidence_classes/stale_proof` links the same theorem while its body starts `diff`
@@ -1166,8 +1166,8 @@ add "attestation-never-binds-drifted-impl" "Concrete/Proof/Proof.lean" "check_at
 # reconciliation now runs over the distinct reference set for each table, so a model the table could
 # describe exactly and does not is a failure.
 add "attestation-dependency-reference-bound" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    [ AttestedPFnDef.of computeChecksumFn      GeneratedAttestations.parseValidateFns_5b60e3b6_compute_checksum\n    , AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_5b60e3b6_parse_header' \
-  $'    [ AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_5b60e3b6_parse_header'
+  $'    [ AttestedPFnDef.of computeChecksumFn      GeneratedAttestations.parseValidateFns_be672785_compute_checksum\n    , AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_be672785_parse_header' \
+  $'    [ AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_be672785_parse_header'
 
 # R-0004 package 2. THE ENTRANCE ASSERTION MUST BE ABLE TO SAY NO. It exists to be red until the flip
 # is safe, and a completion gate that cannot fail is worse than none — it converts an unchecked
@@ -1180,7 +1180,7 @@ add "attestation-dependency-reference-bound" "Concrete/Proof/Proof.lean" "check_
 # SURVIVED, which is the honest answer for a mutation that changed no behaviour. It now empties the
 # attestation list outright, which is the actual unattested state.
 add "atomic-flip-entrance-refuses-pending" "Concrete/Proof/Proof.lean" "check_atomic_flip_entrance.sh" yes \
-  $'    [ AttestedPFnDef.of fcTagFn         GeneratedAttestations.fixedCapacityFns_44a81ba0_compute_tag\n    , AttestedPFnDef.of ringContainsFn  GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_contains\n    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_44a81ba0_ring_push ]' \
+  $'    [ AttestedPFnDef.of fcTagFn         GeneratedAttestations.fixedCapacityFns_d2993ec4_compute_tag\n    , AttestedPFnDef.of ringContainsFn  GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_contains\n    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_d2993ec4_ring_push ]' \
   $'    []'
 
 # ...and it must also refuse a table whose bound references are not LOAD-BEARING. Binding an
@@ -1188,8 +1188,8 @@ add "atomic-flip-entrance-refuses-pending" "Concrete/Proof/Proof.lean" "check_at
 # nothing: the mutation attests a model the table does not hold, which `scopedEntryEvidence` refuses
 # as `attestedModelNotInTable` — so the membership no longer equals the bound count.
 add "atomic-flip-entrance-refuses-inert-binding" "Concrete/Proof/Proof.lean" "check_atomic_flip_entrance.sh" yes \
-  $'    [ AttestedPFnDef.of checkClassFn      GeneratedAttestations.elfFns_0b4c54cf_check_class' \
-  $'    [ AttestedPFnDef.of checkNonceFn      GeneratedAttestations.elfFns_0b4c54cf_check_class'
+  $'    [ AttestedPFnDef.of checkClassFn      GeneratedAttestations.elfFns_e7882240_check_class' \
+  $'    [ AttestedPFnDef.of checkNonceFn      GeneratedAttestations.elfFns_e7882240_check_class'
 
 
 # ---------------------------------------------------------------------------

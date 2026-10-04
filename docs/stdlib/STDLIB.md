@@ -322,7 +322,14 @@ Environment variable access:
 Unix process control:
 
 - exit, getpid
-- `fork()` returns `ForkResult` (Parent/Child/Err) — 3-variant union, not a standard Result
+- no public `fork`: `process_fork` was removed (R-0484 audit F9, 2026-10-04) because a forked child
+  returned to arbitrary code holding every owning handle and buffered stream; `spawn` is the
+  supported fork-then-exec path, and a `Child` can only come from it (F1)
+- `spawn`'s supported runtime profile (stated at `spawn` in `std/src/process.con`): the process
+  is single-threaded at the fork — a program in which foreign code has started threads is
+  outside the supported profile; the child branch runs no arbitrary user callbacks, allocation
+  or stdio before `execvp`/`_exit`; descriptors are inherited across exec (std sets no
+  close-on-exec; that policy is a separate follow-up)
 - `kill()` returns `Result<bool, ProcessError>`
 - `Child::wait()` returns `Result<ExitStatus, ProcessError>` with typed `ExitStatus` (Exited with code / Signaled with raw status)
 - `spawn(cmd, args)` returns `Result<Child, ProcessError>` — fork+execvp

@@ -382,7 +382,7 @@ Process control.
 
 **Must-have APIs**:
 - `exit`, `getpid`
-- `fork() -> ForkResult`, `spawn(cmd, args) -> Result<Child, ProcessError>`
+- `spawn(cmd, args) -> Result<Child, ProcessError>` (no public `fork`: removed under R-0484 F9)
 - `Child::wait() -> Result<ExitStatus, ProcessError>`
 - `kill(pid, signal) -> Result<bool, ProcessError>`
 - Signal constants

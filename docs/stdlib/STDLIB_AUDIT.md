@@ -76,7 +76,7 @@ The stdlib has 38 modules. Most hosted-layer and collection modules are effectiv
 | `io` | Complete — `print`, `println`, `eprint`, `eprintln`, `read_line`, `TextFile` |
 | `fs` | Complete — `File` with open/create/read/write/seek/close, `read_file`, `write_file`, `read_to_string` |
 | `env` | Complete — `get`, `set`, `unset` |
-| `process` | Complete — `process_exit`, `process_getpid`, `process_fork`, `process_kill`, `spawn`, signals |
+| `process` | Complete — `process_exit`, `process_getpid`, `process_kill`, `spawn`, signals (`process_fork` removed 2026-10-04, R-0484 F9) |
 | `net` | Complete — `TcpListener`, `TcpStream`, bind/accept/connect/read/write |
 | `time` | Complete — `Duration` with `from_secs`, `from_millis`, `from_nanos` |
 | `rand` | Complete — `seed`, `random_int`, `random_range` |

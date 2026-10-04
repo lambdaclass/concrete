@@ -30,12 +30,12 @@ without running handlers or flushing.
 `std/src/libc.con` binds `_exit`, and `spawn`'s exec-failure path calls it (imported as
 `libc_exit_now`). The user-facing `process_exit` keeps normal `exit` semantics: it runs
 `atexit` handlers and flushes stdio. Those buffers are not necessarily exclusive to the
-calling process — called in a forked child, for example after `process_fork`, it can
-still flush buffers inherited from the parent. That case belongs to F9, not this fix.
+calling process — called in a forked child it could still flush buffers inherited from the
+parent. That case belonged to F9, not this fix.
 
-Not fixed here, and recorded in the audit (F9): `process_fork` returns to arbitrary
-Concrete code in the child, which still inherits every owning handle and buffered
-stream. That is a design question for R-0484 slice 3, not this bug.
+F9 was resolved 2026-10-04 by removing `process_fork` from the public surface: it returned
+to arbitrary Concrete code in the child, which inherited every owning handle and buffered
+stream. `spawn` is now the only fork path, and its child only execs or `_exit`s.
 
 ## Regression witness
 

@@ -58,7 +58,7 @@ STDLIB_TARGET says the API should be `is_alphanumeric`. The implementation uses 
 
 Recommendation: Rename `is_alnum` to `is_alphanumeric`.
 
-**`process_exit`, `process_getpid`, `process_fork`, `process_kill`** (process module)
+**`process_exit`, `process_getpid`, `process_kill`** (process module; `process_fork` removed 2026-10-04, R-0484 F9)
 
 These are free functions with a `process_` prefix. This is a C-style convention, not a Concrete-style convention. Since they live in `std.process`, the module name already provides the namespace: users write `process.process_exit(1)`, which stutters.
 

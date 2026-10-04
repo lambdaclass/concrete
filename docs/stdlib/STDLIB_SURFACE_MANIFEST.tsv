@@ -331,9 +331,7 @@ process	sig_kill	no	constructs	infallible	none	deterministic	gated	() -> i32	-
 process	sig_term	no	constructs	infallible	none	deterministic	gated	() -> i32	-
 process	process_exit	no	constructs	infallible	Process	hosted-effect	gated	(code: i32) with(Process)	-
 process	process_getpid	no	constructs	infallible	Process	hosted-effect	gated	() with(Process) -> i32	-
-process	process_fork	no	constructs	infallible	Process	hosted-effect	gated	() with(Process) -> ForkResult	-
 process	process_kill	no	constructs	result	Process	hosted-effect	gated	(pid: i32, sig: i32) with(Process) -> Result<bool, ProcessError>	-
-process	new	no	constructs	infallible	none	trusted-boundary	gated	(pid: i32) -> Child	Child
 process	pid	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> i32	Child
 process	wait	no	consumes	result	Process	trusted-boundary	gated	(self) with(Process) -> Result<ExitStatus, ProcessError>	Child
 process	spawn	yes	constructs	result	Alloc,Process,Unsafe	hosted-effect	gated	(cmd: &String, args: *const *const u8) with(Unsafe,Process,Alloc) -> Result<Child, ProcessError>	-

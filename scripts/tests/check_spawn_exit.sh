@@ -47,6 +47,22 @@ else
   no "file holds '$content', expected 'X' — the child flushed the parent's stdio buffer (bug 072)"
 fi
 
+echo "=== the ordinary path: spawn -> wait reaps exactly the spawned child (R-0484 F1/F9) ==="
+# After F1/F9, `spawn` is the only way to obtain a Child. Retained as a runtime regression
+# beside the failed-exec case above: the pid must be positive and `wait` must decode the
+# child's own status (/usr/bin/true -> 0, /usr/bin/false -> 1).
+FIX2="$ROOT_DIR/tests/regressions/spawn_exit/spawn_wait_status"
+if (cd "$FIX2" && $TO "$CC" build . -o "$TMP/spawn_wait" >"$TMP/build2.log" 2>&1); then
+  (cd "$TMP" && $TO ./spawn_wait); rc2=$?
+  if [ "$rc2" -eq 0 ]; then
+    ok "spawned children have positive pids and wait reports Exited 0 / Exited 1"
+  else
+    no "spawn_wait_status returned $rc2 (x0 spawn failed; x1 pid not positive; x2 wait failed; x3 wrong code; x4 signaled; x=1 true, x=2 false)"
+  fi
+else
+  no "spawn_wait_status does not build"; sed 's/^/       /' "$TMP/build2.log" | head -10
+fi
+
 echo
 echo "SPAWN-EXIT: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
