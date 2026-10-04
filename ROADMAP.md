@@ -7,7 +7,8 @@ should happen next, in what order?** Completed milestones live in
 their links and rationale have not yet been physically compacted; they never override the current
 state or queue.
 
-> **Start here for status:** [Current execution state](#current-execution-state-2026-08-21).
+> **Start here for what happens next:** [The current execution queue](#the-current-execution-queue),
+> the first section below — the only ordering in this file.
 > **Start here for direction:** [Capability unlocks](#capability-unlocks--the-stable-product-map)
 > and [North star](#north-star-compositional-fail-visible-verification) — the product boundary,
 > the dimensions along which proof support grows, and the limits that must remain visible.
@@ -18,6 +19,33 @@ state or queue.
 > five authoritative evidence objects; [Verification IR](docs/verification/VERIFICATION_IR.md) defines the
 > target portable proposition boundary. This roadmap sequences their implementation and must not
 > invent competing definitions.
+
+## The current execution queue
+
+This is the only current queue. It is intentionally not padded to a fixed number: rows exist only
+for work whose ordering is presently decided. A newly reproduced authority defect enters ahead of
+the next transition; completed milestones move to the changelog rather than accumulating here.
+
+| order | work | exit before advancing |
+|---|---|---|
+| 0 | **R-0484: `with(...)` is the complete list of a function's external authority (decided 2026-09-29/30; design in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md))** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rules:** handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else, including the `Unsafe` of calling a plain `extern` (this reverses the current rule in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md`); every foreign binding declares its effects and an undeclared one is refused; foreign declarations and descriptor conversions are audited assumptions shown in reports. **Slices:** (1) design doc — drafted; encoding A (per-effect raw-integer bindings to one C symbol) selected for the first implementation, B (`Fd<C>`) a later option; construction/caller audit taken 2026-09-30 ([HANDLE_CAPABILITIES_AUDIT.md](docs/language/HANDLE_CAPABILITIES_AUDIT.md): `Child` forgeable, `Writer`/`Reader` hole confirmed, `fork` duplicates owning handles, 8 unused bindings; classification decisions D1-D4 settled 2026-10-01; F10 fixed early as bug 072); slice 1 complete; slices 2–4 merged to main as a partial checkpoint 2026-10-04 (`a7c9cf1c`, main CI green; merged under an approved exception for the full mutation campaign, which exceeds CI's 6-hour limit) — **remaining before R-0484 closes:** F1 (`Child` constructible outside its module), F9 (`process_fork` duplicates owning handles), cross-package assumption propagation through the existing dependency mechanism (today project mode only; single-file reports state incomplete coverage), the slice 5 completion criteria (docs/examples consistency pass, final authority audit, cross-package and trust controls, codegen/ABI checks, validation evidence), and four external doc pages not yet located; F7/F8 belong to R-0013. Full mutation-campaign qualification is not an R-0484 requirement: it stays its own milestone (row 2), recorded here only because the checkpoint merged under that exception; (2) compiler: effect declarations on externs, symbol aliasing (extending the import-alias path), the `trusted` rule, capability parameters on structs, dependency-summary transport, the assumptions section; (3) std FFI migration: bindings reclassified under the `trusted extern` criterion (`memcpy`/`memcmp` become plain `extern` behind wrappers), sinks declare `Console`/`File`; (4) `Writer<C>`/`Reader<C>` and the 14 consumers outside `io.con`, inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) migration guidance, reference docs, examples and report snapshots, plus the final authority/ABI audit specified in R-0484's completion criteria. The first cut excludes descriptor replacement (std binds no `dup`/`dup2`; unused `fdopen` removed) and requires audited unique ownership for owning handles; a second step adds typed bindings/descriptors and defines replacement and cross-classification aliasing. | `print_bytes` declares `with(C)` and its call site reports `Console`; a function with an empty `with(...)` cannot reach external authority through a handle, a `trusted` body, a foreign binding or a dependency; the design doc's acceptance cases exist as fixtures, with mutation tests where marked; every foreign effect declaration and descriptor conversion appears in the reports' assumptions section |
+| 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
+| 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
+| 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
+| 4 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
+| 5 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
+| 6 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 7 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 8 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 9 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 10 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 11 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 12 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 13 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 14 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+
+`ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
+is not part of this strict queue. Why3 remains comparative prior art, never a backend.
 
 ## How To Read This Roadmap
 
@@ -1453,33 +1481,6 @@ Until these checks are automated, `make test-docs-drift` plus review of
 `VERIFICATION_STATUS`, `CLAIMS_TODAY`, and `KNOWN_HOLES` is a required
 graduation gate.
 
-### The current execution queue
-
-This is the only current queue. It is intentionally not padded to a fixed number: rows exist only
-for work whose ordering is presently decided. A newly reproduced authority defect enters ahead of
-the next transition; completed milestones move to the changelog rather than accumulating here.
-
-| order | work | exit before advancing |
-|---|---|---|
-| 0 | **R-0484: `with(...)` is the complete list of a function's external authority (decided 2026-09-29/30; design in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md))** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rules:** handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else, including the `Unsafe` of calling a plain `extern` (this reverses the current rule in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md`); every foreign binding declares its effects and an undeclared one is refused; foreign declarations and descriptor conversions are audited assumptions shown in reports. **Slices:** (1) design doc — drafted; encoding A (per-effect raw-integer bindings to one C symbol) selected for the first implementation, B (`Fd<C>`) a later option; construction/caller audit taken 2026-09-30 ([HANDLE_CAPABILITIES_AUDIT.md](docs/language/HANDLE_CAPABILITIES_AUDIT.md): `Child` forgeable, `Writer`/`Reader` hole confirmed, `fork` duplicates owning handles, 8 unused bindings; classification decisions D1-D4 settled 2026-10-01; F10 fixed early as bug 072); slice 1 complete; (2) compiler: effect declarations on externs, symbol aliasing (extending the import-alias path), the `trusted` rule, capability parameters on structs, dependency-summary transport, the assumptions section; (3) std FFI migration: bindings reclassified under the `trusted extern` criterion (`memcpy`/`memcmp` become plain `extern` behind wrappers), sinks declare `Console`/`File`; (4) `Writer<C>`/`Reader<C>` and the 14 consumers outside `io.con`, inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) docs and README restated as "no external authority". The first cut excludes descriptor replacement (std binds no `dup`/`dup2`; unused `fdopen` removed) and relies on linear handles for reuse; a second step adds typed bindings/descriptors and defines replacement and cross-classification aliasing. | `print_bytes` declares `with(C)` and its call site reports `Console`; a function with an empty `with(...)` cannot reach external authority through a handle, a `trusted` body, a foreign binding or a dependency; the design doc's acceptance cases exist as fixtures, with mutation tests where marked; every foreign effect declaration and descriptor conversion appears in the reports' assumptions section |
-| 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
-| 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
-| 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
-| 4 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
-| 5 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
-| 6 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 7 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 8 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 9 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 10 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 11 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 12 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 13 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 14 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
-
-`ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
-is not part of this strict queue. Why3 remains comparative prior art, never a backend.
-
 ### Language baseline and bounded verification milestone
 
 **Direction ratified 2026-09-15; implementation and verification remain incomplete.**
@@ -1579,59 +1580,6 @@ removal; none blocks a queue item, and none should be allowed to become furnitur
 Repair (c) carries a second finding worth stating separately: `tcp_basic.con` is labelled flaky and
 is not flaky. It fails deterministically on one platform, and the label is what kept anyone from
 looking. A skip whose reason is wrong is a defect with a lid on it.
-
-### Historical execution queue snapshot (2026-08-05)
-
-The table below is retained only to explain older task-order references. It is not a current queue;
-completed work and superseded ordering are recorded in [CHANGELOG.md](CHANGELOG.md) and the
-[R-0004 execution history](docs/archive/R-0004_EXECUTION_HISTORY.md).
-
-**This overrode file position at the time.** The roadmap groups tasks by PHASE — a topical grouping,
-which the header already calls a milestone label rather than a queue — so the task that
-owns a reproduced soundness hole can sit five thousand lines below the task you should do
-first. It did: R-0461 (now done) and R-0464 are in Phase 13 because that is where they
-belong topically, while the sequencing table below is what actually said when to do them. The
-task bodies are deliberately NOT reordered; moving them would put runtime-safety
-obligations inside "Phase 7: Standard Library And Core APIs" and destroy the only
-organizing principle the file has. This list is the queue; the phases are the filing
-system.
-
-| # | Task | Why here |
-|---|---|---|
-| — | ~~**R-0461**~~ | **DONE 2026-08-03.** H23 closed: provenance + cap + `E0617` enforcement. See the execution note below — the cap turned out to be the cheap third of it |
-| 1 | **R-0004** remaining trust boundaries | **Packages 1 and 2 CLOSED 2026-08-16.** Every manifest-backed table is converted (pending 0); the evidence join, table membership and dependency roots are keyed on `DefinitionIdentity` with no name-keyed fallback; correspondence AND root computability are consumed by production verdicts through one composed authority pass. `proofFns`, `proofFnsExt`, `pureCoreFns` remain evidence-ineligible — no manifest row, so they justify nothing. Measured: **35 proved / 0 unjustified across the fixture corpus**, 13 subject roots refusing (none of them proved), 86 = 0 + 39 + 47 subject rows, 41 dependency requests = 41 attested + 0 refused. **Package 3 ACTIVE:** the structural receipt binds root, theorem artifact and trust boundaries; project/path-independent material is gated 5/0; the coverage baseline is 35/91. Kernel replay is now ONE typed producer (26/0) whose failures are values, and minting is replay-gated at the type level — `unchecked facts -> receipt` does not typecheck, with ten mutation families killed. **Production now mints, stores and re-checks:** the vertical slice is closed — receipts are issued (12/0), stored, and re-checked on consumption (15/0), and `StoredReceipt` is a distinct untrusted type with no minting path. Contract-witness precision is **deferred to the typed-contract milestone and off this closure list**, with a corpus tripwire. Receipts now identify the PROOF LIBRARY whose theorems were accepted, by content digest of its Lean sources, closing an authority gap that path-independence did not: the same theorem names replayed against a different library previously produced a byte-identical receipt. **Contract-witness precision and the ninth table are both DEFERRED and off this closure list**, each with a measured tripwire. **The library-package failure is FIXED:** `loadProject` injected builtin `std` as a dependency of `std` itself, so every one of its modules was filtered out of the user set and the proof surface answered 0 functions in silence; std now reports 861 functions and `check_purecore_proofs.sh` is 40/0. **V2 IS ACTIVATED** (44 fingerprints = 43 plan rows + 1 unreachable; the corpus census is unchanged before and after), and clean-checkout reproducibility is gated 11/0 including a receipt minted in one checkout and consumed against another. The compiler identity is a portable BUILD-TIME source identity embedded in the binary; post-build byte identity is named follow-up work. **Slice 8 and its independent non-author packet are complete at 24/0.** The packet found that any kernel-accepted theorem could be retargeted to an unrelated claim; theorem-to-subject specification binding now refuses sibling and cross-program substitutions during both issuance and consumption. **The remaining blocker is closure validation:** resolve every failure in the complete discovered gate population, add attestation-manifest freshness and exclusive orchestration, then obtain one uncontaminated serial `completed=1`, discovered=executed, zero-failure run at a clean pushed HEAD. |
-| 2 | **R-0473** | typed contract records. Now carries the IDENTITY SUBSTRATE too — the earlier split was circular, since a record cannot retain identities that do not exist yet. Also the narrow diagnostic-accumulation slice that makes the 263 unmeasured corpus files measurable |
-| 2b | **R-0474** | identity-based substitution + the evaluation-law gate. Consumes R-0473's substrate; graduating it lifts the H25 binder ban and the H27 shadowing ban. Blocks `old(...)`, frame/`modifies`, call-site instantiation |
-| 2c | **R-0476** | drains two ratchets before they become furniture: 23 universal assertions that pass over empty collections, and 145 redundant per-gate builds. Small individually, and the vacuity class already produced one green control that proved nothing |
-| — | **R-0480** | **INCREMENTAL INFORMATION ARCHITECTURE.** Establish document authority, lifecycle and executable ownership checks before moving files. Then migrate one topic family at a time; no bulk rename during R-0004. This prevents the cleanup from creating broken links, merge churn or a cleaner-looking second source of truth |
-| — | **R-0481** | **FINAL REPOSITORY ARCHITECTURE.** Preserve subject-oriented docs, add a dated journal and canonical generated artifacts, centralize gate/mutation/corpus facts, and—only after R-0004 identity closure—split Proof production, portable Evidence, VIR and Report along enforced import boundaries. This is the repository-wide owner of the complete layout and sequencing contract |
-| — | **R-0482** | **MODEL ATTESTATIONS AND EXPORTED INTERFACES.** After R-0004 closes exact implementation selection, add independent model identity, explicit relation kinds and correspondence evidence, exported contract identity, contract/model/implementation dependency edges, partial package-evidence linking, and the full substitution/downgrade attack matrix. Exact identity prevents substitution; it never proves semantic correspondence |
-| — | **R-0479** | **OPPORTUNISTIC, and cheap.** A stub or diagnostic that has NOT computed a fact must not return a valid inhabitant of that fact's domain. `shadowEdgeKinds` returned `unclassified` — a legitimate `DependencyEdge` — when it had never consulted the classifier, which is why it produced a FALSE FINDING rather than an obvious wrong answer. Same shape as `| _ => true`. The receipt and manifest types already make this unrepresentable via private constructors and named refusals; diagnostics were exempt. Needs a survey of report code for defaults standing in for "did not look" |
-| — | **R-0478** | **OPPORTUNISTIC — no queue position, pick up whenever.** 163 of 183 gates carry private copies of the assertion helpers (which is why one vacuity fix had to be applied twice), and `substExpr` names two unrelated operations, one sound and one not. Neither blocks anything; both keep producing defects, so the right time is whenever someone is already in the file. The `substExpr` rename should happen BEFORE R-0474 retires the unsound one |
-| 2e | **R-0477** | `vcgen/calculus` is 4 commits off `main` and tracked nowhere — rebase or retire, AFTER R-0473/0474 so it rebases once. Its earlier "zero disagreements over 41,807 obligations" predates contract validation and the merges, so it is not a current number |
-| 2d | **R-0475** | `ModuleOrigin` at project-graph entry, so a report can separate project from dependency obligations. The snapshot half is done; this is the compiler half |
-| — | ~~**R-0464**~~ | **DONE 2026-08-03.** H24 closed: trap conditions are enumerated once in `IntArith` and tied to families by a totality proof. **No reproduced unsoundness remains in KNOWN_HOLES.** |
-| 3 | **R-0466** | the measurement block begins; measuring a surface that reports `proved` for trapping operations had to wait for 2–3 |
-| 4 | **R-0471** | the work R-0466 needs in order to have anything to move |
-| — | ~~**R-0470**~~ | **DONE 2026-09-20.** Bug 063 closed at BOTH sites and gated at 10/0. The 2026-09-19 fix took only `Check.lean`'s function-call path; `CheckHelpers.lean`'s method path held a byte-identical copy, found by the sweep behind `ABSENCE_IS_NOT_A_FACT.md`, and it is the path real callers reach because std's cap-polymorphic combinators are METHODS. Both assert E0242 AND the absence of E0220, so the gate keeps working after fn-type comparison is relaxed to subsetting |
-| 6 | **R-0469** | bug 065 — stack unboundedness propagation |
-| — | ~~**R-0465**~~ | **DONE 2026-08-03.** Promoted ahead of R-0464 because R-0461 measured the cost of not having it. All five parts, incl. the release gate now reading badges off the one ledger — which also made `require-two-kernels` reject the H23 fixture |
-| — | ~~**R-0458**~~ | **DONE 2026-08-03.** The badge states both coordinates: `proved_by_two_kernels (lean, rocq) [1 foundation: CIC]`. `independenceOf` derives from the same function, so the CIC/HOL knowledge exists once |
-| 8 | **R-0454** | neutral digest — closing window, alpha-normalized |
-| — | ~~**R-0467**~~ | **DONE 2026-08-03.** Multi-kernel runs on merges to main; mutation coverage moved to the scheduled path |
-| 10 | **R-0468** | nightly reachability in this repository |
-| 11 | **R-0450** (agreement slice) | **agreement half DONE 2026-08-03** — every lowering (Rocq, Isabelle, SMT, and now Lean itself) is validated against the reference evaluator; the IR unification remains. Previously: the linear fragment is now lowered by ONE function (`exprToProverU`), so `exprToLeanProp` is a delegation rather than a near-copy. Remaining: run the agreement scripts through a Lean driver and mint its witness. **The recorded justification for Lean being exempt was wrong** — see below. Also `exprToSmt` |
-| — | ~~**R-0462**~~ | **DONE 2026-08-04.** `--report artifact-fuzz` + `check_artifact_fuzz.sh`: runs the compiled binary against the safety claims, classified by what the obligation layer claims. Mechanism proven; soundness check currently vacuous in `examples/` (0 claimed functions) and says so |
-| 13 | **R-0455** | term IR + Register B — **slice 1 DONE 2026-08-04**: typed IR (`Concrete/Semantics/TermIR.lean`) with sorts, arity/fixity, binders-free terms, uninterpreted symbols, and a STRUCTURAL evaluator; Register B row 1 (`eliminate_tmod`) discharged with non-vacuity locks. Remaining: rows 2–3, absorbing the four drivers, one-printer collapse |
-| 14 | **R-0460** | Register A rows — **4 of 5 half-discharged 2026-08-04** (div/mod and shift; shifts also became single-source, the interpreter now consumes `evalIntShift`) (`trapConditions_sufficient`: the div/mod conditions are strong enough, proved for all inputs). The lowering half stays open (H19), and the shift row is untouched: `evalIntBinOp` does not model shifts, so the theorem covers them only vacuously |
-| 15 | **R-0459** | non-arithmetic families |
-| 16 | **R-0463** | Farkas-witness probe — before any further prover, never after |
-| 17 | **R-0448** | graduate the arc, once the above hold |
-| 18 | **R-0456** | eval port, on meta-theory grounds only |
-| 19 | **R-0449** | realization research, pull-gated |
-
-After 20, file order resumes at R-0440, R-0435, R-0006–R-0010. The argument for each
-position is in the sequencing note below; this table is the index, not the reasoning.
 
 ### Open holes, owners, acceptance tests
 
@@ -1756,20 +1704,14 @@ Its 2026-08-01 findings landed in `0281890d` and `037e9616`; two structural ones
 under R-0465, and one reported divergence was a false positive (it compared different
 inputs) and is recorded as such rather than left to be re-found.
 
-### Sequencing note: the prover-neutral arc (R-0004, R-0450, R-0448, R-0454–R-0456, R-0458–R-0464, R-0467, R-0468)
+### Rationale notes: the prover-neutral arc (R-0004, R-0450, R-0448, R-0454–R-0456, R-0458–R-0464, R-0467, R-0468)
 
-These tasks are entangled enough that picking one without reading the others has
-already produced rework. The order below is argued from the 2026-07-31 audit of
-`spike/multi-prover-evidence`, not from phase numbering — several of these sit in
-later phases and should still be pulled in this sequence.
-
-**Why this note is load-bearing, stated plainly.** The roadmap advances by FILE POSITION,
-and every task below except R-0459 sits between lines ~6100 and ~6900 — roughly five
-thousand lines after R-0004. A reader following file order does twenty other things and
-never reaches them. That is the same failure the R-0466 block's paragraph names about
-unreferenced ledger bugs, and as of 2026-08-01 it was true of **R-0464, which owns a
-reproduced soundness hole and had no stated position at all.** Anything pulled forward
-here must say so here; a task whose urgency lives only in its own body is not sequenced.
+**Not an ordering.** The numbered order in this note was argued from the 2026-07-31 audit of
+`spike/multi-prover-evidence` and is superseded by [the current execution
+queue](#the-current-execution-queue), which is the only ordering in this file. The
+per-task reasoning is retained because these tasks are entangled enough that picking one
+without reading the others has produced rework; it moves to `docs/archive/` with the
+other historical material.
 
 0. **R-0004's remaining slices come first, and are not optional to this arc.** R-0454
    states in its own body that it belongs immediately after them, and slice 4 (the receipt
@@ -9517,6 +9459,17 @@ variant or omit one enforcement path.
    `checked_range`/`try_range` remains a separate workload-pulled API, as does
    any explicit Rng/system-entropy redesign.
 
+**Additional input (2026-10-02, owner confirmed 2026-10-04):** R-0484's
+construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md`) assigns F7/F8 to
+item 3 here: ignored write/close results (`console_err_write`, `TextFile::write`,
+`TextFile::close`, `fs.File::close`, `TcpListener::close`, `TcpStream::close`) and unchecked
+`ftell` failure in `fs.read_file`/`fs.read_to_string`. Repair each with an injected-failure
+regression and a successful-operation control; preserve explicit cleanup and report any
+failure-path limitations. **Validation is R-0030's:** the injected failures run through its
+deterministic fault schedules at the `Writer`/`File` seam, so R-0013 owns the repair and
+R-0030 owns the dynamic evidence that the error now surfaces — neither duplicates the
+other, and R-0485 does not own these.
+
 Gate: `scripts/tests/check_stdlib_boundary_correctness.sh`, mutation-tested at
 each discarded-error/unchecked-conversion site. Add a source inventory that
 fails when a hosted module introduces unchecked `String` construction from
@@ -10107,7 +10060,9 @@ Do not duplicate compiler-command cleanup here.
   version is far smaller than Turso-style DST. Deterministic failure schedules
   drive properties static analysis cannot reach: `write_all` never `Ok` after a
   short/failed write; close-fail-after-flush is reported; allocation #N fails;
-  `Reader` treats `Ok(0)` as EOF only at the right boundary. Do NOT re-litigate
+  `Reader` treats `Ok(0)` as EOF only at the right boundary. First consumers:
+  R-0013's F7/F8 repairs (ignored write/close results, unchecked `ftell`), whose
+  injected-failure controls run here. Do NOT re-litigate
   already-static properties (capability erasure = manifest gate; exit-status ≠
   stdout = MAIN_EXIT_MODEL). Proof stays separate — the pure core's first line;
   simulation covers only the effectful failure interleavings proofs do not, and
@@ -10766,9 +10721,20 @@ heap proofs or emitted-binary correctness.
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
 
-**Status (2026-09-29): DESIGN DECIDED; this is order 0 of the current queue.** Reports
-were repaired and the admission repair went live 2026-09-26; both remain as the conservative
-backstop. The remaining work implements the decision below.
+**Status (2026-10-04): partial checkpoint on main, R-0484 still open.** The first
+implementation merged at `a7c9cf1c` (main CI green): encoding A, capability parameters on
+structs, mandatory effect declarations on externs (E0116/E0117), the `trusted` reversal,
+`Writer<C>`/`Reader<C>` with their consumers, and the R10 assumptions report. Cross-package
+assumption reporting works in project mode only; a single-file report states that dependency
+coverage is incomplete, so an empty list never reads as "no foreign assumptions". It merged
+under an approved exception — the full mutation campaign exceeds CI's 6-hour limit — and the
+incomplete qualification is recorded under the mutation-harness items. Still open: F1
+(`Child` forgeable), F9 (`process_fork` ownership), complete cross-package assumption
+propagation through the existing dependency mechanism, the completion criteria below, and
+four external doc pages not yet located. F7/F8 belong to R-0013.
+
+(Earlier status, 2026-09-29: design decided; reports were repaired and the admission repair
+went live 2026-09-26, and both remain as the conservative backstop.)
 
 **THE DECISION (2026-09-29, refined 2026-09-30): `with(...)` is the complete list of a
 function's external authority.** The goal it serves: reading a function's header tells you
@@ -10781,8 +10747,8 @@ the summary below is the original three rules plus the 2026-09-30 additions.
 
 1. **Handles carry their capability in their type.** `Writer<C>` and `Reader<C>`, with `C`
    a capability parameter (the existing `cap C` mechanism, extended from functions to
-   structs). `console_writer() with(Console) -> Writer<Console>`; an in-memory writer is
-   `Writer<{}>`.
+   structs). `console_writer() with(Console) -> Writer<Console>`; a fixed-buffer writer
+   can be `Writer<{}>`, while a growable-buffer writer requires `Writer<Alloc>`.
 2. **Using a handle requires its capability.** `Writer<C>::write` requires `with(C)`, so a
    helper reads `fn print_bytes<cap C>(w: &Writer<C>, b: &Bytes) with(C)`. At each call `C`
    is instantiated, and the ordinary rule — a caller's `with(...)` covers its callees' —
@@ -10844,10 +10810,60 @@ restating an empty capability set as "no external authority". **Second step,** a
 hole is closed: typed bindings and descriptors, and defined behaviour for binding
 `dup`/`dup2`/`fdopen` and for cross-classification aliasing.
 
+**Completion criteria (expanded 2026-10-02; planned, not claims of implementation):**
+
+- **Docs and examples move with behavior.** Update reference semantics in the same
+  change as compiler rules, and migrate examples with std API changes so CI continues
+  to compile and exercise them. Slice 5 finishes with a consistency pass over README,
+  the four pages above, tutorials, generated API documentation and report snapshots.
+  Include before/after migration examples for extern declarations, trusted wrappers,
+  `Writer<C>`/`Reader<C>` and their callers, with remedies for the new diagnostics.
+  Reconcile implemented versus planned status in this roadmap, the design and audit.
+  Use “no undeclared external authority”; explain parameter mutation, termination,
+  proof eligibility and foreign assumptions separately.
+- **Final authority audit.** Reconcile the binding inventory against the migrated std:
+  every binding is classified or removed, every remaining descriptor restriction has
+  named callers and ownership evidence, and every finding F1–F10 has a fixed or
+  explicitly owned follow-up disposition. The known-symbol check is an omission
+  detector, not proof that foreign declarations are honest. Assumptions retain their
+  source, responsible boundary and dependent claims through package summaries.
+- **Cross-package and trust controls.** Imported struct capabilities and extern effects
+  obey the same rules as local declarations. Cover valid propagation, wrong kind/count,
+  missing authority through helpers/methods/fields, and assignment of an effectful
+  callback to an empty-capability handle. Trusted wrappers absorb only `Unsafe`;
+  ordinary callers of plain externs still require it. Reversing the trusted rule must
+  not create an intermediate release accepting undeclared foreign effects.
+- **Code generation and ABI.** Capability arguments add no runtime storage and do not
+  change layout. Preserve them until semantic checking and report attribution finish.
+  Verify multiple capability instantiations have correct behavior and collision-free
+  symbols without prescribing whether generated code is shared. Exercise multiple
+  Concrete bindings to one C symbol through direct calls and function references,
+  including across packages; incompatible foreign ABI signatures are diagnosed.
+- **Validation evidence.** Record the exact committed tree and compiler identity for
+  successful checks; validate imports and linking from a clean consumer. Retain both
+  accepting and rejecting controls, and the design's required causal mutation tests.
+  Identity regeneration must account for expected changes, not merely refresh pins.
+
+**Owned follow-ups and boundaries:** R-0484 slice 3 owns resolution of F9's fork
+ownership/runtime-profile contract: either constrain the API or state its supported
+scope and audited preconditions, with regression coverage for supported behavior.
+F10's bug 072 repair does not close F9. R-0013 owns F7/F8 error-honesty repairs (ignored
+write/close results and unchecked `ftell` failure — its item 3, the external-return-value
+audit, already names `ftell`/`fwrite`/`fclose`), validated through R-0030's fault injection;
+these remain separate from the capability repair. R-0484's second step owns typed
+descriptors and any future `dup`/`dup2`/`fdopen` support. Before those APIs are admitted,
+define replacement, reuse, alias ownership, close responsibility and classification
+preservation, with rejection/control cases. That step is workload-gated and is not
+required to finish the first implementation. R-0488 remains the unscheduled usability
+follow-up; this completion pass neither adds tasks nor changes the execution queue.
+
 **Exit:** `print_bytes` declares `with(C)` and its call site reports `Console`; a function
-with an empty `with(...)` cannot reach an effect through a handle, a `trusted` body or a
-dependency; a gate carries a positive control (a `Writer<{}>` helper stays capability-free)
-and a negative one (a handle-using helper without `with(C)` is refused).
+with an empty `with(...)` cannot exercise undeclared external authority through a handle,
+a trusted body or a dependency, subject to the named foreign assumptions. A gate carries
+a positive control (a `Writer<{}>` helper stays capability-free) and a negative one
+(a handle-using helper without `with(C)` is refused). The completion criteria above are
+satisfied and outstanding follow-ups have explicit dispositions rather than being
+counted as implemented guarantees.
 
 **History before the decision (2026-09-26).** The remaining work was then framed as the
 `requires`/`carries`/`performs` model; that framing is superseded by the decision above and
@@ -16852,67 +16868,48 @@ must be shown to read the generated artifact rather than a local copy.
 
 ### Task R-0487
 
-**Objective:** Report what a function *performs*, not merely that it cannot be shown
-pure. Split the single `with(...)` clause into three facts and make inference, checking,
-reports and proof admission share them.
+**Objective:** Infer the authority each function's body MAY use, and use that to check and
+explain capability declarations — never to replace them. Every inferred fact is a potential
+effect, not guaranteed execution: a reachable network call means "may use `Network`", not
+"uses the network".
 
-**Status (2026-09-26): opened by the R-0484 admission repair, which deliberately stopped
-short of this.** Effect opacity now refuses admission to `print_bytes` — correct, and a
-refusal to claim rather than a claim. "Not known pure" is not a behavioural fact: it
-says the compiler cannot see, not that output happens. A program that must answer *does
-this write to the network?* gets `unknown` where it needs `no`.
+**Status (2026-10-04): rewritten around R-0484's accepted semantics; planned, not scheduled.**
+R-0484's partial checkpoint (`a7c9cf1c`) made the header authoritative: `with(...)` is the
+complete list of a function's external authority, handles carry their capability in their
+type (`Writer<C>`) and using one requires `with(C)`, `trusted` absorbs only `Unsafe`, and
+every foreign binding declares its effects as an audited assumption. The task's original
+framing (2026-09-26: split `with(...)` into separate `requires`/`carries`/`performs` facts,
+with authority travelling unannounced inside handle values) is superseded on both counts:
+`carries` is now expressed in types, and the declared header is the primary fact, not an
+inferred one. What survives is inference as a CHECK over declarations and as the basis for
+negative answers.
 
-**The three facts.**
+1. **Potential authority per function.** Compute the capabilities a body may use through
+   direct calls, handle use at each handle's instantiated capability, function-pointer
+   values with a resolved target set, and foreign bindings' declared effects. Potential
+   use beyond the declaration is already a checker error. A declaration broader than the
+   potential set is reported as an over-declaration — an advisory least-authority hint,
+   issued only when the analysis is complete (no unresolved edge), never an error:
+   conservative declarations remain valid, for instance to keep an interface stable.
+2. **Instantiation-level reports.** A capability-generic helper reports its variable
+   (`print_bytes<cap C>` may use `C`), and each call site reports the instantiation
+   (`Console` where `base64_cli` calls it), so a reviewer sees concrete authority where it
+   is chosen.
+3. **Negative questions only under completeness.** "Does this touch the network?" is an
+   absence, so it is answered only when the potential set has no unresolved edge — a
+   function-pointer value whose targets are unknown, or a dependency summarised without
+   capability facts. An unresolved edge yields `unknown`, naming the edge. An answer that
+   passes through a foreign binding is conditional on that binding's declared effects and
+   names the assumption (R-0484 R10). See `docs/project/ABSENCE_IS_NOT_A_FACT.md`.
+4. **Out of scope:** what is mutated through arguments, termination, and which inputs
+   influence which outputs. Those are separate contracts (R-0488's parameter-mutation audit;
+   R-0473/R-0474 typed contracts), and `with(...)` does not claim them.
 
-| fact | means | today |
-|---|---|---|
-| **requires** | ambient authority the caller must supply | this is what `with(...)` already is |
-| **carries** | authority travelling inside a value, checked at acquisition | unrepresented |
-| **performs** | operational effects the body actually causes | unrepresented |
-
-**Revised 2026-09-29 by the R-0484 decision.** This task originally argued that `carries`
-must stay separate from `requires`, because "conflating that with `requires` would force
-every `Writer` consumer to declare `Console`, which is precisely the ambient-authority model
-the language rejected." That argument does not hold. Concrete never rejected declared
-ambient authority — `with(Console)` on `println` is exactly that, and it is the language's
-whole model; what it rejects is *undeclared* authority. The language had also already chosen
-use-site capabilities for the same shape: calling a `fn() with(Console)` value requires
-`Console`, and a `Writer` is a function pointer plus a context. And the consumer declares
-`with(C)`, not `Console` — an in-memory writer costs nothing. What the argument did name
-correctly is a trade-off, authority-by-possession against authority-by-declaration, and
-R-0484 chose declaration because only it puts everything a function can do in its header.
-
-**What this task becomes.** `requires` is now complete for handles, so `carries` is expressed
-in types (`Writer<C>`) rather than as a separate fact. Inference of `performs` remains
-valuable as a CHECK, not a replacement: it verifies that declared capabilities cover what
-bodies do (the `trusted` honesty rule), and it answers negative questions (*does this
-touch the network?*) under the completeness condition below. The original framing follows
-for the record.
-
-**The blocking language gap, and it is structural rather than polish.** `Writer`
-dispatches through a bare function pointer —
-`write_fn: fn(*mut u8, *const u8, u64) -> Result<u64, IoError>` — and `capParams` exists
-only on functions (`AST.lean:355`), not on `StructDef` (`AST.lean:289`/`305`/`320`). So
-`Writer<E>` cannot be written, and call-graph inference cannot resolve where a handle's
-authority came from: every handle-mediated call is a hole. The earlier rejection of a
-`Writer<cap C>` that parameterises *required* authority is overturned by R-0484
-(2026-09-29): measured, capability variables reach 14 functions and no struct, and the
-declaration model is the one that puts the fact in the header.
-
-**Inference first.** Declarations should be checked assertions, not the primary input:
-the library is already written, and a model that demands 890 annotations before it
-reports anything will not be adopted or kept current. Inference also degrades honestly —
-it can answer `unknown` for a hole, where a declaration silently asserts.
-
-**The asymmetry to respect.** `performs(Output)` is a reachability question and inference
-can answer it. `performs(no File, no Network)` is an absence, and absence needs
-completeness the `unknown` state denies — so negative claims must be gated on the call
-graph having no holes, and must say so when it does. See
-`docs/project/ABSENCE_IS_NOT_A_FACT.md`.
-
-**Exit:** `print_bytes` reports that it performs output rather than becoming opaque; a
-handle-consuming function requires nothing ambient while still reporting its effects;
-a negative `performs` claim is refused wherever the call graph has an unresolved edge,
-with the edge named. Gate: a fixture where authority enters only through a handle must
-produce a positive effect report, and the same fixture with the handle's origin hidden
-must produce `unknown` rather than `none`.
+**Exit:** `print_bytes` reports "may use `C`" generically and "may use `Console`" at its
+`base64_cli` call site; a function declaring `with(Network)` whose completely-analysed body
+may use nothing network-capable gets an advisory over-declaration note, and the same
+function with an unresolved edge gets none; a negative claim is refused where the potential
+set has an unresolved function-pointer edge, naming it; a negative claim that depends on a
+foreign binding names the assumption. Gate: a fixture pair in which the same helper is called through a resolved
+and through an unresolved function pointer yields `none` and `unknown` respectively, plus a
+positive control where a `Writer<{}>` helper may use no external authority.
