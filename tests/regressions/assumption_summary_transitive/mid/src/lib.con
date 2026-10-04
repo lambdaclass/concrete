@@ -1,0 +1,4 @@
+mod mid {
+    import leaf.{shout};
+    pub fn relay(c: i32) with(Console) -> i32 { return shout(c); }
+}

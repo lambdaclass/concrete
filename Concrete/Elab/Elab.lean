@@ -2823,7 +2823,9 @@ def elabProgram (resolved : List ResolvedModule)
         functions := imports.functions ++ siblingFns
         linkerAliases := imports.linkerAliases ++ siblingAliases }
       match elabModule m summary imports summaryTable with
-      | .ok cm => (acc ++ [cm], errs)
+      -- Top-level modules keep their source file too (submodules already did): the assumption
+      -- summary scopes declarations by the package that file belongs to (R-0484 R10).
+      | .ok cm => (acc ++ [{ cm with sourceFile := m.sourceFile }], errs)
       | .error ds => (acc, errs ++ ds.addContext s!"while elaborating module '{m.name}'")
   ) (([] : List CModule), ([] : Diagnostics))
   if allErrors.isEmpty then .ok cms else .error allErrors

@@ -308,6 +308,12 @@ structure ProjectContext where
   policyLocMap  : Report.FnLocMap
   registry      : Concrete.ProofRegistry
   pc            : Concrete.ProofCore
+  /-- Which package each source file belongs to: (file, package key, package name). The key is
+      the package's `PackageIdentity.digest`, formed by the same `packageIdentityOf` the root uses
+      from the package's OWN manifest, or `unscoped:<name>` when it has none — never `""`. Module
+      names cannot scope a declaration: two packages may each define a module `util` (R-0484 R10
+      assumption identity). -/
+  filePackages  : List (String × String × String) := []
   -- the non-proof compiler fact store (Phase 4 #2), built once from this load and
   -- linked to the ObligationCore (proof) ledger.
   ledger        : Concrete.CompilerLedger.CompilerLedger
@@ -345,6 +351,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
   -- Load all dependencies
   let mut depModules : List Module := []
   let mut depSrcMap : SourceMap := []
+  let mut filePackages : List (String × String × String) := []
   for (depName, depPath) in deps do
     let resolvedPath := if depPath.startsWith "/" then depPath
       else resolveDependencyPath projectRoot depPath
@@ -355,6 +362,14 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     | .ok (modules, srcMap) =>
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
+      let depToml ← try pure (some (← readFile (resolvedPath ++ "/Concrete.toml"))) catch _ => pure none
+      let key := match depToml with
+        | none => s!"unscoped:{depName}"
+        | some t =>
+          match Proof.packageIdentityOf t (modules.map (·.name)) [] (srcMap.map (·.2)) with
+          | .ok pid => pid.digest
+          | .error _ => s!"unscoped:{depName}"
+      filePackages := filePackages ++ srcMap.map fun (f, _) => (f, key, depName)
   let tDepsLoaded ← IO.monoMsNow
 
   -- The project's entry source: `src/main.con`, or `src/lib.con` for a library package.
@@ -500,8 +515,13 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
         { code := "registry", severity := if issue.isError then "error" else "warning",
           message := Concrete.renderRegistryIssue issue }
       ledger := ledger.recordDiagnostic d
+    let rootKey := match packageIdentity with
+      | .ok pid => pid.digest
+      | .error _ => s!"unscoped:{selfName}"
+    let rootFiles := [mainPath] ++ subSrcMap.map (·.1)
+    let allFilePackages := filePackages ++ rootFiles.map fun f => (f, rootKey, selfName)
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
                        mainPath, depNames, packageIdentity, policy, policyWarnings, policyLocMap,
-                       registry, pc, ledger }
+                       registry, pc, ledger, filePackages := allFilePackages }
 
 end Concrete

@@ -1551,13 +1551,14 @@ def compileAndReport (inputPath : String) (reportType : String)
   -- means one answer; carrying it here is what makes that true rather than intended.
   let frontendResult : Except UInt32
       (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
-       Except Proof.PackageIdentityRefusal Proof.PackageIdentity × List CModule) ←
+       Except Proof.PackageIdentityRefusal Proof.PackageIdentity × List CModule ×
+       List (String × String × String)) ←
     match ← findProjectRoot inputDir with
     | some root =>
       match ← loadProject root with
       | .error ec => pure (Except.error ec)
       | .ok ctx =>
-        let { validCore, parsed, allSrcMap, depNames, packageIdentity, .. } := ctx
+        let { validCore, parsed, allSrcMap, depNames, packageIdentity, filePackages, .. } := ctx
         let userModules := validCore.coreModules.filter fun m => !depNames.contains m.name
         let fullValidCore : ValidatedCore := { validCore with coreModules := userModules }
         let scopedModules ← scopeUserModulesToFile userModules inputPath root
@@ -1565,7 +1566,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- The dependency modules travel too (R-0484 R10): the unsafe report lists the
         -- foreign-binding assumptions a program inherits from them.
         let depModules := validCore.coreModules.filter fun m => depNames.contains m.name
-        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules))
+        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
       | .error ds =>
@@ -1577,10 +1578,17 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- the same package, which is the collision content-binding exists to prevent.
         pure (Except.ok (parsed, validCore, validCore, srcMap,
           Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name))
-            (srcMap.map (·.2)), ([] : List CModule)))
+            (srcMap.map (·.2)), ([] : List CModule), ([] : List (String × String × String))))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules) =>
+  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages) =>
+    -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
+    -- package's canonical identity; standalone mode has one (synthetic) package.
+    let assumptionPkgDefault : String × String := match packageIdentity with
+      | .ok pid => (pid.digest, "program")
+      | .error _ => ("unscoped:program", "program")
+    let assumptionPackageOf : String → Option (String × String) := fun f =>
+      (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
     -- THE REPORT'S SOURCE MAP MUST CONTAIN THE KEY ITS LOCATION MAP USES. `buildFnLocMap` records
     -- every function under `inputPath` — the path the user typed — while a project's `allSrcMap` is
     -- keyed by the resolved, absolute entry path. Those are the same file under two names, and a
@@ -2667,7 +2675,14 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (Report.capabilityReport validCore.coreModules)
       return 0
     if reportType == "unsafe" then
-      IO.println (Report.unsafeReport validCore.coreModules pc depModules)
+      -- R-0484 R10: one assumption summary over the program AND its loaded dependencies.
+      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      IO.println (Report.unsafeReport validCore.coreModules pc assumptions (depsLoaded := !depModules.isEmpty))
+      return 0
+    if reportType == "assumptions" then
+      -- R-0484 R10: the machine-readable view of the assumption summary the text reports render.
+      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      IO.println (assumptions.toJson (validCore.coreModules.map (·.name)) (!depModules.isEmpty))
       return 0
     if reportType == "trust-edges" then
       IO.println (Report.trustEdgeReport validCore.coreModules)
@@ -3134,7 +3149,9 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- schedule directly.
       let auditVCs ← computeVCsDischarged parsed.modules locMap registry
       let vcSum := Report.vcAuditSummary auditVCs
-      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum))
+      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum)
+        (assumptions := assumptions) (depsLoaded := !depModules.isEmpty))
       if Report.hasContracts parsed.modules then
         IO.println (← renderContracts parsed.modules registry locMap)
       return (if hasRegistryErrors then 1 else 0)

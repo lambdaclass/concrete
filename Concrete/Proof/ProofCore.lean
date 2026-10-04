@@ -97,6 +97,67 @@ partial def collectCallsStmts (ss : List CStmt) : List String :=
   ss.foldl (fun acc s => acc ++ collectCallsStmt s) []
 end
 
+/-! ### Indirect calls
+
+The calls `collectCalls*` deliberately drops: a call through a fn-typed binding has no
+statically known target. The assumption summary (R-0484 R10) must not drop them — an
+indirect call is exactly where its "which foreign bindings can this reach" answer becomes
+UNKNOWN rather than empty — so it collects the binding names here, from the same walk
+shape as `collectCalls*` so the two cannot disagree about which expressions are visited.
+-/
+mutual
+partial def collectIndirectCallsExpr (e : CExpr) : List String :=
+  match e with
+  | .call callee _ args _ =>
+    (if callee.isIndirect then [callee.spelling] else []) ++
+      args.foldl (fun acc a => acc ++ collectIndirectCallsExpr a) []
+  | .binOp _ l r _ => collectIndirectCallsExpr l ++ collectIndirectCallsExpr r
+  | .unaryOp _ e _ => collectIndirectCallsExpr e
+  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
+  | .fieldAccess obj _ _ => collectIndirectCallsExpr obj
+  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
+  | .match_ scrut arms _ => collectIndirectCallsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectIndirectCallsArm a) []
+  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectIndirectCallsExpr inner
+  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectIndirectCallsExpr e) []
+  | .arrayIndex arr idx _ => collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx
+  | .cast inner _ => collectIndirectCallsExpr inner
+  | .allocCall inner alloc _ => collectIndirectCallsExpr inner ++ collectIndirectCallsExpr alloc
+  | .ifExpr cond th el _ =>
+    collectIndirectCallsExpr cond ++ collectIndirectCallsStmts th ++ collectIndirectCallsStmts el
+  | _ => []
+
+partial def collectIndirectCallsArm (arm : CMatchArm) : List String :=
+  match arm with
+  | .enumArm _ _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
+  | .litArm v guard body => collectIndirectCallsExpr v ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
+  | .varArm _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
+  | .rangeArm lo hi _ guard body => collectIndirectCallsExpr lo ++ collectIndirectCallsExpr hi ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
+
+partial def collectIndirectCallsStmt (s : CStmt) : List String :=
+  match s with
+  | .letDecl _ _ _ v => collectIndirectCallsExpr v
+  | .assign _ v => collectIndirectCallsExpr v
+  | .return_ (some v) _ => collectIndirectCallsExpr v
+  | .return_ none _ => []
+  | .expr e _ => collectIndirectCallsExpr e
+  | .ifElse c t el =>
+    collectIndirectCallsExpr c ++ collectIndirectCallsStmts t ++
+    match el with | some stmts => collectIndirectCallsStmts stmts | none => []
+  | .while_ c body _ step =>
+    collectIndirectCallsExpr c ++ collectIndirectCallsStmts body ++ collectIndirectCallsStmts step
+  | .fieldAssign obj _ v => collectIndirectCallsExpr obj ++ collectIndirectCallsExpr v
+  | .derefAssign t v => collectIndirectCallsExpr t ++ collectIndirectCallsExpr v
+  | .arrayIndexAssign arr idx v =>
+    collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx ++ collectIndirectCallsExpr v
+  | .break_ (some v) _ => collectIndirectCallsExpr v
+  | .break_ none _ | .continue_ _ => []
+  | .defer body => collectIndirectCallsExpr body
+  | .borrowIn _ _ _ _ _ body => collectIndirectCallsStmts body
+
+partial def collectIndirectCallsStmts (ss : List CStmt) : List String :=
+  ss.foldl (fun acc s => acc ++ collectIndirectCallsStmt s) []
+end
+
 /-! ### Function values
 
 A function taken as a VALUE (`write_fn: console_write`) may be called later through that

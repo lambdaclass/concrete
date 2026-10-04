@@ -1158,11 +1158,48 @@ MUT_NEW+=("      let p := s!\"{out}{idx}\"
 MUT_DESC+=("V2 serializer: binder encoding loses its length prefix")
 gate_for_last "scripts/tests/check_identity_use_bytes.sh"
 
+# 79–82. R-0484 R10 assumption summaries (check_assumption_summary.sh). Two ways to DROP an
+# assumption — one a function reaches directly, one it inherits through a callee — and two ways
+# to report coverage as falsely COMPLETE: losing a function's own indirect calls, and losing
+# the ones it inherits. Each guard is disabled rather than its line deleted, so every binding
+# stays live and the mutant builds.
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("        if !(rs.any (·.key == key)) then")
+MUT_NEW+=("        if false && !(rs.any (·.key == key)) then -- MUTATION: direct binding hit dropped")
+MUT_DESC+=("assumption summary: a directly reached binding is dropped")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("            if !keys.contains r.key then keys := keys.push r.key")
+MUT_NEW+=("            if false && !keys.contains r.key then keys := keys.push r.key -- MUTATION: inherited assumption dropped")
+MUT_DESC+=("assumption summary: an assumption inherited through a callee is dropped")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("    ownGaps := ownGaps.set! i (nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b })")
+MUT_NEW+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.filter fun _ => false).map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) -- MUTATION: own indirect calls ignored")
+MUT_DESC+=("assumption summary: a function's own indirect call no longer makes it incomplete")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("            if !gs.contains g then gs := gs.push g")
+MUT_NEW+=("            if false && !gs.contains g then gs := gs.push g -- MUTATION: inherited gap dropped")
+MUT_DESC+=("assumption summary: an inherited indirect-call gap is dropped (falsely complete)")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
+# 83. Propagation INSIDE a recursive group: members that reach a binding only through another
+# member of the same group lose it. The ping/pong fixture rows catch it.
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("      while changed do")
+MUT_NEW+=("      while false && changed do -- MUTATION: no propagation within a recursive group")
+MUT_DESC+=("assumption summary: a recursive group's members do not share what the group reaches")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=78
+EXPECTED_MUTATIONS=83
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

@@ -1,0 +1,6 @@
+[package]
+name = "pure_app"
+version = "0.1.0"
+
+[dependencies]
+factlib = { path = "../factlib" }

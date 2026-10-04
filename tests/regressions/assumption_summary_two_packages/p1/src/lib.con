@@ -1,0 +1,5 @@
+// Package p1: module `util` binding `putchar`. Package p2 declares the SAME module and names.
+mod util {
+    extern fn putchar(c: i32) with(Console) -> i32;
+    pub trusted fn say(c: i32) with(Console) -> i32 { return putchar(c); }
+}

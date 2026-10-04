@@ -1,0 +1,6 @@
+// A dependency of a dependency. Its binding is an assumption the root program would inherit,
+// so a build that cannot see it must FAIL, not succeed with the assumption silently missing.
+mod leaf {
+    extern fn putchar(c: i32) with(Console) -> i32;
+    pub trusted fn shout(c: i32) with(Console) -> i32 { return putchar(c); }
+}

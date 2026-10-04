@@ -1,0 +1,4 @@
+// Declares only `mid`; `mid` depends on `leaf`. Transitive loading is not implemented, so
+// this build must be refused explicitly.
+import mid.{relay};
+fn main() with(Console) -> i32 { return relay(65) - 65; }

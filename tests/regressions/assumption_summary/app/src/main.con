@@ -1,0 +1,20 @@
+// R-0484 R10 assumption-summary fixture, program side. `ha` is an import ALIAS of
+// factlib.helper_a: the reached binding is still factlib.putchar.
+import factlib.{helper_a as ha, countdown, even, apply, add, ping, pong};
+
+fn via_helpers() with(Console) -> i32 { return ha(65); }
+fn via_recursion() with(Console) -> i32 { return countdown(2) + even(2); }
+fn inc(x: i32) -> i32 { return x + 1; }
+fn via_gap() -> i32 { return apply(inc, 1); }
+fn pure_one() -> i32 { return add(1, 2); }
+fn via_ping() with(Console, Unsafe) -> i32 { return ping(1); }
+fn via_pong() with(Console, Unsafe) -> i32 { return pong(1); }
+
+fn main() with(Console, Unsafe) -> i32 {
+    let e: i32 = via_ping() + via_pong();
+    let a: i32 = via_helpers();
+    let b: i32 = via_recursion();
+    let c: i32 = via_gap();
+    let d: i32 = pure_one();
+    return a + b + c + d + e - 65 - 46 - 69 - 2 - 3 - 80 - 1;
+}

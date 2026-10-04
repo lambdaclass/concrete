@@ -1,0 +1,5 @@
+// Positive control: a program whose every call path is resolved and reaches no assumption.
+// Its report must say coverage is COMPLETE and list no inherited assumption — an analysis
+// that reported everything as incomplete, or charged assumptions it did not reach, fails here.
+import factlib.{add};
+fn main() -> i32 { return add(2, 3) - 5; }

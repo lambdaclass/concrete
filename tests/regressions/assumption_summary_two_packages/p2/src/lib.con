@@ -1,0 +1,5 @@
+// Package p2: identical module path and declaration names to p1, a different package.
+mod util {
+    extern fn putchar(c: i32) with(Console) -> i32;
+    pub trusted fn say(c: i32) with(Console) -> i32 { return putchar(c); }
+}

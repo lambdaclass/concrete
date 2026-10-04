@@ -5853,7 +5853,8 @@ def snapshotJson
     add machine-readable JSON output and a ProvableV1 conformance check. -/
 def auditReport (modules : List CModule) (locMap : FnLocMap := [])
     (sourceMap : SourceMap := []) (registry : ProofRegistry := [])
-    (pc : Concrete.ProofCore) (vcSummary : String := "") : String :=
+    (pc : Concrete.ProofCore) (vcSummary : String := "")
+    (assumptions : Assumptions.Table := {}) (depsLoaded : Bool := false) : String :=
   let banner := String.intercalate "\n"
     [ "=== Concrete Audit Report ==="
     , ""
@@ -5870,7 +5871,7 @@ def auditReport (modules : List CModule) (locMap : FnLocMap := [])
     sectionHeader "Allocation",
     allocReport modules,
     sectionHeader "Unsafe / Trust",
-    unsafeReport modules pc,
+    unsafeReport modules pc assumptions depsLoaded,
     sectionHeader "Effects",
     effectsReport modules locMap pc,
     sectionHeader "Eligibility",

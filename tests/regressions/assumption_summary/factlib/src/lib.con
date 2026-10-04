@@ -1,0 +1,56 @@
+// R-0484 R10 assumption-summary fixture, dependency side. Each shape below is one row of the
+// acceptance table in check_assumption_summary.sh.
+mod factlib {
+    // The one foreign binding the program should inherit.
+    extern fn putchar(c: i32) with(Console) -> i32;
+
+    // A trusted boundary: its body's memory safety is assumed.
+    pub trusted fn emit(c: i32) with(Console) -> i32 {
+        return putchar(c);
+    }
+
+    // Reached through several helpers.
+    fn helper_b(c: i32) with(Console) -> i32 { return emit(c); }
+    pub fn helper_a(c: i32) with(Console) -> i32 { return helper_b(c); }
+
+    // Recursion: self-recursive, and a mutually recursive pair. Both reach `emit`.
+    pub fn countdown(n: i32) with(Console) -> i32 {
+        if n <= 0 { return emit(46); }
+        return countdown(n - 1);
+    }
+    pub fn even(n: i32) with(Console) -> i32 {
+        if n == 0 { return emit(69); }
+        return odd(n - 1);
+    }
+    pub fn odd(n: i32) with(Console) -> i32 {
+        if n == 0 { return 0; }
+        return even(n - 1);
+    }
+
+    // A recursive group whose members each reach a DIFFERENT binding directly: every member must
+    // carry BOTH, though a report shows one witness path per binding.
+    extern fn abs(x: i32) with() -> i32;
+    pub fn ping(n: i32) with(Console, Unsafe) -> i32 {
+        if n <= 0 { return putchar(80); }
+        return pong(n - 1);
+    }
+    pub fn pong(n: i32) with(Console, Unsafe) -> i32 {
+        if n <= 0 { return abs(0 - 1); }
+        return ping(n - 1);
+    }
+
+    // An indirect call: its targets are not known statically.
+    pub fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+        return f(x);
+    }
+
+    // Genuinely assumption-free.
+    pub fn add(a: i32, b: i32) -> i32 { return a + b; }
+
+    // A SECOND binding of the same C symbol in another module, never reached: identity is the
+    // Concrete declaration, so it must not be listed.
+    mod other {
+        extern fn putchar(c: i32) with(Console) -> i32;
+        pub fn unused() with(Console, Unsafe) -> i32 { return putchar(33); }
+    }
+}
