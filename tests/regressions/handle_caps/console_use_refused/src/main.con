@@ -1,0 +1,18 @@
+// NEGATIVE CONTROL (R-0484): USING a `Writer<Console>` costs `Console`. The same shape as
+// empty_writer_free.con's `use_free`, at a concrete capability, must be refused.
+mod console_use_refused {
+    import std.io.{Writer, IoError, console_writer};
+
+    fn use_unpaid(w: &Writer<Console>) -> i32 {
+        let r: Result<u64, IoError> = w.flush();
+        if r.is_ok() { return 0; }
+        return 1;
+    }
+
+    fn main() with(Console) -> i32 {
+        let w: Writer<Console> = console_writer();
+        let a: i32 = use_unpaid(&w);
+        let r: Result<u64, IoError> = w.close();
+        return a;
+    }
+}

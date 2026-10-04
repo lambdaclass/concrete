@@ -31,8 +31,9 @@ else
   echo "       regenerate: python3 scripts/tests/lib/stdlib_manifest.py (with header) > $MANIFEST"
 fi
 
-# 2. no blank facts (9 non-empty fields per row; 22a added evidence+signature)
-bad=$(awk -F'\t' 'NF!=9 || $3=="" || $4=="" || $5=="" || $6=="" || $7=="" || $8=="" || $9==""' "$TMP/committed.tsv" | head -3)
+# 2. no blank facts (10 non-empty fields per row; 22a added evidence+signature, R-0484 the
+#    receiver — `-` for a free function, so absence is explicit there too)
+bad=$(awk -F'\t' 'NF!=10 || $3=="" || $4=="" || $5=="" || $6=="" || $7=="" || $8=="" || $9=="" || $10==""' "$TMP/committed.tsv" | head -3)
 [ -z "$bad" ] && ok "no blank facts (absence is explicit no/none/infallible)" || no "blank facts: $bad"
 
 # 2a. item 22a EVIDENCE marking is exact: `proved` rows are precisely the

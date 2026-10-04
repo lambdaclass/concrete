@@ -1,0 +1,16 @@
+// POSITIVE CONTROL (R-0484): moving a handle is not using it. A function that only
+// passes a `Writer<Console>` along declares nothing; whoever USES it pays `Console`.
+mod transfer_free {
+    import std.io.{Writer, IoError, console_writer};
+
+    fn pass(w: Writer<Console>) -> Writer<Console> {
+        return w;
+    }
+
+    fn main() with(Console) -> i32 {
+        let w: Writer<Console> = pass(console_writer());
+        let r: Result<u64, IoError> = w.close();
+        if r.is_ok() { return 0; }
+        return 1;
+    }
+}

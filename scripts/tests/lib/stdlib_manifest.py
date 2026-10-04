@@ -15,8 +15,13 @@ For each `pub fn` in std/src/*.con, derive from the SIGNATURE (+ attributes):
               no spillover; everything else is `gated`.)
   signature   canonical one-line signature (item 22a: a param/return type
               change that keeps the same fact profile still fails the diff)
+  receiver    the enclosing impl's self type, written as in source (`Writer<C>`;
+              `X` for `impl Trait for X`), or `-` for a free function. Added for
+              R-0484: a name alone is ambiguous (`write` is a method of two types in
+              std.io), so a gate asserting one type's method contract must be able to
+              select that type's row, not whichever row of the name comes first.
 
-Emits TSV: module fn allocates ownership fails capability proof-class evidence signature
+Emits TSV: module fn allocates ownership fails capability proof-class evidence signature receiver
 
 PARSER (defect-queue 0a, replaced the single-regex derivation): a scanner
 that strips comments/strings, tracks brace depth and the ENCLOSING impl's
@@ -149,7 +154,16 @@ def parse_fns(src):
     for im in IMPL_HEAD.finditer(clean):
         brace = clean.index("{", im.start())
         _, end = scan_balanced(clean, brace, "{", "}")
-        impl_regions.append((brace, end, bool(im.group(1))))
+        # The self type: the head after `impl`, minus the impl's own `<...>` params, and
+        # after ` for ` when it is a trait impl.
+        head = clean[clean.index("impl", im.start()) + 4:brace].strip()
+        if head.startswith("<"):
+            _, k = scan_generics(head, 0)
+            head = head[k:].strip()
+        if re.search(r"\bfor\b", head):
+            head = re.split(r"\bfor\b", head, maxsplit=1)[1].strip()
+        recv = re.sub(r"\s+", " ", head)
+        impl_regions.append((brace, end, bool(im.group(1)), recv))
 
     for m in FN_HEAD.finditer(clean):
         fn_trusted, fn_extern, name = bool(m.group(1)), bool(m.group(2)), m.group(3)
@@ -192,7 +206,10 @@ def parse_fns(src):
                     break
                 k += 1
             ret = rest[rm.end():k]
-        in_trusted_impl = any(b <= m.start() < e and t for (b, e, t) in impl_regions)
+        in_trusted_impl = any(b <= m.start() < e and t for (b, e, t, _) in impl_regions)
+        # Innermost enclosing impl (the latest-starting region that contains the fn).
+        enclosing = [(b, r) for (b, e, _, r) in impl_regions if b <= m.start() < e]
+        receiver = max(enclosing)[1] if enclosing else "-"
         yield {
             "start": m.start(),
             "name": name,
@@ -202,6 +219,7 @@ def parse_fns(src):
             "params": params,
             "caps": caps,
             "ret": ret,
+            "receiver": receiver,
         }
 
 
@@ -231,7 +249,7 @@ def rows(paths=None):
             attrs = preceding_attr_lines(src, fn["start"])
             evidence = "proved" if any(a.startswith("#[proof_by(") for a in attrs) else "gated"
             sig = canon_sig(fn["gen"], params, fn["caps"], ret)
-            out.append((mod, fn["name"], alloc, own, fails, cap, pc, evidence, sig))
+            out.append((mod, fn["name"], alloc, own, fails, cap, pc, evidence, sig, fn["receiver"]))
     return out
 
 

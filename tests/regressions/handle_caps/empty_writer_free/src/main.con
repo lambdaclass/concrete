@@ -1,0 +1,31 @@
+// POSITIVE CONTROL (R-0484): a `Writer<{}>` carries no external authority, so a function
+// that only holds and uses one declares nothing. If handle methods required a concrete
+// capability, or `C` instantiated at `{}` still charged something, this would be refused.
+// Acquisition is separate: `fixed_writer` costs `Unsafe` because it takes a raw region.
+mod empty_writer_free {
+    import std.bytes.{Bytes, BytesRaw};
+    import std.io.{Writer, IoError, FixedSinkState, fixed_writer};
+
+    fn use_free(w: &Writer<{}>) -> i32 {
+        let r: Result<u64, IoError> = w.flush();
+        if r.is_ok() { return 0; }
+        return 1;
+    }
+
+    fn release(w: Writer<{}>) -> i32 {
+        let r: Result<u64, IoError> = w.close();
+        if r.is_ok() { return 0; }
+        return 1;
+    }
+
+    fn main() with(Alloc, Unsafe) -> i32 {
+        let region: Bytes = Bytes::with_capacity(8);
+        let raw: BytesRaw = region.raw_view();
+        let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 8, len: 0 };
+        let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
+        let a: i32 = use_free(&w);
+        let b: i32 = release(w);
+        region.drop();
+        return a + b;
+    }
+}

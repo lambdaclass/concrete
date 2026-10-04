@@ -45,6 +45,23 @@ mod selftest {
         return f(&1);
     }
 
+    // 10. receiver column (R-0484): an impl with its own capability parameter, and a
+    //     trait impl. Both define `get`, so only the receiver tells the rows apart.
+    pub struct Sink<cap C> { fd: i32 }
+    impl<cap C> Sink<C> {
+        pub fn get(&self) with(C) -> i32 {
+            return self.fd;
+        }
+    }
+    pub trait Getter {
+        fn get(&self) -> i32;
+    }
+    impl Getter for Thing {
+        pub fn get(&self) -> i32 {
+            return 0;
+        }
+    }
+
     // 9. consuming receiver + Result return (fails column)
     pub fn consumes_self(self: Thing) -> Result<u64, u64> {
         let Thing { n } = self;
