@@ -9,6 +9,8 @@ state or queue.
 
 > **Start here for what happens next:** [The current execution queue](#the-current-execution-queue),
 > the first section below — the only ordering in this file.
+> **Start here for releases:** [Release map](#release-map) — bounded deliverables,
+> candidate acceptance and compatibility; not another execution queue.
 > **Start here for direction:** [Capability unlocks](#capability-unlocks--the-stable-product-map)
 > and [North star](#north-star-compositional-fail-visible-verification) — the product boundary,
 > the dimensions along which proof support grows, and the limits that must remain visible.
@@ -46,6 +48,85 @@ the next transition; completed milestones move to the changelog rather than accu
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
+
+## Release map
+
+Release labels below are provisional scopes, not version numbers, dates or claims
+that a release is ready. The execution queue above remains the sole scheduling
+authority. Phase numbers group subjects; they are not release numbers. R-0333 owns
+this map and each candidate checklist; Phase 17 retains the detailed release bars.
+No release requires finishing the entire task catalog.
+
+| release scope | user-visible outcome | required increments / owners | explicitly deferred |
+|---|---|---|---|
+| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Close R-0484 and R-0483; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing Phase 17 alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
+| Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing Phase 17 beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
+| Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
+
+The systems preview is a separate, narrower deliverable, **not** a weakening or
+renaming of the existing verification alpha. It may expose experimental proof
+features only with their actual evidence classes, assumptions and coverage.
+The preview cannot advertise alpha graduation. Each later scope inherits the
+applicable earlier acceptance checks, rerun on its own candidate.
+
+### Next-release blockers
+
+The next proposed release is the experimental systems preview. This is an
+acceptance checklist, not an alternate priority list. It does not move release
+packaging ahead of current queue work or mark any in-flight branch as complete.
+
+- [ ] R-0484 meets its remaining closure criteria, including assumption propagation,
+  construction/runtime restrictions, final audit and documentation reconciliation.
+- [ ] R-0483 rejects mismatched owners for parsed results with retained controls.
+- [ ] R-0333 names the exact preview subset, supported target/OS/toolchain matrix,
+  known limitations and the validation required for every advertised feature.
+- [ ] R-0335/R-0336/R-0337 publish a versioned description and consistent claims for
+  that subset; examples and migration guidance are checked against the candidate.
+- [ ] R-0334/R-0346/R-0352/R-0354 demonstrate clean installation, build/run/test and
+  the tutorial on every claimed platform. Record external-user failures and fixes.
+- [ ] R-0333 records a reproducible candidate and its validation result using the
+  common candidate record below. Unresolved queue prerequisites remain blockers
+  unless an explicit, scoped release disposition permits a narrower claim.
+
+Finishing the first two items alone does not ship the preview. The mutation
+campaign exception that permitted a development checkpoint does not authorize a
+release exception. Qualification remains owned by its existing queue milestone;
+a candidate must satisfy its applicable requirements or obtain a separately
+recorded release decision that narrows the claims without concealing failures.
+
+### Release increments and candidate records
+
+Assign a **bounded increment** of a task to a release, not the whole task when its
+objective spans several releases. Each R-0333 checklist entry names its existing
+owner ID, delivered behavior, acceptance artifact and deferred remainder. For
+example, alpha needs the three-family R-0182/R-0183 change-and-repair diff; their
+broader reporting dimensions can remain open. Beta needs local package evidence,
+not the whole package ecosystem. Completing an increment does not close its owner.
+Research and workload-gated expansions remain in their existing sections until
+pulled. Historical execution logs belong in the archive, not candidate checklists.
+
+For each candidate, retain one versioned record under R-0333 containing:
+
+- Exact source commit, compiler/toolchain identity and released artifact identities;
+  supported language/std subset, platforms, backends and runtime profile.
+- Required checks and retained results for that exact candidate, including positive
+  and rejecting controls, applicable mutation qualification and clean installation.
+  A timeout, skipped job or incomplete report is never a passing result.
+- Source, std API/ABI and evidence-schema compatibility stated separately; migration,
+  invalidation and revalidation requirements for changes to any of them.
+- Open blockers, accepted limitations and deferred increments as separate lists,
+  with owners and rationale. An accepted limitation cannot contradict an advertised
+  guarantee; unresolved soundness failures inside the claimed scope block release.
+- Matching reference, claims matrix, tutorial/examples and release notes. Distinguish
+  enforced properties, checked proofs, assumptions, tests and incomplete coverage.
+- Supported lifetime and patch procedure, with security reporting, rollback and
+  evidence revocation/rechecking where affected (R-0343, R-0426–R-0429).
+
+Patch releases repair an already published scope without waiting for the next
+feature release. They have their own candidate commit and validation record;
+compatibility breaks or changed evidence identities require an explicit migration
+or invalidation notice. Stabilization must not silently expand the claimed subset.
 
 ## How To Read This Roadmap
 
@@ -1437,6 +1518,14 @@ honest bridge status with it. Avoid demonstration contracts whose specification
 merely restates the implementation, and avoid using quantified flagship examples
 whose prover-library cost obscures the smaller capability actually being built.
 
+**Delivery focus (2026-10-04): make a useful change cheaper to trust.** R-0486 is
+the shared acceptance workload for contracts, review diffs, policy and package
+evidence. Each prerequisite increment names the user-visible operation it unlocks,
+the smallest sufficient artifact/schema, and its bounded exit. Keep the required
+qualification, identity and independent-checking gates; defer broader schemas,
+backend breadth and proof automation until the workload demonstrates a need.
+This changes milestone emphasis, not the current execution queue.
+
 Three adoption tracks run across those slices rather than waiting behind them:
 
 - **one-module adoption:** a supported C ABI path for introducing one
@@ -1525,6 +1614,17 @@ two-state, totality and VC tasks own the semantics. Graduation requires:
    implementation recheck, while contract/authority/trust changes produce precise diffs.
 5. The migrated component has functioning safety regression controls and measured proof
    effort, review friction and runtime costs. Its results determine subsequent feature work.
+6. A non-author changes the component or one dependency, sees which guarantees the
+   change affects, repairs the affected obligations, and independently checks the
+   resulting evidence within the admitted scope. R-0486 retains the before/change/repair
+   artifacts; R-0150 measures effort from the first baseline, and R-0182/R-0183 supply
+   the initial authority/assumption/contract-evidence diff. Compiler-author intervention
+   is recorded as an unresolved usability limitation, not counted as independent success.
+
+Every feature contributing to this milestone includes actionable failure feedback in
+its exit: source location, relevant call/dependency path, unmet permission or obligation,
+and a valid next action (or an explicit unsupported boundary). R-0137/R-0466 own the
+diagnostic criteria; consumers reuse the same facts rather than inventing new verdicts.
 
 General heap proofs, concurrency, relational verification and general resource-bound proofs
 are not prerequisites for this milestone. Their existing research and later-phase owners
@@ -11224,6 +11324,26 @@ flagship already selected in the queue's external-user workflow row. Expose a sm
 malformed input, bounded storage, state mutation, zero-copy access, recoverable
 failure, resource limits and named FFI assumptions. No fourth public flagship.
 
+**Shared change-and-repair scenario (2026-10-04):** prefer the bounded parser/state
+machine in `secure_update_verifier`; use the existing protocol flagship if its admitted
+fragment provides the smaller forcing case. Do not require the complete update verifier
+or all its cryptographic claims for this milestone. Implement the component, establish
+a useful behavioral contract that is not merely a restatement of its body, and retain
+baseline evidence. Change a dependency in separate controlled variants: add authority,
+introduce/widen an assumption, and invalidate contract/proof evidence. Show the precise
+diff and applicable policy rejection, perform an explicit repair, then replay the
+resulting evidence with the independent consumer. A contract-preserving body edit is
+the positive control for preservation after implementation revalidation. Missing facts
+or incomplete analysis produce an explicit incomplete result, never a false-clean diff.
+
+Use this one scenario across typed contracts, R-0182/R-0183 review, existing policy and
+package tasks, and R-0353 replay. R-0150 records annotation and manual proof burden,
+feedback latency and repair effort from the initial baseline; set improvement targets
+after observing that baseline. Measure the non-author session, including failed attempts
+and required author assistance. The scenario does not reorder qualification, identity,
+contract or independent-consumer prerequisites, or require a registry, new backend or
+general heap model.
+
 **Exit:** a consumer relies on a public contract without inspecting private bodies;
 calls establish preconditions and use exported postconditions without inlining;
 frame/`old` semantics cover the admitted mutation fragment. A contract-preserving
@@ -12583,6 +12703,14 @@ too expensive.
 before investing in automation, so the external-validation gate's “was the
 proof discipline worth the cost?” question has data instead of anecdotes.
 
+**First shared consumer (2026-10-04): R-0486.** Begin measurements with its first
+bounded component, before proof scaffolding or automation is expanded. Retain source
+annotation size, manually authored proof/bridge work, time to actionable feedback,
+repair time after each controlled change, and compiler-author interventions. Record
+the revision, toolchain and measurement conditions; establish targets from the observed
+baseline rather than inventing speedup claims. The existing HMAC and coverage series
+below remain useful comparisons, not prerequisites to recording this workload.
+
 Measure both sides of the investment:
 
 - **cost:** per proved function, Lean proof lines, tactic depth,
@@ -13025,6 +13153,16 @@ completeness boundary rather than deriving reachability again.
 
 This is also the first **proof/capability diff for code review** surface.
 
+**First increment (2026-10-04):** serve R-0486 with exactly three change families:
+added/widened authority, added/widened assumptions, and invalidated contract/proof
+evidence. Derive the diff from existing canonical identities and facts; introduce no
+parallel ledger. Produce human and JSON views of the same rows, including affected
+subjects, old/new facts, evidence class and available provenance. Unsupported dimensions
+and incomplete dependency coverage are explicit. The first increment exits with the
+R-0486 change/repair cases and an unchanged-contract control; it need not implement
+every later dimension or editor integration before being useful. The full task exit
+below remains broader.
+
 Output must include human text and JSON rows for: added/removed capability,
 capability widening/narrowing, new `trusted`/`Unsafe`/extern boundary,
 stale/missing/downgraded proof, new runtime trap site, allocation authority
@@ -13042,6 +13180,13 @@ and must not collapse the review into one green badge.
 ### Task R-0183
 
 **Objective:** Add semantic trust diff gates: capability widening, allocation change, trusted boundary addition, stale proof, weakened/missing obligation, assumption widening, runtime-obligation change, and stdlib evidence-class drift. Add a red-team fixture proving the diff cannot emit a false-clean summary when a capability/trust/proof fact changed.
+
+**First increment:** gate R-0182's three-family diff using R-0486. Each controlled
+change must name the affected claim and produce the expected policy/evidence result;
+repair restores acceptance only after required rechecking. A valid unchanged-contract
+case remains accepted. Dropping a relevant fact or dependency edge must yield a
+detected failure or incomplete coverage, never an unchanged/clean verdict. Keep the
+later allocation, runtime and stdlib dimensions behind their existing fact producers.
 
 ### Task R-0184
 
@@ -15583,7 +15728,12 @@ after the source-contract/proof-link path is usable outside flagship hero work;
 it reaches **beta/release** only after ordinary project workflow and external
 validation are in place.
 
-**Alpha bar (language can be presented as a usable experimental language):**
+The [release map](#release-map) separates the systems preview, verified-component
+alpha, project beta and stable supported subset. The preview makes no alpha
+claim; the alpha and beta bars below remain required for their respective scopes.
+Stable release additionally requires the named compatibility and maintenance bars.
+
+**Alpha bar (verified-component alpha):**
 - At least one non-author writes, proves, or contract-annotates a useful
   Concrete program and reports that ProofKit + contracts + `concrete prove`
   were worth the discipline.
@@ -15637,6 +15787,13 @@ audience):**
 ### Task R-0333
 
 **Objective:** Define first public release criteria: supported subset, required examples, required diagnostics, proof workflow, stdlib/project UX, evidence/policy/ tooling story.
+
+Own the [release map](#release-map) and one bounded checklist/candidate record per
+release scope. Assign existing task increments with explicit acceptance artifacts
+and deferred remainders; do not create a second queue or require completion of all
+phases. Record separate source/std/evidence compatibility and patch-release rules.
+The systems preview does not satisfy or replace the verification alpha bar.
+
 
 ### Task R-0334
 
