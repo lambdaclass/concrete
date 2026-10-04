@@ -74,7 +74,8 @@ clean_reject clash_cc       'mod m { fn __cc_bounds_check() -> Int { return 1; }
 clean_reject clash_concrete 'mod m { fn __concrete_get_argc() -> Int { return 9; } fn main() -> Int { return 0; } }'  "reserved"
 
 echo "=== extern declarations of compiler-provided __ symbols still compile (no false positive) ==="
-accepts extern_argc 'mod m { trusted extern fn __concrete_get_argc() -> i32; fn main() with(Unsafe) -> Int { return __concrete_get_argc() as Int; } }'
+# R-0484: every foreign binding declares its effects, and the argument count is Env (D2).
+accepts extern_argc 'mod m { trusted extern fn __concrete_get_argc() with(Env) -> i32; fn main() with(Env) -> Int { return __concrete_get_argc() as Int; } }'
 
 echo "=== indirection breaks the cycle — valid recursive shapes still compile (no false positive) ==="
 accepts ll_ptr    'mod m { struct Node { val: i32, next: *const Node } fn main() -> Int { return 0; } }'
