@@ -30,7 +30,7 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0484: `with(...)` is the complete list of a function's external authority (decided 2026-09-29/30; design in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md))** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rules:** handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else, including the `Unsafe` of calling a plain `extern` (this reverses the current rule in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md`); every foreign binding declares its effects and an undeclared one is refused; foreign declarations and descriptor conversions are audited assumptions shown in reports. **Slices:** (1) design doc — drafted; encoding A (per-effect raw-integer bindings to one C symbol) selected for the first implementation, B (`Fd<C>`) a later option; construction/caller audit taken 2026-09-30 ([HANDLE_CAPABILITIES_AUDIT.md](docs/language/HANDLE_CAPABILITIES_AUDIT.md): `Child` forgeable, `Writer`/`Reader` hole confirmed, `fork` duplicates owning handles, 8 unused bindings; classification decisions D1-D4 settled 2026-10-01; F10 fixed early as bug 072); slice 1 complete; slices 2–4 merged to main as a partial checkpoint 2026-10-04 (`a7c9cf1c`, main CI green; merged under an approved exception for the full mutation campaign, which exceeds CI's 6-hour limit) — **remaining before R-0484 closes:** F1 (`Child` constructible outside its module), F9 (`process_fork` duplicates owning handles), cross-package assumption propagation through the existing dependency mechanism (today project mode only; single-file reports state incomplete coverage), the slice 5 completion criteria (docs/examples consistency pass, final authority audit, cross-package and trust controls, codegen/ABI checks, validation evidence), and four external doc pages not yet located; F7/F8 belong to R-0013. Full mutation-campaign qualification is not an R-0484 requirement: it stays its own milestone (row 2), recorded here only because the checkpoint merged under that exception; (2) compiler: effect declarations on externs, symbol aliasing (extending the import-alias path), the `trusted` rule, capability parameters on structs, dependency-summary transport, the assumptions section; (3) std FFI migration: bindings reclassified under the `trusted extern` criterion (`memcpy`/`memcmp` become plain `extern` behind wrappers), sinks declare `Console`/`File`; (4) `Writer<C>`/`Reader<C>` and the 14 consumers outside `io.con`, inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) migration guidance, reference docs, examples and report snapshots, plus the final authority/ABI audit specified in R-0484's completion criteria. The first cut excludes descriptor replacement (std binds no `dup`/`dup2`; unused `fdopen` removed) and requires audited unique ownership for owning handles; a second step adds typed bindings/descriptors and defines replacement and cross-classification aliasing. | `print_bytes` declares `with(C)` and its call site reports `Console`; a function with an empty `with(...)` cannot reach external authority through a handle, a `trusted` body, a foreign binding or a dependency; the design doc's acceptance cases exist as fixtures, with mutation tests where marked; every foreign effect declaration and descriptor conversion appears in the reports' assumptions section |
+| 0 | **R-0484: explicit external authority through handles, foreign calls and dependencies** | Core repair merged at `a7c9cf1c`; follow-up branches are not yet a validated main checkpoint. Finish F1/F9 integration, R10 assumption qualification and coverage, separate proof-admission consolidation, and the docs/examples/authority audit. Current commit and validation status live in [R-0484](#task-r-0484); semantics live in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md). | Header authority is enforced across handles/trusted code/externs/packages; reports qualify assumptions and gaps; proof admission uses shared summary facts with its own eligibility rules; all R-0484 completion controls pass on the final integrated commit. Full mutation-campaign qualification remains row 2, not an R-0484 closure requirement. |
 | 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
 | 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
 | 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
@@ -10821,17 +10821,73 @@ heap proofs or emitted-binary correctness.
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
 
-**Status (2026-10-04): partial checkpoint on main, R-0484 still open.** The first
-implementation merged at `a7c9cf1c` (main CI green): encoding A, capability parameters on
-structs, mandatory effect declarations on externs (E0116/E0117), the `trusted` reversal,
-`Writer<C>`/`Reader<C>` with their consumers, and the R10 assumptions report. Cross-package
-assumption reporting works in project mode only; a single-file report states that dependency
-coverage is incomplete, so an empty list never reads as "no foreign assumptions". It merged
-under an approved exception — the full mutation campaign exceeds CI's 6-hour limit — and the
-incomplete qualification is recorded under the mutation-harness items. Still open: F1
-(`Child` forgeable), F9 (`process_fork` ownership), complete cross-package assumption
-propagation through the existing dependency mechanism, the completion criteria below, and
-four external doc pages not yet located. F7/F8 belong to R-0013.
+**Status (2026-10-05): core checkpoint on main; follow-up integration pending.**
+The first implementation merged at `a7c9cf1c`: encoding A, capability parameters on
+structs, mandatory extern effect declarations (E0116/E0117), the `trusted` reversal,
+and `Writer<C>`/`Reader<C>`. Main is at roadmap cleanup `8960c97d` at this inventory.
+The checkpoint's approved full-campaign timeout exception does not certify the campaign
+or waive a later release's requirements; qualification retains its separate queue owner.
+
+| increment | recorded state; not a claim of integrated completion |
+|---|---|
+| F1/F9 construction and fork repair | Pushed as `r0484-finish` at `a084d91e`: only `spawn` constructs `Child`; public `process_fork`/`ForkResult` removed. Branch health passed; [full CI run 37354702330](https://github.com/unbalancedparentheses/concrete2/actions/runs/37354702330) is still running at this inventory. Supported spawn runtime assumptions remain explicit. |
+| Shared assumption summaries | `b14aaba3`, followed by bug 074 and canonical manifestless package identity in `873476d7`; carried on the qualification branch, not yet on main. |
+| Conclusion qualification | `f3510e04` supplies shared qualification and explicit unloaded-call gaps. This is an intermediate R10 increment, not complete assumption coverage. |
+| Authority terminology and JSON API v2 | Committed as `50bfc385`: purity claims removed from these authority reports; schema and consumers migrate without an `is_pure` alias. Integration and final validation remain pending. |
+| Combined tree | Local `r0484-integrated` at merge `37496123` combines F1/F9 and qualification. Additional corrections are uncommitted; that SHA is not the final validation candidate. Record the final committed SHA, identity and CI run after those corrections land. |
+
+A branch gate or F1/F9-only CI result cannot stand in for combined-tree validation.
+On the final integrated commit run the selected gates, both suite forms, identity
+freshness, campaign golden and mutation anchors in a clean clone, then full CI under
+the explicitly recorded campaign policy. Explain identity migrations by source/package
+mapping and account for every changed snapshot; regeneration alone is not evidence.
+Only record a follow-up as merged after main contains its validated commit.
+
+**R10 remaining closure work:**
+
+- Report trusted memory-safety boundaries as a named assumption category, with the
+  responsible function, absorbed obligation and dependent claims. A count alone is
+  insufficient; preserve provenance and package identity.
+- Represent coverage of the audited raw-descriptor restrictions and construction/caller
+  paths. Encoding A's lack of typed conversion syntax does not establish that there
+  are no descriptor assumptions. Unimplemented coverage remains explicit, not an
+  empty category presented as checked.
+- Make capability explanations follow dependency summaries and name the dependency
+  callee/binding instead of stopping at an unknown node. Preserve unresolved direct
+  and indirect calls as gaps, including in text, JSON and query consumers.
+
+**Report meaning and schema migration:** declared capability allowances, reachable
+assumptions and coverage are separate facts. An over-declared `with(Console)` header
+continues to display Console; “no reached foreign binding” establishes no narrower
+authority result, because primitives or other operations can supply authority. R-0487
+owns over-declaration analysis. “No external authority” is not purity, non-mutation,
+termination or proof eligibility; retain the `&mut` mutation acceptance example.
+Without sufficient analysis, describe only the declared set or explicit incomplete
+coverage. Empty foreign assumptions never imply complete coverage.
+
+Slice 5 includes the v1 → v2 migration in
+[COMPILER_API.md](docs/compiler/COMPILER_API.md): authority facts replace `is_pure`
+with `no_external_authority`, and declaration-only query facts use
+`no_declared_capability`. Producer and `concrete diff` share the version constant;
+consumers reject v1, absent versions and unsupported future versions before comparing
+facts, with a regeneration diagnostic and a valid-v2 acceptance control. No misleading
+purity alias is retained. Audit snapshots, query/schema fixtures and documentation
+must agree. This is branch implementation until integration is validated and merged.
+
+**Proof-admission consolidation: separate change, required before R-0484 closes.**
+After the combined reporting/FFI checkpoint, make admission consume the shared
+summary's reachability, assumptions and coverage. Admission retains its own eligibility
+judgment; it must not derive eligibility from a headline, an empty authority set or a
+renderer. Retain an old/new corpus verdict comparison and explain every delta. Missing
+dependencies, unresolved direct/indirect calls and dropped assumption edges must not
+silently gain admission; retain valid acceptance controls as well as rejection and
+mutation controls. Publish intermediate checkpoints with R-0484 open until this and
+the remaining R10/documentation criteria pass. This uses the existing R-0484 owner
+and does not introduce a second analysis pipeline or reorder the queue.
+
+The final docs/examples and authority audit, including disposition of the four external
+doc pages not yet located, remain required. F7/F8 repairs stay with R-0013 and validation
+with R-0030. Typed-descriptor extensions remain a separately gated second step.
 
 (Earlier status, 2026-09-29: design decided; reports were repaired and the admission repair
 went live 2026-09-26, and both remain as the conservative backstop.)
@@ -10920,7 +10976,9 @@ hole is closed: typed bindings and descriptors, and defined behaviour for bindin
   `Writer<C>`/`Reader<C>` and their callers, with remedies for the new diagnostics.
   Reconcile implemented versus planned status in this roadmap, the design and audit.
   Use “no undeclared external authority”; explain parameter mutation, termination,
-  proof eligibility and foreign assumptions separately.
+  proof eligibility and foreign assumptions separately. Include the API-v2 migration,
+  incompatible/missing-version rejection, and renamed report/query/diff expectations
+  described above; do not label branch-only changes shipped.
 - **Final authority audit.** Reconcile the binding inventory against the migrated std:
   every binding is classified or removed, every remaining descriptor restriction has
   named callers and ownership evidence, and every finding F1–F10 has a fixed or
