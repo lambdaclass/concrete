@@ -4772,12 +4772,12 @@ echo "=== Audit query tests ==="
 # Pure function audit: enforced, pure, passes predictable, no alloc
 q_audit_pure=$(cached_output "$TESTDIR/report_integration.con" "--query audit:pure_add")
 if grep <<<"$q_audit_pure" -q '"evidence": "enforced"' && \
-   grep <<<"$q_audit_pure" -q '"no_external_authority": true' && \
+   grep <<<"$q_audit_pure" -q '"no_declared_capability": true' && \
    grep <<<"$q_audit_pure" -q '"passes": true'; then
-    echo "  ok  audit:pure_add shows enforced, pure, passes predictable"
+    echo "  ok  audit:pure_add shows enforced, no declared capability, passes predictable"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  audit:pure_add should show enforced + pure + passes"
+    echo "FAIL  audit:pure_add should show enforced + no declared capability + passes"
     echo "$q_audit_pure"
     FAIL=$((FAIL + 1))
 fi
