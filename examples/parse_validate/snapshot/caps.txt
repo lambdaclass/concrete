@@ -1,26 +1,26 @@
 === Capability Summary ===
 
 module parse_validate:
-      validate_version : (pure)
+      validate_version : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_msg_type : (pure)
+      validate_msg_type : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_payload_len : (pure)
+      validate_payload_len : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_total_len : (pure)
+      validate_total_len : (no external authority)
       assumes: no declared capability; call graph complete
-      compute_checksum : (pure)
+      compute_checksum : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_checksum : (pure)
+      validate_checksum : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_header_fields : (pure)
+      validate_header_fields : (no external authority)
       assumes: no declared capability; call graph complete
-      parse_header : (pure)
+      parse_header : (no external authority)
       assumes: no declared capability; call graph complete
-      error_code : (pure)
+      error_code : (no external authority)
       assumes: no declared capability; call graph complete
-  pub main : (pure)
+  pub main : (no external authority)
       assumes: no declared capability; call graph complete
 
-Totals: 10 functions (10 pure), 0 externs
+Totals: 10 functions (10 with no external authority), 0 externs
 

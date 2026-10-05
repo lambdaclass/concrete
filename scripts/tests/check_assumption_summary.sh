@@ -165,7 +165,7 @@ for i, l in enumerate(lines):
     named = {n.strip() for seg in segs for n in seg.split(",") if n.strip()}
     if named != fb: problems.append(f"{fn}: caps text names {sorted(named)}, json {sorted(fb)}")
     if complete != ("call graph complete" in q): problems.append(f"{fn}: caps text coverage disagrees")
-    if head.strip() == "(pure)" and (not complete or fb): problems.append(f"{fn}: headline claims (pure) — complete={complete}, assumes {sorted(fb)}")
+    if head.strip() == "(no external authority)" and (not complete or fb): problems.append(f"{fn}: headline claims no external authority — complete={complete}, assumes {sorted(fb)}")
 # diagnostics-json facts
 facts = diag.get("facts", diag if isinstance(diag, list) else [])
 for f in facts:
@@ -175,12 +175,32 @@ for f in facts:
     named = {x["declaration"] for x in f.get("assumed_foreign_bindings", [])}
     if named != fb: problems.append(f"{f['function']} {f['kind']}: json facts {sorted(named)} vs {sorted(fb)}")
     if f.get("coverage_complete") != complete: problems.append(f"{f['function']} {f['kind']}: coverage disagrees")
-    if f.get("is_pure") and (not complete or fb): problems.append(f"{f['function']} {f['kind']}: is_pure true past a gap or assumption")
+    if f.get("no_external_authority") and (not complete or fb): problems.append(f"{f['function']} {f['kind']}: no_external_authority true past a gap or assumption")
 print("\n".join(problems))
 PY
 )"
 [ -z "$qout" ] && ok "caps text, diagnostics-json facts and the assumptions JSON agree; no unearned (pure)" \
   || no "qualified conclusions disagree across surfaces: $qout"
+if grep -q 'bump : (no external authority)' "$TMP/caps.txt" \
+   && ! grep -q '(pure)' "$TMP/caps.txt" && ! grep -q '"is_pure"' "$TMP/diag.json" \
+   && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); f=[x for x in d['facts'] if x.get('function')=='main.bump' and x.get('kind')=='effects']; sys.exit(0 if f and f[0].get('no_external_authority') is True else 1)" "$TMP/diag.json"; then
+  ok "bump mutates through &mut with complete coverage: 'no external authority', and nothing anywhere claims purity"
+else
+  no "a &mut-mutating function is reported as pure, or 'no external authority' is missing: $(grep 'bump :' "$TMP/caps.txt")"
+fi
+if grep -A1 -E '^\s+overdeclared : Console$' "$TMP/caps.txt" | grep -q 'assumes: Console (declared; no reached foreign binding provides it)'; then
+  ok "over-declared with(Console): the headline keeps the DECLARED allowance; the body result is only in assumes:"
+else
+  no "over-declared function: declared allowance and body analysis are not kept separate: $(grep -A1 'overdeclared :' "$TMP/caps.txt" | tr '\n' ' ')"
+fi
+echo '{"schema_version": 1, "schema_kind": "facts", "facts": [{"kind":"effects","function":"f","is_pure":true}]}' > "$TMP/v1.json"
+(cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/v2.json" 2>/dev/null
+dout="$($TO "$CC" diff "$TMP/v1.json" "$TMP/v2.json" 2>&1)"; drc=$?
+if [ "$drc" -ne 0 ] && printf '%s' "$dout" | grep -q 'schema_version 1 is not supported'; then
+  ok "concrete diff rejects a schema v1 artifact (is_pure removed in v2) with a regeneration diagnostic"
+else
+  no "concrete diff accepted a v1 artifact (rc=$drc): $(printf '%s' "$dout" | head -2)"
+fi
 if grep -q 'via_gap : (effects unknown' "$TMP/caps.txt"; then
   ok "via_gap's headline says its effects are unknown (indirect call), not (pure)"
 else

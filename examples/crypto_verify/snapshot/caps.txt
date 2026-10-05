@@ -1,16 +1,16 @@
 === Capability Summary ===
 
 module main:
-      compute_tag : (pure)
+      compute_tag : (no external authority)
       assumes: no declared capability; call graph complete
-      verify_tag : (pure)
+      verify_tag : (no external authority)
       assumes: no declared capability; call graph complete
-      check_nonce : (pure)
+      check_nonce : (no external authority)
       assumes: no declared capability; call graph complete
-      verify_message : (pure)
+      verify_message : (no external authority)
       assumes: no declared capability; call graph complete
-      main : (pure)
+      main : (no external authority)
       assumes: no declared capability; call graph complete
 
-Totals: 5 functions (5 pure), 0 externs
+Totals: 5 functions (5 with no external authority), 0 externs
 

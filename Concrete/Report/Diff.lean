@@ -59,9 +59,9 @@ private def trustFields (kind : String) : List String :=
   | "proof_status" => ["state", "spec", "proof", "source", "current_fingerprint"]
   | "obligation" => ["status", "spec", "proof", "source", "fingerprint"]
   | "extraction" => ["status", "eligible", "spec", "proof", "proof_core", "fingerprint"]
-  | "effects" => ["capabilities", "is_pure", "allocates", "frees", "recursion",
+  | "effects" => ["capabilities", "no_external_authority", "allocates", "frees", "recursion",
                    "loops", "crosses_ffi", "is_trusted", "evidence"]
-  | "capability" => ["capabilities", "is_pure"]
+  | "capability" => ["capabilities", "no_external_authority"]
   | "unsafe" => ["has_unsafe_cap", "has_raw_pointers", "is_trusted"]
   | "alloc" => ["allocates", "frees", "defers", "potential_leak"]
   | "predictable_violation" => ["state", "reason"]
@@ -100,10 +100,10 @@ private def isWeakening (kind : String) (field : String) (oldV newV : String) : 
   | "proof_status", "state" => proofStateRank newV < proofStateRank oldV
   | "obligation", "status" => proofStateRank newV < proofStateRank oldV
   | "effects", "evidence" => evidenceRank newV < evidenceRank oldV
-  | "effects", "is_pure" => oldV == "true" && newV == "false"
+  | "effects", "no_external_authority" => oldV == "true" && newV == "false"
   | "effects", "is_trusted" => oldV == "false" && newV == "true"
   | "effects", "crosses_ffi" => oldV == "false" && newV == "true"
-  | "capability", "is_pure" => oldV == "true" && newV == "false"
+  | "capability", "no_external_authority" => oldV == "true" && newV == "false"
   | "alloc", "potential_leak" => oldV == "false" && newV == "true"
   | "traceability", "evidence" => evidenceRank newV < evidenceRank oldV
   | "extraction", "status" =>
@@ -168,7 +168,7 @@ private def classifyNewFact (kind : String) (v : Val) : String :=
   | "unsafe" => "weakened"
   | "effects" =>
     let ev := (jsonGetVal v "evidence").map valDisplay
-    let pure := (jsonGetVal v "is_pure").map valDisplay
+    let pure := (jsonGetVal v "no_external_authority").map valDisplay
     let ffi := (jsonGetVal v "crosses_ffi").map valDisplay
     let trusted := (jsonGetVal v "is_trusted").map valDisplay
     let caps := (jsonGetVal v "capabilities").map valDisplay
@@ -181,7 +181,7 @@ private def classifyNewFact (kind : String) (v : Val) : String :=
     else if caps != some "[]" && caps.isSome then "weakened"
     else "neutral"
   | "capability" =>
-    let pure := (jsonGetVal v "is_pure").map valDisplay
+    let pure := (jsonGetVal v "no_external_authority").map valDisplay
     if pure.isNone then "weakened"  -- missing field is suspicious
     else if pure == some "false" then "weakened" else "neutral"
   | "alloc" =>
@@ -325,14 +325,23 @@ def parseFactsWarn (jsonStr : String) : Option (List Val) × List String :=
     let warnings := validateFactSchema vs
     (some vs, warnings)
   | some (.obj kvs) =>
+    -- An enveloped artifact from another API version is REJECTED, not read: v1 carried
+    -- `is_pure`, which v2 removed, so comparing across versions would misreport every change.
+    match kvs.find? (fun (k, _) => k == "schema_version") with
+    | some (_, .num n) =>
+      if n != Int.ofNat apiSchemaVersion then
+        (none, [s!"error: snapshot schema_version {n} is not supported (this compiler writes {apiSchemaVersion}); regenerate it with this compiler — old artifacts are not migrated"])
+      else parseEnvelope kvs
+    | _ => parseEnvelope kvs
+  | some _ => (none, ["error: snapshot JSON is not an array or object"])
+  | none => (none, ["error: snapshot JSON failed to parse"])
+where
+  parseEnvelope (kvs : List (String × Val)) : Option (List Val) × List String :=
     match kvs.find? (fun (k, _) => k == "facts") with
     | some (_, .arr vs) =>
       let warnings := validateFactSchema vs
       (some vs, warnings)
     | _ => (none, ["error: snapshot JSON object has no \"facts\" array field"])
-  | some _ => (none, ["error: snapshot JSON is not an array or object"])
-  | none => (none, ["error: snapshot JSON failed to parse"])
-where
   /-- Validate fact entries have required fields. -/
   validateFactSchema (facts : List Val) : List String :=
     let issues := facts.foldl (fun (acc : List String × Nat) v =>

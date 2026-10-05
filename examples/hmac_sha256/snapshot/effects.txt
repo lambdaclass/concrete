@@ -13,78 +13,78 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
 module hmac_sha256:
       sha256_init
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:60
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:60
     assumes: no declared capability; call graph complete
       sha256_k
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:68
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:68
     assumes: no declared capability; call graph complete
       ch
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:110
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:110
     assumes: no declared capability; call graph complete
       maj
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:115
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:115
     assumes: no declared capability; call graph complete
       rotr
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:132
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:132
     assumes: no declared capability; call graph complete
       big_sigma0
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:137
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:137
     assumes: no declared capability; call graph complete
       big_sigma1
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:142
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:142
     assumes: no declared capability; call graph complete
       small_sigma0
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:147
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:147
     assumes: no declared capability; call graph complete
       small_sigma1
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:152
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:152
     assumes: no declared capability; call graph complete
       ct_compare_32
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:169
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:169
     assumes: no declared capability; call graph complete
       block_to_words
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:192
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:192
     assumes: no declared capability; call graph complete
       sha256_schedule
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:209
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:209
     assumes: no declared capability; call graph complete
       sha256_round
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:233
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:233
     assumes: no declared capability; call graph complete
       sha256_compress
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:249
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:249
     assumes: no declared capability; call graph complete
       block_to_words_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:277
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:277
     assumes: no declared capability; call graph complete
       sha256_compress_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:296
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:296
     assumes: no declared capability; call graph complete
       state_to_bytes
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:314
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:314
     assumes: no declared capability; call graph complete
       sha256_hash
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:345
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:345
     assumes: no declared capability; call graph complete
       hmac_sha256
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:373
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced (proof link unbound: no stored subject)  @ examples/hmac_sha256/src/main.con:373
     assumes: no declared capability; call graph complete
       verify_hmac
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:401
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:401
     assumes: no declared capability; call graph complete
       abc_block
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:411
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:411
     assumes: no declared capability; call graph complete
       rfc4231_tc1_tag
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:423
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:423
     assumes: no declared capability; call graph complete
       rfc4231_tc2_tag
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:429
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:429
     assumes: no declared capability; call graph complete
   pub main
     caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:446
     assumes: Console (declared; no reached foreign binding provides it); call graph complete
 
-Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
+Totals: 24 functions, 23 with no external authority, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 0 proved, 24 enforced, 0 trusted-assumption, 0 reported
 

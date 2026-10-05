@@ -12,55 +12,55 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 === Capability Summary ===
 
 module hmac_sha256:
-      sha256_init : (pure)
+      sha256_init : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_k : (pure)
+      sha256_k : (no external authority)
       assumes: no declared capability; call graph complete
-      ch : (pure)
+      ch : (no external authority)
       assumes: no declared capability; call graph complete
-      maj : (pure)
+      maj : (no external authority)
       assumes: no declared capability; call graph complete
-      rotr : (pure)
+      rotr : (no external authority)
       assumes: no declared capability; call graph complete
-      big_sigma0 : (pure)
+      big_sigma0 : (no external authority)
       assumes: no declared capability; call graph complete
-      big_sigma1 : (pure)
+      big_sigma1 : (no external authority)
       assumes: no declared capability; call graph complete
-      small_sigma0 : (pure)
+      small_sigma0 : (no external authority)
       assumes: no declared capability; call graph complete
-      small_sigma1 : (pure)
+      small_sigma1 : (no external authority)
       assumes: no declared capability; call graph complete
-      ct_compare_32 : (pure)
+      ct_compare_32 : (no external authority)
       assumes: no declared capability; call graph complete
-      block_to_words : (pure)
+      block_to_words : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_schedule : (pure)
+      sha256_schedule : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_round : (pure)
+      sha256_round : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_compress : (pure)
+      sha256_compress : (no external authority)
       assumes: no declared capability; call graph complete
-      block_to_words_at : (pure)
+      block_to_words_at : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_compress_at : (pure)
+      sha256_compress_at : (no external authority)
       assumes: no declared capability; call graph complete
-      state_to_bytes : (pure)
+      state_to_bytes : (no external authority)
       assumes: no declared capability; call graph complete
-      sha256_hash : (pure)
+      sha256_hash : (no external authority)
       assumes: no declared capability; call graph complete
-      hmac_sha256 : (pure)
+      hmac_sha256 : (no external authority)
       assumes: no declared capability; call graph complete
-      verify_hmac : (pure)
+      verify_hmac : (no external authority)
       assumes: no declared capability; call graph complete
-      abc_block : (pure)
+      abc_block : (no external authority)
       assumes: no declared capability; call graph complete
-      rfc4231_tc1_tag : (pure)
+      rfc4231_tc1_tag : (no external authority)
       assumes: no declared capability; call graph complete
-      rfc4231_tc2_tag : (pure)
+      rfc4231_tc2_tag : (no external authority)
       assumes: no declared capability; call graph complete
   pub main : Console
       assumes: Console (declared; no reached foreign binding provides it); call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
-Totals: 24 functions (23 pure), 0 externs
+Totals: 24 functions (23 with no external authority), 0 externs
 

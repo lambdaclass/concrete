@@ -31,6 +31,35 @@ consumers call `findProjectRoot` + `loadProject` in-process to get a
 `--report compiler-ledger --json`, `--report obligation-ledger --json`,
 `--diagnostics-json`.
 
+## Machine-readable schema: version 2 (2026-10-05)
+
+The JSON API (`--report diagnostics-json` facts, `--query` answers, snapshots, proof bundles)
+carries one `schema_version`, defined once as `apiSchemaVersion` in `Concrete/Report/Json.lean`.
+Per the policy in `COMPILER_PIPELINE.md`, a removed field bumps it, and an artifact of another
+version is **rejected** with a regeneration diagnostic (`concrete diff` enforces this); old
+artifacts are not migrated.
+
+**v1 → v2 (R-0484 R10).** `is_pure` is **removed** from `effects` and `capability` facts. It was
+true for an empty declared capability set, which is not purity: it ignored indirect calls,
+calls into code that was never loaded, foreign bindings whose honesty the conclusion rests on,
+and mutation through `&mut` arguments. There is **no alias**: a field named `is_pure` with a
+weaker meaning would keep the misleading claim alive. Replace it with:
+
+| v2 field | meaning |
+|---|---|
+| `no_external_authority` | no declared capability, complete call-graph coverage, and no foreign binding assumed. It is NOT purity: mutation through `&mut` arguments and what trusted code does are not excluded. |
+| `coverage_complete`, `unresolved_indirect_calls` | whether every call path was resolved; the gaps when not |
+| `assumed_foreign_bindings` | the foreign bindings the function may reach, with declared effects; their honesty is assumed |
+| `trusted_boundaries_reached` | how many trusted boundaries its memory safety rests on |
+| `assumptions_computed`, `dependencies_analysed` | whether the facts above were computed, and with dependencies loaded |
+
+Extern `capability` facts report what calling the binding requires (declared effects, plus
+`Unsafe` unless trusted) with `declared_effects_assumed: true`; they never claim
+`no_external_authority`. The audit query's capability object renames its flag
+`no_declared_capability`, which is exactly what it measures. Human-readable reports follow the
+same rule: an empty declared set prints `(none)`, and only a summary-backed conclusion prints
+`(no external authority)`; no report prints `(pure)`.
+
 ## Off-limits to consumers (compiler internals)
 
 Everything else under `Concrete.*` — including `Parser`, `Lexer`, `Resolve`,

@@ -180,4 +180,12 @@ def jsonGetStr (v : Val) (key : String) : Option String :=
     | _ => none
   | _ => none
 
+/-- THE version of the machine-readable JSON API (facts, query answers, bundles). One definition,
+    read by the producer (`Report.schemaVersion`) and by consumers (`concrete diff`), so they cannot
+    disagree. Policy (docs/compiler/COMPILER_PIPELINE.md): bump when a field is removed or a
+    required field added; adding an optional field does not bump. Unsupported versions are
+    REJECTED with a regeneration diagnostic — old artifacts are not migrated.
+    v2 (2026-10-05, R-0484 R10): `is_pure` removed; see docs/compiler/COMPILER_API.md. -/
+def apiSchemaVersion : Nat := 2
+
 end Concrete.Report

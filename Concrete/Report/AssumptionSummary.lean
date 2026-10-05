@@ -590,8 +590,10 @@ def Table.qualifierLine (t : Table) (s : FnSummary) (declared : CapSet) : String
   "; ".intercalate (authority ++ otherPart ++ trustedPart ++ [s.coveragePhrase] ++ depPart)
 
 /-- Is the "no external authority" conclusion earned? Only with no declared capability, complete
-    coverage, and no foreign binding reached (whose honesty it would otherwise rest on). -/
-def Table.effectFree (t : Table) (s : FnSummary) (declared : CapSet) : Bool :=
+    coverage, and no foreign binding reached (whose honesty it would otherwise rest on). This is
+    NOT purity: mutation through `&mut` arguments and what trusted code does are not excluded,
+    and no separate purity judgment is defined. -/
+def Table.noExternalAuthority (t : Table) (s : FnSummary) (declared : CapSet) : Bool :=
   declared.isEmpty && s.complete && (t.foreignFacts s).isEmpty
 
 end Assumptions

@@ -65,10 +65,10 @@ echo "=== the REPORTS no longer claim purity they cannot establish ==="
 # This half IS live. Reports consult opacity directly, so they are honest even while
 # admission is inert.
 cout="$(cd "$FIX" && $TO "$CC" src/main.con --report caps 2>&1)"
-if printf '%s' "$cout" | grep -qE "plain +: \(pure\)"; then
-  ok "a genuinely effect-free function still reads (pure)"
+if printf '%s' "$cout" | grep -qE "plain +: \(no external authority\)"; then
+  ok "a function with no external authority still reads so (not pure: no purity judgment is claimed)"
 else
-  no "plain lost its (pure) rendering — the rule is over-broad, not conservative"
+  no "plain lost its (no external authority) rendering — the rule is over-broad, not conservative"
 fi
 for fn in fire fire2; do
   if printf '%s' "$cout" | grep -qE "$fn +: \(effects unknown: reaches an indirect call\)"; then
@@ -77,7 +77,7 @@ for fn in fire fire2; do
     no "$fn still reads as pure in --report caps"
   fi
 done
-if printf '%s' "$cout" | grep -q "1 pure"; then
+if printf '%s' "$cout" | grep -q "1 with no external authority"; then
   ok "the purity total counts a claim (1), not empty capability sets (would be 4)"
 else
   no "the purity total is not counting a claim"

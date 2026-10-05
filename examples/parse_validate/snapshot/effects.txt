@@ -2,36 +2,36 @@
 
 module parse_validate:
       validate_version
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:59
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:59
     assumes: no declared capability; call graph complete
       validate_msg_type
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:64
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:64
     assumes: no declared capability; call graph complete
       validate_payload_len
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:71
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:71
     assumes: no declared capability; call graph complete
       validate_total_len
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:78
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:78
     assumes: no declared capability; call graph complete
       compute_checksum
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:83
+    caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:83
     assumes: no declared capability; call graph complete
       validate_checksum
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:91
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:91
     assumes: no declared capability; call graph complete
       validate_header_fields
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:115
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:115
     assumes: no declared capability; call graph complete
       parse_header
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:137
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:137
     assumes: no declared capability; call graph complete
       error_code
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:179
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:179
     assumes: no declared capability; call graph complete
   pub main
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:192
+    caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:192
     assumes: no declared capability; call graph complete
 
-Totals: 10 functions, 10 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
+Totals: 10 functions, 10 with no external authority, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 1 proved, 9 enforced, 0 trusted-assumption, 0 reported
 

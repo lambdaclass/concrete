@@ -1,41 +1,41 @@
 === Capability Summary ===
 
 module fixed_capacity:
-      ok_result : (pure)
+      ok_result : (no external authority)
       assumes: no declared capability; call graph complete
-      err_result : (pure)
+      err_result : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_version : (pure)
+      validate_version : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_msg_type : (pure)
+      validate_msg_type : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_payload_len : (pure)
+      validate_payload_len : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_total_len : (pure)
+      validate_total_len : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_tag : (pure)
+      validate_tag : (no external authority)
       assumes: no declared capability; call graph complete
-      read_u8 : (pure)
+      read_u8 : (no external authority)
       assumes: no declared capability; call graph complete
-      read_u16_be : (pure)
+      read_u16_be : (no external authority)
       assumes: no declared capability; call graph complete
-      ring_new : (pure)
+      ring_new : (no external authority)
       assumes: no declared capability; call graph complete
-      ring_contains : (pure)
+      ring_contains : (no external authority)
       assumes: no declared capability; call graph complete
-      ring_push : (pure)
+      ring_push : (no external authority)
       assumes: no declared capability; call graph complete
-      compute_tag : (pure)
+      compute_tag : (no external authority)
       assumes: no declared capability; call graph complete
-      validate_message : (pure)
+      validate_message : (no external authority)
       assumes: no declared capability; call graph complete
-      build_msg : (pure)
+      build_msg : (no external authority)
       assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
-      build_bad_version : (pure)
+      build_bad_version : (no external authority)
       assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
-      build_bad_type : (pure)
+      build_bad_type : (no external authority)
       assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
-      build_payload_overflow : (pure)
+      build_payload_overflow : (no external authority)
       assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       report : Console
       assumes: Console (declared; no reached foreign binding provides it); call graph complete
@@ -44,5 +44,5 @@ module fixed_capacity:
       assumes: Console (declared; no reached foreign binding provides it); memory safety assumed at 4 trusted boundary(ies); call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic), report, print_int (intrinsic)
 
-Totals: 20 functions (18 pure), 0 externs
+Totals: 20 functions (18 with no external authority), 0 externs
 

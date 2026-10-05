@@ -123,7 +123,9 @@ where
 -- ============================================================
 
 def ppCapSet : CapSet → String
-  | .empty => "(pure)"
+  -- An empty DECLARED set says nothing about what the body does (R-0484): "(none)" states the
+  -- header only. A conclusion about authority comes from `ppAuthority` with the assumption summary.
+  | .empty => "(none)"
   | .concrete caps => ", ".intercalate caps
   | .var name => name
   | .union a b => s!"{ppCapSet a}, {ppCapSet b}"

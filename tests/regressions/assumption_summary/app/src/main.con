@@ -7,14 +7,23 @@ fn via_recursion() with(Console) -> i32 { return countdown(2) + even(2); }
 fn inc(x: i32) -> i32 { return x + 1; }
 fn via_gap() -> i32 { return apply(inc, 1); }
 fn pure_one() -> i32 { return add(1, 2); }
+// Mutates through its argument with complete coverage and no foreign call: it has NO EXTERNAL
+// AUTHORITY, and it is not pure. No report may call it pure.
+fn bump(x: &mut i32) { *x = *x + 1; }
+// OVER-DECLARED: declares Console, reaches nothing that provides it. Its headline must keep the
+// declared allowance; the narrower body-analysis result belongs only in the assumes: line.
+fn overdeclared() with(Console) -> i32 { return 1; }
 fn via_ping() with(Console, Unsafe) -> i32 { return ping(1); }
 fn via_pong() with(Console, Unsafe) -> i32 { return pong(1); }
 
 fn main() with(Console, Unsafe) -> i32 {
     let e: i32 = via_ping() + via_pong();
+    let mut m: i32 = 41;
+    bump(&mut m);
+    let o: i32 = overdeclared() - 1;
     let a: i32 = via_helpers();
     let b: i32 = via_recursion();
     let c: i32 = via_gap();
     let d: i32 = pure_one();
-    return a + b + c + d + e - 65 - 46 - 69 - 2 - 3 - 80 - 1;
+    return o + a + b + c + d + e + m - 65 - 46 - 69 - 2 - 3 - 80 - 1 - 42;
 }

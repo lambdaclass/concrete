@@ -15,5 +15,5 @@ capability Console (1 functions):
   pub main  <- main -> print_string
         Console (declared; no reached foreign binding provides it); call graph complete
 
-Totals: 24 functions (23 pure, 1 with capabilities), 0 externs
+Totals: 24 functions (23 with no declared capability, 1 with capabilities), 0 externs
 

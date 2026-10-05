@@ -2154,9 +2154,9 @@ fi
 
 # --- report caps: pure, single cap, multi cap ---
 check_report "$TESTDIR/report_caps_check.con" caps \
-    "pure_fn : (pure)" \
-    "report_caps_check.con --report caps shows pure_fn : (pure)" \
-    "report_caps_check.con --report caps missing pure_fn : (pure)"
+    "pure_fn : (no external authority)" \
+    "report_caps_check.con --report caps shows pure_fn : (no external authority)" \
+    "report_caps_check.con --report caps missing pure_fn : (no external authority)"
 
 check_report "$TESTDIR/report_caps_check.con" caps \
     "alloc_fn : Alloc" \
@@ -2301,7 +2301,7 @@ check_report "$TESTDIR/report_integration.con" layout \
 check_report_multi "$TESTDIR/report_integration.con" interface \
     "report_integration.con --report interface shows pure_add" \
     "report_integration.con --report interface missing pure_add" \
-    "fn pure_add" "(pure)"
+    "fn pure_add" "(none)"
 
 check_report_multi "$TESTDIR/report_integration.con" interface \
     "report_integration.con --report interface shows uses_alloc with Alloc" \
@@ -2359,7 +2359,7 @@ check_report_multi "$TESTDIR/integration_collection_pipeline.con" caps \
 check_report_multi "$TESTDIR/integration_collection_pipeline.con" caps \
     "integration_collection_pipeline.con --report caps identifies pure functions" \
     "integration_collection_pipeline.con --report caps missing pure function detection" \
-    "classify : (pure)" "double : (pure)"
+    "classify : (no external authority)" "double : (no external authority)"
 
 # Alloc: multiple allocation patterns
 check_report_multi "$TESTDIR/integration_collection_pipeline.con" alloc \
@@ -2553,7 +2553,7 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
     "consistency: pure_compute not proof-eligible"
 
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_compute.*(pure)" \
+    "pure_compute.*(no external authority)" \
     "consistency: caps confirms pure_compute is pure" \
     "consistency: caps disagrees on pure_compute"
 
@@ -2563,7 +2563,7 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
     "consistency: pure_multiply not proof-eligible"
 
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_multiply.*(pure)" \
+    "pure_multiply.*(no external authority)" \
     "consistency: caps confirms pure_multiply is pure" \
     "consistency: caps disagrees on pure_multiply"
 
@@ -4077,20 +4077,20 @@ else
 fi
 
 # Effects fact carries key fields
-if grep <<<"$json_int" -q '"is_pure":' && grep <<<"$json_int" -q '"evidence":'; then
-    echo "  ok  diagnostics-json: effects carries is_pure and evidence"
+if grep <<<"$json_int" -q '"no_external_authority":' && grep <<<"$json_int" -q '"evidence":'; then
+    echo "  ok  diagnostics-json: effects carries no_external_authority and evidence"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  diagnostics-json: effects missing is_pure or evidence"
+    echo "FAIL  diagnostics-json: effects missing no_external_authority or evidence"
     FAIL=$((FAIL + 1))
 fi
 
-# Pure function has is_pure: true
-if grep <<<"$json_int" -q '"function": "main.pure_add".*"is_pure": true'; then
-    echo "  ok  diagnostics-json: pure_add has is_pure true"
+# Pure function has no_external_authority: true
+if grep <<<"$json_int" -q '"function": "main.pure_add".*"no_external_authority": true'; then
+    echo "  ok  diagnostics-json: pure_add has no_external_authority true"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  diagnostics-json: pure_add should have is_pure true"
+    echo "FAIL  diagnostics-json: pure_add should have no_external_authority true"
     FAIL=$((FAIL + 1))
 fi
 
@@ -4164,9 +4164,9 @@ rc_unsafe=$(cached_output "$RC_FILE" "--report unsafe")
 
 # --- Layer 1: Intra-JSON consistency ---
 
-# 1a. Effects says pure_add is_pure:true → capability fact should have empty capabilities
+# 1a. Effects says pure_add no_external_authority:true → capability fact should have empty capabilities
 # (grep the JSON line for pure_add's capability fact and check for empty array)
-if grep <<<"$rc_json" -q '"kind": "capability".*"function": "main.pure_add".*"is_pure": true'; then
+if grep <<<"$rc_json" -q '"kind": "capability".*"function": "main.pure_add".*"no_external_authority": true'; then
     echo "  ok  consistency: capability fact agrees pure_add is pure"
     PASS=$((PASS + 1))
 else
@@ -4244,10 +4244,10 @@ fi
 
 # --- Layer 2: JSON ↔ human report consistency ---
 
-# 2a. Human caps says "pure_add : (pure)" → JSON effects has is_pure:true
-if grep <<<"$rc_caps" -q "pure_add : (pure)" && \
-   grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"is_pure": true'; then
-    echo "  ok  consistency: --report caps (pure) ↔ JSON is_pure for pure_add"
+# 2a. Human caps says "pure_add : (no external authority)" → JSON effects has no_external_authority:true
+if grep <<<"$rc_caps" -q "pure_add : (no external authority)" && \
+   grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"no_external_authority": true'; then
+    echo "  ok  consistency: --report caps (pure) ↔ JSON no_external_authority for pure_add"
     PASS=$((PASS + 1))
 else
     echo "FAIL  consistency: caps/JSON disagree on pure_add purity"
@@ -4324,9 +4324,9 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# 2i. Human effects says "2 pure" in totals → JSON has exactly 2 effects facts with is_pure:true
-pure_count=$(grep <<<"$rc_json" -o '"kind": "effects"[^}]*"is_pure": true' | wc -l | tr -d ' ')
-if grep <<<"$rc_effects" -q "2 pure" && [ "$pure_count" = "2" ]; then
+# 2i. Human effects says "2 with no external authority" in totals → JSON has exactly 2 effects facts with no_external_authority:true
+pure_count=$(grep <<<"$rc_json" -o '"kind": "effects"[^}]*"no_external_authority": true' | wc -l | tr -d ' ')
+if grep <<<"$rc_effects" -q "2 with no external authority" && [ "$pure_count" = "2" ]; then
     echo "  ok  consistency: --report effects 2 pure ↔ JSON has 2 pure effects facts"
     PASS=$((PASS + 1))
 else
@@ -4378,11 +4378,11 @@ fi
 # --query effects:pure_add returns exactly one fact
 q_pure=$(cached_output "$TESTDIR/report_integration.con" "--query effects:pure_add")
 if grep <<<"$q_pure" -q '"function": "main.pure_add"' && \
-   grep <<<"$q_pure" -q '"is_pure": true'; then
+   grep <<<"$q_pure" -q '"no_external_authority": true'; then
     echo "  ok  --query effects:pure_add returns pure_add effects fact"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  --query effects:pure_add should return pure_add with is_pure"
+    echo "FAIL  --query effects:pure_add should return pure_add with no_external_authority"
     FAIL=$((FAIL + 1))
 fi
 
@@ -4772,7 +4772,7 @@ echo "=== Audit query tests ==="
 # Pure function audit: enforced, pure, passes predictable, no alloc
 q_audit_pure=$(cached_output "$TESTDIR/report_integration.con" "--query audit:pure_add")
 if grep <<<"$q_audit_pure" -q '"evidence": "enforced"' && \
-   grep <<<"$q_audit_pure" -q '"is_pure": true' && \
+   grep <<<"$q_audit_pure" -q '"no_external_authority": true' && \
    grep <<<"$q_audit_pure" -q '"passes": true'; then
     echo "  ok  audit:pure_add shows enforced, pure, passes predictable"
     PASS=$((PASS + 1))
@@ -5505,10 +5505,10 @@ fi
 
 # Fact without "function" field → should be excluded from diff
 cat > "$ADV_DIR/no_function.json" << 'ADVEOF'
-[{"kind":"effects","is_pure":true}]
+[{"kind":"effects","no_external_authority":true}]
 ADVEOF
 cat > "$ADV_DIR/normal_fact.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","is_pure":true}]
+[{"kind":"effects","function":"foo","no_external_authority":true}]
 ADVEOF
 adv_nofn=$($COMPILER diff "$ADV_DIR/no_function.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
 # The fact without function should be dropped, so "foo" appears as added
@@ -5523,7 +5523,7 @@ fi
 
 # Fact without "kind" field → should also be dropped
 cat > "$ADV_DIR/no_kind.json" << 'ADVEOF'
-[{"function":"foo","is_pure":true}]
+[{"function":"foo","no_external_authority":true}]
 ADVEOF
 adv_nokind=$($COMPILER diff "$ADV_DIR/no_kind.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
 if grep <<<"$adv_nokind" -q '\[+\].*effects.*foo'; then
@@ -5578,10 +5578,10 @@ fi
 # --- Capability array grows (string-level diff) ---
 
 cat > "$ADV_DIR/cap_old.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","capabilities":"[]","is_pure":"true","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"enforced"}]
+[{"kind":"effects","function":"foo","capabilities":"[]","no_external_authority":"true","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"enforced"}]
 ADVEOF
 cat > "$ADV_DIR/cap_new.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","capabilities":"[Alloc, Network]","is_pure":"false","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"reported"}]
+[{"kind":"effects","function":"foo","capabilities":"[Alloc, Network]","no_external_authority":"false","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"reported"}]
 ADVEOF
 adv_cap=$($COMPILER diff "$ADV_DIR/cap_old.json" "$ADV_DIR/cap_new.json" 2>&1) && true || true
 if grep <<<"$adv_cap" -q "TRUST WEAKENED" && \
@@ -5601,7 +5601,7 @@ cat > "$ADV_DIR/new_weak_old.json" << 'ADVEOF'
 []
 ADVEOF
 cat > "$ADV_DIR/new_weak_new.json" << 'ADVEOF'
-[{"kind":"effects","function":"evil_fn","evidence":"reported","is_pure":"false","capabilities":"[Alloc]","allocates":"true","frees":"false","recursion":"none","loops":"none","crosses_ffi":"true","is_trusted":"false"}]
+[{"kind":"effects","function":"evil_fn","evidence":"reported","no_external_authority":"false","capabilities":"[Alloc]","allocates":"true","frees":"false","recursion":"none","loops":"none","crosses_ffi":"true","is_trusted":"false"}]
 ADVEOF
 adv_newweak=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_weak_new.json" 2>&1) && adv_nw_exit=0 || adv_nw_exit=$?
 # New function with weak evidence should be flagged as weakened
@@ -5667,9 +5667,9 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# New capability with is_pure=false → weakened
+# New capability with no_external_authority=false → weakened
 cat > "$ADV_DIR/new_impure_new.json" << 'ADVEOF'
-[{"kind":"capability","function":"impure_fn","capabilities":"[Alloc]","is_pure":"false"}]
+[{"kind":"capability","function":"impure_fn","capabilities":"[Alloc]","no_external_authority":"false"}]
 ADVEOF
 adv_impure=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_impure_new.json" 2>&1) && true || true
 if grep <<<"$adv_impure" -q "TRUST WEAKENED"; then
@@ -6082,7 +6082,7 @@ with open('$CRYPTO_SNAP_DIR/good.facts.json') as f:
 facts = s['facts']
 effects = {f['function']: f for f in facts if f['kind'] == 'effects'}
 for fn in ['main.compute_tag', 'main.verify_tag', 'main.check_nonce']:
-    assert effects[fn]['is_pure'] == True
+    assert effects[fn]['no_external_authority'] == True
     assert effects[fn]['capabilities'] == []
     assert effects[fn]['crosses_ffi'] == False
 " 2>/dev/null; then
@@ -6300,7 +6300,7 @@ with open('$ELF_SNAP_DIR/good.json') as f:
 facts = s['facts']
 effects = {f['function']: f for f in facts if f['kind'] == 'effects'}
 for fn in ['main.check_magic', 'main.check_class', 'main.check_data', 'main.check_version', 'main.validate_header']:
-    assert effects[fn]['is_pure'] == True
+    assert effects[fn]['no_external_authority'] == True
     assert effects[fn]['capabilities'] == []
 " 2>/dev/null; then
     echo "  ok  elf_header: all core functions are pure with no capabilities"
@@ -6320,8 +6320,8 @@ effects = {f['function']: f for f in facts if f['kind'] == 'effects'}
 assert 'File' in effects['main.read_header_bytes']['capabilities']
 assert effects['main.read_header_bytes']['is_trusted'] == True
 assert effects['main.read_byte']['is_trusted'] == True
-assert effects['main.read_byte']['is_pure'] == True
-assert effects['main.main']['is_pure'] == False
+assert effects['main.read_byte']['no_external_authority'] == True
+assert effects['main.main']['no_external_authority'] == False
 " 2>/dev/null; then
     echo "  ok  elf_header: I/O shell has correct capabilities and trust"
     PASS=$((PASS + 1))
@@ -6390,7 +6390,7 @@ else
 fi
 
 # read_byte is trusted but pure (no capabilities)
-if grep <<<"$elf_effects" -A1 "read_byte" | grep -q "caps: (pure)" && grep <<<"$elf_effects" -A1 "read_byte" | grep -q "trusted: yes"; then
+if grep <<<"$elf_effects" -A1 "read_byte" | grep -q "caps: (no external authority)" && grep <<<"$elf_effects" -A1 "read_byte" | grep -q "trusted: yes"; then
     echo "  ok  elf_header: read_byte is trusted + pure (pointer read only)"
     PASS=$((PASS + 1))
 else
@@ -7589,7 +7589,7 @@ else
 fi
 
 # --- 11. Snapshot with duplicate fact keys → error ---
-echo '[{"kind":"effects","function":"foo","is_pure":true},{"kind":"effects","function":"foo","is_pure":false}]' > "$MAL_DIR/dupes.json"
+echo '[{"kind":"effects","function":"foo","no_external_authority":true},{"kind":"effects","function":"foo","no_external_authority":false}]' > "$MAL_DIR/dupes.json"
 mal_dupe=$($COMPILER diff "$MAL_DIR/dupes.json" "$MAL_DIR/good.json" 2>&1) && dupe_exit=0 || dupe_exit=$?
 if [ "$dupe_exit" -ne 0 ] && grep <<<"$mal_dupe" -q "duplicate"; then
     echo "  ok  malformed: snapshot with duplicate keys produces error"
@@ -7730,7 +7730,7 @@ else
 fi
 
 # --- 24. Diff shows <missing> for absent fields, not empty string ---
-echo '[{"kind":"effects","function":"foo","is_pure":true,"evidence":"enforced","capabilities":"[]","crosses_ffi":false,"is_trusted":false}]' > "$MAL_DIR/diff_old.json"
+echo '[{"kind":"effects","function":"foo","no_external_authority":true,"evidence":"enforced","capabilities":"[]","crosses_ffi":false,"is_trusted":false}]' > "$MAL_DIR/diff_old.json"
 echo '[{"kind":"effects","function":"foo","evidence":"enforced"}]' > "$MAL_DIR/diff_new.json"
 diff_out=$($COMPILER diff "$MAL_DIR/diff_old.json" "$MAL_DIR/diff_new.json" 2>&1) || true
 if grep <<<"$diff_out" -q "<missing>"; then
@@ -8097,7 +8097,7 @@ if [ -f "examples/thesis_demo/src/main.con" ] && [ -f "examples/thesis_demo/src/
     drift_check "thesis_demo" \
         "examples/thesis_demo/src/main.con" \
         "examples/thesis_demo/src/main_drifted.con" \
-        "is_pure: true → false"
+        "no_external_authority: true → false"
 
     # Also check authority escalation specifically
     diff_out=$("$COMPILER" diff "$TMPDIR/drift_thesis_demo_orig.json" "$TMPDIR/drift_thesis_demo_drift.json" 2>&1) || true
@@ -8874,12 +8874,12 @@ api_fail=0
 
 api_env=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostics-json 2>/dev/null)
 
-# 1. diagnostics-json has schema_version = 1
-if grep <<<"$api_env" -q '"schema_version": 1'; then
-    echo "  ok  api-versioning: diagnostics-json has schema_version 1"
+# 1. diagnostics-json has schema_version = 2
+if grep <<<"$api_env" -q '"schema_version": 2'; then
+    echo "  ok  api-versioning: diagnostics-json has schema_version 2"
     api_pass=$((api_pass + 1))
 else
-    echo "FAIL  api-versioning: diagnostics-json should have schema_version 1"
+    echo "FAIL  api-versioning: diagnostics-json should have schema_version 2"
     api_fail=$((api_fail + 1))
 fi
 
@@ -8923,18 +8923,18 @@ fi
 
 # 5. semantic query has schema_version
 q_pred=$($COMPILER "$TESTDIR/report_integration.con" --query "predictable:pure_add" 2>/dev/null)
-if grep <<<"$q_pred" -q '"schema_version": 1'; then
-    echo "  ok  api-versioning: query_answer has schema_version 1"
+if grep <<<"$q_pred" -q '"schema_version": 2'; then
+    echo "  ok  api-versioning: query_answer has schema_version 2"
     api_pass=$((api_pass + 1))
 else
-    echo "FAIL  api-versioning: query_answer should have schema_version 1"
+    echo "FAIL  api-versioning: query_answer should have schema_version 2"
     api_fail=$((api_fail + 1))
 fi
 
 # 6. fact-filter query returns versioned envelope
 q_fn=$($COMPILER "$TESTDIR/report_integration.con" --query "fn:pure_add" 2>/dev/null)
 if grep <<<"$q_fn" -q '"schema_kind": "facts"' && \
-   grep <<<"$q_fn" -q '"schema_version": 1'; then
+   grep <<<"$q_fn" -q '"schema_version": 2'; then
     echo "  ok  api-versioning: fact-filter query returns versioned envelope"
     api_pass=$((api_pass + 1))
 else
@@ -8949,7 +8949,7 @@ import json, sys
 s = json.loads(sys.stdin.read())
 for k in ['schema_version','fact_kinds','query_kinds','fact_schemas','query_schemas','envelopes','policies','location_encoding']:
     assert k in s, f'missing key: {k}'
-assert s['schema_version'] == 1
+assert s['schema_version'] == 2
 assert len(s['fact_kinds']) == 12
 assert len(s['query_kinds']) == 7
 " <<< "$schema_out" 2>/dev/null; then
@@ -8962,7 +8962,7 @@ fi
 
 # 8. kind-filter query returns envelope with fact_count > 0
 q_eff=$($COMPILER "$TESTDIR/report_integration.con" --query "effects" 2>/dev/null)
-if grep <<<"$q_eff" -q '"schema_version": 1' && \
+if grep <<<"$q_eff" -q '"schema_version": 2' && \
    grep <<<"$q_eff" -q '"fact_count":' && \
    ! grep <<<"$q_eff" -q '"fact_count": 0'; then
     echo "  ok  api-versioning: kind-filter query returns envelope with facts"
@@ -8974,7 +8974,7 @@ fi
 
 # 9. empty-result policy: unknown function returns envelope with fact_count 0
 q_empty=$($COMPILER "$TESTDIR/report_integration.con" --query "effects:nonexistent_function_xyz" 2>/dev/null)
-if grep <<<"$q_empty" -q '"schema_version": 1' && \
+if grep <<<"$q_empty" -q '"schema_version": 2' && \
    grep <<<"$q_empty" -q '"fact_count": 0'; then
     echo "  ok  api-versioning: empty result returns envelope with fact_count 0"
     api_pass=$((api_pass + 1))
@@ -9000,7 +9000,7 @@ dc_out=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostic-codes 2
 if python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())
-assert d['schema_version'] == 1
+assert d['schema_version'] == 2
 assert d['code_count'] >= 170
 assert d['code_count'] == len(d['codes'])
 assert 'severity_meanings' in d
@@ -9681,11 +9681,11 @@ PP_SRC="examples/proof_pressure/src/main.con"
 pb_out=$($COMPILER "$PP_SRC" --report proof-bundle 2>&1 | grep -v '^warning:')
 
 # 1. Bundle has schema_version and schema_kind
-if echo "$pb_out" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['schema_version']==1; assert d['schema_kind']=='proof_bundle'" 2>/dev/null; then
-    echo "  ok  bundle: schema_version=1 and schema_kind=proof_bundle"
+if echo "$pb_out" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['schema_version']==2; assert d['schema_kind']=='proof_bundle'" 2>/dev/null; then
+    echo "  ok  bundle: schema_version=2 and schema_kind=proof_bundle"
     pb_pass=$((pb_pass + 1))
 else
-    echo "  FAIL bundle: should have schema_version=1 and schema_kind=proof_bundle"
+    echo "  FAIL bundle: should have schema_version=2 and schema_kind=proof_bundle"
     pb_fail=$((pb_fail + 1))
 fi
 
@@ -10147,7 +10147,7 @@ fi
 # 12. No capabilities on validation core (pure functions)
 pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag ok_result err_result; do
-    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
         pure_caps=false
     fi
 done
@@ -10215,7 +10215,7 @@ fi
 # extraction landed (e2ab5eef); the remainder stay `enforced`. The "0 reported"
 # check is the invariant: every pure function carries enforced-or-stronger evidence.
 pv_effects=$("$COMPILER" "$PV_SRC" --report effects 2>&1)
-if grep <<<"$pv_effects" -q "10 pure" && grep <<<"$pv_effects" -q "0 reported"; then
+if grep <<<"$pv_effects" -q "10 with no external authority" && grep <<<"$pv_effects" -q "0 reported"; then
     echo "  ok  parsevalidate: all 10 functions are pure with evidence (proved/enforced)"
     pv_pass=$((pv_pass + 1))
 else
@@ -10271,7 +10271,7 @@ fi
 # 10. All core validators are capability-free (pure)
 pv_pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_checksum compute_checksum parse_header error_code; do
-    if ! grep <<<"$pv_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$pv_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
         pv_pure_caps=false
     fi
 done
@@ -10336,7 +10336,7 @@ fi
 
 # 4. All 12 functions are pure with evidence=enforced
 se_effects=$("$COMPILER" "$SE_SRC" --report effects 2>&1)
-if grep <<<"$se_effects" -q "12 pure" && grep <<<"$se_effects" -q "12 enforced"; then
+if grep <<<"$se_effects" -q "12 with no external authority" && grep <<<"$se_effects" -q "12 enforced"; then
     echo "  ok  serviceerrors: all 12 functions are pure with evidence=enforced"
     se_pass=$((se_pass + 1))
 else
@@ -10392,7 +10392,7 @@ fi
 # 10. All core functions are capability-free (pure)
 se_pure_caps=true
 for fn in validate authorize check_rate_limit process_action handle_request handle_validated handle_authorized service_error_code; do
-    if ! grep <<<"$se_effects" -A1 "$fn" | grep -q "caps: (pure)"; then
+    if ! grep <<<"$se_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
         se_pure_caps=false
     fi
 done

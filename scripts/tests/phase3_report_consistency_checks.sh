@@ -15,7 +15,7 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
 
 # caps confirms pure_compute is pure (no caps)
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_compute.*(pure)" \
+    "pure_compute.*(no external authority)" \
     "consistency: caps confirms pure_compute is pure" \
     "consistency: caps does not confirm pure_compute is pure"
 
@@ -27,7 +27,7 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
 
 # caps confirms pure_multiply is pure
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_multiply.*(pure)" \
+    "pure_multiply.*(no external authority)" \
     "consistency: caps confirms pure_multiply is pure" \
     "consistency: caps does not confirm pure_multiply is pure"
 
@@ -179,11 +179,11 @@ check_report "$TESTDIR/phase3_report_consistency.con" proof \
 # Both must appear as (pure) in caps; identity and wrap_pair are also pure but
 # the eligible count matches the public pure non-generic fns
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_compute.*(pure)" \
+    "pure_compute.*(no external authority)" \
     "consistency: caps cross-check pure_compute is pure for count" \
     "consistency: caps cross-check pure_compute not pure"
 
 check_report "$TESTDIR/phase3_report_consistency.con" caps \
-    "pure_multiply.*(pure)" \
+    "pure_multiply.*(no external authority)" \
     "consistency: caps cross-check pure_multiply is pure for count" \
     "consistency: caps cross-check pure_multiply not pure"

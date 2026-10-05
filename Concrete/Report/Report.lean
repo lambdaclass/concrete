@@ -213,7 +213,7 @@ def authorityReport (modules : List CModule) (assumptions : Assumptions.Table :=
   let pureFns := (allFns.filter fun f => f.capSet.isEmpty).length
   let totalFns := allFns.length
   let externCount := modules.foldl (fun acc m => acc + countModuleExterns m) 0
-  let summary := s!"\nTotals: {totalFns} functions ({pureFns} pure, {totalFns - pureFns} with capabilities), {externCount} externs"
+  let summary := s!"\nTotals: {totalFns} functions ({pureFns} with no declared capability, {totalFns - pureFns} with capabilities), {externCount} externs"
   if sections.isEmpty then s!"{header}\n\nAll functions are pure — no capabilities required.\n"
   else s!"{header}\n\n{"\n\n".intercalate sections}\n{summary}\n"
 
@@ -366,11 +366,13 @@ private structure FnEffects where
   -- declared" rather than "nothing happens". Proof admission already refuses these;
   -- printing `(pure)` here would leave report and admission disagreeing.
   effectOpaque : Bool
+  /-- From the assumption summary: no declared capability, complete coverage, no assumed binding. -/
+  noExternalAuthority : Bool := false
   loc        : Option SourceLoc  -- structured (file, line), not pre-formatted
 
 private def fmtEffectsRow (e : FnEffects) : String :=
   let pub := if e.isPublic then "pub " else "    "
-  let caps := ppAuthority e.capSet e.effectOpaque
+  let caps := ppAuthority e.capSet e.effectOpaque e.noExternalAuthority
   let allocClass :=
     if e.allocates && e.defers then "alloc+defer"
     else if e.allocates && e.frees then "alloc+free"
@@ -467,14 +469,19 @@ def effectsReport (modules : List CModule) (locMap : FnLocMap := [])
     -- Opacity follows the shared summary too, so the row cannot claim `(pure)` past a gap.
     let modEffects := (effectsForModule opaqueSet externNames recUncertain recMap locMap pc m).map fun e =>
       match idx.get? e.qualName >>= assumptions.fns.get? with
-      | some sm => { e with effectOpaque := e.effectOpaque || !sm.complete }
+      | some sm => { e with effectOpaque := e.effectOpaque || !sm.complete
+                            noExternalAuthority := assumptions.noExternalAuthority sm e.capSet }
       | none => e
     let fnLines := modEffects.map fun e =>
       "\n".intercalate (fmtEffectsRow e :: assumesLine assumptions idx e.qualName e.capSet "    ")
     s!"module {m.name}:\n{"\n".intercalate fnLines}"
   -- Summary counts
   let total := allEffects.length
-  let pure := (allEffects.filter fun e => e.capSet == .empty).length
+  let idxT := assumptions.programIndex (modules.map (·.name))
+  let pure := if assumptions.fns.isEmpty then (allEffects.filter fun e => e.capSet == .empty && !e.effectOpaque).length
+    else (allEffects.filter fun e => match idxT.get? e.qualName >>= assumptions.fns.get? with
+      | some sm => assumptions.noExternalAuthority sm e.capSet && !e.effectOpaque
+      | none => false).length
   let allocating := (allEffects.filter (·.allocates)).length
   let recursive := (allEffects.filter fun e => e.recursion != "none").length
   let unboundedLoops := (allEffects.filter fun e => e.loops == "unbounded" || e.loops == "mixed").length
@@ -484,7 +491,7 @@ def effectsReport (modules : List CModule) (locMap : FnLocMap := [])
   let enforced := (allEffects.filter fun e => e.evidence.startsWith "enforced").length
   let trustedAssumption := (allEffects.filter fun e => e.evidence == "trusted-assumption").length
   let reported := (allEffects.filter fun e => e.evidence == "reported").length
-  let summary := s!"\nTotals: {total} functions, {pure} pure, {allocating} allocating, {recursive} recursive, {unboundedLoops} unbounded loops, {ffi} cross FFI, {trusted} trusted\nEvidence: {proved} proved, {enforced} enforced, {trustedAssumption} trusted-assumption, {reported} reported"
+  let summary := s!"\nTotals: {total} functions, {pure} with no external authority, {allocating} allocating, {recursive} recursive, {unboundedLoops} unbounded loops, {ffi} cross FFI, {trusted} trusted\nEvidence: {proved} proved, {enforced} enforced, {trustedAssumption} trusted-assumption, {reported} reported"
   s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n"
 
 /-- Format the recursion report. -/
@@ -4722,10 +4729,10 @@ def traceabilityReport
 -- proof-status entries. JSON output, no external dependencies.
 
 
-/-- Schema version for the machine-readable JSON API.
+/-- Schema version for the machine-readable JSON API — the single definition in `Json.lean`.
     Bump this when adding required fields or removing fields.
     Adding optional fields is backwards-compatible and does not bump the version. -/
-def schemaVersion : Nat := 1
+def schemaVersion : Nat := apiSchemaVersion
 
 /-- Known fact kinds that the compiler produces. -/
 def knownFactKinds : List String :=
@@ -5002,14 +5009,14 @@ private def effectsToFact (assumptions : Assumptions.Table) (idx : Std.HashMap S
   let (concreteCaps, _) := e.capSet.normalize
   -- "pure" is a CLAIM: no declared capability, complete coverage, and no foreign binding whose
   -- honesty it would rest on. An empty capability set alone does not earn it (R-0484).
-  let effectFree := match idx.get? e.qualName >>= assumptions.fns.get? with
-    | some s => assumptions.effectFree s e.capSet
+  let noAuthority := match idx.get? e.qualName >>= assumptions.fns.get? with
+    | some s => assumptions.noExternalAuthority s e.capSet
     | none => e.capSet == .empty && !e.effectOpaque
   .obj ([
     ("kind", .str "effects"),
     ("function", .str e.qualName),
     ("capabilities", .arr (concreteCaps.map .str)),
-    ("is_pure", .bool effectFree),
+    ("no_external_authority", .bool noAuthority),
     ("allocates", .bool e.allocates),
     ("frees", .bool e.frees),
     ("defers", .bool e.defers),
@@ -5055,8 +5062,8 @@ private def capToFact (lookup : CapLookup) (assumptions : Assumptions.Table)
     ("kind", .str "capability"),
     ("function", .str qualName),
     ("capabilities", .arr (concreteCaps.map .str)),
-    ("is_pure", .bool (match idx.get? qualName >>= assumptions.fns.get? with
-      | some s => assumptions.effectFree s f.capSet
+    ("no_external_authority", .bool (match idx.get? qualName >>= assumptions.fns.get? with
+      | some s => assumptions.noExternalAuthority s f.capSet
       | none => concreteCaps.isEmpty)),
     ("is_public", .bool f.isPublic),
     ("why", .arr traces)
@@ -5077,7 +5084,7 @@ private partial def collectCapFactsModule (lookup : CapLookup) (assumptions : As
       ("kind", .str "capability"),
       ("function", .str (qualPrefix ++ "." ++ n)),
       ("capabilities", .arr ((rc ++ rv).map Val.str)),
-      ("is_pure", .bool false),
+      ("no_external_authority", .bool false),
       ("is_extern", .bool true),
       ("is_trusted", .bool trusted),
       ("declared_effects_assumed", .bool true),
@@ -5732,7 +5739,7 @@ def auditQuery (modules : List CModule) (locMap : FnLocMap)
       ("is_trusted", .bool eff.isTrusted),
       ("authority", .obj [
         ("capabilities", .arr (concreteCaps.map .str)),
-        ("is_pure", .bool concreteCaps.isEmpty),
+        ("no_declared_capability", .bool concreteCaps.isEmpty),
         ("traces", .arr capTraces)
       ]),
       ("predictable", .obj [
@@ -5995,14 +6002,14 @@ def schemaReport : String :=
       [("proof_core", "string")]),
     ("effects", fieldSpec
       [("kind", "string"), ("function", "string"), ("capabilities", "string[]"),
-       ("is_pure", "boolean"), ("allocates", "boolean"), ("frees", "boolean"),
+       ("no_external_authority", "boolean"), ("allocates", "boolean"), ("frees", "boolean"),
        ("defers", "boolean"), ("recursion", "string"), ("loops", "string"),
        ("crosses_ffi", "boolean"), ("is_trusted", "boolean"), ("is_public", "boolean"),
        ("evidence", "string"), ("loc", "location")]
       []),
     ("capability", fieldSpec
       [("kind", "string"), ("function", "string"), ("capabilities", "string[]"),
-       ("is_pure", "boolean"), ("why", "object[]")]
+       ("no_external_authority", "boolean"), ("why", "object[]")]
       [("is_public", "boolean"), ("is_extern", "boolean"), ("is_trusted", "boolean")]),
     ("unsafe", fieldSpec
       [("kind", "string"), ("function", "string")]

@@ -69,8 +69,12 @@ def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String) : List Strin
     not earned one). Proof ADMISSION already refuses these; the report saying `(pure)`
     while admission refuses would leave the two disagreeing, which is worse for a reader
     than being consistently wrong. -/
-def ppAuthority (capSet : CapSet) (isOpaque : Bool) : String :=
+def ppAuthority (capSet : CapSet) (isOpaque : Bool) (noExternalAuthority : Bool := false) : String :=
   if isOpaque && capSet.isEmpty then "(effects unknown: reaches an indirect call)"
+  -- Not "(pure)": complete coverage and no assumed binding rule out EXTERNAL authority only.
+  -- Mutation through `&mut` arguments and the operations trusted code performs are not
+  -- excluded, so no purity judgment is claimed (R-0484 R10).
+  else if capSet.isEmpty && noExternalAuthority then "(no external authority)"
   else ppCapSet capSet
 
 /-- The R10 qualification line under a function, read from the shared assumption summary. -/
@@ -95,7 +99,8 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
     let unknownFx := opaqueSet.contains (qualPrefix ++ "." ++ f.name) || (summ.map (!·.complete)).getD false
     let capsStr := match summ with
       | some sm => if !unknownFx && f.capSet.isEmpty && !(assumptions.foreignFacts sm).isEmpty
-                   then "(no declared capability)" else ppAuthority f.capSet unknownFx
+                   then "(no declared capability)"
+                   else ppAuthority f.capSet unknownFx (assumptions.noExternalAuthority sm f.capSet)
       | none => ppAuthority f.capSet unknownFx
     let mainLine := s!"{indent}  {pubStr}{f.name} : {capsStr}"
     let traceLines := capWhyTrace lookup f indent
@@ -120,6 +125,16 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
   if body.isEmpty then header
   else s!"{header}\n{"\n".intercalate body}"
 
+/-- Functions whose headline earns "no external authority" — the count the totals report. -/
+partial def countNoAuthority (assumptions : Assumptions.Table) (idx : Std.HashMap String String)
+    (opaqueSet : List String) (qualPfx : String) (m : CModule) : Nat :=
+  let qp := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
+  let here := (m.functions.filter fun f =>
+    match idx.get? (qp ++ "." ++ f.name) >>= assumptions.fns.get? with
+    | some sm => assumptions.noExternalAuthority sm f.capSet && !opaqueSet.contains (qp ++ "." ++ f.name)
+    | none => false).length
+  here + m.submodules.foldl (fun acc sub => acc + countNoAuthority assumptions idx opaqueSet qp sub) 0
+
 def capabilityReport (modules : List CModule) (assumptions : Assumptions.Table := {}) : String :=
   let header := "=== Capability Summary ==="
   let lookup := buildCapLookup modules
@@ -128,9 +143,12 @@ def capabilityReport (modules : List CModule) (assumptions : Assumptions.Table :
   let idx := assumptions.programIndex (modules.map (·.name))
   let body := modules.map (capReportModule opaqueSet "" lookup · "" assumptions idx)
   let totalFns := modules.foldl (fun acc m => acc + countModuleFns m) 0
-  let pureFns := modules.foldl (fun acc m => acc + countModulePure opaqueSet "" m) 0
+  -- The total counts the SAME claim the headline makes: from the summary when available.
+  let pureFns :=
+    if assumptions.fns.isEmpty then modules.foldl (fun acc m => acc + countModulePure opaqueSet "" m) 0
+    else modules.foldl (fun acc m => acc + countNoAuthority assumptions idx opaqueSet "" m) 0
   let externCount := modules.foldl (fun acc m => acc + countModuleExterns m) 0
-  let summary := s!"\nTotals: {totalFns} functions ({pureFns} pure), {externCount} externs"
+  let summary := s!"\nTotals: {totalFns} functions ({pureFns} with no external authority), {externCount} externs"
   s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n"
 
 -- ============================================================

@@ -2,7 +2,7 @@
 
 module parse_validate (1 exports):
   public API:
-    fn main() -> Int  [(pure)]
+    fn main() -> Int  [(none)]
 
 Totals: 1 modules, 1 public exports
 
