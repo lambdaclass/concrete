@@ -7215,10 +7215,14 @@ check_collection_tests "Fs" \
     fs_test_read_to_string_nonexistent fs_test_read_to_string_roundtrip fs_test_append_file_bad_path \
     fs_test_read_past_eof fs_test_seek_past_end fs_test_read_to_string_empty
 
+# R-0484 F1: process_test_wait_invalid_pid(_negative) are REMOVED, not missing — they forged a
+# Child from a raw pid (one with -1, "any child"), which is no longer expressible. That a Child
+# cannot be forged is asserted by check_construction_rights.sh; the spawn -> wait path by
+# check_spawn_exit.sh (tests/regressions/spawn_exit/spawn_wait_status).
 check_collection_tests "Process" \
-    process_test_wait_invalid_pid process_test_kill_invalid_pid process_test_signal_constants \
+    process_test_kill_invalid_pid process_test_signal_constants \
     process_test_getpid process_test_kill_signal_zero \
-    process_test_kill_invalid_signal process_test_wait_invalid_pid_negative process_test_kill_pid_zero_exists
+    process_test_kill_invalid_signal process_test_kill_pid_zero_exists
 
 check_collection_tests "Net" \
     net_test_connect_refused net_test_connect_bad_address net_test_bind_bad_address \
