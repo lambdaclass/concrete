@@ -9,6 +9,8 @@ state or queue.
 
 > **Start here for what happens next:** [The current execution queue](#the-current-execution-queue),
 > the first section below — the only ordering in this file.
+> **Start here for releases:** [Release map](#release-map) — bounded deliverables,
+> candidate acceptance and compatibility; not another execution queue.
 > **Start here for direction:** [Capability unlocks](#capability-unlocks--the-stable-product-map)
 > and [North star](#north-star-compositional-fail-visible-verification) — the product boundary,
 > the dimensions along which proof support grows, and the limits that must remain visible.
@@ -28,7 +30,7 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0484: `with(...)` is the complete list of a function's external authority (decided 2026-09-29/30; design in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md))** | Top priority: it settles the one semantic boundary the 2026-09-15 baseline left open, and effect reports, proof admission and policy are all built on what a header means. **Rules:** handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs `Unsafe` and nothing else, including the `Unsafe` of calling a plain `extern` (this reverses the current rule in `SAFETY.md`, `FFI.md:109` and `CAPABILITY_FACTS.md`); every foreign binding declares its effects and an undeclared one is refused; foreign declarations and descriptor conversions are audited assumptions shown in reports. **Slices:** (1) design doc — drafted; encoding A (per-effect raw-integer bindings to one C symbol) selected for the first implementation, B (`Fd<C>`) a later option; construction/caller audit taken 2026-09-30 ([HANDLE_CAPABILITIES_AUDIT.md](docs/language/HANDLE_CAPABILITIES_AUDIT.md): `Child` forgeable, `Writer`/`Reader` hole confirmed, `fork` duplicates owning handles, 8 unused bindings; classification decisions D1-D4 settled 2026-10-01; F10 fixed early as bug 072); slice 1 complete; slices 2–4 merged to main as a partial checkpoint 2026-10-04 (`a7c9cf1c`, main CI green; merged under an approved exception for the full mutation campaign, which exceeds CI's 6-hour limit) — **remaining before R-0484 closes:** F1 (`Child` constructible outside its module), F9 (`process_fork` duplicates owning handles), cross-package assumption propagation through the existing dependency mechanism (today project mode only; single-file reports state incomplete coverage), the slice 5 completion criteria (docs/examples consistency pass, final authority audit, cross-package and trust controls, codegen/ABI checks, validation evidence), and four external doc pages not yet located; F7/F8 belong to R-0013. Full mutation-campaign qualification is not an R-0484 requirement: it stays its own milestone (row 2), recorded here only because the checkpoint merged under that exception; (2) compiler: effect declarations on externs, symbol aliasing (extending the import-alias path), the `trusted` rule, capability parameters on structs, dependency-summary transport, the assumptions section; (3) std FFI migration: bindings reclassified under the `trusted extern` criterion (`memcpy`/`memcmp` become plain `extern` behind wrappers), sinks declare `Console`/`File`; (4) `Writer<C>`/`Reader<C>` and the 14 consumers outside `io.con`, inverting `check_effect_opacity.sh`'s pinned assertion that `print_bytes` is admitted; (5) migration guidance, reference docs, examples and report snapshots, plus the final authority/ABI audit specified in R-0484's completion criteria. The first cut excludes descriptor replacement (std binds no `dup`/`dup2`; unused `fdopen` removed) and requires audited unique ownership for owning handles; a second step adds typed bindings/descriptors and defines replacement and cross-classification aliasing. | `print_bytes` declares `with(C)` and its call site reports `Console`; a function with an empty `with(...)` cannot reach external authority through a handle, a `trusted` body, a foreign binding or a dependency; the design doc's acceptance cases exist as fixtures, with mutation tests where marked; every foreign effect declaration and descriptor conversion appears in the reports' assumptions section |
+| 0 | **R-0484: explicit external authority through handles, foreign calls and dependencies** | Core repair merged at `a7c9cf1c`; follow-up branches are not yet a validated main checkpoint. Finish F1/F9 integration, R10 assumption qualification and coverage, separate proof-admission consolidation, and the docs/examples/authority audit. Current commit and validation status live in [R-0484](#task-r-0484); semantics live in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md). | Header authority is enforced across handles/trusted code/externs/packages; reports qualify assumptions and gaps; proof admission uses shared summary facts with its own eligibility rules; all R-0484 completion controls pass on the final integrated commit. Full mutation-campaign qualification remains row 2, not an R-0484 closure requirement. |
 | 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
 | 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
 | 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
@@ -46,6 +48,85 @@ the next transition; completed milestones move to the changelog rather than accu
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
+
+## Release map
+
+Release labels below are provisional scopes, not version numbers, dates or claims
+that a release is ready. The execution queue above remains the sole scheduling
+authority. Phase numbers group subjects; they are not release numbers. R-0333 owns
+this map and each candidate checklist; Phase 17 retains the detailed release bars.
+No release requires finishing the entire task catalog.
+
+| release scope | user-visible outcome | required increments / owners | explicitly deferred |
+|---|---|---|---|
+| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Close R-0484 and R-0483; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing Phase 17 alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
+| Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing Phase 17 beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
+| Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
+
+The systems preview is a separate, narrower deliverable, **not** a weakening or
+renaming of the existing verification alpha. It may expose experimental proof
+features only with their actual evidence classes, assumptions and coverage.
+The preview cannot advertise alpha graduation. Each later scope inherits the
+applicable earlier acceptance checks, rerun on its own candidate.
+
+### Next-release blockers
+
+The next proposed release is the experimental systems preview. This is an
+acceptance checklist, not an alternate priority list. It does not move release
+packaging ahead of current queue work or mark any in-flight branch as complete.
+
+- [ ] R-0484 meets its remaining closure criteria, including assumption propagation,
+  construction/runtime restrictions, final audit and documentation reconciliation.
+- [ ] R-0483 rejects mismatched owners for parsed results with retained controls.
+- [ ] R-0333 names the exact preview subset, supported target/OS/toolchain matrix,
+  known limitations and the validation required for every advertised feature.
+- [ ] R-0335/R-0336/R-0337 publish a versioned description and consistent claims for
+  that subset; examples and migration guidance are checked against the candidate.
+- [ ] R-0334/R-0346/R-0352/R-0354 demonstrate clean installation, build/run/test and
+  the tutorial on every claimed platform. Record external-user failures and fixes.
+- [ ] R-0333 records a reproducible candidate and its validation result using the
+  common candidate record below. Unresolved queue prerequisites remain blockers
+  unless an explicit, scoped release disposition permits a narrower claim.
+
+Finishing the first two items alone does not ship the preview. The mutation
+campaign exception that permitted a development checkpoint does not authorize a
+release exception. Qualification remains owned by its existing queue milestone;
+a candidate must satisfy its applicable requirements or obtain a separately
+recorded release decision that narrows the claims without concealing failures.
+
+### Release increments and candidate records
+
+Assign a **bounded increment** of a task to a release, not the whole task when its
+objective spans several releases. Each R-0333 checklist entry names its existing
+owner ID, delivered behavior, acceptance artifact and deferred remainder. For
+example, alpha needs the three-family R-0182/R-0183 change-and-repair diff; their
+broader reporting dimensions can remain open. Beta needs local package evidence,
+not the whole package ecosystem. Completing an increment does not close its owner.
+Research and workload-gated expansions remain in their existing sections until
+pulled. Historical execution logs belong in the archive, not candidate checklists.
+
+For each candidate, retain one versioned record under R-0333 containing:
+
+- Exact source commit, compiler/toolchain identity and released artifact identities;
+  supported language/std subset, platforms, backends and runtime profile.
+- Required checks and retained results for that exact candidate, including positive
+  and rejecting controls, applicable mutation qualification and clean installation.
+  A timeout, skipped job or incomplete report is never a passing result.
+- Source, std API/ABI and evidence-schema compatibility stated separately; migration,
+  invalidation and revalidation requirements for changes to any of them.
+- Open blockers, accepted limitations and deferred increments as separate lists,
+  with owners and rationale. An accepted limitation cannot contradict an advertised
+  guarantee; unresolved soundness failures inside the claimed scope block release.
+- Matching reference, claims matrix, tutorial/examples and release notes. Distinguish
+  enforced properties, checked proofs, assumptions, tests and incomplete coverage.
+- Supported lifetime and patch procedure, with security reporting, rollback and
+  evidence revocation/rechecking where affected (R-0343, R-0426–R-0429).
+
+Patch releases repair an already published scope without waiting for the next
+feature release. They have their own candidate commit and validation record;
+compatibility breaks or changed evidence identities require an explicit migration
+or invalidation notice. Stabilization must not silently expand the claimed subset.
 
 ## How To Read This Roadmap
 
@@ -1437,6 +1518,14 @@ honest bridge status with it. Avoid demonstration contracts whose specification
 merely restates the implementation, and avoid using quantified flagship examples
 whose prover-library cost obscures the smaller capability actually being built.
 
+**Delivery focus (2026-10-04): make a useful change cheaper to trust.** R-0486 is
+the shared acceptance workload for contracts, review diffs, policy and package
+evidence. Each prerequisite increment names the user-visible operation it unlocks,
+the smallest sufficient artifact/schema, and its bounded exit. Keep the required
+qualification, identity and independent-checking gates; defer broader schemas,
+backend breadth and proof automation until the workload demonstrates a need.
+This changes milestone emphasis, not the current execution queue.
+
 Three adoption tracks run across those slices rather than waiting behind them:
 
 - **one-module adoption:** a supported C ABI path for introducing one
@@ -1525,6 +1614,17 @@ two-state, totality and VC tasks own the semantics. Graduation requires:
    implementation recheck, while contract/authority/trust changes produce precise diffs.
 5. The migrated component has functioning safety regression controls and measured proof
    effort, review friction and runtime costs. Its results determine subsequent feature work.
+6. A non-author changes the component or one dependency, sees which guarantees the
+   change affects, repairs the affected obligations, and independently checks the
+   resulting evidence within the admitted scope. R-0486 retains the before/change/repair
+   artifacts; R-0150 measures effort from the first baseline, and R-0182/R-0183 supply
+   the initial authority/assumption/contract-evidence diff. Compiler-author intervention
+   is recorded as an unresolved usability limitation, not counted as independent success.
+
+Every feature contributing to this milestone includes actionable failure feedback in
+its exit: source location, relevant call/dependency path, unmet permission or obligation,
+and a valid next action (or an explicit unsupported boundary). R-0137/R-0466 own the
+diagnostic criteria; consumers reuse the same facts rather than inventing new verdicts.
 
 General heap proofs, concurrency, relational verification and general resource-bound proofs
 are not prerequisites for this milestone. Their existing research and later-phase owners
@@ -10721,17 +10821,73 @@ heap proofs or emitted-binary correctness.
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
 
-**Status (2026-10-04): partial checkpoint on main, R-0484 still open.** The first
-implementation merged at `a7c9cf1c` (main CI green): encoding A, capability parameters on
-structs, mandatory effect declarations on externs (E0116/E0117), the `trusted` reversal,
-`Writer<C>`/`Reader<C>` with their consumers, and the R10 assumptions report. Cross-package
-assumption reporting works in project mode only; a single-file report states that dependency
-coverage is incomplete, so an empty list never reads as "no foreign assumptions". It merged
-under an approved exception — the full mutation campaign exceeds CI's 6-hour limit — and the
-incomplete qualification is recorded under the mutation-harness items. Still open: F1
-(`Child` forgeable), F9 (`process_fork` ownership), complete cross-package assumption
-propagation through the existing dependency mechanism, the completion criteria below, and
-four external doc pages not yet located. F7/F8 belong to R-0013.
+**Status (2026-10-05): core checkpoint on main; follow-up integration pending.**
+The first implementation merged at `a7c9cf1c`: encoding A, capability parameters on
+structs, mandatory extern effect declarations (E0116/E0117), the `trusted` reversal,
+and `Writer<C>`/`Reader<C>`. Main is at roadmap cleanup `8960c97d` at this inventory.
+The checkpoint's approved full-campaign timeout exception does not certify the campaign
+or waive a later release's requirements; qualification retains its separate queue owner.
+
+| increment | recorded state; not a claim of integrated completion |
+|---|---|
+| F1/F9 construction and fork repair | Pushed as `r0484-finish` at `a084d91e`: only `spawn` constructs `Child`; public `process_fork`/`ForkResult` removed. Branch health passed; [full CI run 37354702330](https://github.com/unbalancedparentheses/concrete2/actions/runs/37354702330) is still running at this inventory. Supported spawn runtime assumptions remain explicit. |
+| Shared assumption summaries | `b14aaba3`, followed by bug 074 and canonical manifestless package identity in `873476d7`; carried on the qualification branch, not yet on main. |
+| Conclusion qualification | `f3510e04` supplies shared qualification and explicit unloaded-call gaps. This is an intermediate R10 increment, not complete assumption coverage. |
+| Authority terminology and JSON API v2 | Committed as `50bfc385`: purity claims removed from these authority reports; schema and consumers migrate without an `is_pure` alias. Integration and final validation remain pending. |
+| Combined tree | Local `r0484-integrated` at merge `37496123` combines F1/F9 and qualification. Additional corrections are uncommitted; that SHA is not the final validation candidate. Record the final committed SHA, identity and CI run after those corrections land. |
+
+A branch gate or F1/F9-only CI result cannot stand in for combined-tree validation.
+On the final integrated commit run the selected gates, both suite forms, identity
+freshness, campaign golden and mutation anchors in a clean clone, then full CI under
+the explicitly recorded campaign policy. Explain identity migrations by source/package
+mapping and account for every changed snapshot; regeneration alone is not evidence.
+Only record a follow-up as merged after main contains its validated commit.
+
+**R10 remaining closure work:**
+
+- Report trusted memory-safety boundaries as a named assumption category, with the
+  responsible function, absorbed obligation and dependent claims. A count alone is
+  insufficient; preserve provenance and package identity.
+- Represent coverage of the audited raw-descriptor restrictions and construction/caller
+  paths. Encoding A's lack of typed conversion syntax does not establish that there
+  are no descriptor assumptions. Unimplemented coverage remains explicit, not an
+  empty category presented as checked.
+- Make capability explanations follow dependency summaries and name the dependency
+  callee/binding instead of stopping at an unknown node. Preserve unresolved direct
+  and indirect calls as gaps, including in text, JSON and query consumers.
+
+**Report meaning and schema migration:** declared capability allowances, reachable
+assumptions and coverage are separate facts. An over-declared `with(Console)` header
+continues to display Console; “no reached foreign binding” establishes no narrower
+authority result, because primitives or other operations can supply authority. R-0487
+owns over-declaration analysis. “No external authority” is not purity, non-mutation,
+termination or proof eligibility; retain the `&mut` mutation acceptance example.
+Without sufficient analysis, describe only the declared set or explicit incomplete
+coverage. Empty foreign assumptions never imply complete coverage.
+
+Slice 5 includes the v1 → v2 migration in
+[COMPILER_API.md](docs/compiler/COMPILER_API.md): authority facts replace `is_pure`
+with `no_external_authority`, and declaration-only query facts use
+`no_declared_capability`. Producer and `concrete diff` share the version constant;
+consumers reject v1, absent versions and unsupported future versions before comparing
+facts, with a regeneration diagnostic and a valid-v2 acceptance control. No misleading
+purity alias is retained. Audit snapshots, query/schema fixtures and documentation
+must agree. This is branch implementation until integration is validated and merged.
+
+**Proof-admission consolidation: separate change, required before R-0484 closes.**
+After the combined reporting/FFI checkpoint, make admission consume the shared
+summary's reachability, assumptions and coverage. Admission retains its own eligibility
+judgment; it must not derive eligibility from a headline, an empty authority set or a
+renderer. Retain an old/new corpus verdict comparison and explain every delta. Missing
+dependencies, unresolved direct/indirect calls and dropped assumption edges must not
+silently gain admission; retain valid acceptance controls as well as rejection and
+mutation controls. Publish intermediate checkpoints with R-0484 open until this and
+the remaining R10/documentation criteria pass. This uses the existing R-0484 owner
+and does not introduce a second analysis pipeline or reorder the queue.
+
+The final docs/examples and authority audit, including disposition of the four external
+doc pages not yet located, remain required. F7/F8 repairs stay with R-0013 and validation
+with R-0030. Typed-descriptor extensions remain a separately gated second step.
 
 (Earlier status, 2026-09-29: design decided; reports were repaired and the admission repair
 went live 2026-09-26, and both remain as the conservative backstop.)
@@ -10820,7 +10976,9 @@ hole is closed: typed bindings and descriptors, and defined behaviour for bindin
   `Writer<C>`/`Reader<C>` and their callers, with remedies for the new diagnostics.
   Reconcile implemented versus planned status in this roadmap, the design and audit.
   Use “no undeclared external authority”; explain parameter mutation, termination,
-  proof eligibility and foreign assumptions separately.
+  proof eligibility and foreign assumptions separately. Include the API-v2 migration,
+  incompatible/missing-version rejection, and renamed report/query/diff expectations
+  described above; do not label branch-only changes shipped.
 - **Final authority audit.** Reconcile the binding inventory against the migrated std:
   every binding is classified or removed, every remaining descriptor restriction has
   named callers and ownership evidence, and every finding F1–F10 has a fixed or
@@ -11223,6 +11381,26 @@ Reuse the parser in the secure update-bundle verifier or protocol-state-machine
 flagship already selected in the queue's external-user workflow row. Expose a small C interface and exercise
 malformed input, bounded storage, state mutation, zero-copy access, recoverable
 failure, resource limits and named FFI assumptions. No fourth public flagship.
+
+**Shared change-and-repair scenario (2026-10-04):** prefer the bounded parser/state
+machine in `secure_update_verifier`; use the existing protocol flagship if its admitted
+fragment provides the smaller forcing case. Do not require the complete update verifier
+or all its cryptographic claims for this milestone. Implement the component, establish
+a useful behavioral contract that is not merely a restatement of its body, and retain
+baseline evidence. Change a dependency in separate controlled variants: add authority,
+introduce/widen an assumption, and invalidate contract/proof evidence. Show the precise
+diff and applicable policy rejection, perform an explicit repair, then replay the
+resulting evidence with the independent consumer. A contract-preserving body edit is
+the positive control for preservation after implementation revalidation. Missing facts
+or incomplete analysis produce an explicit incomplete result, never a false-clean diff.
+
+Use this one scenario across typed contracts, R-0182/R-0183 review, existing policy and
+package tasks, and R-0353 replay. R-0150 records annotation and manual proof burden,
+feedback latency and repair effort from the initial baseline; set improvement targets
+after observing that baseline. Measure the non-author session, including failed attempts
+and required author assistance. The scenario does not reorder qualification, identity,
+contract or independent-consumer prerequisites, or require a registry, new backend or
+general heap model.
 
 **Exit:** a consumer relies on a public contract without inspecting private bodies;
 calls establish preconditions and use exported postconditions without inlining;
@@ -12583,6 +12761,14 @@ too expensive.
 before investing in automation, so the external-validation gate's “was the
 proof discipline worth the cost?” question has data instead of anecdotes.
 
+**First shared consumer (2026-10-04): R-0486.** Begin measurements with its first
+bounded component, before proof scaffolding or automation is expanded. Retain source
+annotation size, manually authored proof/bridge work, time to actionable feedback,
+repair time after each controlled change, and compiler-author interventions. Record
+the revision, toolchain and measurement conditions; establish targets from the observed
+baseline rather than inventing speedup claims. The existing HMAC and coverage series
+below remain useful comparisons, not prerequisites to recording this workload.
+
 Measure both sides of the investment:
 
 - **cost:** per proved function, Lean proof lines, tactic depth,
@@ -13025,6 +13211,16 @@ completeness boundary rather than deriving reachability again.
 
 This is also the first **proof/capability diff for code review** surface.
 
+**First increment (2026-10-04):** serve R-0486 with exactly three change families:
+added/widened authority, added/widened assumptions, and invalidated contract/proof
+evidence. Derive the diff from existing canonical identities and facts; introduce no
+parallel ledger. Produce human and JSON views of the same rows, including affected
+subjects, old/new facts, evidence class and available provenance. Unsupported dimensions
+and incomplete dependency coverage are explicit. The first increment exits with the
+R-0486 change/repair cases and an unchanged-contract control; it need not implement
+every later dimension or editor integration before being useful. The full task exit
+below remains broader.
+
 Output must include human text and JSON rows for: added/removed capability,
 capability widening/narrowing, new `trusted`/`Unsafe`/extern boundary,
 stale/missing/downgraded proof, new runtime trap site, allocation authority
@@ -13042,6 +13238,13 @@ and must not collapse the review into one green badge.
 ### Task R-0183
 
 **Objective:** Add semantic trust diff gates: capability widening, allocation change, trusted boundary addition, stale proof, weakened/missing obligation, assumption widening, runtime-obligation change, and stdlib evidence-class drift. Add a red-team fixture proving the diff cannot emit a false-clean summary when a capability/trust/proof fact changed.
+
+**First increment:** gate R-0182's three-family diff using R-0486. Each controlled
+change must name the affected claim and produce the expected policy/evidence result;
+repair restores acceptance only after required rechecking. A valid unchanged-contract
+case remains accepted. Dropping a relevant fact or dependency edge must yield a
+detected failure or incomplete coverage, never an unchanged/clean verdict. Keep the
+later allocation, runtime and stdlib dimensions behind their existing fact producers.
 
 ### Task R-0184
 
@@ -15583,7 +15786,12 @@ after the source-contract/proof-link path is usable outside flagship hero work;
 it reaches **beta/release** only after ordinary project workflow and external
 validation are in place.
 
-**Alpha bar (language can be presented as a usable experimental language):**
+The [release map](#release-map) separates the systems preview, verified-component
+alpha, project beta and stable supported subset. The preview makes no alpha
+claim; the alpha and beta bars below remain required for their respective scopes.
+Stable release additionally requires the named compatibility and maintenance bars.
+
+**Alpha bar (verified-component alpha):**
 - At least one non-author writes, proves, or contract-annotates a useful
   Concrete program and reports that ProofKit + contracts + `concrete prove`
   were worth the discipline.
@@ -15637,6 +15845,13 @@ audience):**
 ### Task R-0333
 
 **Objective:** Define first public release criteria: supported subset, required examples, required diagnostics, proof workflow, stdlib/project UX, evidence/policy/ tooling story.
+
+Own the [release map](#release-map) and one bounded checklist/candidate record per
+release scope. Assign existing task increments with explicit acceptance artifacts
+and deferred remainders; do not create a second queue or require completion of all
+phases. Record separate source/std/evidence compatibility and patch-release rules.
+The systems preview does not satisfy or replace the verification alpha bar.
+
 
 ### Task R-0334
 
