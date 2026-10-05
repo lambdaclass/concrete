@@ -1,0 +1,52 @@
+// R-0484 audit F1/F9 runtime regression: the ordinary spawn -> wait path.
+//
+// After F1 and F9 a `Child` can come only from `spawn`, so this is the one construction
+// path, and it must hand out a handle that denotes a real child: its pid is greater than
+// zero (never 0, -1 or a process-group id), and `wait` reaps exactly that child and
+// decodes its exit status. `/usr/bin/true` must report Exited 0 and `/usr/bin/false`
+// Exited 1; a decoder that ignored the status, or a wait on the wrong pid, cannot
+// produce both. The failed-exec path is exec_failure_no_double_flush, beside this one.
+//
+// Exit codes: 0 ok; 10/20 spawn failed; 11/21 pid not positive; 12/22 wait failed;
+// 13/23 wrong exit code; 14/24 killed by a signal.
+import std.process.{spawn, Child, ExitStatus, ProcessError};
+import std.string.{String};
+import std.alloc.{dealloc};
+
+fn run(path: &String, expect: i32, base: i32) with(Process, Alloc, Unsafe) -> i32 {
+    let ccmd: *mut u8 = path.to_cstr();
+    let argv: [*const u8; 2] = [ccmd as *const u8, 0 as *const u8];
+    let spawned: Result<Child, ProcessError> = spawn(path, &argv as *const *const u8);
+    let rc: i32 = match spawned {
+        Result::Ok { value } => {
+            let child: Child = value;
+            let positive: bool = child.pid() > 0;
+            let status: Result<ExitStatus, ProcessError> = child.wait();
+            if !positive {
+                base + 1
+            } else {
+                match status {
+                    Result::Ok { value } => match value {
+                        ExitStatus::Exited { code } => if code == expect { 0 } else { base + 3 },
+                        ExitStatus::Signaled { raw } => base + 4,
+                    },
+                    Result::Err { error } => base + 2,
+                }
+            }
+        },
+        Result::Err { error } => base,
+    };
+    dealloc::<u8>(ccmd);
+    return rc;
+}
+
+fn main() with(Process, Alloc, Unsafe) -> i32 {
+    let t: String = "/usr/bin/true";
+    let f: String = "/usr/bin/false";
+    let a: i32 = run(&t, 0, 10);
+    let b: i32 = run(&f, 1, 20);
+    t.drop();
+    f.drop();
+    if a != 0 { return a; }
+    return b;
+}

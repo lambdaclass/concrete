@@ -282,7 +282,11 @@ raw descriptor to a `FILE*`.
 
 Defects are fixed in slice 3 unless noted. None is fixed by this audit.
 
-- **F1. `Child` can be forged.** `pub fn Child::new(pid: i32) -> Child` needs no
+- **F1. `Child` can be forged — FIXED 2026-10-04.** `Child::new` is removed, the field stays
+  private, and only `spawn` constructs a `Child` (pid > 0, in its parent branch). Refusals of
+  a struct literal (E0297) and of `Child::new` (E0106), with a `spawn`-then-`wait` positive
+  control, are pinned in `check_construction_rights.sh` and fail with the constructor
+  restored. The two std tests that forged handles were removed with it. Original finding: `pub fn Child::new(pid: i32) -> Child` needs no
   capability and accepts any integer, so uniqueness and origin are not established.
   `process_fork` returns a raw pid instead of a `Child`. Fix: make `Child::new` private
   (or `Unsafe`-gated and reported as a conversion, design R5), and have `process_fork`
@@ -314,7 +318,22 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
 - **F8. `ftell` failure is unchecked (outside R-0484).** In `fs.read_file` and
   `fs.read_to_string`, `ftell` returns `-1` for a stream that cannot seek (a pipe, a
   directory), and `size as u64` becomes an enormous capacity.
-- **F9. `process_fork` duplicates owning handles and buffered output.** After it returns,
+- **F9. `process_fork` duplicates owning handles and buffered output — FIXED 2026-10-04 by
+  removal** (the first option below): `process_fork` and `ForkResult` are no longer public
+  surface, nothing in std, examples or tests called them, and `spawn` is the supported
+  fork-then-exec path. `check_construction_rights.sh` pins that the import is refused (E0111)
+  and fails with the function restored. A future `fork` needs a stated ownership and
+  runtime-profile contract first (R-0484 second step). **What removal does NOT do:** it closes
+  the public ownership-duplication path, not forking's runtime conditions, which `spawn` still
+  rests on and which are stated at `spawn` in `std/src/process.con`: the supported profile is a
+  process that is single-threaded at the fork (Concrete starts no threads; a program in which
+  foreign code has started threads is outside the supported profile), and between fork and
+  exec the child branch runs no arbitrary user callbacks, allocation or stdio — only `execvp`,
+  then `_exit`. Descriptors are inherited across exec because std sets no close-on-exec; a
+  close-on-exec policy is a separate follow-up. These are stated conditions, not checked
+  properties. Runtime regression for the supported path:
+  `tests/regressions/spawn_exit/spawn_wait_status` (positive pid, `wait` decodes 0 and 1),
+  run by `check_spawn_exit.sh`. Original finding: After it returns,
   parent and child both hold every owning handle, and unflushed `FILE*` buffers exist
   twice. Unique ownership (§2) is a per-process property. Options for slice 3: restrict
   `fork` to `spawn`'s fork-then-exec pattern and remove `process_fork` from the public

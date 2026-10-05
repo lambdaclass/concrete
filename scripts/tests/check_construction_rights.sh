@@ -48,4 +48,32 @@ mod geom { pub struct Copy P { pub x: Int, pub y: Int } }
 mod main { import geom.{P};
   fn main() -> Int { let p: P = P { x: 3, y: 4 }; return p.x + p.y; } }
 EOF
+# R-0484 audit F1/F9: a Child is an owning handle to one child of THIS process, so only
+# `spawn` may mint one. A forged Child(-1) would make `wait` reap "any child", and kill(0/-n)
+# names process groups; process_fork returned a raw pid and duplicated every owning handle.
+rej "Child LITERAL from a raw pid (F1)" E0297 <<'EOF'
+mod main { import std.process.{Child, ExitStatus, ProcessError};
+  fn main() with(Std) -> u8 { let c: Child = Child { pid: -1 }; let r: Result<ExitStatus, ProcessError> = c.wait(); discard(r); return 0; } }
+EOF
+rej "Child::new from a raw pid (F1)" E0106 <<'EOF'
+mod main { import std.process.{Child, ExitStatus, ProcessError};
+  fn main() with(Std) -> u8 { let c: Child = Child::new(4242); let r: Result<ExitStatus, ProcessError> = c.wait(); discard(r); return 0; } }
+EOF
+rej "process_fork is not public surface (F9)" E0111 <<'EOF'
+mod main { import std.process.{process_fork};
+  fn main() with(Std) -> u8 { return 0; } }
+EOF
+acc "a Child from spawn can be waited on (positive control)" <<'EOF'
+mod main { import std.process.{Child, ExitStatus, ProcessError, spawn};
+  fn main() with(Std, Unsafe) -> u8 {
+    let cmd: String = "/usr/bin/true";
+    let args: [*const u8; 2] = [cmd.raw_ptr() as *const u8, 0 as *const u8];
+    let r: Result<Child, ProcessError> = spawn(&cmd, &args as *const *const u8);
+    cmd.drop();
+    match r {
+      Result::Ok { value } => { let w: Result<ExitStatus, ProcessError> = value.wait(); if w.is_ok() { return 0; } return 1; },
+      Result::Err { error } => { return 1; },
+    }
+  } }
+EOF
 echo; echo "CONSTRUCTION-RIGHTS: PASS=$PASS FAIL=$FAIL"; [ "$FAIL" -eq 0 ]

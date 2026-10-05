@@ -445,7 +445,6 @@ Process control.
 | Item | Kind | Capability |
 |------|------|-----------|
 | `process_exit`, `process_getpid` | fn | `Process` |
-| `process_fork` | fn -> ForkResult | `Process` |
 | `spawn(cmd, args) -> Result<Child, ProcessError>` | fn | `Process`, `Alloc` |
 | `process_kill(pid, signal)` | fn | `Process` |
 | Signal constants: `sig_int`, `sig_kill`, `sig_term` | fn -> i32 | -- |
