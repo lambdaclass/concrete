@@ -4,4 +4,5 @@ error: proof link for 'constant_time_tag.ct_compare' has no stored proof subject
 No unsafe signatures found.
 
 Dependency coverage: dependencies analysed. A binding is listed as reached when a program function can get to it through direct calls or through a function stored as a value; an effect reached only through a value constructed outside the analysed program is attributed to where that value was constructed.
+Call-graph coverage: complete — every call path from the program's functions that was analysed is resolved.
 

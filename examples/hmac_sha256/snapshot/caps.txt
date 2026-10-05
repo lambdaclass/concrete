@@ -13,29 +13,53 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
 module hmac_sha256:
       sha256_init : (pure)
+      assumes: no declared capability; call graph complete
       sha256_k : (pure)
+      assumes: no declared capability; call graph complete
       ch : (pure)
+      assumes: no declared capability; call graph complete
       maj : (pure)
+      assumes: no declared capability; call graph complete
       rotr : (pure)
+      assumes: no declared capability; call graph complete
       big_sigma0 : (pure)
+      assumes: no declared capability; call graph complete
       big_sigma1 : (pure)
+      assumes: no declared capability; call graph complete
       small_sigma0 : (pure)
+      assumes: no declared capability; call graph complete
       small_sigma1 : (pure)
+      assumes: no declared capability; call graph complete
       ct_compare_32 : (pure)
+      assumes: no declared capability; call graph complete
       block_to_words : (pure)
+      assumes: no declared capability; call graph complete
       sha256_schedule : (pure)
+      assumes: no declared capability; call graph complete
       sha256_round : (pure)
+      assumes: no declared capability; call graph complete
       sha256_compress : (pure)
+      assumes: no declared capability; call graph complete
       block_to_words_at : (pure)
+      assumes: no declared capability; call graph complete
       sha256_compress_at : (pure)
+      assumes: no declared capability; call graph complete
       state_to_bytes : (pure)
+      assumes: no declared capability; call graph complete
       sha256_hash : (pure)
+      assumes: no declared capability; call graph complete
       hmac_sha256 : (pure)
+      assumes: no declared capability; call graph complete
       verify_hmac : (pure)
+      assumes: no declared capability; call graph complete
       abc_block : (pure)
+      assumes: no declared capability; call graph complete
       rfc4231_tc1_tag : (pure)
+      assumes: no declared capability; call graph complete
       rfc4231_tc2_tag : (pure)
+      assumes: no declared capability; call graph complete
   pub main : Console
+      assumes: Console (declared; no reached foreign binding provides it); call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
 Totals: 24 functions (23 pure), 0 externs

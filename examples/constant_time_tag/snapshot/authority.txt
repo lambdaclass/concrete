@@ -3,6 +3,7 @@ error: proof link for 'constant_time_tag.ct_compare' has no stored proof subject
 
 capability Console (1 functions):
   pub main  <- main -> print_string
+        Console (declared; no reached foreign binding provides it); call graph complete
 
 Totals: 2 functions (1 pure, 1 with capabilities), 0 externs
 

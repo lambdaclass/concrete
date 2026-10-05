@@ -73,35 +73,60 @@ def ppAuthority (capSet : CapSet) (isOpaque : Bool) : String :=
   if isOpaque && capSet.isEmpty then "(effects unknown: reaches an indirect call)"
   else ppCapSet capSet
 
+/-- The R10 qualification line under a function, read from the shared assumption summary. -/
+def assumesLine (assumptions : Assumptions.Table) (idx : Std.HashMap String String)
+    (display : String) (declared : CapSet) (indent : String) : List String :=
+  if assumptions.fns.isEmpty then [s!"{indent}assumes: not computed for this output"]
+  else match idx.get? display >>= assumptions.fns.get? with
+    | some s => [s!"{indent}assumes: {assumptions.qualifierLine s declared}"]
+    | none => []
+
 partial def capReportModule (opaqueSet : List String) (qualPfx : String)
-    (lookup : CapLookup) (m : CModule) (indent : String) : String :=
+    (lookup : CapLookup) (m : CModule) (indent : String)
+    (assumptions : Assumptions.Table := {}) (idx : Std.HashMap String String := {}) : String :=
   let qualPrefix := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
   let header := s!"{indent}module {m.name}:"
   let fnLines := m.functions.foldl (fun acc f =>
     let pubStr := if f.isPublic then "pub " else "    "
-    let capsStr := ppAuthority f.capSet (opaqueSet.contains (qualPrefix ++ "." ++ f.name))
+    -- The headline conclusion follows the SAME summary the `assumes:` line renders: an
+    -- incomplete call graph cannot read `(pure)`, and a complete one that rests on a foreign
+    -- binding's honesty claims no capability, not purity (R-0484 R10).
+    let summ := idx.get? (qualPrefix ++ "." ++ f.name) >>= assumptions.fns.get?
+    let unknownFx := opaqueSet.contains (qualPrefix ++ "." ++ f.name) || (summ.map (!·.complete)).getD false
+    let capsStr := match summ with
+      | some sm => if !unknownFx && f.capSet.isEmpty && !(assumptions.foreignFacts sm).isEmpty
+                   then "(no declared capability)" else ppAuthority f.capSet unknownFx
+      | none => ppAuthority f.capSet unknownFx
     let mainLine := s!"{indent}  {pubStr}{f.name} : {capsStr}"
     let traceLines := capWhyTrace lookup f indent
-    acc ++ [mainLine] ++ traceLines) []
+    let qual := assumesLine assumptions idx (qualPrefix ++ "." ++ f.name) f.capSet (indent ++ "      ")
+    acc ++ [mainLine] ++ qual ++ traceLines) []
   let trustedExterns := m.externFns.filter fun (_, _, _, t) => t
   let untrustedExterns := m.externFns.filter fun (_, _, _, t) => !t
+  -- What CALLING the binding requires: its declared effects, plus Unsafe unless trusted
+  -- (`externFnRequiredCaps`) — the declared effects are an assumption about C (R10).
+  let externCaps (n : String) (t : Bool) : String :=
+    let req := Capabilities.externFnRequiredCaps t ((m.externFnCaps.lookup n).getD .empty)
+    -- Never "(pure)" for a foreign binding: an empty set here is a CLAIM about C code.
+    if req.isEmpty then "(none)" else ppCapSet req
   let externLines := if untrustedExterns.isEmpty then []
     else [s!"{indent}  extern:"] ++ untrustedExterns.map fun (n, _, _, _) =>
-      s!"{indent}      {n} : Unsafe"
+      s!"{indent}      {n} : {externCaps n false}  (declared effects assumed honest)"
   let externLines := externLines ++ (if trustedExterns.isEmpty then []
     else [s!"{indent}  trusted extern:"] ++ trustedExterns.map fun (n, _, _, _) =>
-      s!"{indent}      {n} : (none)")
-  let subLines := m.submodules.map (capReportModule opaqueSet qualPrefix lookup · (indent ++ "  "))
+      s!"{indent}      {n} : {externCaps n true}  (declared effects assumed honest)")
+  let subLines := m.submodules.map (capReportModule opaqueSet qualPrefix lookup · (indent ++ "  ") assumptions idx)
   let body := fnLines ++ externLines ++ subLines
   if body.isEmpty then header
   else s!"{header}\n{"\n".intercalate body}"
 
-def capabilityReport (modules : List CModule) : String :=
+def capabilityReport (modules : List CModule) (assumptions : Assumptions.Table := {}) : String :=
   let header := "=== Capability Summary ==="
   let lookup := buildCapLookup modules
   -- R-0484: purity is a claim, so it is computed rather than inferred from an empty set.
   let opaqueSet := effectOpaqueSet modules (buildCallGraph modules)
-  let body := modules.map (capReportModule opaqueSet "" lookup · "")
+  let idx := assumptions.programIndex (modules.map (·.name))
+  let body := modules.map (capReportModule opaqueSet "" lookup · "" assumptions idx)
   let totalFns := modules.foldl (fun acc m => acc + countModuleFns m) 0
   let pureFns := modules.foldl (fun acc m => acc + countModulePure opaqueSet "" m) 0
   let externCount := modules.foldl (fun acc m => acc + countModuleExterns m) 0

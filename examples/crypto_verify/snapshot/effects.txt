@@ -3,14 +3,19 @@
 module main:
       compute_tag
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:22
+    assumes: no declared capability; call graph complete
       verify_tag
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:32
+    assumes: no declared capability; call graph complete
       check_nonce
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:47
+    assumes: no declared capability; call graph complete
       verify_message
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:68
+    assumes: no declared capability; call graph complete
       main
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/crypto_verify/src/main.con:79
+    assumes: no declared capability; call graph complete
 
 Totals: 5 functions, 5 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 4 proved, 1 enforced, 0 trusted-assumption, 0 reported

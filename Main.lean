@@ -530,7 +530,9 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
           IO.println (Report.queryTraceability validCore.coreModules mono.coreModules ssa.ssaModules locMap fnFilter (registry := registry) (pc := pc))
           return 0
     else
-      match Report.queryFacts validCore.coreModules locMap query (registry := registry) (pc := pc) with
+      -- Standalone query path: dependencies are not loaded, and the table says so.
+      let assumptions : Assumptions.Table := { Assumptions.build validCore.coreModules with dependenciesAnalysed := false }
+      match Report.queryFacts validCore.coreModules locMap query (registry := registry) (pc := pc) (assumptions := assumptions) with
       | .ok result =>
         IO.println result
         return 0
@@ -1589,6 +1591,10 @@ def compileAndReport (inputPath : String) (reportType : String)
       | .error _ => ("unidentified:program", "program")
     let assumptionPackageOf : String → Option (String × String) := fun f =>
       (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
+    -- ONE constructor for the assumption summary every report surface reads (R-0484 R10).
+    let mkAssumptions : Unit → Assumptions.Table := fun _ =>
+      { Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+        with dependenciesAnalysed := !depModules.isEmpty }
     -- THE REPORT'S SOURCE MAP MUST CONTAIN THE KEY ITS LOCATION MAP USES. `buildFnLocMap` records
     -- every function under `inputPath` — the path the user typed — while a project's `allSrcMap` is
     -- keyed by the resolved, absolute entry path. Those are the same file under two names, and a
@@ -2672,16 +2678,16 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (out ++ "\n")
       return 0
     if reportType == "caps" then
-      IO.println (Report.capabilityReport validCore.coreModules)
+      IO.println (Report.capabilityReport validCore.coreModules (mkAssumptions ()))
       return 0
     if reportType == "unsafe" then
       -- R-0484 R10: one assumption summary over the program AND its loaded dependencies.
-      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      let assumptions := mkAssumptions ()
       IO.println (Report.unsafeReport validCore.coreModules pc assumptions (depsLoaded := !depModules.isEmpty))
       return 0
     if reportType == "assumptions" then
       -- R-0484 R10: the machine-readable view of the assumption summary the text reports render.
-      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      let assumptions := mkAssumptions ()
       IO.println (assumptions.toJson (validCore.coreModules.map (·.name)) (!depModules.isEmpty))
       return 0
     if reportType == "trust-edges" then
@@ -2694,7 +2700,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (Report.allocReport validCore.coreModules)
       return 0
     if reportType == "authority" then
-      IO.println (Report.authorityReport validCore.coreModules)
+      IO.println (Report.authorityReport validCore.coreModules (mkAssumptions ()))
       return 0
     if reportType == "proof" then
       IO.println (Report.proofReport validCore.coreModules pc)
@@ -3115,7 +3121,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- VERDICT is over every target the kernel judged, which is what an exit code is for.
       return (if failed.isEmpty && res.rejected.isEmpty && !generalFailure then 0 else 1)
     if reportType == "diagnostics-json" then
-      IO.println (Report.diagnosticsJson validCore.coreModules locMap (registry := registry) (pc := pc))
+      IO.println (Report.diagnosticsJson validCore.coreModules locMap (registry := registry) (pc := pc) (assumptions := mkAssumptions ()))
       return 0
     if reportType == "schema" then
       IO.println Report.schemaReport
@@ -3124,7 +3130,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println Report.diagnosticCodesReport
       return 0
     if reportType == "effects" then
-      IO.println (Report.effectsReport validCore.coreModules locMap pc)
+      IO.println (Report.effectsReport validCore.coreModules locMap pc (mkAssumptions ()))
       return 0
     if reportType == "arithmetic" then
       IO.println (Report.arithmeticReport validCore.coreModules locMap)
@@ -3149,7 +3155,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- schedule directly.
       let auditVCs ← computeVCsDischarged parsed.modules locMap registry
       let vcSum := Report.vcAuditSummary auditVCs
-      let assumptions := Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
+      let assumptions := mkAssumptions ()
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum)
         (assumptions := assumptions) (depsLoaded := !depModules.isEmpty))
       if Report.hasContracts parsed.modules then
@@ -3740,7 +3746,9 @@ def main (args : List String) : IO UInt32 := do
         -- Collect core facts (same as diagnostics-json) plus source-contract facts
         -- (AST metadata, absent from Core) so `concrete diff` can detect contract
         -- API drift (precondition strengthening, postcondition weakening).
-        let coreFacts := Report.collectCoreFacts validCore.coreModules locMap registry pc
+        let snapAssumptions : Assumptions.Table :=
+          { Assumptions.build validCore.coreModules with dependenciesAnalysed := false }
+        let coreFacts := Report.collectCoreFacts validCore.coreModules locMap registry pc snapAssumptions
           ++ Report.collectContractFacts parsed.modules
         -- Run backend pipeline for traceability facts
         let (traceFacts, traceWarns) ← match Pipeline.monomorphize validCore with

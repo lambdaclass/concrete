@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import Concrete.Elab.Core
+import Concrete.Resolve.Intrinsic
 import Concrete.Proof.ProofCore
 import Concrete.Semantics.Capabilities
 
@@ -105,11 +106,17 @@ structure Gap where
   site : String
   /-- Its scoped key, so two packages' same-named functions do not merge into one gap. -/
   siteKey : String
-  /-- The fn-typed binding called through. -/
+  /-- The fn-typed binding called through, or the callee name that resolved to nothing. -/
   binding : String
+  /-- True when this is a direct call (or function value) naming nothing in any loaded module —
+      a definition outside what was analysed, e.g. std in single-file mode. False: an indirect
+      call through a fn-typed binding. -/
+  unloaded : Bool := false
   deriving BEq, Repr, Inhabited
 
-def Gap.render (g : Gap) : String := s!"indirect call through `{g.binding}` in {g.site}"
+def Gap.render (g : Gap) : String :=
+  if g.unloaded then s!"call to `{g.binding}` in {g.site}, which is in no loaded module"
+  else s!"indirect call through `{g.binding}` in {g.site}"
 
 structure FnSummary where
   /-- Display name: module path and function name. -/
@@ -132,6 +139,9 @@ structure Table where
   fns : Std.HashMap String FnSummary := {}
   /-- Function order, for deterministic rendering. -/
   order : Array String := #[]
+  /-- Were the program's dependencies loaded when this table was built? In single-file and
+      query paths they are not, and every conclusion drawn from the table must say so. -/
+  dependenciesAnalysed : Bool := false
   deriving Inhabited
 
 /-! ## Collection -/
@@ -286,17 +296,24 @@ def build (modules : List CModule)
                                 packageName := nd.packageName, module := nd.module,
                                 name := nd.name } : AssumptionId).key
                       via := .declaredHere }
+    let mut unloadedGaps : Array Gap := #[]
     for (name, isValue) in nd.direct.map (·, false) ++ nd.values.map (·, true) do
-      for b in resolve bindings bIdx (·.module) nd.module name do
+      let bs := resolve bindings bIdx (·.module) nd.module name
+      let ts := resolve nodes fnIdx (·.module) nd.module name
+      -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
+      -- not an empty one: what it reaches is unknown.
+      if bs.isEmpty && ts.isEmpty && !isIntrinsic name then
+        unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name, unloaded := true }
+      for b in bs do
         let key := bindings[b]!.key
         if !(rs.any (·.key == key)) then
           rs := rs.push { key, via := if isValue then .refersToBinding else .callsBinding }
-      for t in resolve nodes fnIdx (·.module) nd.module name do
+      for t in ts do
         if t != i && !(es.any (·.1 == t)) then es := es.push (t, isValue)
     edgeKind := edgeKind.set! i es
     succ := succ.set! i (es.map (·.1))
     own := own.set! i rs
-    ownGaps := ownGaps.set! i (nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b })
+    ownGaps := ownGaps.set! i ((nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps)
   -- Resolve in reverse topological order of SCCs.
   let mut reach : Array (Array Reach) := Array.replicate n #[]
   let mut gaps : Array (Array Gap) := Array.replicate n #[]
@@ -511,6 +528,71 @@ private def packageScopeProbe : Table :=
           f.id.kind == .foreignBinding && f.id.qualified == "util.putchar").length == 2
 #guard ((packageScopeProbe.facts.toList.filter fun (_, f) => f.id.qualified == "util.putchar").map
           (·.2.id.packageName)).mergeSort (· ≤ ·) == ["p1", "p2"]
+
+end Assumptions
+end Concrete
+
+namespace Concrete
+namespace Assumptions
+
+/-! ## Qualifying conclusions (R10) — one set of functions every report surface calls
+
+A capability conclusion that depends on a foreign binding says so: "Console, assuming binding
+std.libc.write honest", never plain "Console". A coverage limitation says so too. Every text
+and JSON surface renders these from the same functions, so they cannot disagree. -/
+
+/-- Scoped key of a PROGRAM function from its display name (module path + name). Display names
+    are unambiguous within one build: a top-level module name belongs to one package (bug 074). -/
+def Table.programIndex (t : Table) (programRoots : List String) : Std.HashMap String String :=
+  t.order.foldl (fun acc k =>
+    match t.fns.get? k with
+    | some s => if underRoots programRoots s.module then acc.insert s.fn k else acc
+    | none => acc) {}
+
+/-- The facts of the foreign bindings a function may reach. -/
+def Table.foreignFacts (t : Table) (s : FnSummary) : Array Facts :=
+  s.foreignBindings.filterMap t.facts.get?
+
+/-- Foreign bindings the function may reach whose declared effects include `cap`. -/
+def Table.bindingsProviding (t : Table) (s : FnSummary) (cap : String) : Array Facts :=
+  (t.foreignFacts s).filter fun f => (f.effects.normalize.1).contains cap
+
+/-- Coverage phrase for a function's summary. -/
+def FnSummary.coveragePhrase (s : FnSummary) : String :=
+  if s.complete then "call graph complete"
+  else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} indirect call(s): " ++
+    "; ".intercalate (s.gaps.toList.map (·.render))
+
+/-- One capability, qualified: `Console (assuming std.libc.write honest)`. A declared capability
+    no reached binding provides is stated as such, not invented an assumption. -/
+def Table.qualifyCap (t : Table) (s : FnSummary) (cap : String) : String :=
+  let bs := t.bindingsProviding s cap
+  if bs.isEmpty then s!"{cap} (declared; no reached foreign binding provides it)"
+  else s!"{cap} (assuming {", ".intercalate (bs.toList.map (·.id.qualified))} honest)"
+
+/-- The full qualification line for a function whose header declares `declared`. Lists, in
+    order: each declared capability with the bindings it rests on; foreign bindings reached that
+    provide no declared capability (e.g. `with()` bindings), which the conclusion still assumes;
+    how many trusted boundaries its memory safety rests on (counted, not itemised as discharged
+    obligations — only the boundary is known); and coverage. -/
+def Table.qualifierLine (t : Table) (s : FnSummary) (declared : CapSet) : String :=
+  let (caps, vars) := declared.normalize
+  let capParts := caps.map (t.qualifyCap s)
+  let varParts := vars.map fun v => s!"{v} (capability variable; fixed at each call site)"
+  let providing := caps.foldl (fun acc c => acc ++ (t.bindingsProviding s c).toList.map (·.id.key)) []
+  let others := (t.foreignFacts s).toList.filter fun f => !providing.contains f.id.key
+  let otherPart := if others.isEmpty then []
+    else [s!"also assumes {", ".intercalate (others.map (·.id.qualified))} honest"]
+  let trusted := s.trustedBoundaries.size
+  let trustedPart := if trusted == 0 then [] else [s!"memory safety assumed at {trusted} trusted boundary(ies)"]
+  let authority := if capParts.isEmpty && varParts.isEmpty then ["no declared capability"] else capParts ++ varParts
+  let depPart := if t.dependenciesAnalysed then [] else ["dependencies NOT analysed — their assumptions are not listed"]
+  "; ".intercalate (authority ++ otherPart ++ trustedPart ++ [s.coveragePhrase] ++ depPart)
+
+/-- Is the "no external authority" conclusion earned? Only with no declared capability, complete
+    coverage, and no foreign binding reached (whose honesty it would otherwise rest on). -/
+def Table.effectFree (t : Table) (s : FnSummary) (declared : CapSet) : Bool :=
+  declared.isEmpty && s.complete && (t.foreignFacts s).isEmpty
 
 end Assumptions
 end Concrete

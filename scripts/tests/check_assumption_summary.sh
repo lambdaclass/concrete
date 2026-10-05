@@ -140,6 +140,58 @@ else
   no "base64_cli.print_bytes reads as complete — the indirect call inside Writer::write was lost across the package boundary"
 fi
 
+echo "=== conclusions carry their assumptions, identically in text and JSON (R10 qualification) ==="
+# The caps report's `assumes:` line, the diagnostics-json effects/capability facts and the
+# assumptions JSON are three renderings of ONE table. For every program function they must name
+# the same foreign bindings and the same coverage, and no headline may read `(pure)` where the
+# call graph is incomplete or a foreign binding is assumed.
+(cd "$FIX/app" && $TO "$CC" src/main.con --report caps) > "$TMP/caps.txt" 2>&1
+(cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/diag.json" 2>/dev/null
+qout="$(python3 - "$TMP/app.json" "$TMP/caps.txt" "$TMP/diag.json" <<'PY'
+import json, re, sys
+a = json.load(open(sys.argv[1])); caps = open(sys.argv[2]).read(); diag = json.load(open(sys.argv[3]))
+truth = {f["fn"]: ({x["declaration"] for x in f["assumes"] if x["kind"] == "foreign-binding"}, f["complete"])
+         for f in a["functions"]}
+problems = []
+# text: headline + assumes line per function in module main
+lines = caps.splitlines()
+for i, l in enumerate(lines):
+    m = re.match(r"\s+(\w+) : (.*)$", l)
+    if not m or i + 1 >= len(lines) or "assumes:" not in lines[i + 1]: continue
+    fn = "main." + m.group(1); head = m.group(2); q = lines[i + 1]
+    if fn not in truth: continue
+    fb, complete = truth[fn]
+    segs = re.findall(r"assum(?:ing|es) ([^;()]*?) honest", q)
+    named = {n.strip() for seg in segs for n in seg.split(",") if n.strip()}
+    if named != fb: problems.append(f"{fn}: caps text names {sorted(named)}, json {sorted(fb)}")
+    if complete != ("call graph complete" in q): problems.append(f"{fn}: caps text coverage disagrees")
+    if head.strip() == "(pure)" and (not complete or fb): problems.append(f"{fn}: headline claims (pure) — complete={complete}, assumes {sorted(fb)}")
+# diagnostics-json facts
+facts = diag.get("facts", diag if isinstance(diag, list) else [])
+for f in facts:
+    if f.get("kind") not in ("effects", "capability") or f.get("function") not in truth: continue
+    fb, complete = truth[f["function"]]
+    if not f.get("assumptions_computed"): problems.append(f"{f['function']} {f['kind']}: assumptions not computed"); continue
+    named = {x["declaration"] for x in f.get("assumed_foreign_bindings", [])}
+    if named != fb: problems.append(f"{f['function']} {f['kind']}: json facts {sorted(named)} vs {sorted(fb)}")
+    if f.get("coverage_complete") != complete: problems.append(f"{f['function']} {f['kind']}: coverage disagrees")
+    if f.get("is_pure") and (not complete or fb): problems.append(f"{f['function']} {f['kind']}: is_pure true past a gap or assumption")
+print("\n".join(problems))
+PY
+)"
+[ -z "$qout" ] && ok "caps text, diagnostics-json facts and the assumptions JSON agree; no unearned (pure)" \
+  || no "qualified conclusions disagree across surfaces: $qout"
+if grep -q 'via_gap : (effects unknown' "$TMP/caps.txt"; then
+  ok "via_gap's headline says its effects are unknown (indirect call), not (pure)"
+else
+  no "via_gap's headline does not admit the indirect-call gap: $(grep 'via_gap :' "$TMP/caps.txt")"
+fi
+if grep -q 'putchar : Console, Unsafe  (declared effects assumed honest)' <(cd "$FIX/factlib" && $TO "$CC" src/lib.con --report caps 2>&1); then
+  ok "an extern's line shows its DECLARED effects plus Unsafe, marked as assumed"
+else
+  no "extern lines do not show declared effects as assumptions"
+fi
+
 echo "=== positive control: an assumption-free program reads complete and inherits nothing ==="
 pout="$(cd "$FIX/pure_app" && $TO "$CC" src/main.con --report unsafe 2>&1)"
 if printf '%s' "$pout" | grep -q 'Call-graph coverage: complete' \

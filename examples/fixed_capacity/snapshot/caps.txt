@@ -2,26 +2,46 @@
 
 module fixed_capacity:
       ok_result : (pure)
+      assumes: no declared capability; call graph complete
       err_result : (pure)
+      assumes: no declared capability; call graph complete
       validate_version : (pure)
+      assumes: no declared capability; call graph complete
       validate_msg_type : (pure)
+      assumes: no declared capability; call graph complete
       validate_payload_len : (pure)
+      assumes: no declared capability; call graph complete
       validate_total_len : (pure)
+      assumes: no declared capability; call graph complete
       validate_tag : (pure)
+      assumes: no declared capability; call graph complete
       read_u8 : (pure)
+      assumes: no declared capability; call graph complete
       read_u16_be : (pure)
+      assumes: no declared capability; call graph complete
       ring_new : (pure)
+      assumes: no declared capability; call graph complete
       ring_contains : (pure)
+      assumes: no declared capability; call graph complete
       ring_push : (pure)
+      assumes: no declared capability; call graph complete
       compute_tag : (pure)
+      assumes: no declared capability; call graph complete
       validate_message : (pure)
+      assumes: no declared capability; call graph complete
       build_msg : (pure)
+      assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       build_bad_version : (pure)
+      assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       build_bad_type : (pure)
+      assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       build_payload_overflow : (pure)
+      assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       report : Console
+      assumes: Console (declared; no reached foreign binding provides it); call graph complete
     Console    <- calls print_string (intrinsic), print_int (intrinsic), print_char (intrinsic)
   pub main : Console
+      assumes: Console (declared; no reached foreign binding provides it); memory safety assumed at 4 trusted boundary(ies); call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic), report, print_int (intrinsic)
 
 Totals: 20 functions (18 pure), 0 externs

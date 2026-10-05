@@ -2,10 +2,15 @@
 
 module main:
       compute_tag : (pure)
+      assumes: no declared capability; call graph complete
       verify_tag : (pure)
+      assumes: no declared capability; call graph complete
       check_nonce : (pure)
+      assumes: no declared capability; call graph complete
       verify_message : (pure)
+      assumes: no declared capability; call graph complete
       main : (pure)
+      assumes: no declared capability; call graph complete
 
 Totals: 5 functions (5 pure), 0 externs
 

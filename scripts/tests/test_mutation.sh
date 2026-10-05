@@ -1176,8 +1176,8 @@ MUT_DESC+=("assumption summary: an assumption inherited through a callee is drop
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 
 MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
-MUT_OLD+=("    ownGaps := ownGaps.set! i (nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b })")
-MUT_NEW+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.filter fun _ => false).map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) -- MUTATION: own indirect calls ignored")
+MUT_OLD+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps)")
+MUT_NEW+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.filter fun _ => false).map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) -- MUTATION: own unresolved edges ignored")
 MUT_DESC+=("assumption summary: a function's own indirect call no longer makes it incomplete")
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 
@@ -1195,11 +1195,26 @@ MUT_NEW+=("      while false && changed do -- MUTATION: no propagation within a 
 MUT_DESC+=("assumption summary: a recursive group's members do not share what the group reaches")
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 
+# 84–85. R10 conclusion qualification: a capability conclusion stops naming the foreign bindings
+# it rests on, and "pure" stops requiring complete coverage. The cross-surface section of
+# check_assumption_summary.sh (caps text vs diagnostics-json vs assumptions JSON) catches both.
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("  if bs.isEmpty then s!\"{cap} (declared; no reached foreign binding provides it)\"")
+MUT_NEW+=("  if true || bs.isEmpty then s!\"{cap} (declared; no reached foreign binding provides it)\" -- MUTATION: bindings dropped")
+MUT_DESC+=("qualification: a capability conclusion no longer names the bindings it rests on")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("  declared.isEmpty && s.complete && (t.foreignFacts s).isEmpty")
+MUT_NEW+=("  declared.isEmpty && (s.complete || true) && (t.foreignFacts s).isEmpty -- MUTATION: purity past a gap")
+MUT_DESC+=("qualification: effect-free is claimed past an unresolved call")
+gate_for_last "scripts/tests/check_assumption_summary.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=83
+EXPECTED_MUTATIONS=85
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

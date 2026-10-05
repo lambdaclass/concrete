@@ -2,15 +2,25 @@
 
 module parse_validate:
       validate_version : (pure)
+      assumes: no declared capability; call graph complete
       validate_msg_type : (pure)
+      assumes: no declared capability; call graph complete
       validate_payload_len : (pure)
+      assumes: no declared capability; call graph complete
       validate_total_len : (pure)
+      assumes: no declared capability; call graph complete
       compute_checksum : (pure)
+      assumes: no declared capability; call graph complete
       validate_checksum : (pure)
+      assumes: no declared capability; call graph complete
       validate_header_fields : (pure)
+      assumes: no declared capability; call graph complete
       parse_header : (pure)
+      assumes: no declared capability; call graph complete
       error_code : (pure)
+      assumes: no declared capability; call graph complete
   pub main : (pure)
+      assumes: no declared capability; call graph complete
 
 Totals: 10 functions (10 pure), 0 externs
 

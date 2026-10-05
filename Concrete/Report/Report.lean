@@ -180,8 +180,9 @@ private partial def collectFnsWithCap (m : CModule) (cap : String) : List CFnDef
     caps.contains cap
   matching ++ m.submodules.foldl (fun acc sub => acc ++ collectFnsWithCap sub cap) []
 
-def authorityReport (modules : List CModule) : String :=
+def authorityReport (modules : List CModule) (assumptions : Assumptions.Table := {}) : String :=
   let header := "=== Authority Report ==="
+  let idx := assumptions.programIndex (modules.map (·.name))
   let qualLookup := buildQualCapLookup modules
   let callGraph := buildCallGraph modules
   let bareToQual := modules.foldl (fun acc m => acc ++ buildBareToQualMap m) []
@@ -201,7 +202,12 @@ def authorityReport (modules : List CModule) : String :=
           match n.splitOn "." |>.getLast? with | some b => b | none => n
         let chainStr := if bareChain.length <= 1 then "  <- declared"
           else s!"  <- {" -> ".intercalate bareChain}"
-        s!"  {pubStr}{f.name}{chainStr}"
+        -- R10: the conclusion "this function exercises `cap`" rests on the foreign bindings that
+        -- provide it, and on coverage; both are stated with it.
+        let qual := match idx.get? qualName >>= assumptions.fns.get? with
+          | some sm => s!"\n        {assumptions.qualifyCap sm cap}; {sm.coveragePhrase}"
+          | none => if assumptions.fns.isEmpty then "\n        assumptions: not computed for this output" else ""
+        s!"  {pubStr}{f.name}{chainStr}{qual}"
       some (s!"{capHeader}\n{"\n".intercalate fnLines}")
   let allFns := modules.foldl (fun acc m => acc ++ collectAllFnDefs m) []
   let pureFns := (allFns.filter fun f => f.capSet.isEmpty).length
@@ -444,7 +450,7 @@ private partial def effectsForModule
     acc ++ effectsForModule opaqueSet externNames recUncertain recMap locMap pc sub qualPrefix) []
 
 def effectsReport (modules : List CModule) (locMap : FnLocMap := [])
-    (pc : Concrete.ProofCore) : String :=
+    (pc : Concrete.ProofCore) (assumptions : Assumptions.Table := {}) : String :=
   let header := "=== Combined Effects Report ==="
   -- Use shared analysis results from ProofCore
   let recMap := pc.recMap
@@ -457,8 +463,14 @@ def effectsReport (modules : List CModule) (locMap : FnLocMap := [])
     acc ++ effectsForModule opaqueSet externNames recUncertain recMap locMap pc m) []
   -- Format per-module
   let body := modules.map fun m =>
-    let modEffects := effectsForModule opaqueSet externNames recUncertain recMap locMap pc m
-    let fnLines := modEffects.map fmtEffectsRow
+    let idx := assumptions.programIndex (modules.map (·.name))
+    -- Opacity follows the shared summary too, so the row cannot claim `(pure)` past a gap.
+    let modEffects := (effectsForModule opaqueSet externNames recUncertain recMap locMap pc m).map fun e =>
+      match idx.get? e.qualName >>= assumptions.fns.get? with
+      | some sm => { e with effectOpaque := e.effectOpaque || !sm.complete }
+      | none => e
+    let fnLines := modEffects.map fun e =>
+      "\n".intercalate (fmtEffectsRow e :: assumesLine assumptions idx e.qualName e.capSet "    ")
     s!"module {m.name}:\n{"\n".intercalate fnLines}"
   -- Summary counts
   let total := allEffects.length
@@ -4963,14 +4975,41 @@ def queryTraceability
   (factsEnvelope filtered).render
 
 open Json in
+/-- The assumption facts for one function, as JSON — the SAME `Assumptions.Table` the text
+    reports render, so JSON and text cannot disagree (R-0484 R10). -/
+def assumptionsVal (assumptions : Assumptions.Table) (idx : Std.HashMap String String)
+    (qualName : String) : List (String × Val) :=
+  if assumptions.fns.isEmpty then [("assumptions_computed", .bool false)]
+  else match idx.get? qualName >>= assumptions.fns.get? with
+    | none => [("assumptions_computed", .bool false)]
+    | some s =>
+      let foreign := (assumptions.foreignFacts s).toList.map fun f =>
+        .obj [("declaration", .str f.id.qualified), ("package_name", .str f.id.packageName),
+              ("effects", .arr ((f.effects.normalize.1 ++ f.effects.normalize.2).map .str)),
+              ("trusted_extern", .bool f.trustedExtern)]
+      [ ("assumptions_computed", .bool true),
+        ("dependencies_analysed", .bool assumptions.dependenciesAnalysed),
+        ("coverage_complete", .bool s.complete),
+        ("unresolved_indirect_calls", .arr (s.gaps.toList.map fun g =>
+          .obj [("site", .str g.site), ("binding", .str g.binding)])),
+        ("assumed_foreign_bindings", .arr foreign),
+        ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)) ]
+
+open Json in
 /-- Convert an FnEffects record to a JSON fact. -/
-private def effectsToFact (e : FnEffects) : Val :=
+private def effectsToFact (assumptions : Assumptions.Table) (idx : Std.HashMap String String)
+    (e : FnEffects) : Val :=
   let (concreteCaps, _) := e.capSet.normalize
-  .obj [
+  -- "pure" is a CLAIM: no declared capability, complete coverage, and no foreign binding whose
+  -- honesty it would rest on. An empty capability set alone does not earn it (R-0484).
+  let effectFree := match idx.get? e.qualName >>= assumptions.fns.get? with
+    | some s => assumptions.effectFree s e.capSet
+    | none => e.capSet == .empty && !e.effectOpaque
+  .obj ([
     ("kind", .str "effects"),
     ("function", .str e.qualName),
     ("capabilities", .arr (concreteCaps.map .str)),
-    ("is_pure", .bool (e.capSet == .empty)),
+    ("is_pure", .bool effectFree),
     ("allocates", .bool e.allocates),
     ("frees", .bool e.frees),
     ("defers", .bool e.defers),
@@ -4981,23 +5020,25 @@ private def effectsToFact (e : FnEffects) : Val :=
     ("is_public", .bool e.isPublic),
     ("evidence", .str e.evidence),
     ("loc", locToJson e.loc)
-  ]
+  ] ++ assumptionsVal assumptions idx e.qualName)
 
 open Json in
 /-- Collect effects facts for all functions. -/
 def collectEffectsFacts (modules : List CModule) (locMap : FnLocMap := [])
-    (pc : Concrete.ProofCore) : List Val :=
+    (pc : Concrete.ProofCore) (assumptions : Assumptions.Table := {}) : List Val :=
   let recMap := pc.recMap
   let (externNames, recUncertain) := profileClosures modules pc
   -- R-0484: purity is a claim, computed, not inferred from an empty capability set.
   let opaqueSet := effectOpaqueSet modules pc.callGraph
   let allEffects := modules.foldl (fun acc m =>
     acc ++ effectsForModule opaqueSet externNames recUncertain recMap locMap pc m) []
-  allEffects.map effectsToFact
+  let idx := assumptions.programIndex (modules.map (·.name))
+  allEffects.map (effectsToFact assumptions idx)
 
 open Json in
 /-- Convert a per-function capability entry with why-traces to a JSON fact. -/
-private def capToFact (lookup : CapLookup) (qualName : String) (f : CFnDef) : Val :=
+private def capToFact (lookup : CapLookup) (assumptions : Assumptions.Table)
+    (idx : Std.HashMap String String) (qualName : String) (f : CFnDef) : Val :=
   let (concreteCaps, _) := f.capSet.normalize
   let callees := collectCallsStmts f.body |>.eraseDups
   let traces := concreteCaps.map fun cap =>
@@ -5010,37 +5051,46 @@ private def capToFact (lookup : CapLookup) (qualName : String) (f : CFnDef) : Va
       ("source", .str (if contributors.isEmpty then "declared"
         else ", ".intercalate contributors))
     ]
-  .obj [
+  .obj ([
     ("kind", .str "capability"),
     ("function", .str qualName),
     ("capabilities", .arr (concreteCaps.map .str)),
-    ("is_pure", .bool concreteCaps.isEmpty),
+    ("is_pure", .bool (match idx.get? qualName >>= assumptions.fns.get? with
+      | some s => assumptions.effectFree s f.capSet
+      | none => concreteCaps.isEmpty)),
     ("is_public", .bool f.isPublic),
     ("why", .arr traces)
-  ]
+  ] ++ assumptionsVal assumptions idx qualName)
 
 open Json in
 /-- Collect capability facts with why-traces for all functions. -/
-private partial def collectCapFactsModule (lookup : CapLookup) (m : CModule) (modulePath : String := "") : List Val :=
+private partial def collectCapFactsModule (lookup : CapLookup) (assumptions : Assumptions.Table)
+    (idx : Std.HashMap String String) (m : CModule) (modulePath : String := "") : List Val :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
-  let fnFacts := m.functions.map fun f => capToFact lookup (qualPrefix ++ "." ++ f.name) f
+  let fnFacts := m.functions.map fun f => capToFact lookup assumptions idx (qualPrefix ++ "." ++ f.name) f
   let externFacts := m.externFns.map fun (n, _, _, trusted) =>
+    -- What CALLING the binding requires: its declared effects, plus Unsafe unless trusted. The
+    -- declared effects are an assumption about C (R-0484 R10), never a checked fact.
+    let required := Capabilities.externFnRequiredCaps trusted ((m.externFnCaps.lookup n).getD .empty)
+    let (rc, rv) := required.normalize
     .obj [
       ("kind", .str "capability"),
       ("function", .str (qualPrefix ++ "." ++ n)),
-      ("capabilities", .arr (if trusted then [] else [Val.str unsafeCapName])),
-      ("is_pure", .bool trusted),
+      ("capabilities", .arr ((rc ++ rv).map Val.str)),
+      ("is_pure", .bool false),
       ("is_extern", .bool true),
       ("is_trusted", .bool trusted),
+      ("declared_effects_assumed", .bool true),
       ("why", .arr [])
     ]
   fnFacts ++ externFacts ++ m.submodules.foldl (fun acc sub =>
-    acc ++ collectCapFactsModule lookup sub qualPrefix) []
+    acc ++ collectCapFactsModule lookup assumptions idx sub qualPrefix) []
 
 open Json in
-def collectCapFacts (modules : List CModule) : List Val :=
+def collectCapFacts (modules : List CModule) (assumptions : Assumptions.Table := {}) : List Val :=
   let lookup := buildCapLookup modules
-  modules.foldl (fun acc m => acc ++ collectCapFactsModule lookup m) []
+  let idx := assumptions.programIndex (modules.map (·.name))
+  modules.foldl (fun acc m => acc ++ collectCapFactsModule lookup assumptions idx m) []
 
 open Json in
 /-- Convert a function's unsafe/trust boundary info to a JSON fact. -/
@@ -5133,14 +5183,15 @@ def collectContractFacts (modules : List Module) : List Val :=
 open Json in
 /-- Collect all core facts (everything except traceability) into a flat list. -/
 def collectCoreFacts (modules : List CModule) (locMap : FnLocMap := [])
-    (registry : ProofRegistry := []) (pc : Concrete.ProofCore) : List Val :=
+    (registry : ProofRegistry := []) (pc : Concrete.ProofCore)
+    (assumptions : Assumptions.Table := {}) : List Val :=
   let eligibility := collectEligibilityFacts pc
   let predictable := collectPredictableFacts modules locMap pc
   let proofStatus := collectProofStatusFacts modules locMap registry pc
   let obligations := collectObligationFacts modules locMap registry pc
   let extraction := collectExtractionFacts (registry := registry) (pc := pc)
-  let effects := collectEffectsFacts modules locMap pc
-  let caps := collectCapFacts modules
+  let effects := collectEffectsFacts modules locMap pc assumptions
+  let caps := collectCapFacts modules assumptions
   let unsafeFacts := collectUnsafeFacts modules
   let alloc := collectAllocFacts modules
   let proofDiags := collectProofDiagnosticFacts pc
@@ -5150,8 +5201,9 @@ def collectCoreFacts (modules : List CModule) (locMap : FnLocMap := [])
 open Json in
 /-- Produce JSON diagnostics combining all fact types in a versioned envelope. -/
 def diagnosticsJson (modules : List CModule) (locMap : FnLocMap := [])
-    (registry : ProofRegistry := []) (pc : Concrete.ProofCore) : String :=
-  (factsEnvelope (collectCoreFacts modules locMap registry pc)).render
+    (registry : ProofRegistry := []) (pc : Concrete.ProofCore)
+    (assumptions : Assumptions.Table := {}) : String :=
+  (factsEnvelope (collectCoreFacts modules locMap registry pc assumptions)).render
 
 open Json in
 /-- One VC as a JSON object (schema v1). -/
@@ -5710,7 +5762,7 @@ open Json in
     Returns Except.error for malformed/unknown queries, Except.ok for valid results. -/
 def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
     (query : String) (registry : ProofRegistry := [])
-    (pc : Concrete.ProofCore) : Except String String :=
+    (pc : Concrete.ProofCore) (assumptions : Assumptions.Table := {}) : Except String String :=
   let parts := query.splitOn ":"
   let allKindsStr := s!"{", ".intercalate knownQueryKinds} (semantic), {", ".intercalate knownFactKinds} (fact filter)"
   -- Reject empty query
@@ -5737,7 +5789,7 @@ def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
     | ["evidence", fnName] => .ok (evidenceQuery modules locMap fnName registry pc)
     | ["audit", fnName] => .ok (auditQuery modules locMap fnName registry pc)
     | ["fn", fnName] =>
-      let allFacts := collectCoreFacts modules locMap registry pc
+      let allFacts := collectCoreFacts modules locMap registry pc assumptions
       let filtered := allFacts.filter fun v =>
         match jsonGetStr v "function" with
         | some f => f == fnName || f.endsWith ("." ++ fnName)
@@ -5746,7 +5798,7 @@ def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
     | [filterKind, filterFn] =>
       -- kind:function filter — validate the kind is known
       if knownFactKinds.contains filterKind then
-        let allFacts := collectCoreFacts modules locMap registry pc
+        let allFacts := collectCoreFacts modules locMap registry pc assumptions
         let byKind := allFacts.filter fun v =>
           jsonGetStr v "kind" == some filterKind
         let filtered := byKind.filter fun v =>
@@ -5760,7 +5812,7 @@ def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
   else if parts.length == 1 then
     -- Single-word filter: all facts of this kind — validate kind is known
     if knownFactKinds.contains query then
-      let allFacts := collectCoreFacts modules locMap registry pc
+      let allFacts := collectCoreFacts modules locMap registry pc assumptions
       let filtered := allFacts.filter fun v =>
         jsonGetStr v "kind" == some query
       .ok (factsEnvelope filtered).render
@@ -5867,13 +5919,13 @@ def auditReport (modules : List CModule) (locMap : FnLocMap := [])
   String.intercalate "" [
     banner,
     sectionHeader "Authority",
-    capabilityReport modules,
+    capabilityReport modules assumptions,
     sectionHeader "Allocation",
     allocReport modules,
     sectionHeader "Unsafe / Trust",
     unsafeReport modules pc assumptions depsLoaded,
     sectionHeader "Effects",
-    effectsReport modules locMap pc,
+    effectsReport modules locMap pc assumptions,
     sectionHeader "Eligibility",
     eligibilityReport pc,
     sectionHeader "Proof Status",
