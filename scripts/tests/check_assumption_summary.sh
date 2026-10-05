@@ -188,7 +188,7 @@ if grep -q 'bump : (no external authority)' "$TMP/caps.txt" \
 else
   no "a &mut-mutating function is reported as pure, or 'no external authority' is missing: $(grep 'bump :' "$TMP/caps.txt")"
 fi
-if grep -A1 -E '^\s+overdeclared : Console$' "$TMP/caps.txt" | grep -q 'assumes: Console (declared; no reached foreign binding provides it)'; then
+if grep -A1 -E '^\s+overdeclared : Console$' "$TMP/caps.txt" | grep -q 'assumes: Console (declared); reached foreign assumptions: none'; then
   ok "over-declared with(Console): the headline keeps the DECLARED allowance; the body result is only in assumes:"
 else
   no "over-declared function: declared allowance and body analysis are not kept separate: $(grep -A1 'overdeclared :' "$TMP/caps.txt" | tr '\n' ' ')"
@@ -196,11 +196,26 @@ fi
 echo '{"schema_version": 1, "schema_kind": "facts", "facts": [{"kind":"effects","function":"f","is_pure":true}]}' > "$TMP/v1.json"
 (cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/v2.json" 2>/dev/null
 dout="$($TO "$CC" diff "$TMP/v1.json" "$TMP/v2.json" 2>&1)"; drc=$?
-if [ "$drc" -ne 0 ] && printf '%s' "$dout" | grep -q 'schema_version 1 is not supported'; then
+if [ "$drc" -ne 0 ] && printf '%s' "$dout" | grep -q 'schema_version 1 is older'; then
   ok "concrete diff rejects a schema v1 artifact (is_pure removed in v2) with a regeneration diagnostic"
 else
   no "concrete diff accepted a v1 artifact (rc=$drc): $(printf '%s' "$dout" | head -2)"
 fi
+echo '{"schema_kind": "facts", "facts": []}' > "$TMP/nover.json"
+echo '[]' > "$TMP/bare.json"
+echo '{"schema_version": 99, "schema_kind": "facts", "facts": []}' > "$TMP/future.json"
+for case in "nover:has no schema_version" "bare:a bare array carries no version" "future:schema_version 99 is NEWER"; do
+  f="${case%%:*}"; want="${case#*:}"
+  o="$($TO "$CC" diff "$TMP/$f.json" "$TMP/v2.json" 2>&1)"; r=$?
+  if [ "$r" -ne 0 ] && printf '%s' "$o" | grep -q "$want" && ! printf '%s' "$o" | grep -qiE 'weaken|strength|unchanged|changed:'; then
+    ok "concrete diff rejects the $f artifact before comparing facts"
+  else
+    no "concrete diff did not reject the $f artifact cleanly (rc=$r): $(printf '%s' "$o" | head -2)"
+  fi
+done
+sout="$($TO "$CC" diff "$TMP/v2.json" "$TMP/v2.json" 2>&1)"; src=$?
+[ "$src" -eq 0 ] && ok "CONTROL: a current-version artifact is still accepted (identical v2 snapshots compare clean)" \
+  || no "a current-version artifact is rejected (rc=$src): $(printf '%s' "$sout" | head -2)"
 if grep -q 'via_gap : (effects unknown' "$TMP/caps.txt"; then
   ok "via_gap's headline says its effects are unknown (indirect call), not (pure)"
 else

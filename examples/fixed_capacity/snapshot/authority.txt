@@ -2,9 +2,9 @@
 
 capability Console (2 functions):
       report  <- report -> print_string
-        Console (declared; no reached foreign binding provides it); call graph complete
+        Console (declared); reached foreign assumptions: none; call graph complete
   pub main  <- main -> print_string
-        Console (declared; no reached foreign binding provides it); call graph complete
+        Console (declared); reached foreign assumptions: none; call graph complete
 
 Totals: 20 functions (18 with no declared capability, 2 with capabilities), 0 externs
 

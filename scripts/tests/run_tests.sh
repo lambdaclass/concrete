@@ -5453,7 +5453,7 @@ mkdir -p "$ADV_DIR"
 
 # Truncated JSON (unclosed array)
 echo '[{"kind":"effects","function":"foo"' > "$ADV_DIR/truncated.json"
-echo '[]' > "$ADV_DIR/empty_arr.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[]}' > "$ADV_DIR/empty_arr.json"
 adv_trunc=$($COMPILER diff "$ADV_DIR/truncated.json" "$ADV_DIR/empty_arr.json" 2>&1) && true || true
 if grep <<<"$adv_trunc" -qi "error.*parse\|could not parse"; then
     echo "  ok  adv-diff: truncated JSON rejected with parse error"
@@ -5505,10 +5505,10 @@ fi
 
 # Fact without "function" field → should be excluded from diff
 cat > "$ADV_DIR/no_function.json" << 'ADVEOF'
-[{"kind":"effects","no_external_authority":true}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","no_external_authority":true}]}
 ADVEOF
 cat > "$ADV_DIR/normal_fact.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","no_external_authority":true}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","no_external_authority":true}]}
 ADVEOF
 adv_nofn=$($COMPILER diff "$ADV_DIR/no_function.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
 # The fact without function should be dropped, so "foo" appears as added
@@ -5523,7 +5523,7 @@ fi
 
 # Fact without "kind" field → should also be dropped
 cat > "$ADV_DIR/no_kind.json" << 'ADVEOF'
-[{"function":"foo","no_external_authority":true}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"function":"foo","no_external_authority":true}]}
 ADVEOF
 adv_nokind=$($COMPILER diff "$ADV_DIR/no_kind.json" "$ADV_DIR/normal_fact.json" 2>&1) && true || true
 if grep <<<"$adv_nokind" -q '\[+\].*effects.*foo'; then
@@ -5539,10 +5539,10 @@ fi
 # Only first match is used — second duplicate is invisible
 
 cat > "$ADV_DIR/dupes_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"}]}
 ADVEOF
 cat > "$ADV_DIR/dupes_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"},{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"xyz"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"},{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"xyz"}]}
 ADVEOF
 adv_dupes=$($COMPILER diff "$ADV_DIR/dupes_old.json" "$ADV_DIR/dupes_new.json" 2>&1) && adv_dupes_exit=0 || adv_dupes_exit=$?
 # Duplicate keys should be rejected as a structured error with exit code 2
@@ -5558,10 +5558,10 @@ fi
 # --- Fingerprint change without state change ---
 
 cat > "$ADV_DIR/fp_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]}
 ADVEOF
 cat > "$ADV_DIR/fp_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"xyz","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"xyz","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]}
 ADVEOF
 adv_fp=$($COMPILER diff "$ADV_DIR/fp_old.json" "$ADV_DIR/fp_new.json" 2>&1) && adv_fp_exit=0 || adv_fp_exit=$?
 # Fingerprint changed but state is still proved → should detect change, neutral drift
@@ -5578,10 +5578,10 @@ fi
 # --- Capability array grows (string-level diff) ---
 
 cat > "$ADV_DIR/cap_old.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","capabilities":"[]","no_external_authority":"true","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"enforced"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","capabilities":"[]","no_external_authority":"true","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"enforced"}]}
 ADVEOF
 cat > "$ADV_DIR/cap_new.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","capabilities":"[Alloc, Network]","no_external_authority":"false","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"reported"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","capabilities":"[Alloc, Network]","no_external_authority":"false","allocates":"false","frees":"false","recursion":"none","loops":"none","crosses_ffi":"false","is_trusted":"false","evidence":"reported"}]}
 ADVEOF
 adv_cap=$($COMPILER diff "$ADV_DIR/cap_old.json" "$ADV_DIR/cap_new.json" 2>&1) && true || true
 if grep <<<"$adv_cap" -q "TRUST WEAKENED" && \
@@ -5598,10 +5598,10 @@ fi
 # --- New function with weak evidence appears as neutral (known gap) ---
 
 cat > "$ADV_DIR/new_weak_old.json" << 'ADVEOF'
-[]
+{"schema_version":2,"schema_kind":"facts","facts":[]}
 ADVEOF
 cat > "$ADV_DIR/new_weak_new.json" << 'ADVEOF'
-[{"kind":"effects","function":"evil_fn","evidence":"reported","no_external_authority":"false","capabilities":"[Alloc]","allocates":"true","frees":"false","recursion":"none","loops":"none","crosses_ffi":"true","is_trusted":"false"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"evil_fn","evidence":"reported","no_external_authority":"false","capabilities":"[Alloc]","allocates":"true","frees":"false","recursion":"none","loops":"none","crosses_ffi":"true","is_trusted":"false"}]}
 ADVEOF
 adv_newweak=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_weak_new.json" 2>&1) && adv_nw_exit=0 || adv_nw_exit=$?
 # New function with weak evidence should be flagged as weakened
@@ -5618,7 +5618,7 @@ fi
 # --- Removed fact detected as weakened ---
 
 cat > "$ADV_DIR/removed_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"}]}
 ADVEOF
 adv_removed=$($COMPILER diff "$ADV_DIR/removed_old.json" "$ADV_DIR/new_weak_old.json" 2>&1) && true || true
 if grep <<<"$adv_removed" -q "TRUST WEAKENED" && \
@@ -5634,10 +5634,10 @@ fi
 # --- Escaped characters in function names ---
 
 cat > "$ADV_DIR/escape_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"mod.fn_with\"quotes","state":"proved","current_fingerprint":"abc"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"mod.fn_with\"quotes","state":"proved","current_fingerprint":"abc"}]}
 ADVEOF
 cat > "$ADV_DIR/escape_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"mod.fn_with\"quotes","state":"stale","current_fingerprint":"abc"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"mod.fn_with\"quotes","state":"stale","current_fingerprint":"abc"}]}
 ADVEOF
 adv_esc=$($COMPILER diff "$ADV_DIR/escape_old.json" "$ADV_DIR/escape_new.json" 2>&1) && true || true
 if grep <<<"$adv_esc" -q "TRUST WEAKENED" && \
@@ -5654,7 +5654,7 @@ fi
 
 # New proof_status with missing → weakened
 cat > "$ADV_DIR/new_noproof_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"bar","state":"missing","current_fingerprint":"xyz"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"bar","state":"missing","current_fingerprint":"xyz"}]}
 ADVEOF
 adv_noproof=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_noproof_new.json" 2>&1) && true || true
 if grep <<<"$adv_noproof" -q "TRUST WEAKENED" && \
@@ -5669,7 +5669,7 @@ fi
 
 # New capability with no_external_authority=false → weakened
 cat > "$ADV_DIR/new_impure_new.json" << 'ADVEOF'
-[{"kind":"capability","function":"impure_fn","capabilities":"[Alloc]","no_external_authority":"false"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"capability","function":"impure_fn","capabilities":"[Alloc]","no_external_authority":"false"}]}
 ADVEOF
 adv_impure=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_impure_new.json" 2>&1) && true || true
 if grep <<<"$adv_impure" -q "TRUST WEAKENED"; then
@@ -5683,7 +5683,7 @@ fi
 
 # New proved fact → neutral (not weakened)
 cat > "$ADV_DIR/new_proved_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"good","state":"proved","current_fingerprint":"abc"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"good","state":"proved","current_fingerprint":"abc"}]}
 ADVEOF
 adv_proved=$($COMPILER diff "$ADV_DIR/new_weak_old.json" "$ADV_DIR/new_proved_new.json" 2>&1) && adv_proved_exit=0 || adv_proved_exit=$?
 if grep <<<"$adv_proved" -q "OTHER CHANGES" && [ "$adv_proved_exit" -eq 0 ]; then
@@ -5697,7 +5697,7 @@ fi
 
 # Duplicate keys in old bundle → error
 cat > "$ADV_DIR/dupes_old_bundle.json" << 'ADVEOF'
-[{"kind":"effects","function":"foo","evidence":"proved"},{"kind":"effects","function":"foo","evidence":"stale"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","evidence":"proved"},{"kind":"effects","function":"foo","evidence":"stale"}]}
 ADVEOF
 adv_old_dupes=$($COMPILER diff "$ADV_DIR/dupes_old_bundle.json" "$ADV_DIR/new_weak_old.json" 2>&1) && true || true
 if grep <<<"$adv_old_dupes" -qi "error.*duplicate.*old"; then
@@ -5724,10 +5724,10 @@ fi
 # --- Strengthening direction: stale → proved ---
 
 cat > "$ADV_DIR/strengthen_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]}
 ADVEOF
 cat > "$ADV_DIR/strengthen_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc","spec":"Foo.spec","proof":"Foo.proof","source":"registry"}]}
 ADVEOF
 adv_strength=$($COMPILER diff "$ADV_DIR/strengthen_old.json" "$ADV_DIR/strengthen_new.json" 2>&1) && adv_str_exit=0 || adv_str_exit=$?
 if grep <<<"$adv_strength" -q "TRUST STRENGTHENED" && \
@@ -5744,10 +5744,10 @@ fi
 # --- Mixed drift: both weakened + strengthened in same diff ---
 
 cat > "$ADV_DIR/mixed_old.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"abc"},{"kind":"proof_status","function":"bar","state":"proved","current_fingerprint":"xyz"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"stale","current_fingerprint":"abc"},{"kind":"proof_status","function":"bar","state":"proved","current_fingerprint":"xyz"}]}
 ADVEOF
 cat > "$ADV_DIR/mixed_new.json" << 'ADVEOF'
-[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"},{"kind":"proof_status","function":"bar","state":"stale","current_fingerprint":"xyz"}]
+{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"proof_status","function":"foo","state":"proved","current_fingerprint":"abc"},{"kind":"proof_status","function":"bar","state":"stale","current_fingerprint":"xyz"}]}
 ADVEOF
 adv_mixed=$($COMPILER diff "$ADV_DIR/mixed_old.json" "$ADV_DIR/mixed_new.json" 2>&1) && adv_mix_exit=0 || adv_mix_exit=$?
 if grep <<<"$adv_mixed" -q "TRUST WEAKENED" && \
@@ -7500,7 +7500,7 @@ MAL_DIR=$(mktemp -d)
 
 # --- 1. Truncated snapshot JSON → explicit error, nonzero exit ---
 echo '[{"kind":"effects","function":"foo"' > "$MAL_DIR/truncated.json"
-echo '[]' > "$MAL_DIR/good.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[]}' > "$MAL_DIR/good.json"
 mal_out=$($COMPILER diff "$MAL_DIR/truncated.json" "$MAL_DIR/good.json" 2>&1) && mal_exit=0 || mal_exit=$?
 if [ "$mal_exit" -ne 0 ] && grep <<<"$mal_out" -q "error.*parse\|could not parse"; then
     echo "  ok  malformed: truncated snapshot JSON produces explicit error"
@@ -7567,7 +7567,7 @@ else
 fi
 
 # --- 9. Snapshot facts with missing required fields → warnings ---
-echo '[{"kind":"effects"},{"function":"bar"}]' > "$MAL_DIR/missing_fields.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects"},{"function":"bar"}]}' > "$MAL_DIR/missing_fields.json"
 mal_fields=$($COMPILER diff "$MAL_DIR/missing_fields.json" "$MAL_DIR/good.json" 2>&1 || true)
 if grep <<<"$mal_fields" -q "warning.*missing required.*function" && grep <<<"$mal_fields" -q "warning.*missing required.*kind"; then
     echo "  ok  malformed: snapshot facts with missing fields produce warnings"
@@ -7589,7 +7589,7 @@ else
 fi
 
 # --- 11. Snapshot with duplicate fact keys → error ---
-echo '[{"kind":"effects","function":"foo","no_external_authority":true},{"kind":"effects","function":"foo","no_external_authority":false}]' > "$MAL_DIR/dupes.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","no_external_authority":true},{"kind":"effects","function":"foo","no_external_authority":false}]}' > "$MAL_DIR/dupes.json"
 mal_dupe=$($COMPILER diff "$MAL_DIR/dupes.json" "$MAL_DIR/good.json" 2>&1) && dupe_exit=0 || dupe_exit=$?
 if [ "$dupe_exit" -ne 0 ] && grep <<<"$mal_dupe" -q "duplicate"; then
     echo "  ok  malformed: snapshot with duplicate keys produces error"
@@ -7730,8 +7730,8 @@ else
 fi
 
 # --- 24. Diff shows <missing> for absent fields, not empty string ---
-echo '[{"kind":"effects","function":"foo","no_external_authority":true,"evidence":"enforced","capabilities":"[]","crosses_ffi":false,"is_trusted":false}]' > "$MAL_DIR/diff_old.json"
-echo '[{"kind":"effects","function":"foo","evidence":"enforced"}]' > "$MAL_DIR/diff_new.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","no_external_authority":true,"evidence":"enforced","capabilities":"[]","crosses_ffi":false,"is_trusted":false}]}' > "$MAL_DIR/diff_old.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"effects","function":"foo","evidence":"enforced"}]}' > "$MAL_DIR/diff_new.json"
 diff_out=$($COMPILER diff "$MAL_DIR/diff_old.json" "$MAL_DIR/diff_new.json" 2>&1) || true
 if grep <<<"$diff_out" -q "<missing>"; then
     echo "  ok  malformed: diff reports <missing> for absent fields"
@@ -7742,8 +7742,8 @@ else
 fi
 
 # --- 25. New fact with unknown kind classified as weakened ---
-echo '[]' > "$MAL_DIR/drift_old.json"
-echo '[{"kind":"totally_unknown_kind","function":"bar"}]' > "$MAL_DIR/drift_new.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[]}' > "$MAL_DIR/drift_old.json"
+echo '{"schema_version":2,"schema_kind":"facts","facts":[{"kind":"totally_unknown_kind","function":"bar"}]}' > "$MAL_DIR/drift_new.json"
 drift_out=$($COMPILER diff "$MAL_DIR/drift_old.json" "$MAL_DIR/drift_new.json" 2>&1) || true
 if grep <<<"$drift_out" -q "weakened"; then
     echo "  ok  malformed: unknown fact kind in new facts classified as weakened"

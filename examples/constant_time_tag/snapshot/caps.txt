@@ -5,7 +5,7 @@ module constant_time_tag:
       ct_compare : (no external authority)
       assumes: no declared capability; call graph complete
   pub main : Console
-      assumes: Console (declared; no reached foreign binding provides it); call graph complete
+      assumes: Console (declared); reached foreign assumptions: none; call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
 Totals: 2 functions (1 with no external authority), 0 externs

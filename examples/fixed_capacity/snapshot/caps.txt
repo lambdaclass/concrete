@@ -38,10 +38,10 @@ module fixed_capacity:
       build_payload_overflow : (no external authority)
       assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
       report : Console
-      assumes: Console (declared; no reached foreign binding provides it); call graph complete
+      assumes: Console (declared); reached foreign assumptions: none; call graph complete
     Console    <- calls print_string (intrinsic), print_int (intrinsic), print_char (intrinsic)
   pub main : Console
-      assumes: Console (declared; no reached foreign binding provides it); memory safety assumed at 4 trusted boundary(ies); call graph complete
+      assumes: Console (declared); reached foreign assumptions: none; memory safety assumed at 4 trusted boundary(ies); call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic), report, print_int (intrinsic)
 
 Totals: 20 functions (18 with no external authority), 0 externs

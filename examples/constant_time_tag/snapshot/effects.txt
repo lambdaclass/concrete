@@ -7,7 +7,7 @@ module constant_time_tag:
     assumes: no declared capability; call graph complete
   pub main
     caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/constant_time_tag/src/main.con:67
-    assumes: Console (declared; no reached foreign binding provides it); call graph complete
+    assumes: Console (declared); reached foreign assumptions: none; call graph complete
 
 Totals: 2 functions, 1 with no external authority, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 0 proved, 2 enforced, 0 trusted-assumption, 0 reported

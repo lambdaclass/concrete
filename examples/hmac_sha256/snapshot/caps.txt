@@ -59,7 +59,7 @@ module hmac_sha256:
       rfc4231_tc2_tag : (no external authority)
       assumes: no declared capability; call graph complete
   pub main : Console
-      assumes: Console (declared; no reached foreign binding provides it); call graph complete
+      assumes: Console (declared); reached foreign assumptions: none; call graph complete
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
 Totals: 24 functions (23 with no external authority), 0 externs

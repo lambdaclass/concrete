@@ -13,7 +13,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
 capability Console (1 functions):
   pub main  <- main -> print_string
-        Console (declared; no reached foreign binding provides it); call graph complete
+        Console (declared); reached foreign assumptions: none; call graph complete
 
 Totals: 24 functions (23 with no declared capability, 1 with capabilities), 0 externs
 

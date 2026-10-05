@@ -83,7 +83,7 @@ module hmac_sha256:
     assumes: no declared capability; call graph complete
   pub main
     caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:446
-    assumes: Console (declared; no reached foreign binding provides it); call graph complete
+    assumes: Console (declared); reached foreign assumptions: none; call graph complete
 
 Totals: 24 functions, 23 with no external authority, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 0 proved, 24 enforced, 0 trusted-assumption, 0 reported

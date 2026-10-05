@@ -320,19 +320,22 @@ open Json in
     Accepts either a raw JSON array or a snapshot object with a "facts" field.
     Returns (facts, warnings) where warnings flag schema issues. -/
 def parseFactsWarn (jsonStr : String) : Option (List Val) × List String :=
+  -- The version is checked BEFORE any fact is read or compared. An artifact of another API
+  -- version is rejected, not interpreted: v1 carried `is_pure`, which v2 removed, so comparing
+  -- across versions would misreport every change. A missing version (a bare array, or an
+  -- envelope without the field) is rejected too — it cannot be shown to be this version.
+  let missing := s!"error: facts artifact has no schema_version; this compiler reads schema_version {apiSchemaVersion} envelopes — regenerate it with this compiler"
   match JsonParser.parse jsonStr with
-  | some (.arr vs) =>
-    let warnings := validateFactSchema vs
-    (some vs, warnings)
+  | some (.arr _) => (none, [missing ++ " (a bare array carries no version)"])
   | some (.obj kvs) =>
-    -- An enveloped artifact from another API version is REJECTED, not read: v1 carried
-    -- `is_pure`, which v2 removed, so comparing across versions would misreport every change.
     match kvs.find? (fun (k, _) => k == "schema_version") with
     | some (_, .num n) =>
-      if n != Int.ofNat apiSchemaVersion then
-        (none, [s!"error: snapshot schema_version {n} is not supported (this compiler writes {apiSchemaVersion}); regenerate it with this compiler — old artifacts are not migrated"])
-      else parseEnvelope kvs
-    | _ => parseEnvelope kvs
+      if n == Int.ofNat apiSchemaVersion then parseEnvelope kvs
+      else
+        let which := if n < Int.ofNat apiSchemaVersion then "older" else "NEWER (unsupported future)"
+        (none, [s!"error: snapshot schema_version {n} is {which} than this compiler's {apiSchemaVersion} and is not supported; regenerate it with this compiler — artifacts are not migrated"])
+    | some _ => (none, [missing ++ " (schema_version is not a number)"])
+    | none => (none, [missing])
   | some _ => (none, ["error: snapshot JSON is not an array or object"])
   | none => (none, ["error: snapshot JSON failed to parse"])
 where

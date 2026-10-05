@@ -1199,8 +1199,8 @@ gate_for_last "scripts/tests/check_assumption_summary.sh"
 # it rests on, and "pure" stops requiring complete coverage. The cross-surface section of
 # check_assumption_summary.sh (caps text vs diagnostics-json vs assumptions JSON) catches both.
 MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
-MUT_OLD+=("  if bs.isEmpty then s!\"{cap} (declared; no reached foreign binding provides it)\"")
-MUT_NEW+=("  if true || bs.isEmpty then s!\"{cap} (declared; no reached foreign binding provides it)\" -- MUTATION: bindings dropped")
+MUT_OLD+=("  if bs.isEmpty then s!\"{cap} (declared); reached foreign assumptions: none\"")
+MUT_NEW+=("  if true || bs.isEmpty then s!\"{cap} (declared); reached foreign assumptions: none\" -- MUTATION: bindings dropped")
 MUT_DESC+=("qualification: a capability conclusion no longer names the bindings it rests on")
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 

@@ -563,12 +563,14 @@ def FnSummary.coveragePhrase (s : FnSummary) : String :=
   else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} indirect call(s): " ++
     "; ".intercalate (s.gaps.toList.map (·.render))
 
-/-- One capability, qualified: `Console (assuming std.libc.write honest)`. A declared capability
-    no reached binding provides is stated as such, not invented an assumption. -/
+/-- One capability, qualified: `Console (declared; assuming std.libc.write honest)`. When no
+    reached foreign binding declares it, the line says only that — `reached foreign assumptions:
+    none` — and NOT that the function lacks the authority: authority can also come from compiler
+    primitives or other operations. Judging over-declaration is R-0487's analysis, not this. -/
 def Table.qualifyCap (t : Table) (s : FnSummary) (cap : String) : String :=
   let bs := t.bindingsProviding s cap
-  if bs.isEmpty then s!"{cap} (declared; no reached foreign binding provides it)"
-  else s!"{cap} (assuming {", ".intercalate (bs.toList.map (·.id.qualified))} honest)"
+  if bs.isEmpty then s!"{cap} (declared); reached foreign assumptions: none"
+  else s!"{cap} (declared; assuming {", ".intercalate (bs.toList.map (·.id.qualified))} honest)"
 
 /-- The full qualification line for a function whose header declares `declared`. Lists, in
     order: each declared capability with the bindings it rests on; foreign bindings reached that
