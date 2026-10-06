@@ -1246,7 +1246,7 @@ gate_for_last "scripts/tests/check_proof_admission.sh"
 
 MUT_FILE+=("Concrete/Proof/ProofCore.lean")
 MUT_OLD+=("  let admission : String → List AdmissionRefusal := admissionRefusalsOf assumptions admissionIdx")
-MUT_NEW+=("  let admission : String → List AdmissionRefusal := fun _ => [] -- MUTATION: extraction does not consult the summary")
+MUT_NEW+=("  let admission : String → List AdmissionRefusal := fun q => (admissionRefusalsOf assumptions admissionIdx q).filter (fun _ => false) -- MUTATION: extraction discards the summary's refusals")
 MUT_DESC+=("proof admission: extraction stops consulting the assumption summary")
 gate_for_last "scripts/tests/check_proof_admission.sh"
 
