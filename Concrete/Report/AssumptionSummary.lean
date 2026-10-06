@@ -203,12 +203,32 @@ private structure Binding where
   key : String
   module : String
   spellings : List String
+  /-- A `#[intrinsic]` declaration naming a real compiler intrinsic: calls to it RESOLVE (no
+      unresolved-edge gap) but reach no foreign assumption — the compiler implements it. -/
+  intrinsic : Bool := false
   deriving Inhabited
 
 /-- The package scope of a module: by its source file, else inherited from its parent. -/
 private def scopeOf (packageOf : String → Option (String × String)) (m : CModule)
     (parent : String × String) : String × String :=
   (packageOf m.sourceFile).getD parent
+
+/-- Is `n` a bodiless `#[intrinsic]` declaration in `m` naming an intrinsic the compiler knows?
+    Then the compiler implements it and it is no foreign binding. An unknown intrinsic name stays a
+    foreign binding — the conservative reading. Every report asks this one question. -/
+def isIntrinsicDecl (m : CModule) (n : String) : Bool :=
+  -- ALL of: the attribute names one of the compile-time intrinsics whose calls the compiler
+  -- lowers to a constant (no runtime call, no capability); the declaration's OWN name is one the
+  -- compiler intercepts as that same intrinsic (so calls to it never reach a C symbol); and its
+  -- signature is that intrinsic's: no value parameters, returning `Uint`. Anything else stays a
+  -- foreign binding — a forged `#[intrinsic = "sizeof"] fn my_write(..)` is lowered as a C call
+  -- and must keep its foreign assumption.
+  let constIntrinsic (i : Option IntrinsicId) := i == some .sizeof || i == some .alignof
+  match m.intrinsicDecls.lookup n, m.externFns.find? (·.1 == n) with
+  | some attr, some (_, params, retTy, _) =>
+    constIntrinsic (resolveIntrinsic attr) && resolveIntrinsic n == resolveIntrinsic attr
+      && params.isEmpty && retTy == .uint
+  | _, _ => false
 
 private partial def collect (packageOf : String → Option (String × String))
     (m : CModule) (path : String) (parent : String × String)
@@ -223,7 +243,10 @@ private partial def collect (packageOf : String → Option (String × String))
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
       indirect := (collectIndirectCallsStmts f.body).eraseDups
       trusted := f.isTrusted, typeParams := f.typeParams : Node }
-  let externs := m.externFns.toArray.map fun (n, _, _, t) =>
+  let isIntrinsicDecl := isIntrinsicDecl m
+  let intrinsicBindings := (m.externFns.filter fun (n, _, _, _) => isIntrinsicDecl n).toArray.map fun (n, _, _, _) =>
+    ({ key := "", module := path, spellings := callSpellings path n, intrinsic := true } : Binding)
+  let externs := (m.externFns.filter fun (n, _, _, _) => !isIntrinsicDecl n).toArray.map fun (n, _, _, t) =>
     let id : AssumptionId := { kind := .foreignBinding, package := pkg, packageName := pkgName, module := path, name := n }
     ({ key := id.key, module := path, spellings := callSpellings path n : Binding },
      { id, effects := (m.externFnCaps.lookup n).getD .empty, trustedExtern := t : Facts })
@@ -234,7 +257,7 @@ private partial def collect (packageOf : String → Option (String × String))
   m.submodules.foldl (fun (ns, bs, fs) sub =>
       let (ns', bs', fs') := collect packageOf sub (path ++ "." ++ sub.name) (pkg, pkgName)
       (ns ++ ns', bs ++ bs', fs ++ fs'))
-    (nodes, externs.map (·.1), externs.map (·.2) ++ trustedFacts)
+    (nodes, externs.map (·.1) ++ intrinsicBindings, externs.map (·.2) ++ trustedFacts)
 
 /-- Index: spelling → indices, so name resolution is not a scan of the whole program. -/
 private def indexBy {α} [Inhabited α] (xs : Array α) (spellings : α → List String)
@@ -332,6 +355,7 @@ def build (modules : List CModule)
         unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name,
                                             unloaded := tp.isNone, typeParam := tp }
       for b in bs do
+        if bindings[b]!.intrinsic then continue
         let key := bindings[b]!.key
         if !(rs.any (·.key == key)) then
           rs := rs.push { key, via := if isValue then .refersToBinding else .callsBinding }
@@ -715,6 +739,24 @@ refuses that collision for a whole program (bug 074), but the summary must not d
 built directly from two modules both named `util`, each binding `putchar`, mapped to different
 packages, it must hold TWO foreign-binding identities. A key without the package would merge
 them, and this build would fail. -/
+/-- A bodiless `#[intrinsic]` declaration naming a real intrinsic is no foreign binding; one naming
+    an unknown intrinsic stays foreign (conservative). -/
+private def intrinsicProbe (intrinsic : String) (name : String := "sizeof")
+    (params : List (String × Ty) := []) (retTy : Ty := .uint) : Table :=
+  build [{ name := "mem", structs := [], enums := [], functions := [], constants := []
+           externFns := [(name, params, retTy, true)], externFnCaps := [(name, .empty)]
+           intrinsicDecls := [(name, intrinsic)] }]
+
+#guard (intrinsicProbe "sizeof").facts.isEmpty
+#guard (intrinsicProbe "alignof" "alignof").facts.isEmpty
+-- Rejections: each stays a foreign binding.
+#guard (intrinsicProbe "no_such_intrinsic").facts.size == 1
+#guard (intrinsicProbe "sizeof" "my_write").facts.size == 1           -- forged: name not intercepted
+#guard (intrinsicProbe "alignof" "sizeof").facts.size == 1            -- name/attribute disagree
+#guard (intrinsicProbe "print_int" "print_int").facts.size == 1       -- a runtime intrinsic
+#guard (intrinsicProbe "sizeof" "sizeof" [("x", .i32)]).facts.size == 1  -- wrong signature
+#guard (intrinsicProbe "sizeof" "sizeof" [] .i32).facts.size == 1        -- wrong return type
+
 private def packageScopeProbe : Table :=
   let mk (file : String) : CModule :=
     { name := "util", structs := [], enums := [], functions := [], constants := []

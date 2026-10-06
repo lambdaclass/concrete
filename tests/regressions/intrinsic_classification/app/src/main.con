@@ -1,0 +1,21 @@
+// R-0484 R10: only a compiler-recognized compile-time intrinsic with its exact signature is
+// classified as a compiler intrinsic. Anything else carrying #[intrinsic] stays a foreign binding.
+// Rows of check_descriptor_coverage.sh.
+import std.mem.{sizeof};
+
+mod app {
+    // FORGED: the attribute claims `sizeof`, but the name `abs` is not intercepted by the compiler —
+    // calls lower to C's abs(). It must remain a foreign binding.
+    #[intrinsic = "sizeof"]
+    trusted extern fn abs(x: i32) with() -> i32;
+
+    fn via_forged() -> i32 { return abs(0 - 3); }
+}
+
+// GENUINE: std.mem.sizeof is a compile-time intrinsic; the compiler lowers it to a constant.
+fn via_genuine() -> u64 { return sizeof::<i32>(); }
+
+fn main() -> i32 {
+    let n: u64 = via_genuine();
+    return app::via_forged() - 3 + (n as i32) - 4;
+}

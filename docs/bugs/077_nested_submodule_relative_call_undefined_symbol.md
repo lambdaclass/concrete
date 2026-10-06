@@ -33,6 +33,13 @@ level) compiles and runs.
   recorded as reaching BOTH. Over-approximation keeps the summary sound, but the provenance
   path is wrong.
 
+## Containment while open (gated by `check_bug077_contained.sh`)
+
+R-0484 closes with this bug separately owned, on three conditions the gate checks: the build
+refuses the reproducer every time (LLVM validation, no binary); the assumption summary still
+resolves the relative call, so a foreign binding reached through it is listed for the caller
+(`reach.con`); and every R-0484 acceptance project builds and runs, so none depends on it.
+
 ## Not yet done
 
 Root cause (Elab's qualification of `Mod::fn` paths below the second level), the fix, and a

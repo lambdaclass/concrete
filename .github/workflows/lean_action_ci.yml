@@ -740,6 +740,9 @@ jobs:
       - name: "Capability explanations (R-0484 R10 — explanations follow dependency summaries and name the dependency callee)"
         run: bash scripts/tests/check_capability_explanations.sh
 
+      - name: "Bug 077 contained (OPEN — the build refuses it, reports stay complete-or-honest, no R-0484 case depends on it)"
+        run: bash scripts/tests/check_bug077_contained.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

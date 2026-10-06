@@ -2218,6 +2218,9 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingRepr : Option ReprOpts := none
   let mut pendingIsTest : Bool := false
   let mut pendingOverflow : Bool := false
+  -- `#[intrinsic = "..."]` on a bodiless declaration: the compiler implements it, so it is not
+  -- a foreign binding (R-0484 R10). Carried to Core; nothing else reads it.
+  let mut pendingIntrinsic : Option String := none
   let mut pendingEnsures : List Expr := []
   let mut pendingRequires : List Expr := []
   let mut pendingSpecLink : Option String := none
@@ -2237,6 +2240,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         if key == "test" then
           pendingIsTest := true
         if key == "overflow_checked" then pendingOverflow := true
+        if key == "intrinsic" then pendingIntrinsic := attrVal
         if key == "spec" then
           if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
           pendingSpecLink := attrVal
@@ -2294,6 +2298,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if key == "test" then
             pendingIsTest := true
           if key == "overflow_checked" then pendingOverflow := true
+          if key == "intrinsic" then pendingIntrinsic := attrVal
           if key == "spec" then
             if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
             pendingSpecLink := attrVal
@@ -2326,9 +2331,15 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if isTrusted && tk != .fn && tk != .impl_ && tk != .extern_ then
             let sp ← peekSpan
             throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
+          -- `#[intrinsic]` belongs to a bodiless declaration only; on anything else it would
+          -- otherwise stay pending and attach to a LATER declaration.
+          if pendingIntrinsic.isSome && tk != .fn && tk != .extern_ then
+            let sp ← peekSpan
+            throwParse "#[intrinsic] can only be applied to a bodiless function declaration" (span := some sp)
           if tk == .extern_ then
             let ext ← parseExternFn
-            externFns := { ext with isPublic := isPub, isTrusted } :: externFns
+            externFns := { ext with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic } :: externFns
+            pendingIntrinsic := none
           else if tk == .enum_ then
             let e ← parseEnumDef
             enums := enums ++ [{ e with isPublic := isPub }]
@@ -2427,13 +2438,17 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             -- per top-level declaration was O(decls) each, i.e. O(N²) to parse a
             -- module of N functions — the frontend O(N²) the complexity guard's
             -- many-functions family exposed (it is PARSE, not resolve/check).
-            | .inl fnDef => fns := { fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow } :: fns
+            | .inl fnDef =>
+              if pendingIntrinsic.isSome then
+                throwParse "#[intrinsic] can only be applied to a bodiless function declaration, not one with a body" (span := some fnDef.span)
+              fns := { fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow } :: fns
             -- `isTrusted` must come along. The body-less branch carried `isPublic` and
             -- dropped it, so `pub trusted fn sizeof<T>() -> u64;` parsed as UNtrusted and
             -- `externFnRequiredCaps` charged it `Unsafe` — a modifier the author wrote,
             -- silently discarded, with the default read as a decision. (`trusted extern fn`
             -- was unaffected: that is a different production.)
-            | .inr extDef => externFns := { extDef with isPublic := isPub, isTrusted } :: externFns
+            | .inr extDef => externFns := { extDef with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic } :: externFns
+            pendingIntrinsic := none
             pendingIsTest := false
             pendingOverflow := false
             pendingEnsures := []
@@ -2470,6 +2485,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       pendingRepr := none
       pendingIsTest := false
       pendingOverflow := false
+      pendingIntrinsic := none
       pendingEnsures := []
       pendingRequires := []
       pendingSpecLink := none

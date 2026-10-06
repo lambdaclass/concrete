@@ -371,7 +371,8 @@ partial def unsafeCounts (m : CModule)
     (unsafeFns, ptrFns, externFns, trustedExterns, trustedFns)
 
 /-- Analyze what a trusted function wraps — scan its body for unsafe operations. -/
-def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String :=
+def trustBoundaryAnalysis (externNames : List String) (f : CFnDef)
+    (intrinsicNames : List String := []) : List String :=
   let callees := collectCallsStmts f.body |>.eraseDups
   let ops : List String := []
   -- Check for raw pointer operations in body
@@ -379,7 +380,8 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String
   -- Check for calls to extern functions
   let externCalls := callees.filter fun c => externNames.contains c
   let ops := if externCalls.isEmpty then ops
-    else ops ++ externCalls.map fun c => s!"extern {c}"
+    else ops ++ externCalls.map fun c =>
+      if intrinsicNames.contains c then s!"compiler intrinsic {c}" else s!"extern {c}"
   -- Check for calls to functions with Unsafe capability
   -- (this is approximate — we check if callee name contains known unsafe patterns)
   let ops := if callees.any (fun c => c == "alloc" || c == "free") then
@@ -388,15 +390,23 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String
   if ops.isEmpty then ["(safe body — no raw ops detected)"]
   else ops
 
+/-- Names of every compiler-intrinsic declaration in a module tree. -/
+partial def intrinsicDeclNames (m : CModule) : List String :=
+  (m.externFns.filterMap fun (n, _, _, _) => if Assumptions.isIntrinsicDecl m n then some n else none)
+    ++ m.submodules.foldl (fun acc sub => acc ++ intrinsicDeclNames sub) []
+
 partial def unsafeReportModule (externNames : List String)
-    (m : CModule) (indent : String) : Option String :=
+    (m : CModule) (indent : String) (intrinsicNames : List String := []) : Option String :=
   let unsafeFns := m.functions.filter fun f => hasUnsafeCap f.capSet
-  let externFns := m.externFns.filter fun (_, _, _, t) => !t
-  let trustedExternFns := m.externFns.filter fun (_, _, _, t) => t
+  -- Compiler intrinsic declarations are listed on their own: no C code stands behind them.
+  let intrinsicDecls := m.externFns.filter fun (n, _, _, _) => Assumptions.isIntrinsicDecl m n
+  let foreignFns := m.externFns.filter fun (n, _, _, _) => !Assumptions.isIntrinsicDecl m n
+  let externFns := foreignFns.filter fun (_, _, _, t) => !t
+  let trustedExternFns := foreignFns.filter fun (_, _, _, t) => t
   let ptrFns := m.functions.filter fnUsesRawPtrs
   let trustedFns := m.functions.filter fun f => f.isTrusted
-  let subReports := m.submodules.filterMap (unsafeReportModule externNames · (indent ++ "  "))
-  if unsafeFns.isEmpty && externFns.isEmpty && trustedExternFns.isEmpty && ptrFns.isEmpty && trustedFns.isEmpty && subReports.isEmpty then
+  let subReports := m.submodules.filterMap (unsafeReportModule externNames · (indent ++ "  ") intrinsicNames)
+  if unsafeFns.isEmpty && externFns.isEmpty && trustedExternFns.isEmpty && intrinsicDecls.isEmpty && ptrFns.isEmpty && trustedFns.isEmpty && subReports.isEmpty then
     none
   else
     let lines : List String := [s!"{indent}module {m.name}:"]
@@ -419,7 +429,11 @@ partial def unsafeReportModule (externNames : List String)
     -- every caller but not proved about the C code. Each one is listed with its site
     -- (the binding), its kind of trust, and the functions here whose own declarations
     -- rely on it, so a reader can see what an audit of the binding would have to cover.
-    let allExterns := m.externFns
+    let lines := if intrinsicDecls.isEmpty then lines
+      else lines ++ [s!"{indent}  Compiler intrinsic declarations (implemented by the compiler; not foreign assumptions):"] ++
+        intrinsicDecls.map fun (n, ps, rt, _) =>
+          s!"{indent}    fn {n}({ppTyList ps}) -> {tyToStr rt}  #[intrinsic = \"{((m.intrinsicDecls.lookup n).getD "")}\"]"
+    let allExterns := foreignFns
     let lines := if allExterns.isEmpty then lines
       else lines ++ [s!"{indent}  Foreign effect declarations (audited assumptions):"] ++
         allExterns.foldl (fun acc (n, _, _, t) =>
@@ -442,7 +456,7 @@ partial def unsafeReportModule (externNames : List String)
         let lines := lines ++ [s!"{indent}  Trust boundary analysis:"]
         let lines := if trustedStandalone.isEmpty then lines
           else trustedStandalone.foldl (fun lines f =>
-            let ops := trustBoundaryAnalysis externNames f
+            let ops := trustBoundaryAnalysis externNames f intrinsicNames
             lines ++ [s!"{indent}    trusted fn {f.name}:"] ++
               ops.map fun op => s!"{indent}      wraps: {op}"
           ) lines
@@ -451,7 +465,7 @@ partial def unsafeReportModule (externNames : List String)
           let methodLines := methods.foldl (fun acc f =>
             let shortName := if f.name.startsWith (implName ++ "_") then
               f.name.drop (implName.length + 1) else f.name
-            let ops := trustBoundaryAnalysis externNames f
+            let ops := trustBoundaryAnalysis externNames f intrinsicNames
             acc ++ [s!"{indent}      fn {shortName}:"] ++
               ops.map fun op => s!"{indent}        wraps: {op}"
           ) []
@@ -551,7 +565,7 @@ def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore)
     (assumptions : Assumptions.Table := {}) (depsLoaded : Bool := false) : String :=
   let header := "=== Unsafe Signature Summary ==="
   let externNames := pc.externNames
-  let body := modules.filterMap (unsafeReportModule externNames · "")
+  let body := modules.filterMap (unsafeReportModule externNames · "" (modules.foldl (fun acc m => acc ++ intrinsicDeclNames m) []))
   let (unsafeCount, ptrCount, externCount, trustedExternCount, trustedCount) :=
     modules.foldl (fun (a, b, c, d, e) m =>
       let (a', b', c', d', e') := unsafeCounts m

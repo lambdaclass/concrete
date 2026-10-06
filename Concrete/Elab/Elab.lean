@@ -2696,6 +2696,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     functions := fns
     externFns := cExterns
     externFnCaps := cExternCaps
+    intrinsicDecls := m.externFns.filterMap fun ef => ef.intrinsic.map (ef.name, ·)
     constants := cConstants
     submodules := subs
     newtypes := m.newtypes ++ imports.newtypes

@@ -31,17 +31,19 @@ packages. `print_bytes` declares `with(Console)` and is excluded for it.
   - capability explanations name the dependency callee that supplies a capability, through
     import aliases, identically in the caps/authority text, diagnostics-json and the
     `why-capability`/audit query traces.
+  - a bodiless `#[intrinsic]` declaration (`std.mem.sizeof`) is a compiler intrinsic, not a
+    foreign binding: it is carried into Core and reported on its own.
 
 **Known limits, stated rather than hidden:**
 
 - `--query` runs single-file: dependencies are not loaded there, and its answers say so. Only
   project-mode reports follow dependency summaries.
-- A bodiless `#[intrinsic]` function (`std.mem.sizeof`) parses as an extern and is listed as a
-  foreign binding: over-reported, not omitted, until the attribute reaches Core.
 - Descriptor classification is covered only by the construction/caller audit
-  ([HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)), a document that is not
-  re-run; eight current std bindings postdate it and report as covered by no audit. Typed
-  descriptors are the second step (§10).
+  ([HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)), a human document that is not
+  re-run against callers. It covers every current std binding — F6 removed the eight it marked
+  unused, `_exit` is audited — and `check_descriptor_coverage.sh` fails if a std binding is
+  added without an audit entry or a removed one returns. Typed descriptors are the second step
+  (§10).
 - The reports still compute the older indirect-call analysis beside the summary and treat a
   function as opaque if either says so.
 - The four external pages once named as stating "no capabilities means pure" (the Spec, Why

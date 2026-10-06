@@ -278,6 +278,17 @@ Classification: plain `extern`, `Process`, with these as named assumptions in re
 
 ### 3.5 Never called — removed (F6, carried out 2026-10-06)
 
+**Reconciliation (2026-10-06).** Before F6 was carried out, eight current std bindings appeared in
+none of §3.1–§3.3: the seven F6 names below except `realloc` (`puts`, `fdopen`, `raise`, `putchar`,
+`snprintf`, `strtol`, `htonl`), listed only here, plus `_exit`, added after the audit. The eight
+REMOVED are those seven plus libc's duplicate `realloc`, which never showed as unaudited because
+the name `realloc` is in §3.2 for `alloc.con`'s binding, which stays. `_exit` is RETAINED and
+audited in §3.2. Mechanical coverage (`check_descriptor_coverage.sh`: every current binding is in a
+table, none in two, none removed returns) proves the audit names every binding; it does not prove
+any declared effect or descriptor classification is honest — that remains the audit's human
+assumption.
+
+
 `realloc` (libc copy; `alloc.con` has its own), `puts`, `fdopen`, `raise`, `putchar`,
 `snprintf`, `strtol`, `htonl`. Removing `fdopen` also removes the only bound path from a
 raw descriptor to a `FILE*`.

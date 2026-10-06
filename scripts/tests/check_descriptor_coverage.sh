@@ -113,6 +113,60 @@ while IFS= read -r line; do
   esac
 done < "$TMP/rows.out"
 [ -s "$TMP/rows.out" ] || no "the row table produced nothing"
+echo "=== a compiler intrinsic is not a foreign binding ==="
+# std.mem.sizeof is a bodiless #[intrinsic = "sizeof"] declaration: the compiler implements it, no C
+# code stands behind it. It was listed as an assumed foreign binding; it must not appear as one on any
+# program surface, and std's own report lists it as a compiler intrinsic declaration.
+hits=$(cat "$TMP/b64.txt" "$TMP/b64.json" "$TMP/b64.diag" | grep -c 'sizeof' || true)
+[ "${hits:-0}" -eq 0 ] && ok "base64_cli: std.mem.sizeof appears on no assumption surface (text, assumptions JSON, facts)" \
+  || no "std.mem.sizeof still appears on an assumption surface ($hits mentions)"
+sout="$(cd "$ROOT_DIR/std" && $TO "$CC" src/lib.con --report unsafe 2>&1)"
+# Counted, not grep -q: under pipefail an early-exiting grep -q fails the pipeline on a match.
+c_decl=$(printf '%s\n' "$sout" | grep -A2 'Compiler intrinsic declarations' | grep -c 'fn sizeof() -> Uint  #\[intrinsic = "sizeof"\]' || true)
+c_foreign=$(printf '%s\n' "$sout" | grep -c 'sizeof: assumed to perform' || true)
+c_wraps=$(printf '%s\n' "$sout" | grep -c 'wraps: compiler intrinsic sizeof' || true)
+if [ "${c_decl:-0}" -ge 1 ] && [ "${c_foreign:-0}" -eq 0 ] && [ "${c_wraps:-0}" -ge 1 ]; then
+  ok "std's report lists sizeof as a compiler intrinsic declaration, not an audited foreign declaration"
+else
+  no "std's report does not classify sizeof as a compiler intrinsic"
+fi
+# End to end: a FORGED #[intrinsic = "sizeof"] on C's abs stays a foreign binding; a program calling
+# the genuine std.mem.sizeof does not reach one, and that function is admitted.
+IC="$ROOT_DIR/tests/regressions/intrinsic_classification/app"
+if (cd "$IC" && $TO "$CC" build . -o "$TMP/ic" >"$TMP/ic.log" 2>&1) && "$TMP/ic" >/dev/null 2>&1; then
+  ok "intrinsic_classification builds and runs (abs(-3) and sizeof::<i32>() both evaluate)"
+else
+  no "intrinsic_classification does not build or run: $(head -3 "$TMP/ic.log" | tr '\n' ' ')"
+fi
+(cd "$IC" && $TO "$CC" src/main.con --report assumptions) > "$TMP/ic.json" 2>/dev/null
+(cd "$IC" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/ic.diag" 2>/dev/null
+icr="$(python3 - "$TMP/ic.json" "$TMP/ic.diag" <<'PY'
+import json, sys
+a = json.load(open(sys.argv[1])); d = json.load(open(sys.argv[2]))
+foreign = {x["declaration"] for f in a["functions"] for x in f["assumes"] if x["kind"] == "foreign-binding"}
+el = {f["function"]: f for f in d["facts"] if f.get("kind") == "eligibility"}
+g = el.get("main.via_genuine", {})
+out = []
+out.append(("ok" if "main.app.abs" in foreign else "no") + " the forged #[intrinsic] on abs is still a foreign binding")
+out.append(("ok" if not any("sizeof" in x for x in foreign) else "no") + " the genuine std.mem.sizeof is no foreign binding")
+out.append(("ok" if g.get("admissible") is True else "no") + f" via_genuine (calls std.mem.sizeof) is admitted ({g.get('admission_reasons')})")
+print("\n".join(out))
+PY
+)"
+while IFS= read -r line; do
+  case "$line" in ok\ *) ok "${line#ok }" ;; no\ *) no "${line#no }" ;; esac
+done <<< "$icr"
+# Misplaced: #[intrinsic] on a function WITH a body is a parse error, not a silently pending attribute.
+printf '#[intrinsic = "sizeof"]\nfn f() -> i32 { return 1; }\nfn main() -> i32 { return f() - 1; }\n' > "$TMP/bad.con"
+bo="$($TO "$CC" "$TMP/bad.con" -o "$TMP/bad" 2>&1)"; brc=$?
+if [ "$brc" -ne 0 ] && printf '%s' "$bo" | grep -c 'can only be applied to a bodiless function declaration' >/dev/null; then
+  ok "#[intrinsic] on a function with a body is refused at parse"
+else
+  no "#[intrinsic] on a bodied function was not refused (rc=$brc): $(printf '%s' "$bo" | head -2)"
+fi
+gi=$(grep -c '^#guard ((intrinsicProbe\|^#guard (intrinsicProbe' "$SUMMARY" || true)
+[ "${gi:-0}" -ge 2 ] && ok "$gi #guard controls: a known intrinsic is no foreign fact, an unknown one stays foreign" \
+  || no "intrinsic #guard controls missing (${gi:-0})"
 g=$(grep -c '^#guard ({ id := { kind := .foreignBinding' "$SUMMARY" || true)
 [ "${g:-0}" -ge 3 ] && ok "$g #guard controls on package scoping of the audit" || no "descriptor-coverage #guards missing (${g:-0})"
 

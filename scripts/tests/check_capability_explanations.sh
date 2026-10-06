@@ -108,6 +108,34 @@ else
   no "single-file why-capability trace changed: $(printf '%s' "$q" | head -c 200)"
 fi
 
+echo "=== single-file --query: incomplete dependency coverage is explicit, never a negative conclusion ==="
+# --query runs single-file. A file that needs its project's dependencies is REFUSED rather than
+# answered without them; a dependency-free file says dependencies were not analysed, and a
+# function with an unresolved call gets no "no external authority" conclusion.
+if (cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" src/main.con --query capability:usage >/dev/null 2>&1); then
+  no "--query answered for a project file whose std dependency it cannot load"
+else
+  ok "--query refuses a project file it cannot resolve without its dependencies"
+fi
+printf '%s\n' 'fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }' \
+  'fn inc(x: i32) -> i32 { return x + 1; }' \
+  'fn main() -> i32 { return apply(inc, 1) - 2; }' > "$TMP/q2.con"
+$TO "$CC" "$TMP/q2.con" --query capability > "$TMP/q2.json" 2>/dev/null
+qr="$(python3 - "$TMP/q2.json" <<'PY'
+import json, sys
+fs = {f["function"]: f for f in json.load(open(sys.argv[1])).get("facts", [])}
+a, i = fs.get("main.apply", {}), fs.get("main.inc", {})
+ok = (bool(fs) and all(f.get("dependencies_analysed") is False for f in fs.values())
+      and a.get("coverage_complete") is False and a.get("no_external_authority") is False
+      and i.get("coverage_complete") is True)
+print("ok" if ok else "no " + json.dumps({k: {x: v.get(x) for x in ("dependencies_analysed", "coverage_complete", "no_external_authority")} for k, v in fs.items()}))
+PY
+)"
+case "$qr" in
+  ok) ok "single-file facts say dependencies_analysed=false; an unresolved call blocks 'no external authority'" ;;
+  *)  no "single-file query facts overclaim: $qr" ;;
+esac
+
 echo
 echo "CAPABILITY-EXPLANATIONS: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

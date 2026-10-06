@@ -1828,6 +1828,10 @@ def cryptoFns : FnTable :=
     -- digest). Module, declaration and implementation unchanged; the pairing with its twin in
     -- crypto_verify was resolved by package mapping, recorded in
     -- docs/verification/identity_migrations/2026-10-04_r0484_f1_f9.md.
+    -- RE-PAIRED aa9c5ba5 -> 8b058212 on 2026-10-06 (R-0484 audit F6 removed eight std bindings),
+    -- paired by SOURCE PATH from the attestation manifest; a name-keyed pairing collapsed this
+    -- twin onto crypto_verify's and was refused. See
+    -- docs/verification/identity_migrations/2026-10-06_r0484_f6.md.
     , AttestedPFnDef.of checkNonceFn    GeneratedAttestations.cryptoFns_8b058212_check_nonce ]
 
 -- Keeps `simp only [eval, cryptoFns_globals, cryptoFnsGlobals]` working WITHOUT delta-unfolding

@@ -223,6 +223,9 @@ structure CModule where
   /-- Each foreign binding's DECLARED effects (R-0484), keyed by binding name. Resolve has
       already refused a binding with no declaration, so every extern has an entry. -/
   externFnCaps : List (String × CapSet) := []
+  /-- Bodiless declarations marked `#[intrinsic = "..."]`: (name, intrinsic). Implemented by the
+      compiler, so the assumption summary does not treat them as foreign bindings. -/
+  intrinsicDecls : List (String × String) := []
   constants : List (String × Ty × CExpr)
   submodules : List CModule := []
   traitDefs : List CTraitDef := []
