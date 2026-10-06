@@ -69,7 +69,7 @@ res(bool(r) and r["complete"] and pr[-1:] == ["factlib.putchar"] and len(pr) == 
 g = fns.get("main.via_gap", {})
 res(bool(g) and not g["complete"] and any(x["binding"] == "f" and x["site"] == "factlib.apply" for x in g["gaps"])
     and not foreign(g),
-    "via_gap: INCOMPLETE, naming the indirect call through `f` in factlib.apply")
+    "via_gap: INCOMPLETE, naming the indirect call through 'f' in factlib.apply")
 u = fns.get("main.pure_one", {})
 res(bool(u) and u["complete"] and u["assumes"] == [] and u["gaps"] == [],
     "pure_one: complete and assumption-free (positive control)")
