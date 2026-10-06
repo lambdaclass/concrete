@@ -1,0 +1,10 @@
+// Bug 077 (OPEN): a call from tb.a into its own submodule (`util::poke`) lowers to the
+// unprefixed `@util_poke`, which is undefined, so LLVM validation fails. The same shape one
+// level shallower compiles. See docs/bugs/077.
+mod tb {
+    mod a {
+        mod util { pub fn poke(x: i32) -> i32 { return x + 1; } }
+        pub fn call(x: i32) -> i32 { return util::poke(x); }
+    }
+    fn main() -> i32 { return a::call(1) - 2; }
+}
