@@ -1004,7 +1004,7 @@ structure ProofStatusEntry where
       the artifact is logically valid while it cannot justify the program-level claim.
       Rendering this is not optional — an unreported refusal is worse than an inert
       rule, because the verdict changes with nothing saying why. -/
-  admissible    : Bool := true
+  admissible    : Bool
   admissionReasons : List String := []
   unsupported   : List String  -- unsupported constructs (empty unless blocked)
   specName      : String       -- spec name (from registry or derived)
@@ -1082,8 +1082,11 @@ private partial def collectProofStatus
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , eligibilityReasons := gates, unsupported := unsup, specName := sName, proofName := pName
-    , admissible := match obl with | some o => o.admissible | none => true
-    , admissionReasons := match obl with | some o => o.admissionReasons | none => []
+    -- No obligation means no admission verdict was formed, which is not an admission.
+    , admissible := match obl with | some o => o.admissible | none => false
+    , admissionReasons := match obl with
+        | some o => o.admissionReasons
+        | none => ["no proof obligation was formed for this function, so no admission verdict exists"]
     , proofSource := pSrc, origin, coverage
     , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
     , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
@@ -1206,6 +1209,10 @@ private def renderProofStatusBody (e : ProofStatusEntry) (sourceMap : SourceMap)
     exists to express. -/
 private def admissionLine (e : ProofStatusEntry) : String :=
   if e.admissible then ""
+  -- A function that is not extractable, or is trusted, is not admitted either, and its state
+  -- line already says why. Repeating it as an admission refusal with no reason of its own
+  -- would present the same fact twice, the second time as unexplained.
+  else if e.admissionReasons.isEmpty && (match e.state with | .notEligible | .trusted => true | _ => false) then ""
   else
     let why := if e.admissionReasons.isEmpty then "no reason recorded"
                else ", ".intercalate e.admissionReasons
@@ -5002,7 +5009,8 @@ def assumptionsVal (assumptions : Assumptions.Table) (idx : Std.HashMap String S
         ("dependencies_analysed", .bool assumptions.dependenciesAnalysed),
         ("coverage_complete", .bool s.complete),
         ("unresolved_indirect_calls", .arr (s.gaps.toList.map fun g =>
-          .obj [("site", .str g.site), ("binding", .str g.binding)])),
+          -- The field name predates the other gap kinds; `kind` says which one this is.
+          .obj [("site", .str g.site), ("binding", .str g.binding), ("kind", .str g.kind)])),
         ("assumed_foreign_bindings", .arr foreign),
         ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)) ]
 

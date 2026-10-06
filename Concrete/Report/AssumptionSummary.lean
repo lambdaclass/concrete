@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import Concrete.Elab.Core
 import Concrete.Resolve.Intrinsic
-import Concrete.Proof.ProofCore
+import Concrete.Proof.CallCollect
 import Concrete.Semantics.Capabilities
 
 /-!
@@ -112,11 +112,24 @@ structure Gap where
       a definition outside what was analysed, e.g. std in single-file mode. False: an indirect
       call through a fn-typed binding. -/
   unloaded : Bool := false
+  /-- A method call on a value of the enclosing function's type parameter (Elab names it
+      `<param>_<method>`, e.g. `T_describe`). Its target is chosen per instantiation, so it
+      names no single definition: unresolved, like an indirect call, but not missing code. -/
+  typeParam : Option String := none
   deriving BEq, Repr, Inhabited
 
+/-- The gap's kind, as the JSON view names it. -/
+def Gap.kind (g : Gap) : String :=
+  if g.typeParam.isSome then "type-parameter-dispatch"
+  else if g.unloaded then "unloaded-callee"
+  else "indirect-call"
+
 def Gap.render (g : Gap) : String :=
-  if g.unloaded then s!"call to `{g.binding}` in {g.site}, which is in no loaded module"
-  else s!"indirect call through `{g.binding}` in {g.site}"
+  match g.typeParam with
+  | some tp => s!"call to `{g.binding}` in {g.site}, dispatched on type parameter `{tp}` (target chosen per instantiation)"
+  | none =>
+    if g.unloaded then s!"call to `{g.binding}` in {g.site}, which is in no loaded module"
+    else s!"indirect call through `{g.binding}` in {g.site}"
 
 structure FnSummary where
   /-- Display name: module path and function name. -/
@@ -172,6 +185,7 @@ private structure Node where
   values : List String
   indirect : List String
   trusted : Bool
+  typeParams : List String
   deriving Inhabited
 
 private structure Binding where
@@ -197,7 +211,7 @@ private partial def collect (packageOf : String → Option (String × String))
       direct := (collectCallsStmts f.body).eraseDups.map norm
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
       indirect := (collectIndirectCallsStmts f.body).eraseDups
-      trusted := f.isTrusted : Node }
+      trusted := f.isTrusted, typeParams := f.typeParams : Node }
   let externs := m.externFns.toArray.map fun (n, _, _, t) =>
     let id : AssumptionId := { kind := .foreignBinding, package := pkg, packageName := pkgName, module := path, name := n }
     ({ key := id.key, module := path, spellings := callSpellings path n : Binding },
@@ -303,7 +317,9 @@ def build (modules : List CModule)
       -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
       -- not an empty one: what it reaches is unknown.
       if bs.isEmpty && ts.isEmpty && !isIntrinsic name then
-        unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name, unloaded := true }
+        let tp := nd.typeParams.find? fun p => name.startsWith (p ++ "_")
+        unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name,
+                                            unloaded := tp.isNone, typeParam := tp }
       for b in bs do
         let key := bindings[b]!.key
         if !(rs.any (·.key == key)) then
@@ -378,6 +394,17 @@ def build (modules : List CModule)
 /-! ## Queries shared by every consumer -/
 
 def Table.summary? (t : Table) (fn : String) : Option FnSummary := t.fns.get? fn
+
+/-- The package of a source file, from a `(file, package key, package name)` inventory. -/
+def packageOfFiles (filePackages : List (String × String × String)) : String → Option (String × String) :=
+  fun f => (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
+
+/-- THE constructor for a program's summary: the program's modules and every dependency loaded
+    with it. Reports and proof admission both take the table from here, so they read the same
+    reachability, assumption and coverage facts rather than two analyses that can disagree. -/
+def forProgram (program deps : List CModule)
+    (packageOf : String → Option (String × String)) (defaultPackage : String × String) : Table :=
+  { build (program ++ deps) packageOf defaultPackage with dependenciesAnalysed := !deps.isEmpty }
 
 /-- ONE WITNESS path from the function with key `fnKey` to the declaration of `key`, as display
     names. It follows the single recorded hop per function, so it is a valid call path that
@@ -490,7 +517,7 @@ def Table.toJson (t : Table) (programRoots : List String) (depsLoaded : Bool) : 
           s!"\"package_identity_ambiguous\":{if f.id.ambiguous then "true" else "false"}",
           s!"\"witness_path\":{jarr ((t.explain s.fnKey r.key).map jq)}" ] ++ "}")
     let gaps := s.gaps.toList.map fun g =>
-      "{" ++ s!"\"site\":{jq g.site},\"binding\":{jq g.binding}" ++ "}"
+      "{" ++ s!"\"site\":{jq g.site},\"binding\":{jq g.binding},\"kind\":{jq g.kind}" ++ "}"
     "{" ++ ",".intercalate [
       s!"\"fn\":{jq s.fn}",
       s!"\"package_name\":{jq s.packageName}",
@@ -560,7 +587,7 @@ def Table.bindingsProviding (t : Table) (s : FnSummary) (cap : String) : Array F
 /-- Coverage phrase for a function's summary. -/
 def FnSummary.coveragePhrase (s : FnSummary) : String :=
   if s.complete then "call graph complete"
-  else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} indirect call(s): " ++
+  else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} unresolved call(s): " ++
     "; ".intercalate (s.gaps.toList.map (·.render))
 
 /-- One capability, qualified: `Console (declared; assuming std.libc.write honest)`. When no

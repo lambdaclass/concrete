@@ -728,6 +728,9 @@ jobs:
       - name: "Assumption summaries (R-0484 R10 — what each function may reach, with provenance and explicit completeness)"
         run: bash scripts/tests/check_assumption_summary.sh
 
+      - name: "Proof admission (R-0484 R10 — admission reads the shared assumption summary; unknown never admits)"
+        run: bash scripts/tests/check_proof_admission.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

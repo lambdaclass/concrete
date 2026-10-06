@@ -1,0 +1,34 @@
+// R-0484 R10 proof-admission fixture, program side.
+import admlib.{tabs, apply, add};
+
+trait Describe {
+    fn describe(&self) -> i32;
+}
+
+struct Copy Point { x: i32, y: i32 }
+
+impl Describe for Point {
+    fn describe(&self) -> i32 { return self.x + self.y; }
+}
+
+// ADMITTED: complete coverage, no foreign binding reached (calls into the dependency).
+fn plain() -> i32 { return add(1, 2); }
+fn local_only(x: i32) -> i32 { return x + 1; }
+
+// REFUSED: reaches admlib.abs through a trusted wrapper. Effect-freedom would rest on the
+// binding's declared `with()`, which is assumed, not checked.
+fn via_foreign() -> i32 { return tabs(0 - 1); }
+
+// REFUSED: reaches an indirect call inside the dependency.
+fn via_indirect() -> i32 { return apply(local_only, 1); }
+
+// REFUSED: transitively, through via_indirect.
+fn via_indirect2() -> i32 { return via_indirect() + 1; }
+
+// REFUSED: a method call on a type parameter; its target is chosen per instantiation.
+fn show<T: Describe + Copy>(p: T) -> i32 { return p.describe(); }
+
+fn main() -> i32 {
+    let p: Point = Point { x: 1, y: 2 };
+    return plain() + via_foreign() + via_indirect2() + show(p) - 3 - 1 - 3 - 3;
+}

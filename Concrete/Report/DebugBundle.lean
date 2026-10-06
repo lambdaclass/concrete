@@ -279,8 +279,8 @@ partial def capturePipeline (inputPath source : String)
   -- handles. Fabricating an "unidentified" identity to keep the field populated would be the
   -- name-only fallback the identity migration exists to remove, and it would scope every definition
   -- in the bundle by a value shared with every other unidentified compilation.
-  let pc? := (extractProofCore? validCore
-               (Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name)))
+  let pkgId := Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name))
+  let pc? := (extractProofCore? validCore pkgId (standaloneAssumptions validCore.coreModules pkgId)
                simpleLocMap registry).toOption
 
   -- Verifier (non-blocking)

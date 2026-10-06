@@ -1210,11 +1210,51 @@ MUT_NEW+=("  declared.isEmpty && (s.complete || true) && (t.foreignFacts s).isEm
 MUT_DESC+=("qualification: effect-free is claimed past an unresolved call")
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 
+# 86–91. R10 proof admission reads the shared assumption summary. Each family removes one input
+# the admission judgment depends on; check_proof_admission.sh refuses an admitted function that
+# reaches what was removed. The judgment's own #guards (ProofCore) do not see these: they sit in
+# the summary's construction, its wiring into extraction, and the admission predicate.
+MUT_FILE+=("Main.lean")
+MUT_OLD+=("      Assumptions.forProgram fullValidCore.coreModules depModules")
+MUT_NEW+=("      Assumptions.forProgram fullValidCore.coreModules [] -- MUTATION: dependencies missing from the summary")
+MUT_DESC+=("proof admission: the summary is built without the program's dependencies")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("      if bs.isEmpty && ts.isEmpty && !isIntrinsic name then")
+MUT_NEW+=("      if false && bs.isEmpty && ts.isEmpty && !isIntrinsic name then -- MUTATION: unresolved direct calls ignored")
+MUT_DESC+=("proof admission: a call naming no analysed definition no longer makes the summary incomplete")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps)")
+MUT_NEW+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.filter fun _ => false).map (fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps) -- MUTATION: indirect calls ignored")
+MUT_DESC+=("proof admission: an indirect call no longer makes the summary incomplete")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("            if !keys.contains r.key then keys := keys.push r.key")
+MUT_NEW+=("            if false && !keys.contains r.key then keys := keys.push r.key -- MUTATION: inherited assumption edge dropped")
+MUT_DESC+=("proof admission: a foreign binding reached through a callee is dropped from the summary")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("  e.eligible && e.admissionRefusals.isEmpty")
+MUT_NEW+=("  e.eligible -- MUTATION: admission ignores the summary's refusals")
+MUT_DESC+=("proof admission: every extractable function is admitted")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("  let admission : String → List AdmissionRefusal := admissionRefusalsOf assumptions admissionIdx")
+MUT_NEW+=("  let admission : String → List AdmissionRefusal := fun _ => [] -- MUTATION: extraction does not consult the summary")
+MUT_DESC+=("proof admission: extraction stops consulting the assumption summary")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=85
+EXPECTED_MUTATIONS=91
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

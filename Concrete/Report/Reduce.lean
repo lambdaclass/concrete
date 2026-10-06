@@ -144,7 +144,7 @@ def evalPredicate (pred : Predicate) (source : String)
       match Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name)) with
       | .error _ => pure false
       | .ok pkg =>
-      let pc := extractProofCore validCore pkg [] []
+      let pc := extractProofCore validCore pkg (standaloneAssumptions validCore.coreModules (.ok pkg)) [] []
       let violations := pc.selfCheck
       return !violations.isEmpty
     | .verifyWarning =>

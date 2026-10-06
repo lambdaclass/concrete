@@ -205,6 +205,72 @@ rendered state reports its admission verdict so that the two are never read as
 one. Gated by `check_effect_opacity.sh`, with mutations covering both directions
 of the recoupling.
 
+### 4.2 Admission reads the shared assumption summary (R-0484 R10, 2026-10-06)
+
+Admission used its own analysis: `effectOpaqueSet`, the functions that can reach
+an indirect call over ProofCore's call graph. That graph is built from the
+program's own modules, so a call into a dependency ended the search. The
+authority reports, meanwhile, read the assumption summary (`Assumptions.Table`),
+which is built over the program **and** its loaded dependencies. The two could
+disagree, and admission was the side that was wrong.
+
+Admission now takes that same table, from the one constructor every report uses
+(`Assumptions.forProgram`). It is a required input of `extractProofCore`, so no
+path can extract without it. An extractable function is admitted only when
+exactly one summary covers it, that summary has no unresolved edge, and it
+reaches no foreign binding. Each refusal names the fact behind it
+(`AdmissionRefusal`):
+
+| refusal | the summary says |
+|---|---|
+| `noSummary`, `ambiguousSummary` | no single summary covers the function |
+| `unresolvedCall` | a call names no analysed definition (a missing dependency) |
+| `indirectCall` | a call goes through a fn-typed binding |
+| `typeParamDispatch` | a method call on a type parameter (`T_describe`), whose target is chosen per instantiation |
+| `foreignAssumption` | a reached foreign binding: its effects are declared, and the declaration is assumed honest |
+
+None of these is derived from an empty capability set, from the "no external
+authority" conclusion, or from report text. A reached **trusted boundary** is
+not a refusal: it assumes memory safety, not effects, and proof dependencies on
+trusted code are judged by the dependency rules. Missing information refuses:
+an excluded obligation states `admissible: false` instead of defaulting to
+true, and a proof-status entry with no obligation is refused with that reason.
+Eligibility facts in `--report diagnostics-json` carry `admissible` and
+`admission_reasons`.
+
+**Verdict comparison.** The old and new compilers were run over every
+`examples/*/src/main.con`, `tests/programs/*.con`, the project fixtures under
+`tests/programs/*/`, and `tests/regressions/*/*/src/main.con`. That covers 1,045 programs; 779 of them
+produce facts (the rest are negative tests that are meant to be rejected), giving
+2,745 eligibility facts. Every verdict that changed went from admitted to refused;
+none went the other way. The new fixture's own four refusals are left out of the
+table below. The 11 functions the old rule refused stay
+refused, for the same reason, and their reasons now name the binding and the
+site.
+
+| refused now | count | cause |
+|---|---|---|
+| a generic function's method call on a type parameter (`tests/programs`: trait-dispatch, generic-pipeline and integration programs) | 39 | `T_method` named no definition. The old call graph did not treat it as an edge, and the summary already reported these functions as incomplete. |
+| `examples/integrity` `fcheck.cmp_hash` | 1 | reaches `std.libc.memcmp` through std, a dependency the old graph never entered |
+| `assumption_summary` `main.via_gap`; `handle_caps/empty_writer_free` `use_free`, `release` | 3 | an indirect call **inside a dependency** (`factlib.apply`; std's `Writer::flush`/`close` calling through the writer's fn pointers), invisible to the old graph |
+
+None of the 43 carries a registered proof, so no admitted proof coverage was
+lost. The new fixture `tests/regressions/proof_admission` adds one function
+for each class, plus three that must stay admitted.
+
+Gated by `check_proof_admission.sh`, which also requires admission to agree,
+function by function, with the summary facts the capability report publishes.
+The judgment's unit controls are build-time `#guard`s in `ProofCore`: an
+accepting shape, a trusted-only shape, a missing summary, an unloaded callee,
+an indirect call, a type-parameter dispatch, a foreign binding with and without
+its facts entry, and ambiguity. Six mutation families remove one input each:
+the dependencies, the unresolved-call edge, the indirect-call edge, an
+inherited assumption edge, the predicate and the wiring.
+
+The reports still compute `effectOpaqueSet` beside the summary, and they treat
+a function as opaque if either analysis says so. Retiring it there is part of
+making every surface render the same facts.
+
 ---
 
 ## 5. Boundary Interactions
