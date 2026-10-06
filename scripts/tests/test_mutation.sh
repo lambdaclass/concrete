@@ -1279,11 +1279,26 @@ MUT_NEW+=("    ([] : List String) -- MUTATION: unaudited bindings omitted")
 MUT_DESC+=("descriptor coverage: bindings no audit covers are left out of the report")
 gate_for_last "scripts/tests/check_descriptor_coverage.sh"
 
+# 96–97. R10 cross-package explanations: dependency callees stop being resolved (the explanation
+# stops at the package boundary again), or import aliases stop being followed.
+# check_capability_explanations.sh requires via_helpers' Console to name factlib.helper_a.
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("      if !ds.isEmpty then")
+MUT_NEW+=("      if false && !ds.isEmpty then -- MUTATION: dependency callees not resolved")
+MUT_DESC+=("capability explanations: a dependency callee no longer supplies a capability in the explanation")
+gate_for_last "scripts/tests/check_capability_explanations.sh"
+
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("    let c := (aliases.lookup written).getD written")
+MUT_NEW+=("    let c := written -- MUTATION: import aliases not followed")
+MUT_DESC+=("capability explanations: a callee called through an import alias is not resolved")
+gate_for_last "scripts/tests/check_capability_explanations.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=95
+EXPECTED_MUTATIONS=97
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

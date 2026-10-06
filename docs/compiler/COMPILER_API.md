@@ -61,6 +61,11 @@ Extern `capability` facts report what calling the binding requires (declared eff
 same rule: an empty declared set prints `(none)`, and only a summary-backed conclusion prints
 `(no external authority)`; no report prints `(pure)`.
 
+`capability` facts' `why` entries carry `suppliers`: each callee that supplies the capability,
+with `kind` (`program`, `dependency` or `intrinsic`) and, for a dependency, the `targets` it
+resolves to (through import aliases, as the assumption summary resolves calls). The caps and
+authority text render from the same producer. Additive.
+
 `eligibility` facts carry `admissible` and `admission_reasons`. This is the proof-admission
 verdict, which is separate from extractability; it is read from the same assumption summary
 (see `docs/verification/EFFECT_PROOF_BOUNDARIES.md` §4.2). The field is additive, so the

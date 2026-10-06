@@ -161,6 +161,11 @@ structure Table where
       be determined. Empty when not computed (`absorbedComputed`). -/
   absorbed : Std.HashMap String (Option (Array String)) := {}
   absorbedComputed : Bool := false
+  /-- DEPENDENCY definitions by every spelling a program may call them by (`callSpellings`):
+      display name and declared capabilities. Lets an explanation name the dependency callee
+      that supplies a capability instead of stopping at the package boundary. Empty when no
+      dependency was loaded. -/
+  depCallees : Std.HashMap String (Array (String × CapSet)) := {}
   deriving Inhabited
 
 /-! ## Collection -/
@@ -401,6 +406,19 @@ def build (modules : List CModule)
 
 def Table.summary? (t : Table) (fn : String) : Option FnSummary := t.fns.get? fn
 
+/-- Dependency functions and foreign bindings by call spelling, with display name and declared
+    capabilities (a binding's declared effects). -/
+partial def dependencyCallees (deps : List CModule) : Std.HashMap String (Array (String × CapSet)) :=
+  let rec go (m : CModule) (path : String) (acc : Std.HashMap String (Array (String × CapSet))) :=
+    let add (acc : Std.HashMap String (Array (String × CapSet))) (name : String) (caps : CapSet) :=
+      (callSpellings path name).foldl (fun a sp =>
+        let cur := a.getD sp #[]
+        if cur.any (·.1 == path ++ "." ++ name) then a else a.insert sp (cur.push (path ++ "." ++ name, caps))) acc
+    let acc := m.functions.foldl (fun a f => add a f.name f.capSet) acc
+    let acc := m.externFns.foldl (fun a (n, _, _, _) => add a n ((m.externFnCaps.lookup n).getD .empty)) acc
+    m.submodules.foldl (fun a sub => go sub (path ++ "." ++ sub.name) a) acc
+  deps.foldl (fun acc m => go m m.name acc) {}
+
 /-- What each trusted boundary ABSORBS: the obligations its body discharges by assumption
     instead of by checking. Raw operations come from the checker's own trust edges
     (`coreTrustEdges`: `*raw_ptr`, `*raw_ptr=`, `ptr_arith`, `unsafe_cast`), not from a
@@ -454,7 +472,8 @@ def packageOfFiles (filePackages : List (String × String × String)) : String �
 def forProgram (program deps : List CModule)
     (packageOf : String → Option (String × String)) (defaultPackage : String × String) : Table :=
   let t := { build (program ++ deps) packageOf defaultPackage with dependenciesAnalysed := !deps.isEmpty }
-  { t with absorbed := absorbedObligations (program ++ deps) t, absorbedComputed := true }
+  { t with absorbed := absorbedObligations (program ++ deps) t, absorbedComputed := true
+           depCallees := dependencyCallees deps }
 
 /-- ONE WITNESS path from the function with key `fnKey` to the declaration of `key`, as display
     names. It follows the single recorded hop per function, so it is a valid call path that

@@ -37,25 +37,60 @@ partial def countModulePure (opaqueSet : List String) (qualPfx : String) (m : CM
 partial def countModuleExterns (m : CModule) : Nat :=
   m.externFns.length + m.submodules.foldl (fun acc sub => acc + countModuleExterns sub) 0
 
-/-- Build capability "why" trace lines for a function.
-    For each concrete cap the function requires, find which direct callees
-    contribute that cap. -/
-def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String) : List String :=
+/-- Every linker alias in a module tree (import renames), for explanations that resolve a
+    callee spelling without the calling module at hand. -/
+partial def allLinkerAliases (m : CModule) : List (String × String) :=
+  m.linkerAliases ++ m.submodules.foldl (fun acc sub => acc ++ allLinkerAliases sub) []
+
+/-- One callee that supplies a capability to its caller: how the call resolved, and to what. -/
+structure CapSupplier where
+  callee : String
+  /-- "program", "dependency", "intrinsic" (no definition, a compiler intrinsic) -/
+  kind : String
+  /-- Dependency definitions the spelling resolves to (one, or several when ambiguous). -/
+  targets : List String := []
+
+/-- THE ONE producer of "which callees supply `cap`" for every surface (caps text, authority
+    text, diagnostics-json `why`). A callee resolves like a call does: a program definition
+    first, then a DEPENDENCY definition from the summary's index (R-0484 R10: the explanation
+    follows the dependency instead of stopping at the package boundary), then an intrinsic. -/
+def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String × CapSet)))
+    (f : CFnDef) (cap : String) (aliases : List (String × String) := []) : List CapSupplier :=
+  -- An import alias (`helper_a as ha`) names its target through the calling module's linker
+  -- aliases, exactly as the summary resolves it; the explanation shows the spelling written.
+  (collectCallsStmts f.body).eraseDups.filterMap fun written =>
+    let c := (aliases.lookup written).getD written
+    if (lookup.find? (·.1 == c)).isSome then
+      match lookupCalleeCap lookup c with
+      | some cs => if Capabilities.capSetHas cs cap then some { callee := written, kind := "program" } else none
+      | none => none
+    else
+      let ds := deps.getD c #[]
+      if !ds.isEmpty then
+        let hits := ds.toList.filter fun (_, cs) => Capabilities.capSetHas cs cap
+        if hits.isEmpty then none else some { callee := written, kind := "dependency", targets := hits.map (·.1) }
+      else match lookupCalleeCap lookup c with
+        | some cs => if Capabilities.capSetHas cs cap then some { callee := written, kind := "intrinsic" } else none
+        | none => none
+
+def CapSupplier.render (s : CapSupplier) : String :=
+  match s.kind, s.targets with
+  | "dependency", [q] => s!"{q} (dependency)"
+  | "dependency", qs => s!"{s.callee} (dependency: {" or ".intercalate qs})"
+  | "intrinsic", _ => s!"{s.callee} (intrinsic)"
+  | _, _ => s.callee
+
+/-- Capability "why" trace lines for a function: for each concrete capability it requires,
+    the callees that supply it. -/
+def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String)
+    (deps : Std.HashMap String (Array (String × CapSet)) := {})
+    (aliases : List (String × String) := []) : List String :=
   let (concreteCaps, _) := f.capSet.normalize
-  if concreteCaps.isEmpty then []
-  else
-    let callees := collectCallsStmts f.body |>.eraseDups
-    concreteCaps.filterMap fun cap =>
-      -- Find callees that require this cap
-      let contributors := callees.filter fun callee =>
-        match lookupCalleeCap lookup callee with
-        | some cs => Capabilities.capSetHas cs cap
-        | none => false
-      let contribStr := if contributors.isEmpty then "<- declared"
-        else
-          let tagged := contributors.map fun c => s!"{c}{calleeTag lookup c}"
-          s!"<- calls {", ".intercalate tagged}"
-      some s!"{indent}    {padRight cap 10} {contribStr}"
+  concreteCaps.map fun cap =>
+    let sup := capSuppliers lookup deps f cap aliases
+    let contribStr := if sup.isEmpty then "<- declared"
+      else s!"<- calls {", ".intercalate (sup.map (·.render))}"
+    s!"{indent}    {padRight cap 10} {contribStr}"
 
 /-- How a function's authority reads in the summary.
 
@@ -103,7 +138,7 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
                    else ppAuthority f.capSet unknownFx (assumptions.noExternalAuthority sm f.capSet)
       | none => ppAuthority f.capSet unknownFx
     let mainLine := s!"{indent}  {pubStr}{f.name} : {capsStr}"
-    let traceLines := capWhyTrace lookup f indent
+    let traceLines := capWhyTrace lookup f indent assumptions.depCallees m.linkerAliases
     let qual := assumesLine assumptions idx (qualPrefix ++ "." ++ f.name) f.capSet (indent ++ "      ")
     acc ++ [mainLine] ++ qual ++ traceLines) []
   let trustedExterns := m.externFns.filter fun (_, _, _, t) => t

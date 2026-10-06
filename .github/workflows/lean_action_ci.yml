@@ -737,6 +737,9 @@ jobs:
       - name: "Descriptor coverage (R-0484 R10/R5 — descriptor classification is unchecked; each binding's audit coverage is explicit)"
         run: bash scripts/tests/check_descriptor_coverage.sh
 
+      - name: "Capability explanations (R-0484 R10 — explanations follow dependency summaries and name the dependency callee)"
+        run: bash scripts/tests/check_capability_explanations.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

@@ -531,8 +531,10 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
           IO.println (Report.queryTraceability validCore.coreModules mono.coreModules ssa.ssaModules locMap fnFilter (registry := registry) (pc := pc))
           return 0
     else
-      -- Standalone query path: dependencies are not loaded, and the table says so.
-      let assumptions : Assumptions.Table := { Assumptions.build validCore.coreModules with dependenciesAnalysed := false }
+      -- Standalone query path: dependencies are not loaded, and the table says so. Built by the
+      -- same constructor as every other surface (`forProgram`, via `standaloneAssumptions`), so
+      -- query answers carry the same named boundaries and descriptor coverage as the reports.
+      let assumptions : Assumptions.Table := standaloneAssumptions validCore.coreModules packageIdentity
       match Report.queryFacts validCore.coreModules locMap query (registry := registry) (pc := pc) (assumptions := assumptions) with
       | .ok result =>
         IO.println result
