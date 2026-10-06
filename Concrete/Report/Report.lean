@@ -4852,6 +4852,10 @@ private def eligibilityToFact (e : EligibilityEntry) : Val :=
     ("exclusion_kind", .str exclusionStr),
     ("source_reasons", .arr (e.sourceReasons.map .str)),
     ("profile_reasons", .arr (e.profileReasons.map .str)),
+    -- ADMISSION is a separate judgment from eligibility (see `EligibilityEntry.admissible`):
+    -- an eligible function can still be refused admission as effect-free.
+    ("admissible", .bool e.admissible),
+    ("admission_reasons", .arr (e.admissionReasons.map .str)),
     ("loc", locToJson e.loc)
   ])
 

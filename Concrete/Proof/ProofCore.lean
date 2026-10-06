@@ -1575,6 +1575,14 @@ def EligibilityEntry.admissible (e : EligibilityEntry) : Bool :=
   -- which is the opposite of degrading honestly.
   e.eligible && !e.effectOpaque
 
+/-- Why admission was refused, when it was; empty when admitted. Recorded only where the
+    admission rule is what refused: a function that is not extractable is refused for that,
+    and listing opacity beside it would present a fact that changed nothing as a cause. -/
+def EligibilityEntry.admissionReasons (e : EligibilityEntry) : List String :=
+  if e.effectOpaque && e.eligible && !e.admissible then
+    ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
+  else []
+
 -- ============================================================
 -- Proof registry types (moved from Report.lean)
 -- ============================================================
@@ -3122,17 +3130,10 @@ private def generateObligations
         -- Listing opacity beside an unrelated refusal — `main` is excluded for being the
         -- entry point — presents a fact that contributed nothing as though it were a
         -- cause, so a reason is recorded only where it is the reason.
-        ++ (if e.eligibility.effectOpaque && e.eligibility.eligible
-               && !e.eligibility.admissible then
-              ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-            else [])
+        ++ e.eligibility.admissionReasons
     , ineligCat := cat
     , admissible := e.eligibility.admissible
-    , admissionReasons :=
-        if e.eligibility.effectOpaque && e.eligibility.eligible
-           && !e.eligibility.admissible then
-          ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-        else []
+    , admissionReasons := e.eligibility.admissionReasons
     , dependencies := []  -- filled in second pass
     , notCurrentDeps := []
     , trustedDeps := []
@@ -3161,10 +3162,7 @@ private def generateObligations
         -- Listing opacity beside an unrelated refusal — `main` is excluded for being the
         -- entry point — presents a fact that contributed nothing as though it were a
         -- cause, so a reason is recorded only where it is the reason.
-        ++ (if e.eligibility.effectOpaque && e.eligibility.eligible
-               && !e.eligibility.admissible then
-              ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-            else [])
+        ++ e.eligibility.admissionReasons
     , ineligCat := cat
     , dependencies := []
     , notCurrentDeps := []
