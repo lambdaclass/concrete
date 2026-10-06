@@ -480,8 +480,20 @@ def inheritedAssumptionsSection (assumptions : Assumptions.Table) (programRoots 
   let attributionNote :=
     if ambiguous.isEmpty then ""
     else s!"\nPackage attribution: AMBIGUOUS for {ambiguous.length} declaration(s) — no package identity could be formed, so declarations with the same module and name in different packages cannot be told apart: " ++ ", ".intercalate (ambiguous.map (·.1.id.qualified))
+  -- Trusted MEMORY-SAFETY boundaries, named: the responsible function with its package, the
+  -- obligation it absorbs, the program functions whose conclusions rest on it, and one path.
+  let trusted := assumptions.trustedReached programRoots
+  let tLines : List String := trusted.toList.foldl (fun acc (f, users) =>
+    let path := match users[0]? with
+      | some u => [s!"    one path: {" -> ".intercalate (assumptions.explain u f.id.key)}"]
+      | none => []
+    acc ++ [s!"  {f.id.qualified}: trusted function, package {f.id.packageName}",
+            s!"    {assumptions.absorbsPhrase f.id.key}",
+            s!"    relied on by: {", ".intercalate (users.toList.map assumptions.displayOf)}"] ++ path) []
+  let tListing := if tLines.isEmpty then ""
+    else "\n\nTrusted memory-safety boundaries (assumed, not checked):\n" ++ "\n".intercalate tLines
   let coverage := depNote ++ "\n" ++ graphNote ++ attributionNote
-  listing ++ "\n\n" ++ coverage
+  listing ++ tListing ++ "\n\n" ++ coverage
 
 def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore)
     (assumptions : Assumptions.Table := {}) (depsLoaded : Bool := false) : String :=

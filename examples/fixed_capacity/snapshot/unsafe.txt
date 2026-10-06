@@ -13,6 +13,24 @@ module fixed_capacity:
 
 Totals: 4 unsafe-related signatures (4 trusted)
 
+Trusted memory-safety boundaries (assumed, not checked):
+  fixed_capacity.build_bad_type: trusted function, package fixed_capacity
+    absorbs no raw operation or foreign call found in its body
+    relied on by: fixed_capacity.main
+    one path: fixed_capacity.main -> fixed_capacity.build_bad_type
+  fixed_capacity.build_bad_version: trusted function, package fixed_capacity
+    absorbs no raw operation or foreign call found in its body
+    relied on by: fixed_capacity.main
+    one path: fixed_capacity.main -> fixed_capacity.build_bad_version
+  fixed_capacity.build_msg: trusted function, package fixed_capacity
+    absorbs no raw operation or foreign call found in its body
+    relied on by: fixed_capacity.main
+    one path: fixed_capacity.main -> fixed_capacity.build_msg
+  fixed_capacity.build_payload_overflow: trusted function, package fixed_capacity
+    absorbs no raw operation or foreign call found in its body
+    relied on by: fixed_capacity.main
+    one path: fixed_capacity.main -> fixed_capacity.build_payload_overflow
+
 Dependency coverage: dependencies analysed. A binding is listed as reached when a program function can get to it through direct calls or through a function stored as a value; an effect reached only through a value constructed outside the analysed program is attributed to where that value was constructed.
 Call-graph coverage: complete — every call path from the program's functions that was analysed is resolved.
 

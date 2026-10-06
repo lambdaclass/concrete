@@ -1,0 +1,35 @@
+// R-0484 R10: trusted memory-safety boundaries are NAMED assumptions — the responsible
+// function, its package, the obligation its body absorbs, and what relies on it.
+// Each shape is one row of check_trusted_boundaries.sh.
+mod tb {
+    extern fn abs(x: i32) with() -> i32;
+
+    // Absorbs a foreign call.
+    trusted fn wrap_abs(x: i32) -> i32 { return abs(x); }
+
+    // Absorbs raw-pointer operations.
+    trusted fn read_through(x: i32) -> i32 {
+        let p: *const i32 = &x as *const i32;
+        return *p;
+    }
+
+    // Trusted, but its own body absorbs nothing (it only calls another trusted function).
+    trusted fn relay(x: i32) -> i32 { return wrap_abs(x); }
+
+    // Never reached from main: must not be listed.
+    trusted fn unused(x: i32) -> i32 { return abs(x); }
+
+    // Two trusted functions with the same name in sibling submodules are two boundaries, each
+    // with its own absorbed obligation: only `a.poke` performs a raw operation.
+    mod a { pub trusted fn poke(x: i32) -> i32 { let p: *const i32 = &x as *const i32; return *p; } }
+    mod b { pub trusted fn poke(x: i32) -> i32 { return x; } }
+
+    fn uses_foreign() -> i32 { return wrap_abs(0 - 2); }
+    fn uses_raw() -> i32 { return read_through(3); }
+    fn uses_relay() -> i32 { return relay(0 - 4); }
+    fn uses_twins() -> i32 { return a::poke(1) + b::poke(1); }
+
+    fn main() -> i32 {
+        return uses_foreign() + uses_raw() + uses_relay() + uses_twins() - 2 - 3 - 4 - 2;
+    }
+}

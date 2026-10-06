@@ -1250,11 +1250,32 @@ MUT_NEW+=("  let admission : String → List AdmissionRefusal := fun _ => [] -- 
 MUT_DESC+=("proof admission: extraction stops consulting the assumption summary")
 gate_for_last "scripts/tests/check_proof_admission.sh"
 
+# 92–94. R10 named trusted boundaries: a boundary's absorbed obligation loses its raw operations
+# or its foreign calls, or a boundary is listed as relying on itself. check_trusted_boundaries.sh
+# names each boundary's expected absorbed obligation and dependents.
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("    let raw := (edges.filter fun e => e.kind == .containsRawOp && e.modName == seg && e.fn == f.id.name)")
+MUT_NEW+=("    let raw := (edges.filter fun e => false && e.kind == .containsRawOp && e.modName == seg && e.fn == f.id.name) -- MUTATION: raw operations not absorbed")
+MUT_DESC+=("trusted boundaries: the raw operations a trusted body performs drop out of its absorbed obligation")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("          if r.key.startsWith \"foreign-binding:\" && (r.via == .callsBinding || r.via == .refersToBinding)")
+MUT_NEW+=("          if false && r.key.startsWith \"foreign-binding:\" && (r.via == .callsBinding || r.via == .refersToBinding) -- MUTATION: foreign calls not absorbed")
+MUT_DESC+=("trusted boundaries: the foreign bindings a trusted body calls drop out of its absorbed obligation")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("      fn != self && ((t.fns.get? fn).map (·.reachesKey key)).getD false")
+MUT_NEW+=("      true && ((t.fns.get? fn).map (·.reachesKey key)).getD false -- MUTATION: a boundary relies on itself")
+MUT_DESC+=("trusted boundaries: a boundary is listed among its own dependents (and unreached ones appear)")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=91
+EXPECTED_MUTATIONS=94
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

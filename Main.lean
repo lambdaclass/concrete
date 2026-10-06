@@ -1588,7 +1588,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
-      | .ok pid => (pid.digest, "program")
+      | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
       | .error _ => ("unidentified:program", "program")
     -- ONE constructor for the assumption summary every report surface AND proof admission read
     -- (R-0484 R10).
@@ -3230,7 +3230,7 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
             (validCore.coreModules.filter fun m => depNames.contains m.name)
             (Assumptions.packageOfFiles ctx.filePackages)
             (match packageIdentity with
-              | .ok pid => (pid.digest, "program")
+              | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
               | .error _ => ("unidentified:program", "program")))
           simpleLocMap with
         | .ok pc => pure pc

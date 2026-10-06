@@ -51,6 +51,7 @@ weaker meaning would keep the misleading claim alive. Replace it with:
 | `coverage_complete`, `unresolved_indirect_calls` | whether every call path was resolved; the gaps when not, each with a `kind`: `indirect-call` (through a fn-typed binding), `unloaded-callee` (names no analysed definition) or `type-parameter-dispatch` (a method call on a type parameter) |
 | `assumed_foreign_bindings` | the foreign bindings the function may reach, with declared effects; their honesty is assumed |
 | `trusted_boundaries_reached` | how many trusted boundaries its memory safety rests on |
+| `trusted_boundaries` | the same boundaries, named: `declaration`, `package_name`, and `absorbs` — the raw operations and foreign bindings the trusted body performs or calls (from the checker's trust edges), or `null` when that could not be determined. Additive; the version stays 2. `--report assumptions` carries the same `absorbs` on each trusted-boundary entry, and `--report unsafe` lists each reached boundary with its dependents and one path. |
 | `assumptions_computed`, `dependencies_analysed` | whether the facts above were computed, and with dependencies loaded |
 
 Extern `capability` facts report what calling the binding requires (declared effects, plus

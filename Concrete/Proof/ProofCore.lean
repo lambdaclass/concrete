@@ -3366,7 +3366,7 @@ def applyCorrespondenceAuthority (pc : ProofCore) (graph : CallGraph) : ProofCor
 def standaloneAssumptions (modules : List CModule)
     (packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity) : Assumptions.Table :=
   Assumptions.forProgram modules [] (fun _ => none) <| match packageIdentity with
-    | .ok pid => (pid.digest, "program")
+    | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
     | .error _ => ("unidentified:program", "program")
 
 /-- Extract the proof-oriented fragment from validated Core.

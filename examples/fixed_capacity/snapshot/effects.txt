@@ -45,22 +45,22 @@ module fixed_capacity:
     assumes: no declared capability; call graph complete
       build_msg
     caps: (no external authority)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:210
-    assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
+    assumes: no declared capability; is itself a trusted boundary (its body's memory safety is assumed); call graph complete
       build_bad_version
     caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:236
-    assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
+    assumes: no declared capability; is itself a trusted boundary (its body's memory safety is assumed); call graph complete
       build_bad_type
     caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:242
-    assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
+    assumes: no declared capability; is itself a trusted boundary (its body's memory safety is assumed); call graph complete
       build_payload_overflow
     caps: (no external authority)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:252
-    assumes: no declared capability; memory safety assumed at 1 trusted boundary(ies); call graph complete
+    assumes: no declared capability; is itself a trusted boundary (its body's memory safety is assumed); call graph complete
       report
     caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:266
     assumes: Console (declared); reached foreign assumptions: none; call graph complete
   pub main
     caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:286
-    assumes: Console (declared); reached foreign assumptions: none; memory safety assumed at 4 trusted boundary(ies); call graph complete
+    assumes: Console (declared); reached foreign assumptions: none; memory safety assumed at trusted fixed_capacity.build_msg, fixed_capacity.build_bad_version, fixed_capacity.build_bad_type, fixed_capacity.build_payload_overflow; call graph complete
 
 Totals: 20 functions, 18 with no external authority, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 4 trusted
 Evidence: 4 proved, 12 enforced, 4 trusted-assumption, 0 reported

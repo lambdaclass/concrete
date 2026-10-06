@@ -5012,7 +5012,16 @@ def assumptionsVal (assumptions : Assumptions.Table) (idx : Std.HashMap String S
           -- The field name predates the other gap kinds; `kind` says which one this is.
           .obj [("site", .str g.site), ("binding", .str g.binding), ("kind", .str g.kind)])),
         ("assumed_foreign_bindings", .arr foreign),
-        ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)) ]
+        ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)),
+        -- Named, with the obligation each absorbs (null: not determined or not computed).
+        ("trusted_boundaries", .arr (s.trustedBoundaries.toList.map fun k =>
+          let f? := assumptions.facts.get? k
+          .obj [("declaration", .str ((f?.map (·.id.qualified)).getD k)),
+                ("package_name", .str ((f?.map (·.id.packageName)).getD "")),
+                ("absorbs", if !assumptions.absorbedComputed then .null else
+                   match assumptions.absorbed.get? k with
+                   | some (some xs) => .arr (xs.toList.map .str)
+                   | _ => .null)])) ]
 
 open Json in
 /-- Convert an FnEffects record to a JSON fact. -/
