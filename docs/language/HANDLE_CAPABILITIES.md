@@ -1,45 +1,54 @@
 # Handle Capabilities and the Foreign Boundary
 
-Status: design (ROADMAP R-0484, slice 1). Records the rules decided 2026-09-29/30
-the first-implementation encoding (A), and what remains open. It is a design plan, not
-an implemented guarantee. Items marked **[decided]** are settled
-design, not yet built; **[open]** must be resolved before the compiler slice starts;
-**[current]** describes today's behaviour. Nothing here is implemented yet.
+Status: rules R1–R10 decided and implemented; R-0484 remains OPEN. This page records the
+design (items marked **[decided]**), what the compiler does today (**[current]**), and what is
+still open (**[open]**). Which commits carry which part, and what has reached `main`, is in the
+status section below and in ROADMAP R-0484; nothing here is a release claim.
 
-## Implementation status (branch `r0484-struct-caps`, 2026-10-02)
+## Implementation status (2026-10-06)
 
-Implemented on the branch, not yet merged or validated on CI. R10 and the slice as a whole
-are **not** complete.
+**On `main` (core checkpoint `a7c9cf1c`):** encoding A; capability parameters on structs
+(`Sink<cap C>`, E0114/E0115, cross-package normalization); R1 `Writer<C>`/`Reader<C>` with the
+consumers migrated; R2 `trusted` absorbs the `Unsafe` of a foreign call and nothing else; R3
+every `extern` declares its effects (E0116, E0117); R4 reclassification; R9 enforcement across
+packages. `print_bytes` declares `with(Console)` and is excluded for it.
 
-- **Implemented:** capability parameters on structs (`Sink<cap C>`, kind/count checks
-  E0114/E0115, inference, instantiated field types, cross-package normalization); R1
-  `Writer<C>`/`Reader<C>` in std with the consumers migrated; R2 trusted bodies absorb
-  extern-call `Unsafe` and nothing else; R3 every `extern` declares its effects (E0116,
-  E0117 for a known-effectful symbol declared `with()`); R4 reclassification (40 std
-  bindings now plain `extern`); R9 enforcement across packages (`FileSummary` carries
-  declared effects). `print_bytes` declares `with(Console)` and is excluded for it.
-- **R10 cross-package assumptions — implemented in project mode, with stated limits.**
-  `--report unsafe` lists a module's own foreign bindings (assumed effects, trust kind,
-  dependents) and, in project mode, every DEPENDENCY binding the program can reach, under
-  "Inherited foreign assumptions (from dependencies)", with the program functions that
-  reach it. Reachability follows direct calls and functions stored as values
-  (`ProofCore.collectFnValueRefsStmts`), resolving a name in the calling module first; the
-  dependency modules are the ones the project build already loads, so no second pipeline
-  exists. Limits, stated on every report: an effect reached only through a value built
-  outside the analysed program is attributed to where the value was constructed (precise
-  handle-mediated explanation is R-0487); single-file mode does not load dependencies and
-  says "Dependency coverage: incomplete". Gate: `check_foreign_assumptions_report.sh`,
-  shown to fail when the inherited facts are dropped. R10 is not called complete until this
-  lands on main and CI.
-- **Incomplete — documentation outside the language docs.** SAFETY, FFI, CAPABILITY_FACTS,
-  TWO_AXIS_SAFETY, PREDICTABLE_BOUNDARIES, WHY_CONCRETE and README are updated. The four
-  pages originally named as stating "no capabilities means pure" — the Spec, Why Concrete
-  Exists, Can I prove Concrete programs in Lean?, Nutrition Labels — are **unresolved
-  locations**: the publishing sources in this repository are `site/` (Zola, deployed to
-  `unbalancedparentheses.github.io/concrete2`) and `docs/book/` (`.github/workflows/book.yml`),
-  and no page with those titles exists in either. "Why Concrete Exists" is a SECTION in
-  `site/content/guide/landing.md` and `docs/book/src/landing.md`, and neither states the
-  rule. Their actual location must be confirmed before this pass is called complete.
+**On branches, validated by gates but NOT yet on `main`:**
+
+- `r0484-integrated` (`8187a2f7`): F1/F9 (only `spawn` constructs `Child`; public fork APIs
+  removed; spawn's runtime conditions stated); the shared assumption summary with
+  package-scoped identity (bug 074 refused before LLVM); conclusion qualification; JSON API v2
+  (`is_pure` removed); policy/assumption-file checks reading structured facts (bug 075).
+- `r0484-admission` (`8217bb61`): proof admission reads the same summary (bug 076). An
+  extractable function is admitted only with exactly one complete summary that reaches no
+  foreign binding; refusals are typed and named.
+- `r0484-r10-trusted`: R10 reporting —
+  - trusted memory-safety boundaries named, with the responsible function and package, the
+    obligation the body absorbs (raw operations from the checker's trust edges, foreign
+    bindings by identity), the program functions relying on it, and one path;
+  - descriptor classification (R5) stated as NOT compiler-checked, every reached binding
+    placed under the audit that covers it or under "no audit";
+  - capability explanations name the dependency callee that supplies a capability, through
+    import aliases, identically in the caps/authority text, diagnostics-json and the
+    `why-capability`/audit query traces.
+
+**Known limits, stated rather than hidden:**
+
+- `--query` runs single-file: dependencies are not loaded there, and its answers say so. Only
+  project-mode reports follow dependency summaries.
+- A bodiless `#[intrinsic]` function (`std.mem.sizeof`) parses as an extern and is listed as a
+  foreign binding: over-reported, not omitted, until the attribute reaches Core.
+- Descriptor classification is covered only by the construction/caller audit
+  ([HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)), a document that is not
+  re-run; eight current std bindings postdate it and report as covered by no audit. Typed
+  descriptors are the second step (§10).
+- The reports still compute the older indirect-call analysis beside the summary and treat a
+  function as opaque if either says so.
+- The four external pages once named as stating "no capabilities means pure" (the Spec, Why
+  Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition Labels) do not exist
+  under those titles in `site/` or `docs/book/`. The published reference copies under
+  `site/content/reference/` (FFI, SAFETY, EXECUTION_MODEL) carried the pre-R-0484 rules and
+  were corrected 2026-10-06; their other drift from `docs/` is not part of this pass.
 
 ## 0. The hole this closes
 
@@ -61,12 +70,12 @@ Function-pointer types already carry capabilities: storing a `with(Console)` fun
 a capability-free field is refused (E0220). The erasure happens one step earlier, at
 `trusted` and at the foreign binding.
 
-**What is repaired and what is not.** Since 2026-09-18/26 the reports no longer claim
-`(pure)` where effects may enter through an indirect call, and proof admission refuses
-such functions within a package. That repair is conservative and stops at the package
-boundary. `print_bytes` is **still admitted today**: `check_effect_opacity.sh` pins it as
-eligible, because the analysis cannot see into `std` across the package boundary. This
-design closes the hole at its source instead.
+**What is repaired.** The hole is closed at its source: `Writer<C>` carries the capability,
+so `print_bytes` must declare `with(Console)` and is excluded for it
+(`check_effect_opacity.sh`). The earlier conservative repair (reports no longer claiming
+`(pure)` past an indirect call; admission refusing such functions) remains as a backstop, and
+admission now reads the cross-package assumption summary rather than stopping at the package
+boundary (bug 076).
 
 ## 1. The promise
 

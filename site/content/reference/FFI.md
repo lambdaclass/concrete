@@ -49,9 +49,10 @@ Rules:
 - callers do not need `with(Unsafe)`
 - parameter and return types must still be FFI-safe
 - the declaration itself is the audit boundary — it asserts the foreign function is safe to call with any valid arguments of the declared types
+- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117). The declared effects bind every caller, trusted bodies included (R-0484)
 - `--report unsafe` shows trusted extern declarations in a separate "Trusted extern functions" section
 
-Keep the category narrow. `trusted extern fn` is for pure, well-understood foreign functions — not a general "safe FFI" escape hatch. If a foreign function has side effects, mutates global state, or can crash on valid inputs, it should remain a regular `extern fn` under `with(Unsafe)`.
+Keep the category narrow. `trusted extern fn` means "safe for every argument its types permit, with no undeclared effects" — not a general "safe FFI" escape hatch. A foreign function whose safety depends on pointer validity, or that can invalidate a resource another handle owns (`close`), stays a regular `extern fn`; its callers outside `trusted` code need `with(Unsafe)`. Effects are not what decides this: they are declared either way.
 
 ## FFI-Safe Types
 
@@ -105,12 +106,12 @@ Concrete now has the three-way split described in the research notes:
 
 - **capabilities** (`with(Alloc)`, `with(File)`, etc.) = semantic effects visible to callers
 - **`trusted`** = containment of internal pointer-level implementation techniques behind a safe API
-- **`with(Unsafe)`** = authority to cross foreign boundaries (FFI, transmute) — always explicit, even inside trusted code
+- **`with(Unsafe)`** = the memory-safety obligation of crossing a foreign boundary (FFI, transmute) — explicit in every signature that is not `trusted`; a `trusted` body absorbs it (R-0484)
 
 That means:
 
 - `trusted` does **not** suppress ordinary capabilities
-- `trusted fn`/`trusted impl` does **not** permit `extern fn` calls without `with(Unsafe)`
+- `trusted fn`/`trusted impl` absorbs the `Unsafe` of an `extern fn` call (since R-0484, 2026-10-01) — never the binding's declared effects, which every `extern` must state
 - `trusted extern fn` is a separate, narrower mechanism: it marks a specific foreign binding as safe to call, rather than granting blanket trust to a block of code
 - builtin and stdlib internals are aligned to this same model instead of relying on silent exemptions
 
