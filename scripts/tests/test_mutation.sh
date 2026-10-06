@@ -1271,11 +1271,19 @@ MUT_NEW+=("      true && ((t.fns.get? fn).map (·.reachesKey key)).getD false --
 MUT_DESC+=("trusted boundaries: a boundary is listed among its own dependents (and unreached ones appear)")
 gate_for_last "scripts/tests/check_trusted_boundaries.sh"
 
+# 95. R5 descriptor coverage: bindings covered by no audit drop out of the report, so an empty
+# listing reads as checked. check_descriptor_coverage.sh requires factlib.putchar under "no audit".
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("    group .unaudited \"covered by no audit (whether they receive descriptors is not established)\"")
+MUT_NEW+=("    ([] : List String) -- MUTATION: unaudited bindings omitted")
+MUT_DESC+=("descriptor coverage: bindings no audit covers are left out of the report")
+gate_for_last "scripts/tests/check_descriptor_coverage.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=94
+EXPECTED_MUTATIONS=95
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

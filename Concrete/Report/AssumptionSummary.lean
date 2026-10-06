@@ -485,6 +485,55 @@ def FnSummary.foreignBindings (s : FnSummary) : Array String :=
 def FnSummary.trustedBoundaries (s : FnSummary) : Array String :=
   s.reaches.filterMap fun r => if r.key.startsWith "trusted-boundary:" then some r.key else none
 
+/-- R5 DESCRIPTOR CLASSIFICATION IS NOT CHECKED BY THE COMPILER. Under encoding A there are no
+    typed descriptors, so which descriptor a foreign binding receives is an assumption. Its only
+    coverage is the construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md`,
+    revised 2026-10-01), a document that is not re-run against today's callers.
+
+    The audit covers std's bindings by NAME, in two groups: §3.1 the descriptor and I/O bindings
+    (which descriptor each receives is recorded), and §3.2–§3.3 the bindings it classified as
+    not taking a descriptor. These lists are exactly those tables; `check_descriptor_coverage.sh`
+    keeps them equal. A binding in neither — in std (added since the audit) or in any other
+    package — is covered by NO audit, which is reported, never omitted. -/
+def descriptorAuditedBindings : List String :=
+  [ "fopen", "fclose", "fflush", "ferror", "fread", "fwrite", "fseek", "ftell",
+    "write", "read", "socket", "listen", "bind", "accept", "connect", "setsockopt",
+    "send", "recv", "close" ]
+
+def auditedNoDescriptorBindings : List String :=
+  [ "getenv", "setenv", "unsetenv", "__concrete_get_argv", "__concrete_get_argc", "uname",
+    "time", "clock_gettime", "nanosleep", "rand", "srand", "getpid", "exit", "kill",
+    "waitpid", "fork", "execvp", "malloc", "realloc", "free", "abort",
+    "memcpy", "memset", "memcmp", "strlen", "htons", "inet_pton",
+    "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil" ]
+
+inductive DescriptorCoverage where
+  /-- In the audit's descriptor table: the descriptor each std caller passes is recorded. -/
+  | auditedDescriptor
+  /-- In the audit, classified as not taking a descriptor. -/
+  | auditedNoDescriptor
+  /-- Covered by no audit. -/
+  | unaudited
+  deriving BEq, Repr
+
+def Facts.descriptorCoverage (f : Facts) : DescriptorCoverage :=
+  if f.id.kind != .foreignBinding || f.id.packageName != "std" then .unaudited
+  else if descriptorAuditedBindings.contains f.id.name then .auditedDescriptor
+  else if auditedNoDescriptorBindings.contains f.id.name then .auditedNoDescriptor
+  else .unaudited
+
+-- The audit covers STD's bindings: the same name bound by another package is covered by nothing.
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "std", module := "std.libc", name := "write" } } : Facts).descriptorCoverage == .auditedDescriptor
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "other", module := "other", name := "write" } } : Facts).descriptorCoverage == .unaudited
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "std", module := "std.libc", name := "snprintf" } } : Facts).descriptorCoverage == .unaudited
+
+/-- The tag the JSON surfaces carry. -/
+def Facts.descriptorAuditTag (f : Facts) : String :=
+  match f.descriptorCoverage with
+  | .auditedDescriptor => "std-audit-descriptor"
+  | .auditedNoDescriptor => "std-audit-no-descriptor"
+  | .unaudited => "none"
+
 /-- A trusted boundary's absorbed obligation, rendered. Three distinct answers, never merged:
     not computed, not determined, and determined (possibly empty). -/
 def Table.absorbsPhrase (t : Table) (key : String) : String :=
@@ -544,6 +593,23 @@ def Table.trustedReached (t : Table) (programRoots : List String)
     if !users.isEmpty then out := out.push (f, users)
   return out
 
+/-- Every foreign binding some program function may reach — the program's own and its
+    dependencies' — with the reaching program functions. -/
+def Table.foreignReached (t : Table) (programRoots : List String)
+    : Array (Facts × Array String) := Id.run do
+  let programFns := t.order.filter fun fn =>
+    match t.fns.get? fn with
+    | some s => underRoots programRoots s.module
+    | none => false
+  let mut out : Array (Facts × Array String) := #[]
+  let keys := (t.facts.toArray.map (·.1)).qsort (· < ·)
+  for key in keys do
+    let some f := t.facts.get? key | continue
+    if f.id.kind != .foreignBinding then continue
+    let users := programFns.filter fun fn => ((t.fns.get? fn).map (·.reachesKey key)).getD false
+    if !users.isEmpty then out := out.push (f, users)
+  return out
+
 /-- Display name for a scoped function key. -/
 def Table.displayOf (t : Table) (fnKey : String) : String := ((t.fns.get? fnKey).map (·.fn)).getD fnKey
 
@@ -597,6 +663,8 @@ def Table.toJson (t : Table) (programRoots : List String) (depsLoaded : Bool) : 
           s!"\"package_name\":{jq f.id.packageName}",
           s!"\"package_identity_ambiguous\":{if f.id.ambiguous then "true" else "false"}",
           s!"\"witness_path\":{jarr ((t.explain s.fnKey r.key).map jq)}",
+          -- Foreign bindings only: which audit covers the descriptor it receives ("none" when none).
+          s!"\"descriptor_audit\":{if f.id.kind == .foreignBinding then jq f.descriptorAuditTag else "null"}",
           -- Trusted boundaries only: the obligation the body absorbs; null when not determined.
           s!"\"absorbs\":{if f.id.kind != .trustedBoundary || !t.absorbedComputed then "null" else
             match t.absorbed.get? r.key with

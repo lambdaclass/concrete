@@ -13,6 +13,9 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
 No unsafe signatures found.
 
+Descriptor classification (R5): NOT CHECKED by the compiler. Encoding A has no typed descriptors, so which descriptor a foreign binding receives is an assumption.
+  no foreign binding is reached, so no descriptor assumption is made
+
 Dependency coverage: dependencies analysed. A binding is listed as reached when a program function can get to it through direct calls or through a function stored as a value; an effect reached only through a value constructed outside the analysed program is attributed to where that value was constructed.
 Call-graph coverage: complete — every call path from the program's functions that was analysed is resolved.
 

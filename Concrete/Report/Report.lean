@@ -5004,7 +5004,9 @@ def assumptionsVal (assumptions : Assumptions.Table) (idx : Std.HashMap String S
       let foreign := (assumptions.foreignFacts s).toList.map fun f =>
         .obj [("declaration", .str f.id.qualified), ("package_name", .str f.id.packageName),
               ("effects", .arr ((f.effects.normalize.1 ++ f.effects.normalize.2).map .str)),
-              ("trusted_extern", .bool f.trustedExtern)]
+              ("trusted_extern", .bool f.trustedExtern),
+              -- R5: descriptor classification is not compiler-checked; this names the audit.
+              ("descriptor_audit", .str f.descriptorAuditTag)]
       [ ("assumptions_computed", .bool true),
         ("dependencies_analysed", .bool assumptions.dependenciesAnalysed),
         ("coverage_complete", .bool s.complete),

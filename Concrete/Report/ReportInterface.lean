@@ -492,8 +492,25 @@ def inheritedAssumptionsSection (assumptions : Assumptions.Table) (programRoots 
             s!"    relied on by: {", ".intercalate (users.toList.map assumptions.displayOf)}"] ++ path) []
   let tListing := if tLines.isEmpty then ""
     else "\n\nTrusted memory-safety boundaries (assumed, not checked):\n" ++ "\n".intercalate tLines
+  -- Descriptor classification (R5): NOT checked by the compiler. Each reached foreign binding is
+  -- placed under the audit that covers it, or under "no audit" — never left out, so an empty
+  -- listing can only mean no foreign binding is reached.
+  let reached := assumptions.foreignReached programRoots
+  let byCov (c : Assumptions.DescriptorCoverage) := reached.toList.filter (·.1.descriptorCoverage == c)
+  let names (xs : List (Assumptions.Facts × Array String)) := ", ".intercalate (xs.map (·.1.id.qualified))
+  let group (c : Assumptions.DescriptorCoverage) (label : String) : List String :=
+    let xs := byCov c
+    if xs.isEmpty then [] else [s!"  {label}: {names xs}"]
+  let auditRef := "docs/language/HANDLE_CAPABILITIES_AUDIT.md, revised 2026-10-01; a document, not re-checked against current callers"
+  let dLines :=
+    ["Descriptor classification (R5): NOT CHECKED by the compiler. Encoding A has no typed descriptors, so which descriptor a foreign binding receives is an assumption."] ++
+    (if reached.isEmpty then ["  no foreign binding is reached, so no descriptor assumption is made"] else []) ++
+    group .auditedDescriptor s!"descriptor bindings covered by the std construction/caller audit (§3.1; {auditRef})" ++
+    group .auditedNoDescriptor s!"classified by that audit as taking no descriptor (§3.2–3.3)" ++
+    group .unaudited "covered by no audit (whether they receive descriptors is not established)"
+  let dListing := "\n\n" ++ "\n".intercalate dLines
   let coverage := depNote ++ "\n" ++ graphNote ++ attributionNote
-  listing ++ tListing ++ "\n\n" ++ coverage
+  listing ++ tListing ++ dListing ++ "\n\n" ++ coverage
 
 def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore)
     (assumptions : Assumptions.Table := {}) (depsLoaded : Bool := false) : String :=
