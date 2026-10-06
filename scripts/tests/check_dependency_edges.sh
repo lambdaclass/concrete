@@ -1075,7 +1075,7 @@ def tI (m d : String) : Option DefinitionIdentity :=
 def fnS (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def elG (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := false, loc := none }
+  , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
   match tI "m" "caller", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
   | some cid, some pkg =>
@@ -1090,7 +1090,7 @@ def elG (q : String) : EligibilityEntry :=
     -- exists to catch, and one the corpus does not contain.
     let obl : Obligation :=
       { functionId := { qualName := "m.caller", fingerprint := "FP" }, bareName := "caller"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
@@ -1133,7 +1133,7 @@ def aI (m d : String) : Option DefinitionIdentity :=
 def aFn (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := false, loc := none }
+  , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
   match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
   | some cid, some pkg =>
@@ -1145,7 +1145,7 @@ def aEl (q : String) : EligibilityEntry :=
       , subjectDigest := none }
     let obl : Obligation :=
       { functionId := { qualName := "m.solo", fingerprint := "FP" }, bareName := "solo"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
@@ -1163,7 +1163,7 @@ def aI (m d : String) : Option DefinitionIdentity :=
 def aFn (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := false, loc := none }
+  , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
   match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
   | some cid, some pkg =>
@@ -1175,7 +1175,7 @@ def aEl (q : String) : EligibilityEntry :=
       , subjectDigest := none }
     let obl : Obligation :=
       { functionId := { qualName := "m.solo", fingerprint := "FP" }, bareName := "solo"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
@@ -1196,7 +1196,7 @@ def aI (m d : String) : Option DefinitionIdentity :=
 def aFn (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := false, loc := none }
+  , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
   match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
   | some cid, some pkg =>
@@ -1208,7 +1208,7 @@ def aEl (q : String) : EligibilityEntry :=
       , subjectDigest := none }
     let obl : Obligation :=
       { functionId := { qualName := "m.solo", fingerprint := "FP" }, bareName := "solo"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
@@ -1232,7 +1232,7 @@ def aI (m d : String) : Option DefinitionIdentity :=
 def aFn (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := false, loc := none }
+  , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
   match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
   | some cid, some pkg =>
@@ -1244,7 +1244,7 @@ def aEl (q : String) : EligibilityEntry :=
       , subjectDigest := some "D" }
     let obl : Obligation :=
       { functionId := { qualName := "m.solo", fingerprint := "FP" }, bareName := "solo"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
@@ -1293,7 +1293,7 @@ def tidC (m d : String) : Option DefinitionIdentity :=
 def fnStubC (n : String) : CFnDef := { name := n, params := [], retTy := .i32, body := [] }
 def eligC (q : String) (trusted : Bool) : EligibilityEntry :=
   { qualName := q, eligible := !trusted, sourceReasons := [], profileReasons := []
-  , exclusionKind := none, isTrusted := trusted, loc := none }
+  , exclusionKind := none, isTrusted := trusted, admissionRefusals := [], loc := none }
 def mkExclC (q d : String) (trusted : Bool) : Option ProofCoreExcluded :=
   (tidC "m" d).map fun i =>
     { qualName := q, bareName := d, callableId := CallableId.ofUser "m" d
@@ -1744,13 +1744,13 @@ probe_mint "receipt issuance REFUSES a subject whose closure cannot root" "ISSUA
       , fn := { name := "solo", params := [], retTy := .i32, body := [] }
       , extracted := none, unsupported := [], fingerprint := "FP", params := []
       , eligibility := { qualName := "m.solo", eligible := true, sourceReasons := []
-                       , profileReasons := [], exclusionKind := none, isTrusted := false, loc := none }
+                       , profileReasons := [], exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
       , loc := none
       , spec := some { specId := { name := "s" }, proofName := probeThm, source := .registry, expectedFp := "FP" }
       , subjectDigest := none }
     let obl : Obligation :=
       { functionId := { qualName := "m.solo", fingerprint := "FP" }, bareName := "solo"
-      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := []
+      , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
       { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []

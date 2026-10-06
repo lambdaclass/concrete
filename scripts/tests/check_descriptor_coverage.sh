@@ -56,8 +56,15 @@ std_externs = set()
 for f in glob.glob(stdsrc + "/*.con"):
     std_externs |= set(re.findall(r"extern fn (\w+)\s*\(", open(f).read()))
 res(set(l31 or []) <= std_externs, "every audited descriptor binding is a std extern today")
+# INVENTORY DRIFT: the audit is a human assumption, but it must cover the CURRENT code. A std
+# binding in neither table is unaudited; a binding the audit says was removed must stay removed.
 extra = sorted(std_externs - set(l31 or []) - set(lnd or []))
-print(f"info std bindings the audit does not cover (reported as 'covered by no audit' when reached): {', '.join(extra)}")
+res(not extra, "every current std binding is in the audit's tables" + ("" if not extra else f" — unaudited: {', '.join(extra)}"))
+overlap = sorted(set(l31 or []) & set(lnd or []))
+res(not overlap, "no binding is both a descriptor binding and audited as taking none" + ("" if not overlap else f": {overlap}"))
+removed = doc_names("### 3.5", "## 4.") if "### 3.5" in doc else []
+removed_bound = sorted((set(re.findall(r"\x60(\w+)\x60", doc[doc.index("### 3.5"):doc.index("## 4.")])) & std_externs) - set(lnd or []) - set(l31 or []))
+res(not removed_bound, "no binding the audit removed (section 3.5) is bound again" + ("" if not removed_bound else f": {removed_bound}"))
 
 def groups(path):
     txt = open(path).read()

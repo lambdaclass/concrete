@@ -521,7 +521,7 @@ def descriptorAuditedBindings : List String :=
 
 def auditedNoDescriptorBindings : List String :=
   [ "getenv", "setenv", "unsetenv", "__concrete_get_argv", "__concrete_get_argc", "uname",
-    "time", "clock_gettime", "nanosleep", "rand", "srand", "getpid", "exit", "kill",
+    "time", "clock_gettime", "nanosleep", "rand", "srand", "getpid", "exit", "_exit", "kill",
     "waitpid", "fork", "execvp", "malloc", "realloc", "free", "abort",
     "memcpy", "memset", "memcmp", "strlen", "htons", "inet_pton",
     "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil" ]
