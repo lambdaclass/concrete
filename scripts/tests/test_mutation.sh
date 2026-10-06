@@ -1267,7 +1267,7 @@ gate_for_last "scripts/tests/check_trusted_boundaries.sh"
 
 MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
 MUT_OLD+=("      fn != self && ((t.fns.get? fn).map (·.reachesKey key)).getD false")
-MUT_NEW+=("      true && ((t.fns.get? fn).map (·.reachesKey key)).getD false -- MUTATION: a boundary relies on itself")
+MUT_NEW+=("      (fn != self || true) && ((t.fns.get? fn).map (·.reachesKey key)).getD false -- MUTATION: a boundary relies on itself")
 MUT_DESC+=("trusted boundaries: a boundary is listed among its own dependents (and unreached ones appear)")
 gate_for_last "scripts/tests/check_trusted_boundaries.sh"
 
@@ -1290,7 +1290,7 @@ gate_for_last "scripts/tests/check_capability_explanations.sh"
 
 MUT_FILE+=("Concrete/Report/ReportInterface.lean")
 MUT_OLD+=("    let c := (aliases.lookup written).getD written")
-MUT_NEW+=("    let c := written -- MUTATION: import aliases not followed")
+MUT_NEW+=("    let c := ((aliases.filter (fun _ => false)).lookup written).getD written -- MUTATION: import aliases not followed")
 MUT_DESC+=("capability explanations: a callee called through an import alias is not resolved")
 gate_for_last "scripts/tests/check_capability_explanations.sh"
 
