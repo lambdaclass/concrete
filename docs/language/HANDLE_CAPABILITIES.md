@@ -5,52 +5,36 @@ design (items marked **[decided]**), what the compiler does today (**[current]**
 still open (**[open]**). Which commits carry which part, and what has reached `main`, is in the
 status section below and in ROADMAP R-0484; nothing here is a release claim.
 
-## Implementation status (2026-10-06)
+## Implementation status (2026-10-07)
 
-**On `main` (core checkpoint `a7c9cf1c`):** encoding A; capability parameters on structs
-(`Sink<cap C>`, E0114/E0115, cross-package normalization); R1 `Writer<C>`/`Reader<C>` with the
-consumers migrated; R2 `trusted` absorbs the `Unsafe` of a foreign call and nothing else; R3
-every `extern` declares its effects (E0116, E0117); R4 reclassification; R9 enforcement across
-packages. `print_bytes` declares `with(Console)` and is excluded for it.
+**On `main`:** the core checkpoint `a7c9cf1c` (encoding A; capability parameters on structs,
+E0114/E0115; R1 `Writer<C>`/`Reader<C>`; R2 `trusted` absorbs only `Unsafe`; R3 every `extern`
+declares its effects, E0116/E0117; R4 reclassification; R9 across packages) and the integrated
+checkpoint `8187a2f7` (F1/F9: only `spawn` constructs `Child`, public fork APIs removed; the
+shared assumption summary with package-scoped identity, bug 074 refused before LLVM; conclusion
+qualification; JSON API v2; policy/assumption-file checks on structured facts, bug 075).
 
-**On branches, validated by gates but NOT yet on `main`:**
+**In the closure candidate (branch `r0484-closure`), not on `main` until validated:** proof
+admission on the shared summary (bug 076); named trusted boundaries; descriptor-coverage
+reporting; cross-dependency capability explanations; audit F6 carried out and `_exit` audited;
+`std.mem.sizeof` classified as a compiler intrinsic; containment of bug 077.
 
-- `r0484-integrated` (`8187a2f7`): F1/F9 (only `spawn` constructs `Child`; public fork APIs
-  removed; spawn's runtime conditions stated); the shared assumption summary with
-  package-scoped identity (bug 074 refused before LLVM); conclusion qualification; JSON API v2
-  (`is_pure` removed); policy/assumption-file checks reading structured facts (bug 075).
-- `r0484-admission` (`8217bb61`): proof admission reads the same summary (bug 076). An
-  extractable function is admitted only with exactly one complete summary that reaches no
-  foreign binding; refusals are typed and named.
-- `r0484-r10-trusted`: R10 reporting —
-  - trusted memory-safety boundaries named, with the responsible function and package, the
-    obligation the body absorbs (raw operations from the checker's trust edges, foreign
-    bindings by identity), the program functions relying on it, and one path;
-  - descriptor classification (R5) stated as NOT compiler-checked, every reached binding
-    placed under the audit that covers it or under "no audit";
-  - capability explanations name the dependency callee that supplies a capability, through
-    import aliases, identically in the caps/authority text, diagnostics-json and the
-    `why-capability`/audit query traces.
-  - a bodiless `#[intrinsic]` declaration (`std.mem.sizeof`) is a compiler intrinsic, not a
-    foreign binding: it is carried into Core and reported on its own.
+What each surface establishes:
 
-**Known limits, stated rather than hidden:**
+| | |
+|---|---|
+| **Checked by the compiler** | every function's `with(...)` covers what it reaches, through handles, trusted bodies, externs and dependencies; externs declare effects; proof admission refuses any function whose summary is missing, ambiguous, has an unresolved edge (indirect call, type-parameter dispatch, unloaded callee) or reaches a foreign binding; a compiler intrinsic is recognized only with its exact name, attribute and signature |
+| **Human assumptions, named in reports** | each foreign binding's declared effects; each trusted function's memory safety (named, with the raw operations and foreign calls it absorbs and what relies on it); which descriptor each binding receives (covered only by [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md), which `check_descriptor_coverage.sh` keeps complete over std's bindings but does not re-verify) |
+| **Incomplete coverage, reported as such** | indirect calls, type-parameter dispatch and unloaded callees make a summary incomplete and block "no external authority" and admission; single-file mode and `--query` say dependencies were not analysed, and `--query` refuses a project file it cannot resolve without them |
+| **Unsupported or open** | typed descriptors (second step, §10); a bodiless user `fn` declaration cannot declare effects, so user code cannot itself declare an intrinsic; bug 077 (relative call into a third-level submodule fails LLVM validation) is separately owned — the build refuses it, the summary keeps what such a call reaches, and no R-0484 acceptance case depends on it (`check_bug077_contained.sh`); the reports still compute the older indirect-call analysis beside the summary and treat a function as opaque if either says so |
 
-- `--query` runs single-file: dependencies are not loaded there, and its answers say so. Only
-  project-mode reports follow dependency summaries.
-- Descriptor classification is covered only by the construction/caller audit
-  ([HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)), a human document that is not
-  re-run against callers. It covers every current std binding — F6 removed the eight it marked
-  unused, `_exit` is audited — and `check_descriptor_coverage.sh` fails if a std binding is
-  added without an audit entry or a removed one returns. Typed descriptors are the second step
-  (§10).
-- The reports still compute the older indirect-call analysis beside the summary and treat a
-  function as opaque if either says so.
-- The four external pages once named as stating "no capabilities means pure" (the Spec, Why
-  Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition Labels) do not exist
-  under those titles in `site/` or `docs/book/`. The published reference copies under
-  `site/content/reference/` (FFI, SAFETY, EXECUTION_MODEL) carried the pre-R-0484 rules and
-  were corrected 2026-10-06; their other drift from `docs/` is not part of this pass.
+**External documentation.** The four pages once named as stating "no capabilities means pure"
+(the Spec, Why Concrete Exists, Can I prove Concrete programs in Lean?, Nutrition Labels) do not
+exist under those titles in `site/` or `docs/book/`; "Why Concrete Exists" is a section of the
+landing page and does not state the rule. Disposition: not found, not counted as updated. The
+published reference copies under `site/content/reference/` (FFI, SAFETY, EXECUTION_MODEL) carried
+the pre-R-0484 rules and were corrected 2026-10-06; their other drift from `docs/` is outside this
+pass.
 
 ## 0. The hole this closes
 
