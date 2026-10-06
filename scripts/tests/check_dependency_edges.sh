@@ -260,7 +260,7 @@ EXPECTED_MINT_PROBES=19
 # Digest of the full manifest, not just the names — see mint_manifest_digest below. The constant is
 # a sha256 because this repository supports macOS, where GNU md5sum does not exist; the hasher
 # fallback follows the one in lib/treestate.sh rather than adding a third way to hash a thing.
-EXPECTED_MINT_MANIFEST_SHA256="8713fc18b540d6e676765ef9e495073cd960ccdd5ac3b1cf75e77ab363a1c93b"
+EXPECTED_MINT_MANIFEST_SHA256="0e47323de0a7abac9062cca10cd0c7b9d00e9e2ca650f9c958ba68a9cadb78c0"
 if command -v sha256sum >/dev/null 2>&1; then _MINT_HASHER="sha256sum"
 elif command -v shasum >/dev/null 2>&1; then _MINT_HASHER="shasum -a 256"
 else _MINT_HASHER=""
@@ -483,7 +483,7 @@ mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
 EXPECTED_ORDINARY_PROBES=244
-EXPECTED_ORDINARY_MANIFEST_SHA256="a721c0a702572652e19c2a76c26a334f01c7977053b958de985dd6c8ccbf8e1d"
+EXPECTED_ORDINARY_MANIFEST_SHA256="f11edc026a12778f2684b975bd24771fb6762f8c6312813b7ac2915f74a81a83"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
