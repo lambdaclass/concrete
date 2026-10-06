@@ -142,16 +142,42 @@ check_example() {
   fi
 
   # --- authority.required + authority.forbidden ---
+  local errs_before_authority=$errs
   local required_caps forbidden_caps
   required_caps=$(toml_get "$af" authority required)
   forbidden_caps=$(toml_get "$af" authority forbidden)
+  # Names validated and the Std alias expanded by the compiler's own definitions; an unknown name
+  # (e.g. `Net` for `Network`) is an error, never a silently unmatchable entry.
+  local raw_r="$required_caps" raw_fb="$forbidden_caps" xerrf
+  xerrf="$(mktemp)"
+  if ! required_caps=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" --expand "$ROOT_DIR" $raw_r 2>"$xerrf"); then
+    echo "  FAIL authority.required: $(cat "$xerrf")"; errs=$((errs + 1)); required_caps=""
+  fi
+  if ! forbidden_caps=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" --expand "$ROOT_DIR" $raw_fb 2>"$xerrf"); then
+    echo "  FAIL authority.forbidden: $(cat "$xerrf")"; errs=$((errs + 1)); forbidden_caps=""
+  fi
+  rm -f "$xerrf"
   # Pull every (...) cap-set token out of --report caps. The format is
   # "  fn_name : (cap1, cap2)" or "  fn_name : (pure)".
   local used_caps
-  used_caps=$(grep -oE ':\s*\([^)]*\)' <<<"$report_caps" | tr -d ':() ' | tr ',' '\n' | sort -u | grep -v '^$' | grep -v '^pure$' || true)
+  # From STRUCTURED facts (scripts/tests/lib/authority_facts.py), not report punctuation: the old
+  # scrape read only parenthesised tokens while a capability headline prints bare (`fn : Console`),
+  # so it never saw a capability and these checks were vacuous. Unavailable facts FAIL rather than
+  # read as "no capabilities used".
+  local facts_file="$(mktemp)" au_out au_fail=0
+  "$COMPILER" "$source" --report diagnostics-json > "$facts_file" 2>/dev/null
+  if ! au_out=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" "$facts_file" 2>&1); then
+    echo "  FAIL authority facts unavailable: $au_out"
+    errs=$((errs + 1)); au_fail=1
+    used_caps=""
+  else
+    used_caps=$(python3 -c 'import json,sys; print(" ".join(json.loads(sys.argv[1])["used"]))' "$au_out")
+    echo "  info authority: declared [$used_caps]; $(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(f"{d["functions"]} function(s), {d["empty_declarations"]} declaring none" + (f"; coverage INCOMPLETE for {len(d["incomplete"])} — declared capabilities stay compiler-enforced, listed foreign assumptions may be partial" if d["incomplete"] else "") + ("" if d["dependencies_analysed"] else "; dependencies NOT analysed"))' "$au_out")"
+  fi
+  rm -f "$facts_file"
 
   # Check forbidden ∩ used == ∅
-  if [ -n "$used_caps" ] && [ -n "$forbidden_caps" ]; then
+  if [ "$au_fail" -eq 0 ] && [ -n "$used_caps" ] && [ -n "$forbidden_caps" ]; then
     for cap in $used_caps; do
       for fb in $forbidden_caps; do
         if [ "$cap" = "$fb" ]; then
@@ -163,7 +189,7 @@ check_example() {
   fi
 
   # Check used ⊆ required
-  if [ -n "$used_caps" ]; then
+  if [ "$au_fail" -eq 0 ] && [ -n "$used_caps" ]; then
     for cap in $used_caps; do
       local found=0
       for req in $required_caps; do
@@ -175,11 +201,13 @@ check_example() {
       fi
     done
   fi
-  if [ "$errs" -eq 0 ] || true; then
-    if [ -z "$used_caps" ] && [ -z "$required_caps" ]; then
-      echo "  ok   authority — no capabilities used or required"
-    elif [ -n "$used_caps" ]; then
-      echo "  ok   authority — used caps ($used_caps) within required ($required_caps)"
+  # Reported OK only when no authority check above failed (this used to read `|| true`, so it
+  # printed ok next to its own failures).
+  if [ "$errs" -eq "$errs_before_authority" ] && [ "$au_fail" -eq 0 ]; then
+    if [ -z "$used_caps" ]; then
+      echo "  ok   authority — no capability declared by any function (required=[$required_caps])"
+    else
+      echo "  ok   authority — declared caps ($used_caps) within required ($required_caps), none forbidden"
     fi
   fi
 
@@ -273,5 +301,44 @@ for af in "${ASSUMPTION_FILES[@]}"; do
 done
 
 echo ""
+# CONTROLS: the authority checks must be able to FAIL. Throwaway examples run through the same
+# check_example, in a subshell so the counters above are untouched; only authority lines are judged.
+echo "=== controls: authority checks read real capabilities ==="
+CTLA="$(mktemp -d)"; trap 'rm -rf "$CTLA"' EXIT
+ctl_example() { # name authority-lines source
+  local d="$CTLA/$1"; mkdir -p "$d/src"
+  printf 'schema_version = 1\n\n[authority]\n%s\n' "$2" > "$d/assumptions.toml"
+  printf '%s\n' "$3" > "$d/src/main.con"
+  ( check_example "$d/assumptions.toml" ) 2>&1
+}
+actl() { # label expect reject output
+  if printf '%s' "$4" | grep -qE "$2" && ! printf '%s' "$4" | grep -qE "$3"; then
+    echo "  ok   CONTROL $1"; PASS=$((PASS + 1))
+  else
+    echo "  FAIL CONTROL $1"; printf '%s\n' "$4" | grep -E 'authority' | head -3 | sed 's/^/       /'; FAIL=$((FAIL + 1))
+  fi
+}
+A_CONSOLE='extern fn putchar(c: i32) with(Console) -> i32;
+fn main() with(Console, Unsafe) -> i32 { return putchar(65) - 65; }'
+A_PURE='fn main() -> i32 { return 0; }'
+out="$(ctl_example forbid 'required = ["Console", "Unsafe"]
+forbidden = ["Console"]' "$A_CONSOLE")"
+actl "a forbidden Console that IS declared fails" "FAIL forbidden capability 'Console' is in use" "ok   authority" "$out"
+out="$(ctl_example allow 'required = ["Console", "Unsafe"]
+forbidden = ["File"]' "$A_CONSOLE")"
+actl "a required Console passes" "ok   authority — declared caps \(Console Unsafe\)" "FAIL (forbidden capability|capability .* is used but not)" "$out"
+out="$(ctl_example undeclared 'required = []
+forbidden = []' "$A_CONSOLE")"
+actl "a declared Console missing from required fails" "FAIL capability 'Console' is used but not in authority.required" "ok   authority" "$out"
+out="$(ctl_example empty 'required = []
+forbidden = ["Console"]' "$A_PURE")"
+actl "empty declarations pass and say so" "no capability declared by any function" "FAIL (forbidden capability|capability .* is used)" "$out"
+out="$(ctl_example misspelled 'required = []
+forbidden = ["Net"]' "$A_PURE")"
+actl "an unknown capability name (Net) fails" "'Net' is not a capability" '^$' "$out"
+out="$(ctl_example broken 'required = []
+forbidden = []' 'fn main( -> i32 { return 0; }')"
+actl "a program whose facts cannot be produced FAILS, not 'no capabilities'" "FAIL authority facts unavailable" "ok   authority" "$out"
+
 echo "ASSUMPTIONS: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

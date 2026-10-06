@@ -17,5 +17,5 @@ no_externs             = true
 no_unsafe              = true
 no_trusted             = true
 max_stack_bytes        = 8192
-forbidden_capabilities = ["File", "Net", "Unsafe", "Alloc"]
+forbidden_capabilities = ["File", "Network", "Unsafe", "Alloc"]
 allowed_capabilities   = ["Console"]

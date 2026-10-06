@@ -81,6 +81,7 @@ Those belong in:
 - [072_spawn_exec_failure_flushes_parent_buffers.md](072_spawn_exec_failure_flushes_parent_buffers.md) — fixed 2026-10-01: a child whose exec failed called `exit`, flushing stdio buffers copied from the parent, so pending output was written twice; it now calls `_exit`
 - [073_generic_type_argument_arity_unchecked.md](073_generic_type_argument_arity_unchecked.md) — fixed 2026-10-01: `Box1<i32, bool>` for a one-parameter struct compiled with the extra argument dropped; Resolve now checks type-argument arity (E0113)
 - [074_duplicate_module_names_across_packages.md](074_duplicate_module_names_across_packages.md) — fixed 2026-10-04: two packages defining the same top-level module name failed only in LLVM validation, and report modes merged their declarations; `loadProject` now refuses the collision naming both packages
+- [075_policy_assumption_authority_checks_vacuous.md](075_policy_assumption_authority_checks_vacuous.md) — fixed 2026-10-06: `check_policy`/`check_assumptions` scraped only parenthesised report tokens and never saw a capability (and `Net` was not a capability); now read structured facts, validate names, and carry fail/pass controls
 
 ## Open Numbered Bugs
 

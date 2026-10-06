@@ -45,7 +45,7 @@ stack_max_bytes = 8192   # actual measured: 5312 bytes (main, SHA-256 + HMAC buf
 # Entry point uses Console (narrower than Std) for println.
 # Every other function is pure.  No trusted shells, no FFI.
 required  = ["Console"]
-forbidden = ["File", "Net", "Unsafe", "Alloc"]
+forbidden = ["File", "Network", "Unsafe", "Alloc"]
 
 [ffi]
 externs = []

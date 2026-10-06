@@ -27,7 +27,7 @@ stack_max_bytes = 200
 
 [authority]
 required  = []
-forbidden = ["Alloc", "File", "Net", "Unsafe", "Console", "Time"]
+forbidden = ["Alloc", "File", "Network", "Unsafe", "Console", "Time"]
 
 [ffi]
 externs = []

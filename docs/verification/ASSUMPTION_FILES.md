@@ -62,7 +62,7 @@ stack_max_bytes  = 400           # enforced against --report stack-depth max
 # subset of `required`. Capabilities in `forbidden` must not appear
 # in any function.
 required  = []                   # capabilities granted at entry
-forbidden = ["Alloc", "File", "Net", "Unsafe", "Console", "Time"]
+forbidden = ["Alloc", "File", "Network", "Unsafe", "Console", "Time"]
 
 [ffi]
 # FFI surface. CI asserts the example's externs match this list.

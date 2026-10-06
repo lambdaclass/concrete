@@ -68,7 +68,7 @@ no_externs    = true       # any extern declaration fails CI
 
 # Budgets — numeric / list ceilings.
 max_stack_bytes        = 400      # actual max stack must be ≤ this
-forbidden_capabilities = ["Alloc", "File", "Net", "Unsafe", "Console", "Time"]
+forbidden_capabilities = ["Alloc", "File", "Network", "Unsafe", "Console", "Time"]
 allowed_capabilities   = []       # every function's caps ⊆ this; [] means pure-only
 ```
 

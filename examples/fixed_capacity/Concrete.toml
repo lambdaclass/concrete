@@ -16,5 +16,5 @@ predictable            = true
 no_alloc               = true
 no_externs             = true
 max_stack_bytes        = 3000
-forbidden_capabilities = ["File", "Net", "Unsafe"]
+forbidden_capabilities = ["File", "Network", "Unsafe"]
 allowed_capabilities   = ["Std"]

@@ -30,7 +30,7 @@ stack_max_bytes = 256    # actual measured: 209 bytes (small headroom)
 # Entry point uses Console (narrower than Std) for println.
 # ct_compare itself is pure.  No trusted shells, no FFI.
 required  = ["Console"]
-forbidden = ["File", "Net", "Unsafe", "Alloc"]
+forbidden = ["File", "Network", "Unsafe", "Alloc"]
 
 [ffi]
 externs = []

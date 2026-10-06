@@ -29,6 +29,28 @@ fi
 
 PASS=0
 FAIL=0
+TMP_AF="$(mktemp -d)"; trap 'rm -rf "$TMP_AF"' EXIT
+
+# The program's DECLARED external authority, from structured facts (R-0484: declared capabilities
+# are the compiler-enforced, complete list). Prints the used capabilities, space-separated, on
+# stdout and any coverage note on stderr; returns 2 when the facts cannot establish an answer, so
+# a missing or malformed report is never read as "no capabilities in use".
+authority_used() {
+  local src="$1" tag="$2" f="$TMP_AF/$2.json" out
+  "$COMPILER" "$src" --report diagnostics-json > "$f" 2>/dev/null
+  out=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" "$f" 2>&1) || { echo "$out" >&2; return 2; }
+  python3 - "$out" <<'PY'
+import json, sys
+d = json.loads(sys.argv[1])
+print(" ".join(d["used"]))
+note = f"declared by {d['functions']} function(s), {d['empty_declarations']} declaring none"
+if d["incomplete"]:
+    note += f"; call-graph coverage INCOMPLETE for {len(d['incomplete'])} ({', '.join(d['incomplete'][:3])}...) — declared capabilities are still compiler-enforced, but the foreign assumptions behind them may not all be listed"
+if not d["dependencies_analysed"]:
+    note += "; dependencies NOT analysed"
+print(note, file=sys.stderr)
+PY
+}
 
 # Read a TOML scalar (string / int / bool) or array out of the
 # [policy] section. Returns the value verbatim; arrays come back
@@ -180,9 +202,31 @@ check_project() {
   local forbidden allowed used
   forbidden=$(policy_get "$toml" forbidden_capabilities)
   allowed=$(policy_get "$toml" allowed_capabilities)
-  used=$(grep -oE ':\s*\([^)]*\)' <<<"$report_caps" | tr -d ':() ' | tr ',' '\n' | sort -u | grep -v '^$' | grep -v '^pure$' || true)
+  # Policy names are validated and the Std alias expanded by the compiler's own definitions. A
+  # name the language does not define is an ERROR: `Net` sat in ten policy files, unmatchable.
+  local raw_f="$forbidden" raw_a="$allowed" xerr
+  if ! forbidden=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" --expand "$ROOT_DIR" $raw_f 2>"$TMP_AF/x.err"); then
+    echo "  FAIL forbidden_capabilities: $(cat "$TMP_AF/x.err")"; errs=$((errs + 1)); forbidden=""
+  fi
+  if ! allowed=$(python3 "$ROOT_DIR/scripts/tests/lib/authority_facts.py" --expand "$ROOT_DIR" $raw_a 2>"$TMP_AF/x.err"); then
+    echo "  FAIL allowed_capabilities: $(cat "$TMP_AF/x.err")"; errs=$((errs + 1)); allowed=""
+  fi
+  # From STRUCTURED facts, not report punctuation: the old scrape read only parenthesised tokens
+  # while a capability headline prints bare (`fn : Console`), so it never saw a capability and
+  # these checks were vacuous. Unavailable facts FAIL the policy rather than read as "none used".
+  local au_note au_ok=1
+  au_note="$TMP_AF/${label//\//_}.note"
+  if ! used=$(authority_used "$source" "${label//\//_}" 2>"$au_note"); then
+    echo "  FAIL authority facts unavailable: $(cat "$au_note")"
+    errs=$((errs + 1))
+    used=""; au_ok=0
+  else
+    echo "  info authority: [${used}] — $(cat "$au_note")"
+  fi
 
-  if [ -n "$forbidden" ] && [ -n "$used" ]; then
+  # With no facts there is nothing to evaluate: the policy has already FAILED above, and an empty
+  # `used` must not go on to print "ok — no capability declared".
+  if [ "$au_ok" -eq 1 ] && [ -n "$forbidden" ] && [ -n "$used" ]; then
     for cap in $used; do
       for fb in $forbidden; do
         if [ "$cap" = "$fb" ]; then
@@ -194,9 +238,10 @@ check_project() {
   fi
 
   # allowed_capabilities = [] enforces "pure-only" (no caps allowed).
-  if [ -n "$allowed" ] || policy_get "$toml" allowed_capabilities >/dev/null 2>&1; then
+  if [ "$au_ok" -eq 1 ] && { [ -n "$allowed" ] || policy_get "$toml" allowed_capabilities >/dev/null 2>&1; }; then
     # If allowed_capabilities is declared (even empty), enforce subset.
     if grep -qE '^\s*allowed_capabilities\s*=' "$toml"; then
+      local outside=0
       if [ -n "$used" ]; then
         for cap in $used; do
           local found=0
@@ -205,19 +250,21 @@ check_project() {
           done
           if [ "$found" -eq 0 ]; then
             echo "  FAIL capability '$cap' in use but allowed_capabilities=[$allowed]"
-            errs=$((errs + 1))
+            errs=$((errs + 1)); outside=1
           fi
         done
       fi
-      if [ -z "$used" ]; then
-        echo "  ok   allowed_capabilities=[$allowed] (no caps in use)"
-      else
-        echo "  ok   allowed_capabilities=[$allowed] (used ⊆ allowed)"
+      if [ "$outside" -eq 0 ]; then
+        if [ -z "$used" ]; then
+          echo "  ok   allowed_capabilities=[$allowed] (no capability declared by any function)"
+        else
+          echo "  ok   allowed_capabilities=[$allowed] (declared [$used] ⊆ allowed)"
+        fi
       fi
     fi
   fi
 
-  if [ -n "$forbidden" ] && [ -z "$used" ]; then
+  if [ "$au_ok" -eq 1 ] && [ -n "$forbidden" ] && [ -z "$used" ]; then
     echo "  ok   forbidden_capabilities=[$forbidden] (none in use)"
   fi
 
@@ -231,6 +278,47 @@ check_project() {
 for toml in "${TOML_FILES[@]}"; do
   check_project "$toml"
 done
+
+# ---------------------------------------------------------------------------
+# CONTROLS: the authority checks must be able to FAIL. Each control is a throwaway project run
+# through the same check_project, in a subshell so the example counters above are untouched.
+echo "=== controls: authority checks read real capabilities ==="
+CTL="$TMP_AF/ctl"
+ctl_project() { # name policy-lines source
+  local d="$CTL/$1"; mkdir -p "$d/src"
+  printf '[package]\nname = "%s"\nversion = "0.1.0"\n\n[policy]\n%s\n' "$1" "$2" > "$d/Concrete.toml"
+  printf '%s\n' "$3" > "$d/src/main.con"
+  ( check_project "$d/Concrete.toml" ) 2>&1
+}
+CONSOLE_SRC='extern fn putchar(c: i32) with(Console) -> i32;
+fn shout() with(Console, Unsafe) -> i32 { return putchar(65); }
+fn main() with(Console, Unsafe) -> i32 { return shout() - 65; }'
+PURE_SRC='fn add(a: i32, b: i32) -> i32 { return a + b; }
+fn main() -> i32 { return add(1, 2) - 3; }'
+GAP_SRC='fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
+fn inc(x: i32) -> i32 { return x + 1; }
+fn main() -> i32 { return apply(inc, 1) - 2; }'
+ctl_expect() { # label expect-regex reject-regex output
+  if printf '%s' "$4" | grep -qE "$2" && ! printf '%s' "$4" | grep -qE "$3"; then
+    echo "  ok   CONTROL $1"; PASS=$((PASS + 1))
+  else
+    echo "  FAIL CONTROL $1"; printf '%s\n' "$4" | grep -E 'FAIL|ok|info' | head -4 | sed 's/^/       /'; FAIL=$((FAIL + 1))
+  fi
+}
+out="$(ctl_project forbid_console 'forbidden_capabilities = ["Console"]' "$CONSOLE_SRC")"
+ctl_expect "forbidden Console that IS declared fails" "FAIL forbidden_capabilities contains 'Console'" '^$' "$out"
+out="$(ctl_project allow_console 'allowed_capabilities = ["Console", "Unsafe"]' "$CONSOLE_SRC")"
+ctl_expect "allowed Console passes" "ok   allowed_capabilities=\[Console Unsafe\]" "FAIL" "$out"
+out="$(ctl_project allow_std 'allowed_capabilities = ["Std", "Unsafe"]' "$CONSOLE_SRC")"
+ctl_expect "Std alias expands to include Console" "ok   allowed_capabilities" "FAIL" "$out"
+out="$(ctl_project pure_only 'allowed_capabilities = []' "$PURE_SRC")"
+ctl_expect "empty declarations pass allowed=[] and say so" "no capability declared by any function" "FAIL" "$out"
+out="$(ctl_project gap 'allowed_capabilities = []' "$GAP_SRC")"
+ctl_expect "an indirect call is reported as INCOMPLETE coverage, explicitly" "coverage INCOMPLETE" "FAIL" "$out"
+out="$(ctl_project misspelled 'forbidden_capabilities = ["Net"]' "$PURE_SRC")"
+ctl_expect "an unknown capability name (Net) fails instead of never matching" "'Net' is not a capability" '^$' "$out"
+out="$(ctl_project broken 'allowed_capabilities = []' 'fn main( -> i32 { return 0; }')"
+ctl_expect "a program whose facts cannot be produced FAILS, not 'no capabilities'" "FAIL authority facts unavailable" "no capability declared" "$out"
 
 echo ""
 echo "POLICY: PASS=$PASS  FAIL=$FAIL"

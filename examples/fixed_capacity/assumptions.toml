@@ -33,7 +33,7 @@ stack_max_bytes = 3000   # actual max: 2960 (main)
 # raw-byte-write helpers used only by adversarial test
 # construction.
 required  = ["Std"]
-forbidden = ["File", "Net", "Unsafe"]
+forbidden = ["File", "Network", "Unsafe"]
 
 [ffi]
 externs = []
