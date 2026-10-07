@@ -511,6 +511,71 @@ mod numeric {
         }
     }
 
+    // ---- BoundView: an owner-bound view (R-0483) ----
+    //
+    // A `ByteView` is reusable COORDINATES: it describes a range, and applies to any buffer
+    // that is long enough, by contract. A `BoundView` is the other thing: a view that OWNS the
+    // buffer it describes. Reads take no buffer argument, so reading a range against a different
+    // buffer cannot be written — that is enforced statically, by ownership, not detected at
+    // runtime. While bound, the owner cannot be mutated, reallocated or destroyed, because no
+    // `&mut` or consuming access to it is exposed; `release` hands it back whole. Moving a
+    // `BoundView` moves the owner with it, so the relationship survives transfer, including
+    // across a package boundary. It is linear, like the `Bytes` inside it.
+    //
+    // What it does NOT establish: that the coordinates were derived from this owner's CONTENT.
+    // `of_view` re-validates bounds against the owner and binds them; coordinates computed from a
+    // different buffer of sufficient length bind successfully. The guarantee is "every read goes
+    // to the owner it holds", which is the one substitution breaks.
+    pub struct BoundView {
+        owner: Bytes,
+        off: u64,
+        len: u64,
+    }
+
+    impl BoundView {
+        /// Bind `[off, off+len)` of `owner`. On a range that does not fit, the owner is returned.
+        pub fn bind(owner: Bytes, off: u64, len: u64) -> Result<BoundView, Bytes> {
+            let blen: u64 = owner.len();
+            if off > blen {
+                return Result::<BoundView, Bytes>::Err { error: owner };
+            }
+            if len > blen - off {
+                return Result::<BoundView, Bytes>::Err { error: owner };
+            }
+            return Result::<BoundView, Bytes>::Ok { value: BoundView { owner: owner, off: off, len: len } };
+        }
+
+        /// Bind existing coordinates to `owner`, re-validated against it.
+        pub fn of_view(owner: Bytes, view: &ByteView) -> Result<BoundView, Bytes> {
+            return BoundView::bind(owner, view.off(), view.len());
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        /// The i-th byte of the bound range, or None past its end. No buffer argument: the read
+        /// goes to the owner this view holds.
+        pub fn byte(&self, i: u64) -> Option<u8> {
+            if i >= self.len {
+                return Option::<u8>::None;
+            }
+            return self.owner.get(self.off + i);
+        }
+
+        /// The range as reusable coordinates. Explicitly NOT owner-bound: a `ByteView` applies to
+        /// any buffer that is long enough.
+        pub fn coords(&self) -> ByteView {
+            return ByteView { off: self.off, len: self.len };
+        }
+
+        /// End the binding and hand the owner back, unchanged.
+        pub fn release(self) -> Bytes {
+            let BoundView { owner, off, len } = self;
+            return owner;
+        }
+    }
+
     // ---- Standalone endian functions (no cursor needed) ----
 
     trusted fn read_be16_at(data: *const u8, offset: u64) -> u64 {

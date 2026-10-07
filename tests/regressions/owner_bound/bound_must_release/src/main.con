@@ -1,0 +1,12 @@
+// R-0483 (rejected): a BoundView is linear; dropping it without releasing its owner is an error.
+mod bound_must_release {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new(); a.push(1);
+        match BoundView::bind(a, 0, 1) {
+            Result::Ok { value } => { return 0; },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

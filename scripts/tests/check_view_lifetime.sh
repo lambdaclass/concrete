@@ -118,6 +118,37 @@ check_runs ../owner_bound_survey/view_outlives_scope 71 "escaped view COORDINATE
 check_runs ../owner_bound_survey/of_cursor_substitution 51 "a cursor-derived view reads a different buffer (no owner identity)"
 check_runs ../owner_bound_survey/xpkg_app 81 "a view from another package reads a different buffer (no owner identity)"
 
+echo "=== R-0483 owner-bound views: BoundView owns the buffer it describes ==="
+# VALID — zero copy, moved with its owner, across a package boundary, from cursor coordinates,
+# and released back for mutation.
+check_runs ../owner_bound/bound_read 11 "a BoundView reads its own owner, zero copy"
+check_runs ../owner_bound/bound_moved 13 "moving a BoundView moves its owner with it"
+check_runs ../owner_bound/bound_of_cursor 3 "cursor coordinates bound to an owner read that owner"
+check_runs ../owner_bound/bound_xpkg_app 42 "a BoundView crosses a package boundary with its owner"
+check_runs ../owner_bound/bound_release_rebind 202 "release returns the owner; a new binding sees its new bytes"
+# REJECTED STATICALLY — each for the stated reason, not merely failing to compile.
+check_rejects ../owner_bound/bound_no_buffer_argument "E0262.*'byte' expects 1 arguments" "a BoundView cannot be handed a different buffer to read (no buffer argument)"
+check_rejects ../owner_bound/bound_no_owner_mutation "E0298.*'owner'.*private" "the owner of a BoundView is unreachable for mutation while bound"
+check_rejects ../owner_bound/bound_must_release "E0208.*never consumed" "a BoundView is linear: its owner must be released, never silently dropped"
+# AUDITED ASSUMPTION — a raw pointer value can leave safe code (BytesRaw), but reading through it
+# needs Unsafe at the dereference.
+check_rejects ../owner_bound/raw_pointer_needs_unsafe "E0521.*Unsafe" "reading through an escaped raw pointer requires Unsafe"
+# The packet parser reads its payload in place through a BoundView and agrees with the copy path,
+# and stays predictable (only main fails the profile, for blocking I/O).
+PKT="$ROOT_DIR/examples/packet"
+if (cd "$PKT" && $TO "$CC" build . -o "$TMP/pkt" >/dev/null 2>&1) && "$TMP/pkt" > "$TMP/pkt.out" 2>&1 \
+   && grep -c 'owner-bound view agrees with the copy' "$TMP/pkt.out" >/dev/null && grep -c 'All tests passed' "$TMP/pkt.out" >/dev/null; then
+  ok "examples/packet reads its payload through a BoundView and agrees with the copy"
+else
+  no "examples/packet's owner-bound path did not run or disagreed: $(tail -3 "$TMP/pkt.out" 2>/dev/null | tr '\n' ' ')"
+fi
+pp="$(cd "$PKT" && $TO "$CC" src/main.con --check predictable 2>&1 | grep -E 'function\(s\) failed' | tail -1)"
+if [ "$pp" = "1 function(s) failed, 16 passed" ]; then
+  ok "examples/packet stays predictable with the owner-bound path ($pp; main fails for I/O)"
+else
+  no "examples/packet's predictable profile changed: $pp"
+fi
+
 echo
 echo "VIEW-LIFETIME: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -1,0 +1,19 @@
+// R-0483, program side: the view crosses the package boundary with its owner; there is no
+// buffer argument to substitute.
+mod bound_xpkg_app {
+    import bound_xpkg_lib.{header};
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(42); a.push(43);
+        match header(a) {
+            Result::Ok { value } => {
+                let got: Int = match value.byte(0) { Option::Some { value } => value as Int, Option::None => 0 };
+                destroy(value.release());
+                return got;                    // 42
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

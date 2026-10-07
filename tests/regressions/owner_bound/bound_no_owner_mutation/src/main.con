@@ -1,0 +1,16 @@
+// R-0483 (rejected): the owner of a BoundView is not reachable for mutation while bound.
+mod bound_no_owner_mutation {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new(); a.push(1);
+        match BoundView::bind(a, 0, 1) {
+            Result::Ok { value } => {
+                let ok: bool = value.owner.set(0, 9);
+                destroy(value.release());
+                return 0;
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

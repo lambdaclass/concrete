@@ -1,0 +1,17 @@
+// R-0483: an owner-bound view reads its own owner — zero copy, no buffer argument.
+mod bound_read {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(10); a.push(11); a.push(12);
+        match BoundView::bind(a, 1, 2) {
+            Result::Ok { value } => {
+                let got: Int = match value.byte(0) { Option::Some { value } => value as Int, Option::None => 0 };
+                destroy(value.release());
+                return got;                    // 11
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

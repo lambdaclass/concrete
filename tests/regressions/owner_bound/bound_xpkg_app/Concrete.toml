@@ -1,0 +1,6 @@
+[package]
+name = "bound_xpkg_app"
+version = "0.1.0"
+
+[dependencies]
+bound_xpkg_lib = { path = "../bound_xpkg_lib" }

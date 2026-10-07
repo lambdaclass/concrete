@@ -1,0 +1,17 @@
+// R-0483 (rejected): there is no way to hand a BoundView a different buffer to read.
+mod bound_no_buffer_argument {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new(); a.push(1);
+        let mut b: Bytes = Bytes::new(); b.push(9);
+        match BoundView::bind(a, 0, 1) {
+            Result::Ok { value } => {
+                let got: Int = match value.byte(&b, 0) { Option::Some { value } => value as Int, Option::None => 0 };
+                destroy(value.release()); destroy(b);
+                return got;
+            },
+            Result::Err { error } => { destroy(error); destroy(b); return 200; },
+        }
+    }
+}

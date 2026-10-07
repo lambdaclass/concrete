@@ -1,0 +1,12 @@
+// R-0483 (rejected): safe code can OBTAIN a pointer value through BytesRaw, but reading through it
+// needs Unsafe — the pointer escaping the borrow is an audited obligation at the dereference.
+mod raw_pointer_needs_unsafe {
+    import std.bytes.{Bytes, BytesRaw};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new(); a.push(7);
+        let raw: BytesRaw = a.raw_view();
+        destroy(a);
+        let p: *mut u8 = raw.ptr;
+        return (*p) as Int;
+    }
+}

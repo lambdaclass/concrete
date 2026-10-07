@@ -31,7 +31,10 @@ repair; that repair must flip those rows.
 copies and needs `Alloc`; `examples/packet`'s `extract_payload` copies into a caller-supplied
 buffer to stay allocation-free (keeping the example predictable).
 
-**What remains open.** Nothing binds a view to the owner it was made from. A repair may detect
+**Superseded for owner-bound use (slice 2): `std.numeric.BoundView`**, see `../owner_bound`.
+`ByteView` stays reusable coordinates and these rows stay true of it.
+
+**What remained open at slice 1.** Nothing binds a view to the owner it was made from. A repair may detect
 substitution at runtime (owner identity checked per access) or reject it statically (scoped
 access); either flips the four "accepted by contract" rows deliberately, and its cost in
 copying, allocation and per-access checks must be measured on `examples/packet`.

@@ -35,7 +35,7 @@
 
 mod packet {
 
-    import std.numeric.{ByteCursor, CursorError};
+    import std.numeric.{ByteCursor, CursorError, BoundView};
     import std.bytes.{Bytes};
 
     // ---- Result types (Copy, stack-only, no heap) ----
@@ -188,6 +188,41 @@ mod packet {
         return copy_len;
     }
 
+    // ---- Owner-bound payload access (R-0483) ----
+    //
+    // The payload as a view that OWNS the packet buffer: reads take no buffer argument, so the
+    // payload cannot be read against a different buffer (enforced statically), and the buffer
+    // cannot be mutated or freed while the view holds it. No bytes are copied and nothing is
+    // allocated; `release` hands the buffer back for reuse. Compare `extract_payload`, which
+    // copies into a caller-supplied buffer.
+    fn payload_view(buf: Bytes, payload_len: u64) -> Result<BoundView, Bytes> {
+        let max: u64 = 1490;
+        let n: u64 = if payload_len < max { payload_len } else { max };
+        return BoundView::bind(buf, 10, n);
+    }
+
+    fn payload_sum(v: &BoundView) -> u64 {
+        let mut sum: u64 = 0;
+        for (let mut i: u64 = 0; i < v.len(); i = i + 1) {
+            match v.byte(i) {
+                Option::Some { value } => { sum = sum + (value as u64); },
+                Option::None => {},
+            }
+        }
+        return sum;
+    }
+
+    fn copied_sum(out: &Bytes, n: u64) -> u64 {
+        let mut sum: u64 = 0;
+        for (let mut i: u64 = 0; i < n; i = i + 1) {
+            match out.get(i) {
+                Option::Some { value } => { sum = sum + (value as u64); },
+                Option::None => {},
+            }
+        }
+        return sum;
+    }
+
     // ---- Reporting: with(Console) only ----
 
     fn type_label(t: u8) with(Console) {
@@ -335,6 +370,17 @@ mod packet {
             print("  extracted ");
             print(extracted as Int);
             println(" bytes");
+            // The same payload read in place through an owner-bound view: no copy.
+            let copied: u64 = copied_sum(&payload_out, extracted);
+            match payload_view(buf, r3.payload_bytes as u64) {
+                Result::Ok { value } => {
+                    let bound: u64 = payload_sum(&value);
+                    if bound != copied { failures = failures + 1; }
+                    println("  owner-bound view agrees with the copy");
+                    buf = value.release();
+                },
+                Result::Err { error } => { buf = error; failures = failures + 1; },
+            }
         }
         if r3.error != 0 { failures = failures + 1; }
 

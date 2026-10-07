@@ -1,0 +1,6 @@
+// R-0483, dependency side: a library returns a view that OWNS the buffer it was given.
+mod bound_xpkg_lib {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    pub fn header(buf: Bytes) -> Result<BoundView, Bytes> { return BoundView::bind(buf, 0, 2); }
+}

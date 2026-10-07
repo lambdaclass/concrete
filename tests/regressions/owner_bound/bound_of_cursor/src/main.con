@@ -1,0 +1,20 @@
+// R-0483: coordinates from a cursor, bound to an owner, read that owner.
+mod bound_of_cursor {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView, ByteView, ByteCursor};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2); a.push(3); a.push(4);
+        let mut cur: ByteCursor = ByteCursor::over(&a);
+        let s: u64 = match cur.skip(&a, 3) { Result::Ok { value } => value, Result::Err { error } => 0 };
+        let v: ByteView = ByteView::of_cursor(2, &cur);
+        match BoundView::of_view(a, &v) {
+            Result::Ok { value } => {
+                let got: Int = match value.byte(0) { Option::Some { value } => value as Int, Option::None => 0 };
+                destroy(value.release());
+                return got;                    // 3 (a[2])
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

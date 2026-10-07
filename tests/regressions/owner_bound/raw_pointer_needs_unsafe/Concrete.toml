@@ -1,0 +1,3 @@
+[package]
+name = "raw_pointer_needs_unsafe"
+version = "0.1.0"

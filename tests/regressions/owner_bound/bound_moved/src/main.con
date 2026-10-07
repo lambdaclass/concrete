@@ -1,0 +1,19 @@
+// R-0483: moving a BoundView (into a function and back) moves its owner with it.
+mod bound_moved {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn second(v: BoundView) -> BoundView { return v; }
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(5); a.push(13); a.push(21);
+        match BoundView::bind(a, 0, 3) {
+            Result::Ok { value } => {
+                let w: BoundView = second(value);
+                let got: Int = match w.byte(1) { Option::Some { value } => value as Int, Option::None => 0 };
+                destroy(w.release());
+                return got;                    // 13
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}

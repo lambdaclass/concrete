@@ -1,0 +1,24 @@
+// R-0483: mutation needs the owner back; release, mutate, rebind — the new binding sees the new bytes.
+mod bound_release_rebind {
+    import std.bytes.{Bytes};
+    import std.numeric.{BoundView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2);
+        match BoundView::bind(a, 0, 2) {
+            Result::Ok { value } => {
+                let mut owner: Bytes = value.release();
+                let ok: bool = owner.set(1, 202);
+                match BoundView::bind(owner, 0, 2) {
+                    Result::Ok { value } => {
+                        let got: Int = match value.byte(1) { Option::Some { value } => value as Int, Option::None => 0 };
+                        destroy(value.release());
+                        return got;            // 202
+                    },
+                    Result::Err { error } => { destroy(error); return 201; },
+                }
+            },
+            Result::Err { error } => { destroy(error); return 200; },
+        }
+    }
+}
