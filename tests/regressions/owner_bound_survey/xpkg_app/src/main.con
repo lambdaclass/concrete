@@ -1,0 +1,19 @@
+// R-0483 survey, program side: a view obtained from another package is read against a
+// different buffer. The package boundary carries coordinates only.
+mod xpkg_app {
+    import xpkg_lib.{header_view};
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2);
+        let mut b: Bytes = Bytes::new();
+        b.push(81); b.push(82);
+        let got: Int = match header_view(&a) {
+            Option::Some { value } => match value.byte(&b, 0) { Option::Some { value } => value as Int, Option::None => 0 },
+            Option::None => 200,
+        };
+        destroy(a); destroy(b);
+        return got;             // 81: b's byte through a's view, across the boundary
+    }
+}

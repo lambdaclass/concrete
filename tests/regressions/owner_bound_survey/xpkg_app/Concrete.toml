@@ -1,0 +1,6 @@
+[package]
+name = "xpkg_app"
+version = "0.1.0"
+
+[dependencies]
+xpkg_lib = { path = "../xpkg_lib" }

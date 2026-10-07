@@ -1,0 +1,6 @@
+// R-0483 survey, dependency side: a library hands out a view of the caller's buffer.
+mod xpkg_lib {
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+    pub fn header_view(buf: &Bytes) -> Option<ByteView> { return ByteView::new(0, 2, buf); }
+}

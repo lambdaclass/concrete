@@ -64,7 +64,7 @@ check_runs() {
   [ -d "$d" ] || { no "$label: fixture directory is missing"; return; }
   # Build OUT OF TREE. `concrete build` otherwise drops a binary next to the sources,
   # and a gate that litters the working tree gets its droppings committed eventually.
-  local out="$TMP/$1"
+  local out="$TMP/$(basename "$1")"   # basename: a fixture may live outside $FIX
   if ! (cd "$d" && $TO "$CC" build . -o "$out" >/dev/null 2>&1); then
     no "$label: expected it to build, and it did not"
     return
@@ -106,6 +106,17 @@ echo "=== the coordinate contract is stated, not silently weakened ==="
 # not, which is the substitution that mattered. Asserting the documented behaviour here
 # keeps a future "fix" from re-adding a half-brand without also re-deciding the contract.
 check_runs byteview_wrong_buffer_same_length 91 "a view applies to any in-bounds buffer, by contract"
+
+echo "=== R-0483 owner-bound survey: what is valid, rejected, detected, or accepted today ==="
+# The survey that the owner-bound repair is measured against (tests/regressions/owner_bound_survey).
+# VALID: moving the owner keeps a view's storage, so the read is correct.
+check_runs ../owner_bound_survey/owner_moved 11 "moving the owner keeps the view valid (same storage)"
+# ACCEPTED BY CONTRACT, pinned so a repair flips them deliberately: nothing binds a view to the
+# owner it was made from — not a returned view past its owner's scope, not a cursor-derived
+# view, not a view handed across a package boundary.
+check_runs ../owner_bound_survey/view_outlives_scope 71 "an escaped view reads an unrelated owner (no owner identity)"
+check_runs ../owner_bound_survey/of_cursor_substitution 51 "a cursor-derived view reads a different buffer (no owner identity)"
+check_runs ../owner_bound_survey/xpkg_app 81 "a view from another package reads a different buffer (no owner identity)"
 
 echo
 echo "VIEW-LIFETIME: PASS=$PASS FAIL=$FAIL"

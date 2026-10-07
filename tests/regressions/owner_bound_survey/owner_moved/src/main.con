@@ -1,0 +1,17 @@
+// R-0483 survey: MOVING the owner keeps a view valid — the bytes are the same storage.
+mod owner_moved {
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(10); a.push(11); a.push(12);
+        let v: ByteView = match ByteView::new(1, 2, &a) {
+            Option::Some { value } => value,
+            Option::None => { destroy(a); return 200; },
+        };
+        let moved: Bytes = a;   // ownership moves; storage does not
+        let got: Int = match v.byte(&moved, 0) { Option::Some { value } => value as Int, Option::None => 0 };
+        destroy(moved);
+        return got;             // 11 expected
+    }
+}

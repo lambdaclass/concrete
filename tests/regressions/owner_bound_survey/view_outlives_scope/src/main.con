@@ -1,0 +1,23 @@
+// R-0483 survey: a view is coordinates, so it can be returned past its owner's scope. Using it
+// later still requires A buffer; nothing ties it to the one it was made from.
+mod view_outlives_scope {
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+    fn make() with(Alloc) -> Option<ByteView> {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2); a.push(3);
+        let v: Option<ByteView> = ByteView::new(0, 3, &a);
+        destroy(a);
+        return v;               // owner destroyed; the coordinates escape
+    }
+    fn main() with(Alloc) -> Int {
+        let mut other: Bytes = Bytes::new();
+        other.push(70); other.push(71); other.push(72);
+        let got: Int = match make() {
+            Option::Some { value } => match value.byte(&other, 1) { Option::Some { value } => value as Int, Option::None => 0 },
+            Option::None => 200,
+        };
+        destroy(other);
+        return got;             // 71: the escaped view reads an unrelated owner
+    }
+}

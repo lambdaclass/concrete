@@ -1,0 +1,18 @@
+// R-0483 survey: ByteView::of_cursor builds coordinates from a cursor; reading the view against a
+// different buffer than the cursor walked is accepted.
+mod of_cursor_substitution {
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView, ByteCursor};
+    fn main() with(Alloc) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2); a.push(3); a.push(4);
+        let mut b: Bytes = Bytes::new();
+        b.push(51); b.push(52); b.push(53); b.push(54);
+        let mut cur: ByteCursor = ByteCursor::over(&a);
+        let s: u64 = match cur.skip(&a, 2) { Result::Ok { value } => value, Result::Err { error } => 0 };
+        let v: ByteView = ByteView::of_cursor(0, &cur);
+        let got: Int = match v.byte(&b, 0) { Option::Some { value } => value as Int, Option::None => 0 };
+        destroy(a); destroy(b);
+        return got;             // b's byte: the cursor's buffer is not part of the view
+    }
+}
