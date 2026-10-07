@@ -11,13 +11,15 @@
 
 </div>
 
-**Concrete is a systems programming language that checks resource ownership,
-makes external authority explicit in function signatures, and distinguishes
-what is proved from what must be trusted.**
+**Concrete is a systems programming language without garbage collection that
+checks resource ownership, makes external authority explicit in function
+signatures, and supports machine-checked proofs for a defined subset of
+code—with remaining assumptions made explicit.**
 
-It compiles to native code without a garbage collector. Its compiler is written
-in Lean 4, and its verification tools can attach Lean-checked evidence to a
-supported subset of programs.
+It compiles to native code. Linear ownership makes resource management explicit
+and compiler-checked; its verification tools attach Lean-checked evidence to
+supported code. Proofs, tests, runtime checks and trusted assumptions remain
+distinct. The compiler itself is written in Lean 4.
 
 **Status: experimental.** The language, standard library and tooling are still
 evolving. Concrete is not a fully verified compiler, and a successful build is
