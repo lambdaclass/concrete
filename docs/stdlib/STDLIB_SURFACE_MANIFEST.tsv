@@ -251,6 +251,12 @@ numeric	fits	no	borrows	infallible	none	pure-core	gated	(&self, buf: &Bytes) -> 
 numeric	cursor	no	borrows	option	none	pure-core	gated	(&self, buf: &Bytes) -> Option<ByteCursor>	ByteView
 numeric	byte	no	borrows	option	none	pure-core	gated	(&self, buf: &Bytes, i: u64) -> Option<u8>	ByteView
 numeric	to_text	yes	borrows	option	Alloc	hosted-effect	gated	(&self, buf: &Bytes) with(Alloc) -> Option<Text>	ByteView
+numeric	bind	no	constructs	result	none	pure-core	gated	(owner: Bytes, off: u64, len: u64) -> Result<BoundView, Bytes>	BoundView
+numeric	of_view	no	constructs	result	none	pure-core	gated	(owner: Bytes, view: &ByteView) -> Result<BoundView, Bytes>	BoundView
+numeric	len	no	borrows	infallible	none	pure-core	gated	(&self) -> u64	BoundView
+numeric	byte	no	borrows	option	none	pure-core	gated	(&self, i: u64) -> Option<u8>	BoundView
+numeric	coords	no	borrows	infallible	none	pure-core	gated	(&self) -> ByteView	BoundView
+numeric	release	no	consumes	infallible	none	pure-core	gated	(self) -> Bytes	BoundView
 numeric	from_raw	no	constructs	infallible	Unsafe	trusted-boundary	gated	(data: *mut u8, len: u64) with(Unsafe) -> ByteWriter	ByteWriter
 numeric	pos	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	ByteWriter
 numeric	remaining	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	ByteWriter
