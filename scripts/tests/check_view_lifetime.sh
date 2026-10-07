@@ -114,7 +114,7 @@ check_runs ../owner_bound_survey/owner_moved 11 "moving the owner keeps the view
 # ACCEPTED BY CONTRACT, pinned so a repair flips them deliberately: nothing binds a view to the
 # owner it was made from — not a returned view past its owner's scope, not a cursor-derived
 # view, not a view handed across a package boundary.
-check_runs ../owner_bound_survey/view_outlives_scope 71 "an escaped view reads an unrelated owner (no owner identity)"
+check_runs ../owner_bound_survey/view_outlives_scope 71 "escaped view COORDINATES read an unrelated owner (integers escape, not a reference; no owner identity)"
 check_runs ../owner_bound_survey/of_cursor_substitution 51 "a cursor-derived view reads a different buffer (no owner identity)"
 check_runs ../owner_bound_survey/xpkg_app 81 "a view from another package reads a different buffer (no owner identity)"
 
