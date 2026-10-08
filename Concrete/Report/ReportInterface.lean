@@ -37,25 +37,60 @@ partial def countModulePure (opaqueSet : List String) (qualPfx : String) (m : CM
 partial def countModuleExterns (m : CModule) : Nat :=
   m.externFns.length + m.submodules.foldl (fun acc sub => acc + countModuleExterns sub) 0
 
-/-- Build capability "why" trace lines for a function.
-    For each concrete cap the function requires, find which direct callees
-    contribute that cap. -/
-def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String) : List String :=
+/-- Every linker alias in a module tree (import renames), for explanations that resolve a
+    callee spelling without the calling module at hand. -/
+partial def allLinkerAliases (m : CModule) : List (String × String) :=
+  m.linkerAliases ++ m.submodules.foldl (fun acc sub => acc ++ allLinkerAliases sub) []
+
+/-- One callee that supplies a capability to its caller: how the call resolved, and to what. -/
+structure CapSupplier where
+  callee : String
+  /-- "program", "dependency", "intrinsic" (no definition, a compiler intrinsic) -/
+  kind : String
+  /-- Dependency definitions the spelling resolves to (one, or several when ambiguous). -/
+  targets : List String := []
+
+/-- THE ONE producer of "which callees supply `cap`" for every surface (caps text, authority
+    text, diagnostics-json `why`). A callee resolves like a call does: a program definition
+    first, then a DEPENDENCY definition from the summary's index (R-0484 R10: the explanation
+    follows the dependency instead of stopping at the package boundary), then an intrinsic. -/
+def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String × CapSet)))
+    (f : CFnDef) (cap : String) (aliases : List (String × String) := []) : List CapSupplier :=
+  -- An import alias (`helper_a as ha`) names its target through the calling module's linker
+  -- aliases, exactly as the summary resolves it; the explanation shows the spelling written.
+  (collectCallsStmts f.body).eraseDups.filterMap fun written =>
+    let c := (aliases.lookup written).getD written
+    if (lookup.find? (·.1 == c)).isSome then
+      match lookupCalleeCap lookup c with
+      | some cs => if Capabilities.capSetHas cs cap then some { callee := written, kind := "program" } else none
+      | none => none
+    else
+      let ds := deps.getD c #[]
+      if !ds.isEmpty then
+        let hits := ds.toList.filter fun (_, cs) => Capabilities.capSetHas cs cap
+        if hits.isEmpty then none else some { callee := written, kind := "dependency", targets := hits.map (·.1) }
+      else match lookupCalleeCap lookup c with
+        | some cs => if Capabilities.capSetHas cs cap then some { callee := written, kind := "intrinsic" } else none
+        | none => none
+
+def CapSupplier.render (s : CapSupplier) : String :=
+  match s.kind, s.targets with
+  | "dependency", [q] => s!"{q} (dependency)"
+  | "dependency", qs => s!"{s.callee} (dependency: {" or ".intercalate qs})"
+  | "intrinsic", _ => s!"{s.callee} (intrinsic)"
+  | _, _ => s.callee
+
+/-- Capability "why" trace lines for a function: for each concrete capability it requires,
+    the callees that supply it. -/
+def capWhyTrace (lookup : CapLookup) (f : CFnDef) (indent : String)
+    (deps : Std.HashMap String (Array (String × CapSet)) := {})
+    (aliases : List (String × String) := []) : List String :=
   let (concreteCaps, _) := f.capSet.normalize
-  if concreteCaps.isEmpty then []
-  else
-    let callees := collectCallsStmts f.body |>.eraseDups
-    concreteCaps.filterMap fun cap =>
-      -- Find callees that require this cap
-      let contributors := callees.filter fun callee =>
-        match lookupCalleeCap lookup callee with
-        | some cs => Capabilities.capSetHas cs cap
-        | none => false
-      let contribStr := if contributors.isEmpty then "<- declared"
-        else
-          let tagged := contributors.map fun c => s!"{c}{calleeTag lookup c}"
-          s!"<- calls {", ".intercalate tagged}"
-      some s!"{indent}    {padRight cap 10} {contribStr}"
+  concreteCaps.map fun cap =>
+    let sup := capSuppliers lookup deps f cap aliases
+    let contribStr := if sup.isEmpty then "<- declared"
+      else s!"<- calls {", ".intercalate (sup.map (·.render))}"
+    s!"{indent}    {padRight cap 10} {contribStr}"
 
 /-- How a function's authority reads in the summary.
 
@@ -103,7 +138,7 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
                    else ppAuthority f.capSet unknownFx (assumptions.noExternalAuthority sm f.capSet)
       | none => ppAuthority f.capSet unknownFx
     let mainLine := s!"{indent}  {pubStr}{f.name} : {capsStr}"
-    let traceLines := capWhyTrace lookup f indent
+    let traceLines := capWhyTrace lookup f indent assumptions.depCallees m.linkerAliases
     let qual := assumesLine assumptions idx (qualPrefix ++ "." ++ f.name) f.capSet (indent ++ "      ")
     acc ++ [mainLine] ++ qual ++ traceLines) []
   let trustedExterns := m.externFns.filter fun (_, _, _, t) => t
@@ -336,7 +371,8 @@ partial def unsafeCounts (m : CModule)
     (unsafeFns, ptrFns, externFns, trustedExterns, trustedFns)
 
 /-- Analyze what a trusted function wraps — scan its body for unsafe operations. -/
-def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String :=
+def trustBoundaryAnalysis (externNames : List String) (f : CFnDef)
+    (intrinsicNames : List String := []) : List String :=
   let callees := collectCallsStmts f.body |>.eraseDups
   let ops : List String := []
   -- Check for raw pointer operations in body
@@ -344,7 +380,8 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String
   -- Check for calls to extern functions
   let externCalls := callees.filter fun c => externNames.contains c
   let ops := if externCalls.isEmpty then ops
-    else ops ++ externCalls.map fun c => s!"extern {c}"
+    else ops ++ externCalls.map fun c =>
+      if intrinsicNames.contains c then s!"compiler intrinsic {c}" else s!"extern {c}"
   -- Check for calls to functions with Unsafe capability
   -- (this is approximate — we check if callee name contains known unsafe patterns)
   let ops := if callees.any (fun c => c == "alloc" || c == "free") then
@@ -353,15 +390,23 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef) : List String
   if ops.isEmpty then ["(safe body — no raw ops detected)"]
   else ops
 
+/-- Names of every compiler-intrinsic declaration in a module tree. -/
+partial def intrinsicDeclNames (m : CModule) : List String :=
+  (m.externFns.filterMap fun (n, _, _, _) => if Assumptions.isIntrinsicDecl m n then some n else none)
+    ++ m.submodules.foldl (fun acc sub => acc ++ intrinsicDeclNames sub) []
+
 partial def unsafeReportModule (externNames : List String)
-    (m : CModule) (indent : String) : Option String :=
+    (m : CModule) (indent : String) (intrinsicNames : List String := []) : Option String :=
   let unsafeFns := m.functions.filter fun f => hasUnsafeCap f.capSet
-  let externFns := m.externFns.filter fun (_, _, _, t) => !t
-  let trustedExternFns := m.externFns.filter fun (_, _, _, t) => t
+  -- Compiler intrinsic declarations are listed on their own: no C code stands behind them.
+  let intrinsicDecls := m.externFns.filter fun (n, _, _, _) => Assumptions.isIntrinsicDecl m n
+  let foreignFns := m.externFns.filter fun (n, _, _, _) => !Assumptions.isIntrinsicDecl m n
+  let externFns := foreignFns.filter fun (_, _, _, t) => !t
+  let trustedExternFns := foreignFns.filter fun (_, _, _, t) => t
   let ptrFns := m.functions.filter fnUsesRawPtrs
   let trustedFns := m.functions.filter fun f => f.isTrusted
-  let subReports := m.submodules.filterMap (unsafeReportModule externNames · (indent ++ "  "))
-  if unsafeFns.isEmpty && externFns.isEmpty && trustedExternFns.isEmpty && ptrFns.isEmpty && trustedFns.isEmpty && subReports.isEmpty then
+  let subReports := m.submodules.filterMap (unsafeReportModule externNames · (indent ++ "  ") intrinsicNames)
+  if unsafeFns.isEmpty && externFns.isEmpty && trustedExternFns.isEmpty && intrinsicDecls.isEmpty && ptrFns.isEmpty && trustedFns.isEmpty && subReports.isEmpty then
     none
   else
     let lines : List String := [s!"{indent}module {m.name}:"]
@@ -384,7 +429,11 @@ partial def unsafeReportModule (externNames : List String)
     -- every caller but not proved about the C code. Each one is listed with its site
     -- (the binding), its kind of trust, and the functions here whose own declarations
     -- rely on it, so a reader can see what an audit of the binding would have to cover.
-    let allExterns := m.externFns
+    let lines := if intrinsicDecls.isEmpty then lines
+      else lines ++ [s!"{indent}  Compiler intrinsic declarations (implemented by the compiler; not foreign assumptions):"] ++
+        intrinsicDecls.map fun (n, ps, rt, _) =>
+          s!"{indent}    fn {n}({ppTyList ps}) -> {tyToStr rt}  #[intrinsic = \"{((m.intrinsicDecls.lookup n).getD "")}\"]"
+    let allExterns := foreignFns
     let lines := if allExterns.isEmpty then lines
       else lines ++ [s!"{indent}  Foreign effect declarations (audited assumptions):"] ++
         allExterns.foldl (fun acc (n, _, _, t) =>
@@ -407,7 +456,7 @@ partial def unsafeReportModule (externNames : List String)
         let lines := lines ++ [s!"{indent}  Trust boundary analysis:"]
         let lines := if trustedStandalone.isEmpty then lines
           else trustedStandalone.foldl (fun lines f =>
-            let ops := trustBoundaryAnalysis externNames f
+            let ops := trustBoundaryAnalysis externNames f intrinsicNames
             lines ++ [s!"{indent}    trusted fn {f.name}:"] ++
               ops.map fun op => s!"{indent}      wraps: {op}"
           ) lines
@@ -416,7 +465,7 @@ partial def unsafeReportModule (externNames : List String)
           let methodLines := methods.foldl (fun acc f =>
             let shortName := if f.name.startsWith (implName ++ "_") then
               f.name.drop (implName.length + 1) else f.name
-            let ops := trustBoundaryAnalysis externNames f
+            let ops := trustBoundaryAnalysis externNames f intrinsicNames
             acc ++ [s!"{indent}      fn {shortName}:"] ++
               ops.map fun op => s!"{indent}        wraps: {op}"
           ) []
@@ -480,14 +529,43 @@ def inheritedAssumptionsSection (assumptions : Assumptions.Table) (programRoots 
   let attributionNote :=
     if ambiguous.isEmpty then ""
     else s!"\nPackage attribution: AMBIGUOUS for {ambiguous.length} declaration(s) — no package identity could be formed, so declarations with the same module and name in different packages cannot be told apart: " ++ ", ".intercalate (ambiguous.map (·.1.id.qualified))
+  -- Trusted MEMORY-SAFETY boundaries, named: the responsible function with its package, the
+  -- obligation it absorbs, the program functions whose conclusions rest on it, and one path.
+  let trusted := assumptions.trustedReached programRoots
+  let tLines : List String := trusted.toList.foldl (fun acc (f, users) =>
+    let path := match users[0]? with
+      | some u => [s!"    one path: {" -> ".intercalate (assumptions.explain u f.id.key)}"]
+      | none => []
+    acc ++ [s!"  {f.id.qualified}: trusted function, package {f.id.packageName}",
+            s!"    {assumptions.absorbsPhrase f.id.key}",
+            s!"    relied on by: {", ".intercalate (users.toList.map assumptions.displayOf)}"] ++ path) []
+  let tListing := if tLines.isEmpty then ""
+    else "\n\nTrusted memory-safety boundaries (assumed, not checked):\n" ++ "\n".intercalate tLines
+  -- Descriptor classification (R5): NOT checked by the compiler. Each reached foreign binding is
+  -- placed under the audit that covers it, or under "no audit" — never left out, so an empty
+  -- listing can only mean no foreign binding is reached.
+  let reached := assumptions.foreignReached programRoots
+  let byCov (c : Assumptions.DescriptorCoverage) := reached.toList.filter (·.1.descriptorCoverage == c)
+  let names (xs : List (Assumptions.Facts × Array String)) := ", ".intercalate (xs.map (·.1.id.qualified))
+  let group (c : Assumptions.DescriptorCoverage) (label : String) : List String :=
+    let xs := byCov c
+    if xs.isEmpty then [] else [s!"  {label}: {names xs}"]
+  let auditRef := "docs/language/HANDLE_CAPABILITIES_AUDIT.md, revised 2026-10-01; a document, not re-checked against current callers"
+  let dLines :=
+    ["Descriptor classification (R5): NOT CHECKED by the compiler. Encoding A has no typed descriptors, so which descriptor a foreign binding receives is an assumption."] ++
+    (if reached.isEmpty then ["  no foreign binding is reached, so no descriptor assumption is made"] else []) ++
+    group .auditedDescriptor s!"descriptor bindings covered by the std construction/caller audit (§3.1; {auditRef})" ++
+    group .auditedNoDescriptor s!"classified by that audit as taking no descriptor (§3.2–3.3)" ++
+    group .unaudited "covered by no audit (whether they receive descriptors is not established)"
+  let dListing := "\n\n" ++ "\n".intercalate dLines
   let coverage := depNote ++ "\n" ++ graphNote ++ attributionNote
-  listing ++ "\n\n" ++ coverage
+  listing ++ tListing ++ dListing ++ "\n\n" ++ coverage
 
 def unsafeReport (modules : List CModule) (pc : Concrete.ProofCore)
     (assumptions : Assumptions.Table := {}) (depsLoaded : Bool := false) : String :=
   let header := "=== Unsafe Signature Summary ==="
   let externNames := pc.externNames
-  let body := modules.filterMap (unsafeReportModule externNames · "")
+  let body := modules.filterMap (unsafeReportModule externNames · "" (modules.foldl (fun acc m => acc ++ intrinsicDeclNames m) []))
   let (unsafeCount, ptrCount, externCount, trustedExternCount, trustedCount) :=
     modules.foldl (fun (a, b, c, d, e) m =>
       let (a', b', c', d', e') := unsafeCounts m

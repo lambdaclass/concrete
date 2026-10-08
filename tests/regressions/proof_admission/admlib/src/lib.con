@@ -1,0 +1,19 @@
+// R-0484 R10 proof-admission fixture, dependency side. Proof admission reads the shared
+// assumption summary; each shape below is one row of check_proof_admission.sh.
+mod admlib {
+    // A foreign binding declaring no effects. Its declaration is ASSUMED honest.
+    extern fn abs(x: i32) with() -> i32;
+
+    // A trusted wrapper absorbs `Unsafe`, so callers declare nothing — and still reach `abs`.
+    pub trusted fn tabs(x: i32) -> i32 {
+        return abs(x);
+    }
+
+    // An indirect call: its target is not known statically.
+    pub fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+        return f(x);
+    }
+
+    // Genuinely assumption-free, across the package boundary.
+    pub fn add(a: i32, b: i32) -> i32 { return a + b; }
+}

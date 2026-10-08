@@ -48,9 +48,10 @@ weaker meaning would keep the misleading claim alive. Replace it with:
 | v2 field | meaning |
 |---|---|
 | `no_external_authority` | no declared capability, complete call-graph coverage, and no foreign binding assumed. It is NOT purity: mutation through `&mut` arguments and what trusted code does are not excluded. |
-| `coverage_complete`, `unresolved_indirect_calls` | whether every call path was resolved; the gaps when not |
-| `assumed_foreign_bindings` | the foreign bindings the function may reach, with declared effects; their honesty is assumed |
+| `coverage_complete`, `unresolved_indirect_calls` | whether every call path was resolved; the gaps when not, each with a `kind`: `indirect-call` (through a fn-typed binding), `unloaded-callee` (names no analysed definition) or `type-parameter-dispatch` (a method call on a type parameter) |
+| `assumed_foreign_bindings` | the foreign bindings the function may reach, with declared effects; their honesty is assumed. Each carries `descriptor_audit`: `std-audit-descriptor` (in the construction/caller audit's descriptor table), `std-audit-no-descriptor` (audited as taking none) or `none` (no audit covers it). Descriptor classification itself is not compiler-checked under encoding A. Additive. |
 | `trusted_boundaries_reached` | how many trusted boundaries its memory safety rests on |
+| `trusted_boundaries` | the same boundaries, named: `declaration`, `package_name`, and `absorbs` — the raw operations and foreign bindings the trusted body performs or calls (from the checker's trust edges), or `null` when that could not be determined. Additive; the version stays 2. `--report assumptions` carries the same `absorbs` on each trusted-boundary entry, and `--report unsafe` lists each reached boundary with its dependents and one path. |
 | `assumptions_computed`, `dependencies_analysed` | whether the facts above were computed, and with dependencies loaded |
 
 Extern `capability` facts report what calling the binding requires (declared effects, plus
@@ -59,6 +60,16 @@ Extern `capability` facts report what calling the binding requires (declared eff
 `no_declared_capability`, which is exactly what it measures. Human-readable reports follow the
 same rule: an empty declared set prints `(none)`, and only a summary-backed conclusion prints
 `(no external authority)`; no report prints `(pure)`.
+
+`capability` facts' `why` entries carry `suppliers`: each callee that supplies the capability,
+with `kind` (`program`, `dependency` or `intrinsic`) and, for a dependency, the `targets` it
+resolves to (through import aliases, as the assumption summary resolves calls). The caps and
+authority text render from the same producer. Additive.
+
+`eligibility` facts carry `admissible` and `admission_reasons`. This is the proof-admission
+verdict, which is separate from extractability; it is read from the same assumption summary
+(see `docs/verification/EFFECT_PROOF_BOUNDARIES.md` §4.2). The field is additive, so the
+version stays 2.
 
 ## Off-limits to consumers (compiler internals)
 

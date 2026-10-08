@@ -1,0 +1,13 @@
+// Bug 077 (OPEN), report side: the relative call still resolves for the assumption summary, so a
+// foreign binding reached through it is listed for the caller — the report is not falsely complete
+// even though the program cannot be built. See docs/bugs/077.
+mod tb {
+    mod a {
+        mod util {
+            extern fn abs(x: i32) with() -> i32;
+            pub trusted fn poke(x: i32) -> i32 { return abs(x); }
+        }
+        pub fn call(x: i32) -> i32 { return util::poke(x); }
+    }
+    fn main() -> i32 { return a::call(0 - 1) - 1; }
+}

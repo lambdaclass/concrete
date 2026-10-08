@@ -728,6 +728,21 @@ jobs:
       - name: "Assumption summaries (R-0484 R10 — what each function may reach, with provenance and explicit completeness)"
         run: bash scripts/tests/check_assumption_summary.sh
 
+      - name: "Proof admission (R-0484 R10 — admission reads the shared assumption summary; unknown never admits)"
+        run: bash scripts/tests/check_proof_admission.sh
+
+      - name: "Trusted boundaries (R-0484 R10 — each trusted memory-safety boundary named, with its absorbed obligation and dependents)"
+        run: bash scripts/tests/check_trusted_boundaries.sh
+
+      - name: "Descriptor coverage (R-0484 R10/R5 — descriptor classification is unchecked; each binding's audit coverage is explicit)"
+        run: bash scripts/tests/check_descriptor_coverage.sh
+
+      - name: "Capability explanations (R-0484 R10 — explanations follow dependency summaries and name the dependency callee)"
+        run: bash scripts/tests/check_capability_explanations.sh
+
+      - name: "Bug 077 contained (OPEN — the build refuses it, reports stay complete-or-honest, no R-0484 case depends on it)"
+        run: bash scripts/tests/check_bug077_contained.sh
+
       - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
         run: bash scripts/tests/check_gates_for_diff.sh
 

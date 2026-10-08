@@ -435,6 +435,9 @@ structure ExternFnDecl where
       an omission becomes indistinguishable from a deliberate claim). `some .empty`
       — written `with()` — is the audited claim that the binding has no effects. -/
   capSet : Option CapSet := none
+  /-- `#[intrinsic = "name"]`: a bodiless declaration the COMPILER implements (`std.mem.sizeof`).
+      Not a foreign binding: no C code stands behind it, so it is no foreign assumption. -/
+  intrinsic : Option String := none
   span : Span := default
   deriving Repr
 

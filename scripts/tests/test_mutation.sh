@@ -1210,11 +1210,95 @@ MUT_NEW+=("  declared.isEmpty && (s.complete || true) && (t.foreignFacts s).isEm
 MUT_DESC+=("qualification: effect-free is claimed past an unresolved call")
 gate_for_last "scripts/tests/check_assumption_summary.sh"
 
+# 86–91. R10 proof admission reads the shared assumption summary. Each family removes one input
+# the admission judgment depends on; check_proof_admission.sh refuses an admitted function that
+# reaches what was removed. The judgment's own #guards (ProofCore) do not see these: they sit in
+# the summary's construction, its wiring into extraction, and the admission predicate.
+MUT_FILE+=("Main.lean")
+MUT_OLD+=("      Assumptions.forProgram fullValidCore.coreModules depModules")
+MUT_NEW+=("      Assumptions.forProgram fullValidCore.coreModules [] -- MUTATION: dependencies missing from the summary")
+MUT_DESC+=("proof admission: the summary is built without the program's dependencies")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("      if bs.isEmpty && ts.isEmpty && !isIntrinsic name then")
+MUT_NEW+=("      if false && bs.isEmpty && ts.isEmpty && !isIntrinsic name then -- MUTATION: unresolved direct calls ignored")
+MUT_DESC+=("proof admission: a call naming no analysed definition no longer makes the summary incomplete")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.map fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps)")
+MUT_NEW+=("    ownGaps := ownGaps.set! i ((nd.indirect.toArray.filter fun _ => false).map (fun b => { site := nd.fn, siteKey := nd.fnKey, binding := b }) ++ unloadedGaps) -- MUTATION: indirect calls ignored")
+MUT_DESC+=("proof admission: an indirect call no longer makes the summary incomplete")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("            if !keys.contains r.key then keys := keys.push r.key")
+MUT_NEW+=("            if false && !keys.contains r.key then keys := keys.push r.key -- MUTATION: inherited assumption edge dropped")
+MUT_DESC+=("proof admission: a foreign binding reached through a callee is dropped from the summary")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("  e.eligible && e.admissionRefusals.isEmpty")
+MUT_NEW+=("  e.eligible -- MUTATION: admission ignores the summary's refusals")
+MUT_DESC+=("proof admission: every extractable function is admitted")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+MUT_FILE+=("Concrete/Proof/ProofCore.lean")
+MUT_OLD+=("  let admission : String → List AdmissionRefusal := admissionRefusalsOf assumptions admissionIdx")
+MUT_NEW+=("  let admission : String → List AdmissionRefusal := fun q => (admissionRefusalsOf assumptions admissionIdx q).filter (fun _ => false) -- MUTATION: extraction discards the summary's refusals")
+MUT_DESC+=("proof admission: extraction stops consulting the assumption summary")
+gate_for_last "scripts/tests/check_proof_admission.sh"
+
+# 92–94. R10 named trusted boundaries: a boundary's absorbed obligation loses its raw operations
+# or its foreign calls, or a boundary is listed as relying on itself. check_trusted_boundaries.sh
+# names each boundary's expected absorbed obligation and dependents.
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("    let raw := (edges.filter fun e => e.kind == .containsRawOp && e.modName == seg && e.fn == f.id.name)")
+MUT_NEW+=("    let raw := (edges.filter fun e => false && e.kind == .containsRawOp && e.modName == seg && e.fn == f.id.name) -- MUTATION: raw operations not absorbed")
+MUT_DESC+=("trusted boundaries: the raw operations a trusted body performs drop out of its absorbed obligation")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("          if r.key.startsWith \"foreign-binding:\" && (r.via == .callsBinding || r.via == .refersToBinding)")
+MUT_NEW+=("          if false && r.key.startsWith \"foreign-binding:\" && (r.via == .callsBinding || r.via == .refersToBinding) -- MUTATION: foreign calls not absorbed")
+MUT_DESC+=("trusted boundaries: the foreign bindings a trusted body calls drop out of its absorbed obligation")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
+MUT_FILE+=("Concrete/Report/AssumptionSummary.lean")
+MUT_OLD+=("      fn != self && ((t.fns.get? fn).map (·.reachesKey key)).getD false")
+MUT_NEW+=("      (fn != self || true) && ((t.fns.get? fn).map (·.reachesKey key)).getD false -- MUTATION: a boundary relies on itself")
+MUT_DESC+=("trusted boundaries: a boundary is listed among its own dependents (and unreached ones appear)")
+gate_for_last "scripts/tests/check_trusted_boundaries.sh"
+
+# 95. R5 descriptor coverage: bindings covered by no audit drop out of the report, so an empty
+# listing reads as checked. check_descriptor_coverage.sh requires factlib.putchar under "no audit".
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("    group .unaudited \"covered by no audit (whether they receive descriptors is not established)\"")
+MUT_NEW+=("    ([] : List String) -- MUTATION: unaudited bindings omitted")
+MUT_DESC+=("descriptor coverage: bindings no audit covers are left out of the report")
+gate_for_last "scripts/tests/check_descriptor_coverage.sh"
+
+# 96–97. R10 cross-package explanations: dependency callees stop being resolved (the explanation
+# stops at the package boundary again), or import aliases stop being followed.
+# check_capability_explanations.sh requires via_helpers' Console to name factlib.helper_a.
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("      if !ds.isEmpty then")
+MUT_NEW+=("      if false && !ds.isEmpty then -- MUTATION: dependency callees not resolved")
+MUT_DESC+=("capability explanations: a dependency callee no longer supplies a capability in the explanation")
+gate_for_last "scripts/tests/check_capability_explanations.sh"
+
+MUT_FILE+=("Concrete/Report/ReportInterface.lean")
+MUT_OLD+=("    let c := (aliases.lookup written).getD written")
+MUT_NEW+=("    let c := ((aliases.filter (fun _ => false)).lookup written).getD written -- MUTATION: import aliases not followed")
+MUT_DESC+=("capability explanations: a callee called through an import alias is not resolved")
+gate_for_last "scripts/tests/check_capability_explanations.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=85
+EXPECTED_MUTATIONS=97
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

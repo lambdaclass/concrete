@@ -82,6 +82,8 @@ Those belong in:
 - [073_generic_type_argument_arity_unchecked.md](073_generic_type_argument_arity_unchecked.md) — fixed 2026-10-01: `Box1<i32, bool>` for a one-parameter struct compiled with the extra argument dropped; Resolve now checks type-argument arity (E0113)
 - [074_duplicate_module_names_across_packages.md](074_duplicate_module_names_across_packages.md) — fixed 2026-10-04: two packages defining the same top-level module name failed only in LLVM validation, and report modes merged their declarations; `loadProject` now refuses the collision naming both packages
 - [075_policy_assumption_authority_checks_vacuous.md](075_policy_assumption_authority_checks_vacuous.md) — fixed 2026-10-06: `check_policy`/`check_assumptions` scraped only parenthesised report tokens and never saw a capability (and `Net` was not a capability); now read structured facts, validate names, and carry fail/pass controls
+- [076_proof_admission_blind_to_dependencies.md](076_proof_admission_blind_to_dependencies.md) — fixed 2026-10-06: proof admission used a program-only call graph, so indirect calls and foreign bindings inside dependencies, and type-parameter dispatch, were admitted as effect-free; now reads the shared assumption summary, with fixture, gate, #guards and mutations
+- [077_nested_submodule_relative_call_undefined_symbol.md](077_nested_submodule_relative_call_undefined_symbol.md) — OPEN: a call `util::poke` from `tb.a` into `tb.a.util` lowers to the undefined `@util_poke` (LLVM validation fails); the assumption summary over-resolves the same call
 
 ## Open Numbered Bugs
 

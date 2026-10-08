@@ -200,8 +200,14 @@ def authorityReport (modules : List CModule) (assumptions : Assumptions.Table :=
         -- Display bare names in chain output for readability
         let bareChain := chain.map fun n =>
           match n.splitOn "." |>.getLast? with | some b => b | none => n
-        let chainStr := if bareChain.length <= 1 then "  <- declared"
-          else s!"  <- {" -> ".intercalate bareChain}"
+        -- No program chain supplies `cap`: name the DEPENDENCY callee that does, from the one
+        -- supplier producer, before falling back to "declared" (R-0484 R10).
+        let depSupply := if bareChain.length > 1 then [] else
+          (capSuppliers (buildCapLookup modules) assumptions.depCallees f cap
+            (modules.foldl (fun acc m => acc ++ allLinkerAliases m) [])).filter (·.kind == "dependency")
+        let chainStr := if bareChain.length > 1 then s!"  <- {" -> ".intercalate bareChain}"
+          else if depSupply.isEmpty then "  <- declared"
+          else s!"  <- calls {", ".intercalate (depSupply.map (·.render))}"
         -- R10: the conclusion "this function exercises `cap`" rests on the foreign bindings that
         -- provide it, and on coverage; both are stated with it.
         let qual := match idx.get? qualName >>= assumptions.fns.get? with
@@ -1004,7 +1010,7 @@ structure ProofStatusEntry where
       the artifact is logically valid while it cannot justify the program-level claim.
       Rendering this is not optional — an unreported refusal is worse than an inert
       rule, because the verdict changes with nothing saying why. -/
-  admissible    : Bool := true
+  admissible    : Bool
   admissionReasons : List String := []
   unsupported   : List String  -- unsupported constructs (empty unless blocked)
   specName      : String       -- spec name (from registry or derived)
@@ -1082,8 +1088,11 @@ private partial def collectProofStatus
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , eligibilityReasons := gates, unsupported := unsup, specName := sName, proofName := pName
-    , admissible := match obl with | some o => o.admissible | none => true
-    , admissionReasons := match obl with | some o => o.admissionReasons | none => []
+    -- No obligation means no admission verdict was formed, which is not an admission.
+    , admissible := match obl with | some o => o.admissible | none => false
+    , admissionReasons := match obl with
+        | some o => o.admissionReasons
+        | none => ["no proof obligation was formed for this function, so no admission verdict exists"]
     , proofSource := pSrc, origin, coverage
     , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
     , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
@@ -1206,6 +1215,10 @@ private def renderProofStatusBody (e : ProofStatusEntry) (sourceMap : SourceMap)
     exists to express. -/
 private def admissionLine (e : ProofStatusEntry) : String :=
   if e.admissible then ""
+  -- A function that is not extractable, or is trusted, is not admitted either, and its state
+  -- line already says why. Repeating it as an admission refusal with no reason of its own
+  -- would present the same fact twice, the second time as unexplained.
+  else if e.admissionReasons.isEmpty && (match e.state with | .notEligible | .trusted => true | _ => false) then ""
   else
     let why := if e.admissionReasons.isEmpty then "no reason recorded"
                else ", ".intercalate e.admissionReasons
@@ -4852,6 +4865,10 @@ private def eligibilityToFact (e : EligibilityEntry) : Val :=
     ("exclusion_kind", .str exclusionStr),
     ("source_reasons", .arr (e.sourceReasons.map .str)),
     ("profile_reasons", .arr (e.profileReasons.map .str)),
+    -- ADMISSION is a separate judgment from eligibility (see `EligibilityEntry.admissible`):
+    -- an eligible function can still be refused admission as effect-free.
+    ("admissible", .bool e.admissible),
+    ("admission_reasons", .arr (e.admissionReasons.map .str)),
     ("loc", locToJson e.loc)
   ])
 
@@ -4993,14 +5010,26 @@ def assumptionsVal (assumptions : Assumptions.Table) (idx : Std.HashMap String S
       let foreign := (assumptions.foreignFacts s).toList.map fun f =>
         .obj [("declaration", .str f.id.qualified), ("package_name", .str f.id.packageName),
               ("effects", .arr ((f.effects.normalize.1 ++ f.effects.normalize.2).map .str)),
-              ("trusted_extern", .bool f.trustedExtern)]
+              ("trusted_extern", .bool f.trustedExtern),
+              -- R5: descriptor classification is not compiler-checked; this names the audit.
+              ("descriptor_audit", .str f.descriptorAuditTag)]
       [ ("assumptions_computed", .bool true),
         ("dependencies_analysed", .bool assumptions.dependenciesAnalysed),
         ("coverage_complete", .bool s.complete),
         ("unresolved_indirect_calls", .arr (s.gaps.toList.map fun g =>
-          .obj [("site", .str g.site), ("binding", .str g.binding)])),
+          -- The field name predates the other gap kinds; `kind` says which one this is.
+          .obj [("site", .str g.site), ("binding", .str g.binding), ("kind", .str g.kind)])),
         ("assumed_foreign_bindings", .arr foreign),
-        ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)) ]
+        ("trusted_boundaries_reached", .num (Int.ofNat s.trustedBoundaries.size)),
+        -- Named, with the obligation each absorbs (null: not determined or not computed).
+        ("trusted_boundaries", .arr (s.trustedBoundaries.toList.map fun k =>
+          let f? := assumptions.facts.get? k
+          .obj [("declaration", .str ((f?.map (·.id.qualified)).getD k)),
+                ("package_name", .str ((f?.map (·.id.packageName)).getD "")),
+                ("absorbs", if !assumptions.absorbedComputed then .null else
+                   match assumptions.absorbed.get? k with
+                   | some (some xs) => .arr (xs.toList.map .str)
+                   | _ => .null)])) ]
 
 open Json in
 /-- Convert an FnEffects record to a JSON fact. -/
@@ -5045,18 +5074,18 @@ def collectEffectsFacts (modules : List CModule) (locMap : FnLocMap := [])
 open Json in
 /-- Convert a per-function capability entry with why-traces to a JSON fact. -/
 private def capToFact (lookup : CapLookup) (assumptions : Assumptions.Table)
-    (idx : Std.HashMap String String) (qualName : String) (f : CFnDef) : Val :=
+    (idx : Std.HashMap String String) (qualName : String) (f : CFnDef)
+    (aliases : List (String × String) := []) : Val :=
   let (concreteCaps, _) := f.capSet.normalize
-  let callees := collectCallsStmts f.body |>.eraseDups
   let traces := concreteCaps.map fun cap =>
-    let contributors := callees.filter fun callee =>
-      match lookupCalleeCap lookup callee with
-      | some cs => Capabilities.capSetHas cs cap
-      | none => false
+    let sup := capSuppliers lookup assumptions.depCallees f cap aliases
     .obj [
       ("capability", .str cap),
-      ("source", .str (if contributors.isEmpty then "declared"
-        else ", ".intercalate contributors))
+      ("source", .str (if sup.isEmpty then "declared" else ", ".intercalate (sup.map (·.callee)))),
+      -- How each supplier resolved: a program function, a DEPENDENCY definition (named), or an
+      -- intrinsic. The same producer renders the caps and authority text.
+      ("suppliers", .arr (sup.map fun x => .obj [("callee", .str x.callee), ("kind", .str x.kind),
+          ("targets", .arr (x.targets.map .str))]))
     ]
   .obj ([
     ("kind", .str "capability"),
@@ -5074,7 +5103,7 @@ open Json in
 private partial def collectCapFactsModule (lookup : CapLookup) (assumptions : Assumptions.Table)
     (idx : Std.HashMap String String) (m : CModule) (modulePath : String := "") : List Val :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
-  let fnFacts := m.functions.map fun f => capToFact lookup assumptions idx (qualPrefix ++ "." ++ f.name) f
+  let fnFacts := m.functions.map fun f => capToFact lookup assumptions idx (qualPrefix ++ "." ++ f.name) f m.linkerAliases
   let externFacts := m.externFns.map fun (n, _, _, trusted) =>
     -- What CALLING the binding requires: its declared effects, plus Unsafe unless trusted. The
     -- declared effects are an assumption about C (R-0484 R10), never a checked fact.
@@ -5413,7 +5442,9 @@ private partial def traceCapability
     (capLookup : CapLookup)
     (locMap : FnLocMap)
     (fnName : String) (cap : String)
-    (visited : List String := []) (depth : Nat := 0) : List Val :=
+    (visited : List String := []) (depth : Nat := 0)
+    (deps : Std.HashMap String (Array (String × CapSet)) := {})
+    (aliases : List (String × String) := []) : List Val :=
   if depth > 20 then [.obj [("function", .str fnName), ("error", .str "depth limit")]]
   else if visited.contains fnName then [.obj [("function", .str fnName), ("error", .str "cycle")]]
   else
@@ -5444,14 +5475,17 @@ private partial def traceCapability
       -- Check if this function even has the cap
       if !concreteCaps.contains cap then []
       else
-        let callees := collectCallsStmts f.body |>.eraseDups
         let visited' := fnName :: visited
-        -- Find callees that contribute this cap
-        let contributors := callees.filter fun callee =>
-          match lookupCalleeCap capLookup callee with
-          | some cs => Capabilities.capSetHas cs cap
-          | none => false
-        if contributors.isEmpty then
+        -- The callees that supply this cap, resolved by the one producer (program definition,
+        -- then DEPENDENCY definition, then intrinsic — R-0484 R10).
+        let suppliers := capSuppliers capLookup deps f cap aliases
+        let contributors := suppliers.filter (·.kind != "dependency") |>.map (·.callee)
+        let depSteps : List Val := (suppliers.filter (·.kind == "dependency")).foldl (fun acc x =>
+          acc ++ [Val.obj [("function", .str fnName), ("edge", .str "calls"), ("callee", .str x.callee)]]
+            ++ x.targets.map fun q =>
+              -- The dependency's own header declares the capability; its summary is not re-walked.
+              Val.obj [("function", .str q), ("origin", .str "declared"), ("dependency", .bool true)]) []
+        if contributors.isEmpty && depSteps.isEmpty then
           -- No callee contributes it → declared via with(...)
           let loc := locMap.find? (fun e => e.qualName.endsWith ("." ++ fnName) || e.qualName == fnName)
           let locVal := match loc with
@@ -5459,24 +5493,24 @@ private partial def traceCapability
             | none => Val.null
           [.obj [("function", .str fnName), ("origin", .str "declared"), ("loc", locVal)]]
         else
-          -- Trace through each contributor
+          -- Trace through each program contributor; dependency suppliers end at their header.
           contributors.foldl (fun acc callee =>
             let subTrace := traceCapability fnLookup externLookup capLookup locMap
-              callee cap visited' (depth + 1)
+              callee cap visited' (depth + 1) deps aliases
             if subTrace.isEmpty then acc
             else
               let step := Val.obj [("function", .str fnName), ("edge", .str "calls"), ("callee", .str callee)]
               acc ++ [step] ++ subTrace
-          ) []
+          ) [] ++ depSteps
 
 open Json in
 /-- Handle a why-capability query. Returns answer-shaped JSON. -/
 def whyCapabilityQuery (modules : List CModule) (locMap : FnLocMap)
-    (fnName : String) (cap : String) : String :=
+    (fnName : String) (cap : String) (assumptions : Assumptions.Table := {}) : String :=
   let fnLookup := buildFnLookup modules
   let externLookup := buildExternLookup modules
   let capLookup := buildCapLookup modules
-  let trace := traceCapability fnLookup externLookup capLookup locMap fnName cap
+  let trace := traceCapability fnLookup externLookup capLookup locMap fnName cap [] 0 assumptions.depCallees (modules.foldl (fun acc m => acc ++ allLinkerAliases m) [])
   -- R-0479 REPAIRED 2026-08-16. `transitive` is stated explicitly so the catch-all stops doing
   -- double duty — it used to be both the real fourth origin and the fallback for an unreadable one,
   -- turning "the origin key is absent" into a positive claim that the capability arrived
@@ -5646,7 +5680,7 @@ open Json in
     profile, proof status, evidence, trust, and allocation into one answer. -/
 def auditQuery (modules : List CModule) (locMap : FnLocMap)
     (fnName : String) (registry : ProofRegistry := [])
-    (pc : Concrete.ProofCore) : String :=
+    (pc : Concrete.ProofCore) (assumptions : Assumptions.Table := {}) : String :=
   let recMap := pc.recMap
   let (externNames, recUncertain) := profileClosures modules pc
   -- R-0484: purity is a claim, computed, not inferred from an empty capability set.
@@ -5671,7 +5705,7 @@ def auditQuery (modules : List CModule) (locMap : FnLocMap)
     -- Capabilities with why traces
     let (concreteCaps, _) := eff.capSet.normalize
     let capTraces := concreteCaps.map fun cap =>
-      let trace := traceCapability fnLookup externLookup capLookup locMap fnName cap
+      let trace := traceCapability fnLookup externLookup capLookup locMap fnName cap [] 0 assumptions.depCallees (modules.foldl (fun acc m => acc ++ allLinkerAliases m) [])
       let origin :=
         if trace.isEmpty then "not_required"
         else match trace with
@@ -5783,7 +5817,7 @@ def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
   -- Semantic queries: three-part (why-capability:fn:cap)
   if parts.length == 3 then
     match parts with
-    | ["why-capability", fnName, cap] => .ok (whyCapabilityQuery modules locMap fnName cap)
+    | ["why-capability", fnName, cap] => .ok (whyCapabilityQuery modules locMap fnName cap assumptions)
     | [kind, _, _] =>
       .error s!"unknown three-part query kind '{kind}'. Only 'why-capability:FN:CAP' uses three parts"
     | _ => .error s!"malformed three-part query '{query}'"
@@ -5794,7 +5828,7 @@ def queryFacts (modules : List CModule) (locMap : FnLocMap := [])
     | ["predictable", fnName] => .ok (predictableQuery modules locMap fnName pc)
     | ["proof", fnName] => .ok (proofQuery modules locMap fnName registry pc)
     | ["evidence", fnName] => .ok (evidenceQuery modules locMap fnName registry pc)
-    | ["audit", fnName] => .ok (auditQuery modules locMap fnName registry pc)
+    | ["audit", fnName] => .ok (auditQuery modules locMap fnName registry pc assumptions)
     | ["fn", fnName] =>
       let allFacts := collectCoreFacts modules locMap registry pc assumptions
       let filtered := allFacts.filter fun v =>

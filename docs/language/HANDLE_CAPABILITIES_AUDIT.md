@@ -1,7 +1,9 @@
 # Handle Capabilities: Construction and Caller Audit
 
 Status: audited design inventory (ROADMAP R-0484, slice 1), taken 2026-09-30 against
-`bbba9ebf`, revised 2026-10-01 after review. It records
+`bbba9ebf`, revised 2026-10-01 after review, and brought current 2026-10-06 (F6 carried out;
+`_exit`, added by the bug 072 fix, audited in §3.2; every std binding now appears in exactly
+one of §3.1–§3.3, checked by `check_descriptor_coverage.sh`). It records
 std as it is today, measured against the rules in
 [HANDLE_CAPABILITIES.md](HANDLE_CAPABILITIES.md). It is evidence for the design and a
 work list for slice 3, not a claim that anything is fixed. Line numbers refer to that
@@ -29,9 +31,10 @@ entry states the evidence for it.
 - **Use requires the capability today** for `TextFile`, `fs.File`, `TcpListener`,
   `TcpStream` and `Child::wait`. It does **not** for `Writer` and `Reader`: that is the
   hole (F2).
-- **65 foreign bindings** in std: `libc.con` 50, `math.con` 9, `alloc.con` 4, `args.con` 2.
-  All are `trusted extern`. **8 are never called** and can be removed rather than
-  classified (F6).
+- **65 foreign bindings** in std at the 2026-09-30 snapshot: `libc.con` 50, `math.con` 9,
+  `alloc.con` 4, `args.con` 2, all `trusted extern`, 8 never called (F6). **Today
+  (2026-10-06): 58** — `libc.con` 43 after F6 removed the eight and the bug 072 fix added
+  `_exit`; since slice 3 they are no longer all `trusted extern` (R4).
 - **Two wrappers exercise authority they do not declare:** `net.is_darwin` (`uname`) and
   `args::count` (`__concrete_get_argc`) (F4, F5).
 - **`fork` duplicates owning handles and buffered output** across processes (F9), and
@@ -237,6 +240,7 @@ if a file descriptor is ever closed with it, it needs a second binding.
 | `rand`, `srand` | `Random` | `trusted extern` (scalar, effect declared) | `rand.random_int`, `random_range`, `seed` |
 | `getpid` | `Process` | `trusted extern` (no arguments, queries only, effect declared) | `process.process_getpid` |
 | `exit` | `Process` | `trusted extern` (scalar, effect declared); see F10 for the child path | `process.process_exit`, `spawn` |
+| `_exit` (added 2026-10-04, bug 072) | `Process` | `trusted extern` (scalar, effect declared); takes no descriptor; terminates without flushing stdio or running atexit handlers | `process.spawn`, only in the forked child when `execvp` fails |
 | `kill` | `Process` | `trusted extern` (scalar, effect declared): it signals but does not invalidate a handle's memory; targeting any pid is ambient `Process` authority, see special values in F1 | `process.process_kill` |
 | `waitpid` | `Process` | plain (reaps a child another handle may own; status pointer) | `process.Child::wait` |
 | `fork` | `Process` | **plain**, audited separately (§3.4) | `process.process_fork`, `spawn` |
@@ -272,7 +276,18 @@ if a file descriptor is ever closed with it, it needs a second binding.
 
 Classification: plain `extern`, `Process`, with these as named assumptions in reports.
 
-### 3.5 Never called — remove (F6)
+### 3.5 Never called — removed (F6, carried out 2026-10-06)
+
+**Reconciliation (2026-10-06).** Before F6 was carried out, eight current std bindings appeared in
+none of §3.1–§3.3: the seven F6 names below except `realloc` (`puts`, `fdopen`, `raise`, `putchar`,
+`snprintf`, `strtol`, `htonl`), listed only here, plus `_exit`, added after the audit. The eight
+REMOVED are those seven plus libc's duplicate `realloc`, which never showed as unaudited because
+the name `realloc` is in §3.2 for `alloc.con`'s binding, which stays. `_exit` is RETAINED and
+audited in §3.2. Mechanical coverage (`check_descriptor_coverage.sh`: every current binding is in a
+table, none in two, none removed returns) proves the audit names every binding; it does not prove
+any declared effect or descriptor classification is honest — that remains the audit's human
+assumption.
+
 
 `realloc` (libc copy; `alloc.con` has its own), `puts`, `fdopen`, `raise`, `putchar`,
 `snprintf`, `strtol`, `htonl`. Removing `fdopen` also removes the only bound path from a
@@ -310,7 +325,9 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
 - **F5. `args::count` reads `argc` declaring nothing, while `args::get` requires `Env`.**
   Either `count` requires `Env`, or the argument count is declared not to be authority.
   Classification decision D2.
-- **F6. Eight bindings are never called** (§3.5). Remove them.
+- **F6. Eight bindings are never called** (§3.5). Remove them. **Done 2026-10-06**: removed
+  from `std/src/libc.con`; until then the runtime-profile statement in §7 that "the unused
+  `raise` is removed" was not true of the code.
 - **F7. Error results ignored (outside R-0484; recorded for the error-honesty work).**
   `console_err_write` ignores `write`'s result, while `console_write` checks it.
   `TextFile::write` ignores `fwrite`'s count. `TextFile::close`, `fs.File::close`,

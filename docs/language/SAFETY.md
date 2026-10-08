@@ -258,7 +258,9 @@ Linearity ────── compile-time resource safety
 
 ProofCore ────── proof-eligible subset of validated Core
      │
-     ├── pure functions only (no caps, no trusted, no extern)
+     ├── extractable: no declared capability, not trusted, no extern call
+     ├── admitted as effect-free only with a complete assumption summary
+     │   that reaches no foreign binding (no capability is NOT purity)
      ├── safe algebraic data types
      ├── --report proof shows eligibility
      └── Concrete/Proof/Proof.lean has formal semantics + theorems

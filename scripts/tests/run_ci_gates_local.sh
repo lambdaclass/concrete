@@ -278,7 +278,12 @@ mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|pyt
 # 230 -> 231: check_cap_struct_cross_package.sh (R-0484), pinned in the same commit.
 # 231 -> 232: check_foreign_assumptions_report.sh (R-0484 R10), pinned in the same commit.
 # 232 -> 233: check_assumption_summary.sh (R-0484 R10 assumption summaries), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=233
+# 233 -> 234: check_proof_admission.sh (R-0484 R10 proof admission over the summary), pinned in the same commit.
+# 234 -> 235: check_trusted_boundaries.sh (R-0484 R10 named trusted boundaries), pinned in the same commit.
+# 235 -> 236: check_descriptor_coverage.sh (R-0484 R10/R5 descriptor coverage), pinned in the same commit.
+# 236 -> 237: check_capability_explanations.sh (R-0484 R10 cross-package explanations), pinned in the same commit.
+# 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=238
 if [ -n "$JOB" ]; then
   [ "${#CMDS[@]}" -ge 1 ] || { echo "error: --job '$JOB' yielded no gate commands." >&2
     ci_write_summary 0 " job_selected_nothing"; _gate_lock_release; exit 2; }

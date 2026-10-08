@@ -123,5 +123,27 @@ else
 fi
 
 echo
+echo "=== twins resolve by PACKAGE, not by name (identity migration 2026-10-06) ==="
+# crypto_verify and proof_pressure both define main.check_nonce with the same implementation. A
+# migration that keyed proof references by name collapsed both cryptoFns entries onto one package.
+# Each proof reference must name the package the manifest attributes to its own source file.
+tw="$(python3 - "$TMP/man.original" "$ROOT_DIR/Concrete/Proof/Proof.lean" <<'PY'
+import re, sys
+rows = [l for l in open(sys.argv[1]) if l.startswith("Concrete.Proof.cryptoFns <- ") and "/main.check_nonce " in l]
+by_path = {}
+for l in rows:
+    m = re.search(r"<- ([0-9a-f]{32})/main\.check_nonce .*\(([^()]+\.con)\)\s*$", l.strip())
+    if m: by_path.setdefault(m.group(2), set()).add(m.group(1)[:8])
+want = set().union(*by_path.values()) if by_path else set()
+got = set(re.findall(r"GeneratedAttestations\.cryptoFns_([0-9a-f]{8})_check_nonce\b", open(sys.argv[2]).read()))
+ok = len(by_path) == 2 and all(len(v) == 1 for v in by_path.values()) and len(want) == 2 and got == want
+print(("ok" if ok else "no") + f" sources={sorted(by_path)} manifest={sorted(want)} proof_refs={sorted(got)}")
+PY
+)"
+case "$tw" in
+  ok*) ok "the two main.check_nonce twins map to two packages, each its own source's (${tw#ok })" ;;
+  *)   no "main.check_nonce twins do not map one-to-one to their sources' packages (${tw#no })" ;;
+esac
+
 echo "ATTESTATION-REFS-ORDER: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

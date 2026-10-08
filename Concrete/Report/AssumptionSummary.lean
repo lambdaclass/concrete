@@ -1,8 +1,9 @@
 import Std.Data.HashMap
 import Concrete.Elab.Core
 import Concrete.Resolve.Intrinsic
-import Concrete.Proof.ProofCore
+import Concrete.Proof.CallCollect
 import Concrete.Semantics.Capabilities
+import Concrete.Check.CoreCheck
 
 /-!
 # Assumption summaries (R-0484 R10)
@@ -112,11 +113,24 @@ structure Gap where
       a definition outside what was analysed, e.g. std in single-file mode. False: an indirect
       call through a fn-typed binding. -/
   unloaded : Bool := false
+  /-- A method call on a value of the enclosing function's type parameter (Elab names it
+      `<param>_<method>`, e.g. `T_describe`). Its target is chosen per instantiation, so it
+      names no single definition: unresolved, like an indirect call, but not missing code. -/
+  typeParam : Option String := none
   deriving BEq, Repr, Inhabited
 
+/-- The gap's kind, as the JSON view names it. -/
+def Gap.kind (g : Gap) : String :=
+  if g.typeParam.isSome then "type-parameter-dispatch"
+  else if g.unloaded then "unloaded-callee"
+  else "indirect-call"
+
 def Gap.render (g : Gap) : String :=
-  if g.unloaded then s!"call to `{g.binding}` in {g.site}, which is in no loaded module"
-  else s!"indirect call through `{g.binding}` in {g.site}"
+  match g.typeParam with
+  | some tp => s!"call to `{g.binding}` in {g.site}, dispatched on type parameter `{tp}` (target chosen per instantiation)"
+  | none =>
+    if g.unloaded then s!"call to `{g.binding}` in {g.site}, which is in no loaded module"
+    else s!"indirect call through `{g.binding}` in {g.site}"
 
 structure FnSummary where
   /-- Display name: module path and function name. -/
@@ -142,6 +156,16 @@ structure Table where
   /-- Were the program's dependencies loaded when this table was built? In single-file and
       query paths they are not, and every conclusion drawn from the table must say so. -/
   dependenciesAnalysed : Bool := false
+  /-- For each trusted boundary (by identity key): the obligation its body absorbs — the raw
+      operations it performs and the foreign bindings it calls — or `none` when that could not
+      be determined. Empty when not computed (`absorbedComputed`). -/
+  absorbed : Std.HashMap String (Option (Array String)) := {}
+  absorbedComputed : Bool := false
+  /-- DEPENDENCY definitions by every spelling a program may call them by (`callSpellings`):
+      display name and declared capabilities. Lets an explanation name the dependency callee
+      that supplies a capability instead of stopping at the package boundary. Empty when no
+      dependency was loaded. -/
+  depCallees : Std.HashMap String (Array (String × CapSet)) := {}
   deriving Inhabited
 
 /-! ## Collection -/
@@ -172,18 +196,39 @@ private structure Node where
   values : List String
   indirect : List String
   trusted : Bool
+  typeParams : List String
   deriving Inhabited
 
 private structure Binding where
   key : String
   module : String
   spellings : List String
+  /-- A `#[intrinsic]` declaration naming a real compiler intrinsic: calls to it RESOLVE (no
+      unresolved-edge gap) but reach no foreign assumption — the compiler implements it. -/
+  intrinsic : Bool := false
   deriving Inhabited
 
 /-- The package scope of a module: by its source file, else inherited from its parent. -/
 private def scopeOf (packageOf : String → Option (String × String)) (m : CModule)
     (parent : String × String) : String × String :=
   (packageOf m.sourceFile).getD parent
+
+/-- Is `n` a bodiless `#[intrinsic]` declaration in `m` naming an intrinsic the compiler knows?
+    Then the compiler implements it and it is no foreign binding. An unknown intrinsic name stays a
+    foreign binding — the conservative reading. Every report asks this one question. -/
+def isIntrinsicDecl (m : CModule) (n : String) : Bool :=
+  -- ALL of: the attribute names one of the compile-time intrinsics whose calls the compiler
+  -- lowers to a constant (no runtime call, no capability); the declaration's OWN name is one the
+  -- compiler intercepts as that same intrinsic (so calls to it never reach a C symbol); and its
+  -- signature is that intrinsic's: no value parameters, returning `Uint`. Anything else stays a
+  -- foreign binding — a forged `#[intrinsic = "sizeof"] fn my_write(..)` is lowered as a C call
+  -- and must keep its foreign assumption.
+  let constIntrinsic (i : Option IntrinsicId) := i == some .sizeof || i == some .alignof
+  match m.intrinsicDecls.lookup n, m.externFns.find? (·.1 == n) with
+  | some attr, some (_, params, retTy, _) =>
+    constIntrinsic (resolveIntrinsic attr) && resolveIntrinsic n == resolveIntrinsic attr
+      && params.isEmpty && retTy == .uint
+  | _, _ => false
 
 private partial def collect (packageOf : String → Option (String × String))
     (m : CModule) (path : String) (parent : String × String)
@@ -197,8 +242,11 @@ private partial def collect (packageOf : String → Option (String × String))
       direct := (collectCallsStmts f.body).eraseDups.map norm
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
       indirect := (collectIndirectCallsStmts f.body).eraseDups
-      trusted := f.isTrusted : Node }
-  let externs := m.externFns.toArray.map fun (n, _, _, t) =>
+      trusted := f.isTrusted, typeParams := f.typeParams : Node }
+  let isIntrinsicDecl := isIntrinsicDecl m
+  let intrinsicBindings := (m.externFns.filter fun (n, _, _, _) => isIntrinsicDecl n).toArray.map fun (n, _, _, _) =>
+    ({ key := "", module := path, spellings := callSpellings path n, intrinsic := true } : Binding)
+  let externs := (m.externFns.filter fun (n, _, _, _) => !isIntrinsicDecl n).toArray.map fun (n, _, _, t) =>
     let id : AssumptionId := { kind := .foreignBinding, package := pkg, packageName := pkgName, module := path, name := n }
     ({ key := id.key, module := path, spellings := callSpellings path n : Binding },
      { id, effects := (m.externFnCaps.lookup n).getD .empty, trustedExtern := t : Facts })
@@ -209,7 +257,7 @@ private partial def collect (packageOf : String → Option (String × String))
   m.submodules.foldl (fun (ns, bs, fs) sub =>
       let (ns', bs', fs') := collect packageOf sub (path ++ "." ++ sub.name) (pkg, pkgName)
       (ns ++ ns', bs ++ bs', fs ++ fs'))
-    (nodes, externs.map (·.1), externs.map (·.2) ++ trustedFacts)
+    (nodes, externs.map (·.1) ++ intrinsicBindings, externs.map (·.2) ++ trustedFacts)
 
 /-- Index: spelling → indices, so name resolution is not a scan of the whole program. -/
 private def indexBy {α} [Inhabited α] (xs : Array α) (spellings : α → List String)
@@ -303,8 +351,11 @@ def build (modules : List CModule)
       -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
       -- not an empty one: what it reaches is unknown.
       if bs.isEmpty && ts.isEmpty && !isIntrinsic name then
-        unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name, unloaded := true }
+        let tp := nd.typeParams.find? fun p => name.startsWith (p ++ "_")
+        unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name,
+                                            unloaded := tp.isNone, typeParam := tp }
       for b in bs do
+        if bindings[b]!.intrinsic then continue
         let key := bindings[b]!.key
         if !(rs.any (·.key == key)) then
           rs := rs.push { key, via := if isValue then .refersToBinding else .callsBinding }
@@ -379,6 +430,75 @@ def build (modules : List CModule)
 
 def Table.summary? (t : Table) (fn : String) : Option FnSummary := t.fns.get? fn
 
+/-- Dependency functions and foreign bindings by call spelling, with display name and declared
+    capabilities (a binding's declared effects). -/
+partial def dependencyCallees (deps : List CModule) : Std.HashMap String (Array (String × CapSet)) :=
+  let rec go (m : CModule) (path : String) (acc : Std.HashMap String (Array (String × CapSet))) :=
+    let add (acc : Std.HashMap String (Array (String × CapSet))) (name : String) (caps : CapSet) :=
+      (callSpellings path name).foldl (fun a sp =>
+        let cur := a.getD sp #[]
+        if cur.any (·.1 == path ++ "." ++ name) then a else a.insert sp (cur.push (path ++ "." ++ name, caps))) acc
+    let acc := m.functions.foldl (fun a f => add a f.name f.capSet) acc
+    let acc := m.externFns.foldl (fun a (n, _, _, _) => add a n ((m.externFnCaps.lookup n).getD .empty)) acc
+    m.submodules.foldl (fun a sub => go sub (path ++ "." ++ sub.name) a) acc
+  deps.foldl (fun acc m => go m m.name acc) {}
+
+/-- What each trusted boundary ABSORBS: the obligations its body discharges by assumption
+    instead of by checking. Raw operations come from the checker's own trust edges
+    (`coreTrustEdges`: `*raw_ptr`, `*raw_ptr=`, `ptr_arith`, `unsafe_cast`), not from a
+    re-derivation; foreign bindings come from this table's direct reaches, so they carry the
+    binding's package-scoped identity rather than a C symbol.
+
+    Trust edges name a function by its module's LAST segment and its name. When two trusted
+    functions share both (two packages each with a module `util`), the edges cannot be told
+    apart, and the entry is `none` — not determined — rather than either one's operations. -/
+def absorbedObligations (modules : List CModule) (t : Table)
+    : Std.HashMap String (Option (Array String)) := Id.run do
+  let (edges, _) := coreTrustEdges modules
+  let lastSeg (p : String) : String := ((p.splitOn ".").getLast?).getD p
+  let trusted := t.facts.toArray.filter fun (_, f) => f.id.kind == .trustedBoundary
+  let mut out : Std.HashMap String (Option (Array String)) := {}
+  for (k, f) in trusted do
+    let seg := lastSeg f.id.module
+    let twins := trusted.filter fun (_, g) => lastSeg g.id.module == seg && g.id.name == f.id.name
+    if twins.size != 1 then
+      out := out.insert k none
+      continue
+    let raw := (edges.filter fun e => e.kind == .containsRawOp && e.modName == seg && e.fn == f.id.name)
+      |>.map (·.target) |>.eraseDups |>.map (s!"raw operation {·}")
+    let fnKey := s!"P{f.id.package.length}:{f.id.package}|{f.id.module}.{f.id.name}"
+    let foreign : Array String := match t.fns.get? fnKey with
+      | some s => s.reaches.filterMap fun r =>
+          if r.key.startsWith "foreign-binding:" && (r.via == .callsBinding || r.via == .refersToBinding)
+          then some s!"foreign binding {((t.facts.get? r.key).map (·.id.qualified)).getD r.key}"
+          else none
+      | none => #[]
+    out := out.insert k (some (raw.toArray ++ foreign))
+  return out
+
+-- Two trusted boundaries indistinguishable to the trust edges (same last module segment, same
+-- name) are NOT DETERMINED — `none` — never each other's operations and never "absorbs nothing".
+private def absorbProbe : Table :=
+  let tb (pkg module : String) : Facts :=
+    { id := { kind := .trustedBoundary, package := pkg, packageName := pkg, module, name := "f" } }
+  let fs := [tb "p1" "x.util", tb "p2" "y.util", tb "p1" "z.other"]
+  { facts := fs.foldl (fun acc f => acc.insert f.id.key f) {} }
+#guard ((absorbedObligations [] absorbProbe).toList.filter (·.2.isNone)).length == 2
+#guard ((absorbedObligations [] absorbProbe).toList.filter (·.2 == some #[])).length == 1
+
+/-- The package of a source file, from a `(file, package key, package name)` inventory. -/
+def packageOfFiles (filePackages : List (String × String × String)) : String → Option (String × String) :=
+  fun f => (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
+
+/-- THE constructor for a program's summary: the program's modules and every dependency loaded
+    with it. Reports and proof admission both take the table from here, so they read the same
+    reachability, assumption and coverage facts rather than two analyses that can disagree. -/
+def forProgram (program deps : List CModule)
+    (packageOf : String → Option (String × String)) (defaultPackage : String × String) : Table :=
+  let t := { build (program ++ deps) packageOf defaultPackage with dependenciesAnalysed := !deps.isEmpty }
+  { t with absorbed := absorbedObligations (program ++ deps) t, absorbedComputed := true
+           depCallees := dependencyCallees deps }
+
 /-- ONE WITNESS path from the function with key `fnKey` to the declaration of `key`, as display
     names. It follows the single recorded hop per function, so it is a valid call path that
     exists — not the list of every path. The summary itself keeps every reachable assumption;
@@ -408,6 +528,64 @@ def FnSummary.foreignBindings (s : FnSummary) : Array String :=
 def FnSummary.trustedBoundaries (s : FnSummary) : Array String :=
   s.reaches.filterMap fun r => if r.key.startsWith "trusted-boundary:" then some r.key else none
 
+/-- R5 DESCRIPTOR CLASSIFICATION IS NOT CHECKED BY THE COMPILER. Under encoding A there are no
+    typed descriptors, so which descriptor a foreign binding receives is an assumption. Its only
+    coverage is the construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md`,
+    revised 2026-10-01), a document that is not re-run against today's callers.
+
+    The audit covers std's bindings by NAME, in two groups: §3.1 the descriptor and I/O bindings
+    (which descriptor each receives is recorded), and §3.2–§3.3 the bindings it classified as
+    not taking a descriptor. These lists are exactly those tables; `check_descriptor_coverage.sh`
+    keeps them equal. A binding in neither — in std (added since the audit) or in any other
+    package — is covered by NO audit, which is reported, never omitted. -/
+def descriptorAuditedBindings : List String :=
+  [ "fopen", "fclose", "fflush", "ferror", "fread", "fwrite", "fseek", "ftell",
+    "write", "read", "socket", "listen", "bind", "accept", "connect", "setsockopt",
+    "send", "recv", "close" ]
+
+def auditedNoDescriptorBindings : List String :=
+  [ "getenv", "setenv", "unsetenv", "__concrete_get_argv", "__concrete_get_argc", "uname",
+    "time", "clock_gettime", "nanosleep", "rand", "srand", "getpid", "exit", "_exit", "kill",
+    "waitpid", "fork", "execvp", "malloc", "realloc", "free", "abort",
+    "memcpy", "memset", "memcmp", "strlen", "htons", "inet_pton",
+    "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil" ]
+
+inductive DescriptorCoverage where
+  /-- In the audit's descriptor table: the descriptor each std caller passes is recorded. -/
+  | auditedDescriptor
+  /-- In the audit, classified as not taking a descriptor. -/
+  | auditedNoDescriptor
+  /-- Covered by no audit. -/
+  | unaudited
+  deriving BEq, Repr
+
+def Facts.descriptorCoverage (f : Facts) : DescriptorCoverage :=
+  if f.id.kind != .foreignBinding || f.id.packageName != "std" then .unaudited
+  else if descriptorAuditedBindings.contains f.id.name then .auditedDescriptor
+  else if auditedNoDescriptorBindings.contains f.id.name then .auditedNoDescriptor
+  else .unaudited
+
+-- The audit covers STD's bindings: the same name bound by another package is covered by nothing.
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "std", module := "std.libc", name := "write" } } : Facts).descriptorCoverage == .auditedDescriptor
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "other", module := "other", name := "write" } } : Facts).descriptorCoverage == .unaudited
+#guard ({ id := { kind := .foreignBinding, package := "k", packageName := "std", module := "std.libc", name := "snprintf" } } : Facts).descriptorCoverage == .unaudited
+
+/-- The tag the JSON surfaces carry. -/
+def Facts.descriptorAuditTag (f : Facts) : String :=
+  match f.descriptorCoverage with
+  | .auditedDescriptor => "std-audit-descriptor"
+  | .auditedNoDescriptor => "std-audit-no-descriptor"
+  | .unaudited => "none"
+
+/-- A trusted boundary's absorbed obligation, rendered. Three distinct answers, never merged:
+    not computed, not determined, and determined (possibly empty). -/
+def Table.absorbsPhrase (t : Table) (key : String) : String :=
+  if !t.absorbedComputed then "absorbed obligation not computed"
+  else match t.absorbed.get? key with
+    | some (some #[]) => "absorbs no raw operation or foreign call found in its body"
+    | some (some xs) => s!"absorbs: {", ".intercalate xs.toList}"
+    | _ => "absorbed obligation NOT DETERMINED (another trusted function has the same module and name)"
+
 end Assumptions
 end Concrete
 
@@ -434,6 +612,45 @@ def Table.inheritedForeign (t : Table) (programRoots : List String)
     let users := programFns.filter fun fn => ((t.fns.get? fn).map (·.reachesKey key)).getD false
     if !users.isEmpty then out := out.push (f, users)
   -- `users` are scoped keys; callers render them with `Table.displayOf`.
+  return out
+
+/-- Every trusted boundary — in the program or any dependency — that some program function may
+    reach, with the reaching program functions (scoped keys): the memory-safety assumptions a
+    program's conclusions rest on. -/
+def Table.trustedReached (t : Table) (programRoots : List String)
+    : Array (Facts × Array String) := Id.run do
+  let programFns := t.order.filter fun fn =>
+    match t.fns.get? fn with
+    | some s => underRoots programRoots s.module
+    | none => false
+  let mut out : Array (Facts × Array String) := #[]
+  let keys := (t.facts.toArray.map (·.1)).qsort (· < ·)
+  for key in keys do
+    let some f := t.facts.get? key | continue
+    if f.id.kind != .trustedBoundary then continue
+    -- The boundary itself is not one of its dependents: it holds the assumption, it does not
+    -- rely on it from outside.
+    let self := s!"P{f.id.package.length}:{f.id.package}|{f.id.module}.{f.id.name}"
+    let users := programFns.filter fun fn =>
+      fn != self && ((t.fns.get? fn).map (·.reachesKey key)).getD false
+    if !users.isEmpty then out := out.push (f, users)
+  return out
+
+/-- Every foreign binding some program function may reach — the program's own and its
+    dependencies' — with the reaching program functions. -/
+def Table.foreignReached (t : Table) (programRoots : List String)
+    : Array (Facts × Array String) := Id.run do
+  let programFns := t.order.filter fun fn =>
+    match t.fns.get? fn with
+    | some s => underRoots programRoots s.module
+    | none => false
+  let mut out : Array (Facts × Array String) := #[]
+  let keys := (t.facts.toArray.map (·.1)).qsort (· < ·)
+  for key in keys do
+    let some f := t.facts.get? key | continue
+    if f.id.kind != .foreignBinding then continue
+    let users := programFns.filter fun fn => ((t.fns.get? fn).map (·.reachesKey key)).getD false
+    if !users.isEmpty then out := out.push (f, users)
   return out
 
 /-- Display name for a scoped function key. -/
@@ -488,9 +705,16 @@ def Table.toJson (t : Table) (programRoots : List String) (depsLoaded : Bool) : 
           s!"\"package\":{jq f.id.package}",
           s!"\"package_name\":{jq f.id.packageName}",
           s!"\"package_identity_ambiguous\":{if f.id.ambiguous then "true" else "false"}",
-          s!"\"witness_path\":{jarr ((t.explain s.fnKey r.key).map jq)}" ] ++ "}")
+          s!"\"witness_path\":{jarr ((t.explain s.fnKey r.key).map jq)}",
+          -- Foreign bindings only: which audit covers the descriptor it receives ("none" when none).
+          s!"\"descriptor_audit\":{if f.id.kind == .foreignBinding then jq f.descriptorAuditTag else "null"}",
+          -- Trusted boundaries only: the obligation the body absorbs; null when not determined.
+          s!"\"absorbs\":{if f.id.kind != .trustedBoundary || !t.absorbedComputed then "null" else
+            match t.absorbed.get? r.key with
+            | some (some xs) => jarr (xs.toList.map jq)
+            | _ => "null"}" ] ++ "}")
     let gaps := s.gaps.toList.map fun g =>
-      "{" ++ s!"\"site\":{jq g.site},\"binding\":{jq g.binding}" ++ "}"
+      "{" ++ s!"\"site\":{jq g.site},\"binding\":{jq g.binding},\"kind\":{jq g.kind}" ++ "}"
     "{" ++ ",".intercalate [
       s!"\"fn\":{jq s.fn}",
       s!"\"package_name\":{jq s.packageName}",
@@ -515,6 +739,24 @@ refuses that collision for a whole program (bug 074), but the summary must not d
 built directly from two modules both named `util`, each binding `putchar`, mapped to different
 packages, it must hold TWO foreign-binding identities. A key without the package would merge
 them, and this build would fail. -/
+/-- A bodiless `#[intrinsic]` declaration naming a real intrinsic is no foreign binding; one naming
+    an unknown intrinsic stays foreign (conservative). -/
+private def intrinsicProbe (intrinsic : String) (name : String := "sizeof")
+    (params : List (String × Ty) := []) (retTy : Ty := .uint) : Table :=
+  build [{ name := "mem", structs := [], enums := [], functions := [], constants := []
+           externFns := [(name, params, retTy, true)], externFnCaps := [(name, .empty)]
+           intrinsicDecls := [(name, intrinsic)] }]
+
+#guard (intrinsicProbe "sizeof").facts.isEmpty
+#guard (intrinsicProbe "alignof" "alignof").facts.isEmpty
+-- Rejections: each stays a foreign binding.
+#guard (intrinsicProbe "no_such_intrinsic").facts.size == 1
+#guard (intrinsicProbe "sizeof" "my_write").facts.size == 1           -- forged: name not intercepted
+#guard (intrinsicProbe "alignof" "sizeof").facts.size == 1            -- name/attribute disagree
+#guard (intrinsicProbe "print_int" "print_int").facts.size == 1       -- a runtime intrinsic
+#guard (intrinsicProbe "sizeof" "sizeof" [("x", .i32)]).facts.size == 1  -- wrong signature
+#guard (intrinsicProbe "sizeof" "sizeof" [] .i32).facts.size == 1        -- wrong return type
+
 private def packageScopeProbe : Table :=
   let mk (file : String) : CModule :=
     { name := "util", structs := [], enums := [], functions := [], constants := []
@@ -560,7 +802,7 @@ def Table.bindingsProviding (t : Table) (s : FnSummary) (cap : String) : Array F
 /-- Coverage phrase for a function's summary. -/
 def FnSummary.coveragePhrase (s : FnSummary) : String :=
   if s.complete then "call graph complete"
-  else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} indirect call(s): " ++
+  else s!"call graph INCOMPLETE — may reach more through {s.gaps.size} unresolved call(s): " ++
     "; ".intercalate (s.gaps.toList.map (·.render))
 
 /-- One capability, qualified: `Console (declared; assuming std.libc.write honest)`. When no
@@ -585,8 +827,16 @@ def Table.qualifierLine (t : Table) (s : FnSummary) (declared : CapSet) : String
   let others := (t.foreignFacts s).toList.filter fun f => !providing.contains f.id.key
   let otherPart := if others.isEmpty then []
     else [s!"also assumes {", ".intercalate (others.map (·.id.qualified))} honest"]
-  let trusted := s.trustedBoundaries.size
-  let trustedPart := if trusted == 0 then [] else [s!"memory safety assumed at {trusted} trusted boundary(ies)"]
+  -- NAMED, not counted: a count says how much is assumed but not where to audit it.
+  -- A trusted function IS a boundary (its own body is assumed); boundaries it reaches beyond
+  -- itself are named separately.
+  let isSelf := s.reaches.any fun r => r.via == .declaredHere
+  let selfKeys := (s.reaches.filter (·.via == .declaredHere)).map (·.key)
+  let trustedNames := (s.trustedBoundaries.filter (!selfKeys.contains ·)).toList.map fun k =>
+    ((t.facts.get? k).map (·.id.qualified)).getD k
+  let trustedPart :=
+    (if isSelf then ["is itself a trusted boundary (its body's memory safety is assumed)"] else []) ++
+    (if trustedNames.isEmpty then [] else [s!"memory safety assumed at trusted {", ".intercalate trustedNames}"])
   let authority := if capParts.isEmpty && varParts.isEmpty then ["no declared capability"] else capParts ++ varParts
   let depPart := if t.dependenciesAnalysed then [] else ["dependencies NOT analysed — their assumptions are not listed"]
   "; ".intercalate (authority ++ otherPart ++ trustedPart ++ [s.coveragePhrase] ++ depPart)

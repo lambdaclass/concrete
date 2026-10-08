@@ -234,17 +234,23 @@ Extern functions participate in the capability system:
 
 | Declaration | Capability requirement | Use case |
 |------------|----------------------|----------|
-| `extern fn foo(...)` | Caller must have `Unsafe` | Raw foreign calls |
-| `trusted extern fn bar(...)` | No capability required | Audited pure functions (math, abs) |
-| `trusted fn wrap(...) with(Alloc, Unsafe)` calling extern fn | Caller must have `Alloc` and `Unsafe` | Wrappers that audit raw pointer use but still expose `Unsafe` |
+| `extern fn foo(...) with(E)` | Caller needs `E` and `Unsafe`; a `trusted` body absorbs the `Unsafe`, never `E` | Foreign calls whose safety depends on pointer validity or invalidates a resource |
+| `trusted extern fn bar(...) with(E)` | Caller needs `E` (often nothing: `with()`), not `Unsafe` | Bindings safe for every argument their types permit (math, `htons`, `malloc`) |
+| `trusted fn wrap(...) with(Alloc)` calling an extern | Caller needs what the wrapper declares; the wrapper's body absorbs `Unsafe` | Audited wrappers |
+
+Every `extern` declares its effects (`with()` for none); an undeclared binding is refused
+(E0116). Those effects are an assumption about the C code, enforced on every caller and
+listed in `--report unsafe` (R-0484).
 
 The standard pattern is a three-layer stack:
 
-1. **libc declaration** (`std.libc`): raw `extern fn malloc(size: u64) -> *mut u8`
-2. **trusted wrapper** (`std.alloc`): `trusted fn heap_new<T>() with(Alloc, Unsafe) -> *mut T` — calls malloc, null-checks, casts the pointer. The `trusted` marker means raw pointer operations inside are audited, but `Unsafe` is still visible to callers.
-3. **user code**: calls `heap_new<T>()` with both `Alloc` and `Unsafe` capabilities
+1. **libc declaration** (`std.alloc`): `trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8`
+2. **trusted wrapper** (`std.alloc`): `trusted fn heap_new<T>() with(Alloc) -> *mut T` — calls malloc, null-checks, casts the pointer. The raw operations inside are audited, not checked, and the wrapper's memory safety is reported as a trusted boundary.
+3. **user code**: calls `heap_new<T>()` with `Alloc` only.
 
-Today `trusted` allows raw pointer operations without additional checks inside the function body, but it does **not** hide capabilities from callers. The declared `with(...)` set is the caller-visible contract. A future capability-hiding mechanism (where a trusted wrapper could absorb `Unsafe` and expose only `Alloc`) is not yet implemented.
+`trusted` absorbs `Unsafe` and nothing else (R-0484 R2): a wrapper's declared `with(...)` remains
+the caller-visible contract for every other capability, including the effects of the bindings it
+calls.
 
 ### Ownership across FFI calls
 

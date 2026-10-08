@@ -510,7 +510,8 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
     -- "unidentified" fallback would be shared by every such compilation, reintroducing the
     -- collision this migration removes.
     let packageIdentity ← resolvePackageIdentity inputPath (validCore.coreModules.map (·.name)) srcMap
-    let pc ← match extractProofCore? validCore packageIdentity simpleLocMap registry with
+    let pc ← match extractProofCore? validCore packageIdentity
+        (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap registry with
       | .ok pc => pure pc
       | .error w => IO.eprintln s!"error: {w.explain}"; return 1
     -- Traceability queries need the backend pipeline
@@ -530,8 +531,10 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
           IO.println (Report.queryTraceability validCore.coreModules mono.coreModules ssa.ssaModules locMap fnFilter (registry := registry) (pc := pc))
           return 0
     else
-      -- Standalone query path: dependencies are not loaded, and the table says so.
-      let assumptions : Assumptions.Table := { Assumptions.build validCore.coreModules with dependenciesAnalysed := false }
+      -- Standalone query path: dependencies are not loaded, and the table says so. Built by the
+      -- same constructor as every other surface (`forProgram`, via `standaloneAssumptions`), so
+      -- query answers carry the same named boundaries and descriptor coverage as the reports.
+      let assumptions : Assumptions.Table := standaloneAssumptions validCore.coreModules packageIdentity
       match Report.queryFacts validCore.coreModules locMap query (registry := registry) (pc := pc) (assumptions := assumptions) with
       | .ok result =>
         IO.println result
@@ -1587,14 +1590,13 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
-      | .ok pid => (pid.digest, "program")
+      | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
       | .error _ => ("unidentified:program", "program")
-    let assumptionPackageOf : String → Option (String × String) := fun f =>
-      (filePackages.find? (·.1 == f)).map fun (_, k, n) => (k, n)
-    -- ONE constructor for the assumption summary every report surface reads (R-0484 R10).
+    -- ONE constructor for the assumption summary every report surface AND proof admission read
+    -- (R-0484 R10).
     let mkAssumptions : Unit → Assumptions.Table := fun _ =>
-      { Assumptions.build (fullValidCore.coreModules ++ depModules) assumptionPackageOf assumptionPkgDefault
-        with dependenciesAnalysed := !depModules.isEmpty }
+      Assumptions.forProgram fullValidCore.coreModules depModules
+        (Assumptions.packageOfFiles filePackages) assumptionPkgDefault
     -- THE REPORT'S SOURCE MAP MUST CONTAIN THE KEY ITS LOCATION MAP USES. `buildFnLocMap` records
     -- every function under `inputPath` — the path the user typed — while a project's `allSrcMap` is
     -- keyed by the resolved, absolute entry path. Those are the same file under two names, and a
@@ -1623,7 +1625,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- placeholder: every definition identity minted from this ProofCore is package-scoped, and an
     -- "unidentified" fallback would be shared by every such compilation, reintroducing the
     -- collision this migration removes.
-    let pc ← match extractProofCore? fullValidCore packageIdentity simpleLocMap registry with
+    let pc ← match extractProofCore? fullValidCore packageIdentity (mkAssumptions ()) simpleLocMap registry with
       | .ok pc => pure pc
       | .error w => IO.eprintln s!"error: {w.explain}"; return 1
     -- Report output still iterates only the scoped modules.
@@ -3225,6 +3227,13 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
           -- manifest rather than synthesizing one. Synthesizing here would be a second producer of
           -- package identity for a package that has a declared one.
           packageIdentity
+          -- The program's summary over its loaded dependencies, from the one constructor.
+          (Assumptions.forProgram userModules
+            (validCore.coreModules.filter fun m => depNames.contains m.name)
+            (Assumptions.packageOfFiles ctx.filePackages)
+            (match packageIdentity with
+              | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
+              | .error _ => ("unidentified:program", "program")))
           simpleLocMap with
         | .ok pc => pure pc
         | .error w => IO.eprintln s!"error: {w.explain}"; return 1
@@ -3250,7 +3259,8 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
       -- collision this migration removes.
       let packageIdentity ← resolvePackageIdentity inputPath (validCore.coreModules.map (·.name))
         [(inputPath, source)]
-      let pc ← match extractProofCore? validCore packageIdentity simpleLocMap with
+      let pc ← match extractProofCore? validCore packageIdentity
+          (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap with
         | .ok pc => pure pc
         | .error w => IO.eprintln s!"error: {w.explain}"; return 1
       let srcMap : SourceMap := [(inputPath, source)]
@@ -3740,7 +3750,8 @@ def main (args : List String) : IO UInt32 := do
         -- collision this migration removes.
         let packageIdentity ← resolvePackageIdentity inp (validCore.coreModules.map (·.name))
           [(inp, source)]
-        let pc ← match extractProofCore? validCore packageIdentity simpleLocMap registry with
+        let pc ← match extractProofCore? validCore packageIdentity
+            (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap registry with
           | .ok pc => pure pc
           | .error w => IO.eprintln s!"error: {w.explain}"; return 1
         -- Collect core facts (same as diagnostics-json) plus source-contract facts

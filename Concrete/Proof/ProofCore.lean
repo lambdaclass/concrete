@@ -1,4 +1,6 @@
 import Concrete.Elab.Core
+import Concrete.Proof.CallCollect
+import Concrete.Report.AssumptionSummary
 import Concrete.Pipeline.Pipeline
 import Concrete.Proof.Proof
 import Concrete.Resolve.Intrinsic
@@ -38,265 +40,7 @@ infrastructure can reason about today.
 -- Shared analysis helpers (used by eligibility + reports)
 -- ============================================================
 
--- Call collection
-
-mutual
-partial def collectCallsExpr (e : CExpr) : List String :=
-  match e with
-  -- Only a direct callee names a definition. An indirect callee is a fn-typed
-  -- binding, so its statically-known target set is empty — which is also why
-  -- it contributes no dependency edge. Extraction keeps it as `PExpr.applyVar`
-  -- rather than refusing the body (which cost three real std proofs); the
-  -- identity is the binding, not a global name.
-  | .call callee _ args _ =>
-    callee.directName?.toList ++ args.foldl (fun acc a => acc ++ collectCallsExpr a) []
-  | .binOp _ l r _ => collectCallsExpr l ++ collectCallsExpr r
-  | .unaryOp _ e _ => collectCallsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCallsExpr v) []
-  | .fieldAccess obj _ _ => collectCallsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCallsExpr v) []
-  | .match_ scrut arms _ => collectCallsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectCallsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectCallsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectCallsExpr e) []
-  | .arrayIndex arr idx _ => collectCallsExpr arr ++ collectCallsExpr idx
-  | .cast inner _ => collectCallsExpr inner
-  | .allocCall inner alloc _ => collectCallsExpr inner ++ collectCallsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectCallsExpr cond ++ collectCallsStmts th ++ collectCallsStmts el
-  | _ => []
-
-partial def collectCallsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .litArm v guard body => collectCallsExpr v ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .varArm _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .rangeArm lo hi _ guard body => collectCallsExpr lo ++ collectCallsExpr hi ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-
-partial def collectCallsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectCallsExpr v
-  | .assign _ v => collectCallsExpr v
-  | .return_ (some v) _ => collectCallsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectCallsExpr e
-  | .ifElse c t el =>
-    collectCallsExpr c ++ collectCallsStmts t ++
-    match el with | some stmts => collectCallsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectCallsExpr c ++ collectCallsStmts body ++ collectCallsStmts step
-  | .fieldAssign obj _ v => collectCallsExpr obj ++ collectCallsExpr v
-  | .derefAssign t v => collectCallsExpr t ++ collectCallsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectCallsExpr arr ++ collectCallsExpr idx ++ collectCallsExpr v
-  | .break_ (some v) _ => collectCallsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectCallsExpr body
-  | .borrowIn _ _ _ _ _ body => collectCallsStmts body
-
-partial def collectCallsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectCallsStmt s) []
-end
-
-/-! ### Indirect calls
-
-The calls `collectCalls*` deliberately drops: a call through a fn-typed binding has no
-statically known target. The assumption summary (R-0484 R10) must not drop them — an
-indirect call is exactly where its "which foreign bindings can this reach" answer becomes
-UNKNOWN rather than empty — so it collects the binding names here, from the same walk
-shape as `collectCalls*` so the two cannot disagree about which expressions are visited.
--/
-mutual
-partial def collectIndirectCallsExpr (e : CExpr) : List String :=
-  match e with
-  | .call callee _ args _ =>
-    (if callee.isIndirect then [callee.spelling] else []) ++
-      args.foldl (fun acc a => acc ++ collectIndirectCallsExpr a) []
-  | .binOp _ l r _ => collectIndirectCallsExpr l ++ collectIndirectCallsExpr r
-  | .unaryOp _ e _ => collectIndirectCallsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
-  | .fieldAccess obj _ _ => collectIndirectCallsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
-  | .match_ scrut arms _ => collectIndirectCallsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectIndirectCallsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectIndirectCallsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectIndirectCallsExpr e) []
-  | .arrayIndex arr idx _ => collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx
-  | .cast inner _ => collectIndirectCallsExpr inner
-  | .allocCall inner alloc _ => collectIndirectCallsExpr inner ++ collectIndirectCallsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectIndirectCallsExpr cond ++ collectIndirectCallsStmts th ++ collectIndirectCallsStmts el
-  | _ => []
-
-partial def collectIndirectCallsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .litArm v guard body => collectIndirectCallsExpr v ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .varArm _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .rangeArm lo hi _ guard body => collectIndirectCallsExpr lo ++ collectIndirectCallsExpr hi ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-
-partial def collectIndirectCallsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectIndirectCallsExpr v
-  | .assign _ v => collectIndirectCallsExpr v
-  | .return_ (some v) _ => collectIndirectCallsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectIndirectCallsExpr e
-  | .ifElse c t el =>
-    collectIndirectCallsExpr c ++ collectIndirectCallsStmts t ++
-    match el with | some stmts => collectIndirectCallsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectIndirectCallsExpr c ++ collectIndirectCallsStmts body ++ collectIndirectCallsStmts step
-  | .fieldAssign obj _ v => collectIndirectCallsExpr obj ++ collectIndirectCallsExpr v
-  | .derefAssign t v => collectIndirectCallsExpr t ++ collectIndirectCallsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx ++ collectIndirectCallsExpr v
-  | .break_ (some v) _ => collectIndirectCallsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectIndirectCallsExpr body
-  | .borrowIn _ _ _ _ _ body => collectIndirectCallsStmts body
-
-partial def collectIndirectCallsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectIndirectCallsStmt s) []
-end
-
-/-! ### Function values
-
-A function taken as a VALUE (`write_fn: console_write`) may be called later through that
-value, by code that no direct-call edge connects to it. `collectCalls*` above deliberately
-omits such references — extraction and proof dependency edges must not treat a mention as a
-call. Reachability for REPORTING foreign assumptions (R-0484 R10) needs them: a
-`Writer<Console>` reaches libc `write` only because its constructor stored `console_write`.
-Counting a reference as a possible call is a sound over-approximation for that purpose,
-and it is used only there. -/
-mutual
-partial def collectFnValueRefsExpr (e : CExpr) : List String :=
-  match e with
-  | .fnRef name _ => [name]
-  | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectFnValueRefsExpr a) []
-  | .binOp _ l r _ => collectFnValueRefsExpr l ++ collectFnValueRefsExpr r
-  | .unaryOp _ e _ => collectFnValueRefsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
-  | .fieldAccess obj _ _ => collectFnValueRefsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
-  | .match_ scrut arms _ =>
-    collectFnValueRefsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectFnValueRefsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectFnValueRefsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectFnValueRefsExpr e) []
-  | .arrayIndex arr idx _ => collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx
-  | .cast inner _ => collectFnValueRefsExpr inner
-  | .allocCall inner alloc _ => collectFnValueRefsExpr inner ++ collectFnValueRefsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectFnValueRefsExpr cond ++ collectFnValueRefsStmts th ++ collectFnValueRefsStmts el
-  | _ => []
-
-partial def collectFnValueRefsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .litArm v guard body =>
-    collectFnValueRefsExpr v ++ (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .varArm _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .rangeArm lo hi _ guard body =>
-    collectFnValueRefsExpr lo ++ collectFnValueRefsExpr hi ++ (guard.map collectFnValueRefsExpr).getD []
-      ++ collectFnValueRefsStmts body
-
-partial def collectFnValueRefsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectFnValueRefsExpr v
-  | .assign _ v => collectFnValueRefsExpr v
-  | .return_ (some v) _ => collectFnValueRefsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectFnValueRefsExpr e
-  | .ifElse c t el =>
-    collectFnValueRefsExpr c ++ collectFnValueRefsStmts t ++
-    match el with | some stmts => collectFnValueRefsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectFnValueRefsExpr c ++ collectFnValueRefsStmts body ++ collectFnValueRefsStmts step
-  | .fieldAssign obj _ v => collectFnValueRefsExpr obj ++ collectFnValueRefsExpr v
-  | .derefAssign t v => collectFnValueRefsExpr t ++ collectFnValueRefsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx ++ collectFnValueRefsExpr v
-  | .break_ (some v) _ => collectFnValueRefsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectFnValueRefsExpr body
-  | .borrowIn _ _ _ _ _ body => collectFnValueRefsStmts body
-
-partial def collectFnValueRefsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectFnValueRefsStmt s) []
-end
-
-/-! ### Indirect calls
-
-`collectCalls*` above records only DIRECT callees, and says so: an indirect callee is a fn-typed
-binding whose statically-known target set is empty, so it contributes no dependency edge. That
-is the right call for extraction. It is the WRONG call for two guarantees that were quietly
-built on the same call graph:
-
-* **`no recursion`** — a cycle that passes through a function pointer has no edge, so SCC finds
-  no cycle, so the function reports `recursion: none` and `--check predictable` admits it. A
-  genuinely recursive program passes the no-recursion gate.
-* **`--report stack-depth`** — with no edge, the deepest chain is one frame, so the report
-  states a specific `Max stack bound` in bytes for a function that recurses to an arbitrary
-  depth. A false NUMBER, not merely a missing warning.
-
-Both are fixed by refusing to certify: a body containing an indirect call cannot be shown
-acyclic here, so it is excluded rather than assumed acyclic. Resolving the target set (every
-call site of a combinator passes a known function) is a whole-program analysis and a real
-project; assuming it is empty is not a conservative approximation of it, it is the opposite. -/
-mutual
-partial def hasIndirectCallExpr (e : CExpr) : Bool :=
-  match e with
-  | .call callee _ args _ =>
-    callee.directName?.isNone || args.any hasIndirectCallExpr
-  | .binOp _ l r _ => hasIndirectCallExpr l || hasIndirectCallExpr r
-  | .unaryOp _ e _ => hasIndirectCallExpr e
-  | .structLit _ _ fields _ => fields.any (fun (_, v) => hasIndirectCallExpr v)
-  | .fieldAccess obj _ _ => hasIndirectCallExpr obj
-  | .enumLit _ _ _ fields _ => fields.any (fun (_, v) => hasIndirectCallExpr v)
-  | .match_ scrut arms _ => hasIndirectCallExpr scrut || arms.any hasIndirectCallArm
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => hasIndirectCallExpr inner
-  | .arrayLit elems _ => elems.any hasIndirectCallExpr
-  | .arrayIndex arr idx _ => hasIndirectCallExpr arr || hasIndirectCallExpr idx
-  | .cast inner _ => hasIndirectCallExpr inner
-  | .allocCall inner alloc _ => hasIndirectCallExpr inner || hasIndirectCallExpr alloc
-  | .ifExpr cond th el _ =>
-    hasIndirectCallExpr cond || hasIndirectCallStmts th || hasIndirectCallStmts el
-  | _ => false
-
-partial def hasIndirectCallArm (arm : CMatchArm) : Bool :=
-  match arm with
-  | .enumArm _ _ _ guard body =>
-    (guard.map hasIndirectCallExpr).getD false || hasIndirectCallStmts body
-  | .litArm v guard body =>
-    hasIndirectCallExpr v || (guard.map hasIndirectCallExpr).getD false || hasIndirectCallStmts body
-  | .varArm _ _ guard body =>
-    (guard.map hasIndirectCallExpr).getD false || hasIndirectCallStmts body
-  | .rangeArm lo hi _ guard body =>
-    hasIndirectCallExpr lo || hasIndirectCallExpr hi
-      || (guard.map hasIndirectCallExpr).getD false || hasIndirectCallStmts body
-
-partial def hasIndirectCallStmt (s : CStmt) : Bool :=
-  match s with
-  | .letDecl _ _ _ v => hasIndirectCallExpr v
-  | .assign _ v => hasIndirectCallExpr v
-  | .return_ (some v) _ => hasIndirectCallExpr v
-  | .return_ none _ => false
-  | .expr e _ => hasIndirectCallExpr e
-  | .ifElse c t el =>
-    hasIndirectCallExpr c || hasIndirectCallStmts t
-      || (match el with | some ss => hasIndirectCallStmts ss | none => false)
-  | .while_ cond body _ step =>
-    hasIndirectCallExpr cond || hasIndirectCallStmts body || hasIndirectCallStmts step
-  | .fieldAssign obj _ v => hasIndirectCallExpr obj || hasIndirectCallExpr v
-  | .derefAssign t v => hasIndirectCallExpr t || hasIndirectCallExpr v
-  | .arrayIndexAssign arr idx v =>
-    hasIndirectCallExpr arr || hasIndirectCallExpr idx || hasIndirectCallExpr v
-  | .break_ (some v) _ => hasIndirectCallExpr v
-  | .break_ none _ | .continue_ _ => false
-  | .defer body => hasIndirectCallExpr body
-  | .borrowIn _ _ _ _ _ body => hasIndirectCallStmts body
-
-partial def hasIndirectCallStmts (ss : List CStmt) : Bool :=
-  ss.any hasIndirectCallStmt
-end
+-- Call collection: `Concrete.Proof.CallCollect` (shared with the assumption summary).
 
 -- Defer collection
 
@@ -1534,6 +1278,128 @@ inductive ExclusionKind where
   | both
   deriving Repr
 
+/-- Why ADMISSION as effect-free is refused, read from the shared assumption summary
+    (`Assumptions.Table`, the same table every authority report renders). Each constructor is a
+    fact the summary records; none is derived from an empty capability set, from the "no external
+    authority" conclusion, or from report text.
+
+    Admission needs the function's reachable behaviour to be KNOWN and free of assumed effects:
+
+    - `noSummary` / `ambiguousSummary`: the summary has no entry, or more than one, under this
+      name. What the function reaches is then unknown, and unknown never admits.
+    - `indirectCall`: it may reach a call through a fn-typed binding, whose targets — and the
+      authority a handle supplies — are not visible in any header.
+    - `unresolvedCall`: it may reach a call naming no analysed definition (a dependency that was
+      not loaded, e.g. std in single-file mode). Missing information, not absence of effects.
+    - `typeParamDispatch`: it may reach a method call on a type parameter (`T_describe`), whose
+      target is chosen per instantiation. A generic body's effects are those of every
+      instantiation's impl, which no single definition determines.
+    - `foreignAssumption`: it may reach a foreign binding. Its effects are DECLARED, and the
+      declaration is assumed honest, not checked, so effect-freedom would rest on it.
+
+    Trusted boundaries are not refusals here: they assume memory safety, not effects, and proof
+    dependencies on trusted code are judged by the dependency rules (`trustedDeps`). -/
+inductive AdmissionRefusal where
+  | noSummary
+  | ambiguousSummary (count : Nat)
+  | indirectCall (site binding : String)
+  | unresolvedCall (site callee : String)
+  | typeParamDispatch (site callee typeParam : String)
+  | foreignAssumption (binding : String)
+  deriving Repr, BEq, Inhabited
+
+def AdmissionRefusal.explain : AdmissionRefusal → String
+  | .noSummary =>
+    "no assumption summary covers this function, so what it may reach is unknown"
+  | .ambiguousSummary n =>
+    s!"{n} assumption summaries carry this name, so what it may reach is not determined"
+  | .indirectCall site b =>
+    s!"effects may enter through an indirect call (through `{b}` in {site}; authority supplied by a handle is not visible in the header)"
+  | .unresolvedCall site c =>
+    s!"calls `{c}` in {site}, which is in no analysed module, so what it may reach is unknown"
+  | .typeParamDispatch site c tp =>
+    s!"calls `{c}` in {site}, dispatched on type parameter `{tp}`, so its target is chosen per instantiation"
+  | .foreignAssumption b =>
+    s!"reaches foreign binding {b}; its declared effects are assumed, not checked"
+
+/-- Summaries by display name (module path + function name), the name ProofCore uses. -/
+def admissionIndex (t : Assumptions.Table) : Std.HashMap String (Array Assumptions.FnSummary) :=
+  t.order.foldl (fun acc k =>
+    match t.fns.get? k with
+    | some s => acc.insert s.fn ((acc.getD s.fn #[]).push s)
+    | none => acc) {}
+
+/-- The admission refusals the summary establishes for `qualName`. Empty only when exactly one
+    summary covers the function, it has no unresolved edge, and it reaches no foreign binding. -/
+def admissionRefusalsOf (t : Assumptions.Table)
+    (idx : Std.HashMap String (Array Assumptions.FnSummary)) (qualName : String)
+    : List AdmissionRefusal :=
+  match (idx.getD qualName #[]).toList with
+  | [] => [.noSummary]
+  | [s] =>
+    s.gaps.toList.map (fun g =>
+      match g.typeParam with
+      | some tp => .typeParamDispatch g.site g.binding tp
+      | none => if g.unloaded then .unresolvedCall g.site g.binding else .indirectCall g.site g.binding)
+    -- From the REACH, not from `foreignFacts`: that view drops a reached key whose facts entry
+    -- is missing, and a dropped edge must not read as an assumption-free function.
+    ++ s.foreignBindings.toList.map (fun k =>
+        .foreignAssumption (((t.facts.get? k).map (·.id.qualified)).getD k))
+  | many => [.ambiguousSummary many.length]
+
+/-! ### Admission controls — checked at build time
+
+Each refusal is produced from the summary fact it names, and the one accepting shape admits.
+A table built WITHOUT a dependency stands for the missing-dependency case: the caller's summary
+then carries an unloaded-callee gap, or no summary exists at all. -/
+
+private def admissionProbe (fns : List Assumptions.FnSummary) (facts : List Assumptions.Facts := [])
+    : Assumptions.Table :=
+  { fns := fns.foldl (fun acc s => acc.insert s.fnKey s) {}
+    order := (fns.map (·.fnKey)).toArray
+    facts := facts.foldl (fun acc f => acc.insert f.id.key f) {} }
+
+private def admissionProbeFor (t : Assumptions.Table) (fn : String) : List AdmissionRefusal :=
+  admissionRefusalsOf t (admissionIndex t) fn
+
+private def probeFn (fn : String) (key : String := fn) : Assumptions.FnSummary :=
+  { fn, fnKey := key, packageName := "p", module := "m" }
+
+private def probeForeign : Assumptions.AssumptionId :=
+  { kind := .foreignBinding, package := "pkg", packageName := "p", module := "m", name := "abs" }
+
+-- Accepting control: exactly one complete summary that reaches no foreign binding.
+#guard admissionProbeFor (admissionProbe [probeFn "m.plain"]) "m.plain" == []
+-- A reached TRUSTED boundary assumes memory safety, not effects: still admitted.
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.t" with
+          reaches := #[{ key := "trusted-boundary:P3:pkg|m.t", via := .declaredHere }] }]) "m.t" == []
+-- Missing dependency, no summary at all.
+#guard admissionProbeFor (admissionProbe []) "m.plain" == [.noSummary]
+-- Missing dependency, the caller's edge into it unresolved.
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.f" with
+          gaps := #[{ site := "m.f", siteKey := "m.f", binding := "dep_g", unloaded := true }] }]) "m.f"
+        == [.unresolvedCall "m.f" "dep_g"]
+-- Unresolved indirect call.
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.f" with
+          gaps := #[{ site := "m.apply", siteKey := "m.apply", binding := "f" }] }]) "m.f"
+        == [.indirectCall "m.apply" "f"]
+-- Method call on a type parameter.
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.show" with
+          gaps := #[{ site := "m.show", siteKey := "m.show", binding := "T_describe", typeParam := some "T" }] }]) "m.show"
+        == [.typeParamDispatch "m.show" "T_describe" "T"]
+-- A reached foreign binding, with its facts present...
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.f" with
+          reaches := #[{ key := probeForeign.key, via := .throughCall "m.wrap" }] }]
+          [{ id := probeForeign }]) "m.f"
+        == [.foreignAssumption "m.abs"]
+-- ...and with its facts entry MISSING: the edge still refuses rather than vanishing.
+#guard admissionProbeFor (admissionProbe [{ probeFn "m.f" with
+          reaches := #[{ key := probeForeign.key, via := .throughCall "m.wrap" }] }]) "m.f"
+        == [.foreignAssumption probeForeign.key]
+-- Two summaries under one display name (two packages): not determined, so refused.
+#guard admissionProbeFor (admissionProbe [probeFn "m.f" "k1", probeFn "m.f" "k2"]) "m.f"
+        == [.ambiguousSummary 2]
+
 structure EligibilityEntry where
   qualName       : String
   eligible       : Bool
@@ -1541,10 +1407,11 @@ structure EligibilityEntry where
   profileReasons : List String
   exclusionKind  : Option ExclusionKind
   isTrusted      : Bool
-  /-- R-0484: this function can reach an indirect call, so its effects are not
-      determined by its declared capabilities. Reported and consumed by ADMISSION;
-      deliberately NOT folded into `eligible`, which also gates extraction. -/
-  effectOpaque   : Bool := false
+  /-- R-0484: why the shared assumption summary refuses to let this function count as
+      effect-free (`admissionRefusals`). Consumed by ADMISSION only; deliberately NOT folded
+      into `eligible`, which also gates extraction. No default: an entry built without
+      consulting the summary must not read as admitted. -/
+  admissionRefusals : List AdmissionRefusal
   loc            : Option SourceLoc
 
 /-- Admissible as EFFECT-FREE, which is strictly stronger than extractable.
@@ -1573,7 +1440,14 @@ def EligibilityEntry.admissible (e : EligibilityEntry) : Bool :=
   -- An admission failure must never erase an artifact from MAINTENANCE: otherwise
   -- reclassifying an effect silently removes claims from replay and drift detection,
   -- which is the opposite of degrading honestly.
-  e.eligible && !e.effectOpaque
+  e.eligible && e.admissionRefusals.isEmpty
+
+/-- Why admission was refused, when it was; empty when admitted. Recorded only where the
+    admission rule is what refused: a function that is not extractable is refused for that,
+    and listing a summary fact beside it would present something that changed nothing as a
+    cause. -/
+def EligibilityEntry.admissionReasons (e : EligibilityEntry) : List String :=
+  if e.eligible then e.admissionRefusals.map (·.explain) else []
 
 -- ============================================================
 -- Proof registry types (moved from Report.lean)
@@ -1867,7 +1741,7 @@ structure Obligation where
       A report may therefore say `replay: passed` and `admission: refused` at once. That
       is not a contradiction — the theorem artifact remains logically valid while it
       cannot currently justify the program-level claim. -/
-  admissible   : Bool := true
+  admissible   : Bool
   /-- Why admission was refused, when it was. Empty means admitted. -/
   admissionReasons : List String := []
   dependencies : List String      -- qualified names of proved callees
@@ -2854,7 +2728,7 @@ private def assessEligibility
     (f : CFnDef) (qualName : String)
     (externNames : List String)
     (recMap : List (String × RecursionKind × List String))
-    (opaqueSet : List String)
+    (admission : String → List AdmissionRefusal)
     (locMap : List (String × SourceLoc)) : EligibilityEntry :=
   let fnLoc := match locMap.find? fun (n, _) => n == qualName with
     | some (_, loc) => some loc
@@ -2897,7 +2771,7 @@ private def assessEligibility
     else if !passesSource then some .source
     else some .profile
   { qualName, eligible, sourceReasons, profileReasons, exclusionKind
-  , effectOpaque := opaqueSet.contains qualName
+  , admissionRefusals := admission qualName
   , isTrusted := f.isTrusted, loc := fnLoc }
 
 /-- Walk a module tree collecting eligibility + extraction for each function.
@@ -2906,7 +2780,7 @@ private partial def extractModule
     (packageIdentity : Proof.PackageIdentity)
     (externNames : List String)
     (recMap : List (String × RecursionKind × List String))
-    (opaqueSet : List String)
+    (admission : String → List AdmissionRefusal)
     (locMap : List (String × SourceLoc))
     (registry : ProofRegistry)
     (m : CModule) (modulePath : String := "")
@@ -2935,7 +2809,7 @@ private partial def extractModule
     let evBody? := (m.evidenceBodies.find? fun p => p.1 == cid).map Prod.snd
     -- `none` when the facts are absent OR incomplete. Never a string, so an
     -- absent subject cannot be compared as though it were a computed one.
-    let elig := assessEligibility f qualName externNames recMap opaqueSet locMap
+    let elig := assessEligibility f qualName externNames recMap admission locMap
     let sa := resolveSpec qualName registry
     -- The spec IDENTITY, not the proof name: what the claim is about, rather than which Lean
     -- theorem happens to carry it. Re-pointing a link at a differently-named proof of the SAME
@@ -3003,7 +2877,7 @@ private partial def extractModule
   ) ([], [])
   -- Recurse into submodules
   let (subEntries, subExcluded) := m.submodules.foldl (fun (accE, accX) sub =>
-    let (e, x) := extractModule packageIdentity externNames recMap opaqueSet locMap registry sub qualPrefix
+    let (e, x) := extractModule packageIdentity externNames recMap admission locMap registry sub qualPrefix
     (accE ++ e, accX ++ x)) ([], [])
   (entries ++ subEntries, excluded ++ subExcluded)
 
@@ -3122,17 +2996,10 @@ private def generateObligations
         -- Listing opacity beside an unrelated refusal — `main` is excluded for being the
         -- entry point — presents a fact that contributed nothing as though it were a
         -- cause, so a reason is recorded only where it is the reason.
-        ++ (if e.eligibility.effectOpaque && e.eligibility.eligible
-               && !e.eligibility.admissible then
-              ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-            else [])
+        ++ e.eligibility.admissionReasons
     , ineligCat := cat
     , admissible := e.eligibility.admissible
-    , admissionReasons :=
-        if e.eligibility.effectOpaque && e.eligibility.eligible
-           && !e.eligibility.admissible then
-          ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-        else []
+    , admissionReasons := e.eligibility.admissionReasons
     , dependencies := []  -- filled in second pass
     , notCurrentDeps := []
     , trustedDeps := []
@@ -3161,11 +3028,12 @@ private def generateObligations
         -- Listing opacity beside an unrelated refusal — `main` is excluded for being the
         -- entry point — presents a fact that contributed nothing as though it were a
         -- cause, so a reason is recorded only where it is the reason.
-        ++ (if e.eligibility.effectOpaque && e.eligibility.eligible
-               && !e.eligibility.admissible then
-              ["effects may enter through an indirect call (authority supplied by a handle is not visible in the header)"]
-            else [])
+        ++ e.eligibility.admissionReasons
     , ineligCat := cat
+    -- Stated, not defaulted: `Obligation.admissible` defaults to true, and an excluded function
+    -- left at the default read as admitted while being neither extractable nor summarised.
+    , admissible := e.eligibility.admissible
+    , admissionReasons := e.eligibility.admissionReasons
     , dependencies := []
     , notCurrentDeps := []
     , trustedDeps := []
@@ -3492,9 +3360,19 @@ def applyCorrespondenceAuthority (pc : ProofCore) (graph : CallGraph) : ProofCor
   let preserved := pc.diagnostics.filter fun d => !statusKinds.contains d.kind
   { pc with obligations := propagated, diagnostics := regenerated ++ preserved }
 
+/-- The assumption summary of a standalone compilation: one package, nothing loaded beside it.
+    Calls into anything outside `modules` are unresolved edges in this table, so they refuse
+    admission rather than reading as effect-free. -/
+def standaloneAssumptions (modules : List CModule)
+    (packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity) : Assumptions.Table :=
+  Assumptions.forProgram modules [] (fun _ => none) <| match packageIdentity with
+    | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
+    | .error _ => ("unidentified:program", "program")
+
 /-- Extract the proof-oriented fragment from validated Core.
     This is the primary entry point for the proof pipeline. -/
 def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdentity)
+    (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
     : ProofCore :=
@@ -3504,11 +3382,13 @@ def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdenti
   let graph := buildCallGraph modules
   let sccs := tarjanSCC graph
   let recMap := classifyRecursion graph sccs
-  let opaqueSet := effectOpaqueSet modules graph
+  -- ADMISSION reads the shared assumption summary, the same table the authority reports render.
+  let admissionIdx := admissionIndex assumptions
+  let admission : String → List AdmissionRefusal := admissionRefusalsOf assumptions admissionIdx
   let externNames := modules.foldl (fun acc m => acc ++ collectExternNames m) []
   -- Extract entries and excluded (with spec attachment)
   let (entries, excluded) := modules.foldl (fun (accE, accX) m =>
-    let (e, x) := extractModule packageIdentity externNames recMap opaqueSet locMap registry m
+    let (e, x) := extractModule packageIdentity externNames recMap admission locMap registry m
     (accE ++ e, accX ++ x)) ([], [])
   -- Generate proof obligations and diagnostics
   let obligations := generateObligations entries excluded graph
@@ -3567,12 +3447,13 @@ def ProofIdentityRefusal.explain : ProofIdentityRefusal → String
     to say so. -/
 def extractProofCore? (vc : ValidatedCore)
     (packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity)
+    (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
     : Except ProofIdentityRefusal ProofCore :=
   match packageIdentity with
   | .error w => .error (.noPackageIdentity w)
-  | .ok pkg  => .ok (extractProofCore vc pkg locMap registry)
+  | .ok pkg  => .ok (extractProofCore vc pkg assumptions locMap registry)
 
 /-- Get all eligibility entries (both eligible and excluded). -/
 def ProofCore.allEligibility (pc : ProofCore) : List EligibilityEntry :=

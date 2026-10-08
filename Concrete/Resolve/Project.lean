@@ -492,7 +492,21 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     -- previously computed at the return statement, which is below this binding.
     let packageIdentity := Proof.packageIdentityOf tomlContent (merged.modules.map (·.name)) depNames
                              (allSrcMap.map (·.2))
-    let pcE := extractProofCore? validCore packageIdentity simpleLocMap registry
+    let rootKey := match packageIdentity with
+      | .ok pid => pid.digest
+      | .error _ =>
+        match Proof.PackageIdentity.syntheticForModules (resolvedParsed.modules.map (·.name))
+            ([source] ++ subSrcMap.map (·.2)) with
+        | .ok pid => pid.digest
+        | .error _ => s!"unidentified:{selfName}"
+    let rootFiles := [mainPath] ++ subSrcMap.map (·.1)
+    let allFilePackages := filePackages ++ rootFiles.map fun f => (f, rootKey, selfName)
+    -- Proof ADMISSION reads the same summary the authority reports do (R-0484 R10).
+    let assumptions := Assumptions.forProgram
+      (validCore.coreModules.filter fun m => !depNames.contains m.name)
+      (validCore.coreModules.filter fun m => depNames.contains m.name)
+      (Assumptions.packageOfFiles allFilePackages) (rootKey, selfName)
+    let pcE := extractProofCore? validCore packageIdentity assumptions simpleLocMap registry
     -- A project whose manifest declares no name yields no scoped identity and therefore no
     -- ProofCore. Refusing the LOAD is correct: every downstream consumer of this context treats
     -- `pc` as authoritative, so a ProofCore built without scope would let unscoped definitions
@@ -540,15 +554,6 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
         { code := "registry", severity := if issue.isError then "error" else "warning",
           message := Concrete.renderRegistryIssue issue }
       ledger := ledger.recordDiagnostic d
-    let rootKey := match packageIdentity with
-      | .ok pid => pid.digest
-      | .error _ =>
-        match Proof.PackageIdentity.syntheticForModules (resolvedParsed.modules.map (·.name))
-            ([source] ++ subSrcMap.map (·.2)) with
-        | .ok pid => pid.digest
-        | .error _ => s!"unidentified:{selfName}"
-    let rootFiles := [mainPath] ++ subSrcMap.map (·.1)
-    let allFilePackages := filePackages ++ rootFiles.map fun f => (f, rootKey, selfName)
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
                        mainPath, depNames, packageIdentity, policy, policyWarnings, policyLocMap,
                        registry, pc, ledger, filePackages := allFilePackages }
