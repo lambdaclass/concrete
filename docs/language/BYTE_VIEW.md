@@ -115,6 +115,26 @@ afterwards left a "validated" value yielding bytes that were never validated.
 `Text` is consequently linear rather than `Copy`. The ASCII-only `AsciiText::try_new`
 remains for the owned-ASCII-newtype case.
 
+## Owner-bound access: `BoundView` (R-0483)
+
+`ByteView` stays reusable coordinates. Where the relationship to one owner matters,
+`std.numeric.BoundView` is the owning result the paragraph above calls for: it owns the
+`Bytes` it describes.
+
+| property | how it holds |
+|---|---|
+| reads go to the owner held | `byte(i)` takes no buffer, so reading against another buffer cannot be written — **static** (E0262) |
+| no mutation, reallocation or destruction while bound | the owner is a private field — **static** (E0298); the view is linear and must be `release`d — **static** (E0208) |
+| survives moves, transfer and package boundaries | the owner travels inside the view |
+| coordinates came from this owner's content | **not established**: `bind`/`of_view` re-validate bounds only |
+| raw pointers (`BytesRaw.ptr`, `RawCursor`) | safe code may hold a pointer value; reading through it needs `Unsafe` — **audited assumption** |
+
+Runtime owner identity was considered and not taken: safe code has no global state to mint
+durable ids from, and an address or a length is not identity. Measured on
+`examples/packet`: no bytes copied and no allocation for the payload, versus a copy into a
+caller buffer. Evidence and fixtures: `tests/regressions/owner_bound/README.md`, gated by
+`check_view_lifetime.sh`.
+
 ## Limitations (documented, not hidden)
 
 - **A view does not identify its buffer, by design.** Any buffer satisfying the
@@ -122,7 +142,7 @@ remains for the owned-ASCII-newtype case.
   brand; R-0483 resolved it by removing the brand and stating the contract, because
   a guard that catches some substitutions reads like one that catches all of them.
   If a workload needs owner-bound access, the answer is an owning parsed result, not
-  a stronger token.
+  a stronger token — `BoundView` (above) is that result for a single range.
 - ByteView indexes one **contiguous** buffer; scatter/gather views are out of
   scope.
 
@@ -131,6 +151,7 @@ remains for the owned-ASCII-newtype case.
 - `std.numeric` (alongside `ByteCursor`): the `ByteView` type + `new`/`of_cursor`/
   `cursor`/`byte`/`to_text`/`fits`/`off`/`len`/`is_empty`. R-0483 made this a plain
   `impl`: with no stored pointer and no brand, nothing in it crosses a trust boundary.
+- `std.numeric`: `BoundView` — `bind`/`of_view`/`byte`/`len`/`coords`/`release` (R-0483).
 - `std.text`: an owning `Text` with `copy_from_raw` (validated, copying) and
   `from_string`, plus the `validate_utf8` well-formedness checker.
 - `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,wrong_buffer}/`
