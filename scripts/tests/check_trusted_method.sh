@@ -19,6 +19,8 @@
 # `with(Console)` is still refused to a caller holding none — trust is about memory
 # discipline, not about permission to reach a sink.
 set -uo pipefail
+# Matches read here-strings, not `printf | grep -q`: under pipefail an early-exiting grep -q
+# SIGPIPEs printf on large output and turns a MATCH into a failure (CI run 37678716769, step 99).
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
@@ -46,7 +48,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 expect_clean() { # dir label
   local out rc
   out="$(cd "$FIX/$1" && $TO "$CC" build . -o "$TMP/ec_$1" 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] || printf '%s' "$out" | grep -qE 'error\['; then
+  if [ "$rc" -ne 0 ] || grep -qE 'error\[' <<<"$out"; then
     no "$2 — expected a clean build, got rc=$rc"
     printf '%s\n' "$out" | grep -E 'error' | awk 'NR<=3' | sed 's/^/       /'
   else
@@ -56,10 +58,10 @@ expect_clean() { # dir label
 expect_refusal() { # dir code label
   local out
   out="$(cd "$FIX/$1" && $TO "$CC" check . 2>&1)"
-  if printf '%s' "$out" | grep -qE 'error\[parse\]|unknown module|unknown function'; then
+  if grep -qE 'error\[parse\]|unknown module|unknown function' <<<"$out"; then
     no "$3 — UNEXPECTED failure kind (parse/resolve), not the refusal under test"
     printf '%s\n' "$out" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
-  elif printf '%s' "$out" | grep -q "($2)"; then
+  elif grep -q "($2)" <<<"$out"; then
     ok "$3"
   else
     no "$3 — expected $2, got: $(printf '%s' "$out" | grep -oE '\(E0[0-9]+\)' | head -1 | tr -d '\n')${out:+}"
@@ -96,12 +98,12 @@ echo "=== provenance: the call is RECORDED, not silently absorbed ==="
 # Trust licenses the operation; it must not hide that the operation is there. This is
 # the fact a consumer needs once `Unsafe` stops appearing in safe signatures.
 te="$(cd "$FIX/axes_ok" && $TO "$CC" src/main.con --report trust-edges 2>&1)"
-if printf '%s' "$te" | grep -q "calls-trusted	Box_peek"; then
+if grep -q "calls-trusted	Box_peek" <<<"$te"; then
   ok "--report trust-edges records calls-trusted for the method"
 else
   no "the trusted method call is not recorded as a trust edge"
 fi
-if printf '%s' "$te" | grep -q "contains-raw-op"; then
+if grep -q "contains-raw-op" <<<"$te"; then
   ok "and the raw operation inside it is recorded too"
 else
   no "the raw operation inside a trusted method vanished from the edges"
@@ -120,7 +122,7 @@ if [ "${mods:-0}" -ge 20 ]; then
 else
   no "cross-package trust edges are missing — only $mods modules visible"
 fi
-if printf '%s' "$xp" | grep -q "^alloc	alloc_dealloc	calls-ffi"; then
+if grep -q "^alloc	alloc_dealloc	calls-ffi" <<<"$xp"; then
   ok "and they name the actual FFI leaf (alloc_dealloc -> free)"
 else
   no "the dependency's FFI leaves are not visible to a consumer"
@@ -130,7 +132,7 @@ fi
 # unjustified raw operations in `ordered_set` that the checker had authorized all along.
 # A provenance report inventing an unjustified operation is the defect class this whole
 # area exists to prevent, so the count is pinned at zero.
-if printf '%s' "$xp" | grep -q "unjustified-raw-op=0"; then
+if grep -q "unjustified-raw-op=0" <<<"$xp"; then
   ok "no unjustified raw operations across the dependency (cap variables counted as authority)"
 else
   no "unjustified raw operations reported: $(printf '%s' "$xp" | grep -oE 'unjustified-raw-op=[0-9]+')"
