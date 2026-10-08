@@ -5,6 +5,7 @@
 #   - COMPILE            plain `con` / `concrete` fence (front-end bar: --emit-core
 #                        — snippets need not define main/link)
 #   - REJECT as declared  `con reject:E0xxx` fence (compiler must emit that code)
+#   - PROJECT            `con project` fence (compiled to LLVM with a manifest and std)
 #   - be marked exempt    `con pseudocode` (illustrative/fragment; not compiled)
 # An unmarked block that no longer compiles FAILS the gate (the Zig stale-docs
 # lesson: docs drift unless they are executed).
@@ -46,6 +47,18 @@ for meta in "$TMP"/*.meta; do
   loc="$(cut -f1 "$meta")"; tag="$(cut -f2 "$meta")"
   case "$tag" in
     pseudocode*) SKIP=$((SKIP+1)); continue ;;
+    project)
+      project="$b.project"
+      mkdir -p "$project/src"
+      cp "$b.con" "$project/src/main.con"
+      printf '[package]\nname = "doc_snippet"\nversion = "0.1.0"\n' > "$project/Concrete.toml"
+      if (cd "$project" && CONCRETE_STD="$ROOT_DIR/std" "$ROOT_DIR/$COMPILER" build --emit-llvm) >"$b.log" 2>&1; then
+        PASS=$((PASS+1))
+      else
+        echo "  FAIL $loc — project snippet no longer compiles"
+        head -5 "$b.log"
+        FAIL=$((FAIL+1))
+      fi ;;
     reject:*)
       code="${tag#reject:}"
       out="$("$COMPILER" "$b.con" --emit-core 2>&1 >/dev/null || true)"

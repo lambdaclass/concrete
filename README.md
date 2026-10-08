@@ -11,372 +11,205 @@
 
 </div>
 
-**Concrete is a Lean-hosted, verification-oriented systems language whose main
-goal is that you can see and trust exactly what code does: its authority, its
-allocation, its failure modes, its ownership, and its evidence.**
+**Concrete is a systems programming language without garbage collection that
+checks resource ownership, makes external authority explicit in function
+signatures, and supports machine-checked proofs for a defined subset of
+code—with remaining assumptions made explicit.**
 
-It is not "Rust but smaller" or "Go but safer." Concrete optimizes for honesty
-and provability over convenience, and accepts real ergonomic costs to get them:
-non-`Copy` values are used exactly once, function headers expose required
-capabilities, cleanup is explicit, and the tooling keeps a clear path from source
-to evidence. The refusals have a second payoff beyond auditability: with no
-closures, no trait objects, no macros, and whole-program monomorphization, code
-values come from a closed set of named functions—**the whole program is
-statically enumerable**, even when a function-pointer target is selected at
-runtime. That gives per-function facts a tractable path toward whole-program
-facts. The thesis in one line — **systems control plus compositional,
-transferable evidence**: a no-GC systems core where public behavior, authority,
-resources, failure modes, and assumptions can cross function and package
-boundaries as machine-checkable contracts. The evidence ledger never collapses
-proofs, tests, solver results, runtime checks, and assumptions into a single
-green badge. Its direction includes independently replayable evidence that a
-consumer can check with a kernel they choose. See the
-[verification charter](docs/verification/VERIFICATION_CHARTER.md); it is product direction,
-not a claim that all of this surface ships today.
+It compiles to native code. Linear ownership makes resource management explicit
+and compiler-checked; its verification tools attach Lean-checked evidence to
+supported code. Proofs, tests, runtime checks and trusted assumptions remain
+distinct. The compiler itself is written in Lean 4.
 
-For the current shipped/experimental/missing capability matrix, see
-[Verification Status](docs/verification/VERIFICATION_STATUS.md).
-
-## At a Glance
-
-- **Simple syntax:** the grammar is LL(1) and checked as part of the project.
-- **Linear ownership:** non-`Copy` values are used exactly once; `_` may ignore
-  only `Copy` data; cleanup is explicit (`defer x.drop()`), never an implicit
-  scope-exit drop.
-- **Scoped references:** safe references are second-class — they flow *down* into
-  calls, callbacks, and borrow blocks, but safe APIs never return `&T` / `&mut T`.
-  Accessors use scoped callbacks, owned views, or value returns. No lifetime
-  parameters.
-- **No garbage collector:** resource lifetimes are explicit and checked.
-- **Capability headers:** side effects and authority appear in the signature —
-  `with(Console)`, `with(File)`, `with(Alloc)`.
-- **Runtime safety:** array bounds, arithmetic traps, assertions, and
-  preconditions become visible obligations or checks.
-- **Evidence, not one badge:** proofs, tests, solver results, runtime checks, and
-  trusted boundaries are reported as *distinct* classes.
-- **Compositional contracts — direction:** public functions and packages export
-  behavioral contracts that callers can rely on without inspecting private
-  implementations; unsupported and unproved portions remain explicit.
+**Status: experimental.** The language, standard library and tooling are still
+evolving. Concrete is not a fully verified compiler, and a successful build is
+not a proof that a program is correct. See [Claims Today](docs/verification/CLAIMS_TODAY.md)
+for the guarantees and boundaries, and the [roadmap](ROADMAP.md) for planned work.
 
 ## A Small Example
 
-```con
-#[requires(0 <= off && off + 1 < len && len <= 512)]
-fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -> i32 {
-    let hi: i32 = packet[off] as i32;
-    let lo: i32 = packet[off + 1] as i32;
-    return hi * 256 + lo;
-}
+This complete program writes a message, checks the write and close results, and
+explicitly releases its resources. Save it as `hello/src/main.con`; the setup
+commands are below.
 
-fn report(result: i32) with(Console) {
-    if result == 0 { println("ok"); } else { println("fail"); }
-}
-```
+```con project
+mod hello {
+    import std.io.{Writer, IoError, console_writer};
 
-The first function declares no capabilities, so it has no external authority — it
-cannot print, open files or touch the network, however it is called — and it creates
-bounds/arithmetic obligations; the second can print only because it declares
-`with(Console)`. An empty `with(...)` is not a claim of purity in the stronger sense: a
-function can still modify what it is handed through `&mut`. From that surface the tools
-answer, per function: what authority it needs, what can fail at runtime, what
-Lean's kernel proved, what a decision procedure discharged, what an external
-solver was trusted for, what an oracle tested, and what remains assumed, trusted,
-stale, or unproven.
+    // The helper declares the authority required by its writer.
+    fn emit<cap C>(out: &Writer<C>, message: &String)
+        with(C) -> Result<u64, IoError> {
+        return out.write_str(message);
+    }
 
-## A Complete Program
+    fn main() with(Console, Alloc) -> Int {
+        let message: String = "Hello, Concrete!\n";
+        let out: Writer<Console> = console_writer();
 
-A whole program — the base64 CLI, Concrete's first real stdlib workload (trimmed;
-full source in [examples/base64_cli/src/main.con](examples/base64_cli/src/main.con)).
-Notice that every owned value is *explicitly* disposed and the `Writer` is closed
-by hand: that visible cleanup is the linear-ownership pillar, not boilerplate.
+        let written: u64 = emit(&out, &message).unwrap_or(0);
+        let complete: bool = written == message.len();
+        message.drop();
 
-```con pseudocode
-mod base64_cli {
-    import std.args.{count, get};
-    import std.bytes.{Bytes};
-    import std.io.{Writer, console_writer, eprintln, IoError};
-    import std.base64.{encode, decode};
-
-    fn main() with(Std) -> Int {
-        if count() < 3 {
-            let u: String = "usage: base64_cli encode|decode <text>";
-            eprintln(&u); u.drop();                 // owned String, disposed
-            return 1;
-        }
-        let cmd: String = get(1);
-        let arg: String = get(2);
-        let enc: String = "encode";
-        let is_enc: bool = cmd.eq(&enc);
-        enc.drop(); cmd.drop();
-
-        let input: Bytes = Bytes::from_string(&arg);
-        arg.drop();
-        let mut w: Writer = console_writer();       // a linear Writer, must be closed
-        let mut rc: Int = 0;
-
-        if is_enc {
-            let out: Bytes = encode(&input);        // from std.base64
-            let r: Result<u64, IoError> = w.write(&out);
-            let ignored: u64 = r.unwrap_or(0);
-            out.drop();
-        } else {
-            // decode is symmetric: decode(&input) -> Option<Bytes>; None sets rc = 1
-            rc = 1;
-        }
-
-        let closed: Result<u64, IoError> = w.close();
-        let ignored2: u64 = closed.unwrap_or(0);
-        input.drop();
-        return rc;
+        let closed: bool = out.close().is_ok();
+        if complete && closed { return 0; }
+        return 1;
     }
 }
 ```
 
-`with(Std)` is the entrypoint's bundled authority; `encode`/`decode` come from
-`std.base64`; a bad argument is a *recoverable* failure (message + exit 1), never
-a trap. The two small snippets above show the obligation and capability surfaces;
-this shows how they read in a real program.
+Three things are visible in the code:
 
-## Why It Coheres
+- **Ownership:** `emit` borrows the writer and message. `main` owns them, so it
+  must consume or transfer them. Here, `drop()` releases the string and `close()`
+  consumes the writer. There is no implicit scope-exit destruction.
+- **Authority:** `emit` requires its writer's capability `C`. With this console
+  writer, that means `Console`. Removing `Console` from `main` is a compiler
+  error; passing the writer through a helper does not hide the requirement.
+  `Alloc` accounts for the allocated string.
+- **Failure:** writing and closing return `Result`. This program exits with 1
+  on a failed or short write, or a failed close. Closing happens even when the
+  write fails.
 
-Systems code usually asks reviewers to infer authority, failure, and ownership
-from convention. Concrete makes those facts come from the compiler instead of a
-comment — and the pillars are not independent features bolted together. They lock
-into each other, and each is cheaper *because* of the others:
+The same helper can borrow a `Writer<File>` or a fixed-buffer `Writer<{}>`.
+The required authority changes with the type; ownership and error handling
+remain explicit.
 
-- **Second-class references make ownership provable.** No returned references
-  means no aliasing to track, which means no lifetime algebra — a small,
-  checkable ownership fragment. The ergonomic cost buys the proof simplicity.
-- **Linear ownership plus abort-not-unwind makes cleanup simple.** Because
-  Concrete aborts rather than unwinding, destruction runs only on normal control
-  flow — no drop flags, no partial-initialization tracking, none of the machinery
-  an unwinding language needs to keep destructors panic-safe.
-- **Capabilities and linearity compose.** When a collection is explicitly
-  disposed, its compiler-generated drop glue **inherits its elements' destructor
-  capabilities**, derived at monomorphization — otherwise automatic destruction
-  would become an invisible authority path. Two guarantees made to hold at once.
-- **The interpreter and the judgment modules make the compiler verifiable.** Each
-  semantic decision lives in one pure module (arithmetic, types, capabilities,
-  ownership); an interpreter runs the reference semantics and is differentially
-  tested against compiled output; and stage contracts catch a violation at the
-  first boundary it crosses — so the pipeline stays honest enough to prove
-  against.
-- **The closed world makes whole-program analysis tractable.** No closures, no
-  trait objects, no macros, whole-program monomorphization, and indirect calls
-  that carry value identity (not a name to re-resolve) mean callable values
-  come from a finite set of named functions. An indirect target may still be
-  selected at runtime, so a sound call graph must conservatively retain its
-  possible target set. That is the shape needed for authority, allocation, and
-  failure facts to compose from `main` outward. The composition theorem is the
-  direction of the proof work, not a shipped claim; ROADMAP R-0443 owns the
-  first narrow authority-path certificate.
+## Try It
 
-The unifying pattern: **every design choice trades convenience for a property you
-can see and check—and the refusals keep whole-program uncertainty finite and
-explicit.** That is the language.
+The repository provides a [Nix](https://nixos.org/download/) development shell
+with Lean, clang and the supporting tools. From a terminal:
 
-## What Concrete Deliberately Rejects
-
-Concrete's shape is defined as much by what it refuses as by what it adds:
-
-- **No affine implicit drop.** Non-`Copy` values do not disappear at scope exit;
-  cleanup is a visible consuming action.
-- **No returned safe references.** Safe references are scoped access paths, not
-  lifetime-bearing values that escape through APIs.
-- **No ambient authority.** Files, console, network, time, allocation, and unsafe
-  operations appear in capability headers.
-- **No trait objects or iterator tower.** Generic behavior is monomorphized;
-  traversal is internal (`for_each`/`fold`/callbacks), not a lazy adapter stack.
-- **No one-word "verified."** Proofs, tests, runtime checks, solver trust,
-  assumptions, and unsafe boundaries remain separate evidence classes.
-- **No hidden runtime convenience as the default story.** No GC, no unwinding
-  destructors, no implicit allocation, no implicit conversions.
-
-## Evidence, Not One Badge
-
-Concrete reports evidence classes separately — that distinction is the product:
-
-```text
-proved_by_lean              Lean kernel checked a linked theorem
-proved_by_kernel_decision   Lean-owned decision procedure closed the obligation
-solver_trusted              external SMT solved it; the solver is trusted
-tested_by_oracle            compiled code matched an independent reference
-runtime_checked             checked dynamically or instrumented at runtime
-enforced                    compiler enforced a structural property
-assumed                     accepted assumption, visible in audit
-trusted                     outside the proof model, named explicitly
-partial                     narrower proof than the full claim
-stale                       source changed after proof attachment
-vacuous                     claim follows only because premise is impossible
-counterexample              source-level witness refutes the claim
-unproven                    obligation exists but was not discharged
+```bash
+git clone https://github.com/unbalancedparentheses/concrete2.git
+cd concrete2
+nix --extra-experimental-features "nix-command flakes" develop
+lake build
+export PATH="$PWD/.lake/build/bin:$PATH"
 ```
 
-A report says *what* was verified, *which* theorem / decision procedure / oracle
-/ runtime check / trusted boundary supports it, and what remains outside — never
-one undifferentiated "formally verified."
+If you already have Lean and clang installed, you can build outside Nix with
+`lake build`. Use the exact Lean version in [lean-toolchain](lean-toolchain),
+currently **4.28.0**, rather than an arbitrary newer version.
 
-The target architecture keeps five facts separate: whether the proposition
-describes the source, whether it is logically valid, whether its dependencies
-are closed, what exact replay occurred, and whether current consumer policy
-accepts that replay. See
-[Evidence Architecture](docs/verification/EVIDENCE_ARCHITECTURE.md) and
-[Verification IR](docs/verification/VERIFICATION_IR.md). These are product direction;
-[Claims Today](docs/verification/CLAIMS_TODAY.md) remains authoritative for shipped support.
+Create a project inside the checkout:
 
-## Four Claim Shapes
-
-These are intentionally different, and Concrete keeps them different — each is
-labeled with its own evidence class, and none is allowed to borrow another's
-strength.
-
-| Claim shape | Example | Discharged by | Class |
-| --- | --- | --- | --- |
-| Value correctness, proved | `ct_compare` (equal tags → 1, else 0) | Lean kernel checks a linked theorem | `proved_by_lean` |
-| Runtime safety from ordinary code | `read_u16_be` bounds + overflow | Lean-owned decision procedures (`omega`, `bv_decide`) | `proved_by_kernel_decision` |
-| Reference agreement | HMAC/SHA-256 vs RFC/FIPS/Python | an independent oracle — a test, not a proof | `tested_by_oracle` |
-| Nonlinear arithmetic | `scale` overflow | external SMT (Z3): trust named, replayable, counterexample if false | `solver_trusted` |
-
-The two proof classes read like this in a report — value correctness attached to
-source, and runtime safety discharged in-kernel with no external solver:
-
-```text
-ct_compare
-  ensures equal tags return 1 and different tags return 0
-    status: proved_by_lean   coverage: iff
-    theorems: Examples.ConstantTimeTag.Proofs.ct_compare_{same,different}_tag_correct
-
-read_u16_be
-  runtime array_bounds packet[off]        status: proved_by_kernel_decision  engine: omega
-  runtime array_bounds packet[off + 1]    status: proved_by_kernel_decision  engine: omega
-  runtime overflow    hi * 256 + lo       status: proved_by_kernel_decision  engine: bv_decide
+```bash
+mkdir -p hello/src
+cat > hello/Concrete.toml <<'EOF'
+[package]
+name = "hello"
+version = "0.1.0"
+EOF
 ```
 
-The proved-value contract does **not** claim machine-level timing; the
-constant-time source shape and CPU/backend assumptions are reported separately.
-External SMT is opt-in, reproducible, policy-gated, reports a source-level
-counterexample when a claim is false, and is never counted as Lean evidence
-unless a separate Lean replay checks it. Worked source, report output, and replay
-commands live in the examples below.
+Save the program above in `hello/src/main.con`, then run:
 
-## Contracts, Assert, And Assume
+```bash
+cd hello
+concrete build . -o hello
+./hello
+concrete src/main.con --report caps
+concrete src/main.con --report unsafe
+```
+
+The program prints `Hello, Concrete!`. The reports show declared authority and
+its supporting assumptions and coverage. An incomplete report is not evidence
+that no assumptions exist.
+
+A manifest matters: standard-library imports use project mode. For the
+standalone-file workflow, see
+[Standalone File vs Project Mode](docs/project/STANDALONE_VS_PROJECT.md).
+Run `concrete --help` for commands, or explore an existing program such as
+[base64_cli](examples/base64_cli/src/main.con).
+
+## What the Compiler Checks
+
+| Concern | Concrete's approach |
+| --- | --- |
+| Resource ownership | Non-`Copy` values must be consumed or transferred; use after move and silent discard are rejected. |
+| Borrowing | Safe references provide scoped access and cannot be returned from safe APIs. Mutable access is exclusive. |
+| External authority | Callers declare the capabilities their calls require, including calls through capability-bearing handles and function pointers. |
+| Cleanup | Explicit consuming calls, optionally scheduled with `defer`; failures abort rather than unwind. |
+| Runtime safety | Safe indexing and ordinary integer arithmetic have bounds and overflow checks. Explicit wrapping and saturating operations have their named behavior. |
+| Recoverable failure | APIs use values such as `Result`; failure paths must also respect ownership. |
+
+A capability is an **allowance**, not a promise that every execution uses it.
+`with(File)` does not identify a particular file or confine filesystem paths.
+An empty capability set does not establish purity, termination, or functional
+correctness: a function can still mutate an argument through `&mut`.
+
+Foreign declarations are audited claims. A `trusted` body can discharge
+`Unsafe` obligations, but must still declare its external authority. The
+compiler checks callers against those declarations; it cannot prove a dishonest
+C binding honest. Read the [FFI rules](docs/platform/FFI.md) and
+[handle capability design](docs/language/HANDLE_CAPABILITIES.md) for the boundary.
+
+## Contracts and Evidence
+
+Contracts state properties to establish. For example:
 
 ```con
 #[requires(0 <= i && i < 16)]
 #[ensures(result == a[i])]
 fn get16(a: [u8; 16], i: i32) -> u8 {
-    assert(i < 16);
     return a[i];
 }
 ```
 
-- `#[requires]` — a caller obligation / entry assumption.
-- `#[ensures]` — a postcondition that needs evidence.
-- `assert(e);` — creates an obligation.
-- `assume(e);` — a trapdoor: it taints the function as `assumed`, shows up in
-  audit, and can be rejected by policy. An `assume` never manufactures proof
-  evidence.
+The precondition is an obligation for callers. The postcondition states what the
+function should return. Writing either annotation does not, by itself, prove it.
+Concrete generates obligations and reports the evidence available for them.
 
-Authority is visible the same way: a reviewer can ask "why does this need
-`File`?" or "which callee introduced `Network`?" and get a compiler answer rather
-than a convention — capabilities and their sources show up in `--report caps` /
-`--report authority`. Visible is step one. Because the possible callable set is
-closed, transitive authority can be conservatively computed for the *whole
-program*—the shape a whole-program theorem can take once the proof work reaches
-it.
+| Evidence | What it tells you |
+| --- | --- |
+| Compiler enforcement | A structural check, such as ownership or capability checking, accepted the code. |
+| Lean proof | A kernel checked a stated theorem about the supported formal model. |
+| External solver result | A solver discharged an obligation; solver trust remains explicit unless independently replayed. |
+| Oracle test | Executions agreed with a reference implementation on tested inputs. |
+| Runtime check | A condition is checked when the program executes. |
+| Assumption or trusted boundary | The conclusion relies on something outside the checked proof. |
 
-## Try It
+**A theorem about extracted semantics is not an end-to-end proof of the native
+binary.** Source-to-model correspondence, foreign code, the backend and the
+runtime have their own boundaries. Missing, stale and incomplete evidence must
+be read alongside successful results.
 
-Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html) (v4.28.0+)
-and clang.
+Start with the [verification status](docs/verification/VERIFICATION_STATUS.md)
+and [proof semantics boundary](docs/verification/PROOF_SEMANTICS_BOUNDARY.md).
+The [verification charter](docs/verification/VERIFICATION_CHARTER.md) describes
+the longer-term direction separately from current support.
+
+## Examples to Explore
+
+| Example | What to look for |
+| --- | --- |
+| [Base64 CLI](examples/base64_cli/src/main.con) | Owned strings and bytes, explicit cleanup, and capability-bearing writers in a real program. |
+| [Constant-time tag comparison](examples/constant_time_tag/) | Value-correctness proofs, with machine-level timing assumptions kept separate. |
+| [HMAC/SHA-256](examples/hmac_sha256/) | Refinement proofs and independent oracle tests supporting different claims. |
+| [Contract negatives](examples/contract_negatives/) | Invalid and unsupported claims that the tools must refuse. |
+| [VC examples](examples/vc_suite/) | Bounds, arithmetic and contract obligations. |
+
+The [example inventory](docs/project/EXAMPLE_INVENTORY.md) distinguishes tested
+examples from exploratory workloads. The [documentation index](docs/README.md)
+links the language, standard library, compiler and verification references.
+
+## Development
+
+Inside the development shell, from the repository root:
 
 ```bash
-make build
-make test
-make clean
+lake build
+bash scripts/tests/run_tests.sh
+bash scripts/tests/check_doc_snippets.sh
 ```
 
-The daily workflow (run `concrete --help` from anywhere for the full map):
+The full suite is substantial. For a focused change, consult the
+[test guide](scripts/tests/README.md) for the relevant checks. Documentation code
+blocks are checked too, including the project example in this README.
 
-```bash
-concrete file.con                 # compile
-concrete run file.con             # compile and run
-concrete test                     # run #[test] functions (in a project)
-concrete fmt file.con --check     # format
-
-concrete report caps file.con     # what authority does this code have?
-concrete trace file.con --json    # per-stage pipeline trace (first failing phase)
-concrete reduce file.con --predicate check-error   # minimize a failing program
-```
-
-Explore the evidence surfaces on the shipped examples, and run the replay gates:
-
-```bash
-.lake/build/bin/concrete examples/parse_validate/src/main.con --report audit
-.lake/build/bin/concrete examples/vc_suite/fixed_point_filter.con --report vcs
-.lake/build/bin/concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --smt
-
-make test-phase1-contracts   # contract negatives + snapshots
-make test-phase2-vc          # VC discharge matrix
-make test-prove-cli          # the prove workflow
-make test-evidence-corpus    # every evidence class reports correctly
-```
-
-Report surfaces include `effects`, `contracts`, `vcs`, `audit`, `proof-status`,
-`caps`, `authority`, `unsafe`, `layout`, `alloc`, `eligibility`, `fingerprints`,
-`consistency`, and `verify`. Proofs are source-linked and binary-first
-(`concrete prove <file> <fn> --emit-lean --workspace`); the workspace is
-disposable build output holding proof context, per-obligation JSON, a Lean stub,
-and replay commands. The gates are the point: Concrete's claims are meant to be
-replayed, not trusted from prose.
-
-## Examples To Read
-
-- [examples/constant_time_tag](examples/constant_time_tag/) — layered evidence:
-  Lean proves value correctness, the source shape reports constant-time
-  discipline, and machine timing stays an assumption.
-- [examples/hmac_sha256](examples/hmac_sha256/) — the deepest proof artifact:
-  SHA-256/HMAC refinement against an independent spec, plus oracle tests against
-  RFC/FIPS/Python references.
-- [examples/evidence_classes](examples/evidence_classes/) — the compact catalog
-  of evidence classes.
-- [examples/contract_negatives](examples/contract_negatives/) — cases that must
-  *not* turn green: invalid contracts, unmet preconditions, vacuous claims,
-  fabricated theorem names, duplicate proof links, `assert`, and `assume`.
-- [examples/proof_patterns](examples/proof_patterns/) — the proof-authoring
-  corpus: refinement, array update, loop copy, fold, composition, ghost state,
-  workspace, and repair-loop patterns.
-- [examples/vc_suite](examples/vc_suite/) and
-  [examples/vc_discharge](examples/vc_discharge/) — the VC discharge matrix and
-  end-to-end VCs: packet windows, fixed-point filters, hash padding, rate limits,
-  ring-buffer indices.
-- [examples/smt](examples/smt/) — where external SMT helps and where Concrete
-  refuses it: kernel-preferred facts, nonlinear overflow, counterexamples, solver
-  provenance, policy gates, replay artifacts, red-team negatives.
-
-## Nearby Systems
-
-Concrete is not trying to replace Rust, Zig, Odin, SPARK, Dafny, Austral, Lean,
-or C. Its claim is the composition: systems control, linear ownership, explicit
-authority, source contracts, Lean-checked proof links, drift detection,
-external-solver accounting, oracle evidence, audit reports that refuse to hide
-trust—and a closed, enumerable callable set without closures, trait objects, or
-macro-generated control flow. That is a narrower claim than saying every
-indirect call has one compile-time target.
-
-| System | What Concrete learns from it | Where Concrete differs |
-| --- | --- | --- |
-| Rust | Ownership, memory safety, strong tooling | Concrete is linear rather than affine-by-default, has explicit capability headers, and treats proof/evidence as part of the toolchain. |
-| Zig | No hidden control flow, no hidden allocation, explicit systems control | Concrete adds linear ownership, capability signatures, and formal evidence accounting. |
-| Odin | Direct systems programming and data-oriented ergonomics | Concrete rejects ambient context authority and makes effects visible in function headers. |
-| C/C++ | Low-level control and ABI reality | Concrete removes undefined-behavior-shaped language holes from the safe core and reports trusted boundaries explicitly. |
-| Austral | Linear types, capabilities, no GC, no implicit cleanup | Concrete adds Lean-backed proof attachment, VC generation, oracle evidence, and audit reports. |
-| SPARK/Ada | Contracts, absence-of-runtime-error goals, high-assurance culture | Concrete aims at a smaller C/Rust-shaped systems core with explicit ownership and capability flow. |
-| Dafny/F*/Why3 | Verification-aware programming and proof obligations | Concrete keeps the systems-language surface and separates Lean proof, SMT trust, tests, runtime checks, and assumptions. |
-| Lean/Coq/Isabelle | Small trusted kernels and machine-checked proofs | Concrete uses theorem proving as evidence for systems code rather than making proof authoring the whole programming experience. |
-
-For the longer C/Rust-oriented argument, read
-[docs/project/WHY_CONCRETE.md](docs/project/WHY_CONCRETE.md).
+For the design rationale, read [Why Concrete?](docs/project/WHY_CONCRETE.md).
+For current priorities and release plans, use the [roadmap](ROADMAP.md).
+Questions and discussion are welcome in [Telegram][tg-url].
 
 ## License
 
