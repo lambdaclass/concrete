@@ -860,13 +860,19 @@ add "wrapping-stays-unchecked" "Concrete/Backend/EmitSSA.lean" "check_wrapping_a
 # The RULE is guarded, though, and decisively: measured with the mutation applied,
 # `make test` goes from 1702/0 to **1315 passed / 76 failed** — E0213 linear-variable
 # errors, because divergence detection is what allows an `if` without `else` whose
-# then-branch returns. So this family targets `run_tests.sh`, the check that actually
-# kills it, rather than the gate whose name suggested it should.
+# then-branch returns. So this family first targeted `run_tests.sh`.
+#
+# RETARGETED 2026-10-10. Under the mutant `run_tests.sh` does not finish: an unguarded compile of
+# a program that needs divergence aborts it under `set -e` (and a second EXIT trap had disabled its
+# exit-97 notice), so the campaign could only score "never reached the end" — INVALID on every run,
+# never killed. `check_divergence_detection.sh` exercises each arm of `stmtDiverges` directly and
+# ends with a verdict line; under this mutant it reports PASS=7 FAIL=5 (the five rows that need
+# divergence fail with E0213). Writing its fixtures is also what found bug 078.
 #
 # Recorded this way because the first instinct — delete the family, or leave it aimed at a
 # gate it does not exercise — would have converted a measurement into either silence or a
 # false green.
-add "divergence-detection" "Concrete/Check/CheckHelpers.lean" "run_tests.sh" yes \
+add "divergence-detection" "Concrete/Check/CheckHelpers.lean" "check_divergence_detection.sh" yes \
   $'partial def blockDiverges (stmts : List Stmt) : Bool :=\n  match stmts.getLast? with\n  | none => false\n  | some s => stmtDiverges s' \
   $'partial def blockDiverges (stmts : List Stmt) : Bool :=\n  match stmts.getLast? with\n  | none => false\n  | some _ => false'
 
