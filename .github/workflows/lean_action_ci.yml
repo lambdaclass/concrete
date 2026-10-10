@@ -304,6 +304,12 @@ jobs:
           [ ! -f .mutation-campaign-summary.partial ] || cp .mutation-campaign-summary.partial "$out/summary.txt"
           run_id="$(sed -n 's/^run_id=//p' "$out/summary.txt" 2>/dev/null | head -1)"
           [ -z "$run_id" ] || [ ! -d ".mutation-evidence/$run_id" ] || cp -R ".mutation-evidence/$run_id" "$out/evidence"
+          # A shard cancelled before its summary still leaves baseline logs, and those are the
+          # runner-specific evidence (a gate red on the clean tree) that cannot be reproduced locally.
+          # Kept for diagnosis only; the aggregator reads summary.txt and never this directory.
+          if [ -z "$run_id" ] && [ -d .mutation-evidence ]; then
+            cp -R .mutation-evidence "$out/evidence-unsummarized"
+          fi
 
       - name: Upload shard record
         if: always()
