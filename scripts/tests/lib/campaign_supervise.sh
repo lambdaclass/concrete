@@ -83,6 +83,12 @@ candidate_incoherent() { # candidate [expected-family-count] [expected-gate-coun
   case "$_m" in
     campaign) [ "$_s" = "$_d" ] || out="$out campaign_mode_selected_subset($_s of $_d)" ;;
     single)   [ "$_s" = "1" ]   || out="$out single_mode_selected($_s)" ;;
+    # A SHARD selects a subset — possibly empty — and never more than was discovered. Which subset is
+    # the aggregator's question (it holds the plan); here only the shape can be wrong.
+    shard)    case "$_s:$_d" in
+                *[!0-9:]*|:*|*:) out="$out shard_mode_nonnumeric_selection($_s of $_d)" ;;
+                *) [ "$_s" -le "$_d" ] || out="$out shard_mode_selected_exceeds_discovered($_s of $_d)" ;;
+              esac ;;
     *)        out="$out unknown_mode($_m)" ;;
   esac
   # Reporting more than was executed is not a partial result, it is an invented one.
@@ -1061,6 +1067,7 @@ EOF
       # branch does not carry them either; this branch must match it.
     } > "$_tmp.skel" || _pub_ok=0
     _mode="campaign"; [ "${CONCRETE_MUT_PARTIAL:-0}" = "0" ] || _mode="single"
+    [ -z "${CONCRETE_MUT_SHARD:-}" ] || _mode="shard"
     sed -e "s|^mode=.*|mode=$_mode|" \
         -e "s|^refusals=.*|refusals= child_left_no_candidate|" \
         -e "s|^run_id=.*|run_id=$RUN_ID|" \

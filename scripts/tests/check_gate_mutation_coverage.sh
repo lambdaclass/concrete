@@ -25,6 +25,14 @@
 # (default). Restore is via `git checkout --` (assumes a clean tree for the
 # mutated files); a final clean rebuild is done at the end.
 #
+# SHARDED CAMPAIGN: the full corpus does not fit GitHub's 6-hour job limit (cancelled at family
+# 30-31 of 95 on 8187a2f7 and 245cd51c). `--shard-plan <n>` prints the inventory once, with every
+# family's shard; `SHARD=<k>/<n>` runs exactly the families whose shard is k. Membership is a
+# function of the family NAME alone (`shard_of`), never of its position, so adding a family moves
+# nothing else. A shard is a PARTIAL run (mode=shard) and can never qualify by itself: only
+# scripts/tests/lib/aggregate_mutation_shards.py, which reconciles every shard against the plan,
+# can say qualified=1.
+#
 # Most families' gates are OUTSIDE run_tests.sh --fast, so we invoke each gate directly.
 #
 # COVERAGE, stated because this harness is the thing that stops gates being decorative and
@@ -112,14 +120,37 @@ _timed_gate(){ # gate-path logfile
 # A sample must never be able to destroy evidence about the whole corpus, so the question is asked
 # once and both roles read the same answer.
 CAMPAIGN_PARTIAL=0
-{ [ -z "${FAMILY:-}" ] && [ -z "${FAMILY_ID:-}" ]; } || CAMPAIGN_PARTIAL=1
+{ [ -z "${FAMILY:-}" ] && [ -z "${FAMILY_ID:-}" ] && [ -z "${SHARD:-}" ]; } || CAMPAIGN_PARTIAL=1
 export CONCRETE_MUT_PARTIAL="$CAMPAIGN_PARTIAL"
 ONLY="${FAMILY:-}"
+# A SHARD IS VALIDATED HERE, BEFORE THE LOCK, because a malformed one must write nothing. `0/4`, `5/4`
+# or `x` would otherwise reach selection after a pristine build, and combining SHARD with a family
+# selector names two different subsets at once — neither reading is the one the caller meant.
+SHARD_K=""; SHARD_N=""
+if [ -n "${SHARD:-}" ]; then
+  case "$SHARD" in
+    [1-9]*/[1-9]*) SHARD_K="${SHARD%%/*}"; SHARD_N="${SHARD#*/}" ;;
+  esac
+  case "$SHARD_K:$SHARD_N" in
+    *[!0-9:]*|:*|*:) echo "FATAL: SHARD must be <k>/<n> with 1 <= k <= n, got '$SHARD'. This run wrote NOTHING." >&2; exit 2 ;;
+  esac
+  if [ "$SHARD_K" -gt "$SHARD_N" ] || [ "$SHARD_N" -gt 256 ]; then
+    echo "FATAL: SHARD=$SHARD is out of range (1 <= k <= n <= 256). This run wrote NOTHING." >&2; exit 2
+  fi
+  if [ -n "${FAMILY:-}" ] || [ -n "${FAMILY_ID:-}" ]; then
+    echo "FATAL: SHARD cannot be combined with FAMILY or FAMILY_ID. This run wrote NOTHING." >&2; exit 2
+  fi
+fi
+# THE SUPERVISOR NEEDS THE SAME FACT to label a record the child never wrote.
+export CONCRETE_MUT_SHARD="${SHARD:-}"
 # A single-family probe and a full campaign make different claims. Only a campaign can ever qualify;
 # a probe must be able to SUCCEED on a sound selected result without ever storing or printing campaign
 # qualification. Conflating the two would break the registered FAMILY=n consumers, including
-# check_phase6c_observability.sh, which chains two of them with `&&`.
-CAMPAIGN_MODE=campaign; [ "$CAMPAIGN_PARTIAL" = "0" ] || CAMPAIGN_MODE=single
+# check_phase6c_observability.sh, which chains two of them with `&&`. A shard is the same kind of
+# claim as a probe — sound about what it selected, silent about the corpus — with a larger selection.
+CAMPAIGN_MODE=campaign
+[ "$CAMPAIGN_PARTIAL" = "0" ] || CAMPAIGN_MODE=single
+[ -z "$SHARD_K" ] || CAMPAIGN_MODE=shard
 
 # ---------------------------------------------------------------------------
 # IMMUTABLE DRIVER SNAPSHOT.
@@ -188,7 +219,7 @@ _rm_snapdir() {
 # whether it is supervised are the same question — "does this invocation run a campaign?" — and they
 # were answered by two separately maintained enumerations of `--coverage`. Adding a third reporting
 # mode to one and not the other yields a query that forks a supervisor, or one that takes the lock.
-_mut_query_mode() { case "${1:-}" in --coverage|--spec) return 0 ;; *) return 1 ;; esac; }
+_mut_query_mode() { case "${1:-}" in --coverage|--spec|--shard-plan) return 0 ;; *) return 1 ;; esac; }
 _MUT_READ_ONLY_MODE=0
 [ "${ANCHORS_ONLY:-0}" = "1" ] && _MUT_READ_ONLY_MODE=1
 _mut_query_mode "${1:-}" && _MUT_READ_ONLY_MODE=1
@@ -598,6 +629,21 @@ family_spec_digest() {
   printf '%d:%s,%d:%s,%d:%s,%d:%s,%d:%s' \
     "${#2}" "$2" "${#3}" "$3" "${#4}" "$4" "${#5}" "$5" "${#6}" "$6" \
     | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1
+}
+
+# shard_of <name> <n> -> the 1-based shard that owns family <name> in an <n>-way split
+#
+# THE ONE DEFINITION OF SHARD MEMBERSHIP. Both `--shard-plan` and the `SHARD=k/n` selection call it,
+# and the aggregator never recomputes it — it compares what each shard RAN against what the plan
+# SAID, so there is no second implementation to drift. Keyed on the NAME, the identity evidence
+# records are filed under: an ordinal would move every later family to another shard whenever one
+# is inserted, and a plan and a shard built a commit apart would then disagree about everything.
+# Eight hex digits (32 bits) keep the arithmetic inside bash's integers on every platform.
+shard_of() {
+  local h
+  h="$(printf '%s' "$1" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-8)" || return 1
+  case "${#h}:$h" in 8:*[!0-9a-f]*|8:) return 1 ;; 8:*) ;; *) return 1 ;; esac
+  printf '%s' "$(( (16#$h % $2) + 1 ))"
 }
 
 add "corecheck-unsafe-op" "Concrete/Check/CoreCheck.lean" "check_corecheck_boundary.sh" yes \
@@ -1582,6 +1628,55 @@ if [ "${1:-}" = "--spec" ]; then
   echo "no family named '$2' in this inventory of $N" >&2; exit 2
 fi
 
+# `--shard-plan <n>`: print the inventory ONCE, with each family's shard, and exit.
+#
+# This is the "discovered" side of a sharded campaign. The aggregator requires the union of what the
+# shards ran to equal exactly these rows, so the inventory is computed by one producer at one
+# commit — not re-derived by each shard and then trusted to agree. The header binds the plan to that
+# commit and driver; a shard that ran anything else is refused by those fields, not by a count.
+# READ-ONLY: no lock, no artifact, no workspace. The pin is checked here rather than below because
+# the floor's invalidation write belongs to campaign runs, and a plan of the wrong population must
+# not exist at all.
+if [ "${1:-}" = "--shard-plan" ]; then
+  case "${2:-}" in
+    [1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-6]) ;;
+    *) echo "usage: --shard-plan <n>   (1 <= n <= 256)" >&2; exit 2 ;;
+  esac
+  if [ "$N" != "$EXPECTED_FAMILIES" ]; then
+    echo "FATAL: the mutation inventory holds $N families, pinned at $EXPECTED_FAMILIES. No plan written." >&2
+    exit 2
+  fi
+  . "$ROOT_DIR/scripts/tests/lib/treestate.sh" 2>/dev/null || true
+  ts_require || exit 2
+  _pl_head="$(ts_head "$ROOT_DIR")"; _pl_inv="$(ts_inventory_digest "$ROOT_DIR")"
+  _pl_drv="$(ts_driver_digest "$ROOT_DIR")"
+  _pl_fams="$(family_set_digest "$(printf '%s\n' "${NAME[@]}")")"
+  # EVERY HEADER VALUE IS A MEASUREMENT OR THE PLAN IS REFUSED: an empty or in-band failure marker
+  # would otherwise be copied into the plan and then compared, equal to itself, against each shard.
+  for _pv in "$_pl_head" "$_pl_inv" "$_pl_drv" "$_pl_fams"; do
+    case "$_pv" in ''|*UNAVAILABLE*) echo "FATAL: could not measure the plan header ('$_pv')" >&2; exit 2 ;; esac
+  done
+  _pl_out="shard_plan=1
+shards=$2
+discovered=$N
+head=$_pl_head
+inventory_sha=$_pl_inv
+repo_driver_sha=$_pl_drv
+families_digest=$_pl_fams
+"
+  for (( _i=0; _i<N; _i++ )); do
+    _pl_spec="$(family_spec_digest "${NAME[$_i]}" "${FILE[$_i]}" "${GATE[$_i]}" \
+                                   "${BUILD[$_i]}" "${OLD[$_i]}" "${NEW[$_i]}")" || exit 2
+    _pl_k="$(shard_of "${NAME[$_i]}" "$2")" || { echo "FATAL: shard_of failed for '${NAME[$_i]}'" >&2; exit 2; }
+    [ "${#_pl_spec}" = "64" ] || { echo "FATAL: malformed spec digest for '${NAME[$_i]}'" >&2; exit 2; }
+    _pl_out="${_pl_out}family=${NAME[$_i]} shard=$_pl_k gate=${GATE[$_i]} spec=$_pl_spec
+"
+  done
+  # PRINTED WHOLE OR NOT AT ALL, so a failure midway cannot leave a plan that names fewer families.
+  printf '%s' "$_pl_out"
+  exit 0
+fi
+
 
 # VACUITY FLOOR, APPLIED TO EVERY MODE. `N` comes straight from the inventory array, so an inventory
 # that lost its entries — a renamed array, a truncated edit, a botched merge — would run zero
@@ -2272,8 +2367,11 @@ baseline_pristine_build(){
 baseline_all_gates(){
   local g total=0 red=0
   local -a uniq=()
-  # Distinct gates, in inventory order.
-  for g in "${GATE[@]}"; do
+  # Distinct gates of the SELECTED families, in inventory order. For a full campaign that is every
+  # gate; a shard baselines only the gates its own families name, which is all its verdicts rest on.
+  local _si
+  for _si in ${SEL_IDX[@]+"${SEL_IDX[@]}"}; do
+    g="${GATE[$_si]}"
     [ -z "${CLEAN_GATE[$g]:-}" ] || continue
     CLEAN_GATE[$g]=pending; uniq+=("$g")
   done
@@ -2781,6 +2879,22 @@ if [ -n "${FAMILY_ID:-}" ]; then
   ONLY=$(( _fid_idx + 1 ))
   echo "selected by identity: $FAMILY_ID (ordinal $ONLY of $N)"
 fi
+# THE SELECTION, AS INDICES, for the campaign and shard paths. A full campaign selects every family;
+# a shard selects exactly those `shard_of` assigns to it — the same function `--shard-plan` printed,
+# so what this shard runs and what the plan says it owns cannot be two computations. An EMPTY shard
+# is legitimate (nothing hashed there) and still publishes a record, so the aggregator can tell
+# "owned nothing" from "never reported".
+SEL_IDX=()
+for (( _i=0; _i<N; _i++ )); do
+  if [ -n "$SHARD_K" ]; then
+    _sk="$(shard_of "${NAME[$_i]}" "$SHARD_N")" || {
+      echo "FATAL: shard_of failed for '${NAME[$_i]}'" >&2
+      write_summary 0 " shard_membership_unmeasurable"; rm -rf "$TMP"; _gate_lock_release; exit 2; }
+    [ "$_sk" = "$SHARD_K" ] || continue
+  fi
+  SEL_IDX+=("$_i")
+done
+[ -z "$SHARD_K" ] || echo "selected by shard: $SHARD_K/$SHARD_N owns ${#SEL_IDX[@]} of $N families"
 if [ -n "$ONLY" ]; then
   case "$ONLY" in
     ''|*[!0-9]*) echo "FATAL: FAMILY must be a positive integer, got '$ONLY'." >&2; _gate_lock_release; exit 2 ;;
@@ -2843,8 +2957,8 @@ else
   # reconciliation cannot see this: it inspects the REAL repository, not the copy.
   WORK_UNTRACKED="$(ts_untracked "$WORK")"; _require_measured "$WORK_UNTRACKED" untracked
   WORK_TRACKED="$(ts_tracked "$WORK")";       _require_measured "$WORK_TRACKED" tracked
-  # Arithmetic loop, not `seq`, for the same reason as the anchor loop above.
-  for (( i=0; i<N; i++ )); do run_one "$i"; done
+  # Over the selection, which for a full campaign is every index in order — the same loop as before.
+  for i in ${SEL_IDX[@]+"${SEL_IDX[@]}"}; do run_one "$i"; done
 fi
 
 # leave a clean binary behind
@@ -2927,13 +3041,14 @@ END_DIRTY="$(snap_dirty_targets)"
 # unproven, so the two must add up: gate-proven families plus declared build kills must equal the
 # whole corpus. Anything else means some family produced neither kind of evidence while the run still
 # reported PASS.
+# A shard accounts for ITS selection: the other shards' families are not its to explain.
 if [ -z "$ONLY" ]; then
   _accounted=$(( ${KILLED_BY_GATE:-0} + ${KILLED_BY_BUILD:-0} ))
-  [ "$_accounted" = "$N" ] \
-    || REFUSALS="$REFUSALS families_unaccounted(gate=${KILLED_BY_GATE:-0} build=${KILLED_BY_BUILD:-0} of $N)"
+  [ "$_accounted" = "${#SEL_IDX[@]}" ] \
+    || REFUSALS="$REFUSALS families_unaccounted(gate=${KILLED_BY_GATE:-0} build=${KILLED_BY_BUILD:-0} of ${#SEL_IDX[@]})"
 fi
 # A partial campaign is not a campaign. FAMILY=<n> selects one deliberately and cannot complete.
-EXPECTED_RUN="$N"; [ -n "$ONLY" ] && EXPECTED_RUN=1
+EXPECTED_RUN="${#SEL_IDX[@]}"; [ -n "$ONLY" ] && EXPECTED_RUN=1
 # THE DENOMINATOR IS VERDICTS, NOT VISITS. `FAMILIES_RUN` is incremented unconditionally at the top of
 # `run_one` and the loop is `seq 0 $((N-1))`, so `FAMILIES_RUN == N` was ARITHMETICALLY guaranteed and
 # the check could not fail — an inert control, the same shape as the dirty-target copy removed above.
@@ -2966,7 +3081,7 @@ if [ -n "${ONLY:-}" ]; then
   _ev_expected="${NAME[$((ONLY-1))]}
 "
 else
-  for (( _i=0; _i<N; _i++ )); do _ev_expected="$_ev_expected${NAME[$_i]}
+  for _i in ${SEL_IDX[@]+"${SEL_IDX[@]}"}; do _ev_expected="$_ev_expected${NAME[$_i]}
 "; done
 fi
 _ev_expected="$(printf '%s' "$_ev_expected" | LC_ALL=C sort)"
@@ -3044,6 +3159,9 @@ REPORTED_ALL=0; [ "$VERDICTS" = "$EXPECTED_RUN" ] && REPORTED_ALL=1
 # a corrupted run, so it suppresses completion WITHOUT failing the process.
 SCOPE_NOTES=""
 [ -z "$ONLY" ] || SCOPE_NOTES=" single_family_selected($ONLY)"
+# THE SHARD NAMES ITSELF in the record, in the same scope-note slot, so the aggregator can refuse a
+# record filed under the wrong shard without a new schema key.
+[ -z "$SHARD_K" ] || SCOPE_NOTES=" shard_selected($SHARD_K/$SHARD_N)"
 ALL_REFUSALS="$REFUSALS$SCOPE_NOTES"
 
 # COMPLETED AND QUALIFIED ARE DIFFERENT FACTS, and conflating them recreated exactly the
