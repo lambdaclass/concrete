@@ -401,6 +401,9 @@ test-totality-judgment: build ## Totality matrix (Phase 6.5): trap/divergence fa
 test-corecheck-boundary: build ## CoreCheck boundary gate (Phase 6.5 #4): every frontend/mono/type-policy residue class is rejected before Lower (see docs/compiler/COMPILER_BOUNDARY.md)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_corecheck_boundary.sh
 
+test-divergence-detection: build ## Divergence gate: each arm of stmtDiverges lifts E0213 for an if-without-else, the same shapes without divergence stay refused, and accepted rows compile+run equal to --interp (bug 078)
+	$(NIX_DEVELOP) bash ./scripts/tests/check_divergence_detection.sh
+
 test-capability-judgment: build ## Capability-judgment gate (Phase 6.5): direct-call capability satisfaction/missing is one decision (Capabilities.decideCall) shared by Check, CoreCheck, and reports
 	$(NIX_DEVELOP) bash ./scripts/tests/check_capability_judgment.sh
 

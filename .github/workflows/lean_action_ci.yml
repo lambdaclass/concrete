@@ -686,6 +686,9 @@ jobs:
       - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
         run: bash scripts/tests/check_corecheck_boundary.sh
 
+      - name: "Divergence-detection gate (each diverging arm lifts E0213; bug 078 lowering)"
+        run: bash scripts/tests/check_divergence_detection.sh
+
       - name: "Capability-judgment gate (Phase 6.5 — one direct-call capability decision)"
         run: bash scripts/tests/check_capability_judgment.sh
 

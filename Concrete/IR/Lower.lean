@@ -1475,11 +1475,17 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- with the statement-if and match via reconcileBranchVars — ROADMAP 1a).
     -- Diverged branches contribute nothing to the reconciliation.
     startBlock mergeLabel
-    if !term1 || !term2 then
-      let liveArms :=
-        (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
-          (if term2 then [] else [(elseEndVars, elseEndLabel)])
-      reconcileBranchVars ifExprMergeRules preIfVars liveArms
+    if term1 && term2 then
+      -- Bug 078, the expression form: both arms diverged, so the merge is
+      -- unreachable and loading the result slot there used a slot whose store
+      -- never reaches it (E0703). Terminate it, as match lowering does.
+      setState { (← getState) with vars := preIfVars }
+      terminateBlock .unreachable
+      return .unit
+    let liveArms :=
+      (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
+        (if term2 then [] else [(elseEndVars, elseEndLabel)])
+    reconcileBranchVars ifExprMergeRules preIfVars liveArms
     -- Load result from slot (a unit/never if-expr has no slot — yields unit).
     loadResult resultSlot? ty "ifload."
 
@@ -1795,7 +1801,16 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     -- with the if-expr and match via reconcileBranchVars — ROADMAP 1a).
     -- Diverged branches contribute nothing to the reconciliation.
     startBlock mergeLabel
-    if !term1 || !term2 then
+    if term1 && term2 then
+      -- Bug 078: both arms diverged, so nothing reaches the merge. Left open, the
+      -- block looked like a fall-through: an enclosing `if` branched from it into
+      -- its own merge and used the unreachable block as a phi source, which the
+      -- verifier rejects (E0703, a use in a block its definition cannot dominate).
+      -- Terminate it, as match lowering does when every arm diverges, so the
+      -- statements after it are skipped and enclosing constructs see a diverged arm.
+      setState { (← getState) with vars := preIfVars }
+      terminateBlock .unreachable
+    else
       let liveArms :=
         (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
           (if term2 then [] else [(elseEndVars, elseEndLabel)])
