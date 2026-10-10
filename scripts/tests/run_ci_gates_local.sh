@@ -242,7 +242,7 @@ fi
 # while appearing in the failure list: the loudest possible way to be silent.
 # Output is discarded by the runner anyway, so redirections are noise here.
 mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$SRC" \
-         | grep -v 'check_gate_mutation_coverage\.sh' \
+         | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
          | sed 's/[[:space:]][0-9]*[<>].*$//' \
          | sed 's/[[:space:]]*$//' \
          | sort -u)
@@ -283,7 +283,11 @@ mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|pyt
 # 235 -> 236: check_descriptor_coverage.sh (R-0484 R10/R5 descriptor coverage), pinned in the same commit.
 # 236 -> 237: check_capability_explanations.sh (R-0484 R10 cross-package explanations), pinned in the same commit.
 # 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=239
+# 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
+# 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
+#   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
+#   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
+EXPECTED_GATE_COMMANDS=240
 if [ -n "$JOB" ]; then
   [ "${#CMDS[@]}" -ge 1 ] || { echo "error: --job '$JOB' yielded no gate commands." >&2
     ci_write_summary 0 " job_selected_nothing"; _gate_lock_release; exit 2; }
