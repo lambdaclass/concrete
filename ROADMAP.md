@@ -13577,6 +13577,36 @@ Fire-drill acceptance is operational, not “the new toolchain builds”:
 - publish the exact affected claims and remaining trust rather than saying the whole compiler was
   either safe or unsafe.
 
+**Scope before implementation (tightened 2026-10-10; nothing implemented).** The drill
+splits into two slices: (1) revocation and receipt acceptance, (2) the actual upgrade with
+an explained replay of the same claim denominator. Slice 1 must first define the trust
+boundary for receipt acceptance, because today there is none to revoke against:
+
+- **What exists.** `resolveChecker` (`Concrete/Proof/Replay.lean`) names the checker by the
+  text of the workspace's `lean-toolchain` file, not by the process that replays (`lake env
+  lean`). `toolchainIdOf` (`Concrete/Proof/Receipt.lean`) is an unkeyed `shortHash` of public
+  strings, a stored receipt is unauthenticated, and `storedDispositionFor`
+  (`Concrete/Proof/Issue.lean`) yields only `current`/`notCurrent` by digest equality. Anyone
+  who can edit a receipt's identity can recompute that hash, so reading the real checker's
+  identity fixes the file/process mismatch but authenticates nothing.
+- **Checker identity.** Identify the process that actually performs replay, including its
+  executable and build identity (resolved binary, version, githash), and bind that.
+- **Why a consumer trusts a receipt.** Choose and state one basis, per consumer: protected
+  local provenance, an authenticated issuer, or fresh replay by the consumer. A receipt whose
+  basis does not hold is not accepted, whatever its contents say.
+- **Who controls advisory policy.** An editable register cannot protect against its own
+  replacement. Name the independently trusted policy source and specify how missing,
+  altered or rolled-back policy fails closed.
+- **Tests.** Synthetic identities exercise policy transitions (affected → `needs_recheck`,
+  forged identity, edited or rolled-back policy). "Fresh replay under an accepted kernel
+  restores acceptance" is reserved for a real upgraded-kernel integration test, not
+  simulated.
+
+The upstream issue shows the affected kernel accepting an axiom-free proof of `False`
+through checked declarations. That removes the assurance the affected checker provided; it
+does not show that any of this repository's theorems is false, and reports must say the
+former, not the latter. Queue order: after mutation qualification.
+
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
 declarations; an accepted narrowing needs an independently checked retained-environment footprint.
