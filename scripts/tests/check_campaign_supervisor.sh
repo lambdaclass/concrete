@@ -15,6 +15,10 @@
 # EVERY REFUSAL HAS A POSITIVE CONTROL. A gate that only checks refusals passes when the function
 # refuses everything, which would be just as broken and far easier to ship.
 set -uEo pipefail
+# HERMETIC: run inside a campaign, this gate inherited the driver's CONCRETE_MUT_SNAPSHOT/ROOT/SNAPDIR
+# and lock token, and every sandboxed driver copy below then refused to start — red on the clean tree
+# in each campaign, green everywhere else. The wiring subshells set the CONCRETE_MUT_* values they need.
+for _v in $(compgen -e); do case "$_v" in CONCRETE_MUT_*|CAMPAIGN_HELD_LOCK) unset "$_v" ;; esac; done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/tests/lib/campaign_supervise.sh" || { echo "cannot load the decision library" >&2; exit 2; }

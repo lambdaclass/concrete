@@ -93,16 +93,28 @@ RUN_T0=$(date +%s)
 declare -A PHASE_SECS
 declare -A FAMILY_SECS
 _sw_now(){ date +%s; }
+# A GATE RUNS IN A DEVELOPER'S ENVIRONMENT, NOT THE CAMPAIGN'S. The re-exec exports
+# CONCRETE_MUT_SNAPSHOT/ROOT/SNAPDIR/... and the lock token, and a gate run from here inherited all of
+# them. check_campaign_supervisor.sh runs sandboxed copies of this driver; each saw the inherited
+# CONCRETE_MUT_SNAPSHOT, took the snapshot branch, and refused ("this file is inside the repository"),
+# so that gate was RED ON CLEAN in every campaign and its 7 families scored INVALID — while it passed
+# 169/0 everywhere else. Scrubbed by PATTERN, so a variable added later cannot leak the same way.
+_campaign_env_scrub(){
+  local _v
+  for _v in $(compgen -e); do
+    case "$_v" in CONCRETE_MUT_*|CAMPAIGN_HELD_LOCK) unset "$_v" ;; esac
+  done
+}
 _timed_build(){ # logfile
   local _t0 rc=0; _t0=$(_sw_now)
-  ( cd "$WORK" && "$LAKE" build ) >"$1" 2>&1 || rc=$?
+  ( cd "$WORK" && _campaign_env_scrub && "$LAKE" build ) >"$1" 2>&1 || rc=$?
   local d=$(( $(_sw_now) - _t0 ))
   PHASE_SECS[build]=$(( ${PHASE_SECS[build]:-0} + d )); FAMILY_SECS[build]=$(( ${FAMILY_SECS[build]:-0} + d ))
   return $rc
 }
 _timed_gate(){ # gate-path logfile
   local _t0 rc=0; _t0=$(_sw_now)
-  ( cd "$WORK" && bash "$1" ) >"$2" 2>&1 || rc=$?
+  ( cd "$WORK" && _campaign_env_scrub && bash "$1" ) >"$2" 2>&1 || rc=$?
   local d=$(( $(_sw_now) - _t0 ))
   PHASE_SECS[gate]=$(( ${PHASE_SECS[gate]:-0} + d )); FAMILY_SECS[gate]=$(( ${FAMILY_SECS[gate]:-0} + d ))
   return $rc
