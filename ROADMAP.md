@@ -13607,6 +13607,27 @@ through checked declarations. That removes the assurance the affected checker pr
 does not show that any of this repository's theorems is false, and reports must say the
 former, not the latter. Queue order: after mutation qualification.
 
+**Design decisions (2026-10-10; implementation after mutation qualification).** A read of the
+replay path found that replay emits `#check` against `.olean`s an earlier `lake build` produced, so
+the kernel accepted each theorem at build time, not in the replay process; that the nix devshell
+takes Lean from nixpkgs and ignores `lean-toolchain` while CI's elan honours it; and that the
+`needsRecheck` disposition is never produced. Decided:
+
+1. **Fresh replay includes an actual kernel re-check.** Looking a declaration up in an existing
+   `.olean` is insufficient; the accepted checker validates the retained proof and its required
+   dependency closure.
+2. **Trust basis: fresh consumer replay.** Per-user signing keys are deferred; a signature
+   authenticates an issuer's statement, not that the proof was checked correctly.
+3. **Advisory policy is a compiled module**, one policy source versioned with the consumer. Its
+   identity is recorded in each policy decision, separately from immutable receipts. Sequence
+   numbers alone do not prevent rollback: either an independently enforced minimum policy version
+   exists, or the rollback guarantee is stated as limited.
+4. **A register change triggers policy re-evaluation, not invalidation.** Historical replay facts
+   are preserved; recheck is required where an advisory affects the recorded checker, and
+   unrelated receipts can remain accepted.
+5. **Checker identity binds the actual executable and build.** A nonce-tagged identity line
+   printed by the replay process correlates output with that process; it is not authentication.
+
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
 declarations; an accepted narrowing needs an independently checked retained-environment footprint.
