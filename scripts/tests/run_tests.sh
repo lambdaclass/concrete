@@ -23,6 +23,13 @@ rm -f "$SUMMARY_FILE"
 SUMMARY_WRITTEN=0
 on_exit() {
   local rc=$?
+  # The suite's scratch directory is removed HERE, not by a second `trap ... EXIT`: a later trap
+  # REPLACES this one, and one did — `trap 'rm -rf "$TMPDIR"' EXIT` further down silently
+  # disabled the banner and exit 97 for every abort after it, so a `set -e` death mid-suite exited
+  # with the failing command's code and no "did not complete" notice. Found because a mutant made
+  # an unguarded compile fail and the campaign could only report "never reached the end".
+  # SUITE_TMPDIR, never the inherited TMPDIR: before it is assigned this must remove nothing.
+  [ -z "${SUITE_TMPDIR:-}" ] || rm -rf "$SUITE_TMPDIR"
   if [ "$SUMMARY_WRITTEN" -ne 1 ]; then
     echo "" >&2
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
@@ -309,7 +316,7 @@ filter_match() {
 COMPILER=".lake/build/bin/concrete"
 TESTDIR="tests/programs"
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+SUITE_TMPDIR="$TMPDIR"   # removed by on_exit; do not add another EXIT trap (it would replace on_exit)
 JOBDIR="$TMPDIR/jobs"
 mkdir -p "$JOBDIR"
 
