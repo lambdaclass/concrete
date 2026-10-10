@@ -2519,6 +2519,12 @@ publish_evidence() { # nm index file gate killed invalid note [disposition]
     "$nm" "$selector" "$idx" "$file" "$gate" "$disp" "$killed" "$invalid" "${BUILD[$idx]:-unknown}" \
     "$(if build_kill_declared "$nm"; then echo build; else echo gate; fi)" \
     "$START_HEAD" "$RUN_ID" "$note" > "$stage/verdict.txt" 2>/dev/null || ok=0
+  # TIMINGS TRAVEL WITH THE RECORD. The `[t]` line exists only in the job log, which CI deletes after
+  # its retention period, and shard sizing is computed from these numbers. Elapsed so far when the
+  # record is published (an early exit records what it spent). Informational: no verdict reads them.
+  printf 'secs_family=%s\nsecs_build=%s\nsecs_gate=%s\n' \
+    "$(( $(_sw_now) - ${_fam_t0:-$(_sw_now)} ))" "${FAMILY_SECS[build]:-0}" "${FAMILY_SECS[gate]:-0}" \
+    >> "$stage/verdict.txt" 2>/dev/null || ok=0
   # VALIDATE BEFORE PUBLISHING. Every cp and the verdict write used to be `|| true`, and
   # evidence_written incremented on the rename alone — so an EMPTY directory counted as evidence.
   [ -s "$stage/verdict.txt" ] || ok=0
