@@ -14,7 +14,7 @@ checkpoint `8187a2f7` (F1/F9: only `spawn` constructs `Child`, public fork APIs 
 shared assumption summary with package-scoped identity, bug 074 refused before LLVM; conclusion
 qualification; JSON API v2; policy/assumption-file checks on structured facts, bug 075).
 
-**In the closure candidate (branch `r0484-closure`), not on `main` until validated:** proof
+**On `main` since 2026-10-08 (closure `245cd51c`, main CI 37771982899; R-0484 closed):** proof
 admission on the shared summary (bug 076); named trusted boundaries; descriptor-coverage
 reporting; cross-dependency capability explanations; audit F6 carried out and `_exit` audited;
 `std.mem.sizeof` classified as a compiler intrinsic; containment of bug 077.

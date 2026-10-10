@@ -10,6 +10,46 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### R-0483 CLOSED: Owner-Bound Views For Zero-Copy Parsing
+
+_Library repair, closed 2026-10-09 at `4f005715` (main CI 37917463687)._
+
+The 2026-09-16 repair made views pointer-free coordinates, which left one gap: a
+`ByteView` built from one buffer could be applied to another of sufficient length, and the
+call site would not show it. `std.numeric.BoundView` closes the gap without a new language
+feature. The view owns the `Bytes` it describes, `byte(i)` takes no buffer argument, so a
+read against another buffer cannot be written (E0262). The owner is a private field (E0298),
+and the view is linear (E0208), so the owner cannot be mutated, reallocated or dropped while
+bound. `examples/packet` reads its payload in place with no copy and no `Alloc`, and its
+predictable profile stays at one failure (`main`, for I/O).
+
+Gated by `check_view_lifetime.sh` (28 checks), with positive controls for zero-copy reads,
+moved owners, cross-package use and rebinding after release. **Limit:** binding checks
+coordinates against the owner's bounds, not where they came from; `ByteView` remains
+reusable coordinates by contract.
+
+### R-0484 CLOSED: `with(...)` Lists A Function's External Authority
+
+_Language and report semantics, closed 2026-10-08 at `245cd51c` (main CI 37771982899)._
+
+A function's header now states the external authority it can reach, through handles,
+`trusted` bodies, foreign bindings and dependencies. Handles carry their capability in
+their type (`Writer<C>`, `Reader<C>`) and using one requires `with(C)`. `trusted` absorbs
+only `Unsafe`. Every `extern` declares its effects (E0116/E0117). Proof admission reads the
+same package-scoped assumption summary as the reports. Foreign effect declarations, trusted
+memory safety and descriptor classification are reported as named human assumptions, and
+indirect calls and unloaded callees are reported as incomplete coverage, not as
+"no external authority". JSON API v2 replaced `is_pure` with `no_external_authority`.
+
+**Accepted limits, each gated:** single-file mode and `--query` do not analyse
+dependencies and say so; bug 077 is contained by refusal; descriptor classification rests on
+the construction/caller audit; bodiless user declarations cannot carry `with(...)`; reports
+still compute the older opacity analysis beside the summary.
+
+**Not qualified:** the full mutation campaign was cancelled at GitHub's 6-hour job limit on
+both dispatched closure-candidate runs. That is recorded as incomplete qualification, not a
+pass, and remains ROADMAP queue row 0.
+
 ### Proof Admission Separated From Proof Maintenance
 
 _Evidence-semantics repair, landed 2026-09-26 (R-0484)._

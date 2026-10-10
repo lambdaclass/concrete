@@ -30,21 +30,22 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0484: explicit external authority through handles, foreign calls and dependencies** | Core repair merged at `a7c9cf1c`; follow-up branches are not yet a validated main checkpoint. Finish F1/F9 integration, R10 assumption qualification and coverage, separate proof-admission consolidation, and the docs/examples/authority audit. Current commit and validation status live in [R-0484](#task-r-0484); semantics live in [HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md). | Header authority is enforced across handles/trusted code/externs/packages; reports qualify assumptions and gaps; proof admission uses shared summary facts with its own eligibility rules; all R-0484 completion controls pass on the final integrated commit. Full mutation-campaign qualification remains row 2, not an R-0484 closure requirement. |
-| 1 | **R-0483: sound, usable zero-copy parsing — core repair done 2026-09-16, owner-bound results open** | **Done:** pointer-free `ByteCursor` taking the buffer on every access; `ByteView`'s length brand removed and the coordinate contract stated; `Text` owns immutable storage; raw access moved to `RawCursor` behind `with(Unsafe)`. `examples/packet` migrated with its predictable profile unchanged at 1 failed / 13 passed. The attestation migration was resolved by regeneration on full scoped rows (21/21 packages paired, 42 renames, 38 references rewritten); `crypto_verify` 4 proved and `elf_header` 5 proved, both 0 stale and 0 closure-unjustified. Gated by `check_view_lifetime.sh` 13/0 in the fast suite and CI; stdlib 313/0, suite 1713/0. **Remaining:** `ByteView::of_cursor` yields coordinates meaningful only against the buffer the cursor was reading, which the contract permits but a call site does not show. | owner-bound parsed results, where pairing a view with the wrong buffer is unrepresentable rather than merely out-of-contract, with a fixture showing the substitution refused; then the entry moves to the changelog |
-| 2 | **Post-R-0004 mutation qualification checkpoint** | **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
-| 3 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
-| 4 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
-| 5 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
-| 6 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 7 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 8 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 9 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 10 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 11 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 12 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 13 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 14 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+| 0 | **Post-R-0004 mutation qualification checkpoint** | **R-0484 closed without campaign qualification (2026-10-08):** on both dispatched closure-candidate runs the Nightly job's "Gate mutation coverage" step was cancelled at GitHub's 6-hour limit ([37464836373](https://github.com/unbalancedparentheses/concrete2/actions/runs/37464836373) on `8187a2f7`, [37707710553](https://github.com/unbalancedparentheses/concrete2/actions/runs/37707710553) on `245cd51c`), so no complete campaign exists for the closed revision. That is incomplete qualification, never a pass; the checkpoint exception does not transfer to a release. **Local runs unblocked 2026-09-29:** from `51fa2058` (2026-08-31) until `8fcf352d` the driver refused its own snapshot on macOS (a self-location check was correct only by accident on Linux), so no campaign could run on a Mac in that window; the census below predates it. CI's Linux runs were unaffected. **Diagnostic census shipped:** 81/81 reported at `898d9a7b`: 73 causal kills, 6 invalid experiments, 2 survivors, 0 could-not-apply; artifact/log preserved. **Schema split shipped:** `98dee5e3` separates completion, dispositions, integrity and qualification. Six production-wiring families now make the live inventory 91. Next: exercise the pure reconciliation matrix; close both `freshFactsFor` survivors with a live trusted-boundary receipt plus reject-all control; regenerate retained evidence for and repair/reclassify all six invalids; instrument timings; validate paired source/build snapshots and isolated-worker acceleration against mismatch/corruption/crash/order attacks; then obtain one clean pushed-HEAD run with 91 discovered = selected = executed = reported = killed, zero invalid/survived/could-not-apply, `completed=1`, `integrity_ok=1`, `qualified=1` |
+| 1 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
+| 2 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
+| 3 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
+| 4 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 5 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 6 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 7 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 8 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 9 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 10 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 11 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 12 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+
+R-0484 (closed 2026-10-08 at `245cd51c`) and R-0483 (closed 2026-10-09 at `4f005715`) moved to
+[CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
@@ -59,7 +60,7 @@ No release requires finishing the entire task catalog.
 
 | release scope | user-visible outcome | required increments / owners | explicitly deferred |
 |---|---|---|---|
-| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Close R-0484 and R-0483; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | R-0484 and R-0483 are closed; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
 | Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing Phase 17 alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
 | Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing Phase 17 beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
 | Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
@@ -76,9 +77,11 @@ The next proposed release is the experimental systems preview. This is an
 acceptance checklist, not an alternate priority list. It does not move release
 packaging ahead of current queue work or mark any in-flight branch as complete.
 
-- [ ] R-0484 meets its remaining closure criteria, including assumption propagation,
-  construction/runtime restrictions, final audit and documentation reconciliation.
-- [ ] R-0483 rejects mismatched owners for parsed results with retained controls.
+- [x] R-0484 meets its closure criteria (closed 2026-10-08 at `245cd51c`, main CI 37771982899);
+  its accepted limits are listed in its task section and its mutation campaign is
+  incompletely qualified (queue row 0).
+- [x] R-0483 rejects mismatched owners for parsed results with retained controls (closed
+  2026-10-09 at `4f005715`; `check_view_lifetime.sh` 28/0 in main CI 37917463687).
 - [ ] R-0333 names the exact preview subset, supported target/OS/toolchain matrix,
   known limitations and the validation required for every advertised feature.
 - [ ] R-0335/R-0336/R-0337 publish a versioned description and consistent claims for
@@ -1591,7 +1594,7 @@ The remaining design work has existing owners:
 | area | owner | decision or completion required |
 |---|---|---|
 | Safe library abstractions | R-0483, with R-0485 for review clarity | Make views, cursors, text and resource APIs preserve the existing ownership rules; distinguish reusable coordinates from access tied to an encapsulated owner, and preserve validated content against mutation. This is primarily library/API work, not a presumption that a new lifetime system is needed. |
-| Authority and effects | R-0484 | **Decided 2026-09-29/30:** a header's `with(...)` is the complete list of the function's external authority. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implementation is order 0 of the current queue. |
+| Authority and effects | R-0484 | **Decided 2026-09-29/30:** a header's `with(...)` is the complete list of the function's external authority. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implemented; closed 2026-10-08 (see the task). |
 | Compositional contract semantics | R-0473/R-0474/R-0477, Phase 9 and the existing VC bridge tasks | Complete typed contracts, binding/substitution, call composition, narrow mutation/frame semantics and checked totality. This is the largest remaining language-design area; R-0486 supplies the forcing workload. |
 
 **First bounded verification milestone — planned, not shipped:** one sequential
@@ -1634,8 +1637,8 @@ waive the current queue's evidence-integrity prerequisites or the broader releas
 
 ### Design-review priorities (ratified 2026-09-15)
 
-R-0483 (sound, usable zero-copy parsing) is repaired and gated; the next milestone is
-R-0484's authority semantics, decided 2026-09-29 and now order 0 of the current queue. R-0485 improves review clarity within the existing
+R-0483 (sound, usable zero-copy parsing) closed 2026-10-09 with owner-bound views, and
+R-0484's authority semantics closed 2026-10-08; both are in the changelog. R-0485 improves review clarity within the existing
 error model. R-0486 carries the same workload into the typed-contract and external-user
 rows above; it is not an additional public flagship or a parallel execution queue.
 The ByteCursor defect and Text/ByteView lifetime, identity and content-validity
@@ -10603,7 +10606,25 @@ the library and is not a fourth public flagship.
 **Objective:** Make safe zero-copy parsing preserve owner lifetime through every
 stdlib wrapper, not only through syntactic `&T` references.
 
-**Status (2026-09-16): REPAIRED AND GATED.** The three properties are fixed by
+**Status (2026-10-09): CLOSED at `4f005715`** (main CI
+[37917463687](https://github.com/unbalancedparentheses/concrete2/actions/runs/37917463687)
+passed; `check_view_lifetime.sh` 28/0 there). Owner-bound results landed as
+`std.numeric.BoundView`, which owns the `Bytes` it describes; design, fixtures and measured
+cost are in [tests/regressions/owner_bound/README.md](tests/regressions/owner_bound/README.md).
+Wrong-buffer substitution is rejected statically: `BoundView::byte` takes no buffer
+argument (`bound_no_buffer_argument`, E0262). The owner is a private field, so it cannot be
+mutated while bound (`bound_no_owner_mutation`, E0298), and the view is linear, so it must
+be released (`bound_must_release`, E0208). Positive controls cover the zero-copy read, the
+moved owner, the cross-package case and rebinding after release. `examples/packet` reads
+its payload through a `BoundView` with no copy and no `Alloc`; its predictable profile is
+1 failed (`main`, I/O) / 16 passed.
+
+**Accepted limit:** binding re-validates coordinates against the owner's bounds, not
+their provenance — coordinates computed from a different buffer of sufficient length still
+bind. The guarantee is that reads go to the owner held. `ByteView` deliberately stays
+reusable coordinates, and the survey rows asserting that remain in the gate.
+
+**Earlier status (2026-09-16): REPAIRED AND GATED.** The three properties are fixed by
 structure rather than by checks, the attestation migration is done and validated, and
 `check_view_lifetime.sh` (13/0) runs in both the fast local suite and CI.
 
@@ -10658,7 +10679,7 @@ only by deleting an API proves the old spelling is gone and nothing else, so the
 positive controls carry the weight. Five further tests in `std/src/numeric.con` cover
 the replacement directly. Stdlib 313/0, suite 1713/0.
 
-**Remaining, and not claimed as done:** `ByteView::of_cursor` still produces a view
+**Remaining at 2026-09-16 (resolved 2026-10-09 by `BoundView`, above):** `ByteView::of_cursor` still produces a view
 whose coordinates are meaningful only against the buffer the cursor was reading, which
 the coordinate contract permits but does not make obvious at a call site. Owner-bound
 parsed results — where substitution is unrepresentable rather than merely
@@ -10821,7 +10842,40 @@ heap proofs or emitted-binary correctness.
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
 
-**Status (2026-10-05): core checkpoint on main; follow-up integration pending.**
+**Status (2026-10-08): CLOSED at `245cd51c`** (fast-forward from `8187a2f7`; main CI
+[37771982899](https://github.com/unbalancedparentheses/concrete2/actions/runs/37771982899)
+passed every job). Closure covered proof admission on the shared assumption summary
+(bug 076), named trusted boundaries with the obligations they absorb, descriptor-audit
+coverage complete over std (audit F6 carried out, `_exit` audited, inventory drift
+gated), cross-dependency capability explanations, `std.mem.sizeof` classified as a
+compiler intrinsic, and the docs/authority audit. Per-surface status (checked, human
+assumption, incomplete coverage, unsupported) is in
+[HANDLE_CAPABILITIES.md](docs/language/HANDLE_CAPABILITIES.md#implementation-status-2026-10-07).
+
+**Accepted limits, each gated rather than hidden:**
+
+- single-file mode and `--query` do not analyse dependencies and say so
+  (`dependencies_analysed=false`); `--query` refuses a project file
+  (`check_capability_explanations.sh`);
+- bug 077 (relative call into a nested submodule) is contained: the build refuses it
+  (`check_bug077_contained.sh`);
+- descriptor classification is a human assumption covered only by the construction/caller
+  audit; typed descriptors remain the second step;
+- a bodiless user `fn` declaration cannot carry `with(...)`, so user code cannot declare
+  an intrinsic;
+- reports still compute the older indirect-call opacity analysis beside the summary and
+  treat a function as opaque if either says so.
+
+**Not qualified:** the full mutation campaign never completed on a closure candidate —
+the Nightly job's mutation-coverage step was cancelled at GitHub's 6-hour limit on both
+dispatched runs (37464836373 on `8187a2f7`, 37707710553 on `245cd51c`). R-0484 closed
+under the checkpoint exception, which does not certify the campaign or carry over to a
+release; qualification is queue row 0. F7/F8 stay with R-0013, F9's runtime contract
+with spawn's stated assumptions, typed descriptors with the second step.
+
+The record below is the pre-closure inventory, kept for its commit trail.
+
+**Earlier status (2026-10-05): core checkpoint on main; follow-up integration pending.**
 The first implementation merged at `a7c9cf1c`: encoding A, capability parameters on
 structs, mandatory extern effect declarations (E0116/E0117), the `trusted` reversal,
 and `Writer<C>`/`Reader<C>`. Main is at roadmap cleanup `8960c97d` at this inventory.
