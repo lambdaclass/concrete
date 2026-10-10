@@ -52,7 +52,11 @@ while read -r _localref localsha _remoteref remotesha; do
 done
 # Fallback when stdin gave nothing (hook invoked by hand, or `make pre-push`).
 if [ -z "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
+  # Everything this branch would publish: from its upstream, else from where it left
+  # origin/main. `HEAD~1` checked only the tip commit, so a by-hand run on a multi-commit
+  # branch with no upstream skipped the gates for every earlier commit.
   up="$(git rev-parse "@{upstream}" 2>/dev/null || echo "")"
+  [ -n "$up" ] || up="$(git merge-base HEAD origin/main 2>/dev/null || echo "")"
   [ -n "$up" ] && changed="$(git diff --name-only "$up"..HEAD)" \
                || changed="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")"
 fi
@@ -85,7 +89,10 @@ bash scripts/tests/run_fast_surface_gates.sh || {
 # that enforces that is CI-only (the trust gate). Bug 066 shipped with the document and
 # the gate but no map entry, pre-push passed, and main went red. This check runs in
 # under a second, so it belongs on the first local push rather than a CI round-trip.
-if git diff --name-only "$range" 2>/dev/null | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
+# Reads $changed, the union over every pushed ref. It used `git diff "$range"`, but $range
+# held only the LAST ref's range and is unset when the hook runs by hand, where `set -u`
+# failed the substitution and silently skipped this check.
+if printf '%s\n' "$changed" | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
   echo "pre-push: bug-filing completeness (docs/bugs, corpus map, coverage)"
   bash scripts/tests/check_bug_filing_complete.sh || {
     echo "pre-push: BUG FILING INCOMPLETE — a bug needs a document, a corpus entry, and coverage" >&2
