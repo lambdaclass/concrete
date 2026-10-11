@@ -22,7 +22,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # gate aborted. That is exactly what lib/fingerprints.sh exists to prevent.
 source "$ROOT_DIR/scripts/tests/lib/fingerprints.sh"
 cd "$ROOT_DIR"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# Background jobs (compiler prefetch, probe workers) are always joined on the normal path; on an
+# abnormal exit they are stopped rather than left writing into a deleted directory.
+TMP="$(mktemp -d)"; trap 'for _j in $(jobs -p); do kill "$_j" 2>/dev/null || :; done; rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 # EVERY ASSERTION'S IDENTITY, recorded as it is made. The pinned TOTAL catches deletion but not
 # substitution: delete one negative test and duplicate another and the count, both source manifests
@@ -46,9 +48,38 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); ASSERT_LABELS+="$1
 # these calls happen inside command substitutions, where a counter increment would be lost with the
 # subshell — the same class of defect.
 CC_FAILURES="$TMP/cc_failures"; : > "$CC_FAILURES"
+# EACH (FILE, REPORT) PAIR IS COMPILED ONCE PER RUN AND ITS RAW RESULT REUSED. The gate made 359
+# compiler calls for 104 distinct pairs — ~72s of a ~300s run spent re-deriving outputs it already
+# had. This is sound because nothing in this gate writes inside the repository (every scratch file
+# is under $TMP), so the compiler's inputs cannot change between two calls of the same pair within a
+# run, and the memo lives in $TMP so nothing survives into another run or mutation state.
+#
+# WHAT IS MEMOIZED IS THE RAW PROCESS RESULT — stdout and exit status — and NOTHING ELSE. Every call
+# to `cc` still applies the full completeness and exit-status validation below to that result and
+# appends its own line to $CC_FAILURES, so the failure count is exactly what it was when every call
+# re-ran the compiler. A crash is memoized as a crash, and every reader of it is still told so.
+#
+# _cc_raw is the ONE place the compiler is invoked. The status file is written LAST and by rename,
+# so a producer that dies midway leaves no status, and `cc` then recomputes instead of reading a
+# partial output as a finished one.
+CC_MEMO="$TMP/cc_memo"; mkdir -p "$CC_MEMO"
+_cc_key() { local k="${1//%/%25}"; k="${k//\//%2F}"; printf '%s@%s' "$k" "$2"; }
+_cc_raw() {
+  local f="$1" rep="$2" k rc=0 me="$BASHPID"   # captured HERE: a redirection expands in the child
+  k="$CC_MEMO/$(_cc_key "$f" "$rep")"
+  "$ROOT_DIR/.lake/build/bin/concrete" "$f" --report "$rep" > "$k.out.$me" 2>/dev/null || rc=$?
+  mv -f "$k.out.$me" "$k.out"
+  printf '%s\n' "$rc" > "$k.rc.$me"
+  mv -f "$k.rc.$me" "$k.rc"
+}
 cc() {
-  local f="$1" rep="$2" rc=0 out
-  out="$("$ROOT_DIR/.lake/build/bin/concrete" "$f" --report "$rep" 2>/dev/null)" || rc=$?
+  local f="$1" rep="$2" rc=0 out k
+  k="$CC_MEMO/$(_cc_key "$f" "$rep")"
+  [ -f "$k.rc" ] || _cc_raw "$f" "$rep"
+  rc="$(cat "$k.rc")"
+  # Identical to capturing the process's stdout directly: command substitution strips the same
+  # trailing newlines from a file's contents as from a pipe's.
+  out="$(cat "$k.out")"
   # A NONZERO EXIT IS NORMAL HERE and must not be treated as a producer failure: the compiler exits
   # nonzero when the SUBJECT is bad — a stale-proof fixture is meant to be rejected — while still
   # printing its report. Six such runs exist in this corpus. What is never normal is an EMPTY
@@ -141,6 +172,41 @@ reconcile_compiler_runs() {
   fi
 }
 
+# PREFETCH, IN PARALLEL, THE PAIRS THIS GATE IS KNOWN TO READ. Purely a warm-up of the memo above:
+# it never records a verdict and never touches $CC_FAILURES, so a pair it misses is computed on
+# demand by `cc` and a pair it computes needlessly asserts nothing. The population is the exit
+# matrix at the end of this gate (every proof-carrying fixture x every report) plus the few
+# single-use inputs outside it. Four workers, each with a FIXED share of the list, so the work done
+# does not depend on scheduling; each pair's output goes to its own file.
+cc_prefetch() {
+  local -a pairs=() pids=()
+  local f r w i
+  for f in $(grep -rlE '#\[(proof_by|ensures_proof)\(' examples --include='*.con' | sort); do
+    for r in subject-facts proof-status consistency generated-implementations; do pairs+=("$f|$r"); done
+  done
+  pairs+=("tests/programs/proof_decode_header.con|proof-status"
+          "examples/thesis_demo/src/main.con|generated-implementations"
+          "examples/thesis_demo/src/main_drifted.con|generated-implementations"
+          "examples/proof_patterns/composition_deep_trust/src/main.con|proof-status")
+  for ((w = 0; w < 4; w++)); do
+    (
+      for ((i = w; i < ${#pairs[@]}; i += 4)); do
+        _cc_raw "${pairs[$i]%%|*}" "${pairs[$i]#*|}"
+      done
+    ) &
+    pids+=("$!")
+  done
+  # A worker that failed is not a verdict — `cc` recomputes whatever it left without a status — but
+  # it is still an unexpected shell failure, and the ERR trap must see it rather than have it waived.
+  for w in "${pids[@]}"; do wait "$w"; done
+}
+# IN THE BACKGROUND, while the probes below are registered. A pair `cc` asks for before its prefetch
+# finished is simply computed by `cc` as well; both producers write private temporaries and publish
+# by rename, so a reader sees one complete result or none. The prefetch is joined before any
+# verdict is reconciled, so nothing outlives this run.
+cc_prefetch &
+CC_PREFETCH_PID=$!
+
 PROBE_N=0
 PROBE_RECS=""
 probe() {
@@ -155,7 +221,63 @@ probe() {
     no "$label — has an EMPTY expectation, which would accept any output"
     return
   fi
-  cat > "$TMP/p.lean" <<LEAN
+  # A probe registered after the batches were generated would never run. Refuse it by name rather
+  # than let it vanish from a green total.
+  if [ "$OPROBE_LAUNCHED" = "1" ]; then
+    no "$label — registered AFTER the ordinary probe batches were launched, so it never ran"
+    return
+  fi
+  OPROBE_LABEL+=("$label"); OPROBE_WANT+=("$want"); OPROBE_BODY+=("$body")
+}
+
+# ---------------------------------------------------------------------------
+# BATCHED ORDINARY PROBES — many probes per `lake env lean` process, every verdict still per probe.
+#
+# Each ordinary probe used to be its own process, and each process spent most of its ~0.8s
+# reloading the Concrete and Examples environments: 244 probes, ~200s of a ~300s run, almost none
+# of it spent on the probe bodies. What follows runs them in a handful of processes and reads back
+# one verdict per probe, with the SAME three requirements the per-process version applied:
+# the process must succeed, the probe must not have produced a Lean diagnostic, and its own output
+# must contain its expectation as a whole word.
+#
+# ISOLATION IS DECIDED FROM THE BODY, CONSERVATIVELY. A body whose every top-level line is `#eval`
+# or a comment adds nothing to the environment, so any number of them can share a file without one
+# changing what another sees ("pure"). A body that declares with `def`/`theorem` changes the
+# environment for whatever follows it, so declaring bodies share a file only when no two declare the
+# same name and none MENTIONS a name another declares — a whole-word over-approximation of
+# reference, so that a declaration can neither collide with nor be resolved by a batch-mate. Any
+# other top-level command (instance, attribute, open, set_option, a block comment, ...), anything
+# that writes the environment from an #eval, or a declaring body that READS the environment, gets
+# a process of its own: exactly the old isolation. Pure batches contain no declarations at all, so
+# an environment scan there sees what it saw alone, plus only the gate's own preamble.
+#
+# ATTRIBUTION IS BY CONSTRUCTION, TWICE. Each probe is bracketed by markers carrying its index, and
+# Lean elaborates and reports commands in order, so a probe's output is exactly the lines between
+# its two markers — and the batch's marker lines must be EXACTLY the expected sequence, begin/end
+# for each member in order, or the whole batch fails. Independently, every positioned diagnostic is
+# mapped by LINE NUMBER to the probe whose source range contains it. A diagnostic, exit status or
+# marker the attribution cannot account for fails EVERY probe in that batch — never none of them.
+# The markers are `#print "<literal>"`, NOT `#eval IO.println`: every `#eval` pays for a sorry-axiom
+# scan of its whole dependency closure, measured at ~0.19s each, so 488 marker evaluations cost
+# more than the probes they bracketed. `#print` of a literal evaluates nothing.
+#
+# PARALLELISM DOES NOT CHANGE ANY RESULT. Batches are formed deterministically from the registration
+# order, each process writes only its own files, and workers take FIXED shares of the job list, so
+# scheduling decides only when a verdict is computed, never what it is. Verdicts are emitted in
+# registration order after every process has finished.
+OPROBE_LABEL=(); OPROBE_WANT=(); OPROBE_BODY=()
+OPROBE_LAUNCHED=0
+readonly OPROBE_PURE_CHUNKS=8 OPROBE_WORKERS=4
+OB_MEMBERS=()      # batch -> space-separated probe indices
+OB_PIDS=()
+declare -a OB_OF=() OB_START=() OB_END=() OB_WHY=() OB_RC=()
+_OB_CLASS=""
+OB_SUMMARY=""
+NC_LABEL=()       # negative tests, queued by expect_no_compile and run as jobs beside the batches
+
+# THE PREAMBLE IS THE ONE THE PER-PROCESS PROBE USED, unchanged.
+_probe_preamble() {
+  cat <<LEAN
 import Concrete
 import Examples
 open Lean Meta Concrete Concrete.Proof
@@ -174,47 +296,270 @@ def tid? (m d : String) : Option DefinitionIdentity :=
 -- \`probe_mint\` and run in their group's batch driver: ONE successful replay per group, with every
 -- receipt in that group deriving from that replay.
 --
--- The mint definition lives ONLY in that driver. It used to be duplicated here too, and a second
--- definition of the same fact is a second thing to keep in step — the batch could have drifted from
--- this copy without any gate noticing.
---
 -- Material validation does NOT go through minting at all: it is pure, and most of those legs are
--- about material rather than authority. Keeping them separate is why this file did not grow 36
--- kernel invocations.
-$body
+-- about material rather than authority.
 LEAN
-  # `|| true` USED TO DISCARD THE EXIT STATUS here, so a Lean that printed the wanted string and
-  # then exited nonzero passed. Output matching and process success are separate facts and both are
-  # required; the batch path already checked both, and this asymmetry left the 240 ordinary probes
-  # weaker than the 18 batched ones.
-  # ONE capture site. The self-test swaps the COMMAND, not the capture: a seam with its own status
-  # capture would stay red even if `|| true` were restored on the real invocation, so it would prove
-  # nothing about the path that actually runs Lean.
-  local out rc=0
-  local -a cmd=(lake env lean "$TMP/p.lean")
-  if [ "${PROBE_SELFTEST_FAKE_EXIT:-}" = "1" ]; then
-    printf '#!/bin/sh\nprintf "%%s\\n" "$1"\nexit 9\n' > "$TMP/fakeprobe"; chmod +x "$TMP/fakeprobe"
-    cmd=("$TMP/fakeprobe" "$want")
+}
+
+# Sets _OB_CLASS to pure | decl | solo — see ISOLATION above. Anything not positively recognized is
+# `solo`. Pure bash on purpose: this runs once per probe.
+_oprobe_class() {
+  local body="$1" line
+  local writes='(^|[^A-Za-z0-9_])(add|modify|set|compile|declare|register)[A-Z]|realize|CommandElabM|elabCommand|initialize'
+  # An INDENTED command keyword is still a command to Lean, so it cannot hide behind indentation.
+  local indented='^[[:space:]]+(private |protected |noncomputable |partial |unsafe )*(def|theorem|lemma|abbrev|instance|attribute|open|export|set_option|namespace|section|end|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|structure|inductive|class|axiom|opaque|universe|variable|deriving|initialize|example|mutual)([[:space:]]|$)'
+  _OB_CLASS="pure"
+  # Anything that could WRITE the environment from inside an #eval runs alone — over-matched on
+  # purpose (no probe currently mentions any of these, so the cost of a false hit is one process).
+  if [[ "$body" =~ $writes ]]; then
+    _OB_CLASS="solo"; return
   fi
-  out="$("${cmd[@]}" 2>&1)" || rc=$?
-  # An error is a failure whatever the text says — a probe that cannot elaborate
-  # must not pass on a digit inside "line:col" (that happened in the migration gate).
-  # Match a LEAN DIAGNOSTIC, not the bare word: `Except.error` is a legitimate
-  # value and matching "error" made every probe of a refusal a false negative —
-  # the vacuity guard corrupting the measurement it exists to protect.
-  if [ "$rc" -ne 0 ]; then
-    no "$label — probe exited $rc: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-180)"
-  elif grep -qE "error:|error\(lean" <<<"$out"; then
-    no "$label — probe did not elaborate: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-180)"
-  # WHOLE WORD, NOT SUBSTRING. `grep -F "BOUND"` is satisfied by "NOTBOUND", and "COMPARABLE" by
-  # "INCOMPARABLE" — so a predicate could be INVERTED and its own positive control would still pass.
-  # Measured: ten such pairs among these expectations, and that negation-of-itself case is the one
-  # that matters, because it is the failure a positive control exists to catch. Whole-LINE matching
-  # would also be sound but is wrong here: many probes legitimately assert a token inside a rendered
-  # Lean value, and requiring the entire line would pin incidental formatting as if it were the
-  # claim.
-  elif grep -qwF -- "$want" <<<"$out"; then ok "$label"
-  else no "$label — got: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-180)"; fi
+  while IFS= read -r line; do
+    if [[ "$line" =~ $indented ]]; then _OB_CLASS="solo"; return; fi
+    case "$line" in
+      ''|[[:space:]]*|'#eval '*|'#eval'|'--'*) ;;
+      'def '*|'theorem '*) _OB_CLASS="decl" ;;
+      *) _OB_CLASS="solo"; return ;;
+    esac
+  done <<<"$body"
+  if [ "$_OB_CLASS" = "decl" ] && [[ "$body" == *getEnv* ]]; then _OB_CLASS="solo"; fi
+}
+_oprobe_decl_names() {
+  sed -nE 's/^(def|theorem) +([^ :({[]+).*/\2/p' <<<"$1"
+}
+
+# Partition the queue into batches. Deterministic: depends only on the registered bodies.
+_oprobe_partition() {
+  local n=${#OPROBE_LABEL[@]} i
+  local -a pure=() solo=() dbatch_names=() dbatch_bodies_idx=()
+  local nd=0
+  for ((i = 0; i < n; i++)); do
+    _oprobe_class "${OPROBE_BODY[$i]}"
+    case "$_OB_CLASS" in
+      pure) pure+=("$i") ;;
+      solo) solo+=("$i") ;;
+      decl)
+        local names nm j placed=0 conflict m
+        names="$(_oprobe_decl_names "${OPROBE_BODY[$i]}" | tr '\n' ' ')"
+        for ((j = 0; j < nd; j++)); do
+          conflict=0
+          # Mine must not be declared or mentioned by any member; theirs must not be mentioned by me.
+          for nm in $names; do
+            case " ${dbatch_names[$j]} " in *" $nm "*) conflict=1 ;; esac
+            for m in ${dbatch_bodies_idx[$j]}; do
+              if grep -qwF -- "$nm" <<<"${OPROBE_BODY[$m]}"; then conflict=1; fi
+            done
+          done
+          for nm in ${dbatch_names[$j]}; do
+            if grep -qwF -- "$nm" <<<"${OPROBE_BODY[$i]}"; then conflict=1; fi
+          done
+          if [ "$conflict" = "0" ]; then
+            dbatch_names[$j]+=" $names"; dbatch_bodies_idx[$j]+=" $i"; placed=1; break
+          fi
+        done
+        if [ "$placed" = "0" ]; then
+          dbatch_names[$nd]="$names"; dbatch_bodies_idx[$nd]="$i"; nd=$((nd + 1))
+        fi ;;
+    esac
+  done
+  # Pure probes: OPROBE_PURE_CHUNKS contiguous chunks of near-equal size, placed FIRST so that each
+  # worker starts on one of the large batches.
+  local np=${#pure[@]} k lo hi chunk
+  for ((k = 0; k < OPROBE_PURE_CHUNKS; k++)); do
+    lo=$((k * np / OPROBE_PURE_CHUNKS)); hi=$(((k + 1) * np / OPROBE_PURE_CHUNKS))
+    chunk=""
+    for ((i = lo; i < hi; i++)); do chunk+="${chunk:+ }${pure[$i]}"; done
+    [ -z "$chunk" ] || OB_MEMBERS+=("$chunk")
+  done
+  for ((j = 0; j < nd; j++)); do OB_MEMBERS+=("${dbatch_bodies_idx[$j]}"); done
+  for i in ${solo[@]+"${solo[@]}"}; do OB_MEMBERS+=("$i"); done
+  OB_SUMMARY="${#pure[@]} pure in $OPROBE_PURE_CHUNKS shared files, $((n - ${#pure[@]} - ${#solo[@]})) declaring in $nd, ${#solo[@]} alone"
+}
+
+# Generate batch b's Lean file, its line ranges, and the self-test transcript.
+_oprobe_write_batch() {
+  local b="$1" f="$TMP/ob.$b.lean" i id nl nlines
+  _probe_preamble > "$f"
+  nl="$(awk 'END{print NR}' "$f")"
+  : > "$TMP/ob.$b.fake"
+  for i in ${OB_MEMBERS[$b]}; do
+    printf -v id '%03d' "$i"
+    OB_OF[$i]="$b"
+    # Line numbers are counted, not re-read: a body printed with '%s\n' occupies one line more than
+    # the newlines it contains.
+    nlines="${OPROBE_BODY[$i]//[!$'\n']/}"
+    printf '#print "<<OPROBE-BEGIN-%s>>"\n%s\n#print "<<OPROBE-END-%s>>"\n' "$id" "${OPROBE_BODY[$i]}" "$id" >> "$f"
+    OB_START[$i]=$((nl + 1))
+    nl=$((nl + 1 + ${#nlines} + 1 + 1))
+    OB_END[$i]="$nl"
+    printf '<<OPROBE-BEGIN-%s>>\n%s\n<<OPROBE-END-%s>>\n' "$id" "${OPROBE_WANT[$i]}" "$id" >> "$TMP/ob.$b.fake"
+  done
+  # The counted line numbers ARE the attribution, so they are checked against the file itself.
+  if [ "$(awk 'END{print NR}' "$f")" != "$nl" ]; then
+    OB_WHY[$b]="the generated batch file does not have the line count its probe ranges assume"
+  fi
+}
+
+# `|| true` USED TO DISCARD THE EXIT STATUS of the per-probe process, so a Lean that printed the
+# wanted string and then exited nonzero passed. Output matching and process success are separate
+# facts and both are required. Here `|| rc=$?` captures it and _oprobe_judge_batch accounts for it:
+# exit 1 is accepted for a member only when every Lean diagnostic in the batch was attributed to
+# SOME member — Lean exits 1 exactly when it logged an error, so the status is then explained, and
+# the members that own those errors fail. Any other status fails the whole batch.
+# ONE capture site for every batch. The self-test swaps the COMMAND, not the capture: a seam with
+# its own status capture would stay red even if `|| true` were restored on the real invocation.
+# Under PROBE_SELFTEST_FAKE_EXIT the process prints every probe's markers around its wanted string
+# and exits 9, which must still fail every probe.
+_oprobe_run_batch() {
+  local b="$1" rc=0
+  local -a cmd=(lake env lean "$TMP/ob.$b.lean")
+  if [ "${PROBE_SELFTEST_FAKE_EXIT:-}" = "1" ]; then
+    printf '#!/bin/sh\ncat "$1"\nexit 9\n' > "$TMP/fakeprobe.$b"; chmod +x "$TMP/fakeprobe.$b"
+    cmd=("$TMP/fakeprobe.$b" "$TMP/ob.$b.fake")
+  fi
+  "${cmd[@]}" > "$TMP/ob.$b.out" 2> "$TMP/ob.$b.err" || rc=$?
+  printf '%s\n' "$rc" > "$TMP/ob.$b.rc"
+}
+
+# Jobs are probe batches ("ob N") and negative tests ("nc N", see expect_no_compile). Each job is
+# its own process writing its own files; worker w runs jobs w, w+W, w+2W, ... .
+launch_ordinary_probes() {
+  OPROBE_LAUNCHED=1
+  _oprobe_partition
+  local nb=${#OB_MEMBERS[@]} b w n
+  local -a jobs=()
+  for ((b = 0; b < nb; b++)); do _oprobe_write_batch "$b"; done
+  # The large pure batches first, one per worker; then the negative tests and the small batches.
+  for ((b = 0; b < nb && b < OPROBE_PURE_CHUNKS; b++)); do jobs+=("ob $b"); done
+  for ((n = 0; n < ${#NC_LABEL[@]}; n++)); do jobs+=("nc $n"); done
+  for ((b = OPROBE_PURE_CHUNKS; b < nb; b++)); do jobs+=("ob $b"); done
+  for ((w = 0; w < OPROBE_WORKERS; w++)); do
+    (
+      for ((n = w; n < ${#jobs[@]}; n += OPROBE_WORKERS)); do
+        case "${jobs[$n]}" in
+          "ob "*) _oprobe_run_batch "${jobs[$n]#ob }" ;;
+          "nc "*) _nc_run "${jobs[$n]#nc }" ;;
+        esac
+      done
+    ) &
+    OB_PIDS+=("$!")
+  done
+}
+
+# The source line of every positioned Lean diagnostic in $1 that names file $2.
+_oprobe_errlines() {
+  awk -v f="$2:" '/error:|error\(lean/ {
+      k = index($0, f)
+      if (k > 0) { rest = substr($0, k + length(f)); if (match(rest, /^[0-9]+:/)) print substr(rest, 1, RLENGTH - 1) }
+    }' <<<"$1"
+}
+
+# Why batch b as a whole cannot be trusted (OB_WHY[b]), or empty; and, when it can, each member's
+# output split into $TMP/ob.$b.seg.<id>.
+_oprobe_judge_batch() {
+  local b="$1" f="$TMP/ob.$b.lean" rc out err i pos owner lines id
+  [ -z "${OB_WHY[$b]:-}" ] || return 0
+  if [ ! -f "$TMP/ob.$b.rc" ] || [ ! -f "$TMP/ob.$b.out" ] || [ ! -f "$TMP/ob.$b.err" ]; then
+    OB_RC[$b]="none"; OB_WHY[$b]="its probe process recorded no exit status or output"; return 0
+  fi
+  rc="$(<"$TMP/ob.$b.rc")"; OB_RC[$b]="$rc"
+  out="$(<"$TMP/ob.$b.out")"; err="$(<"$TMP/ob.$b.err")"
+  case "$rc" in
+    0|1) ;;
+    *) OB_WHY[$b]="probe exited $rc: $(printf '%s %s' "$out" "$err" | tr '\n' ' ' | cut -c1-180)"; return 0 ;;
+  esac
+  if grep -qE "error:|error\(lean" <<<"$err"; then
+    OB_WHY[$b]="probe did not elaborate (stderr): $(printf '%s' "$err" | tr '\n' ' ' | cut -c1-180)"; return 0
+  fi
+  # The marker lines must be exactly begin/end per member, in member order.
+  local want_markers="" got_markers
+  for i in ${OB_MEMBERS[$b]}; do
+    printf -v id '%03d' "$i"
+    want_markers+="<<OPROBE-BEGIN-$id>>"$'\n'"<<OPROBE-END-$id>>"$'\n'
+  done
+  got_markers="$(grep -E '^<<OPROBE-(BEGIN|END)-[0-9]+>>$' <<<"$out" || true)"
+  if [ "$got_markers"$'\n' != "$want_markers" ]; then
+    OB_WHY[$b]="probe results are missing or out of order (exit $rc): $(printf '%s' "$out" | tail -3 | tr '\n' ' ' | cut -c1-180)"; return 0
+  fi
+  # Positioned diagnostics, by line. One that falls in no probe's range is unattributable.
+  lines="$(_oprobe_errlines "$out" "$f")"
+  local attributed=0
+  for pos in $lines; do
+    owner=""
+    for i in ${OB_MEMBERS[$b]}; do
+      if [ "$pos" -ge "${OB_START[$i]}" ] && [ "$pos" -le "${OB_END[$i]}" ]; then owner="$i"; break; fi
+    done
+    if [ -z "$owner" ]; then
+      OB_WHY[$b]="probe did not elaborate: a diagnostic at line $pos belongs to no probe: $(grep -m1 -F -- "$f:$pos:" <<<"$out" | cut -c1-180)"; return 0
+    fi
+    attributed=1
+  done
+  # Diagnostics OUTSIDE every probe's segment (unpositioned, or printed between probes).
+  local outside
+  outside="$(awk '/^<<OPROBE-BEGIN-[0-9]+>>$/{inside=1; next} /^<<OPROBE-END-[0-9]+>>$/{inside=0; next} !inside{print}' <<<"$out" | grep -E "error:|error\(lean" || true)"
+  if [ -n "$outside" ]; then
+    OB_WHY[$b]="probe did not elaborate: a diagnostic outside every probe: $(printf '%s' "$outside" | tr '\n' ' ' | cut -c1-180)"; return 0
+  fi
+  # A failing exit with nothing to account for it fails the whole batch.
+  if [ "$rc" = "1" ] && [ "$attributed" = "0" ]; then
+    OB_WHY[$b]="probe exited 1 with no diagnostic attributable to any probe: $(printf '%s %s' "$out" "$err" | tr '\n' ' ' | cut -c1-180)"; return 0
+  fi
+  # Split the (now verified) output into one file per member, in one pass.
+  awk -v d="$TMP/ob.$b.seg." '
+    /^<<OPROBE-BEGIN-[0-9]+>>$/ { id = $0; gsub(/[^0-9]/, "", id); seg = d id; printf "" > seg; inside = 1; next }
+    /^<<OPROBE-END-[0-9]+>>$/   { close(seg); inside = 0; next }
+    inside { print > seg }' <<<"$out"
+  OB_ERRLINES[$b]="$lines"
+}
+declare -a OB_ERRLINES=()
+
+finish_ordinary_probes() {
+  local w b i id seg nb=${#OB_MEMBERS[@]} rc pos haserr verdicts=0
+  for w in "${OB_PIDS[@]}"; do wait "$w"; done
+  for ((b = 0; b < nb; b++)); do _oprobe_judge_batch "$b"; done
+  judge_negative_tests
+  echo ""
+  echo "=== ordinary Lean probes (${#OPROBE_LABEL[@]} probes in $nb processes: $OB_SUMMARY) ==="
+  for ((i = 0; i < ${#OPROBE_LABEL[@]}; i++)); do
+    verdicts=$((verdicts + 1))
+    local label="${OPROBE_LABEL[$i]}" want="${OPROBE_WANT[$i]}"
+    b="${OB_OF[$i]:-}"
+    if [ -z "$b" ]; then no "$label — was assigned to NO batch, so it never ran"; continue; fi
+    rc="${OB_RC[$b]:-none}"
+    if [ -n "${OB_WHY[$b]:-}" ]; then no "$label — ${OB_WHY[$b]}"; continue; fi
+    printf -v id '%03d' "$i"
+    if [ ! -f "$TMP/ob.$b.seg.$id" ]; then no "$label — produced no result segment (exit $rc)"; continue; fi
+    seg="$(<"$TMP/ob.$b.seg.$id")"
+    # This probe's positioned diagnostics, by its source range.
+    haserr=0
+    for pos in ${OB_ERRLINES[$b]:-}; do
+      if [ "$pos" -ge "${OB_START[$i]}" ] && [ "$pos" -le "${OB_END[$i]}" ]; then haserr=1; fi
+    done
+    # An error is a failure whatever the text says — a probe that cannot elaborate
+    # must not pass on a digit inside "line:col" (that happened in the migration gate).
+    # Match a LEAN DIAGNOSTIC, not the bare word: `Except.error` is a legitimate
+    # value and matching "error" made every probe of a refusal a false negative —
+    # the vacuity guard corrupting the measurement it exists to protect.
+    if [ "$haserr" = "1" ] || [[ "$seg" =~ error:|error\(lean ]]; then
+      if [ "$rc" != "0" ]; then
+        no "$label — probe exited $rc and did not elaborate: $(printf '%s' "$seg" | tr '\n' ' ' | cut -c1-180)"
+      else
+        no "$label — probe did not elaborate: $(printf '%s' "$seg" | tr '\n' ' ' | cut -c1-180)"
+      fi
+    # WHOLE WORD, NOT SUBSTRING. `grep -F "BOUND"` is satisfied by "NOTBOUND", and "COMPARABLE" by
+    # "INCOMPARABLE" — so a predicate could be INVERTED and its own positive control would still pass.
+    # Measured: ten such pairs among these expectations, and that negation-of-itself case is the one
+    # that matters, because it is the failure a positive control exists to catch. Whole-LINE matching
+    # would also be sound but is wrong here: many probes legitimately assert a token inside a rendered
+    # Lean value, and requiring the entire line would pin incidental formatting as if it were the
+    # claim. The match is against THIS probe's segment only, never the batch's output.
+    elif grep -qwF -- "$want" <<<"$seg"; then ok "$label"
+    else no "$label — got: $(printf '%s' "$seg" | tr '\n' ' ' | cut -c1-180)"; fi
+  done
+  # Every queued probe must have been answered exactly once.
+  if [ "$verdicts" -ne "${#OPROBE_LABEL[@]}" ]; then
+    no "ordinary probe batches reported $verdicts verdicts for ${#OPROBE_LABEL[@]} queued probes"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1590,32 +1935,63 @@ expect_no_compile() {
     NC_RECS+="$(_manifest_record "$label" "${pats[*]-}" "negative" "$body")
 "
   fi
-  cat > "$TMP/h.lean" <<LEAN
+  if [ "$OPROBE_LAUNCHED" = "1" ]; then
+    no "$label — registered AFTER the probe jobs were launched, so it never ran"
+    return
+  fi
+  # QUEUED, NOT RUN HERE: each negative test is still its OWN process — a snippet that must fail to
+  # elaborate cannot share a file with anything — but it runs as a job beside the ordinary probe
+  # batches instead of serially, and its verdict is computed by judge_negative_tests from exactly
+  # the output and exit status it would have produced here.
+  local n=${#NC_LABEL[@]} p
+  NC_LABEL+=("$label")
+  cat > "$TMP/nc.$n.lean" <<LEAN
 import Concrete
 import Examples
 open Lean Meta Concrete Concrete.Proof
 $body
 LEAN
-  # NO DUMP SEAM. `EXPECT_NC_DUMP=1` returned before reporting any verdict, so an inherited value
-  # skipped all nine negative assertions and still allowed exit 0 — the same class of hole as the
-  # manifest skip. Diagnostics for pinning new patterns are obtained by running the snippet directly.
-  local out rc=0
-  out="$(lake env lean "$TMP/h.lean" 2>&1)" || rc=$?
-  local p miss=""
-  for p in ${pats[@]+"${pats[@]}"}; do
-    grep -qE -- "$p" <<<"$out" || { miss="$p"; break; }
+  # NUL-separated, so a pattern is recovered exactly whatever it contains.
+  : > "$TMP/nc.$n.pats"
+  for p in ${pats[@]+"${pats[@]}"}; do printf '%s\0' "$p" >> "$TMP/nc.$n.pats"; done
+}
+# NO DUMP SEAM. `EXPECT_NC_DUMP=1` returned before reporting any verdict, so an inherited value
+# skipped all nine negative assertions and still allowed exit 0 — the same class of hole as the
+# manifest skip. Diagnostics for pinning new patterns are obtained by running the snippet directly.
+_nc_run() {
+  local n="$1" rc=0
+  lake env lean "$TMP/nc.$n.lean" > "$TMP/nc.$n.out" 2>&1 || rc=$?
+  printf '%s\n' "$rc" > "$TMP/nc.$n.rc"
+}
+judge_negative_tests() {
+  local n label out rc p miss
+  echo ""
+  echo "=== negative (must-not-compile) tests ==="
+  for ((n = 0; n < ${#NC_LABEL[@]}; n++)); do
+    label="${NC_LABEL[$n]}"
+    if [ ! -f "$TMP/nc.$n.rc" ] || [ ! -f "$TMP/nc.$n.out" ]; then
+      no "$label — its process recorded no exit status or output, so nothing was refuted"
+      continue
+    fi
+    rc="$(<"$TMP/nc.$n.rc")"; out="$(<"$TMP/nc.$n.out")"
+    local -a pats=()
+    while IFS= read -r -d '' p; do pats+=("$p"); done < "$TMP/nc.$n.pats"
+    miss=""
+    for p in ${pats[@]+"${pats[@]}"}; do
+      grep -qE -- "$p" <<<"$out" || { miss="$p"; break; }
+    done
+    if [ "${#pats[@]}" -eq 0 ]; then
+      no "$label — no expected diagnostic declared, so any error would satisfy it"
+    elif [ "$rc" -eq 0 ]; then
+      no "$label — IT COMPILED (exit 0), so the invariant is documentation rather than a type"
+    elif ! grep -qE "error:|error\(lean" <<<"$out"; then
+      no "$label — exited $rc but produced no Lean diagnostic, so it failed for an unrelated reason"
+    elif [ -n "$miss" ]; then
+      no "$label — rejected for the WRONG reason (missing /$miss/): $(printf '%s' "$out" | grep -m1 -E 'error' | cut -c1-180)"
+    else
+      ok "$label"
+    fi
   done
-  if [ "${#pats[@]}" -eq 0 ]; then
-    no "$label — no expected diagnostic declared, so any error would satisfy it"
-  elif [ "$rc" -eq 0 ]; then
-    no "$label — IT COMPILED (exit 0), so the invariant is documentation rather than a type"
-  elif ! grep -qE "error:|error\(lean" <<<"$out"; then
-    no "$label — exited $rc but produced no Lean diagnostic, so it failed for an unrelated reason"
-  elif [ -n "$miss" ]; then
-    no "$label — rejected for the WRONG reason (missing /$miss/): $(printf '%s' "$out" | grep -m1 -E 'error' | cut -c1-180)"
-  else
-    ok "$label"
-  fi
 }
 
 expect_no_compile "direct construction does NOT compile (constructor is private)" '
@@ -3797,6 +4173,10 @@ fi
 
 echo ""
 
+# Every ordinary probe is registered by now. Their batches run in the background while the exit
+# matrix and the mint batch below proceed; their verdicts are collected before any reconciliation.
+launch_ordinary_probes
+
 # THE EXIT MATRIX, ACROSS THE WHOLE FIXTURE POPULATION.
 #
 # `cc` enforces the expected status for calls that HAPPEN, and the gate does not otherwise run every
@@ -3834,6 +4214,8 @@ fi
 # GATE_DONE=1: the ERR trap that catches an unexpected shell failure must still be armed while the
 # batch runs, or a crash inside the batch would leave a short but green-looking result.
 flush_mint_probes
+wait "$CC_PREFETCH_PID"
+finish_ordinary_probes
 reconcile_compiler_runs
 reconcile_ordinary_probes
 reconcile_assertion_total
