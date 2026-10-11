@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=102
+EXPECTED_FAMILIES=107
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1554,6 +1554,37 @@ add "checker-digest-binds-image-bytes" "Concrete/Proof/Replay.lean" "check_check
 add "mint-toolchain-binds-checker" "Concrete/Proof/Receipt.lean" "check_replay_producer.sh" yes \
   '  , toolchainId := toolchainIdOf m.compilerVersion sr.checker.canonical' \
   '  , toolchainId := toolchainIdOf m.compilerVersion sr.environment.toolchain'
+
+# R-0208 slice 1b: a receipt is minted only for a theorem the kernel RE-CHECKED in the replay run.
+# All five verified red by hand before registration.
+
+# MINTING REQUIRES THE RE-CHECK. Without it an ill-typed theorem found in a compiled .olean mints.
+add "mint-requires-recheck" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '  if rv != .rechecked then throw (.notRechecked theoremName rv)' \
+  '  if false then throw (.notRechecked theoremName rv)'
+
+# THE RE-CHECK MUST REACH THE KERNEL. Collecting the closure and not replaying it reports every
+# theorem rechecked, the ill-typed one included.
+add "recheck-runs-kernel" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  "    let _ ← env0.replay' consts" \
+  '    let _ := consts'
+
+# ...AND MUST REPLAY THE WORKSPACE CONSTANTS. Walking the closure while replaying none of it is the
+# same vacuous pass by a different route.
+add "recheck-replays-workspace-closure" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '    consts := consts.insert c ci' \
+  '    consts := consts'
+
+# NATIVE EVALUATION IS NAMED, never re-checked: a bv_decide theorem must read native_trust, not a
+# generic failure that hides why the kernel could not re-establish it.
+add "recheck-native-never-rechecked" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '    if axs.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler) then' \
+  '    if false then'
+
+# ONE VERDICT PER THEOREM. Taking the first of two lines lets an injected verdict decide.
+add "recheck-verdict-unambiguous" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  $'    match lines.filter (·.startsWith pfx) with\n    | [l] =>' \
+  $'    match (lines.filter (·.startsWith pfx)).take 1 with\n    | [l] =>'
 
 # THE REPORT HANDLERS MUST RETURN. attestation-join, generated-implementations and impl-manifest
 # each printed their report and then fell through to the "Unknown report type" branch, exiting 1 on
