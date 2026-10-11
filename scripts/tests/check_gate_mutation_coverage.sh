@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=107
+EXPECTED_FAMILIES=112
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1585,6 +1585,36 @@ add "recheck-native-never-rechecked" "Concrete/Proof/Replay.lean" "check_kernel_
 add "recheck-verdict-unambiguous" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
   $'    match lines.filter (·.startsWith pfx) with\n    | [l] =>' \
   $'    match (lines.filter (·.startsWith pfx)).take 1 with\n    | [l] =>'
+
+# R-0208 decisions 3-4: receiptV2's readable checker and the compiled advisory register. All five
+# verified red by hand before registration.
+
+# THE READABLE IDENTITY MUST BE THE BOUND ONE. Without the re-hash an edited checker line dodges an
+# advisory while the record still reads current.
+add "receipt-decode-binds-readable-identity" "Concrete/Proof/Receipt.lean" "check_receipt_consumption.sh" yes \
+  '  if toolchainIdOf compiler checker != toolchain then throw (.identityNotBound toolchain)' \
+  '  if false then throw (.identityNotBound toolchain)'
+
+# REVOKED BEATS AFFECTED: a revocation is the stronger statement and must decide.
+add "policy-revoked-beats-affected" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '    if hits.any (·.status == .revoked) then' \
+  '    if false then'
+
+# AN ADVISORY BEATS AN ACCEPTANCE: an accepted build named by an advisory is not accepted.
+add "policy-advisory-beats-acceptance" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '    else if hits.any (·.status == .affected) then' \
+  '    else if false then'
+
+# UNKNOWN IS NOT ACCEPTED: a checker the register neither accepts nor names fails closed.
+add "policy-unknown-not-accepted" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '    else { base with advisories := ids }' \
+  '    else { base with status := .accepted, advisories := ids }'
+
+# THE REGISTER IDENTITY BINDS ITS ADVISORIES, or two registers that decide differently share a name
+# and a decision cannot say which made it. Written to keep `adv` used (an unused let is an error).
+add "policy-identity-binds-advisories" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '     ++ adv)' \
+  '     ++ adv.take 0)'
 
 # THE REPORT HANDLERS MUST RETURN. attestation-join, generated-implementations and impl-manifest
 # each printed their report and then fell through to the "Unknown report type" branch, exiting 1 on
