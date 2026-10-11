@@ -172,6 +172,47 @@ else
   no "could not find the literal to edit — this control lost its target"
 fi
 
+echo "=== a claim that is no longer proved is refused before any comparison ==="
+
+# THE STATUS CHECK, NOT THE DIGEST COMPARISON. Every leg above invalidates by changing what the
+# receipt binds, so a consumer that compared material without first asking whether the claim is
+# still proved passed them all (the 2026-10-11 campaign: freshfacts-requires-proved-status
+# SURVIVED). Editing ONLY a proof fingerprint makes the claim `stale` while its body is unchanged;
+# the consumer must refuse it by status, and naming the cause is the observable difference.
+cp -r examples/elf_header "$WORK/stale"
+STALE_SRC="$WORK/stale/src/main.con"
+"$BIN" "$STALE_SRC" --report receipts --out "$TMP/stale.txt" >/dev/null 2>&1
+STALE_BEFORE="$(tally "$(consume "$TMP/stale.txt" "$STALE_SRC")")"
+if grep -q 'proof_fingerprint("v2:a669dd14614bc56a33be35aa10226679")' "$STALE_SRC"; then
+  sed -i 's/v2:a669dd14614bc56a33be35aa10226679/v2:00000000000000000000000000000000/' "$STALE_SRC"
+  STALE_OUT="$(consume "$TMP/stale.txt" "$STALE_SRC")"
+  if [ "$STALE_BEFORE" != "5 current, 0 not current, 0 unreadable" ]; then
+    no "the stale-claim control had no current receipts to start from — it would be vacuous"
+  elif grep -qE "^\s+✗ main\.check_magic — cannot be checked \[claim_not_proved\] .*'stale'" <<<"$STALE_OUT"; then
+    ok "a claim made stale by its fingerprint alone is refused as [claim_not_proved], naming staleness"
+  else
+    no "a stale claim was not refused by status — its receipt was compared as if the claim were proved"
+  fi
+else
+  no "could not find check_magic's fingerprint to edit — this control lost its target"
+fi
+
+echo "=== a trusted closure's receipt reads current WITH its boundary ==="
+
+# THE TRUST QUALIFICATION, consumed. Issuance names the boundary (check_receipt_issuance.sh); the
+# consumer's fresh facts must carry it too, or every trust-qualified receipt is refused and the
+# elf_header legs above — none of which crosses a trusted boundary — cannot tell
+# (freshfacts-carries-trusted-boundaries SURVIVED the 2026-10-11 campaign).
+TRUST_SRC="examples/proof_patterns/composition_trusted_helper/src/main.con"
+"$BIN" "$TRUST_SRC" --report receipts --out "$TMP/trusted.txt" >/dev/null 2>&1
+TRUST_OUT="$(consume "$TMP/trusted.txt" "$TRUST_SRC")"
+if [ "$(tally "$TRUST_OUT")" = "2 current, 0 not current, 0 unreadable" ] \
+   && grep -qE '^\s+✓ calls\.combine — kernel-replayed, receipt current .* ASSUMING calls\.dbl' <<<"$TRUST_OUT"; then
+  ok "a trust-qualified receipt reads current and still names its boundary (combine ASSUMING calls.dbl)"
+else
+  no "a trust-qualified receipt did not read current with its boundary: $(tally "$TRUST_OUT")"
+fi
+
 echo "=== a changed PROOF LIBRARY invalidates its receipts ==="
 
 # THE AUTHORITY GAP THIS CLOSES. Until 2026-08-16 `importsId` bound a digest of the compiler's own
