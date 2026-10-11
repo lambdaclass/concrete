@@ -1,0 +1,7 @@
+name = "kernel_recheck_fixture"
+
+[[lean_lib]]
+name = "Bad"
+
+[[lean_lib]]
+name = "Good"

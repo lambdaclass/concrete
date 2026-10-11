@@ -217,6 +217,9 @@ test-receipt-consumption: build ## R-0004 package 3: a stored receipt is untrust
 test-checker-identity: build ## R-0208 slice 1a: receipts bind the checker that actually ran (loaded images), not lean-toolchain text
 	bash scripts/tests/check_checker_identity.sh
 
+test-kernel-recheck: build ## R-0208 slice 1b: receipts mint only for theorems the kernel re-checked in the replay run
+	bash scripts/tests/check_kernel_recheck.sh
+
 test-v2-migration-plan: build ## R-0004 package 3: the V1->V2 migration dry run reconciles and manufactures no freshness
 	bash scripts/tests/check_v2_migration_plan.sh
 

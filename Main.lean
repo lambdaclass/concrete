@@ -2797,6 +2797,7 @@ def compileAndReport (inputPath : String) (reportType : String)
               -- WHAT "current" DOES NOT YET MEAN (R-0208, open slices). Stated so a reader cannot take
               -- identity agreement for a re-check or for advisory acceptance.
               , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
+              , "  Receipts are minted only after a fresh kernel re-check of each theorem's workspace closure."
               , "  'current' means the stored facts match this program, proof library and checker identity."
               , "  It is NOT a fresh kernel re-check in this run, and no checker advisory policy has been applied."]))
         -- THE EXIT CODE CARRIES THE VERDICT when receipts were consumed. It was unconditionally 0 —
@@ -3067,6 +3068,17 @@ def compileAndReport (inputPath : String) (reportType : String)
       out := out ++ s!"\nToolchain: "
       out := out ++ tc ++ " (declared pin)\n"
       out := out ++ s!"Checker: {(res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"}\n"
+      -- THE FRESH KERNEL RE-CHECK (R-0208 decision 1), separately from the lookup below: "Kernel-
+      -- verified" counts names found in compiled .oleans; only `rechecked` means the kernel re-ran.
+      let rc := res.recheck
+      let nRe := (rc.filter (·.2 == .rechecked)).length
+      let nNat := (rc.filter (·.2 == .native)).length
+      out := out ++ s!"Kernel re-check: {nRe} of {rc.length} theorem(s) re-checked, {nNat} native-trust (not kernel-replayable), {rc.length - nRe - nNat} failed or not run\n"
+      for (thm, v) in rc do
+        match v with
+        | .failed why => out := out ++ s!"  re-check FAILED {thm}: {why}\n"
+        | .notRun => out := out ++ s!"  re-check NOT RUN {thm}\n"
+        | _ => pure ()
       if !verified.isEmpty then
         out := out ++ s!"\n  Kernel-verified ({verified.length}):\n"
         for fn in verified do

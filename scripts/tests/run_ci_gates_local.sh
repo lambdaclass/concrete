@@ -126,7 +126,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
 # 240 -> 241: check_prepush_record.sh (the pre-push validation-record bindings), pinned in the same commit.
 # 241 -> 242: check_checker_identity.sh (R-0208 slice 1a checker identity), pinned at integration.
-EXPECTED_GATE_COMMANDS=242
+# 242 -> 243: check_kernel_recheck.sh (R-0208 slice 1b fresh kernel re-check), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=243
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

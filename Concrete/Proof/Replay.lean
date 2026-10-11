@@ -239,6 +239,31 @@ structure ReplayEnvironment where
   checker           : Option CheckerIdentity := none
   deriving BEq, Repr
 
+/-- What a FRESH KERNEL RE-CHECK said about one theorem (R-0208 decision 1).
+
+    `#check @thm` only looks a name up in `.olean` files an earlier build produced; it accepted an
+    ill-typed theorem added with the kernel check skipped (measured 2026-10-11). The re-check replays
+    the declarations of every workspace module in the theorem's import closure through the kernel,
+    in the same process whose identity the result records. Modules shipped with the toolchain are
+    not replayed: they are part of the checker build that `CheckerIdentity` names. -/
+inductive RecheckVerdict where
+  /-- Every workspace module in the closure replayed through the kernel without error. -/
+  | rechecked
+  /-- The theorem rests on native evaluation (`Lean.ofReduceBool`/`trustCompiler`). The kernel
+      cannot re-run compiled code, so no replay can re-establish it; never treated as rechecked. -/
+  | native
+  /-- Some module in the closure failed to replay; the message names it. -/
+  | failed (why : String)
+  /-- The run did not report exactly one re-check verdict for this theorem. -/
+  | notRun
+  deriving BEq, Repr
+
+def RecheckVerdict.canonical : RecheckVerdict → String
+  | .rechecked => "rechecked"
+  | .native    => "native_trust"
+  | .failed _  => "recheck_failed"
+  | .notRun    => "recheck_not_run"
+
 /-- What a completed replay produced. It records what happened, INCLUDING failure — a report that
     refused to describe a failed run would just hide failures.
 
@@ -263,6 +288,8 @@ structure ReplayResult where
   /-- Combined stdout and stderr, retained verbatim. The only diagnosis available for a general
       failure, and the material every per-target verdict was read out of. -/
   transcript     : String
+  /-- The fresh kernel re-check, one verdict per distinct theorem name. -/
+  recheck        : List (String × RecheckVerdict) := []
   deriving BEq, Repr
 
 namespace ReplayResult
@@ -332,6 +359,9 @@ inductive ReplayEvidenceRefusal where
   /-- The run did not establish which checker produced its verdicts. A receipt binds the checker,
       and binding an unknown one would let any later checker match it. -/
   | checkerUnidentified
+  /-- The theorem was found but not RE-CHECKED by the kernel in this run (decision 1): a lookup in
+      an `.olean` is not a check. -/
+  | notRechecked (theoremName : String) (verdict : RecheckVerdict)
   deriving BEq, Repr
 
 def ReplayEvidenceRefusal.canonical : ReplayEvidenceRefusal → String
@@ -340,6 +370,7 @@ def ReplayEvidenceRefusal.canonical : ReplayEvidenceRefusal → String
   | .underGeneralFailure => "under_general_failure"
   | .fallbackWorkspace _ => "fallback_workspace"
   | .checkerUnidentified => "checker_unidentified"
+  | .notRechecked ..     => "not_rechecked"
 
 def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
   | .notReplayed t =>
@@ -354,6 +385,10 @@ def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
   | .checkerUnidentified =>
       "the run did not establish which checker executable and build produced its verdicts, so "
       ++ "there is nothing a receipt could bind"
+  | .notRechecked t v =>
+      s!"'{t}' was found but not re-checked by the kernel in this run ({v.canonical}"
+      ++ (match v with | .failed why => s!": {why}" | _ => "")
+      ++ "); a lookup in a compiled .olean is not a kernel check"
 
 /-- The kernel accepted THIS theorem, in THIS environment.
 
@@ -385,6 +420,8 @@ def SuccessfulReplay.of? (r : ReplayResult) (theoremName : String)
     throw (.fallbackWorkspace r.environment.workspace)
   let some checker := r.environment.checker
     | throw .checkerUnidentified
+  let rv := ((r.recheck.find? (·.1 == theoremName)).map (·.2)).getD .notRun
+  if rv != .rechecked then throw (.notRechecked theoremName rv)
   return { theoremName := c.target.theoremName
          , subject := c.target.subject
          , environment := r.environment
@@ -587,6 +624,104 @@ def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) 
     let some buildDigest ← checkerBuildDigest hashed named | return none
     return some { version, githash, platform, buildDigest }
 
+/-- The Lean commands that RE-CHECK each theorem through the kernel, in the replay process itself.
+
+    For each theorem: if it rests on native evaluation it is reported `native`; otherwise every
+    module in its import closure whose object file is NOT under the toolchain's own library is
+    replayed with `Lean.Environment.replay'` (the routine `leanchecker` uses: declarations go to the
+    kernel; constructors and recursors are compared against what the kernel regenerates), each
+    module once per run. Measured 2026-10-11: `elf_header`'s closure is 16 modules, ~7 s.
+
+    The replay process is the one whose identity `checkerIdentityProbe` reports, so the checker that
+    re-checked is the checker the receipt binds. Running `leanchecker` instead would put a second,
+    unidentified executable in that role. -/
+def recheckProbe (nonce : String) (theorems : List String) : String :=
+  let names := ", ".intercalate (theorems.map fun t => "\"" ++ t ++ "\"")
+  ((r#"
+-- Fresh kernel re-check of each theorem's workspace dependency closure (R-0208).
+open Lean in
+unsafe def _concreteRecheckModule (module : Name) : IO (Except String Unit) := do
+  try
+    let mFile ← findOLean module
+    unless (← mFile.pathExists) do throw <| IO.userError s!"no object file for {module}"
+    let mut fnames := #[mFile]
+    let sFile := OLeanLevel.server.adjustFileName mFile
+    if (← sFile.pathExists) then
+      fnames := fnames.push sFile
+      let pFile := OLeanLevel.private.adjustFileName mFile
+      if (← pFile.pathExists) then fnames := fnames.push pFile
+    let parts ← readModuleDataParts fnames
+    if h : parts.size = 0 then throw <| IO.userError "failed to read module data" else
+    let (mod, _) := parts[0]
+    let (_, st) ← importModulesCore mod.imports |>.run
+    let env ← finalizeImport st mod.imports {} 0 false false (isModule := true)
+    let mut newConstants : Std.HashMap Name ConstantInfo := {}
+    for name in parts[parts.size-1].1.constNames, ci in parts[parts.size-1].1.constants do
+      newConstants := newConstants.insert name ci
+    let env' ← env.replay' newConstants
+    env'.freeRegions
+    return .ok ()
+  catch e => return .error (toString e)
+
+open Lean in
+def _concreteRecheckClosure (env : Environment) (m : Name) (sysLib : String) : IO (Array Name) := do
+  let mut todo := #[m]
+  let mut seen : NameSet := {}
+  let mut out := #[]
+  while h : todo.size > 0 do
+    let cur := todo.back
+    todo := todo.pop
+    if seen.contains cur then continue
+    seen := seen.insert cur
+    if (← findOLean cur).toString.startsWith sysLib then continue
+    out := out.push cur
+    match env.getModuleIdx? cur with
+    | some idx => for i in env.header.moduleData[idx.toNat]!.imports do todo := todo.push i.module
+    | none => pure ()
+  return out
+
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  let sysLib := ((← Lean.findSysroot) / "lib" / "lean").toString ++ "/"
+  let mut memo : Std.HashMap Name (Option String) := {}
+  for s in ([THEOREMS] : List String) do
+    let thm := s.toName
+    let some idx := env.getModuleIdxFor? thm
+      | IO.println s!"CONCRETE-RECHECK NONCE {s} unknown"
+    let axs ← liftCoreM <| Lean.collectAxioms thm
+    if axs.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler) then
+      IO.println s!"CONCRETE-RECHECK NONCE {s} native"
+    else
+      let mods ← _concreteRecheckClosure env env.header.moduleNames[idx.toNat]! sysLib
+      let mut bad : Option String := none
+      for mm in mods do
+        if !memo.contains mm then
+          let res ← unsafe _concreteRecheckModule mm
+          memo := memo.insert mm (match res with | .ok _ => none | .error e => some s!"{mm}: {e}")
+        if bad.isNone then bad := memo.getD mm none
+      match bad with
+      | none => IO.println s!"CONCRETE-RECHECK NONCE {s} rechecked"
+      | some why => IO.println s!"CONCRETE-RECHECK NONCE {s} failed {(why.replace "\n" " ").take 300}"
+"#).replace "NONCE" nonce).replace "THEOREMS" names
+
+/-- The re-check verdict the run reported for each theorem: EXACTLY one line per theorem, or
+    `notRun`. A missing or repeated line is not a verdict. -/
+def recheckVerdictsOf (nonce transcript : String) (theorems : List String)
+    : List (String × RecheckVerdict) :=
+  let lines := taggedLines "CONCRETE-RECHECK" nonce transcript
+  theorems.map fun t =>
+    let pfx := t ++ " "
+    match lines.filter (·.startsWith pfx) with
+    | [l] =>
+      let rest := String.ofList (l.toList.drop pfx.length)
+      (t, if rest == "rechecked" then .rechecked
+          else if rest == "native" then .native
+          else if rest == "unknown" then .failed "the theorem is not in the replayed environment"
+          else if rest.startsWith "failed " then .failed (String.ofList (rest.toList.drop 7))
+          else .notRun)
+    | _ => (t, .notRun)
+
 /-- Run `lake env lean` on `source` in `ws`, in a scratch directory that is always removed. -/
 def runChecker (ws : System.FilePath) (source : String)
     : IO (Except String IO.Process.Output) := do
@@ -694,6 +829,7 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
   let some (ws, env) ← resolveEnvironment req
     | return .error (.noWorkspace req.inputPath req.fallbackDir)
   let nonce ← freshNonce
+  let theorems := (req.targets.map (·.theoremName)).eraseDups
   -- Scratch file. Failure here is a refusal: nothing was checked.
   let scratchDir ← try
       let d ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
@@ -702,7 +838,8 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
     catch e => return .error (.scratchUnavailable (toString e))
   let scratch := scratchDir ++ "/kernel_replay.lean"
   try
-    IO.FS.writeFile ⟨scratch⟩ (req.source ++ checkerIdentityProbe nonce)
+    IO.FS.writeFile ⟨scratch⟩ ("import Lean\nimport LeanChecker.Replay\n" ++ req.source
+      ++ checkerIdentityProbe nonce ++ recheckProbe nonce theorems)
   catch e =>
     let _ ← IO.Process.output { cmd := "rm", args := #["-rf", scratchDir] }
     return .error (.scratchUnavailable (toString e))
@@ -732,7 +869,8 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
         | .bound   => .accepted
     { target := t, verdict }
   let checker ← checkerIdentityOf nonce transcript
+  let recheck := recheckVerdictsOf nonce transcript theorems
   return .ok { environment := { env with checker }, checks, exitCode := result.exitCode
-             , generalFailure, transcript }
+             , generalFailure, transcript, recheck }
 
 end Concrete.Proof
