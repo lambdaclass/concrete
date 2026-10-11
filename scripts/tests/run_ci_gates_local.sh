@@ -20,6 +20,21 @@
 #
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
 #        scripts/tests/run_ci_gates_local.sh --job "<CI job name substring>"
+#        scripts/tests/run_ci_gates_local.sh [--plan] [--first CMD]... [--job J]... [--filter S]...
+#
+# SELECTORS COMPOSE INTO ONE UNIQUE LIST. `--job`, `--filter` (or a bare positional substring) and
+# `--first` may each be repeated; the union is resolved ONCE, deduplicated by the normalized command
+# text, and every selected command runs exactly once. The pre-push hook used to call this runner once
+# per job and once per area, and the selections overlap: a Concrete/Proof change ran 79 gate
+# invocations of which only 67 were distinct (scripts/ci/proof_gate.sh twice, among others).
+#   --first CMD  runs CMD sequentially BEFORE the rest, in the order given, and a failure there stops
+#                the run before anything else launches — the fail-fast ordering the hook had when it
+#                ran the fast surface checklist first. CMD need not be a workflow command, but its
+#                script must exist.
+#   --plan       prints the resolved list (one command per line, execution order) and exits. It takes
+#                no lock, writes no summary and runs nothing.
+# Every --job/--filter must select at least one command on its own; an empty selector is refused,
+# exactly as a single empty filter always was.
 #
 # `--job` selects every gate declared inside one CI JOB, instead of guessing at
 # gate names. Filtering by name substring is itself a fact restated where it can
@@ -33,6 +48,203 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"
+
+# ARGUMENTS ARE PARSED BEFORE THE LOCK, BUT JUDGED AFTER IT. Parsing is pure; an error found here is
+# only reported once the lock is held (so the invalidation record below is written by the holder),
+# except in --plan mode, which never takes the lock.
+ARG_ERR=""
+PLAN=0
+JOBSEL=(); FILTERS=(); FIRST_CMDS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    # `--closure` IS DOCUMENTED but was never parsed: it fell through as a filter substring, matched
+    # no gate, and produced a partial result that looked like a deliberate subset.
+    --closure) CONCRETE_CLOSURE_RUN=1; shift ;;
+    --plan)    PLAN=1; shift ;;
+    --job|--filter|--first)
+      if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
+      case "$1" in
+        --job)    JOBSEL+=("$2") ;;
+        --filter) FILTERS+=("$2") ;;
+        --first)  FIRST_CMDS+=("$2") ;;
+      esac
+      shift 2 ;;
+    --*) ARG_ERR="unknown option $1"; break ;;
+    *)   FILTERS+=("$1"); shift ;;   # the legacy positional filter substring
+  esac
+done
+SELECTING=0
+[ "${#JOBSEL[@]}${#FILTERS[@]}${#FIRST_CMDS[@]}" = "000" ] || SELECTING=1
+
+# THE ONE EXTRACTOR. Strip any trailing REDIRECTION from the extracted command. The character
+# class stops at `&`, so a workflow line ending `... --trust-gate 2>&1 | tee
+# /tmp/trust-gate.log` was captured as `... --trust-gate 2>` — a redirect with no
+# target. `eval` then died of a parse error and the gate was counted FAIL, every
+# run, on a clean tree. So the trust gate was never actually EXECUTED locally
+# while appearing in the failure list: the loudest possible way to be silent.
+# Output is discarded by the runner anyway, so redirections are noise here.
+_extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
+  grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
+    | sed 's/[[:space:]][0-9]*[<>].*$//' \
+    | sed 's/[[:space:]]*$//' \
+    | sort -u
+}
+# The spelling the runner EXECUTES: `bash ./scripts/x.sh` and `bash scripts/x.sh` are one gate.
+# Deduplication is on this form, so two spellings of one gate can never both run.
+_norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
+
+# PINNED, not floored. A floor of 100 against 208 accepted the silent loss of 108 commands while
+# still producing a closure artifact, because DISCOVERED is derived from whatever survived.
+# The pin describes the WHOLE workflow, so it applies only when the whole workflow was read. With
+# `--job` the text is deliberately narrowed to one job first, and demanding all 208 commands from that
+# subset made the documented flag unusable (fail-closed, but unusable).
+# 213 -> 224: four gates added by R-0483/R-0484 and the diff-to-gate mapping
+# (check_view_lifetime, check_effect_opacity, check_gates_for_diff, and the
+# attestation reference-order gate). Updated here because the pin is what makes
+# "the whole workflow was read" checkable; leaving it stale turns a growth signal
+# into a permanent refusal.
+# 224 -> 229: the bug-071 capability gates — check_cross_package_caps,
+# check_cap_sibling_module, check_trusted_method, check_cap_inference,
+# check_absence_not_fact. The pin went stale for four commits because this runner is
+# not itself a CI gate, so nothing noticed; GitHub ran the five new gates the whole
+# time. Worth stating plainly: a pin that only a local tool enforces detects drift
+# whenever someone runs it, not when the drift happens.
+# 229 -> 230: check_spawn_exit.sh (bug 072). The pin went stale again in the commit
+# that added the gate, and the pre-push hook — which does run this — refused the push.
+# 230 -> 231: check_cap_struct_cross_package.sh (R-0484), pinned in the same commit.
+# 231 -> 232: check_foreign_assumptions_report.sh (R-0484 R10), pinned in the same commit.
+# 232 -> 233: check_assumption_summary.sh (R-0484 R10 assumption summaries), pinned in the same commit.
+# 233 -> 234: check_proof_admission.sh (R-0484 R10 proof admission over the summary), pinned in the same commit.
+# 234 -> 235: check_trusted_boundaries.sh (R-0484 R10 named trusted boundaries), pinned in the same commit.
+# 235 -> 236: check_descriptor_coverage.sh (R-0484 R10/R5 descriptor coverage), pinned in the same commit.
+# 236 -> 237: check_capability_explanations.sh (R-0484 R10 cross-package explanations), pinned in the same commit.
+# 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
+# 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
+# 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
+#   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
+#   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
+EXPECTED_GATE_COMMANDS=240
+
+# RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
+# FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
+# commands that are not workflow commands). On failure sets RESOLVE_ERR (a refusal token) and
+# RESOLVE_MSG; nothing is executed or written here.
+resolve_selection() {
+  RESOLVE_ERR=""; RESOLVE_MSG=""; SELECTED=(); FIRST_N=0; OUTSIDE=0
+  mapfile -t CMDS < <(_extract_cmds "$WORKFLOW" 2>/dev/null)
+  # VACUITY FLOOR ON THE INVENTORY ITSELF. `mapfile` does not fail when its process substitution
+  # produces nothing, so a missing workflow file or extractor drift yields CMDS=() — after which every
+  # loop below does nothing, DISCOVERED == EXECUTED == 0 holds, and closure mode writes `completed=1`
+  # with `PASS=0 FAIL=0`. PINNED, not floored: see EXPECTED_GATE_COMMANDS below.
+  # THE PIN NOW APPLIES TO EVERY RUN. `--job` used to read only that job's text and so could not
+  # check it; selection is now resolved against the whole workflow, and a job's commands must be a
+  # subset of it.
+  if [ "${#CMDS[@]}" != "$EXPECTED_GATE_COMMANDS" ]; then
+    RESOLVE_ERR="gate_inventory_vacuous(${#CMDS[@]})"
+    RESOLVE_MSG="gate extraction produced ${#CMDS[@]} commands from $WORKFLOW, pinned at $EXPECTED_GATE_COMMANDS.
+       If the workflow legitimately changed, update EXPECTED_GATE_COMMANDS in the SAME commit.
+       That is extractor failure, not an empty gate set. Refusing to report a verdict."
+    return 1
+  fi
+  # Every extracted command must be SYNTACTICALLY VALID before anything is run. A truncated command
+  # otherwise reports as a failing gate, which reads as "the tree is red" rather than "the extractor
+  # is broken" — and those demand opposite responses.
+  local cmd bad=""
+  for cmd in "${CMDS[@]}"; do
+    bash -n -c "$cmd" 2>/dev/null || bad="$bad
+         $cmd"
+  done
+  if [ -n "$bad" ]; then
+    RESOLVE_ERR="gate_extraction_invalid"
+    RESOLVE_MSG="gate extraction produced unrunnable commands — fix the extractor,
+       not the gates. A truncated command cannot be told from a red gate:$bad"
+    return 1
+  fi
+  local -A inv=() seen=()
+  local n
+  for cmd in "${CMDS[@]}"; do
+    n="$(_norm_cmd "$cmd")"
+    if [ -n "${inv[$n]:-}" ]; then
+      RESOLVE_ERR="gate_inventory_duplicate_spelling"
+      RESOLVE_MSG="the workflow spells one gate two ways ($n); a full run would execute it twice."
+      return 1
+    fi
+    inv[$n]=1
+  done
+  if [ "$SELECTING" = "0" ]; then
+    for cmd in "${CMDS[@]}"; do SELECTED+=("$(_norm_cmd "$cmd")"); done
+    return 0
+  fi
+  _sel_add() { if [ -z "${seen[$1]:-}" ]; then seen[$1]=1; SELECTED+=("$1"); return 0; fi; return 1; }
+  local script
+  for cmd in "${FIRST_CMDS[@]}"; do
+    n="$(_norm_cmd "$cmd")"
+    if ! bash -n -c "$n" 2>/dev/null; then
+      RESOLVE_ERR="first_command_invalid"; RESOLVE_MSG="--first command is not valid shell: $n"; return 1
+    fi
+    if [ -z "${inv[$n]:-}" ]; then
+      # Outside the workflow inventory (the docs-only checks are). It still has to name a script that
+      # exists: a missing script would otherwise "fail" for a reason that says nothing about the tree.
+      script="$(printf '%s' "$n" | grep -oE '(\./)?scripts/[^ ;|&]*\.(sh|py)' | head -1)"
+      if [ -z "$script" ] || [ ! -f "$script" ]; then
+        RESOLVE_ERR="first_command_missing_script"; RESOLVE_MSG="--first command names no existing script: $n"; return 1
+      fi
+      _sel_add "$n" && OUTSIDE=$((OUTSIDE+1))
+    else
+      _sel_add "$n" || true
+    fi
+  done
+  FIRST_N="${#SELECTED[@]}"
+  local j f t got
+  for j in "${JOBSEL[@]}"; do
+    # Job headers sit at two-space indent under `jobs:`; a name: line at that depth starts a new block.
+    t="$(mktemp)" || { RESOLVE_ERR="tmp_unavailable"; RESOLVE_MSG="mktemp failed"; return 1; }
+    awk -v job="$j" '
+      /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { inblock=0 }
+      /^    name:/ { inblock = (index($0, job) > 0) }
+      inblock { print }
+    ' "$WORKFLOW" > "$t"
+    if ! [ -s "$t" ]; then rm -f "$t"
+      RESOLVE_ERR="no_ci_job($j)"; RESOLVE_MSG="no CI job matching '$j'"; return 1
+    fi
+    got=0
+    while IFS= read -r cmd; do
+      [ -n "$cmd" ] || continue
+      n="$(_norm_cmd "$cmd")"
+      if [ -z "${inv[$n]:-}" ]; then rm -f "$t"
+        RESOLVE_ERR="job_command_outside_inventory"; RESOLVE_MSG="job '$j' yields '$n', which the whole-workflow extraction does not"; return 1
+      fi
+      got=$((got+1)); _sel_add "$n" || true
+    done < <(_extract_cmds "$t")
+    rm -f "$t"
+    if [ "$got" -eq 0 ]; then
+      RESOLVE_ERR="job_selected_nothing($j)"; RESOLVE_MSG="--job '$j' yielded no gate commands."; return 1
+    fi
+  done
+  for f in "${FILTERS[@]}"; do
+    # A SUBSET OF ZERO IS NOT A SUBSET — per selector. A typo'd filter used to skip every command and
+    # report `PARTIAL PASS=0`; with several selectors, one empty one would hide behind the others.
+    got=0
+    for cmd in "${CMDS[@]}"; do
+      n="$(_norm_cmd "$cmd")"
+      [[ "$n" == *"$f"* ]] || continue
+      got=$((got+1)); _sel_add "$n" || true
+    done
+    if [ "$got" -eq 0 ]; then
+      RESOLVE_ERR="filter_selected_nothing($f)"; RESOLVE_MSG="filter '$f' matches no gate command."; return 1
+    fi
+  done
+  return 0
+}
+
+# --plan: print the resolved selection and stop. No lock, no summary, no build, no gate.
+if [ "$PLAN" = "1" ]; then
+  [ -z "$ARG_ERR" ] || { echo "error: $ARG_ERR" >&2; exit 2; }
+  resolve_selection || { echo "error: $RESOLVE_MSG" >&2; exit 2; }
+  printf '%s\n' "${SELECTED[@]}"
+  exit 0
+fi
 
 # THE WHOLE PASS HOLDS ONE LOCK. Individual gates take it too, but only those that call
 # `require_fresh_binary`; a grep-only gate does not, so without this a stray run could interleave
@@ -144,19 +356,6 @@ if ! require_fresh_binary ".lake/build/bin/concrete"; then
   _gate_lock_release
   exit 2
 fi
-FILTER="${1:-}"
-JOB=""
-# `--closure` IS DOCUMENTED but was never parsed: it fell through as a filter substring, matched no
-# gate, and produced a partial result that looked like a deliberate subset. A documented flag that
-# silently means something else is worse than an unknown one.
-if [ "$FILTER" = "--closure" ]; then
-  CONCRETE_CLOSURE_RUN=1; FILTER="${2:-}"
-fi
-if [ "$FILTER" = "--job" ]; then
-  JOB="${2:-}"; FILTER=""
-  [ -n "$JOB" ] || { echo "error: --job needs a CI job name substring" >&2; _gate_lock_release; exit 2; }
-fi
-
 # The nightly fuzz steps derive SEED from the date in CI; the extracted fuzz
 # commands reference "$SEED", which would trip `set -u` here. Mirror CI.
 SEED="${SEED:-$(date -u +%Y%m%d)}"
@@ -216,103 +415,15 @@ if [ "$CLOSURE" = "1" ]; then
 fi
 export SEED
 
-# When --job is given, narrow the workflow text to that job's block first, so
-# the gate list comes from the same declaration CI uses.
-SRC="$WORKFLOW"
-if [ -n "$JOB" ]; then
-  SRC="$(mktemp)"; trap 'rm -f "$SRC"' EXIT
-  awk -v job="$JOB" '
-    # job headers sit at two-space indent under `jobs:`; a name: line at that
-    # depth starts a new job block.
-    /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { inblock=0 }
-    /^    name:/ { inblock = (index($0, job) > 0) }
-    inblock { print }
-  ' "$WORKFLOW" > "$SRC"
-  if ! [ -s "$SRC" ]; then
-    echo "error: no CI job matching '$JOB'" >&2; _gate_lock_release; exit 2
-  fi
+# RESOLVE THE SELECTION (see resolve_selection above) under the lock, so a refusal is recorded by
+# the holder. Bad arguments are reported here for the same reason.
+if [ -n "$ARG_ERR" ]; then
+  echo "error: $ARG_ERR" >&2
+  ci_write_summary 0 " bad_arguments"; _gate_lock_release; exit 2
 fi
-
-# Extract the gate command list once (same filter as before).
-# Strip any trailing REDIRECTION from the extracted command. The character
-# class stops at `&`, so a workflow line ending `... --trust-gate 2>&1 | tee
-# /tmp/trust-gate.log` was captured as `... --trust-gate 2>` — a redirect with no
-# target. `eval` then died of a parse error and the gate was counted FAIL, every
-# run, on a clean tree. So the trust gate was never actually EXECUTED locally
-# while appearing in the failure list: the loudest possible way to be silent.
-# Output is discarded by the runner anyway, so redirections are noise here.
-mapfile -t CMDS < <(grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$SRC" \
-         | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
-         | sed 's/[[:space:]][0-9]*[<>].*$//' \
-         | sed 's/[[:space:]]*$//' \
-         | sort -u)
-
-# Every extracted command must be SYNTACTICALLY VALID before anything is run. A
-# truncated command otherwise reports as a failing gate, which reads as "the tree
-# is red" rather than "the extractor is broken" — and those demand opposite
-# responses. Checked up front so the whole list is trustworthy before a ~20min
-# pass, not discovered gate by gate.
-# VACUITY FLOOR ON THE INVENTORY ITSELF. `mapfile` does not fail when its process substitution
-# produces nothing, so a missing workflow file or extractor drift yields CMDS=() — after which every
-# loop below does nothing, DISCOVERED == EXECUTED == 0 holds, and closure mode writes `completed=1`
-# with `PASS=0 FAIL=0`. An authoritative record that the entire gate set passed, having run none of
-# it. The floor is far below the current 208 so it catches collapse, not growth.
-# PINNED, not floored. A floor of 100 against 208 accepted the silent loss of 108 commands while
-# still producing a closure artifact, because DISCOVERED is derived from whatever survived.
-# The pin describes the WHOLE workflow, so it applies only when the whole workflow was read. With
-# `--job` the text is deliberately narrowed to one job first, and demanding all 208 commands from that
-# subset made the documented flag unusable (fail-closed, but unusable).
-# 213 -> 224: four gates added by R-0483/R-0484 and the diff-to-gate mapping
-# (check_view_lifetime, check_effect_opacity, check_gates_for_diff, and the
-# attestation reference-order gate). Updated here because the pin is what makes
-# "the whole workflow was read" checkable; leaving it stale turns a growth signal
-# into a permanent refusal.
-# 224 -> 229: the bug-071 capability gates — check_cross_package_caps,
-# check_cap_sibling_module, check_trusted_method, check_cap_inference,
-# check_absence_not_fact. The pin went stale for four commits because this runner is
-# not itself a CI gate, so nothing noticed; GitHub ran the five new gates the whole
-# time. Worth stating plainly: a pin that only a local tool enforces detects drift
-# whenever someone runs it, not when the drift happens.
-# 229 -> 230: check_spawn_exit.sh (bug 072). The pin went stale again in the commit
-# that added the gate, and the pre-push hook — which does run this — refused the push.
-# 230 -> 231: check_cap_struct_cross_package.sh (R-0484), pinned in the same commit.
-# 231 -> 232: check_foreign_assumptions_report.sh (R-0484 R10), pinned in the same commit.
-# 232 -> 233: check_assumption_summary.sh (R-0484 R10 assumption summaries), pinned in the same commit.
-# 233 -> 234: check_proof_admission.sh (R-0484 R10 proof admission over the summary), pinned in the same commit.
-# 234 -> 235: check_trusted_boundaries.sh (R-0484 R10 named trusted boundaries), pinned in the same commit.
-# 235 -> 236: check_descriptor_coverage.sh (R-0484 R10/R5 descriptor coverage), pinned in the same commit.
-# 236 -> 237: check_capability_explanations.sh (R-0484 R10 cross-package explanations), pinned in the same commit.
-# 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
-# 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
-# 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
-#   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
-#   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
-EXPECTED_GATE_COMMANDS=240
-if [ -n "$JOB" ]; then
-  [ "${#CMDS[@]}" -ge 1 ] || { echo "error: --job '$JOB' yielded no gate commands." >&2
-    ci_write_summary 0 " job_selected_nothing"; _gate_lock_release; exit 2; }
-elif [ "${#CMDS[@]}" != "$EXPECTED_GATE_COMMANDS" ]; then
-  echo "error: gate extraction produced ${#CMDS[@]} commands from $WORKFLOW, pinned at $EXPECTED_GATE_COMMANDS." >&2
-  echo "       If the workflow legitimately changed, update EXPECTED_GATE_COMMANDS in the SAME commit." >&2
-  echo "       That is extractor failure, not an empty gate set. Refusing to report a verdict." >&2
-  ci_write_summary 0 " gate_inventory_vacuous(${#CMDS[@]})"
-  _gate_lock_release
-  exit 2
-fi
-
-bad=0
-for cmd in "${CMDS[@]}"; do
-  if ! bash -n -c "$cmd" 2>/dev/null; then
-    echo "error: extracted gate command is not valid shell: $cmd" >&2
-    bad=1
-  fi
-done
-if [ "$bad" -ne 0 ]; then
-  echo "error: gate extraction produced unrunnable commands — fix the extractor," >&2
-  echo "       not the gates. A truncated command cannot be told from a red gate." >&2
-  ci_write_summary 0 " gate_extraction_invalid"
-  _gate_lock_release
-  exit 2
+if ! resolve_selection; then
+  echo "error: $RESOLVE_MSG" >&2
+  ci_write_summary 0 " $RESOLVE_ERR"; _gate_lock_release; exit 2
 fi
 
 # ---------------------------------------------------------------------------
@@ -380,21 +491,33 @@ FAILLOG_DIR="$ROOT_DIR/.ci-gate-failures"
 rm -rf "$FAILLOG_DIR"; mkdir -p "$FAILLOG_DIR"
 faillog_name(){ printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_' | cut -c1-80; }
 
+# ONE SEQUENTIAL VERDICT, used by the first stage, JOBS=1 and the parallel re-run alike.
+run_seq() { # cmd -> 0 pass / 1 fail; output kept only on failure
+  local _out="$FAILLOG_DIR/$(faillog_name "$1").log"
+  if eval "$1" >"$_out" 2>&1; then PASS=$((PASS+1)); rm -f "$_out"; return 0; fi
+  FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})"
+  return 1
+}
+
+# THE FIRST STAGE runs sequentially, in order, before anything else launches, and a failure there
+# stops the run: the hook's fast surface checklist used to run first and fail the push in seconds,
+# and folding it into one pool must not turn that into a failure reported after minutes of other gates.
+STOPPED_EARLY=0
+for (( _i=0; _i<FIRST_N; _i++ )); do
+  run_seq "${SELECTED[$_i]}" || { STOPPED_EARLY=1; break; }
+done
+REST=("${SELECTED[@]:$FIRST_N}")
+[ "$STOPPED_EARLY" = "1" ] && REST=()
+
 if [ "$JOBS" -le 1 ]; then
-  for cmd in "${CMDS[@]}"; do
-    cmd="${cmd/bash .\//bash }"
-    if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
-    _out="$FAILLOG_DIR/$(faillog_name "$cmd").log"
-    if eval "$cmd" >"$_out" 2>&1; then PASS=$((PASS+1)); rm -f "$_out"
-    else FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"; echo "  FAIL $cmd (output: ${_out#$ROOT_DIR/})"; fi
+  for cmd in "${REST[@]}"; do
+    run_seq "$cmd" || true
   done
 else
   # Parallel pool: each gate writes "OK"/"FAIL <cmd>" to its own result file.
   RES=$(mktemp -d); trap 'rm -rf "$RES"' EXIT
   idx=0
-  for cmd in "${CMDS[@]}"; do
-    cmd="${cmd/bash .\//bash }"
-    if [ -n "$FILTER" ] && [[ "$cmd" != *"$FILTER"* ]]; then continue; fi
+  for cmd in "${REST[@]}"; do
     # throttle to JOBS concurrent
     while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
     idx=$((idx+1))
@@ -430,10 +553,11 @@ else
       continue
     fi
     cmd="$(sed 's/^FAIL //' "$f")"
-    if eval "$cmd" >/dev/null 2>&1; then
-      PASS=$((PASS+1)); RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
-    else
-      FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd"; echo "  FAIL $cmd"
+    # The re-run's output is KEPT on failure, as in sequential mode. Parallel is the default, and it
+    # discarded both runs' output — so the hook's fast surface checklist, whose own report names the
+    # failing constituent, failed with nothing but its name.
+    if run_seq "$cmd"; then
+      RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
     fi
   done
   [ -n "$RECHECKED" ] && echo -e "Recovered under sequential re-run:$RECHECKED"
@@ -536,14 +660,24 @@ EXECUTED=$(( PASS + FAIL ))
 # as corruption: every successful filtered run printed REFUSED and exited nonzero. A filtered run
 # still cannot produce `completed=1`, because it is not the complete gate set.
 SCOPE_NOTES=""
-if [ -n "$FILTER" ] || [ -n "$JOB" ]; then
+SELECTED_N="${#SELECTED[@]}"
+if [ "$SELECTING" = "1" ]; then
   # A SUBSET OF ZERO IS NOT A SUBSET. Any nonempty filter was accepted as deliberate scope, so a typo
   # skipped all 208 commands and the run printed `PARTIAL PASS=0 FAIL=0` and exited ZERO — a vacuous
-  # success with no positive control that the filter selected even one live gate.
+  # success with no positive control that the filter selected even one live gate. (Each selector is
+  # now also checked on its own in resolve_selection.)
   if [ "$EXECUTED" -eq 0 ]; then
-    REFUSALS="$REFUSALS filter_selected_nothing($FILTER$JOB)"
+    REFUSALS="$REFUSALS filter_selected_nothing(${JOBSEL[*]:-}${FILTERS[*]:-})"
+  fi
+  # EVERY SELECTED COMMAND RAN, OR THE RUN SAYS WHY NOT. A selection is a promise about what was
+  # executed; the full-run check below makes the same promise for the whole inventory.
+  if [ "$STOPPED_EARLY" = "1" ]; then
+    REFUSALS="$REFUSALS stopped_after_first_stage_failure($((SELECTED_N - EXECUTED)) not run)"
+  elif [ "$EXECUTED" != "$SELECTED_N" ]; then
+    REFUSALS="$REFUSALS selected_not_executed($SELECTED_N selected, $EXECUTED executed)"
   fi
   SCOPE_NOTES=" deliberate_subset($EXECUTED of $DISCOVERED)"
+  [ "${OUTSIDE:-0}" -eq 0 ] || SCOPE_NOTES="$SCOPE_NOTES outside_inventory($OUTSIDE)"
 elif [ "$DISCOVERED" != "$EXECUTED" ]; then
   REFUSALS="$REFUSALS discovered_not_executed($DISCOVERED discovered, $EXECUTED executed)"
 fi
