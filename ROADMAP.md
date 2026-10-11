@@ -13674,8 +13674,28 @@ identity is correlated by nonce and not authenticated, and files are hashed afte
 (time-of-check gap). Seven mutation families cover the new refusals and bindings (inventory 95 →
 102), each verified red by hand before registration; `check_checker_identity.sh` also refuses two
 loaded images sharing a file name, with the second image a real file so only that rule can refuse.
-**R-0208 remains partial:** fresh kernel re-checking (decision 1) and the advisory policy
-(decisions 3-4) are ahead.
+**Slice 1a published and qualified:** `c8731588` on origin (CI 38163033211), 102-family campaign
+38163069750 `qualified=1` (102/102, 8.7 runner-hours, slowest shard 55.5 min).
+
+**Slice 1b on branch `r0208-kernel-recheck` (decision 1).** Measured first: replay emitted
+`#check @thm` against `.olean`s an earlier build produced, and an ILL-TYPED theorem added with the
+kernel check skipped (`bogus : 1 = 2 := Eq.refl 1`) was "found" by that lookup; `leanchecker`
+refused it. The replay process now re-checks each theorem itself: it collects the workspace
+constants the theorem reaches (types, values, recursor rules, each inductive's constructors and
+recursors) and replays them with `Lean.Environment.replay'` — the routine `leanchecker` uses — into
+an environment of only the toolchain modules they touch, in the same process whose identity the
+receipt binds. Per constant, not per module: a per-module first version refused genuine
+`proof_patterns` theorems because an imported module also holds an unrelated `bv_decide` lemma.
+One nonce-tagged verdict per theorem (`rechecked`, `native`, `failed`, `not run`); minting requires
+`rechecked`. Theorems resting on `Lean.ofReduceBool`/`trustCompiler` are reported native-trust and
+never minted — none mints today (all HMAC claims are already withheld), and whether such a claim
+may carry a native-trust-qualified receipt is an open policy question. `check_kernel_recheck.sh`
+(9 legs) holds: the ill-typed theorem is found by the lookup but refused by the re-check; genuine
+theorems in another module and in the same module re-check and mint; a `bv_decide` theorem is
+native-trust; missing, duplicated or foreign-nonce verdicts mint nothing. Cost ~0.3 s per theorem.
+Limits: toolchain modules are trusted via the checker identity, not replayed (`--fresh`-style replay
+of core measured at 88 s per closure); verdict lines are nonce-correlated, not authenticated.
+**R-0208 remains partial:** the advisory policy (decisions 3-4) is ahead.
 
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
