@@ -2993,8 +2993,12 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- Obligation status is a RENDERING input only: a stale claim whose theorem type-checks is
       -- reported `stale` rather than `checked`. It is not part of the replay question, so it is not
       -- part of the request.
-      let statusByTheorem : List (String × String) :=
-        pc.obligations.filterMap fun o => o.spec.map fun s => (s.proofName, o.status.canonical)
+      -- KEYED BY SUBJECT, not by theorem. Two claims may link one theorem (`stale_missing_partial`:
+      -- `states.partial` is proved, `states.stale` is stale, both by `add_three_correct`), and a
+      -- theorem-keyed lookup gave both the first status found — the R-0208 claim inventory showed a
+      -- proved, minted claim reported `stale`.
+      let statusBySubject : List (String × String) :=
+        pc.obligations.filterMap fun o => o.spec.map fun _ => (o.functionId.qualName, o.status.canonical)
       match ← Proof.replay
           { inputPath := inputPath
           , fallbackDir := "."
@@ -3048,6 +3052,9 @@ def compileAndReport (inputPath : String) (reportType : String)
         let checkObj := fun (fn thm kind origin oblStatus : String) =>
           String.join ["    {\"function\": ", q fn, ", \"theorem\": ", q thm, ", \"obligation_kind\": ", q kind,
             ", \"origin\": ", q origin, ", \"status\": ", q (statusOf thm oblStatus),
+            -- The FRESH KERNEL RE-CHECK verdict (R-0208), beside the lookup status above, so a
+            -- frozen claim inventory can compare both across a toolchain upgrade.
+            ", \"recheck\": ", q (((res.recheck.find? (·.1 == thm)).map (·.2.canonical)).getD "recheck_not_run"),
             ", \"source_line\": ", toString (lineOf fn), "}"]
         let refChecks := refinementTargets.map fun t =>
           -- NOT `.getD "proved"`. Every refinement target comes from an obligation that has a
@@ -3057,12 +3064,13 @@ def compileAndReport (inputPath : String) (reportType : String)
           -- for one. Caught by check_one_producer.sh, which forbids defaulting a fact to a valid
           -- value of itself.
           checkObj t.subject t.theoremName "refinement" t.origin.canonical
-            ((statusByTheorem.find? (·.1 == t.theoremName)).map (·.2) |>.getD "unknown")
+            ((statusBySubject.find? (·.1 == t.subject)).map (·.2) |>.getD "unknown")
         let ensChecks := ensuresThms.map fun (fn, thm) => checkObj fn thm "ensures" "source_linked" "proved"
         let allObjs := refChecks ++ ensChecks
         let leanErr := if generalFailure || !failed.isEmpty then String.ofList (combined.toList.take 800) else ""
         IO.println (String.join [
           "{\n  \"schema_version\": ", q "1", ",\n  \"toolchain\": ", q tc,
+          ",\n  \"checker\": ", q ((res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"),
           ",\n  \"all_checked\": ", (if failed.isEmpty && !generalFailure then "true" else "false"),
           ",\n  \"checks\": [\n", ",\n".intercalate allObjs, "\n  ],\n",
           "  \"lean_error\": ", q leanErr,

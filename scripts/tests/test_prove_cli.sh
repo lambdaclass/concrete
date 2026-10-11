@@ -278,6 +278,16 @@ if command -v lake >/dev/null 2>&1; then
     'd["all_checked"] is True and d["schema_version"]=="1" and any(c["status"]=="checked" and c["origin"]=="source_linked" and "source_line" in c for c in d["checks"])' \
     "$COMPILER" "$LI" --report check-proofs --json
   assert_exit "check-proofs --json proved → exit 0" 0 "$COMPILER" "$LI" --report check-proofs --json
+  # STATUS IS PER CLAIM, not per theorem: `states.partial` (proved) and `states.stale` (stale) link the
+  # same theorem, and a theorem-keyed lookup reported the proved one stale (found by the R-0208 claim
+  # inventory). Both statuses must come out, each on its own claim.
+  assert_json "check-proofs --json keys status by claim when two claims share a theorem" \
+    'any(c["function"]=="states.partial" and c["status"]=="checked" for c in d["checks"]) and any(c["function"]=="states.stale" and c["status"]=="stale" for c in d["checks"])' \
+    "$COMPILER" examples/proof_patterns/stale_missing_partial/src/main.con --report check-proofs --json
+  # The re-check verdict and the checker are part of the summary (R-0208).
+  assert_json "check-proofs --json names the checker and each claim's kernel re-check" \
+    'd["checker"].startswith("lean ") and all(c.get("recheck") in ("rechecked","native_trust","recheck_failed","recheck_not_run") for c in d["checks"]) and any(c["recheck"]=="rechecked" for c in d["checks"])' \
+    "$COMPILER" "$LI" --report check-proofs --json
 else
   echo "  skip check-proofs --json assertions (lake not on PATH)"
 fi
