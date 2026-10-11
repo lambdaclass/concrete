@@ -378,7 +378,8 @@ _oprobe_partition() {
 
 # Generate batch b's Lean file, its line ranges, and the self-test transcript.
 _oprobe_write_batch() {
-  local b="$1" f="$TMP/ob.$b.lean" i id nl nlines
+  local b="$1"
+  local f="$TMP/ob.$b.lean" i id nl nlines
   _probe_preamble > "$f"
   nl="$(awk 'END{print NR}' "$f")"
   : > "$TMP/ob.$b.fake"
@@ -457,7 +458,8 @@ _oprobe_errlines() {
 # Why batch b as a whole cannot be trusted (OB_WHY[b]), or empty; and, when it can, each member's
 # output split into $TMP/ob.$b.seg.<id>.
 _oprobe_judge_batch() {
-  local b="$1" f="$TMP/ob.$b.lean" rc out err i pos owner lines id
+  local b="$1"
+  local f="$TMP/ob.$b.lean" rc out err i pos owner lines id
   [ -z "${OB_WHY[$b]:-}" ] || return 0
   if [ ! -f "$TMP/ob.$b.rc" ] || [ ! -f "$TMP/ob.$b.out" ] || [ ! -f "$TMP/ob.$b.err" ]; then
     OB_RC[$b]="none"; OB_WHY[$b]="its probe process recorded no exit status or output"; return 0
