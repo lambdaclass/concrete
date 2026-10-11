@@ -535,6 +535,16 @@ shard artifacts reproduced the CI verdict exactly. Slowest shard 92m; 14.1 runne
 in the 21 families gated by `check_dependency_edges.sh`. The history below is kept as the record of
 how the campaign got there; R-0208 is now queue row 0.
 
+**Re-qualification for the next integration (2026-10-11).** The batch integrating R-0208 slice 1a
+adds seven families (inventory 102) and changes `check_dependency_edges.sh`, the gate of 21
+families: its probes now run in 18 Lean processes instead of 244 and each compiler result is
+computed once per run, 305 s → 34 s locally with the same 317 assertions (`0a7002b0`; six of its
+families hand-verified red). The same batch makes the pre-push hook run one deduplicated gate
+list and reuse a validation record bound to the exact tree, toolchain bytes, C compiler, gate
+definitions, selection and changed files. `qualified=1` above describes `670ec85a` only; the
+integrated commit needs its own 102-family campaign. Shard balancing by measured timings is
+deferred: it is not built or tested, and qualification does not wait for it.
+
 R-0004 remains **closed** by the protected 205/205 serial run recorded below and in
 [CHANGELOG.md](CHANGELOG.md). The current work is a stronger post-closure question: can every
 registered evidence-boundary mutation be shown to cause its intended production gate to fail for
@@ -13661,7 +13671,11 @@ probe process per operation, no cache). **What 'current' still does not mean:** 
 explicitly — not a fresh kernel re-check (decision 1, open) and not advisory acceptance (decisions
 3-4, open). Stated limits: OS libraries named not hashed, core `.olean` data not bound, the
 identity is correlated by nonce and not authenticated, and files are hashed after the run
-(time-of-check gap). Mutation families for the new refusals are queued with the next campaign.
+(time-of-check gap). Seven mutation families cover the new refusals and bindings (inventory 95 →
+102), each verified red by hand before registration; `check_checker_identity.sh` also refuses two
+loaded images sharing a file name, with the second image a real file so only that rule can refuse.
+**R-0208 remains partial:** fresh kernel re-checking (decision 1) and the advisory policy
+(decisions 3-4) are ahead.
 
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
