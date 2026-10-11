@@ -11,3 +11,7 @@ set_option debug.skipKernelTC true in
   let ty := mkApp3 (mkConst ``Eq [1]) nat (mkNatLit 1) (mkNatLit 2)
   let pf := mkApp2 (mkConst ``Eq.refl [1]) nat (mkNatLit 1)
   liftCoreM <| addDecl (.thmDecl { name := `bogus, levelParams := [], type := ty, value := pf })
+
+-- A genuine theorem in the SAME module: the re-check is per constant, so the bad declaration beside
+-- it must not take it down.
+theorem fine_beside : 2 + 2 = 4 := rfl

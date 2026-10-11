@@ -627,10 +627,16 @@ def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) 
 /-- The Lean commands that RE-CHECK each theorem through the kernel, in the replay process itself.
 
     For each theorem: if it rests on native evaluation it is reported `native`; otherwise every
-    module in its import closure whose object file is NOT under the toolchain's own library is
-    replayed with `Lean.Environment.replay'` (the routine `leanchecker` uses: declarations go to the
-    kernel; constructors and recursors are compared against what the kernel regenerates), each
-    module once per run. Measured 2026-10-11: `elf_header`'s closure is 16 modules, ~7 s.
+    WORKSPACE CONSTANT it reaches (through types, values and recursor rules, plus each inductive's
+    constructors and recursors) is replayed with `Lean.Environment.replay'` — the routine
+    `leanchecker` uses: declarations go to the kernel, constructors and recursors are compared with
+    what the kernel regenerates — into an environment holding only the toolchain modules those
+    constants touch. Constants from modules under the toolchain's own library are not replayed.
+
+    PER CONSTANT, NOT PER MODULE. The first version replayed whole modules and refused genuine
+    theorems in `proof_patterns` because a module they import also holds an unrelated `bv_decide`
+    lemma; a theorem's verdict should depend only on what it uses. Measured 2026-10-11: ~300
+    constants and ~0.3 s per theorem, against ~7 s for `elf_header`'s 16-module closure.
 
     The replay process is the one whose identity `checkerIdentityProbe` reports, so the checker that
     re-checked is the checker the receipt binds. Running `leanchecker` instead would put a second,
@@ -640,67 +646,84 @@ def recheckProbe (nonce : String) (theorems : List String) : String :=
   ((r#"
 -- Fresh kernel re-check of each theorem's workspace dependency closure (R-0208).
 open Lean in
-unsafe def _concreteRecheckModule (module : Name) : IO (Except String Unit) := do
-  try
-    let mFile ← findOLean module
-    unless (← mFile.pathExists) do throw <| IO.userError s!"no object file for {module}"
-    let mut fnames := #[mFile]
-    let sFile := OLeanLevel.server.adjustFileName mFile
-    if (← sFile.pathExists) then
-      fnames := fnames.push sFile
-      let pFile := OLeanLevel.private.adjustFileName mFile
-      if (← pFile.pathExists) then fnames := fnames.push pFile
-    let parts ← readModuleDataParts fnames
-    if h : parts.size = 0 then throw <| IO.userError "failed to read module data" else
-    let (mod, _) := parts[0]
-    let (_, st) ← importModulesCore mod.imports |>.run
-    let env ← finalizeImport st mod.imports {} 0 false false (isModule := true)
-    let mut newConstants : Std.HashMap Name ConstantInfo := {}
-    for name in parts[parts.size-1].1.constNames, ci in parts[parts.size-1].1.constants do
-      newConstants := newConstants.insert name ci
-    let env' ← env.replay' newConstants
-    env'.freeRegions
-    return .ok ()
-  catch e => return .error (toString e)
+def _concreteToolchainModule (env : Environment) (sysLib : String)
+    (cache : IO.Ref (Std.HashMap Name Bool)) (c : Name) : IO (Option Name) := do
+  match env.getModuleIdxFor? c with
+  | none => return none
+  | some idx =>
+    let m := env.header.moduleNames[idx.toNat]!
+    let b ← match (← cache.get)[m]? with
+      | some b => pure b
+      | none => do
+        let b := (← findOLean m).toString.startsWith sysLib
+        cache.modify (·.insert m b)
+        pure b
+    return if b then some m else none
 
 open Lean in
-def _concreteRecheckClosure (env : Environment) (m : Name) (sysLib : String) : IO (Array Name) := do
-  let mut todo := #[m]
+def _concreteRecheckClosure (env : Environment) (sysLib : String) (thm : Name)
+    : IO (Except String (Std.HashMap Name ConstantInfo × NameSet)) := do
+  let cache ← IO.mkRef {}
+  let mut todo := #[thm]
   let mut seen : NameSet := {}
-  let mut out := #[]
+  let mut consts : Std.HashMap Name ConstantInfo := {}
+  let mut core : NameSet := {}
   while h : todo.size > 0 do
-    let cur := todo.back
+    let c := todo.back
     todo := todo.pop
-    if seen.contains cur then continue
-    seen := seen.insert cur
-    if (← findOLean cur).toString.startsWith sysLib then continue
-    out := out.push cur
-    match env.getModuleIdx? cur with
-    | some idx => for i in env.header.moduleData[idx.toNat]!.imports do todo := todo.push i.module
-    | none => pure ()
-  return out
+    if seen.contains c then continue
+    seen := seen.insert c
+    let some ci := env.find? c | return .error s!"unknown constant {c}"
+    if let some m ← _concreteToolchainModule env sysLib cache c then
+      core := core.insert m
+      continue
+    consts := consts.insert c ci
+    let mut exprs : Array Expr := #[ci.type]
+    if let some e := ci.value? (allowOpaque := true) then exprs := exprs.push e
+    match ci with
+    | .recInfo v =>
+      for r in v.rules do exprs := exprs.push r.rhs
+      for n in v.all do todo := todo.push n
+    | .inductInfo v =>
+      for n in v.all ++ v.ctors do todo := todo.push n
+      for n in v.all do
+        todo := todo.push (n ++ `rec)
+        let mut i := 1
+        while env.contains (n ++ Name.mkSimple s!"rec_{i}") do
+          todo := todo.push (n ++ Name.mkSimple s!"rec_{i}")
+          i := i + 1
+    | .ctorInfo v => todo := todo.push v.induct
+    | _ => pure ()
+    for e in exprs do
+      for d in e.getUsedConstants do todo := todo.push d
+  return .ok (consts, core)
+
+open Lean in
+def _concreteRecheckReplay (core : NameSet) (consts : Std.HashMap Name ConstantInfo)
+    : IO (Option String) := do
+  try
+    let env0 ← importModules (core.toArray.map ({ module := · })) {}
+    let _ ← env0.replay' consts
+    return none
+  catch e => return some (toString e)
 
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
   let env ← getEnv
   let sysLib := ((← Lean.findSysroot) / "lib" / "lean").toString ++ "/"
-  let mut memo : Std.HashMap Name (Option String) := {}
   for s in ([THEOREMS] : List String) do
     let thm := s.toName
-    let some idx := env.getModuleIdxFor? thm
-      | IO.println s!"CONCRETE-RECHECK NONCE {s} unknown"
+    unless env.contains thm do
+      IO.println s!"CONCRETE-RECHECK NONCE {s} unknown"
+      continue
     let axs ← liftCoreM <| Lean.collectAxioms thm
     if axs.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler) then
       IO.println s!"CONCRETE-RECHECK NONCE {s} native"
-    else
-      let mods ← _concreteRecheckClosure env env.header.moduleNames[idx.toNat]! sysLib
-      let mut bad : Option String := none
-      for mm in mods do
-        if !memo.contains mm then
-          let res ← unsafe _concreteRecheckModule mm
-          memo := memo.insert mm (match res with | .ok _ => none | .error e => some s!"{mm}: {e}")
-        if bad.isNone then bad := memo.getD mm none
-      match bad with
+      continue
+    match ← _concreteRecheckClosure env sysLib thm with
+    | .error e => IO.println s!"CONCRETE-RECHECK NONCE {s} failed {e}"
+    | .ok (consts, core) =>
+      match ← _concreteRecheckReplay core consts with
       | none => IO.println s!"CONCRETE-RECHECK NONCE {s} rechecked"
       | some why => IO.println s!"CONCRETE-RECHECK NONCE {s} failed {(why.replace "\n" " ").take 300}"
 "#).replace "NONCE" nonce).replace "THEOREMS" names

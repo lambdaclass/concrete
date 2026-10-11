@@ -11,15 +11,15 @@
 #
 # Legs, each with a live positive control:
 #   - the ill-typed theorem is still FOUND by the lookup (the hole is real) but fails the re-check,
-#     and mints nothing; a genuine theorem in its own module re-checks and mints;
+#     and mints nothing; a genuine theorem in another module re-checks and mints, and so does one in
+#     the SAME module (the re-check is per constant, so an unrelated bad declaration is not contagious);
 #   - a theorem resting on native evaluation (`bv_decide`) is reported `native_trust`, never
 #     re-checked, and mints nothing;
 #   - a missing, duplicated or foreign-nonce re-check line is not a verdict.
 #
 # WHAT IT DOES NOT ESTABLISH: modules shipped with the toolchain are not replayed (they are part of
-# the checker build `CheckerIdentity` names); the re-check is per MODULE, so a genuine theorem sharing
-# a module with a bad one is refused too (fail-closed, not precise); and the verdict line is
-# correlated with the run by nonce, not authenticated.
+# the checker build `CheckerIdentity` names); and the verdict line is correlated with the run by
+# nonce, not authenticated.
 set -uo pipefail
 trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "${GATE_DONE:-0}" -ne 1 ]; then
   echo "FATAL: unexpected shell failure (exit $rc) — the verdict below is not trustworthy" >&2; exit "$rc"; fi' ERR
@@ -54,13 +54,13 @@ open Concrete.Proof
 def tg (n : String) : ReplayTarget :=
   { subject := n, theoremName := n, kind := .refinement, origin := .hardcoded, binding := .bound }
 #eval show IO Unit from do
-  match ← replay { inputPath := "$KW/main.con", imports := ["Bad", "Good"], targets := [tg "bogus", tg "fine"] } with
+  match ← replay { inputPath := "$KW/main.con", imports := ["Bad", "Good"], targets := [tg "bogus", tg "fine", tg "fine_beside"] } with
   | .error e => IO.println s!"REPLAY-REFUSED {e.canonical}"
   | .ok r =>
     for c in r.checks do IO.println s!"LOOKUP {c.target.theoremName} {c.verdict.canonical}"
     for (t, v) in r.recheck do
       IO.println s!"RECHECK {t} {v.canonical} {match v with | .failed w => w | _ => ""}"
-    for t in ["bogus", "fine"] do
+    for t in ["bogus", "fine", "fine_beside"] do
       match SuccessfulReplay.of? r t with
       | .ok _ => IO.println s!"TOKEN {t}"
       | .error e => IO.println s!"TOKEN-REFUSED {t} {e.canonical}"
@@ -81,6 +81,11 @@ if grep -q '^RECHECK fine rechecked' <<<"$H" && grep -q '^TOKEN fine$' <<<"$H"; 
   ok "a genuine theorem in its own module re-checks and mints (the positive control)"
 else
   no "the genuine theorem did not re-check — the refusal above may be refuse-everything: $(grep -E '^(RECHECK|TOKEN)' <<<"$H" | tr '\n' ' ')"
+fi
+if grep -q '^RECHECK fine_beside rechecked' <<<"$H" && grep -q '^TOKEN fine_beside$' <<<"$H"; then
+  ok "a genuine theorem in the SAME module as the bad one re-checks too (per constant, not per module)"
+else
+  no "a bad declaration took down its module-mate: $(grep -E '^(RECHECK|TOKEN) fine_beside' <<<"$H" | tr '\n' ' ')"
 fi
 
 echo "=== a theorem resting on native evaluation is never re-checked ==="
