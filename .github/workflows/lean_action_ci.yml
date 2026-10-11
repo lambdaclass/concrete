@@ -676,6 +676,9 @@ jobs:
       - name: "Gate lock (a lock is refused, never reclaimed on a dead creator PID)"
         run: bash scripts/tests/check_gate_lock.sh
 
+      - name: "Pre-push validation record (reused only when every bound input matches)"
+        run: bash scripts/tests/check_prepush_record.sh
+
       # REGISTERED 2026-09-02. These gates existed, passed, and were run by nothing. The registration
       # gate reported them reachable because their names appeared somewhere in a file CI runs — for
       # check_classification_freshness.sh, inside a comment saying the gate runs elsewhere.

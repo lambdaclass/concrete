@@ -36,9 +36,11 @@ fi
 # how the first version ran ZERO area gates on a push full of Concrete/Proof
 # changes.
 changed=""
+pushed=""
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "$localsha" in *[!0]*) ;; *) continue ;; esac   # all-zero = branch deletion
+  pushed="$pushed $localsha"
   case "${remotesha:-}" in
     ""|*[!0-9a-f]*) range="$localsha" ;;
     *[!0]*) range="$remotesha..$localsha" ;;           # normal update
@@ -59,6 +61,7 @@ if [ -z "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
   [ -n "$up" ] || up="$(git merge-base HEAD origin/main 2>/dev/null || echo "")"
   [ -n "$up" ] && changed="$(git diff --name-only "$up"..HEAD)" \
                || changed="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")"
+  pushed="$(git rev-parse HEAD 2>/dev/null || echo "")"   # by hand: the candidate is the checkout
 fi
 changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 [ -z "$changed" ] && { echo "pre-push: nothing to check"; exit 0; }
@@ -70,92 +73,91 @@ while IFS= read -r f; do
   case "$f" in docs/*|*.md) ;; *) docs_only=0; break ;; esac
 done <<< "$changed"
 
-echo "pre-push: building…"
-make build >/tmp/prepush-build.log 2>&1 || {
-  echo "pre-push: BUILD FAILED — see /tmp/prepush-build.log" >&2; exit 1; }
 
+# ONE SELECTION, EACH GATE ONCE. Everything below only DECLARES what to run, as selectors for
+# run_ci_gates_local.sh; the runner resolves their union into one deduplicated list and executes each
+# command exactly once. The hook used to call the runner once per CI job and once per area, and those
+# selections overlap — a Concrete/Proof change ran 79 gate invocations for 67 distinct gates
+# (scripts/ci/proof_gate.sh twice, the proof/contract/callable name matches inside the evidence job
+# twice). `--first` keeps the old order where it mattered: those run sequentially before the rest,
+# and a failure there stops the run before the heavy gates launch.
+SEL=()
 if [ "$docs_only" = "1" ]; then
   echo "pre-push: docs-only change — docs gates"
-  bash scripts/tests/check_docs_drift.sh || exit 1
-  bash scripts/tests/check_roadmap_linear.sh || exit 1
-  echo "pre-push: docs gates pass"; exit 0
-fi
+  SEL+=(--first "bash scripts/tests/check_docs_drift.sh"
+        --first "bash scripts/tests/check_roadmap_linear.sh")
+else
+  # The R-0022 fast surface checklist, first.
+  SEL+=(--first "bash scripts/tests/run_fast_surface_gates.sh")
 
-echo "pre-push: fast surface gates (R-0022)"
-bash scripts/tests/run_fast_surface_gates.sh || {
-  echo "pre-push: FAST SURFACE GATES FAILED" >&2; exit 1; }
+  # BUG FILING is three artifacts — document, corpus entry, coverage — and the audit
+  # that enforces that is CI-only (the trust gate). Bug 066 shipped with the document and
+  # the gate but no map entry, pre-push passed, and main went red. This check runs in
+  # under a second, so it belongs on the first local push rather than a CI round-trip.
+  # Reads $changed, the union over every pushed ref. It used `git diff "$range"`, but $range
+  # held only the LAST ref's range and is unset when the hook runs by hand, where `set -u`
+  # failed the substitution and silently skipped this check.
+  if printf '%s\n' "$changed" | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
+    echo "pre-push: bug-filing completeness selected (docs/bugs, corpus map, coverage)"
+    SEL+=(--first "bash scripts/tests/check_bug_filing_complete.sh")
+  fi
 
-# BUG FILING is three artifacts — document, corpus entry, coverage — and the audit
-# that enforces that is CI-only (the trust gate). Bug 066 shipped with the document and
-# the gate but no map entry, pre-push passed, and main went red. This check runs in
-# under a second, so it belongs on the first local push rather than a CI round-trip.
-# Reads $changed, the union over every pushed ref. It used `git diff "$range"`, but $range
-# held only the LAST ref's range and is unset when the hook runs by hand, where `set -u`
-# failed the substitution and silently skipped this check.
-if printf '%s\n' "$changed" | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
-  echo "pre-push: bug-filing completeness (docs/bugs, corpus map, coverage)"
-  bash scripts/tests/check_bug_filing_complete.sh || {
-    echo "pre-push: BUG FILING INCOMPLETE — a bug needs a document, a corpus entry, and coverage" >&2
-    exit 1; }
-fi
+  # Area filters: map touched paths to the gate-name substrings the runner
+  # accepts. Deliberately generous — a superfluous gate costs seconds, a missed
+  # one costs a red main and a CI round-trip.
+  areas=""
+  add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
+  # Whole CI JOBS to run, for areas where a name-substring filter is not
+  # trustworthy. `proof` selects 6 gates by name; the "Proof evidence gate" job
+  # runs 40, and the one that broke on R-0442
+  # (check_operational_vc_auto_discharge.sh, which typechecks Lean fixtures
+  # against the Proof API) has no "proof" in its name. The workflow already
+  # declares which gates belong to which job — deriving the set from the job is
+  # one source instead of a naming convention.
+  jobs_to_run=""
+  addjob() { case "$jobs_to_run" in *"|$1|"*) ;; *) jobs_to_run="$jobs_to_run|$1|" ;; esac; }
+  while IFS= read -r f; do
+    case "$f" in
+      # A Proof/Report/proofs change runs BOTH: the name-matched areas AND the
+      # whole evidence job. Neither alone is sufficient, which is easy to get
+      # wrong — proof gates are split across two CI jobs. The name filters catch
+      # proof-named gates wherever they live (check_purecore_proofs.sh and
+      # check_proofcore_callable_identity.sh are in "Language-surface gates", not
+      # the evidence job); the job catches the evidence job's oddly-named ones
+      # (check_operational_vc_auto_discharge.sh, which broke on R-0442 and has no
+      # "proof" in its name). Dropping the name filters for the job alone would
+      # have traded one gap for another.
+      # Main.lean drives EVERY `--report` surface, so a change there can move any
+      # report's output. Mapping it to `hygiene` alone (via the Concrete/* catch-all
+      # below) is how the workspace-resolution regression reached CI: the fix lived
+      # in Main.lean, the hook ran one gate, and twelve std proofs broke.
+      Main.lean|Concrete/Proof/*|Concrete/Report/*|proofs/*)
+        add proof; add evidence; add contract; add callable
+        addjob "Proof evidence gate"
+        # ...and the release bundle, which CONSUMES report output: it counts the
+        # `✓` lines in proof-status, so a verdict change moves its manifest. Only
+        # 8 gates, and it is the job that caught R-0004 slice 3 after two rounds of
+        # name-filter patching. Route to the job rather than guess another name.
+        addjob "Extra gates" ;;
+      Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
+      # Semantics and the interpreter are where trap/overflow facts live, and the
+      # interpreter is half of every differential. Without this line they matched
+      # only the catch-all `Concrete/*` -> hygiene, which is how a change to the
+      # trap inventory could reach CI having run no gate that evaluates one.
+      # `positions` rather than `differential`: the latter also selects the
+      # workload differentials (httpget, wordfreq, tar_list), which are minutes.
+      Concrete/Semantics/*|Concrete/Interp/*)       add trap; add totality; add builtin; add positions ;;
+      Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
+      Concrete/Resolve/*)                           add linear; add callable; add mono ;;
+      std/*)                                        add collections; add stdlib; add proof ;;
+      # Example sources feed the release bundle and the snapshot corpus.
+      examples/*)                                   add evidence; add examples; addjob "Extra gates" ;;
+      scripts/tests/*|.github/workflows/*)          add hygiene ;;
+      Makefile|.githooks/*|flake.nix|lakefile.toml) add hygiene ;;
+      Concrete/*)                                   add hygiene ;;
+    esac
+  done <<< "$changed"
 
-# Area filters: map touched paths to the gate-name substrings the runner
-# accepts. Deliberately generous — a superfluous gate costs seconds, a missed
-# one costs a red main and a CI round-trip.
-areas=""
-add() { case " $areas " in *" $1 "*) ;; *) areas="$areas $1" ;; esac; }
-# Whole CI JOBS to run, for areas where a name-substring filter is not
-# trustworthy. `proof` selects 6 gates by name; the "Proof evidence gate" job
-# runs 40, and the one that broke on R-0442
-# (check_operational_vc_auto_discharge.sh, which typechecks Lean fixtures
-# against the Proof API) has no "proof" in its name. The workflow already
-# declares which gates belong to which job — deriving the set from the job is
-# one source instead of a naming convention.
-jobs_to_run=""
-addjob() { case "$jobs_to_run" in *"|$1|"*) ;; *) jobs_to_run="$jobs_to_run|$1|" ;; esac; }
-while IFS= read -r f; do
-  case "$f" in
-    # A Proof/Report/proofs change runs BOTH: the name-matched areas AND the
-    # whole evidence job. Neither alone is sufficient, which is easy to get
-    # wrong — proof gates are split across two CI jobs. The name filters catch
-    # proof-named gates wherever they live (check_purecore_proofs.sh and
-    # check_proofcore_callable_identity.sh are in "Language-surface gates", not
-    # the evidence job); the job catches the evidence job's oddly-named ones
-    # (check_operational_vc_auto_discharge.sh, which broke on R-0442 and has no
-    # "proof" in its name). Dropping the name filters for the job alone would
-    # have traded one gap for another.
-    # Main.lean drives EVERY `--report` surface, so a change there can move any
-    # report's output. Mapping it to `hygiene` alone (via the Concrete/* catch-all
-    # below) is how the workspace-resolution regression reached CI: the fix lived
-    # in Main.lean, the hook ran one gate, and twelve std proofs broke.
-    Main.lean|Concrete/Proof/*|Concrete/Report/*|proofs/*)
-      add proof; add evidence; add contract; add callable
-      addjob "Proof evidence gate"
-      # ...and the release bundle, which CONSUMES report output: it counts the
-      # `✓` lines in proof-status, so a verdict change moves its manifest. Only
-      # 8 gates, and it is the job that caught R-0004 slice 3 after two rounds of
-      # name-filter patching. Route to the job rather than guess another name.
-      addjob "Extra gates" ;;
-    Concrete/IR/*|Concrete/Backend/*)             add mono; add codegen; add ssa; add trap; add fnptr ;;
-    # Semantics and the interpreter are where trap/overflow facts live, and the
-    # interpreter is half of every differential. Without this line they matched
-    # only the catch-all `Concrete/*` -> hygiene, which is how a change to the
-    # trap inventory could reach CI having run no gate that evaluates one.
-    # `positions` rather than `differential`: the latter also selects the
-    # workload differentials (httpget, wordfreq, tar_list), which are minutes.
-    Concrete/Semantics/*|Concrete/Interp/*)       add trap; add totality; add builtin; add positions ;;
-    Concrete/Check/*|Concrete/Elab/*)             add linear; add collections; add cli ;;
-    Concrete/Resolve/*)                           add linear; add callable; add mono ;;
-    std/*)                                        add collections; add stdlib; add proof ;;
-    # Example sources feed the release bundle and the snapshot corpus.
-    examples/*)                                   add evidence; add examples; addjob "Extra gates" ;;
-    scripts/tests/*|.github/workflows/*)          add hygiene ;;
-    Makefile|.githooks/*|flake.nix|lakefile.toml) add hygiene ;;
-    Concrete/*)                                   add hygiene ;;
-  esac
-done <<< "$changed"
-
-if [ -n "$jobs_to_run" ]; then
   # while-read, not `for j in $(...)`: CI job names contain SPACES, so word
   # splitting would turn "Proof evidence gate" into three bogus job names and
   # every one of them would fail to match — a loop that appears to run and
@@ -163,18 +165,96 @@ if [ -n "$jobs_to_run" ]; then
   while IFS= read -r j; do
     [ -z "$j" ] && continue
     echo "pre-push: all gates in CI job '$j'"
-    bash scripts/tests/run_ci_gates_local.sh --job "$j" || {
-      echo "pre-push: GATES FAILED in CI job '$j' — fix, or bypass deliberately." >&2; exit 1; }
+    SEL+=(--job "$j")
   done <<< "$(printf '%s' "$jobs_to_run" | sed 's/^|//; s/|$//; s/||/\n/g')"
-fi
-
-if [ -n "$areas" ]; then
   for a in $areas; do
     echo "pre-push: gates matching '$a'"
-    bash scripts/tests/run_ci_gates_local.sh "$a" || {
-      echo "pre-push: GATES FAILED for area '$a' — fix, or bypass deliberately." >&2; exit 1; }
+    SEL+=(--filter "$a")
   done
 fi
 
-echo "pre-push: fast surface gates + touched-area gates pass"
-echo "pre-push: NOTE the full set was not run — 'make pre-push-full' or CI covers it."
+RUNNER="scripts/tests/run_ci_gates_local.sh"
+TMPD="$(mktemp -d)" || { echo "pre-push: cannot create a temp directory" >&2; exit 1; }
+trap 'rm -rf "$TMPD"' EXIT
+PLAN_F="$TMPD/plan"; CHANGED_F="$TMPD/changed"
+printf '%s\n' "$changed" > "$CHANGED_F"
+# The selection is resolved by the RUNNER, not restated here: --plan is the same code path that the
+# real run executes, so the list printed (and bound into any record) is the list that runs.
+bash "$RUNNER" --plan "${SEL[@]}" > "$PLAN_F" || {
+  echo "pre-push: could not resolve the gate selection (above) — refusing to push." >&2; exit 1; }
+[ -s "$PLAN_F" ] || { echo "pre-push: the gate selection is EMPTY — refusing to push." >&2; exit 1; }
+echo "pre-push: $(grep -c . "$PLAN_F") unique gate command(s) selected:"
+sed 's/^/  /' "$PLAN_F"
+
+# ---------------------------------------------------------------------------
+# VALIDATION RECORD (scripts/tests/lib/prepush_record.sh). The same SHA is pushed to more than one
+# remote; when this exact candidate already passed this exact selection — same commit and clean
+# tree, same untracked files, same toolchain and compiler binary, same gate definitions, same
+# changed-file list — the second push reuses that result instead of re-running it. ANY difference,
+# or any doubt (no record, truncated, failed, unidentifiable toolchain, dirty tree), is a full run.
+# Opt out with CONCRETE_PREPUSH_NO_REUSE=1.
+RECORD=""; RECORDABLE=0
+COMP0="$TMPD/components.pre"
+if source "scripts/tests/lib/prepush_record.sh" 2>/dev/null \
+   && [ "$(ppr_available 2>/dev/null)" = "concrete-prepush-record-v1" ] \
+   && RECORD="$(ppr_path "$ROOT_DIR")"; then
+  if ppr_components "$ROOT_DIR" "$pushed" "$CHANGED_F" "$PLAN_F" "$COMP0"; then
+    RECORDABLE=1
+    if [ "${CONCRETE_PREPUSH_NO_REUSE:-0}" = "1" ]; then
+      echo "pre-push: record reuse disabled by CONCRETE_PREPUSH_NO_REUSE=1 — running the gates"
+    elif ppr_check "$RECORD" "$COMP0"; then
+      echo "pre-push: REUSED validation record $RECORD"
+      echo "pre-push:   $(grep -E '^(head|written_at|selection_count)=' "$RECORD" | tr '\n' ' ')"
+      echo "pre-push:   every bound input matches (commit, clean tree, untracked files, toolchain, compiler"
+      echo "pre-push:   binary, gate definitions, selection, changed-file list); no gate was re-run."
+      exit 0
+    else
+      echo "pre-push: no reusable validation record ($PPR_REASON) — running the gates"
+    fi
+  else
+    echo "pre-push: this push cannot be recorded ($PPR_REASON) — running the gates; no record will be written"
+  fi
+else
+  echo "pre-push: validation-record library unavailable — running the gates; no record will be written"
+fi
+# A run is starting, so the previous record no longer describes anything this hook vouches for.
+if [ -n "$RECORD" ] && ! ppr_invalidate "$RECORD"; then
+  echo "pre-push: could not remove the previous validation record $RECORD — refusing to push." >&2; exit 1
+fi
+
+echo "pre-push: building…"
+make build >/tmp/prepush-build.log 2>&1 || {
+  echo "pre-push: BUILD FAILED — see /tmp/prepush-build.log" >&2; exit 1; }
+
+COMP1="$TMPD/components.start"
+[ "$RECORDABLE" = "1" ] && { ppr_components "$ROOT_DIR" "$pushed" "$CHANGED_F" "$PLAN_F" "$COMP1" || RECORDABLE=0; }
+
+bash "$RUNNER" "${SEL[@]}" || {
+  echo "pre-push: GATES FAILED (above) — fix, or bypass deliberately." >&2; exit 1; }
+
+if [ "$docs_only" = "1" ]; then
+  echo "pre-push: docs gates pass"
+else
+  echo "pre-push: fast surface gates + touched-area gates pass"
+  echo "pre-push: NOTE the full set was not run — 'make pre-push-full' or CI covers it."
+fi
+
+# The record binds what the gates actually ran against: components captured after the build, and
+# captured again now. If any moved during the run, the result describes neither — fail closed.
+if [ "$RECORDABLE" = "1" ]; then
+  COMP2="$TMPD/components.end"
+  if ! ppr_components "$ROOT_DIR" "$pushed" "$CHANGED_F" "$PLAN_F" "$COMP2"; then
+    echo "pre-push: validation inputs became unreadable during the run ($PPR_REASON) — refusing to push." >&2; exit 1
+  fi
+  if ! cmp -s "$COMP1" "$COMP2"; then
+    echo "pre-push: validation inputs MOVED during the run:" >&2
+    diff "$COMP1" "$COMP2" | sed 's/^/  /' >&2
+    echo "pre-push: the gates' verdict describes neither state — refusing to push." >&2; exit 1
+  fi
+  if ppr_write "$RECORD" "$COMP2"; then
+    echo "pre-push: validation record written to $RECORD (a push of this exact candidate may reuse it)"
+  else
+    echo "pre-push: warning: could not write the validation record; the next push will re-run." >&2
+  fi
+fi
+exit 0
