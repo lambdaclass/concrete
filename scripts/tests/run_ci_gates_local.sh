@@ -124,7 +124,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
 #   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
-EXPECTED_GATE_COMMANDS=240
+# 240 -> 241: check_prepush_record.sh (the pre-push validation-record bindings), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=241
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

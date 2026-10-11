@@ -25,6 +25,20 @@ is `make pre-push-full`, and CI runs it on every push regardless.
 Deliberate bypass is `CONCRETE_SKIP_GATES=1 git push`, which prints a warning
 saying you own the CI result.
 
+The hook resolves everything it selects — CI jobs, area filters, the fast
+surface checklist, the bug-filing check — into **one deduplicated list** via
+`run_ci_gates_local.sh --plan`, prints it, and runs each command once (the
+checklist and bug-filing check first, sequentially, failing fast). After a fully
+successful run it writes a validation record under the worktree's git directory;
+a later push of the *same* candidate (typically the second remote) reuses it and
+says so, but only when the commit, a clean tracked tree, the untracked files,
+`lean-toolchain`, the `lean`/`lake` on `PATH`, the compiler binary, every file
+under `scripts/` and `.githooks/` (plus the workflow, Makefile and build
+manifests), the selected list and the changed-file list all match. Anything
+else — including a failed or interrupted run — means a full run.
+`CONCRETE_PREPUSH_NO_REUSE=1` forces one. `check_prepush_record.sh` proves each
+binding is load-bearing.
+
 **`make test-full` is not a substitute and never was.** It does not execute the
 `check_*.sh` gate scripts at all — golden baselines, proof gates, and every
 per-feature gate run only in CI and in `test-ci-gates`. This repository has
