@@ -28,11 +28,15 @@ SB="$(mktemp -d)" || exit 2
 trap 'rm -rf "$SB"' EXIT
 mkdir -p "$SB/bin"
 # Stub toolchain: identity is whatever the environment says, so one byte can be moved at will.
-for t in lean lake; do
+for t in lean lake cc; do
   T="$(echo "$t" | tr a-z A-Z)"
-  printf '#!/bin/sh\n[ -n "${FAKE_%s_BROKEN:-}" ] && exit 1\necho "%s ${FAKE_%s_VERSION:-1.0.0}"\n' "$T" "$t" "$T" > "$SB/bin/$t"
+  printf '#!/bin/sh\n[ -n "${FAKE_%s_BROKEN:-}" ] && exit 1\n[ "$1" = --print-prefix ] && { echo "${FAKE_PREFIX:-%s}"; exit 0; }\necho "%s ${FAKE_%s_VERSION:-1.0.0}"\n' "$T" "$SB/tc" "$t" "$T" > "$SB/bin/$t"
   chmod +x "$SB/bin/$t"
 done
+# Stub toolchain PREFIX: the bytes `checker_build` must bind, independent of any --version text.
+mkdir -p "$SB/tc/bin" "$SB/tc/lib/lean"
+cp "$SB/bin/lean" "$SB/tc/bin/lean"; cp "$SB/bin/lake" "$SB/tc/bin/lake"
+printf 'kernel v1\n' > "$SB/tc/lib/lean/libleanshared.so"
 export PATH="$SB/bin:$PATH"
 unset SEED
 for v in $(env | grep -oE '^CONCRETE_[A-Z0-9_]*'); do unset "$v"; done
@@ -95,6 +99,11 @@ label="lean --version string"; dim=lean
 FAKE_LEAN_VERSION=1.0.1 expect_change
 label="lake --version string"; dim=lake
 FAKE_LAKE_VERSION=1.0.1 expect_change
+label="one byte of the toolchain's libleanshared (same --version)"; dim=checker_build
+printf 'X' >> "$SB/tc/lib/lean/libleanshared.so"; expect_change
+printf 'kernel v1\n' > "$SB/tc/lib/lean/libleanshared.so"
+label="cc --version string"; dim=cc
+FAKE_CC_VERSION=1.0.1 expect_change
 
 label="lean-toolchain contents (committed)"; dim=toolchain_file
 printf 'leanprover/lean4:v9.9.8\n' > "$REPO/lean-toolchain"; g commit -qam tc; expect_change
@@ -143,6 +152,9 @@ NOLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | while IFS= read -r d; do [ -n
 PATH="${NOLEAN_PATH%:}" refuse; mv "$SB/bin/lean.off" "$SB/bin/lean"
 label="a lean that reports no version"; want="toolchain_unidentified(lean)"
 FAKE_LEAN_BROKEN=1 refuse
+label="a toolchain prefix with no libleanshared"; want=checker_build_unidentified
+mkdir -p "$SB/tc_nokern/bin"; cp "$SB/tc/bin/lean" "$SB/tc_nokern/bin/lean"
+FAKE_PREFIX="$SB/tc_nokern" refuse
 label="unverified-binary override"; want=unverified_binary_override
 CONCRETE_ALLOW_UNVERIFIED_BINARY=1 refuse
 label="empty selection"; want=empty_selection

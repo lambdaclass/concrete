@@ -15,6 +15,12 @@
 #   toolchain_file   lean-toolchain contents;
 #   lean, lake       the binaries actually on PATH and their --version output. An unidentifiable
 #                    toolchain disables records rather than binding "unknown".
+#   checker_build    the toolchain the gates actually ran, BY CONTENT: `lean --print-prefix`, then the
+#                    bytes of bin/lean, bin/lake and every native library in lib/lean. A path and a
+#                    --version string do not identify a build (an elan proxy path is shared by every
+#                    toolchain, and a rebuilt toolchain can report the same version), so a record
+#                    without libleanshared located is not written.
+#   cc               the C compiler on PATH (path and --version); the codegen gates link with it.
 #   binary           digest of .lake/build/bin/concrete, the compiler the gates ran.
 #   gate_defs        digest of every file under scripts/ and .githooks/, the workflow directory, the
 #                    Makefile and the build/toolchain manifests — tracked or untracked. The SHA and the
@@ -59,6 +65,21 @@ _ppr_toolver() { # tool -> "path|version" or nothing
   printf '%s|%s' "$path" "$ver"
 }
 
+_ppr_checker_build() { # -> digest of the toolchain's executables and native libraries, or nothing
+  local pfx f rows=""
+  pfx="$(lean --print-prefix 2>/dev/null)" || return 1
+  [ -n "$pfx" ] && [ -f "$pfx/bin/lean" ] || return 1
+  ls "$pfx"/lib/lean/libleanshared.* >/dev/null 2>&1 || return 1
+  for f in "$pfx/bin/lean" "$pfx/bin/lake" "$pfx"/lib/lean/*.so "$pfx"/lib/lean/*.so.* \
+           "$pfx"/lib/lean/*.dylib "$pfx"/lib/lean/*.dll; do
+    [ -f "$f" ] || continue
+    rows="$rows${f#"$pfx"/}:$(ts_digest < "$f")
+"
+  done
+  [ -n "$rows" ] || return 1
+  printf '%s' "$rows" | ts_digest
+}
+
 _ppr_gate_defs() { # root -> digest
   local root="$1" list hashes
   list="$(mktemp)" || return 1
@@ -101,13 +122,15 @@ ppr_components() {
   if ! git -C "$root" diff --quiet HEAD -- 2>/dev/null || ! git -C "$root" diff --cached --quiet 2>/dev/null; then
     PPR_REASON="tracked_tree_dirty"; return 1
   fi
-  local tracked untracked tcfile lean lake bin gates sel base seed envd
+  local tracked untracked tcfile lean lake ckb cc bin gates sel base seed envd
   tracked="$(ts_tracked "$root")"
   untracked="$(ts_untracked "$root")"
   tcfile="$(tr '\n' ' ' < "$root/lean-toolchain" 2>/dev/null | sed 's/[[:space:]]*$//')"
   [ -n "$tcfile" ] || { PPR_REASON="lean_toolchain_unreadable"; return 1; }
   lean="$(_ppr_toolver lean)" || { PPR_REASON="toolchain_unidentified(lean)"; return 1; }
   lake="$(_ppr_toolver lake)" || { PPR_REASON="toolchain_unidentified(lake)"; return 1; }
+  ckb="$(_ppr_checker_build)" || { PPR_REASON="checker_build_unidentified"; return 1; }
+  cc="$(_ppr_toolver cc)" || { PPR_REASON="toolchain_unidentified(cc)"; return 1; }
   [ -f "$root/.lake/build/bin/concrete" ] || { PPR_REASON="no_compiler_binary"; return 1; }
   bin="$(ts_digest < "$root/.lake/build/bin/concrete")"
   gates="$(_ppr_gate_defs "$root")" || { PPR_REASON="gate_defs_unreadable"; return 1; }
@@ -116,7 +139,7 @@ ppr_components() {
   if grep -q 'SEED' "$plan_f"; then seed="${SEED:-$(date -u +%Y%m%d)}"; else seed="unused"; fi
   envd="$(env | grep '^CONCRETE_' | grep -v '^CONCRETE_SKIP_GATES=' | LC_ALL=C sort | ts_digest)"
   local kv k v
-  for kv in "tracked=$tracked" "untracked=$untracked" "binary=$bin" "gate_defs=$gates" \
+  for kv in "tracked=$tracked" "untracked=$untracked" "checker_build=$ckb" "binary=$bin" "gate_defs=$gates" \
             "selection=$sel" "base=$base" "env=$envd"; do
     k="${kv%%=*}"; v="${kv#*=}"
     case "$v" in ""|*TREESTATE-UNAVAILABLE*) PPR_REASON="component_unavailable($k)"; return 1 ;; esac
@@ -130,6 +153,8 @@ ppr_components() {
     echo "toolchain_file=$tcfile"
     echo "lean=$lean"
     echo "lake=$lake"
+    echo "checker_build=$ckb"
+    echo "cc=$cc"
     echo "binary=$bin"
     echo "gate_defs=$gates"
     echo "selection=$sel"
