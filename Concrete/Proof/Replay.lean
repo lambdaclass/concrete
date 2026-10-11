@@ -170,6 +170,34 @@ structure ReplayCheck where
   verdict : ReplayVerdict
   deriving BEq, Repr
 
+/-- The Lean checker that actually ran, identified by the process itself and by its build.
+
+    BEFORE R-0208 the checker was named by the TEXT of the workspace's `lean-toolchain` file, which
+    is not the process that replays. The nix devshell takes Lean from nixpkgs and ignores that file
+    while CI's elan honours it, so two different checkers carried the same name, and an upgraded
+    kernel could not be told from the one it replaced.
+
+    `version`, `githash` and `platform` are what the checking process reports about itself.
+    `buildDigest` is SHA-256 over the bytes of the executable that process ran from AND the
+    toolchain's shared libraries beside it: the `lean` executable is a small stub, and the kernel
+    lives in `libleanshared`, so digesting the executable alone would bind almost nothing. A nix
+    build reports its githash as the version tag, which is exactly why the bytes are bound too.
+
+    WHAT IT DOES NOT BIND: system libraries outside the toolchain prefix (libc, GMP, libuv), the
+    `.olean` files of Lean's own core library, and anything about HOW the identity reached us. The
+    replay process prints it, tagged with a per-run nonce, which CORRELATES the line with that run;
+    it does not AUTHENTICATE it — code running inside the checker could print the same line. -/
+structure CheckerIdentity where
+  version     : String
+  githash     : String
+  platform    : String
+  buildDigest : String
+  deriving BEq, Repr
+
+/-- The one rendering a receipt's toolchain identity is computed from. -/
+def CheckerIdentity.canonical (c : CheckerIdentity) : String :=
+  s!"lean {c.version} commit {c.githash} platform {c.platform} build {c.buildDigest}"
+
 /-- The checker that produced a result, identified well enough to be re-examined later.
 
     A verdict with no environment is anonymous, and an anonymous verdict cannot be invalidated: when
@@ -204,6 +232,11 @@ structure ReplayEnvironment where
       binds less: anything outside the workspace. Lean core is pinned by `toolchain`; a proof
       reaching some other external library is not covered here. -/
   importDigests     : List (String × String)
+  /-- The checker that ran, as it reported itself; `none` when no identity could be established.
+      `none` mints nothing and compares current against nothing — it is never a wildcard. Defaulted
+      only so a hand-built environment fails for the reason it should (private constructors
+      downstream), not for a missing field. -/
+  checker           : Option CheckerIdentity := none
   deriving BEq, Repr
 
 /-- What a completed replay produced. It records what happened, INCLUDING failure — a report that
@@ -296,6 +329,9 @@ inductive ReplayEvidenceRefusal where
       location-dependence slice 4 removed. Replaying such an input is still legitimate and still
       reported; what it may not do is mint. -/
   | fallbackWorkspace (workspace : String)
+  /-- The run did not establish which checker produced its verdicts. A receipt binds the checker,
+      and binding an unknown one would let any later checker match it. -/
+  | checkerUnidentified
   deriving BEq, Repr
 
 def ReplayEvidenceRefusal.canonical : ReplayEvidenceRefusal → String
@@ -303,6 +339,7 @@ def ReplayEvidenceRefusal.canonical : ReplayEvidenceRefusal → String
   | .notAccepted ..      => "not_accepted"
   | .underGeneralFailure => "under_general_failure"
   | .fallbackWorkspace _ => "fallback_workspace"
+  | .checkerUnidentified => "checker_unidentified"
 
 def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
   | .notReplayed t =>
@@ -314,6 +351,9 @@ def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
   | .fallbackWorkspace w =>
       s!"the workspace '{w}' was resolved from the caller's directory rather than from the input, so "
       ++ "the verdict is not a property of the program alone and may not be minted into a receipt"
+  | .checkerUnidentified =>
+      "the run did not establish which checker executable and build produced its verdicts, so "
+      ++ "there is nothing a receipt could bind"
 
 /-- The kernel accepted THIS theorem, in THIS environment.
 
@@ -330,6 +370,8 @@ structure SuccessfulReplay where
   theoremName : String
   subject     : String
   environment : ReplayEnvironment
+  /-- The checker that accepted the theorem. Total here: `of?` refuses a run without one. -/
+  checker     : CheckerIdentity
   deriving Repr
 
 /-- Extract the witness for one theorem from a completed replay, or say why not. -/
@@ -341,9 +383,12 @@ def SuccessfulReplay.of? (r : ReplayResult) (theoremName : String)
   if c.verdict != .accepted then throw (.notAccepted theoremName c.verdict)
   if !r.environment.workspaceFromInput then
     throw (.fallbackWorkspace r.environment.workspace)
+  let some checker := r.environment.checker
+    | throw .checkerUnidentified
   return { theoremName := c.target.theoremName
          , subject := c.target.subject
-         , environment := r.environment }
+         , environment := r.environment
+         , checker }
 
 /-! ### The producer -/
 
@@ -410,6 +455,157 @@ def importClosureOf (ws : System.FilePath) (imports : List String)
       out := out ++ [(rel, Concrete.shortHash content)]
   return out.mergeSort (fun a b => a.1 ≤ b.1)
 
+/-- The Lean command that makes the process running it report its own identity. Appended to every
+    replay file, so the identity in a result is the identity of the process that produced its
+    verdicts — not of a second process asked afterwards, which could resolve differently.
+
+    It prints one `CONCRETE-CHECKER-ID` line (version, githash, platform, executable) and one
+    `CONCRETE-CHECKER-IMAGE` line per file the process has MAPPED — read from `/proc/self/maps` on
+    Linux and from `lsof` on the process itself elsewhere. That is the code that actually loaded,
+    which is the point: hashing the libraries that merely sit beside the executable binds a file the
+    process may never have opened (macOS loads four of the toolchain's five dylibs) and misses ones
+    it did (GMP and libuv come from elsewhere). Classification of the raw list is done by the
+    consumer, in `checkerImagesOf`, where it can be tested without a checker. -/
+def checkerIdentityProbe (nonce : String) : String :=
+  (r#"
+-- The checker reports itself; the nonce ties these lines to this run.
+#eval show IO Unit from do
+  IO.println s!"CONCRETE-CHECKER-ID NONCE {Lean.versionString}|{Lean.githash}|{System.Platform.target}|{← IO.appPath}"
+  let maps : System.FilePath := "/proc/self/maps"
+  let paths ← if ← maps.pathExists then do
+      let s ← IO.FS.readFile maps
+      pure (s.splitOn "\n" |>.filterMap fun l =>
+        match l.splitOn " /" with
+        | _ :: rest@(_ :: _) => some ("/" ++ " /".intercalate rest)
+        | _ => none)
+    else do
+      let o ← IO.Process.output
+        { cmd := "lsof", args := #["-p", toString (← IO.Process.getPID), "-Fn"] }
+      if o.exitCode != 0 then pure [] else
+      pure (o.stdout.splitOn "\n" |>.filterMap fun l =>
+        if l.startsWith "n/" then some (String.ofList (l.toList.drop 1)) else none)
+  for p in paths.eraseDups do
+    IO.println s!"CONCRETE-CHECKER-IMAGE NONCE {p}"
+"#).replace "NONCE" nonce
+
+/-- A fresh per-run nonce. -/
+def freshNonce : IO String := do
+  let b ← IO.getRandomBytes 16
+  return String.join (b.toList.map byteToHex)
+
+/-- The payloads of the lines tagged `tag` and carrying `nonce`. -/
+def taggedLines (tag nonce transcript : String) : List String :=
+  let pfx := s!"{tag} {nonce} "
+  (transcript.splitOn "\n").filterMap fun l =>
+    if l.startsWith pfx then some (String.ofList (l.toList.drop pfx.length)).trimAscii.toString
+    else none
+
+/-- The fields of the ONE identity line carrying `nonce`, or `none`. Two lines with the right nonce
+    are as bad as none: the run did not say unambiguously who it was. -/
+def parseCheckerLine (nonce transcript : String) : Option (String × String × String × String) :=
+  match taggedLines "CONCRETE-CHECKER-ID" nonce transcript with
+  | [l] =>
+    match l.splitOn "|" with
+    | [v, g, p, a] => if [v, g, p, a].any (·.isEmpty) then none else some (v, g, p, a)
+    | _ => none
+  | _ => none
+
+/-- OS-owned locations. Images here are NAMED in the identity but not hashed: binding the host's
+    libc bytes would make every receipt flap with routine OS updates while saying nothing about the
+    Lean build. A stated limit, not a claim that they cannot matter. -/
+def isSystemImage (p : String) : Bool :=
+  ["/usr/lib/", "/lib/", "/lib64/", "/usr/lib64/", "/System/"].any (fun (d : String) => p.startsWith d)
+
+/-- A file of native code: a shared library by name, or the executable itself. Data files the
+    process maps (`.olean`, `.ir`) are not code and are not part of WHICH checker this is. -/
+def isNativeImage (exe p : String) : Bool :=
+  let name := (System.FilePath.mk p).fileName.getD ""
+  p == exe || name.endsWith ".dylib" || name.endsWith ".dll" || name.endsWith ".so"
+    || (name.splitOn ".so.").length > 1
+
+/-- Which loaded images the identity hashes and which it only names, or why there is no identity.
+
+    Refuses rather than guessing when: the process listed no images; its own executable is not among
+    them; no `libleanshared` was loaded (the kernel's code was not located); or two hashed images
+    share a file name (keys are file names, so the digest is independent of install location, and an
+    ambiguous key would let one stand in for the other). -/
+def checkerImagesOf (exe : String) (images : List String)
+    : Except String (List String × List String) := do
+  let native := images.eraseDups.filter (isNativeImage exe)
+  if native.isEmpty then throw "the checker listed no loaded images"
+  if !native.contains exe then throw s!"the checker's executable '{exe}' is not among its loaded images"
+  let nameOf := fun (p : String) => (System.FilePath.mk p).fileName.getD p
+  if !native.any (fun p => (nameOf p).startsWith "libleanshared") then
+    throw "no libleanshared was loaded, so the kernel's code was not located"
+  let hashed := native.filter (!isSystemImage ·)
+  let names := hashed.map nameOf
+  if names.eraseDups.length != names.length then
+    throw "two loaded images share a file name, so a name cannot identify one of them"
+  return (hashed, native.filter isSystemImage)
+
+/-- SHA-256 of each file, in order, by the host's `sha256sum` (or `shasum -a 256`), or `none`.
+
+    An external tool on purpose. These are ~200 MB of native code, and `Sha256Fast` evaluated by
+    the Lean interpreter — which is how every `#eval`-level caller of `replay` runs it — does not
+    finish; even compiled it cost ~2.5 s per identity. The tool joins `lsof` in the trust base of the
+    identity, and a host with neither tool has no identity rather than a weaker one. -/
+def sha256Files (paths : List String) : IO (Option (List String)) := do
+  if paths.isEmpty then return some []
+  for (cmd, pre) in [("sha256sum", #[]), ("shasum", #["-a", "256"])] do
+    let out ← try
+        pure (some (← IO.Process.output { cmd, args := pre ++ paths.toArray }))
+      catch _ => pure none
+    let some o := out | continue
+    if o.exitCode != 0 then continue
+    let rows := (o.stdout.splitOn "\n").filter (!·.isEmpty)
+    let isHex := fun (c : Char) => c.isDigit || ('a' ≤ c && c ≤ 'f')
+    let digests := rows.map fun r => String.ofList (r.toList.take 64)
+    if rows.length == paths.length && digests.all (fun d => d.length == 64 && d.all isHex) then
+      return some digests
+  return none
+
+/-- SHA-256 over the hashed images' digests (keyed by file name) and the named images' paths. -/
+def checkerBuildDigest (hashed named : List String) : IO (Option String) := do
+  let some digests ← sha256Files hashed | return none
+  let nameOf := fun (p : String) => (System.FilePath.mk p).fileName.getD p
+  let rows := (hashed.zip digests).map (fun (p, d) => s!"hash {nameOf p}:{d}") ++ named.map (s!"name {·}")
+  let material := "\n".intercalate (rows.mergeSort (· ≤ ·))
+  return some (String.join ((Sha256Fast.hash material.toUTF8).toList.map byteToHex))
+
+/-- The identity a run reported about itself, completed with the digest of the code it had loaded. -/
+def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) := do
+  let some (version, githash, platform, app) := parseCheckerLine nonce transcript | return none
+  match checkerImagesOf app (taggedLines "CONCRETE-CHECKER-IMAGE" nonce transcript) with
+  | .error _ => return none
+  | .ok (hashed, named) =>
+    let some buildDigest ← checkerBuildDigest hashed named | return none
+    return some { version, githash, platform, buildDigest }
+
+/-- Run `lake env lean` on `source` in `ws`, in a scratch directory that is always removed. -/
+def runChecker (ws : System.FilePath) (source : String)
+    : IO (Except String IO.Process.Output) := do
+  let scratchDir ← try
+      let d ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+      if d.exitCode != 0 then throw (IO.userError d.stderr)
+      pure d.stdout.trimAscii.toString
+    catch e => return .error s!"scratch: {e}"
+  let scratch := scratchDir ++ "/kernel_replay.lean"
+  let out ← try
+      IO.FS.writeFile ⟨scratch⟩ source
+      pure (Except.ok (← IO.Process.output
+        { cmd := "lake", args := #["env", "lean", scratch], cwd := ws
+        , env := #[("LAKE_TERM_ANSI", "0")] }))
+    catch e => pure (Except.error (toString e))
+  let _ ← IO.Process.output { cmd := "rm", args := #["-rf", scratchDir] }
+  return out
+
+/-- Ask the checker that WOULD run in `ws` who it is, without replaying anything. -/
+def probeChecker (ws : System.FilePath) : IO (Option CheckerIdentity) := do
+  let nonce ← freshNonce
+  match ← runChecker ws (checkerIdentityProbe nonce) with
+  | .error _ => return none
+  | .ok r => checkerIdentityOf nonce (r.stdout ++ "\n" ++ r.stderr)
+
 /-- The checker that WOULD run for this input: its workspace and its toolchain, without running it.
 
     ONE PRODUCER, used by `replay` and by every consumer that has to compare a stored receipt
@@ -421,7 +617,8 @@ def importClosureOf (ws : System.FilePath) (imports : List String)
     The toolchain is read from the RESOLVED WORKSPACE rather than the process directory: it describes
     the checker that would run for this input, and reading it from elsewhere would name a different
     one. -/
-def resolveChecker (req : ReplayRequest) : IO (Option (System.FilePath × ReplayEnvironment)) := do
+private def resolveEnvironment (req : ReplayRequest)
+    : IO (Option (System.FilePath × ReplayEnvironment)) := do
   match ← resolveWorkspace req with
   | none => return none
   | some (ws, fromInput) =>
@@ -432,6 +629,13 @@ def resolveChecker (req : ReplayRequest) : IO (Option (System.FilePath × Replay
     let digests ← importClosureOf ws req.imports
     return some (ws, { workspace := ws.toString, workspaceFromInput := fromInput
                      , toolchain, imports := req.imports, importDigests := digests })
+
+/-- See above. `toolchain` is the workspace's DECLARED pin, kept for display; `checker` is who would
+    actually run, asked of that process. -/
+def resolveChecker (req : ReplayRequest) : IO (Option (System.FilePath × ReplayEnvironment)) := do
+  match ← resolveEnvironment req with
+  | none => return none
+  | some (ws, env) => return some (ws, { env with checker := ← probeChecker ws })
 
 /-- The generated Lean file for a request. Pure, so a test can assert what would be checked without
     running a kernel, and so the same bytes are reproducible from the request alone. -/
@@ -480,8 +684,10 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
   match req.validate with
   | .error e => return .error e
   | .ok () =>
-  let some (ws, env) ← resolveChecker req
+  -- NOT `resolveChecker`: the checker identity comes from THIS run's own process, below.
+  let some (ws, env) ← resolveEnvironment req
     | return .error (.noWorkspace req.inputPath req.fallbackDir)
+  let nonce ← freshNonce
   -- Scratch file. Failure here is a refusal: nothing was checked.
   let scratchDir ← try
       let d ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
@@ -490,7 +696,7 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
     catch e => return .error (.scratchUnavailable (toString e))
   let scratch := scratchDir ++ "/kernel_replay.lean"
   try
-    IO.FS.writeFile ⟨scratch⟩ req.source
+    IO.FS.writeFile ⟨scratch⟩ (req.source ++ checkerIdentityProbe nonce)
   catch e =>
     let _ ← IO.Process.output { cmd := "rm", args := #["-rf", scratchDir] }
     return .error (.scratchUnavailable (toString e))
@@ -519,6 +725,8 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
         | .unbound => .acceptedUnbound
         | .bound   => .accepted
     { target := t, verdict }
-  return .ok { environment := env, checks, exitCode := result.exitCode, generalFailure, transcript }
+  let checker ← checkerIdentityOf nonce transcript
+  return .ok { environment := { env with checker }, checks, exitCode := result.exitCode
+             , generalFailure, transcript }
 
 end Concrete.Proof

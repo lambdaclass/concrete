@@ -16,7 +16,7 @@ that hashes.
 namespace Concrete
 
 /-- Two-digit lowercase hex of a byte. -/
-private def byteToHex (b : UInt8) : String :=
+def byteToHex (b : UInt8) : String :=
   let digits := "0123456789abcdef".toList
   let n := b.toNat
   String.ofList [digits.getD (n / 16) '0', digits.getD (n % 16) '0']

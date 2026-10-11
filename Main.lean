@@ -2734,9 +2734,9 @@ def compileAndReport (inputPath : String) (reportType : String)
         let checkerNow ← Proof.resolveChecker
           { inputPath := inputPath, fallbackDir := "."
           , imports := ["Concrete", "Examples"], targets := [] }
-        let toolchain := match checkerNow with
-          | some (_, e) => e.toolchain
-          | none => "unknown"
+        let checker := match checkerNow with
+          | some (_, e) => e.checker
+          | none => none
         -- THE PROOF LIBRARY, BY CONTENT. A receipt that did not identify whose theorems were
         -- accepted could be replayed against a different library and still read current.
         let importsId := match checkerNow with
@@ -2765,7 +2765,7 @@ def compileAndReport (inputPath : String) (reportType : String)
               notCurrent := notCurrent + 1
               lines := lines ++ [s!"    ✗ {subject} — no such claim in this program; the receipt describes something else"]
             | some entry =>
-              match Proof.storedDispositionFor pc env toolchain trustedDepsOf entry st with
+              match Proof.storedDispositionFor pc env checker trustedDepsOf entry st with
               | .error w =>
                 notCurrent := notCurrent + 1
                 lines := lines ++ [s!"    ✗ {subject} — cannot be checked [{w.canonical}] {w.explain}"]
@@ -2793,7 +2793,12 @@ def compileAndReport (inputPath : String) (reportType : String)
           ([s!"\n=== Replay Receipts ({path}) ==="] ++ lines
            ++ [s!"\n  {current} current, {notCurrent} not current, {unreadable} unreadable, {missing.length} no receipt"
               , "  A receipt makes a claim kernel-replayed ONLY while it agrees with fresh facts."
-              , "  Status above is derived from source facts and does not itself mean the kernel ran."]))
+              , "  Status above is derived from source facts and does not itself mean the kernel ran."
+              -- WHAT "current" DOES NOT YET MEAN (R-0208, open slices). Stated so a reader cannot take
+              -- identity agreement for a re-check or for advisory acceptance.
+              , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
+              , "  'current' means the stored facts match this program, proof library and checker identity."
+              , "  It is NOT a fresh kernel re-check in this run, and no checker advisory policy has been applied."]))
         -- THE EXIT CODE CARRIES THE VERDICT when receipts were consumed. It was unconditionally 0 —
         -- five current, zero current, an empty store and an unreadable one all exited 0 — so any CI
         -- gate built on this surface passed no matter what it found. Only the `--receipts` mode is
@@ -2917,7 +2922,10 @@ def compileAndReport (inputPath : String) (reportType : String)
       let mut out := "=== Replay Receipts ===\n"
       out := out ++ s!"\nWorkspace: {res.environment.workspace}"
       out := out ++ (if res.environment.workspaceFromInput then " (from input)\n" else " (from working directory)\n")
-      out := out ++ s!"Toolchain: {res.environment.toolchain}\n"
+      out := out ++ s!"Toolchain: {res.environment.toolchain} (declared pin; the checker below is what ran)\n"
+      -- THE CHECKER THAT RAN, as its own process reported it (R-0208). This, not the pin above, is
+      -- what each receipt's toolchain identity binds; without it nothing minted.
+      out := out ++ s!"Checker: {(res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can bind it, so none was minted"}\n"
       -- NAMED, not just bound. The receipt binds a digest of (compiler, toolchain), so without this
       -- line nothing observable says WHICH compiler produced the evidence — and an identity that
       -- cannot be read cannot be checked against the executable it claims to describe.
@@ -3057,7 +3065,8 @@ def compileAndReport (inputPath : String) (reportType : String)
       out := out ++ s!"\nWorkspace: {ws}"
       out := out ++ (if wsFromInput then " (from input)\n" else " (from working directory; the input is outside any workspace)\n")
       out := out ++ s!"\nToolchain: "
-      out := out ++ tc ++ "\n"
+      out := out ++ tc ++ " (declared pin)\n"
+      out := out ++ s!"Checker: {(res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"}\n"
       if !verified.isEmpty then
         out := out ++ s!"\n  Kernel-verified ({verified.length}):\n"
         for fn in verified do
