@@ -13643,6 +13643,26 @@ takes Lean from nixpkgs and ignores `lean-toolchain` while CI's elan honours it;
 5. **Checker identity binds the actual executable and build.** A nonce-tagged identity line
    printed by the replay process correlates output with that process; it is not authentication.
 
+**Slice 1a landed on branch `r0208-checker-identity` (2026-10-11; decision 5).** The replay process
+reports its own `Lean.versionString`, `Lean.githash`, platform and executable behind a per-run
+nonce, plus the native images it has mapped (`/proc/self/maps` on Linux, `lsof` on itself on
+macOS). The build digest hashes those LOADED images (`shasum -a 256`), keyed by file name so an
+identical build at another path is the same checker; OS-owned images are named, not hashed.
+Measured on macOS: the old sibling-library rule hashed `libLake_shared`, which the checker never
+loads, and missed GMP and libuv, which it does. `toolchainIdOf` moved to V2 and binds
+`CheckerIdentity.canonical`; `lean-toolchain` is now shown only as the declared pin. Missing,
+duplicated or incomplete self-reports (no line, two lines, no image list, executable or
+`libleanshared` absent, duplicate image names) give no identity, and no identity mints nothing
+(`checker_unidentified`) and compares current against nothing. `check_checker_identity.sh` (14
+legs) holds: a lean-toolchain-only change keeps the identity; one byte appended to the loaded
+`libleanshared` changes it and makes every receipt non-current; edited self-reports are a different
+checker; a foreign-nonce line is ignored. Cost: a status check went from 0.65 s to 1.7 s (one
+probe process per operation, no cache). **What 'current' still does not mean:** reports say so
+explicitly — not a fresh kernel re-check (decision 1, open) and not advisory acceptance (decisions
+3-4, open). Stated limits: OS libraries named not hashed, core `.olean` data not bound, the
+identity is correlated by nonce and not authenticated, and files are hashed after the run
+(time-of-check gap). Mutation families for the new refusals are queued with the next campaign.
+
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
 declarations; an accepted narrowing needs an independently checked retained-environment footprint.
