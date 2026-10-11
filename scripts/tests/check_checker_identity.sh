@@ -149,10 +149,17 @@ stub drop   '/^CONCRETE-CHECKER-ID /d'
 stub dup    '/^CONCRETE-CHECKER-ID /{p;}'
 stub nokern '/^CONCRETE-CHECKER-IMAGE .*libleanshared/d'
 stub noimg  '/^CONCRETE-CHECKER-IMAGE /d'
+# A SECOND loaded image with the same file name at another path. Images are keyed by file name so
+# the digest is location-independent; an ambiguous key would let one library stand in for another.
+# The second path is a REAL file (a link to the same library), so hashing succeeds and only the
+# duplicate-key rule can refuse — a missing file would refuse for an unrelated reason.
+mkdir -p "$TMP/elsewhere"
+for e in "$PFX/lib/lean/"libleanshared.*; do ln -s "$e" "$TMP/elsewhere/$(basename "$e")"; done
+stub dupname "s#^(CONCRETE-CHECKER-IMAGE [0-9a-f]+ )(.*/)(libleanshared\\.(dylib|so))\$#\\1\\2\\3\\n\\1$TMP/elsewhere/\\3#"
 stub edit   '/^CONCRETE-CHECKER-ID /s/\|[^|]*\|/|forged-commit|/'
 stub foreign 's/^(CONCRETE-CHECKER-ID )([0-9a-f]+)(.*)$/\1\2\3\n\1deadbeef 9.99.0|forged|forged|\/forged/'
 
-for c in "drop:no identity line" "dup:two identity lines" "nokern:no libleanshared loaded" "noimg:no loaded-image list"; do
+for c in "drop:no identity line" "dup:two identity lines" "nokern:no libleanshared loaded" "noimg:no loaded-image list" "dupname:two loaded images sharing a file name"; do
   s="${c%%:*}"; why="${c#*:}"
   OUT="$(PATH="$TMP/stub_$s:$PATH" consume)"
   if grep -q 'Checker now: UNIDENTIFIED' <<<"$OUT" \
