@@ -63,7 +63,7 @@ fi
 
 echo "=== 'current' is identity agreement, and says so ==="
 
-if grep -q "It is NOT a fresh kernel re-check in this run, and no checker advisory policy has been applied" <<<"$BASE"; then
+if grep -q "It is NOT a fresh kernel re-check in this run" <<<"$BASE"; then
   ok "the report states that current is not a re-check and not advisory acceptance"
 else
   no "the disclosure is gone — 'current' now reads as re-checked or advisory-accepted"

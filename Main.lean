@@ -2747,6 +2747,7 @@ def compileAndReport (inputPath : String) (reportType : String)
           (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
         let env : Proof.IssueEnvironment := { compilerVersion, workspaceId, importsId }
         let mut lines : List String := []
+        let mut policyCounts : Array Proof.AdvisoryStatus := #[]
         let mut current := 0
         let mut notCurrent := 0
         let mut unreadable := 0
@@ -2772,7 +2773,14 @@ def compileAndReport (inputPath : String) (reportType : String)
               | .ok .current =>
                 current := current + 1
                 let trust := if st.carriesTrust then s!" ASSUMING {", ".intercalate st.trustedBoundaries}" else ""
-                lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"]
+                -- THE CHECKER POLICY, SEPARATELY (R-0208 decisions 3-4): currency says the receipt
+                -- matches the program; the decision says whether the checker that established it is
+                -- still accepted. Read from the register at report time, never from the receipt.
+                let d := Proof.checkerRegister.decide st.checker
+                policyCounts := policyCounts.push d.status
+                let why := if d.advisories.isEmpty then "" else s!" ({", ".intercalate d.advisories})"
+                lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"
+                                 , s!"        checker policy: {d.status.canonical}{why}"]
               | .ok .notCurrent =>
                 notCurrent := notCurrent + 1
                 lines := lines ++ [s!"    ✗ {subject} — receipt NOT current: it was established against different material"]
@@ -2799,7 +2807,11 @@ def compileAndReport (inputPath : String) (reportType : String)
               , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
               , "  Receipts are minted only after a fresh kernel re-check of each theorem's workspace closure."
               , "  'current' means the stored facts match this program, proof library and checker identity."
-              , "  It is NOT a fresh kernel re-check in this run, and no checker advisory policy has been applied."]))
+              , "  It is NOT a fresh kernel re-check in this run."
+              , s!"  Checker policy v{Proof.checkerRegister.policyVersion} ({Proof.checkerRegister.policyIdentity}): "
+                ++ s!"{(policyCounts.filter (· == .accepted)).size} accepted, {(policyCounts.filter (· == .affected)).size} affected, "
+                ++ s!"{(policyCounts.filter (· == .revoked)).size} revoked, {(policyCounts.filter (· == .unknown)).size} unknown — "
+                ++ "reported beside currency, not folded into it: a register change re-evaluates, it does not invalidate."]))
         -- THE EXIT CODE CARRIES THE VERDICT when receipts were consumed. It was unconditionally 0 —
         -- five current, zero current, an empty store and an unreadable one all exited 0 — so any CI
         -- gate built on this surface passed no matter what it found. Only the `--receipts` mode is

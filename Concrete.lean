@@ -56,6 +56,7 @@ import Concrete.BuildIdentity
 import Concrete.Proof.Replay
 import Concrete.Proof.Receipt
 import Concrete.Proof.Issue
+import Concrete.Proof.CheckerPolicy
 import Concrete.ProofKit
 import Concrete.Proof.ProofSoundness
 import Concrete.Proof.Sha256Spec

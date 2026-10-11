@@ -220,6 +220,9 @@ test-checker-identity: build ## R-0208 slice 1a: receipts bind the checker that 
 test-kernel-recheck: build ## R-0208 slice 1b: receipts mint only for theorems the kernel re-checked in the replay run
 	bash scripts/tests/check_kernel_recheck.sh
 
+test-checker-policy: build ## R-0208 decisions 3-4: compiled checker advisory register, decided beside currency
+	bash scripts/tests/check_checker_policy.sh
+
 test-v2-migration-plan: build ## R-0004 package 3: the V1->V2 migration dry run reconciles and manufactures no freshness
 	bash scripts/tests/check_v2_migration_plan.sh
 

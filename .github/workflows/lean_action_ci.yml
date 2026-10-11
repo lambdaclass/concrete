@@ -613,6 +613,9 @@ jobs:
       - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
         run: bash scripts/tests/check_kernel_recheck.sh
 
+      - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
+        run: bash scripts/tests/check_checker_policy.sh
+
       - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
         run: bash scripts/tests/check_v2_migration_plan.sh
 
