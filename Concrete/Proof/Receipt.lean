@@ -140,15 +140,19 @@ deliberately independent of the machine it ran on, because clean-machine reprodu
 completion requirement: an identity containing an absolute path would make every receipt
 un-replayable anywhere else, which is the opposite of what binding the environment is for. -/
 
-/-- The toolchain the proof was checked under: compiler version AND Lean toolchain.
+/-- The toolchain the proof was checked under: compiler version AND the Lean checker.
 
     Both, not either. The compiler decides what the subject IS; Lean decides what a proof of it
     MEANS. A receipt that pinned only one would survive a change to the other, and
     `tableValueDigest`'s structural rendering is explicitly toolchain-relative — that limit is
-    only acceptable because this exists. -/
-def toolchainIdOf (compilerVersion leanToolchain : String) : String :=
-  shortHash ("toolchainV1:" ++ toString compilerVersion.length ++ ":" ++ compilerVersion
-             ++ "|lean:" ++ toString leanToolchain.length ++ ":" ++ leanToolchain)
+    only acceptable because this exists.
+
+    `checker` is `CheckerIdentity.canonical`: the version, githash, platform and build digest the
+    checking PROCESS reported (R-0208). V1 bound the text of `lean-toolchain`, a file the checker
+    that actually ran need not honour; the tag moved so no V1 identity can equal a V2 one. -/
+def toolchainIdOf (compilerVersion checker : String) : String :=
+  shortHash ("toolchainV2:" ++ toString compilerVersion.length ++ ":" ++ compilerVersion
+             ++ "|checker:" ++ toString checker.length ++ ":" ++ checker)
 
 /-- The workspace, identified by its PACKAGE identity rather than its path.
 
@@ -305,7 +309,7 @@ def ProofEvidenceReceipt.mint
   , theoremArtifact := sr.theoremName
   , carriesTrust := m.carriesTrust
   , trustedBoundaries := m.trustedBoundaries
-  , toolchainId := toolchainIdOf m.compilerVersion sr.environment.toolchain
+  , toolchainId := toolchainIdOf m.compilerVersion sr.checker.canonical
   , workspaceId := m.workspaceId
   , importsId := m.importsId }
 

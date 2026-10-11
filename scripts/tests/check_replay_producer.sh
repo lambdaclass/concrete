@@ -281,7 +281,10 @@ probe "MINTED artifact=Concrete.Proof.parse_byte_correct toolchain=bound" \
       | none => IO.println "MATERIAL-REFUSED"
       | some m =>
         let rc := ProofEvidenceReceipt.mint sr m
-        let bound := rc.toolchainId == toolchainIdOf "cv" sr.environment.toolchain
+        -- The CHECKER THAT RAN (R-0208), not the lean-toolchain text: the token carries the identity
+        -- the replay process reported about itself, and the receipt must bind exactly that.
+        let bound := rc.toolchainId == toolchainIdOf "cv" sr.checker.canonical
+          && rc.toolchainId != toolchainIdOf "cv" sr.environment.toolchain
         IO.println s!"MINTED artifact={rc.theoremArtifact} toolchain={if bound then "bound" else "invented"}"'
 
 # AN UNBOUND ACCEPTANCE IS NOT A MINTING AUTHORITY. The kernel accepted the theorem; the claim has

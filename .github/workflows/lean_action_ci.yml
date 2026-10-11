@@ -607,6 +607,9 @@ jobs:
       - name: "Receipt consumption (R-0004 — a stored receipt is untrusted input, re-checked against current facts)"
         run: bash scripts/tests/check_receipt_consumption.sh
 
+      - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
+        run: bash scripts/tests/check_checker_identity.sh
+
       - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
         run: bash scripts/tests/check_v2_migration_plan.sh
 
