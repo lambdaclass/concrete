@@ -161,7 +161,7 @@ launder "trust boundary fabricated" \
 echo "=== decoding: partial, confused, and contradictory ==="
 
 attack "schema downgraded to an older envelope" \
-  'recs[0][1] = [l.replace("receiptV1", "receiptV0") for l in recs[0][1]]' 4 1
+  'recs[0][1] = [l.replace("receiptV2", "receiptV1") for l in recs[0][1]]' 4 1
 attack "required field removed" \
   'recs[0][1] = [l for l in recs[0][1] if not l.startswith("subject ")]' 4 1
 attack "required field duplicated with a different value" \

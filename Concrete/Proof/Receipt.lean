@@ -122,6 +122,13 @@ structure ProofEvidenceReceipt where
   carriesTrust : Bool
   trustedBoundaries : List String
   toolchainId : String
+  /-- The compiler and the checker `toolchainId` was computed from, IN THE CLEAR (receiptV2,
+      R-0208). The digest alone binds them but cannot be read: advisory policy has to know WHICH
+      checker accepted a theorem to say whether an advisory affects it. Both are re-hashed against
+      `toolchainId` on decode, so editing the readable identity to dodge an advisory makes the
+      record malformed rather than unaffected. -/
+  compilerVersion : String
+  checker : String
   workspaceId : String
   importsId : String
 deriving Repr
@@ -180,7 +187,7 @@ def importsIdOf (imports : List (String × String)) : String :=
 
 /-- The current envelope format. Bumping this makes every stored receipt `needs_recheck`,
     which is the intended behaviour and the reason the field exists. -/
-def receiptSchemaVersion : String := "receiptV1"
+def receiptSchemaVersion : String := "receiptV2"
 
 /-- Receipt material that has passed every field and consistency check, and nothing more.
 
@@ -310,6 +317,8 @@ def ProofEvidenceReceipt.mint
   , carriesTrust := m.carriesTrust
   , trustedBoundaries := m.trustedBoundaries
   , toolchainId := toolchainIdOf m.compilerVersion sr.checker.canonical
+  , compilerVersion := m.compilerVersion
+  , checker := sr.checker.canonical
   , workspaceId := m.workspaceId
   , importsId := m.importsId }
 
@@ -345,6 +354,8 @@ def ProofEvidenceReceipt.encode (r : ProofEvidenceReceipt) : String :=
        , s!"trust {if r.carriesTrust then "true" else "false"}" ]
     ++ (r.trustedBoundaries.map fun b => s!"boundary {b}")
     ++ [ s!"toolchain {r.toolchainId}"
+       , s!"compiler {r.compilerVersion}"
+       , s!"checker {r.checker}"
        , s!"workspace {r.workspaceId}"
        , s!"imports {r.importsId}" ])
 
@@ -375,6 +386,10 @@ inductive ReceiptDecodeRefusal where
       Zero and several are equally unusable, which is the same disposition `validatedRowOf` gives an
       ambiguous classification and `duplicateField` gives a repeated field. -/
   | duplicateRecord (subject : String)
+  /-- The readable compiler/checker identity does not re-hash to the bound `toolchain` id: one of
+      them was edited. Policy reads the readable one and currency compares the bound one, so they
+      must be the same identity or the record is refused. -/
+  | identityNotBound (toolchain : String)
   deriving BEq, Repr
 
 def ReceiptDecodeRefusal.canonical : ReceiptDecodeRefusal → String
@@ -384,6 +399,7 @@ def ReceiptDecodeRefusal.canonical : ReceiptDecodeRefusal → String
   | .unknownKey _       => "unknown_key"
   | .malformedField ..  => "malformed_field"
   | .duplicateRecord _  => "duplicate_record"
+  | .identityNotBound _ => "identity_not_bound"
 
 def ReceiptDecodeRefusal.explain : ReceiptDecodeRefusal → String
   | .schemaUnreadable f =>
@@ -395,6 +411,9 @@ def ReceiptDecodeRefusal.explain : ReceiptDecodeRefusal → String
   | .duplicateRecord sub =>
       s!"the store holds more than one record for '{sub}'; a store that contradicts itself about a "
       ++ "claim cannot make it current, and picking one would be choosing which to believe"
+  | .identityNotBound t =>
+      s!"the readable compiler/checker identity does not hash to the bound toolchain id '{t}'; one "
+      ++ "of them was edited, so the record names a checker it was not established under"
 
 /-- A receipt read back from storage. NOT evidence.
 
@@ -417,6 +436,8 @@ structure StoredReceipt where
   carriesTrust      : Bool
   trustedBoundaries : List String
   toolchainId       : String
+  compilerVersion   : String
+  checker           : String
   workspaceId       : String
   importsId         : String
   deriving Repr
@@ -440,7 +461,7 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
         if val.isEmpty then throw (.malformedField "boundary" val)
         boundaries := boundaries ++ [val]
       else if ["schema", "subject", "edge", "root", "artifact", "trust",
-               "toolchain", "workspace", "imports"].contains key then
+               "toolchain", "compiler", "checker", "workspace", "imports"].contains key then
         if single.any (·.1 == key) then throw (.duplicateField key)
         single := single ++ [(key, val)]
       else throw (.unknownKey key)
@@ -465,6 +486,12 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
     else if trustTag == "false" then pure false
     else throw (.malformedField "trust" trustTag)
   let toolchain ← req "toolchain"
+  let compiler ← req "compiler"
+  let checker ← req "checker"
+  -- THE READABLE IDENTITY MUST BE THE BOUND ONE. Advisory policy reads `checker`; currency compares
+  -- `toolchain`. If they could disagree, a record could be current under one checker while policy
+  -- judged another, so a record whose readable identity does not re-hash to its binding is refused.
+  if toolchainIdOf compiler checker != toolchain then throw (.identityNotBound toolchain)
   let workspace ← req "workspace"
   let imports ← req "imports"
   -- THE SAME CONSISTENCY THE MINT REQUIRES. A stored receipt claiming trust while naming no
@@ -475,7 +502,8 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
   return { schemaVersion := schema, subjectDigest := subject, edge := edge
          , tableBindings := tables, dependencyRoot := root, theoremArtifact := artifact
          , carriesTrust, trustedBoundaries := boundaries
-         , toolchainId := toolchain, workspaceId := workspace, importsId := imports }
+         , toolchainId := toolchain, compilerVersion := compiler, checker
+         , workspaceId := workspace, importsId := imports }
 
 /-- The fields a currency comparison reads, from either kind of receipt.
 

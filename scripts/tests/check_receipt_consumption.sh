@@ -86,7 +86,7 @@ write(T + "/partial.txt", list(partial.items()))
 smuggled = dict(d); smuggled["main.check_data"] = d["main.check_data"] + "\nblessed true"
 write(T + "/smuggled.txt", list(smuggled.items()))
 # a record written under another envelope version
-older = dict(d); older["main.check_data"] = d["main.check_data"].replace("schema receiptV1", "schema receiptV0")
+older = dict(d); older["main.check_data"] = d["main.check_data"].replace("schema receiptV2", "schema receiptV1")
 write(T + "/older.txt", list(older.items()))
 PY
 
@@ -133,6 +133,21 @@ for case in partial:missing_field smuggled:unknown_key older:schema_unreadable; 
     ok "a $f record is reported unreadable as [$want], and the other four still read"
   else
     no "$f handling moved (wanted $want): $(tally "$OUT")"
+  fi
+done
+
+# THE READABLE IDENTITY IS BOUND (receiptV2, R-0208). A record carries the compiler and checker in
+# the clear so advisory policy can read them, and both must re-hash to the bound toolchain id: editing
+# the readable checker to one an advisory does not name must make the record unreadable, never let it
+# be judged under a checker it was not established with.
+for fld in checker compiler; do
+  sed -E "s/^($fld [^ ]+ )/\\1EDITED-/" "$TMP/r.txt" > "$TMP/id_$fld.txt"
+  ID_OUT="$(consume "$TMP/id_$fld.txt" "$SRC")"
+  if [ "$(grep -c 'unreadable \[identity_not_bound\]' <<<"$ID_OUT")" = "5" ] \
+     && [ "$(tally "$ID_OUT")" = "0 current, 0 not current, 5 unreadable" ]; then
+    ok "an edited readable '$fld' is refused as identity_not_bound on all five records"
+  else
+    no "an edited '$fld' was not refused as unbound: $(tally "$ID_OUT")"
   fi
 done
 
