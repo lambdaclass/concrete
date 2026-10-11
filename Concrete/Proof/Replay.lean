@@ -543,25 +543,25 @@ def checkerImagesOf (exe : String) (images : List String)
     throw "two loaded images share a file name, so a name cannot identify one of them"
   return (hashed, native.filter isSystemImage)
 
-/-- SHA-256 of each file, in order, by the host's `sha256sum` (or `shasum -a 256`), or `none`.
+/-- SHA-256 of each file, in order, by the host's `shasum -a 256`, or `none`.
 
     An external tool on purpose. These are ~200 MB of native code, and `Sha256Fast` evaluated by
     the Lean interpreter — which is how every `#eval`-level caller of `replay` runs it — does not
-    finish; even compiled it cost ~2.5 s per identity. The tool joins `lsof` in the trust base of the
-    identity, and a host with neither tool has no identity rather than a weaker one. -/
+    finish; even compiled it cost ~2.5 s per identity. `shasum` ships with macOS and with Perl on
+    Linux runners; it joins `lsof` in the trust base of the identity, and a host without it has no
+    identity rather than a weaker one. -/
 def sha256Files (paths : List String) : IO (Option (List String)) := do
   if paths.isEmpty then return some []
-  for (cmd, pre) in [("sha256sum", #[]), ("shasum", #["-a", "256"])] do
-    let out ← try
-        pure (some (← IO.Process.output { cmd, args := pre ++ paths.toArray }))
-      catch _ => pure none
-    let some o := out | continue
-    if o.exitCode != 0 then continue
-    let rows := (o.stdout.splitOn "\n").filter (!·.isEmpty)
-    let isHex := fun (c : Char) => c.isDigit || ('a' ≤ c && c ≤ 'f')
-    let digests := rows.map fun r => String.ofList (r.toList.take 64)
-    if rows.length == paths.length && digests.all (fun d => d.length == 64 && d.all isHex) then
-      return some digests
+  let out ← try
+      pure (some (← IO.Process.output { cmd := "shasum", args := #["-a", "256"] ++ paths.toArray }))
+    catch _ => pure none
+  let some o := out | return none
+  if o.exitCode != 0 then return none
+  let rows := (o.stdout.splitOn "\n").filter (!·.isEmpty)
+  let isHex := fun (c : Char) => c.isDigit || ('a' ≤ c && c ≤ 'f')
+  let digests := rows.map fun r => String.ofList (r.toList.take 64)
+  if rows.length == paths.length && digests.all (fun d => d.length == 64 && d.all isHex) then
+    return some digests
   return none
 
 /-- SHA-256 over the hashed images' digests (keyed by file name) and the named images' paths. -/
