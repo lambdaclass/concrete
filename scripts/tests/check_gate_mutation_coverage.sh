@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=95
+EXPECTED_FAMILIES=102
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1510,6 +1510,50 @@ add "receipt-decode-refuses-unknown-key" "Concrete/Proof/Receipt.lean" "check_re
 add "receipt-decode-checks-schema-first" "Concrete/Proof/Receipt.lean" "check_receipt_consumption.sh" yes \
   '  if schema != receiptSchemaVersion then throw (.schemaUnreadable schema)' \
   '  if false then throw (.schemaUnreadable schema)'
+
+# R-0208 slice 1a: a receipt binds the checker that ACTUALLY RAN. Each family removes one refusal or
+# binding and is killed by the leg written for it (all seven verified red by hand at integration).
+
+# NO IDENTITY MINTS NOTHING. Substituting an empty identity would let a run that could not say who
+# checked it mint a receipt that any equally anonymous checker later matches.
+add "mint-requires-checker-identity" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
+  $'  let some checker := r.environment.checker\n    | throw .checkerUnidentified' \
+  $'  let checker := r.environment.checker.getD { version := "", githash := "", platform := "", buildDigest := "" }'
+
+# ...AND COMPARES CURRENT AGAINST NOTHING. The consumer must refuse rather than compare against a
+# defaulted identity: two unknown checkers are not the same checker.
+add "freshfacts-requires-checker-identity" "Concrete/Proof/Issue.lean" "check_checker_identity.sh" yes \
+  '  let some checker := checker | throw (.checkerUnidentified subject)' \
+  '  let checker := checker.getD { version := "", githash := "", platform := "", buildDigest := "" }'
+
+# THE KERNEL'S CODE MUST BE AMONG THE LOADED IMAGES. Without libleanshared the identity binds only
+# the launcher stub, which says almost nothing about which kernel ran.
+add "checker-identity-requires-kernel-image" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
+  $'  if !native.any (fun p => (nameOf p).startsWith "libleanshared") then\n    throw "no libleanshared was loaded, so the kernel\'s code was not located"' \
+  $'  if false then\n    throw "no libleanshared was loaded, so the kernel\'s code was not located"'
+
+# ONE SELF-REPORT PER RUN. Taking the first of two identity lines lets an injected line decide.
+add "checker-identity-line-unambiguous" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
+  $'  match taggedLines "CONCRETE-CHECKER-ID" nonce transcript with\n  | [l] =>' \
+  $'  match (taggedLines "CONCRETE-CHECKER-ID" nonce transcript).take 1 with\n  | [l] =>'
+
+# IMAGE KEYS ARE FILE NAMES, so a duplicated name is ambiguous and must refuse. Written to keep
+# `names` used: emptying the test outright strands it on an unused-binding lint (INVALID, not killed).
+add "checker-images-unique-names" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
+  '  if names.eraseDups.length != names.length then' \
+  '  if names.length != names.length then'
+
+# THE DIGEST BINDS THE BYTES, not just which files loaded. Dropping each image's content digest makes
+# a changed libleanshared the same checker.
+add "checker-digest-binds-image-bytes" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
+  '(hashed.zip digests).map (fun (p, d) => s!"hash {nameOf p}:{d}")' \
+  '(hashed.zip digests).map (fun (p, _d) => s!"hash {nameOf p}")'
+
+# THE RECEIPT BINDS THE CHECKER, NOT THE PIN. Reverting to the lean-toolchain text restores exactly
+# the file/process mismatch slice 1a removed.
+add "mint-toolchain-binds-checker" "Concrete/Proof/Receipt.lean" "check_replay_producer.sh" yes \
+  '  , toolchainId := toolchainIdOf m.compilerVersion sr.checker.canonical' \
+  '  , toolchainId := toolchainIdOf m.compilerVersion sr.environment.toolchain'
 
 # THE REPORT HANDLERS MUST RETURN. attestation-join, generated-implementations and impl-manifest
 # each printed their report and then fell through to the "Unknown report type" branch, exiting 1 on
