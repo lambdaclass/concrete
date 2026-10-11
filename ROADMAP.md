@@ -13695,7 +13695,26 @@ theorems in another module and in the same module re-check and mint; a `bv_decid
 native-trust; missing, duplicated or foreign-nonce verdicts mint nothing. Cost ~0.3 s per theorem.
 Limits: toolchain modules are trusted via the checker identity, not replayed (`--fresh`-style replay
 of core measured at 88 s per closure); verdict lines are nonce-correlated, not authenticated.
-**R-0208 remains partial:** the advisory policy (decisions 3-4) is ahead.
+**Advisory policy on branch `r0208-policy` (decisions 3-4).** receiptV2 carries the compiler and
+checker identity in the clear, and decoding requires both to re-hash to the bound `toolchain` id,
+so editing the readable identity to dodge an advisory is refused (`identity_not_bound`); receiptV1
+stores read as written under another envelope. `Concrete/Proof/CheckerPolicy.lean` is the
+register, compiled into the consumer: explicitly accepted `(checker, version)` pairs and advisories
+keyed by exact versions with status `accepted | affected | revoked | unknown`, a `policyVersion`
+and a `policyIdentity` digest over its canonical rendering. Decisions are made at read time from
+(receipt checker, register) and reported BESIDE currency, naming the deciding register: revoked >
+affected > accepted, and a checker neither accepted nor named (or unparseable) is `unknown`, never
+accepted. A register change therefore re-evaluates and never invalidates. First entry: `lean4#14576`
+affects `4.28.0`; no checker is accepted yet, so every current receipt reads `checker policy:
+affected (lean4#14576)` — the fire drill's "not accepted for new high-assurance claims", stated as
+a loss of the affected checker's assurance, not as any theorem being false. Rollback protection is
+LIMITED and stated: `check_checker_policy.sh` refuses a compiled `policyVersion` below the
+separately owned `scripts/tests/fixtures/checker_policy_minimum`; reverting both together is not
+refused. The gate (14 legs) exercises transitions on synthetic identities and registers only.
+**Open, and owned by the user:** whether a native-trust (`bv_decide`) claim may carry a
+native-trust-qualified receipt; which exact fixed toolchain to accept (slice 2 proper: upgrade,
+rebuild, replay the same denominator, explain every delta, and show only fresh re-check under the
+accepted checker restores acceptance).
 
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
