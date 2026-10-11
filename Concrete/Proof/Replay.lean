@@ -484,8 +484,14 @@ def checkerIdentityProbe (nonce : String) : String :=
       if o.exitCode != 0 then pure [] else
       pure (o.stdout.splitOn "\n" |>.filterMap fun l =>
         if l.startsWith "n/" then some (String.ofList (l.toList.drop 1)) else none)
-  for p in paths.eraseDups do
-    IO.println s!"CONCRETE-CHECKER-IMAGE NONCE {p}"
+  -- NATIVE CODE ONLY, filtered here: a replay importing the proof library maps ~15 000 `.olean`
+  -- files, and listing (let alone de-duplicating) them in interpreted Lean cost seconds per run.
+  -- The consumer still classifies what is printed; duplicates are its job too.
+  let app := (← IO.appPath).toString
+  for p in paths do
+    if p == app || p.endsWith ".dylib" || p.endsWith ".dll" || p.endsWith ".so"
+       || (p.splitOn ".so.").length > 1 then
+      IO.println s!"CONCRETE-CHECKER-IMAGE NONCE {p}"
 "#).replace "NONCE" nonce
 
 /-- A fresh per-run nonce. -/
