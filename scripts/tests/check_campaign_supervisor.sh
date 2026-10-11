@@ -85,7 +85,8 @@ GATES=36
 # bug 071 added `check_cross_package_caps.sh` as a new target. It moved again 37 -> 38 when
 # R-0484's two admission/maintenance families (2026-09-26) introduced
 # `check_effect_opacity.sh`; that commit left this pin behind and CI stayed red for three days.
-DRIVER_GATES=38
+# 38 -> 39 with R-0208 slice 1a's families, which introduced `check_checker_identity.sh`.
+DRIVER_GATES=39
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2
