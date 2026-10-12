@@ -1566,7 +1566,7 @@ add "mint-requires-recheck" "Concrete/Proof/Replay.lean" "check_kernel_recheck.s
 # THE RE-CHECK MUST REACH THE KERNEL. Collecting the closure and not replaying it reports every
 # theorem rechecked, the ill-typed one included.
 add "recheck-runs-kernel" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
-  "    let _ ← env0.replay' consts" \
+  '    let _ ← env0.toKernelEnv.replay consts' \
   '    let _ := consts'
 
 # ...AND MUST REPLAY THE WORKSPACE CONSTANTS. Walking the closure while replaying none of it is the
@@ -1578,8 +1578,8 @@ add "recheck-replays-workspace-closure" "Concrete/Proof/Replay.lean" "check_kern
 # NATIVE EVALUATION IS NAMED, never re-checked: a bv_decide theorem must read native_trust, not a
 # generic failure that hides why the kernel could not re-establish it.
 add "recheck-native-never-rechecked" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
-  '    if axs.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler) then' \
-  '    if false then'
+  $'    if extra.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler\n                           || (a.toString.splitOn "._native.").length > 1) then' \
+  $'    if false && extra.isEmpty then'
 
 # ONE VERDICT PER THEOREM. Taking the first of two lines lets an injected verdict decide.
 add "recheck-verdict-unambiguous" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \

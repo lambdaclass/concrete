@@ -39,6 +39,6 @@ theorem count_up_loop_preserves (fns : FnTable) (env : Env) (k acc0 : Int) (fuel
       ∧ (0 ≤ k + 1 ∧ k + 1 ≤ 8) := by
   refine ⟨?_, by omega, by omega⟩
   simp only [count_upBody, eval.evalAssigns, eval, evalBinOp, hacc, hi, Env.bind,
-    beq_iff_eq, String.reduceEq, if_false]
+    beq_iff_eq, String.reduceEq, ite_false]
 
 end Examples.LoopInvariant.Proofs

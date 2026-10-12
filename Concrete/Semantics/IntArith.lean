@@ -438,13 +438,13 @@ theorem trapConditions_sufficient (op : BinOp) (ty : Ty) (a b : Int)
     have h0 := h .divisorNonZero (by simp [trapConditions])
     have hq := h .quotientInRange (by simp [trapConditions])
     simp [trapConditionHolds] at h0 hq
-    simp only [evalIntBinOp, if_neg (by simpa using h0 : ¬ (b == 0) = true)]
+    simp only [evalIntBinOp, ite_eq_right (by simpa using h0 : ¬ (b == 0) = true)]
     exact isTrap_checked (by simpa [h0] using hq)
   case mod =>
     have h0 := h .divisorNonZero (by simp [trapConditions])
     have hq := h .quotientInRange (by simp [trapConditions])
     simp [trapConditionHolds] at h0 hq
-    simp only [evalIntBinOp, if_neg (by simpa using h0 : ¬ (b == 0) = true)]
+    simp only [evalIntBinOp, ite_eq_right (by simpa using h0 : ¬ (b == 0) = true)]
     cases hc : checkedToType ty (tdiv a b) with
     | none   => simp_all
     | some v => rfl

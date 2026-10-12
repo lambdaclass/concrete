@@ -22,7 +22,7 @@ def copyFn (dstFn srcFn : Nat → BitVec 8) (off m : Nat) : Nat → BitVec 8 :=
   fun j => if off ≤ j ∧ j < off + m then srcFn (j - off) else dstFn j
 
 theorem copyFn_zero (dstFn srcFn off) : copyFn dstFn srcFn off 0 = dstFn := by
-  funext j; simp only [copyFn, Nat.add_zero]; rw [if_neg (by omega)]
+  funext j; simp only [copyFn, Nat.add_zero]; rw [ite_eq_right (by omega)]
 
 /-- One copy step: writing `src[m]` at `dst[off+m]` extends the copied prefix. -/
 theorem copyFn_step (dstFn srcFn : Nat → BitVec 8) (off m : Nat) :
@@ -31,12 +31,12 @@ theorem copyFn_step (dstFn srcFn : Nat → BitVec 8) (off m : Nat) :
   simp only [bufUpd, copyFn]
   by_cases h : j = off + m
   · subst h
-    rw [if_pos rfl, if_pos (show off ≤ off + m ∧ off + m < off + (m + 1) by omega),
+    rw [ite_eq_left rfl, ite_eq_left (show off ≤ off + m ∧ off + m < off + (m + 1) by omega),
         Nat.add_sub_cancel_left]
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     by_cases h2 : off ≤ j ∧ j < off + m
-    · rw [if_pos h2, if_pos (by omega)]
-    · rw [if_neg h2, if_neg (by omega)]
+    · rw [ite_eq_left h2, ite_eq_left (by omega)]
+    · rw [ite_eq_right h2, ite_eq_right (by omega)]
 
 theorem copyFn_step0 (dstFn srcFn : Nat → BitVec 8) (m : Nat) :
     bufUpd (copyFn dstFn srcFn 0 m) m (srcFn m) = copyFn dstFn srcFn 0 (m + 1) := by
@@ -50,12 +50,12 @@ theorem copyFn_map_append (dstFn srcFn : Nat → BitVec 8) (off N : Nat) :
   simp only [List.length_map, List.length_range] at h1
   rw [List.getElem_map, List.getElem_range, List.getElem_append]
   by_cases hj : j < off
-  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
+  · rw [dite_eq_left (by simp only [List.length_map, List.length_range]; exact hj)]
     simp only [List.getElem_map, List.getElem_range, copyFn,
-      if_neg (show ¬ (off ≤ j ∧ j < off + N) by omega)]
-  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
+      ite_eq_right (show ¬ (off ≤ j ∧ j < off + N) by omega)]
+  · rw [dite_eq_right (by simp only [List.length_map, List.length_range]; omega)]
     simp only [List.length_map, List.length_range, List.getElem_map, List.getElem_range, copyFn,
-      if_pos (show off ≤ j ∧ j < off + N by omega)]
+      ite_eq_left (show off ≤ j ∧ j < off + N by omega)]
 
 /-- A `copyFn` into a zero buffer, viewed over `[0, T)`, is the copied prefix
     followed by zeros — the shape of a padded fixed-size buffer. -/
@@ -67,10 +67,10 @@ theorem copyFn_zfn_map (srcFn : Nat → BitVec 8) (k_len T : Nat) (h : k_len ≤
   simp only [List.length_map, List.length_range] at h1
   rw [List.getElem_map, List.getElem_range, List.getElem_append]
   by_cases hj : j < k_len
-  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
-    simp only [List.getElem_map, List.getElem_range, copyFn, Nat.sub_zero, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega)]
-  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
-    simp only [List.getElem_replicate, copyFn, zfn, if_neg (show ¬ (0 ≤ j ∧ j < 0 + k_len) by omega)]
+  · rw [dite_eq_left (by simp only [List.length_map, List.length_range]; exact hj)]
+    simp only [List.getElem_map, List.getElem_range, copyFn, Nat.sub_zero, ite_eq_left (show 0 ≤ j ∧ j < 0 + k_len by omega)]
+  · rw [dite_eq_right (by simp only [List.length_map, List.length_range]; omega)]
+    simp only [List.getElem_replicate, copyFn, zfn, ite_eq_right (show ¬ (0 ≤ j ∧ j < 0 + k_len) by omega)]
 
 /-- The loop-state env after `m` copy iterations. -/
 def copyEnv (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
@@ -101,7 +101,7 @@ theorem cpy_step (fns : FnTable) (dstNm srcNm iNm : String)
     simp [copyEnv, Env.bind, e_di, e_ds]
   have hsv : eval fns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 1)
       (.arrayIndex (.var srcNm) (.var iNm)) = some (.int ↑(srcFn m).toNat) := by
-    simp only [eval, copyEnv, Env.bind, e_si, e_is, if_false, if_true,
+    simp only [eval, copyEnv, Env.bind, e_si, e_is, ite_false, ite_true,
       beq_self_eq_true, beq_iff_eq, reduceCtorEq]
     exact arrN_read sn srcFn (m : Int) m rfl hsm
   have harr : eval fns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 2)
@@ -114,7 +114,7 @@ theorem cpy_step (fns : FnTable) (dstNm srcNm iNm : String)
     rw [show ((off + m : Nat) : Int).toNat = off + m by omega, arrN_set, copyFn_step]
   simp only [eval.evalAssigns, harr]
   simp only [eval, evalBinOp, Env.bind, copyEnv, e_id, e_di, e_ds, e_sd, e_si, e_is,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, reduceCtorEq, Option.some.injEq]
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == iNm) = true <;> by_cases h2 : (n == dstNm) = true <;>
     simp_all [Env.bind, copyEnv, beq_iff_eq, Option.some.injEq, PVal.int.injEq] <;> omega

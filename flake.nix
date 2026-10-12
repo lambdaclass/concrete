@@ -21,8 +21,42 @@
     in {
       devShells = forAllSystems ({ pkgs }:
         let
+          # LEAN IS THE OFFICIAL v4.34.1 RELEASE ARCHIVE, not nixpkgs' lean4 (R-0208). The checker identity a
+          # receipt binds is the executable and libraries that actually load; nixpkgs builds Lean itself
+          # (reporting its version tag as the githash), so the devshell and CI's elan ran DIFFERENT checkers
+          # under one name. Pinning the archive elan installs makes them the same build. Hashes are the
+          # sha256 GitHub publishes for each release asset. macOS binaries are left byte-identical
+          # (dontFixup); Linux needs autoPatchelf to run under Nix, so its bytes — and identity — differ
+          # from elan's there, which CI (elan) does not use.
+          leanRelease =
+            let
+              sys = pkgs.stdenv.hostPlatform.system;
+              asset = {
+                "aarch64-darwin" = { name = "darwin_aarch64"; sha256 = "65f22a4f047738ec742667b3247e836a86ebf06eabc12655c3dee00637e37866"; };
+                "x86_64-darwin"  = { name = "darwin";         sha256 = "c2fee70250444e46c1106a27bddfef948d1e563eef431eaac05bb946b2f73d3a"; };
+                "x86_64-linux"   = { name = "linux";          sha256 = "47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4"; };
+                "aarch64-linux"  = { name = "linux_aarch64";  sha256 = "fdb974c2cdb4627e090d5d4007b913e09d13c4868720fb5594e22808b3de9e37"; };
+              }.${sys};
+            in pkgs.stdenv.mkDerivation {
+              pname = "lean4-release";
+              version = "4.34.1";
+              src = pkgs.fetchurl {
+                url = "https://github.com/leanprover/lean4/releases/download/v4.34.1/lean-4.34.1-${asset.name}.tar.zst";
+                sha256 = asset.sha256;
+              };
+              nativeBuildInputs = [ pkgs.zstd ]
+                ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.autoPatchelfHook ];
+              buildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.stdenv.cc.cc.lib pkgs.zlib ];
+              autoPatchelfIgnoreMissingDeps = true;
+              dontConfigure = true;
+              dontBuild = true;
+              dontStrip = true;
+              dontFixup = pkgs.stdenv.isDarwin;
+              unpackPhase = "tar --zstd -xf $src";
+              installPhase = "mkdir -p $out && cp -R lean-4.34.1-${asset.name}/. $out/";
+            };
           base = with pkgs; [
-            lean4
+            leanRelease
             clang
             llvmPackages.llvm  # provides lli for fast test execution
             z3                 # external SMT solver for the pre-existing solver_trusted path

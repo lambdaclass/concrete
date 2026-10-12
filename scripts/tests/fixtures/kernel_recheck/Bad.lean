@@ -15,3 +15,8 @@ set_option debug.skipKernelTC true in
 -- A genuine theorem in the SAME module: the re-check is per constant, so the bad declaration beside
 -- it must not take it down.
 theorem fine_beside : 2 + 2 = 4 := rfl
+
+-- A THEOREM RESTING ON A DECLARED AXIOM. The kernel accepts an axiom without proof, so replaying this
+-- "succeeds"; only the axiom allow-list (propext, Classical.choice, Quot.sound) can refuse it.
+axiom cheat : 1 = 2
+theorem uses_axiom : 1 = 2 := cheat

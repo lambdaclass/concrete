@@ -1488,6 +1488,13 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
 -- caller needing a workspace would otherwise have copied it, and two answers to "where does this
 -- replay" is exactly the drift slice 4 was about.
 
+-- LEAN 4.34.1 `do` ELABORATOR (R-0208 upgrade). Under 4.34.1's default (new) `do` elaborator this
+-- 1 700-line definition never finished elaborating: heartbeat timeouts appeared wherever the cut was
+-- placed (bisected over its 51 report branches — the cost is cumulative, not one branch), and the
+-- full build ran 41 minutes before the process was killed. The legacy elaborator elaborates all of
+-- Main.lean in ~3 s. Elaboration strategy only; the definition is unchanged. Splitting this function
+-- is the durable fix and would let the option go.
+set_option backward.do.legacy true in
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
     through project mode so std and other dependencies resolve. -/

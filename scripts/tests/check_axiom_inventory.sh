@@ -26,6 +26,15 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 ALLOWLIST="propext Classical.choice Quot.sound"
 NATIVE_AXIOMS="Lean.ofReduceBool Lean.trustCompiler"
 NATIVE_FILE="scripts/tests/axiom_native_trust.txt"
+# NATIVE-CODE TRUST HAS TWO SPELLINGS. Lean 4.28's bv_decide/native_decide rested on the axioms above;
+# Lean 4.34's emit a fresh axiom per proof, named `<decl>._native.bv_decide.ax_<n>` (or
+# `._native.native_decide.ax_<n>`). Same trust, same rule: permitted only for theorems listed in
+# $NATIVE_FILE and documented in AXIOMS.md. Matched narrowly by that generated naming.
+is_native() {
+  case " $NATIVE_AXIOMS " in *" $1 "*) return 0 ;; esac
+  case "$1" in *._native.bv_decide.ax_*|*._native.native_decide.ax_*) return 0 ;; esac
+  return 1
+}
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
@@ -77,13 +86,12 @@ while IFS= read -r rec; do
   axioms=$(echo "$rec" | sed 's/.*\[\(.*\)\].*/\1/' | tr ',' ' ')
   for a in $axioms; do
     case " $ALLOWLIST " in *" $a "*) continue ;; esac
-    case " $NATIVE_AXIOMS " in
-      *" $a "*)
-        grep -q "^$thm\$" "$NATIVE_FILE" 2>/dev/null \
-          || NATIVE_UNLISTED="$NATIVE_UNLISTED $thm"
-        ;;
-      *) VIOLATIONS="$VIOLATIONS $thm:$a" ;;
-    esac
+    if is_native "$a"; then
+      grep -q "^$thm\$" "$NATIVE_FILE" 2>/dev/null \
+        || NATIVE_UNLISTED="$NATIVE_UNLISTED $thm"
+    else
+      VIOLATIONS="$VIOLATIONS $thm:$a"
+    fi
   done
 done < "$TMP/records.txt"
 
@@ -145,7 +153,7 @@ else
   NC_VIOL=""
   for a in $NC_AXIOMS; do
     case " $ALLOWLIST " in *" $a "*) continue ;; esac
-    case " $NATIVE_AXIOMS " in *" $a "*) continue ;; esac
+    is_native "$a" && continue
     NC_VIOL="$NC_VIOL $a"
   done
   case "$NC_VIOL" in

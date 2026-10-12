@@ -64,6 +64,11 @@ def exprPureDiscardable : Expr → Bool
     | _ => exprPureDiscardable l && exprPureDiscardable r
   | _ => false
 
+-- LEAN 4.34.1 `do` ELABORATOR (R-0208 upgrade). 4.34.1 elaborates `do` blocks with a new elaborator
+-- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
+-- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
+-- only: the definitions are unchanged. Remove when the new elaborator copes with blocks this size.
+set_option backward.do.legacy true in
 mutual
 
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do

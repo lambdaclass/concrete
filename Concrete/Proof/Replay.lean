@@ -628,8 +628,8 @@ def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) 
 
     For each theorem: if it rests on native evaluation it is reported `native`; otherwise every
     WORKSPACE CONSTANT it reaches (through types, values and recursor rules, plus each inductive's
-    constructors and recursors) is replayed with `Lean.Environment.replay'` — the routine
-    `leanchecker` uses: declarations go to the kernel, constructors and recursors are compared with
+    constructors and recursors) is replayed with `Lean.Kernel.Environment.replay` — the routine
+    `leanchecker` uses (merged into Lean core by 4.34; 4.28 shipped it as `LeanChecker.Replay`'s `replay'`): declarations go to the kernel, constructors and recursors are compared with
     what the kernel regenerates — into an environment holding only the toolchain modules those
     constants touch. Constants from modules under the toolchain's own library are not replayed.
 
@@ -703,7 +703,7 @@ def _concreteRecheckReplay (core : NameSet) (consts : Std.HashMap Name ConstantI
     : IO (Option String) := do
   try
     let env0 ← importModules (core.toArray.map ({ module := · })) {}
-    let _ ← env0.replay' consts
+    let _ ← env0.toKernelEnv.replay consts
     return none
   catch e => return some (toString e)
 
@@ -716,9 +716,18 @@ open Lean Elab Command in
     unless env.contains thm do
       IO.println s!"CONCRETE-RECHECK NONCE {s} unknown"
       continue
+    -- AXIOMS ARE ALLOW-LISTED, NOT DENY-LISTED. Lean 4.28's `bv_decide` rested on `Lean.ofReduceBool`;
+    -- 4.34's emits a fresh axiom per proof (`…._native.bv_decide.ax_1_41`). A deny-list of the old names
+    -- reported such a theorem `rechecked` — the kernel accepts an axiom without proof, so the replay
+    -- "succeeded". Only the kernel's standard three may remain; anything else is named.
     let axs ← liftCoreM <| Lean.collectAxioms thm
-    if axs.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler) then
+    let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))
+    if extra.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler
+                           || (a.toString.splitOn "._native.").length > 1) then
       IO.println s!"CONCRETE-RECHECK NONCE {s} native"
+      continue
+    if !extra.isEmpty then
+      IO.println s!"CONCRETE-RECHECK NONCE {s} failed rests on axioms beyond propext/Classical.choice/Quot.sound: {extra.toList}"
       continue
     match ← _concreteRecheckClosure env sysLib thm with
     | .error e => IO.println s!"CONCRETE-RECHECK NONCE {s} failed {e}"
@@ -861,7 +870,7 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
     catch e => return .error (.scratchUnavailable (toString e))
   let scratch := scratchDir ++ "/kernel_replay.lean"
   try
-    IO.FS.writeFile ⟨scratch⟩ ("import Lean\nimport LeanChecker.Replay\n" ++ req.source
+    IO.FS.writeFile ⟨scratch⟩ ("import Lean\n" ++ req.source
       ++ checkerIdentityProbe nonce ++ recheckProbe nonce theorems)
   catch e =>
     let _ ← IO.Process.output { cmd := "rm", args := #["-rf", scratchDir] }

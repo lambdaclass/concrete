@@ -2907,7 +2907,7 @@ def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
     `status` is `proved_by_kernel_decision` (omega closed), `arithmetic_proved`
     (O2 arithmetic half closed, operational pending), or `planned`. Used by both
     `--show-obligation` and `--json` so ids/kinds/hypotheses never drift. -/
-def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Expr)
+def loopObInfo (lc : LoopContract) (oblId qualName : String) (posts₀ : List Expr)
     (extraLets : List (String × Expr)) (retExpr : Option Expr) (provedVCs : List String)
     (outer : List Expr := []) :
     Option (String × List String × String × String) :=
@@ -2928,7 +2928,7 @@ def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Exp
       ("invariant_init", outerStrs ++ ["loop-entry state (counter at its initializer)"], g, status false)
   | "O2" => some ("invariant_preservation", outerStrs ++ invs ++ [guardStr],
       " ∧ ".intercalate ((lc.invariants.map (substContract lc.body)).filterMap toLeanProp), status true)
-  | "O3" => (genExitVC lc ensures retExpr outer).map fun g =>
+  | "O3" => (genExitVC lc posts₀ retExpr outer).map fun g =>
       ("loop_exit_post_link", outerStrs ++ invs ++ [s!"¬({guardStr})"], g, status false)
   | "O4" => if lc.variant.isSome then
       some ("variant_nonnegative", outerStrs ++ invs ++ [guardStr], s!"0 ≤ {variantStr}", status false) else none

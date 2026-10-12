@@ -85,7 +85,7 @@ theorem ch_refines (X Y Z : BitVec 32) (fuel : Nat) :
       (fuel + 1) chExpr
       = some (.int (Sha256Spec.ch X Y Z).toNat) := by
   simp only [chExpr, eval, Env.bind, evalBinOp, Sha256Spec.ch,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
     ofInt_natCast_toNat, ofInt_ofNat_toNat, Option.some.injEq,
     PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
   bv_decide
@@ -102,7 +102,7 @@ theorem maj_refines (X Y Z : BitVec 32) (fuel : Nat) :
       (fuel + 1) majExpr
       = some (.int (Sha256Spec.maj X Y Z).toNat) := by
   simp only [majExpr, eval, Env.bind, evalBinOp, Sha256Spec.maj,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
     ofInt_natCast_toNat, ofInt_ofNat_toNat, Option.some.injEq,
     PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
     <;> bv_decide
@@ -123,7 +123,7 @@ theorem readN (b : Nat → BitVec 8) (m : Nat) (hm : m < 64) :
     (if ((m:Int)) < 0 then (none : Option PVal)
      else eval.lookupIndex (List.map (fun j => PVal.int ↑(b j).toNat) (List.range 64)) ((m:Int).toNat))
     = some (PVal.int ↑(b m).toNat) := by
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
   simp only [Int.toNat_natCast]
   exact lookupIndex_range_map _ 64 m hm
 
@@ -158,7 +158,13 @@ theorem packExpr_eval (fns : FnTable) (b : Nat → BitVec 8) (env : Env) (k : Na
   simp only [Sha256Spec.packWord, ofInt32_byte, ofInt32_byte_cast,
     ofInt_ofNat_toNat, ofInt_natCast_toNat, Option.some.injEq, PVal.int.injEq,
     Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
-  bv_decide
+  -- LEAN 4.34.1 (R-0208 upgrade): the evaluator's shift amounts reach this goal as
+  -- `BitVec.ofNatClamp 6 (Int.toNat 8)`. 4.28.0's `bv_decide` accepted this goal; 4.34.1's abstracts
+  -- those terms as opaque and reports a spurious counterexample. Reducing them
+  -- here closes the goal outright, so `bv_decide` (and the native evaluation it rests on) is no longer
+  -- needed for this lemma; the theorem statement is unchanged.
+  simp only [BitVec.ofNatClamp, Int.reduceToNat, Nat.reducePow, Nat.reduceLT, ↓reduceDIte,
+    BitVec.ofNatLT_eq_ofNat]
 
 -- ===== loop state =====
 /-- Working array after `k` iterations: first `k` words packed, rest 0. -/
@@ -223,7 +229,7 @@ theorem assigns_step (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 
   simp only [assigns_e, eval.evalAssigns, harr]
   -- thread the `i := i + 1` assignment and close against stEnv b (k+1)
   simp only [eval.evalAssigns, eval, evalBinOp, Env.bind, stEnv,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Option.some.injEq]
   funext n
   simp only [Env.bind]
@@ -254,7 +260,7 @@ theorem wList16_spec (b : Nat → BitVec 8) :
   intro j h1 _
   simp only [wList, List.length_map, List.length_range] at h1
   simp only [wList, Sha256Spec.blockToWords, List.getElem_map, List.getElem_range,
-    if_pos h1, pwd]
+    ite_eq_left h1, pwd]
   rw [getD_range_map b (4*j) (by omega), getD_range_map b (4*j+1) (by omega),
       getD_range_map b (4*j+2) (by omega), getD_range_map b (4*j+3) (by omega)]
 
@@ -314,7 +320,7 @@ theorem rotr_refines (fns : FnTable) (X : BitVec 32) (n : Nat) (hn : n ≤ 32) (
     eval fns ((Env.empty.bind "x" (.int X.toNat)).bind "n" (.int (n:Int))) (fuel + 1) rotrExpr
       = some (.int (Sha256Spec.rotr X n).toNat) := by
   simp only [rotrExpr, eval, Env.bind, evalBinOp, Sha256Spec.rotr,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     ofInt_natCast_toNat]
   rw [show ((n:Int)).toNat = n by omega, show ((32:Int) - (n:Int)).toNat = 32 - n by omega]
   simp only [Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
@@ -573,7 +579,7 @@ theorem small_sigma0_refines (X : BitVec 32) (fuel : Nat) :
   have h7 := rotr_call X 7 7 (by omega) (by omega) _ _ fuel hx
   have h18 := rotr_call X 18 18 (by omega) (by omega) _ _ fuel hx
   simp only [smallSigma0Expr, eval, h7, h18, evalBinOp, Sha256Spec.smallSigma0,
-    Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
     BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
   rw [show ((3:Int)).toNat = 3 by omega]
@@ -587,7 +593,7 @@ theorem small_sigma1_refines (X : BitVec 32) (fuel : Nat) :
   have h17 := rotr_call X 17 17 (by omega) (by omega) _ _ fuel hx
   have h19 := rotr_call X 19 19 (by omega) (by omega) _ _ fuel hx
   simp only [smallSigma1Expr, eval, h17, h19, evalBinOp, Sha256Spec.smallSigma1,
-    Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
     BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
   rw [show ((10:Int)).toNat = 10 by omega]
@@ -621,7 +627,7 @@ theorem round_refines (S0 S1 S2 S3 S4 S5 S6 S7 K W : BitVec 32) (fuel : Nat) :
     eval.evalElems, eval.lookupIndex, bindArgs, shaFns_globals, shaFnsGlobals, rotrExpr, chExpr, majExpr,
     bigSigma0Expr, bigSigma1Expr, Sha256Spec.round, Sha256Spec.ch, Sha256Spec.maj,
     Sha256Spec.bigSigma0, Sha256Spec.bigSigma1, Sha256Spec.rotr,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Int.reduceToNat, Int.reduceLT, Int.reduceSub, Nat.reduceSub, reduceIte,
     List.getD_cons_zero, List.getD_cons_succ, List.map_cons, List.map_nil,
     ofInt_natCast_toNat, ofInt_ofNat_toNat,
@@ -781,7 +787,7 @@ theorem wread (wf : Nat → BitVec 32) (M : Nat) (env : Env) (fuel : Nat) (j : N
     (idxE : PExpr) (hidx : eval shaFns env (fuel + 1) idxE = some (.int (j:Int))) :
     eval shaFns env (fuel + 1) (.arrayIndex (.var "w") idxE) = some (.int (swd wf j).toNat) := by
   simp only [eval, hw, hidx, wschedList]
-  rw [if_neg (by omega), show ((j:Int)).toNat = j by omega,
+  rw [ite_eq_right (by omega), show ((j:Int)).toNat = j by omega,
       lookupIndex_range_map _ 64 j (by omega)]
   simp [hj]
 
@@ -791,7 +797,7 @@ theorem w16read (wf : Nat → BitVec 32) (env : Env) (fuel : Nat) (j : Nat) (hj 
     (idxE : PExpr) (hidx : eval shaFns env (fuel + 1) idxE = some (.int (j:Int))) :
     eval shaFns env (fuel + 1) (.arrayIndex (.var "w16") idxE) = some (.int (wf j).toNat) := by
   simp only [eval, hw16, hidx]
-  rw [if_neg (by omega), show ((j:Int)).toNat = j by omega,
+  rw [ite_eq_right (by omega), show ((j:Int)).toNat = j by omega,
       lookupIndex_range_map _ 16 j hj]
 
 -- generic unary helper call (sigmas)
@@ -864,11 +870,11 @@ theorem expansion_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel : 
         show 16 + k + 1 = 16 + (k+1) by omega]
   simp only [assigns2, eval.evalAssigns, harr]
   simp only [eval, evalBinOp, Env.bind, st2,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Option.some.injEq]
   funext n
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 def st1 (wf : Nat → BitVec 32) (k : Nat) : Env :=
@@ -899,11 +905,11 @@ theorem copy_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 16) (fuel : Nat) 
     rw [show ((k:Int)).toNat = k by omega, wschedList_set wf k]
   simp only [assigns1, eval.evalAssigns, harr]
   simp only [eval, evalBinOp, Env.bind, st1,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq, reduceCtorEq,
     Option.some.injEq]
   funext n
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 theorem cond_copy_true (wf) (k : Nat) (hk : k < 16) (F : Nat) :
@@ -931,7 +937,7 @@ theorem wschedList_64_spec (wf : Nat → BitVec 32) :
     simp only [wschedList, List.length_map, List.length_range] at h1
     have hlen : j < (Sha256Spec.expandSchedule (w16of wf)).length := by
       rw [expandSchedule_length (w16of wf) (w16of_length wf)]; omega
-    simp only [wschedList, List.getElem_map, List.getElem_range, if_pos h1, swd,
+    simp only [wschedList, List.getElem_map, List.getElem_range, ite_eq_left h1, swd,
       List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlen, Option.getD_some]
 
 theorem copy_loop_eval (wf : Nat → BitVec 32) (cont : PExpr) (base : Nat) :
@@ -1075,7 +1081,7 @@ theorem arr_read (L : List (BitVec 32)) (env : Env) (fuel : Nat) (j : Nat) (hj :
     eval shaFns env (fuel + 1) (.arrayIndex (.var name) idxE)
       = some (.int (L.getD j 0).toNat) := by
   simp only [eval, hL, hidx]
-  rw [if_neg (by omega), show ((j:Int)).toNat = j by omega, lookupIndex_eq,
+  rw [ite_eq_right (by omega), show ((j:Int)).toNat = j by omega, lookupIndex_eq,
       List.getElem?_map, List.getElem?_eq_getElem hj]
   simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj]
 
@@ -1114,11 +1120,11 @@ theorem cstep (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 
         (by simpa using hwe)]
     rw [← compressFold_succ]
   simp only [assignsC, eval.evalAssigns, hround]
-  simp only [eval, evalBinOp, Env.bind, stc, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+  simp only [eval, evalBinOp, Env.bind, stc, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "s") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 theorem cond_c_true (e : Env) (state0 wlist) (m : Nat) (hm : m < 64) (F : Nat) :
@@ -1378,7 +1384,7 @@ theorem readNbuf (bf : Nat → BitVec 8) (c : Int) (m : Nat) (hc : c = (m:Int)) 
     (if c < 0 then (none : Option PVal) else eval.lookupIndex (bufArr bf) c.toNat)
       = some (.int ↑(bf m).toNat) := by
   subst hc
-  rw [if_neg (by omega), show ((m:Int)).toNat = m by omega]
+  rw [ite_eq_right (by omega), show ((m:Int)).toNat = m by omega]
   simp only [bufArr]; exact lookupIndex_range_map _ 384 m hm
 
 
@@ -1398,7 +1404,13 @@ theorem packExprAt_eval (fns : FnTable) (bf : Nat → BitVec 8) (env : Env) (off
   simp only [pwdAt, Sha256Spec.packWord, ofInt32_byte, ofInt32_byte_cast,
     ofInt_ofNat_toNat, ofInt_natCast_toNat, Option.some.injEq, PVal.int.injEq,
     Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
-  bv_decide
+  -- LEAN 4.34.1 (R-0208 upgrade): the evaluator's shift amounts reach this goal as
+  -- `BitVec.ofNatClamp 6 (Int.toNat 8)`. 4.28.0's `bv_decide` accepted this goal; 4.34.1's abstracts
+  -- those terms as opaque and reports a spurious counterexample. Reducing them
+  -- here closes the goal outright, so `bv_decide` (and the native evaluation it rests on) is no longer
+  -- needed for this lemma; the theorem statement is unchanged.
+  simp only [BitVec.ofNatClamp, Int.reduceToNat, Nat.reducePow, Nat.reduceLT, ↓reduceDIte,
+    BitVec.ofNatLT_eq_ofNat]
 
 def sliceAt (bf : Nat → BitVec 8) (off : Nat) : List Sha256Spec.Byte :=
   (List.range 64).map (fun j => bf (off + j))
@@ -1418,7 +1430,7 @@ theorem wListAt16_spec (bf : Nat → BitVec 8) (off : Nat) :
   apply List.ext_getElem (by simp [wListAt, Sha256Spec.blockToWords])
   intro j h1 _
   simp only [wListAt, List.length_map, List.length_range] at h1
-  simp only [wListAt, Sha256Spec.blockToWords, List.getElem_map, List.getElem_range, if_pos h1, pwdAt]
+  simp only [wListAt, Sha256Spec.blockToWords, List.getElem_map, List.getElem_range, ite_eq_left h1, pwdAt]
   rw [sliceAt_getD bf off (4*j) (by omega), sliceAt_getD bf off (4*j+1) (by omega),
       sliceAt_getD bf off (4*j+2) (by omega), sliceAt_getD bf off (4*j+3) (by omega)]
   congr 2 <;> omega
@@ -1445,11 +1457,11 @@ theorem stepAt (fns : FnTable) (bf : Nat → BitVec 8) (off m : Nat) (hm : m < 1
         hwv hiv hpack (by omega) (by rw [wListAt_length]; simp; omega)]
     rw [show ((m:Int)).toNat = m by omega, wListAt_set bf off m]
   simp only [assignsAt, eval.evalAssigns, harr]
-  simp only [eval, evalBinOp, Env.bind, stEnvAt, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+  simp only [eval, evalBinOp, Env.bind, stEnvAt, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == "k") = true <;> by_cases h2 : (n == "w") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 theorem condAt_true (fns : FnTable) (bf off m) (hm : m < 16) (F) :
@@ -1563,7 +1575,6 @@ theorem bufArr_set (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
     (bufArr bf).set i (PVal.int v.toNat) = bufArr (bufUpd bf i v) := by
   apply List.ext_getElem (by simp [bufArr])
   intro m h1 _
-  simp only [bufArr, List.length_map, List.length_range] at h1
   rw [List.getElem_set]
   simp only [bufArr, List.getElem_map, List.getElem_range, bufUpd]
   by_cases hmi : m = i
@@ -1607,24 +1618,24 @@ theorem pad_getD (df : Nat → BitVec 8) (len i : Nat) (hi : i < plenOf len) :
   simp only [List.getElem?_append, List.length_map, List.length_range, List.length_append,
     List.length_cons, List.length_nil, List.length_replicate]
   by_cases h1 : i < len
-  · rw [if_pos (show i < len + (0+1) + (plenOf len - len - 9) by omega),
-        if_pos (show i < len + (0+1) by omega), if_pos h1, List.getElem?_map,
-        List.getElem?_range h1, if_pos h1]
+  · rw [ite_eq_left (show i < len + (0+1) + (plenOf len - len - 9) by omega),
+        ite_eq_left (show i < len + (0+1) by omega), ite_eq_left h1, List.getElem?_map,
+        List.getElem?_range h1, ite_eq_left h1]
     rfl
   · by_cases h2 : i = len
     · subst h2
-      rw [if_pos (show i < i + (0+1) + (plenOf i - i - 9) by omega),
-          if_pos (show i < i + (0+1) by omega), if_neg (show ¬ i < i by omega),
-          if_neg h1, if_pos rfl]
+      rw [ite_eq_left (show i < i + (0+1) + (plenOf i - i - 9) by omega),
+          ite_eq_left (show i < i + (0+1) by omega), ite_eq_right (show ¬ i < i by omega),
+          ite_eq_right h1, ite_eq_left rfl]
       simp [Nat.sub_self]
     · by_cases h3 : i < plenOf len - 8
-      · rw [if_pos (show i < len + (0+1) + (plenOf len - len - 9) by omega),
-            if_neg (show ¬ i < len + (0+1) by omega), List.getElem?_replicate,
-            if_pos (show i - (len + (0+1)) < plenOf len - len - 9 by omega),
-            if_neg h1, if_neg h2, if_pos h3]
+      · rw [ite_eq_left (show i < len + (0+1) + (plenOf len - len - 9) by omega),
+            ite_eq_right (show ¬ i < len + (0+1) by omega), List.getElem?_replicate,
+            ite_eq_left (show i - (len + (0+1)) < plenOf len - len - 9 by omega),
+            ite_eq_right h1, ite_eq_right h2, ite_eq_left h3]
         rfl
-      · rw [if_neg (show ¬ i < len + (0+1) + (plenOf len - len - 9) by omega),
-            if_neg h1, if_neg h2, if_neg h3, List.getD_eq_getElem?_getD,
+      · rw [ite_eq_right (show ¬ i < len + (0+1) + (plenOf len - len - 9) by omega),
+            ite_eq_right h1, ite_eq_right h2, ite_eq_right h3, List.getD_eq_getElem?_getD,
             show i - (len + (0+1) + (plenOf len - len - 9)) = i - (plenOf len - 8) by omega]
 
 -- ---- the post-store buffer function and its agreement with padMessage ----
@@ -1648,30 +1659,30 @@ theorem padFn_eq (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
   rw [pad_getD df len i hi]
   simp only [padFn, bufUpd, lenByte]
   by_cases e4 : i = plenOf len - 4
-  · rw [if_pos e4, if_neg (show ¬ i < len by omega), if_neg (show ¬ i = len by omega),
-      if_neg (show ¬ i < plenOf len - 8 by omega),
+  · rw [ite_eq_left e4, ite_eq_right (show ¬ i < len by omega), ite_eq_right (show ¬ i = len by omega),
+      ite_eq_right (show ¬ i < plenOf len - 8 by omega),
       show i - (plenOf len - 8) = 4 + 0 by omega, be64_low_byte (len * 8) hb 0 (by omega)]
   · by_cases e3 : i = plenOf len - 3
-    · rw [if_neg e4, if_pos e3, if_neg (show ¬ i < len by omega),
-        if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+    · rw [ite_eq_right e4, ite_eq_left e3, ite_eq_right (show ¬ i < len by omega),
+        ite_eq_right (show ¬ i = len by omega), ite_eq_right (show ¬ i < plenOf len - 8 by omega),
         show i - (plenOf len - 8) = 4 + 1 by omega, be64_low_byte (len * 8) hb 1 (by omega)]
     · by_cases e2 : i = plenOf len - 2
-      · rw [if_neg e4, if_neg e3, if_pos e2, if_neg (show ¬ i < len by omega),
-          if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+      · rw [ite_eq_right e4, ite_eq_right e3, ite_eq_left e2, ite_eq_right (show ¬ i < len by omega),
+          ite_eq_right (show ¬ i = len by omega), ite_eq_right (show ¬ i < plenOf len - 8 by omega),
           show i - (plenOf len - 8) = 4 + 2 by omega, be64_low_byte (len * 8) hb 2 (by omega)]
       · by_cases e1 : i = plenOf len - 1
-        · rw [if_neg e4, if_neg e3, if_neg e2, if_pos e1, if_neg (show ¬ i < len by omega),
-            if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+        · rw [ite_eq_right e4, ite_eq_right e3, ite_eq_right e2, ite_eq_left e1, ite_eq_right (show ¬ i < len by omega),
+            ite_eq_right (show ¬ i = len by omega), ite_eq_right (show ¬ i < plenOf len - 8 by omega),
             show i - (plenOf len - 8) = 4 + 3 by omega, be64_low_byte (len * 8) hb 3 (by omega)]
-        · rw [if_neg e4, if_neg e3, if_neg e2, if_neg e1]
+        · rw [ite_eq_right e4, ite_eq_right e3, ite_eq_right e2, ite_eq_right e1]
           by_cases hl : i < len
-          · rw [if_neg (show ¬ i = len by omega), if_pos hl]
+          · rw [ite_eq_right (show ¬ i = len by omega), ite_eq_left hl]
           · by_cases he : i = len
-            · rw [if_pos he, if_neg hl, if_pos he]
-            · rw [if_neg he, if_neg hl, if_neg he]
+            · rw [ite_eq_left he, ite_eq_right hl, ite_eq_left he]
+            · rw [ite_eq_right he, ite_eq_right hl, ite_eq_right he]
               by_cases h8 : i < plenOf len - 8
-              · rw [if_pos h8, hz i (by omega)]
-              · rw [if_neg h8, be64_high_zero (len * 8) hb (i - (plenOf len - 8)) (by omega),
+              · rw [ite_eq_left h8, hz i (by omega)]
+              · rw [ite_eq_right h8, be64_high_zero (len * 8) hb (i - (plenOf len - 8)) (by omega),
                   hz i (by omega)]
 
 -- ---- bridge to the spec's block view ----
@@ -1752,18 +1763,18 @@ theorem hstep (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte)
       = some (.array_ (bufArr bff)) := by simp [eval, hsEnv, Env.bind]
   have hoffv : eval shaFns (hsEnv e bff padded nblocks blk) (fuel + 78)
       (.binOp .mul (.var "blk") (.lit (.int 64))) = some (.int ((blk * 64 : Nat) : Int)) := by
-    simp only [eval, hsEnv, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+    simp only [eval, hsEnv, Env.bind, evalBinOp, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
       String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
   have hoffbound : blk * 64 + 64 ≤ 384 := by omega
   have hcompress := sha256_compress_at_call (hashFold padded blk) h8 bff (blk * 64) hoffbound
     (hsEnv e bff padded nblocks blk) _ _ _ fuel hsv hbv hoffv
   rw [hslice, ← hashFold_succ] at hcompress
   simp only [assignsH, eval.evalAssigns, hcompress]
-  simp only [eval, evalBinOp, Env.bind, hsEnv, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+  simp only [eval, evalBinOp, Env.bind, hsEnv, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == "blk") = true <;> by_cases h2 : (n == "state") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq]
 
 theorem cond_h_true (e bff padded nblocks blk) (hblk : blk < nblocks) (F : Nat) :
@@ -1846,7 +1857,7 @@ theorem stateToBytes_getD (state : List Sha256Spec.W) (j : Nat) (hj : j < 32) :
       flatMap_getD_4 (state.take 8) (j / 4) (j % 4) (by omega),
       wordToBytes_getD _ _ (by omega)]
   rw [show (state.take 8).getD (j / 4) 0 = state.getD (j / 4) 0 by
-        rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_take, if_pos hq]]
+        rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_take, ite_eq_left hq]]
   rw [hjr]; rfl
 
 -- ---- eval side: invariant array, store values ----
@@ -1863,7 +1874,7 @@ theorem obAt_32 (state : List Sha256Spec.W) (h8 : 8 ≤ state.length) :
   apply List.ext_getElem (by simp [obAt, stateToBytes_length state h8])
   intro j h1 _
   simp only [obAt, List.length_map, List.length_range] at h1
-  simp only [obAt, List.getElem_map, List.getElem_range, if_pos h1]
+  simp only [obAt, List.getElem_map, List.getElem_range, ite_eq_left h1]
   rw [← getD_eq_getElem_mem _ j (by rw [stateToBytes_length state h8]; exact h1),
       stateToBytes_getD state j h1]
 
@@ -1932,12 +1943,12 @@ theorem envL_rebind (e : Env) (state : List Sha256Spec.W) (m : Nat) (L L' : List
 
 theorem idx0_eval (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (fuel : Nat) :
     eval shaFns (envL e state m L) (fuel + 4) oIdx0 = some (.int ((4 * m : Nat) : Int)) := by
-  simp only [oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq,
-    if_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
+  simp only [oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, ite_true, beq_iff_eq,
+    ite_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
 theorem idxK_eval (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (fuel k : Nat) :
     eval shaFns (envL e state m L) (fuel + 4) (oIdxK (k : Int)) = some (.int ((4 * m + k : Nat) : Int)) := by
-  simp only [oIdxK, oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq,
-    if_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
+  simp only [oIdxK, oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, ite_true, beq_iff_eq,
+    ite_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
 
 theorem val_shr (e : Env) (state : List Sha256Spec.W) (m r : Nat) (hr : r < 3) (hm : m < 8)
     (h8 : 8 ≤ state.length) (L : List PVal) (fuel : Nat) :
@@ -1979,11 +1990,11 @@ theorem stb_step (e : Env) (state : List Sha256Spec.W) (m : Nat) (hm : m < 8)
     (idxK_eval e state m _ fuel 3) (val_and e state m hm h8 _ fuel)
   simp only [assignsS, eval.evalAssigns, s0, envL_rebind, s1, s2, s3,
     show 4 * m + 1 = 4 * m + 1 from rfl]
-  simp only [eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+  simp only [eval, envL, Env.bind, evalBinOp, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "out") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq, show 4 * (m + 1) = 4 * m + 3 + 1 by omega]
 
 theorem condS_true (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (hm : m < 8) (F : Nat) :
@@ -2022,7 +2033,7 @@ theorem state_to_bytes_refines_spec (e : Env) (state : List Sha256Spec.W) (h8 : 
         by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "out") = true <;> simp_all]
   rw [show fuel + 14 = (fuel + 5) + 8 + 1 by omega, stb_loop e state (by omega) _ fuel,
       show (4 * 8 : Nat) = 32 from rfl]
-  simp only [eval, envL, Env.bind, beq_self_eq_true, if_true, obAt_32 state (by omega)]
+  simp only [eval, envL, Env.bind, beq_self_eq_true, ite_true, obAt_32 state (by omega)]
 
 -- ==================================================================
 -- sha256_hash store-chain components (task #21, sha256_hash glue):
@@ -2112,7 +2123,7 @@ theorem nblocks_eval (E : Env) (len : Nat) (hlen : len ≤ 375) (G nbv : Nat)
       = some (.int ((nbv : Nat) : Int)) := by
   subst hnbv
   simp only [eval, evalBinOp, var_read E "len" (.int (len:Int)) G hle]
-  rw [if_neg (show ¬ ((64:Int) = 0) by decide)]
+  rw [ite_eq_right (show ¬ ((64:Int) = 0) by decide)]
   rw [show (len + 9 + 63) = (len + 72) by omega, sdiv64_bridge len hlen]
 
 theorem plen_eval (E : Env) (nbv : Nat) (G : Nat) (hn : E "nblocks" = some (.int (nbv : Int))) :
@@ -2221,7 +2232,7 @@ theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len
     rw [hashState_eq_fold, hml]; congr 1; omega
   rw [state_to_bytes_call (hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb)
         (hashFold_length _ _) _ (.var "state") (fuel + 62)
-        (var_read _ "state" (.array_ ((hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb).map (fun x => PVal.int x.toNat))) (fuel + 77) (by simp only [hsEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]))]
+        (var_read _ "state" (.array_ ((hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb).map (fun x => PVal.int x.toNat))) (fuel + 77) (by simp only [hsEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]))]
   rw [hfeq, Sha256Spec.hash]
 
 -- ==================================================================
@@ -2311,12 +2322,12 @@ theorem xor_step (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (fu
     rw [show ((m:Int)).toNat = m by omega,
         show (kpFn m ^^^ BitVec.ofInt 8 92) = ipadFn kpFn 92 m from rfl, bufArr_set, copyFn_step0]
   simp only [xorAssigns, eval.evalAssigns, harr1, harr2]
-  simp only [eval, evalBinOp, Env.bind, xorEnv, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+  simp only [eval, evalBinOp, Env.bind, xorEnv, beq_self_eq_true, ite_true, beq_iff_eq, ite_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "outer") = true <;>
     by_cases h3 : (n == "inner") = true <;>
-    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+    simp_all [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, ite_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 -- `condX` relocated to `Concrete.Proof` (task #22).
@@ -2369,14 +2380,14 @@ theorem kp_else (kFn : Nat → BitVec 8) (k_len : Nat) (h : k_len ≤ 64) :
     (List.range 64).map (copyFn zfn kFn 0 k_len) = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
   rw [copyFn_zfn_map kFn k_len 64 h]
   unfold Sha256Spec.keyPrep
-  simp only [List.length_map, List.length_range, gt_iff_lt, if_neg (by omega : ¬ (64 < k_len))]
+  simp only [List.length_map, List.length_range, gt_iff_lt, ite_eq_right (by omega : ¬ (64 < k_len))]
 
 theorem kp_if (khFn : Nat → BitVec 8) (key : List Sha256Spec.Byte) (hlen : key.length > 64)
     (hkh : (List.range 32).map khFn = Sha256Spec.hash key) :
     (List.range 64).map (copyFn zfn khFn 0 32) = Sha256Spec.keyPrep key := by
   rw [copyFn_zfn_map khFn 32 64 (by omega), hkh]
   unfold Sha256Spec.keyPrep
-  simp only [if_pos hlen, hash_length]
+  simp only [ite_eq_left hlen, hash_length]
 
 -- ==================================================================
 -- HMAC assembly scaffolding (task #21): the forced local helpers for
@@ -2460,54 +2471,54 @@ theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (
       eval_letIn _ _ (fuel + 200 + m_len) _ _ _ (.int 0) (by simp [eval])]
   -- xor loop
   rw [← xorEnv_self (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn
-        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-        (by simp only [Env.bind, beq_self_eq_true, if_true, String.reduceEq, reduceCtorEq, if_false]; exact hkpv)
-        (by simp only [Env.bind, beq_self_eq_true, if_true])]
+        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, String.reduceEq, reduceCtorEq, ite_false]; exact hkpv)
+        (by simp only [Env.bind, beq_self_eq_true, ite_true])]
   rw [show fuel + 200 + m_len = ((fuel + 132 + m_len) + 3) + 64 + 1 by omega, xor_loop _ kpFn _ (fuel + 132 + m_len)]
   -- stage 2: reset i + message copy
   rw [show fuel + 132 + m_len + 3 = (fuel + 134 + m_len) + 1 by omega,
       eval_letIn _ _ (fuel + 134 + m_len) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn
-        (by simp only [Env.bind, xorEnv, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-        (by simp only [Env.bind, xorEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+        (by simp only [Env.bind, xorEnv, bufArr_eq, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+        (by simp only [Env.bind, xorEnv, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmv) (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])]
   simp only [msgAssigns]
   rw [show fuel + 134 + m_len = (fuel + 131 + 2) + m_len + 1 by omega,
       copy_loop shaFns "inner" "m" "i" (by decide) (by decide) (by decide) _ 384 256 64
         (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len (by omega) hml condMsg
         (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 131)
-        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
-        (fun mm hmm => by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen]; simp; omega)
-        (by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen]; simp)]
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hmlen]; simp; omega)
+        (by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hmlen]; simp)]
   -- stage 3: inner hash
   rw [show fuel + 133 = (fuel + 132) + 1 by omega,
       eval_letIn _ _ (fuel + 132) _ _ _ _
         (sha256_hash_call_at (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len) (64 + m_len) (by omega)
-          (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega), if_neg (by omega)])
+          (fun i hi => by simp only [copyFn, zfn]; rw [ite_eq_right (by omega), ite_eq_right (by omega)])
           (copyEnv "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len) (.var "inner") (.binOp .add (.lit (.int 64)) (.var "m_len")) (fuel + 132) (by omega)
-          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-          (by simp only [eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen, Option.some.injEq, PVal.int.injEq]; omega))]
+          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+          (by simp only [eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hmlen, Option.some.injEq, PVal.int.injEq]; omega))]
   rw [map_toNat_eq_arrN, hash_length]
   -- stage 4: reset i + ih copy into outer
   rw [show fuel + 132 = (fuel + 131) + 1 by omega,
       eval_letIn _ _ (fuel + 131) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "outer" "ih" "i" (((copyEnv "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len).bind "ih" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0)))).bind "i" (.int 0)) 384 32 64 (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0)
-        (by simp only [Env.bind, copyEnv, xorEnv, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-        (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+        (by simp only [Env.bind, copyEnv, xorEnv, bufArr_eq, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+        (by simp only [Env.bind, copyEnv, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]) (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])]
   simp only [ihAssigns]
   rw [show fuel + 131 = (fuel + 96 + 2) + 32 + 1 by omega,
       copy_loop shaFns "outer" "ih" "i" (by decide) (by decide) (by decide) _ 384 32 64
         (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 32 (by omega) (by omega) condIh
         (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 96)
-        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
-        (fun mm hmm => by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)
-        (by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp)]
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; simp; omega)
+        (by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; simp)]
   -- stage 5: outer hash
   rw [show fuel + 98 = (fuel + 97) + 1 by omega,
       sha256_hash_call_at (copyFn (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 64 32) 96 (by omega)
-        (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega), if_neg (by omega)])
+        (fun i hi => by simp only [copyFn, zfn]; rw [ite_eq_right (by omega), ite_eq_right (by omega)])
         _ (.var "outer") (.lit (.int 96)) (fuel + 97) (by omega)
-        (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
         (by simp [eval])]
   -- fold to hmac
   have hkp54 : (Sha256Spec.keyPrep KEY).map (fun b => b ^^^ 54) = (List.range 64).map (ipadFn kpFn 54) := by
@@ -2556,26 +2567,26 @@ theorem elseBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
   rw [elseBranch, show (base + 2) + k_len + 1 + 1 = ((base + 2) + k_len + 1) + 1 by omega,
       eval_letIn _ _ ((base + 2) + k_len + 1) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "kp" "k" "i" (e.bind "i" (.int 0)) 64 128 0 zfn kFn
-        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
-        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv)
-        (by simp only [Env.bind, beq_self_eq_true, if_true])]
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hkp0)
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hkv)
+        (by simp only [Env.bind, beq_self_eq_true, ite_true])]
   rw [copy_loop shaFns "kp" "k" "i" (by decide) (by decide) (by decide) (e.bind "i" (.int 0)) 64 128 0 zfn kFn k_len
         (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") hmacLinearExpr base
-        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
-        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
-        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp)]
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hklv]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hklv]; simp)]
   rw [show base + 2 = (base - 201 - m_len) + 203 + m_len by omega]
   exact hmac_linear (copyFn zfn kFn 0 k_len) mFn ((List.range k_len).map kFn) m_len hml
     (kp_else kFn k_len (by omega)) _ (base - 201 - m_len)
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmv)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmlen)
 
 theorem key_copyFn (kFn : Nat → BitVec 8) (k_len : Nat) :
     (List.range k_len).map (copyFn zfn kFn 0 k_len) = (List.range k_len).map kFn := by
   apply List.map_congr_left; intro j hj
   simp only [List.mem_range] at hj
-  simp only [copyFn, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega), Nat.sub_zero]
+  simp only [copyFn, ite_eq_left (show 0 ≤ j ∧ j < 0 + k_len by omega), Nat.sub_zero]
 
 -- `thenBranch` (the `k_len > 64` branch, with the HMAC continuation inlined
 -- as the inner loop's `cont`) is defined in `Concrete.Proof`.
@@ -2604,35 +2615,35 @@ theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
   rw [show base + 144 + k_len = (base + 143 + k_len) + 1 by omega,
       eval_letIn _ _ (base + 143 + k_len) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn
-        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; rw [← arrN_zfn 384])
-        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; rw [← arrN_zfn 384])
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hkv) (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])]
   rw [show base + 143 + k_len = (base + 140 + 2) + k_len + 1 by omega,
       copy_loop shaFns "kbuf" "k" "i" (by decide) (by decide) (by decide) ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len
         (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") _ (base + 140)
-        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
-        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
-        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp)]
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hklv]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hklv]; simp)]
   -- kh letIn (hash of kbuf)
   rw [show base + 142 = (base + 141) + 1 by omega,
       eval_letIn _ _ (base + 141) _ _ _ _
         (sha256_hash_call_at (copyFn zfn kFn 0 k_len) k_len (by omega)
-          (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega)])
+          (fun i hi => by simp only [copyFn, zfn]; rw [ite_eq_right (by omega)])
           (copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len) (.var "kbuf") (.var "k_len") (base + 141) (by omega)
-          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-          (by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]))]
+          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+          (by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, hklv]))]
   rw [key_copyFn, map_toNat_eq_arrN, hash_length]
   -- reset i + kp copy from kh
   rw [show base + 141 = (base + 140) + 1 by omega,
       eval_letIn _ _ (base + 140) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "kp" "kh" "i" (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)
-        (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
-        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+        (by simp only [Env.bind, copyEnv, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hkp0)
+        (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]) (by simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])]
   rw [show base + 140 = (base + 105 + 2) + 32 + 1 by omega,
       copy_loop shaFns "kp" "kh" "i" (by decide) (by decide) (by decide) (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 32
         (by omega) (by omega) (.binOp .lt (.var "i") (.lit (.int 32))) (.var "i") hmacLinearExpr (base + 105)
-        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
-        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)
-        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp)]
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; simp)]
   -- post key-prep: kp = hash(key); run the HMAC continuation via hmac_linear
   have hkp : (List.range 64).map (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
       = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
@@ -2642,9 +2653,9 @@ theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
   rw [show base + 105 + 2 = (base - 96 - m_len) + 203 + m_len by omega]
   exact hmac_linear (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
     mFn ((List.range k_len).map kFn) m_len hml hkp _ (base - 96 - m_len)
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
-    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false])
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmv)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmlen)
 
 theorem arrayLit_z64 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
@@ -2675,13 +2686,13 @@ theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat
   have hkp0 : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "kp" = some (.array_ (arrN 64 zfn)) := by
     rw [← arrN_zfn 64]; simp [Env.bind]
   have hkv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "k" = some (.array_ (arrN 128 kFn)) := by
-    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv
+    simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hkv
   have hklv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "k_len" = some (.int (k_len:Int)) := by
-    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hklv
+    simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hklv
   have hmv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "m" = some (.array_ (arrN 256 mFn)) := by
-    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv
+    simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmv
   have hmlen' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "m_len" = some (.int (m_len:Int)) := by
-    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen
+    simp only [Env.bind, beq_self_eq_true, ite_true, beq_iff_eq, String.reduceEq, reduceCtorEq, ite_false]; exact hmlen
   -- The extracted `if (k_len > 64)` duplicates the continuation into both
   -- branches; each branch is closed by thenBranch_eval / elseBranch_eval.
   rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega]

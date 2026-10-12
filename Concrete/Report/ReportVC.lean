@@ -889,12 +889,12 @@ def loopExitReturn (body : List Stmt) : Option Expr :=
     States `∀ vars, invariant ∧ ¬guard → ensures'`. `none` when there is no
     ensures, no clean loop-exit return, or a `result` we cannot ground (so the
     bridge stays honest). -/
-def genExitVC (lc : LoopContract) (ensures : List Expr) (retExpr : Option Expr)
+def genExitVC (lc : LoopContract) (posts₀ : List Expr) (retExpr : Option Expr)
     (outer : List Expr := []) : Option String := do
   let g ← lc.guard
-  if lc.invariants.isEmpty || ensures.isEmpty then failure
+  if lc.invariants.isEmpty || posts₀.isEmpty then failure
   let subst := match retExpr with | some e => [("result", e)] | none => []
-  let posts := ensures.map (substContract subst)
+  let posts := posts₀.map (substContract subst)
   -- a still-free `result` means we could not ground the postcondition → bail
   if posts.any (fun e => (collectIdents e).contains "result") then failure
   let outerStrs := outer.filterMap toLeanProp

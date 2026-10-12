@@ -9,7 +9,8 @@
 # (`Lean.Environment.replay'`, the routine `leanchecker` uses), in the SAME process whose identity
 # the receipt binds, and minting requires the verdict `rechecked`.
 #
-# Legs, each with a live positive control:
+# Legs, each with a live positive control (plus: a theorem resting on a DECLARED AXIOM replays
+# fine — the kernel takes axioms on trust — so axioms are allow-listed to the kernel's standard three):
 #   - the ill-typed theorem is still FOUND by the lookup (the hole is real) but fails the re-check,
 #     and mints nothing; a genuine theorem in another module re-checks and mints, and so does one in
 #     the SAME module (the re-check is per constant, so an unrelated bad declaration is not contagious);
@@ -54,13 +55,13 @@ open Concrete.Proof
 def tg (n : String) : ReplayTarget :=
   { subject := n, theoremName := n, kind := .refinement, origin := .hardcoded, binding := .bound }
 #eval show IO Unit from do
-  match ← replay { inputPath := "$KW/main.con", imports := ["Bad", "Good"], targets := [tg "bogus", tg "fine", tg "fine_beside"] } with
+  match ← replay { inputPath := "$KW/main.con", imports := ["Bad", "Good"], targets := [tg "bogus", tg "fine", tg "fine_beside", tg "uses_axiom"] } with
   | .error e => IO.println s!"REPLAY-REFUSED {e.canonical}"
   | .ok r =>
     for c in r.checks do IO.println s!"LOOKUP {c.target.theoremName} {c.verdict.canonical}"
     for (t, v) in r.recheck do
       IO.println s!"RECHECK {t} {v.canonical} {match v with | .failed w => w | _ => ""}"
-    for t in ["bogus", "fine", "fine_beside"] do
+    for t in ["bogus", "fine", "fine_beside", "uses_axiom"] do
       match SuccessfulReplay.of? r t with
       | .ok _ => IO.println s!"TOKEN {t}"
       | .error e => IO.println s!"TOKEN-REFUSED {t} {e.canonical}"
@@ -86,6 +87,15 @@ if grep -q '^RECHECK fine_beside rechecked' <<<"$H" && grep -q '^TOKEN fine_besi
   ok "a genuine theorem in the SAME module as the bad one re-checks too (per constant, not per module)"
 else
   no "a bad declaration took down its module-mate: $(grep -E '^(RECHECK|TOKEN) fine_beside' <<<"$H" | tr '\n' ' ')"
+fi
+
+# A DECLARED AXIOM IS NOT A PROOF. Replay succeeds (the kernel takes an axiom on trust), so a re-check
+# that only replayed would call this theorem rechecked; the axiom allow-list must refuse it by name.
+if grep -qE "^RECHECK uses_axiom recheck_failed .*rests on axioms beyond .*cheat" <<<"$H" \
+   && grep -q '^TOKEN-REFUSED uses_axiom not_rechecked' <<<"$H"; then
+  ok "a theorem resting on a declared axiom is refused, naming the axiom"
+else
+  no "a theorem resting on a declared axiom was not refused: $(grep -E '^(RECHECK|TOKEN) uses_axiom' <<<"$H" | tr '\n' ' ')"
 fi
 
 echo "=== a theorem resting on native evaluation is never re-checked ==="

@@ -29,7 +29,6 @@ theorem arrN_set (n : Nat) (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
     (arrN n bf).set i (PVal.int v.toNat) = arrN n (bufUpd bf i v) := by
   apply List.ext_getElem (by simp [arrN])
   intro m h1 _
-  simp only [arrN, List.length_map, List.length_range] at h1
   rw [List.getElem_set]
   simp only [arrN, List.getElem_map, List.getElem_range, bufUpd]
   by_cases hmi : m = i
@@ -41,7 +40,7 @@ theorem arrN_read (n : Nat) (bf : Nat → BitVec 8) (c : Int) (m : Nat) (hc : c 
     (if c < 0 then (none : Option PVal) else eval.lookupIndex (arrN n bf) c.toNat)
       = some (.int ↑(bf m).toNat) := by
   subst hc
-  rw [if_neg (by omega), show ((m:Int)).toNat = m by omega]
+  rw [ite_eq_right (by omega), show ((m:Int)).toNat = m by omega]
   simp only [arrN]; exact lookupIndex_range_map _ n m hm
 
 /-- The all-zeros byte function. -/
@@ -69,8 +68,8 @@ theorem set_in_counter_map {α : Type} (n : Nat) (f : Nat → α) (z : α) (m : 
   · rw [List.getElem_set_ne hmi]
     simp only [List.getElem_map, List.getElem_range]
     rcases Nat.lt_or_ge i m with h | h
-    · rw [if_pos h, if_pos (by omega)]
-    · rw [if_neg (by omega), if_neg (by omega)]
+    · rw [ite_eq_left h, ite_eq_left (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
 /-- Generic single-step `arraySet` evaluation, given the three sub-eval results.
     Keeps the stored value opaque (it enters as `ev`) so its proof is not
@@ -84,6 +83,6 @@ theorem eval_arraySet_lemma (fns : FnTable) (env : Env) (fuel : Nat)
     eval fns env (fuel + 1) (.arraySet arr idx val)
       = some (.array_ (es.set i.toNat v)) := by
   simp only [eval, ea, ei, ev]
-  rw [if_neg (by omega), if_neg (by omega)]
+  rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
 end Concrete.Proof
