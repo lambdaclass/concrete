@@ -13716,6 +13716,29 @@ native-trust-qualified receipt; which exact fixed toolchain to accept (slice 2 p
 rebuild, replay the same denominator, explain every delta, and show only fresh re-check under the
 accepted checker restores acceptance).
 
+**Lean v4.34.1 upgrade on branch `r0208-upgrade` (2026-10-12; user decisions recorded).** Decisions:
+native-trust receipts are allowed but stay withheld until native evaluation is recorded end to end and
+can never satisfy a kernel-only policy; target v4.34.1, accepting a checker only per MEASURED BUILD
+after the upgrade, hostile controls and fresh replay pass; keep Nix, local and CI aligned. Done:
+`lean-toolchain` and the flake (official release archive, GitHub sha256 per platform) — Nix and elan
+now load byte-identical images on macOS (build `137d3402…`). Source adaptations change no statement:
+deprecated `if_`/`dif_` lemma names (identical statements), `ensures` as a binder keyword, stricter
+type checking after `simp … at`, `backward.do.legacy` on the two very large `do` definitions (the new
+elaborator never finished `compileAndReport`: bisected, cumulative), and two HMAC lemmas whose
+`bv_decide` goal 4.34.1 abstracted (`BitVec.ofNatClamp`) now close by `simp`. Found by the upgrade:
+4.34.1's `bv_decide` emits per-proof `._native.bv_decide.ax_*` axioms instead of `ofReduceBool`, which
+the re-check's deny-list missed (and a theorem on a DECLARED axiom re-checked even on 4.28); axioms are
+now allow-listed to `propext`/`Classical.choice`/`Quot.sound`, and `check_axiom_inventory.sh`
+classifies the generated native axioms like `ofReduceBool`. Evidence: the frozen 71-claim inventory
+(`docs/verification/claim-inventory-v4.28.0.tsv`) replays identically on 4.34.1; the classification
+table's 43 rows keep edge, tables, trust and specs, with only proof-term digests moving (rendered types
+identical across versions). Policy v2 accepts one measured build (macOS aarch64); a rebuild, another
+commit or another platform reads `unknown`, and Linux stays unaccepted until its CI-measured digest
+passes the same controls (`scripts/tools/checker_acceptance_evidence.sh`, artifact
+`checker-acceptance-<os>`). Consumers re-check every stored theorem before reporting acceptance, so a
+fully consistent forged receipt is accepted only by that re-check, never by its bytes; reports state a
+stored receipt is unauthenticated. Mutation inventory 115.
+
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
 declarations; an accepted narrowing needs an independently checked retained-environment footprint.
