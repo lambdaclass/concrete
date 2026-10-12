@@ -950,8 +950,8 @@ add "subject-digest-binds-preimage" "Concrete/Proof/ProofCore.lean" "check_proof
 # describes, which is worse. Same intent: the edge is reclassified `body` -> `contract`, so the
 # justification no longer matches what the theorem actually establishes.
 add "classification-justifies" "Concrete/Proof/ClassificationTable.lean" "check_dependency_edges.sh" yes \
-  $'  ("Concrete.Proof.parse_byte_correct", "body", "7bcec2d7871f93204b26e2bf83d5acf1", [("Concrete.Proof.proofFns", "e41b73d684a263ed7a2f8cfebdc34727")], false, ["Concrete.Proof.parseByteExpr"]),' \
-  $'  ("Concrete.Proof.parse_byte_correct", "contract", "7bcec2d7871f93204b26e2bf83d5acf1", [("Concrete.Proof.proofFns", "e41b73d684a263ed7a2f8cfebdc34727")], false, ["Concrete.Proof.parseByteExpr"]),'
+  $'  ("Concrete.Proof.parse_byte_correct", "body", "3a2993ab6c8fc1ec7a1a0b6a1f921fb8", [("Concrete.Proof.proofFns", "e41b73d684a263ed7a2f8cfebdc34727")], false, ["Concrete.Proof.parseByteExpr"]),' \
+  $'  ("Concrete.Proof.parse_byte_correct", "contract", "3a2993ab6c8fc1ec7a1a0b6a1f921fb8", [("Concrete.Proof.proofFns", "e41b73d684a263ed7a2f8cfebdc34727")], false, ["Concrete.Proof.parseByteExpr"]),'
 
 # R-0004 slice 6. `tableEntryEvidence` RECOMPUTES the canonical body digest from `PFnDef.body` and
 # refuses unless the stored provenance agrees. Before that, the stored digest was copied and every
