@@ -536,6 +536,29 @@ def StoredReceipt.facts (r : StoredReceipt) : ReceiptFacts :=
   , carriesTrust := r.carriesTrust, trustedBoundaries := r.trustedBoundaries
   , toolchainId := r.toolchainId, workspaceId := r.workspaceId, importsId := r.importsId }
 
+/-- Which bound fields of `r` differ from `fresh`, by name, in envelope order (R-0208).
+
+    A REPORTING aid, never a verdict: `isCurrentAgainst` decides currency. It exists so a downgrade
+    of ONE dimension stays legible — a receipt established under a since-advised checker differs
+    only in `toolchain`, and its subject, correspondence and dependency facts must remain visibly
+    intact rather than disappear into a single "not current". -/
+def ReceiptFacts.differingFields (r fresh : ReceiptFacts) : List String :=
+  let norm := fun (t : List (Name × String)) => t.mergeSort (fun a b => toString a.1 ≤ toString b.1)
+  [ ("subject", r.subjectDigest != fresh.subjectDigest)
+  , ("edge", r.edge != fresh.edge)
+  , ("tables", norm r.tableBindings != norm fresh.tableBindings)
+  , ("root", r.dependencyRoot != fresh.dependencyRoot)
+  , ("artifact", r.theoremArtifact != fresh.theoremArtifact)
+  , ("trust", r.carriesTrust != fresh.carriesTrust
+              || r.trustedBoundaries.mergeSort (· ≤ ·) != fresh.trustedBoundaries.mergeSort (· ≤ ·))
+  , ("toolchain", r.toolchainId != fresh.toolchainId)
+  , ("workspace", r.workspaceId != fresh.workspaceId)
+  , ("imports", r.importsId != fresh.importsId) ].filterMap fun (n, d) => if d then some n else none
+
+/-- Every bound field name, in envelope order. -/
+def receiptFieldNames : List String :=
+  ["subject", "edge", "tables", "root", "artifact", "trust", "toolchain", "workspace", "imports"]
+
 /-- Is a stored receipt still current against freshly computed material?
 
     Schema is checked FIRST and separately: an older envelope is not comparable at all, and

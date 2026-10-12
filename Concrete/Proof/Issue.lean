@@ -329,6 +329,14 @@ def storedDispositionFor (pc : ProofCore) (env : IssueEnvironment) (checker : Op
               fresh.toolchainId fresh.workspaceId fresh.importsId
          then .current else .notCurrent
 
+/-- Which bound fields of a stored receipt differ from material computed fresh, by name. Reporting
+    only; `storedDispositionFor` decides. -/
+def storedDifferenceFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option CheckerIdentity)
+    (trustedDepsOf : String → List String) (e : ProofCoreEntry)
+    (st : StoredReceipt) : Except IssueRefusal (List String) := do
+  let fresh ← freshFactsFor pc env checker trustedDepsOf e
+  return st.facts.differingFields fresh
+
 /-- Issue over every claim the replay covered, reporting each outcome.
 
     Returns one entry per claim WITH A PROOF LINK, refusals included. A caller that wants only the

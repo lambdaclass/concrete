@@ -2814,7 +2814,15 @@ def compileAndReport (inputPath : String) (reportType : String)
                                  , s!"        fresh kernel re-check in this run: {rv.canonical}"]
               | .ok .notCurrent =>
                 notCurrent := notCurrent + 1
-                lines := lines ++ [s!"    ✗ {subject} — receipt NOT current: it was established against different material"]
+                -- WHICH dimensions moved, and which still hold (R-0208): a receipt from a since-advised
+                -- checker differs only in `toolchain`, and its subject/correspondence/dependency facts
+                -- stay visibly intact instead of vanishing into one "not current".
+                let diff := match Proof.storedDifferenceFor pc env checker trustedDepsOf entry st with
+                  | .ok d => d
+                  | .error _ => []
+                let held := Proof.receiptFieldNames.filter (!diff.contains ·)
+                lines := lines ++ [s!"    ✗ {subject} — receipt NOT current: it was established against different material"
+                                 , s!"        differs in: {", ".intercalate diff}; still matching: {", ".intercalate held}"]
               | .ok .needsRecheck =>
                 unreadable := unreadable + 1
                 lines := lines ++ [s!"    ? {subject} — receipt written under a different envelope; re-verify and re-record"]

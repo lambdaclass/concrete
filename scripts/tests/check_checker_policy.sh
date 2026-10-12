@@ -187,6 +187,13 @@ else
   else
     no "an old-checker receipt was not refused: $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$O" | head -1)"
   fi
+  # THE DOWNGRADE IS ONE DIMENSION. The old checker's logical validity is what the advisory removes; the
+  # subject, correspondence and dependency facts were established independently and must stay visible.
+  if [ "$(grep -c 'differs in: toolchain; still matching: subject, edge, tables, root, artifact, trust, workspace, imports' <<<"$O")" = "5" ]; then
+    ok "each old-checker receipt differs ONLY in toolchain; subject, edge, tables, root, artifact, trust, workspace and imports stay visibly matched"
+  else
+    no "the downgrade is not shown as toolchain-only: $(grep -m1 'differs in:' <<<"$O")"
+  fi
   forge "$TMP/edit_ck.txt" "$NOW_ID" "$OLD_TID"
   O="$(consume_store "$TMP/edit_ck.txt")"
   if [ "$(grep -c 'unreadable \[identity_not_bound\]' <<<"$O")" = "5" ]; then
