@@ -1,4 +1,5 @@
 import Concrete.Proof.Digest
+import Concrete.Proof.Replay
 
 /-!
 # Checker advisory policy (R-0208, decisions 3 and 4)
@@ -169,5 +170,12 @@ def CheckerRegister.decide (r : CheckerRegister) (checker : String) : PolicyDeci
         a.checker == i && a.version == v && a.commit == c && a.platform == p && a.build == b) then
       { base with status := .accepted, advisories := ids }
     else { base with advisories := ids }
+
+/-- ACCEPTED NOW: a current receipt counts as accepted only when the checker THIS run used is accepted
+    AND this run's kernel re-check of its theorem said `rechecked`. A pure function so the rule is
+    tested on synthetic inputs on every platform — an oracle that only bites where some build happens
+    to be registered (as the inline version did: Linux, unregistered, could not observe it) is not one. -/
+def acceptedNow (d : PolicyDecision) (rv : RecheckVerdict) : Bool :=
+  d.status == .accepted && rv == .rechecked
 
 end Concrete.Proof

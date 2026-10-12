@@ -2808,7 +2808,7 @@ def compileAndReport (inputPath : String) (reportType : String)
                 policyCounts := policyCounts.push d.status
                 let why := if d.advisories.isEmpty then "" else s!" ({", ".intercalate d.advisories})"
                 let rv := freshRecheck st.theoremArtifact
-                if d.status == .accepted && rv == .rechecked then acceptedNow := acceptedNow + 1
+                if Proof.acceptedNow d rv then acceptedNow := acceptedNow + 1
                 lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"
                                  , s!"        checker policy: {d.status.canonical}{why}"
                                  , s!"        fresh kernel re-check in this run: {rv.canonical}"]

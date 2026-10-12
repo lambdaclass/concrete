@@ -75,6 +75,10 @@ def report (tag : String) (r : CheckerRegister) (c : String) : IO Unit := do
               { withAdv with accepted := [] }.policyIdentity,
               { withAdv with accepted := [{ acc "4.29.0" with build := "11ee" }] }.policyIdentity]
   IO.println s!"IDS-DISTINCT {ids.eraseDups.length == ids.length}"
+  -- ACCEPTED NOW is the conjunction, tested here on every platform.
+  let acc : PolicyDecision := { status := .accepted, advisories := [], policyVersion := 1, policyIdentity := "x" }
+  let unk : PolicyDecision := { acc with status := .unknown }
+  IO.println s!"ACCNOW {acceptedNow acc .rechecked} {acceptedNow acc .notRun} {acceptedNow acc .native} {acceptedNow acc (.failed "x")} {acceptedNow unk .rechecked}"
   IO.println s!"REAL v{checkerRegister.policyVersion} {checkerRegister.policyIdentity}"
 LEAN
 P="$(lake env lean "$TMP/policy.lean" 2>&1 || true)"
@@ -98,6 +102,12 @@ if grep -q '^IDS-DISTINCT true' <<<"$P"; then
   ok "the register identity moves when its version, an advisory's status or versions, or the accepted list changes"
 else
   no "two different registers share an identity — a decision could not say which register made it"
+fi
+
+if grep -q '^ACCNOW true false false false false' <<<"$P"; then
+  ok "accepted now requires BOTH an accepted checker and this run's re-check (only accepted+rechecked counts)"
+else
+  no "the accepted-now rule moved: $(grep '^ACCNOW' <<<"$P")"
 fi
 
 echo "=== rollback: the compiled register may not fall below the separately owned minimum ==="

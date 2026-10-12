@@ -1625,10 +1625,12 @@ add "policy-accepts-measured-build-only" "Concrete/Proof/CheckerPolicy.lean" "ch
   '        a.checker == i && a.version == v && a.commit == c && a.platform == p && (b == b)) then'
 
 # ACCEPTANCE NEEDS THE CONSUMER'S OWN RE-CHECK. Without it a fully consistent forged store is accepted on
-# its bytes alone, and metadata edits restore acceptance.
-add "consumer-acceptance-requires-recheck" "Main.lean" "check_checker_policy.sh" yes \
-  '                if d.status == .accepted && rv == .rechecked then acceptedNow := acceptedNow + 1' \
-  '                if d.status == .accepted && (rv == rv) then acceptedNow := acceptedNow + 1'
+# its bytes alone, and metadata edits restore acceptance. Anchored on the PURE rule (`acceptedNow`) so the
+# synthetic leg kills it on every platform: the first, inline version SURVIVED on Linux CI (38272837944,
+# shard 3), where no build is registered and acceptance was therefore unobservable.
+add "consumer-acceptance-requires-recheck" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '  d.status == .accepted && rv == .rechecked' \
+  '  d.status == .accepted && (rv == rv)'
 
 # AXIOMS ARE ALLOW-LISTED. Degrading to a deny-list of native axioms lets a theorem resting on a
 # declared axiom re-check (the kernel takes axioms on trust) — the hole the upgrade exposed.
