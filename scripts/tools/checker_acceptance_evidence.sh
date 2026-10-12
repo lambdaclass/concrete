@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # CHECKER ACCEPTANCE EVIDENCE (R-0208): what a measured checker build must show before its digest may be
-# added to the register (Concrete/Proof/CheckerPolicy.lean). Run as the LAST step of the CI job that
-# already ran the hostile controls (check_checker_identity, check_kernel_recheck, check_checker_policy),
-# so reaching it means those passed ON THIS BUILD. It adds what they do not:
+# added to the register (Concrete/Proof/CheckerPolicy.lean). SELF-CONTAINED: the artifact itself must
+# demonstrate every requirement on THIS build, not lean on step order in some job. It records:
 #   - the exact checker identity under test (the candidate digest);
+#   - the hostile controls RUN HERE, with their logs: check_checker_identity, check_kernel_recheck,
+#     check_checker_policy — and the identity the policy gate reports having tested must be the
+#     identity captured above, or the controls describe some other build;
 #   - the axiom inventory on this build (native trust classified, nothing escaping the allow-list);
 #   - a fresh replay of the frozen claim inventory, compared ROW BY ROW with the accepted reference.
 # It never registers anything. The register is edited by hand, citing this evidence; an unregistered
@@ -30,6 +32,19 @@ else
   echo "UNREGISTERED candidate" > "$OUT/register-status.txt"
 fi
 
+CONTROLS=""
+for g in check_checker_identity check_kernel_recheck check_checker_policy; do
+  if bash "scripts/tests/$g.sh" > "$OUT/$g.log" 2>&1; then
+    CONTROLS="$CONTROLS $g:$(grep -oE 'PASS=[0-9]+ FAIL=[0-9]+' "$OUT/$g.log" | tail -1)"
+  else
+    CONTROLS="$CONTROLS $g:FAILED"; echo "FAIL: control $g"; rc=1
+  fi
+done
+TESTED="$(sed -n 's/^  info checker under test: //p' "$OUT/check_checker_policy.log" | head -1)"
+if [ "$TESTED" != "$ID" ]; then
+  echo "FAIL: the controls tested '$TESTED', not the captured identity"; rc=1
+fi
+
 bash scripts/tests/check_axiom_inventory.sh > "$OUT/axiom-inventory.log" 2>&1 || { echo "FAIL: axiom inventory"; rc=1; }
 
 bash scripts/tools/claim_inventory.sh > "$OUT/claim-inventory.tsv" 2>"$OUT/claim-inventory.err" || true
@@ -42,7 +57,8 @@ fi
 {
   echo "checker:   $ID"
   echo "register:  $(cat "$OUT/register-status.txt")"
-  echo "controls:  check_checker_identity, check_kernel_recheck, check_checker_policy passed earlier in this job"
+  echo "controls: $CONTROLS"
+  echo "tested:    ${TESTED:-NONE} ($( [ "$TESTED" = "$ID" ] && echo 'matches the identity under test' || echo 'DOES NOT MATCH'))"
   echo "axioms:    $(tail -1 "$OUT/axiom-inventory.log")"
   echo "inventory: $INV against $REF ($(grep -c . "$OUT/claim-inventory.diff") diff lines)"
 } | tee "$OUT/SUMMARY.txt"
