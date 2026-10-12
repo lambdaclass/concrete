@@ -61,10 +61,10 @@ else
   no "consumer identity/currency moved: $(tally "$BASE") now='$BASE_ID' issued='$ISSUED_ID'"
 fi
 
-echo "=== 'current' is identity agreement, and says so ==="
+echo "=== 'current' is identity agreement; acceptance needs this run's re-check, and the report says so ==="
 
-if grep -q "It is NOT a fresh kernel re-check in this run" <<<"$BASE"; then
-  ok "the report states that current is not a re-check and not advisory acceptance"
+if grep -q "re-checked by the kernel in this run (fresh consumer replay)" <<<"$BASE"; then
+  ok "the report states that acceptance comes from this run's own kernel re-check, not from currency"
 else
   no "the disclosure is gone — 'current' now reads as re-checked or advisory-accepted"
 fi

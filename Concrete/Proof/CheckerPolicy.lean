@@ -59,13 +59,27 @@ structure CheckerAdvisory where
   replay      : String
   deriving Repr
 
+/-- One MEASURED checker build the register accepts. Every field must match the receipt's readable
+    checker exactly: a binary reporting the official release commit is not thereby shown to contain
+    that code, so acceptance names the build digest that was validated, per platform. A rebuild — a
+    new digest — is a new candidate that needs its own validation before it is listed. -/
+structure AcceptedBuild where
+  checker  : String
+  version  : String
+  commit   : String
+  platform : String
+  build    : String
+  /-- How and where this build was validated, for the record. -/
+  evidence : String
+  deriving Repr
+
 /-- The register: the explicitly accepted checker builds and the advisories. -/
 structure CheckerRegister where
   /-- Monotone. Every change to the register raises it, and the gate holds it at or above the
       separately owned minimum. -/
   policyVersion : Nat
-  /-- `(checker, version)` pairs explicitly accepted. Anything else is `unknown`. -/
-  accepted      : List (String × String)
+  /-- Measured builds explicitly accepted. Anything else is `unknown`. -/
+  accepted      : List AcceptedBuild
   advisories    : List CheckerAdvisory
   deriving Repr
 
@@ -76,10 +90,22 @@ structure CheckerRegister where
     fix, so its kernel's acceptance is not accepted for new high-assurance claims until an exact fixed
     toolchain is selected and the retained reproducer is tested against it. That removes the
     assurance the affected checker provided; it does NOT show that any theorem in this repository is
-    false, and decisions must say the former. No checker is accepted yet. -/
+    false, and decisions must say the former.
+
+    **Lean 4.34.1 accepted, per measured build (policy v2, 2026-10-12).** Accepted only after the
+    upgrade (`ca7852e1`), the hostile controls (`check_checker_identity.sh`, `check_kernel_recheck.sh`
+    including the declared-axiom and native-axiom legs) and a fresh replay of the frozen claim
+    inventory (all 71 rows identical: docs/verification/claim-inventory-v4.34.1.tsv) passed on that
+    build. macOS aarch64 only: the Nix devshell and elan load byte-identical images there and share the
+    entry. Linux is NOT listed until its CI-measured digest has passed the same controls; until then a
+    Linux checker reads `unknown`, never a commit-level fallback. -/
 def checkerRegister : CheckerRegister :=
-  { policyVersion := 1
-  , accepted := []
+  { policyVersion := 2
+  , accepted :=
+      [ { checker := "lean", version := "4.34.1", commit := "5045d0056413266e57c625dcd7c365b10e377c52"
+        , platform := "arm64-apple-darwin24.6.0"
+        , build := "137d34023aa9f455f7400b746c400d05315331cfd41851969b3611319a8bfa81"
+        , evidence := "macOS aarch64, official release archive via elan and the Nix devshell (identical images); upgrade ca7852e1, controls + 71-claim replay 2026-10-12" } ]
   , advisories :=
       [ { id := "lean4#14576", checker := "lean", versions := ["4.28.0"], status := .affected
         , affects := "kernel acceptance (logical validity of checked declarations)"
@@ -93,12 +119,19 @@ def CheckerRegister.canonical (r : CheckerRegister) : String :=
     ++ s!"{",".intercalate a.replacement}|{a.replay}"
   "\n".intercalate
     ([s!"policyVersion {r.policyVersion}"]
-     ++ r.accepted.map (fun (c, v) => s!"accepted {c}|{v}")
+     ++ r.accepted.map (fun a => s!"accepted {a.checker}|{a.version}|{a.commit}|{a.platform}|{a.build}|{a.evidence}")
      ++ adv)
 
 /-- The register's identity, named in every decision. -/
 def CheckerRegister.policyIdentity (r : CheckerRegister) : String :=
   shortHash ("checkerPolicyV1:" ++ r.canonical)
+
+/-- The full readable identity: implementation, version, commit, platform, build — or `none`. -/
+def checkerFieldsOf (checker : String) : Option (String × String × String × String × String) :=
+  match checker.splitOn " " with
+  | [impl, ver, "commit", c, "platform", p, "build", b] =>
+    if [impl, ver, c, p, b].any (·.isEmpty) then none else some (impl, ver, c, p, b)
+  | _ => none
 
 /-- The checker implementation and version a receipt's readable identity names, or `none`.
     Parsed from `CheckerIdentity.canonical` (`lean <version> commit <githash> platform ... build ...`). -/
@@ -132,7 +165,9 @@ def CheckerRegister.decide (r : CheckerRegister) (checker : String) : PolicyDeci
     let ids := hits.map (·.id)
     if hits.any (·.status == .revoked) then { base with status := .revoked, advisories := ids }
     else if hits.any (·.status == .affected) then { base with status := .affected, advisories := ids }
-    else if r.accepted.contains (impl, ver) then { base with status := .accepted, advisories := ids }
+    else if (checkerFieldsOf checker).any (fun (i, v, c, p, b) => r.accepted.any fun a =>
+        a.checker == i && a.version == v && a.commit == c && a.platform == p && a.build == b) then
+      { base with status := .accepted, advisories := ids }
     else { base with advisories := ids }
 
 end Concrete.Proof

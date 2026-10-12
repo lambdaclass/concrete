@@ -39,7 +39,10 @@ echo "=== policy transitions on synthetic identities ==="
 cat > "$TMP/policy.lean" <<'LEAN'
 import Concrete
 open Concrete.Proof
-def ck (v : String) : String := s!"lean {v} commit c-{v} platform synthetic build 00ff"
+def ck (v : String) (b : String := "00ff") (c : String := s!"c-{v}") (p : String := "synthetic") : String :=
+  s!"lean {v} commit {c} platform {p} build {b}"
+def acc (v : String) : AcceptedBuild :=
+  { checker := "lean", version := v, commit := s!"c-{v}", platform := "synthetic", build := "00ff", evidence := "test" }
 def adv (id : String) (vs : List String) (st : AdvisoryStatus) : CheckerAdvisory :=
   { id, checker := "lean", versions := vs, status := st, affects := "kernel acceptance"
   , replacement := [], replay := "fresh re-check" }
@@ -47,12 +50,17 @@ def report (tag : String) (r : CheckerRegister) (c : String) : IO Unit := do
   let d := r.decide c
   IO.println s!"{tag} {d.status.canonical} [{",".intercalate d.advisories}] v{d.policyVersion} {d.policyIdentity}"
 #eval show IO Unit from do
-  let reg0 : CheckerRegister := { policyVersion := 1, accepted := [("lean", "4.29.0")], advisories := [] }
+  let reg0 : CheckerRegister := { policyVersion := 1, accepted := [acc "4.29.0"], advisories := [] }
   let withAdv : CheckerRegister := { reg0 with policyVersion := 2, advisories := [adv "X-1" ["4.28.0"] .affected] }
   let revoked : CheckerRegister := { reg0 with policyVersion := 3, advisories := [adv "X-1" ["4.28.0"] .affected, adv "X-2" ["4.28.0"] .revoked] }
-  let acceptedButNamed : CheckerRegister := { policyVersion := 4, accepted := [("lean", "4.28.0")], advisories := [adv "X-1" ["4.28.0"] .affected] }
+  let acceptedButNamed : CheckerRegister := { policyVersion := 4, accepted := [acc "4.28.0"], advisories := [adv "X-1" ["4.28.0"] .affected] }
   report "NONE-428" reg0 (ck "4.28.0")
   report "NONE-429" reg0 (ck "4.29.0")
+  -- A MEASURED BUILD, not a version: the same version and commit with another build digest is a
+  -- rebuild, a new candidate; another commit or platform under the same digest is not that build.
+  report "REBUILD-429" reg0 (ck "4.29.0" (b := "11ee"))
+  report "OTHERCOMMIT-429" reg0 (ck "4.29.0" (c := "c-other"))
+  report "OTHERPLATFORM-429" reg0 (ck "4.29.0" (p := "elsewhere"))
   report "ADV-428" withAdv (ck "4.28.0")
   report "ADV-429" withAdv (ck "4.29.0")
   report "ADV-430" withAdv (ck "4.30.0")
@@ -64,7 +72,8 @@ def report (tag : String) (r : CheckerRegister) (c : String) : IO Unit := do
   let ids := [reg0.policyIdentity, withAdv.policyIdentity, { withAdv with policyVersion := 9 }.policyIdentity,
               { withAdv with advisories := [adv "X-1" ["4.28.0"] .revoked] }.policyIdentity,
               { withAdv with advisories := [adv "X-1" ["4.28.0", "4.27.0"] .affected] }.policyIdentity,
-              { withAdv with accepted := [] }.policyIdentity]
+              { withAdv with accepted := [] }.policyIdentity,
+              { withAdv with accepted := [{ acc "4.29.0" with build := "11ee" }] }.policyIdentity]
   IO.println s!"IDS-DISTINCT {ids.eraseDups.length == ids.length}"
   IO.println s!"REAL v{checkerRegister.policyVersion} {checkerRegister.policyIdentity}"
 LEAN
@@ -75,6 +84,9 @@ expect() { # tag status advisories label
 }
 expect NONE-428 unknown "" "with no advisory, a build that is not explicitly accepted is unknown (never accepted)"
 expect NONE-429 accepted "" "an explicitly accepted build is accepted (the positive control)"
+expect REBUILD-429 unknown "" "a rebuild (same version and commit, different build digest) is a new candidate: unknown"
+expect OTHERCOMMIT-429 unknown "" "a build reporting another commit is not the accepted build: unknown"
+expect OTHERPLATFORM-429 unknown "" "the accepted digest on another platform is not the accepted build: unknown"
 expect ADV-428 affected "X-1" "an advisory moves the build it names to affected and names itself"
 expect ADV-429 accepted "" "an advisory for 4.28.0 leaves the accepted 4.29.0 receipt's decision unchanged (re-evaluation, not invalidation)"
 expect ADV-430 unknown "" "a build neither accepted nor named stays unknown"
@@ -112,16 +124,107 @@ echo "=== the real report: the decision beside currency ==="
 "$BIN" "$SRC" --report receipts --out "$TMP/r.txt" >/dev/null 2>&1 || true
 OUT="$("$BIN" "$SRC" --report proof-status --receipts "$TMP/r.txt" 2>/dev/null | sed -n '/=== Replay Receipts/,$p' || true)"
 REAL_ID="$(grep -oE '^REAL v[0-9]+ [0-9a-f]+' <<<"$P" | awk '{print $3}')"
-if grep -q '5 current, 0 not current, 0 unreadable' <<<"$OUT" \
-   && [ "$(grep -c 'checker policy: affected (lean4#14576)' <<<"$OUT")" = "5" ]; then
-  ok "every current receipt reads checker policy: affected (lean4#14576), and currency is unchanged"
+# PLATFORM-AWARE, NOT CIRCULAR. Whether THIS build is accepted is read from the register SOURCE (its
+# digest listed under `accepted`), not from `decide` — the function under test. A build the register
+# does not list must read unknown; it is never accepted by commit. The identity is printed so CI's
+# Linux digest can be captured, validated and then registered.
+NOW="$(sed -n 's/^  Checker now: //p' <<<"$OUT" | head -1)"
+NOW_BUILD="$(grep -oE 'build [0-9a-f]{64}$' <<<"$NOW" | awk '{print $2}')"
+echo "  info checker under test: $NOW"
+if [ -n "$NOW_BUILD" ] && grep -q "build := \"$NOW_BUILD\"" Concrete/Proof/CheckerPolicy.lean; then
+  WANT=accepted
 else
-  no "the real decision or currency moved: $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$OUT" | head -1)"
+  WANT=unknown
 fi
-if [ -n "$REAL_ID" ] && grep -q "Checker policy v$REAL_V ($REAL_ID): 0 accepted, 5 affected, 0 revoked, 0 unknown" <<<"$OUT"; then
+if grep -q '5 current, 0 not current, 0 unreadable' <<<"$OUT" \
+   && [ "$(grep -c "checker policy: $WANT\$" <<<"$OUT")" = "5" ]; then
+  ok "every current receipt reads checker policy: $WANT (this build's digest is $( [ $WANT = accepted ] && echo listed || echo NOT listed ) in the register), and currency is unchanged"
+else
+  no "the real decision or currency moved (wanted $WANT): $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$OUT" | head -1) $(grep -m1 'checker policy:' <<<"$OUT")"
+fi
+if [ -n "$REAL_ID" ] && grep -qE "Checker policy v$REAL_V \($REAL_ID\): " <<<"$OUT"; then
   ok "the report names the register that decided (v$REAL_V, $REAL_ID)"
 else
   no "the report does not name the deciding register: $(grep 'Checker policy' <<<"$OUT")"
+fi
+
+echo "=== metadata edits cannot restore acceptance; only a fresh re-check under an accepted build can ==="
+
+# Receipts are unauthenticated bytes. These legs forge them in every way short of a fresh re-check and
+# require that acceptance moves only when the CONSUMER's own kernel re-check, under an accepted build,
+# says so. `toolchainIdOf` is unkeyed, so a forger can recompute it; the probe below does exactly that.
+accepted_now() { grep -oE 'ACCEPTED NOW \(current, re-checked in this run, accepted checker build\): [0-9]+ of [0-9]+' <<<"$1" | grep -oE '[0-9]+ of [0-9]+'; }
+consume_store() { "$BIN" "$SRC" --report proof-status --receipts "$1" 2>/dev/null | sed -n '/=== Replay Receipts/,$p' || true; }
+COMP="$(sed -n 's/^compiler //p' "$TMP/r.txt" | head -1)"
+NOW_ID="$(sed -n 's/^checker //p' "$TMP/r.txt" | head -1)"
+OLD_ID="lean 4.28.0 commit v4.28.0 platform arm64-apple-darwin build ba9da303f51c10ee6bab7ecb9374d3a8338b638162f9e16d462cea65e66ef832"
+cat > "$TMP/tid.lean" <<LEAN
+import Concrete
+#eval IO.println (Concrete.Proof.toolchainIdOf "$COMP" "$OLD_ID")
+#eval IO.println (Concrete.Proof.toolchainIdOf "$COMP" "$NOW_ID")
+LEAN
+TIDS="$(lake env lean "$TMP/tid.lean" 2>/dev/null)"
+OLD_TID="$(sed -n 1p <<<"$TIDS")"; NOW_TID="$(sed -n 2p <<<"$TIDS")"
+forge() { # $1 out, $2 checker, $3 toolchain id
+  python3 - "$TMP/r.txt" "$1" "$2" "$3" <<'PY2'
+import sys
+src, out, ck, tid = sys.argv[1:]
+lines = []
+for l in open(src).read().split("\n"):
+    if l.startswith("checker "): l = "checker " + ck
+    elif l.startswith("toolchain ") and tid: l = "toolchain " + tid
+    lines.append(l)
+open(out, "w").write("\n".join(lines))
+PY2
+}
+if [ -z "$OLD_TID" ] || [ -z "$NOW_TID" ] || [ -z "$NOW_ID" ]; then
+  no "could not compute forged toolchain ids — every leg below would be vacuous"
+else
+  forge "$TMP/old.txt" "$OLD_ID" "$OLD_TID"
+  O="$(consume_store "$TMP/old.txt")"
+  if grep -q '0 current, 5 not current, 0 unreadable' <<<"$O"; then
+    ok "a consistent receipt bound to the old 4.28.0 checker is not current, so nothing about it is accepted"
+  else
+    no "an old-checker receipt was not refused: $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$O" | head -1)"
+  fi
+  forge "$TMP/edit_ck.txt" "$NOW_ID" "$OLD_TID"
+  O="$(consume_store "$TMP/edit_ck.txt")"
+  if [ "$(grep -c 'unreadable \[identity_not_bound\]' <<<"$O")" = "5" ]; then
+    ok "editing an old receipt's checker line to the accepted build is refused (identity_not_bound)"
+  else
+    no "an edited checker line was not refused: $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$O" | head -1)"
+  fi
+  forge "$TMP/edit_ver.txt" "${OLD_ID/4.28.0/4.34.1}" "$OLD_TID"
+  O="$(consume_store "$TMP/edit_ver.txt")"
+  if [ "$(grep -c 'unreadable \[identity_not_bound\]' <<<"$O")" = "5" ]; then
+    ok "editing only the version string in an old receipt is refused (identity_not_bound)"
+  else
+    no "an edited version string was not refused: $(grep -oE '[0-9]+ current, [0-9]+ not current, [0-9]+ unreadable' <<<"$O" | head -1)"
+  fi
+  # A FULLY CONSISTENT FORGERY naming the accepted build is byte-for-byte what issuance would write; its
+  # acceptance must come from the consumer's re-check, so suppressing that re-check must accept nothing.
+  forge "$TMP/forged.txt" "$NOW_ID" "$NOW_TID"
+  mkdir -p "$TMP/norecheck"
+  cat > "$TMP/norecheck/lake" <<EOF
+#!/usr/bin/env bash
+set -o pipefail
+"$(command -v lake)" "\$@" 2>&1 | sed -E '/^CONCRETE-RECHECK /d'
+EOF
+  chmod +x "$TMP/norecheck/lake"
+  O="$(PATH="$TMP/norecheck:$PATH" consume_store "$TMP/forged.txt")"
+  if grep -q '5 current, 0 not current, 0 unreadable' <<<"$O" && [ "$(accepted_now "$O")" = "0 of 5" ]; then
+    ok "a fully consistent forgery reads current but is accepted 0 of 5 without the consumer's own re-check"
+  else
+    no "forged metadata produced acceptance without a re-check: $(accepted_now "$O")"
+  fi
+  O="$(consume_store "$TMP/forged.txt")"
+  if [ "$WANT" = accepted ] && [ "$(accepted_now "$O")" = "5 of 5" ]; then
+    ok "...and the same store is accepted 5 of 5 once the consumer re-checks under the accepted build (the only route)"
+  elif [ "$WANT" = unknown ] && [ "$(accepted_now "$O")" = "0 of 5" ]; then
+    ok "...and on this unregistered build even the consumer's re-check accepts nothing (0 of 5): acceptance needs a registered build"
+  else
+    no "acceptance after a fresh re-check moved: $(accepted_now "$O") (build $WANT)"
+  fi
 fi
 
 GATE_DONE=1

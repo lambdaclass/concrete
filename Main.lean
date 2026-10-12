@@ -2753,8 +2753,28 @@ def compileAndReport (inputPath : String) (reportType : String)
         let trustedDepsOf := fun (qn : String) =>
           (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
         let env : Proof.IssueEnvironment := { compilerVersion, workspaceId, importsId }
+        -- FRESH CONSUMER REPLAY (R-0208 decision 2). Receipts are unauthenticated bytes: a forger can
+        -- rewrite the readable checker AND the toolchain id consistently, and the comparison alone would
+        -- then call a receipt for an ill-typed theorem current under an accepted checker. So the consumer
+        -- re-checks every stored theorem itself, in ONE replay, and acceptance is decided on THIS run's
+        -- checker and THIS run's kernel re-check — never on what the store says. Metadata edits therefore
+        -- cannot restore acceptance; only a fresh re-check under an accepted build can.
+        let freshTargets : List Proof.ReplayTarget := records.filterMap fun (subject, decoded) =>
+          match decoded with
+          | .ok st => some { subject, theoremName := st.theoremArtifact, kind := .refinement
+                           , origin := .sourceLinked, binding := .bound }
+          | .error _ => none
+        let fresh ← if freshTargets.isEmpty then pure none else do
+          match ← Proof.replay { inputPath := inputPath, fallbackDir := "."
+                               , imports := ["Concrete", "Examples"], targets := freshTargets } with
+          | .ok r => pure (some r)
+          | .error _ => pure none
+        let freshRecheck := fun (thm : String) =>
+          ((fresh.bind fun r => (r.recheck.find? (·.1 == thm)).map (·.2)).getD Proof.RecheckVerdict.notRun)
+        let freshChecker := (fresh.bind (·.environment.checker)).map (·.canonical)
         let mut lines : List String := []
         let mut policyCounts : Array Proof.AdvisoryStatus := #[]
+        let mut acceptedNow := 0
         let mut current := 0
         let mut notCurrent := 0
         let mut unreadable := 0
@@ -2783,11 +2803,15 @@ def compileAndReport (inputPath : String) (reportType : String)
                 -- THE CHECKER POLICY, SEPARATELY (R-0208 decisions 3-4): currency says the receipt
                 -- matches the program; the decision says whether the checker that established it is
                 -- still accepted. Read from the register at report time, never from the receipt.
-                let d := Proof.checkerRegister.decide st.checker
+                -- Decided on the checker THIS run used for its re-check, not the one the record names.
+                let d := Proof.checkerRegister.decide (freshChecker.getD "")
                 policyCounts := policyCounts.push d.status
                 let why := if d.advisories.isEmpty then "" else s!" ({", ".intercalate d.advisories})"
+                let rv := freshRecheck st.theoremArtifact
+                if d.status == .accepted && rv == .rechecked then acceptedNow := acceptedNow + 1
                 lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"
-                                 , s!"        checker policy: {d.status.canonical}{why}"]
+                                 , s!"        checker policy: {d.status.canonical}{why}"
+                                 , s!"        fresh kernel re-check in this run: {rv.canonical}"]
               | .ok .notCurrent =>
                 notCurrent := notCurrent + 1
                 lines := lines ++ [s!"    ✗ {subject} — receipt NOT current: it was established against different material"]
@@ -2814,7 +2838,8 @@ def compileAndReport (inputPath : String) (reportType : String)
               , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
               , "  Receipts are minted only after a fresh kernel re-check of each theorem's workspace closure."
               , "  'current' means the stored facts match this program, proof library and checker identity."
-              , "  It is NOT a fresh kernel re-check in this run."
+              , "  Each current receipt's theorem is re-checked by the kernel in this run (fresh consumer replay);"
+              , s!"  ACCEPTED NOW (current, re-checked in this run, accepted checker build): {acceptedNow} of {current}."
               , s!"  Checker policy v{Proof.checkerRegister.policyVersion} ({Proof.checkerRegister.policyIdentity}): "
                 ++ s!"{(policyCounts.filter (· == .accepted)).size} accepted, {(policyCounts.filter (· == .affected)).size} affected, "
                 ++ s!"{(policyCounts.filter (· == .revoked)).size} revoked, {(policyCounts.filter (· == .unknown)).size} unknown — "
