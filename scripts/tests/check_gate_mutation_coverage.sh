@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=112
+EXPECTED_FAMILIES=115
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1615,6 +1615,26 @@ add "policy-unknown-not-accepted" "Concrete/Proof/CheckerPolicy.lean" "check_che
 add "policy-identity-binds-advisories" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
   '     ++ adv)' \
   '     ++ adv.take 0)'
+
+# R-0208 Lean 4.34.1 acceptance. Written before hand-verification; each must be shown red by hand.
+
+# ACCEPTANCE NAMES THE MEASURED BUILD. Dropping the digest comparison accepts any rebuild reporting the
+# release commit — exactly the commit-only acceptance the register exists to refuse.
+add "policy-accepts-measured-build-only" "Concrete/Proof/CheckerPolicy.lean" "check_checker_policy.sh" yes \
+  '        a.checker == i && a.version == v && a.commit == c && a.platform == p && a.build == b) then' \
+  '        a.checker == i && a.version == v && a.commit == c && a.platform == p && (b == b)) then'
+
+# ACCEPTANCE NEEDS THE CONSUMER'S OWN RE-CHECK. Without it a fully consistent forged store is accepted on
+# its bytes alone, and metadata edits restore acceptance.
+add "consumer-acceptance-requires-recheck" "Main.lean" "check_checker_policy.sh" yes \
+  '                if d.status == .accepted && rv == .rechecked then acceptedNow := acceptedNow + 1' \
+  '                if d.status == .accepted && (rv == rv) then acceptedNow := acceptedNow + 1'
+
+# AXIOMS ARE ALLOW-LISTED. Degrading to a deny-list of native axioms lets a theorem resting on a
+# declared axiom re-check (the kernel takes axioms on trust) — the hole the upgrade exposed.
+add "recheck-allowlists-kernel-axioms" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '    let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))' \
+  '    let extra := axs.filter (fun a => a == ``Lean.ofReduceBool || (a.toString.splitOn "._native.").length > 1)'
 
 # THE REPORT HANDLERS MUST RETURN. attestation-join, generated-implementations and impl-manifest
 # each printed their report and then fell through to the "Unknown report type" branch, exiting 1 on

@@ -616,6 +616,20 @@ jobs:
       - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
         run: bash scripts/tests/check_checker_policy.sh
 
+      # The evidence a measured checker build needs before its digest may be registered (R-0208): the
+      # controls above passed on THIS build to reach here; this adds the identity, the axiom inventory
+      # and a row-by-row replay of the frozen claim inventory, and keeps them as an artifact.
+      - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
+        run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
+
+      - name: "Upload checker acceptance evidence"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/checker-acceptance
+          if-no-files-found: warn
+
       - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
         run: bash scripts/tests/check_v2_migration_plan.sh
 
