@@ -13738,6 +13738,12 @@ passes the same controls (`scripts/tools/checker_acceptance_evidence.sh`, artifa
 `checker-acceptance-<os>`). Consumers re-check every stored theorem before reporting acceptance, so a
 fully consistent forged receipt is accepted only by that re-check, never by its bytes; reports state a
 stored receipt is unauthenticated. Mutation inventory 115.
+**Campaign on `9204684d` (38272837944): UNQUALIFIED.** `consumer-acceptance-requires-recheck` SURVIVED in
+Linux shard 3 — no Linux build is registered, so acceptance was unobservable there. Repaired on
+`r0208-closure`: the rule is a pure `Proof.acceptedNow` tested on synthetic inputs on every platform,
+production use is covered by a separate family (`report-uses-acceptedNow`, inventory 116) killed on a
+registered build, and the Linux build is registered in the same commit with self-contained evidence.
+R-0208 closes only when the final commit passes CI and its complete campaign qualifies.
 
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile

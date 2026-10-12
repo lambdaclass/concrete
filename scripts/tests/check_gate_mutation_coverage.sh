@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=115
+EXPECTED_FAMILIES=116
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1637,6 +1637,15 @@ add "consumer-acceptance-requires-recheck" "Concrete/Proof/CheckerPolicy.lean" "
 add "recheck-allowlists-kernel-axioms" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
   '    let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))' \
   '    let extra := axs.filter (fun a => a == ``Lean.ofReduceBool || (a.toString.splitOn "._native.").length > 1)'
+
+# THE REPORT MUST USE THE RULE. `acceptedNow` is tested on synthetic inputs everywhere; this family
+# keeps PRODUCTION covered: bypassing the call (acceptance from policy alone) must fail a gate. Killed by
+# the forged-store leg ("accepted 0 of 5 without the consumer's own re-check") on a registered build —
+# which is why the Linux build is registered in the same commit as this family.
+add "report-uses-acceptedNow" "Main.lean" "check_checker_policy.sh" yes \
+  '                if Proof.acceptedNow d rv then acceptedNow := acceptedNow + 1' \
+  '                if d.status == .accepted && (rv == rv) then acceptedNow := acceptedNow + 1'
+
 
 # THE REPORT HANDLERS MUST RETURN. attestation-join, generated-implementations and impl-manifest
 # each printed their report and then fell through to the "Unknown report type" branch, exiting 1 on
