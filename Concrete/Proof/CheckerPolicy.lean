@@ -97,16 +97,25 @@ structure CheckerRegister where
     upgrade (`ca7852e1`), the hostile controls (`check_checker_identity.sh`, `check_kernel_recheck.sh`
     including the declared-axiom and native-axiom legs) and a fresh replay of the frozen claim
     inventory (all 71 rows identical: docs/verification/claim-inventory-v4.34.1.tsv) passed on that
-    build. macOS aarch64 only: the Nix devshell and elan load byte-identical images there and share the
-    entry. Linux is NOT listed until its CI-measured digest has passed the same controls; until then a
-    Linux checker reads `unknown`, never a commit-level fallback. -/
+    build. macOS aarch64: the Nix devshell and elan load byte-identical images there and share the
+    entry. Linux x86_64 (policy v4): CI's measured build, registered from its retained evidence. Any
+    other build — a rebuild, another platform, a Nix-patched Linux binary — reads `unknown`, never a
+    commit-level fallback, until it is measured, validated and listed. -/
 def checkerRegister : CheckerRegister :=
-  { policyVersion := 3
+  { policyVersion := 4
   , accepted :=
       [ { checker := "lean", version := "4.34.1", commit := "5045d0056413266e57c625dcd7c365b10e377c52"
         , platform := "arm64-apple-darwin24.6.0"
         , build := "137d34023aa9f455f7400b746c400d05315331cfd41851969b3611319a8bfa81"
-        , evidence := "macOS aarch64, official release archive via elan and the Nix devshell (identical images); upgrade ca7852e1, controls + 71-claim replay 2026-10-12" } ]
+        , evidence := "macOS aarch64, official release archive via elan and the Nix devshell (identical images); upgrade ca7852e1, controls + 71-claim replay 2026-10-12; docs/verification/checker-acceptance/lean-4.34.1-arm64-apple-darwin.txt" }
+      -- Linux x86_64, CI's elan install of the official archive (policy v4). Measured in CI run
+      -- 38272808890 on 9204684d: hostile controls passed on this identity in the same job, axiom
+      -- inventory clean, 71-claim replay identical. Registered together with the self-contained
+      -- evidence script, which must pass again on the commit that registers it.
+      , { checker := "lean", version := "4.34.1", commit := "5045d0056413266e57c625dcd7c365b10e377c52"
+        , platform := "x86_64-unknown-linux-gnu"
+        , build := "3eb21141b6a9840a1e5985f570e9702f69fc6de34965a21540cf6d06031b920f"
+        , evidence := "CI run 38272808890 (9204684d); docs/verification/checker-acceptance/lean-4.34.1-x86_64-unknown-linux-gnu.txt" } ]
   , advisories :=
       [ { id := "lean4#14576", checker := "lean", versions := ["4.28.0"], status := .affected
         , affects := "kernel acceptance (logical validity of checked declarations)"

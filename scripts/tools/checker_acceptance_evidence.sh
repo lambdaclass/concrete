@@ -41,6 +41,15 @@ for g in check_checker_identity check_kernel_recheck check_checker_policy; do
   fi
 done
 TESTED="$(sed -n 's/^  info checker under test: //p' "$OUT/check_checker_policy.log" | head -1)"
+# AN ACCEPTED BUILD MUST SHOW THE CONSUMER RE-CHECK RESTORING ACCEPTANCE ON ITSELF: a registered build is
+# only evidenced if, on this very build, the forged store is accepted 0 of 5 without the consumer's
+# re-check and 5 of 5 with it. An unregistered candidate shows the 0-of-5 side only.
+if grep -q '^registered$' "$OUT/register-status.txt"; then
+  RECHECK_LEG="$(grep -E 'ok .*accepted 5 of 5 once the consumer re-checks' "$OUT/check_checker_policy.log" | head -1)"
+  [ -n "$RECHECK_LEG" ] || { echo "FAIL: registered build without the accepted-build consumer re-check leg"; rc=1; }
+else
+  RECHECK_LEG="$(grep -E 'ok .*0 of 5 without the consumer' "$OUT/check_checker_policy.log" | head -1)"
+fi
 if [ "$TESTED" != "$ID" ]; then
   echo "FAIL: the controls tested '$TESTED', not the captured identity"; rc=1
 fi
@@ -59,6 +68,7 @@ fi
   echo "register:  $(cat "$OUT/register-status.txt")"
   echo "controls: $CONTROLS"
   echo "tested:    ${TESTED:-NONE} ($( [ "$TESTED" = "$ID" ] && echo 'matches the identity under test' || echo 'DOES NOT MATCH'))"
+  echo "re-check:  ${RECHECK_LEG:-MISSING}"
   echo "axioms:    $(tail -1 "$OUT/axiom-inventory.log")"
   echo "inventory: $INV against $REF ($(grep -c . "$OUT/claim-inventory.diff") diff lines)"
 } | tee "$OUT/SUMMARY.txt"

@@ -1,0 +1,28 @@
+# Supporting evidence for registering this Linux build (R-0208).
+# Source: CI run 38272808890 on 9204684d, job 'Language-surface gates' (114892893955),
+# artifact checker-acceptance-Linux. That run predates the self-contained evidence script, so the
+# control results below are the same job's log lines; the self-contained script must pass again on the
+# closure commit, where this build is registered (accepted-build consumer re-check included).
+
+## artifact SUMMARY.txt
+checker:   lean 4.34.1 commit 5045d0056413266e57c625dcd7c365b10e377c52 platform x86_64-unknown-linux-gnu build 3eb21141b6a9840a1e5985f570e9702f69fc6de34965a21540cf6d06031b920f
+register:  UNREGISTERED candidate
+controls:  check_checker_identity, check_kernel_recheck, check_checker_policy passed earlier in this job
+axioms:    AXIOM-INVENTORY: PASS=7 FAIL=0
+inventory: IDENTICAL against docs/verification/claim-inventory-v4.34.1.tsv (0 diff lines)
+
+## controls, same job log (this build)
+CHECKER-IDENTITY: PASS=15 FAIL=0
+KERNEL-RECHECK: PASS=10 FAIL=0
+  info checker under test: lean 4.34.1 commit 5045d0056413266e57c625dcd7c365b10e377c52 platform x86_64-unknown-linux-gnu build 3eb21141b6a9840a1e5985f570e9702f69fc6de34965a21540cf6d06031b920f
+CHECKER-POLICY: PASS=22 FAIL=0
+
+## artifact axiom-inventory.log (tail)
+  ok   native-code trust (bv_decide/native_decide) only where declared in scripts/tests/axiom_native_trust.txt
+  ok   all native-trust theorems are documented in docs/verification/AXIOMS.md
+  ok   docs/verification/AXIOMS.md documents the kernel-axiom allowlist
+=== negative control: a sorry-backed theorem must be CAUGHT ===
+  ok   a sorry-backed theorem is classified as a violation (detection has teeth)
+  ok   sorryAx is not allowlisted
+
+AXIOM-INVENTORY: PASS=7 FAIL=0
