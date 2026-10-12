@@ -101,7 +101,7 @@ structure CheckerRegister where
     entry. Linux is NOT listed until its CI-measured digest has passed the same controls; until then a
     Linux checker reads `unknown`, never a commit-level fallback. -/
 def checkerRegister : CheckerRegister :=
-  { policyVersion := 2
+  { policyVersion := 3
   , accepted :=
       [ { checker := "lean", version := "4.34.1", commit := "5045d0056413266e57c625dcd7c365b10e377c52"
         , platform := "arm64-apple-darwin24.6.0"
@@ -110,7 +110,10 @@ def checkerRegister : CheckerRegister :=
   , advisories :=
       [ { id := "lean4#14576", checker := "lean", versions := ["4.28.0"], status := .affected
         , affects := "kernel acceptance (logical validity of checked declarations)"
-        , replacement := []
+        -- 4.34.1 verified, not assumed: the retained upstream reproducer is REJECTED by its kernel
+        -- ("invalid projection") and ACCEPTED by 4.28.0 (scripts/tests/check_lean14576_reproducer.sh;
+        -- policy v3, 2026-10-12).
+        , replacement := ["4.34.1"]
         , replay := "fresh kernel re-check under an accepted, fixed checker" } ] }
 
 /-- Canonical bytes of a register: what `policyIdentity` digests. Every field, in a fixed order. -/
