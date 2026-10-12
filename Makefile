@@ -223,6 +223,9 @@ test-kernel-recheck: build ## R-0208 slice 1b: receipts mint only for theorems t
 test-checker-policy: build ## R-0208 decisions 3-4: compiled checker advisory register, decided beside currency
 	bash scripts/tests/check_checker_policy.sh
 
+test-lean14576: build ## R-0208 fire drill: the retained upstream reproducer, isolated, against the pinned checker
+	bash scripts/tests/check_lean14576_reproducer.sh
+
 test-v2-migration-plan: build ## R-0004 package 3: the V1->V2 migration dry run reconciles and manufactures no freshness
 	bash scripts/tests/check_v2_migration_plan.sh
 
