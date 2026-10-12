@@ -62,6 +62,14 @@ else
   no "the disclosure is gone — 'proved' now reads as 'kernel-replayed'"
 fi
 
+# A STORED RECEIPT IS NOT AUTHENTICATED, and the report must say so: "accepted now" rests on this
+# run's re-check, and nothing in the output may read as vouching for whoever wrote the store.
+if grep -q 'A stored receipt is NOT authenticated' <<<"$BASE" && grep -q 'acceptance never rests on who wrote or minted the record' <<<"$BASE"; then
+  ok "the report states that a stored receipt is unauthenticated and acceptance does not rest on its author"
+else
+  no "the unauthenticated-store disclosure is gone — a reader could take a store's records as vouched for"
+fi
+
 echo "=== substitution is defeated by the comparison, not by the filename ==="
 
 python3 - "$TMP" <<'PY'

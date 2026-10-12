@@ -2831,12 +2831,14 @@ def compileAndReport (inputPath : String) (reportType : String)
         IO.println (String.intercalate "\n"
           ([s!"\n=== Replay Receipts ({path}) ==="] ++ lines
            ++ [s!"\n  {current} current, {notCurrent} not current, {unreadable} unreadable, {missing.length} no receipt"
-              , "  A receipt makes a claim kernel-replayed ONLY while it agrees with fresh facts."
+              , "  A stored receipt is NOT authenticated: anyone can write a store. It counts only while it agrees"
+              , "  with facts computed now, and acceptance never rests on who wrote or minted the record."
               , "  Status above is derived from source facts and does not itself mean the kernel ran."
               -- WHAT "current" DOES NOT YET MEAN (R-0208, open slices). Stated so a reader cannot take
               -- identity agreement for a re-check or for advisory acceptance.
               , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
-              , "  Receipts are minted only after a fresh kernel re-check of each theorem's workspace closure."
+              , "  This compiler mints a receipt only after a fresh kernel re-check, but a store's records may come"
+              , "  from anywhere, so that history is not relied on here."
               , "  'current' means the stored facts match this program, proof library and checker identity."
               , "  Each current receipt's theorem is re-checked by the kernel in this run (fresh consumer replay);"
               , s!"  ACCEPTED NOW (current, re-checked in this run, accepted checker build): {acceptedNow} of {current}."

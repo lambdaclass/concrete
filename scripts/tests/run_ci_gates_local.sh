@@ -85,7 +85,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -122,6 +122,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
 # 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
 # 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
+#   scripts/tools/checker_acceptance_evidence.sh (R-0208) is excluded too: it PRODUCES evidence for a
+#   CI-measured checker build (an artifact), judges nothing locally, and needs $RUNNER_TEMP.
 #   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
 # 240 -> 241: check_prepush_record.sh (the pre-push validation-record bindings), pinned in the same commit.
