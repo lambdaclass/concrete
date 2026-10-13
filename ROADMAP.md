@@ -6995,7 +6995,13 @@ language.
 `IDENTITY-OVERBINDING` (6/0) reproduces the fail-safe defect: an unused std-content change moves 7
 of 21 package identities. Those count gates are entrance evidence, not a migration map. Before any
 identity bytes change, freeze the canonical full rows so a rewrite cannot preserve every `sort -u`
-count while silently changing associations. The migration itself has not started.
+count while silently changing associations. **Rows frozen (2026-10-13):** `IDENTITY-ROWS` (11/0)
+pins 323 canonical rows (`docs/verification/identity-rows-pre-r0482.tsv`, from
+`scripts/tools/identity_rows.sh`) with package digests replaced by their producing fixture; a model
+swap that keeps every count moves the rows, and an unused std edit moves none. **Ratification draft:**
+`docs/verification/IDENTITY_SEPARATION.md` proposes the five definitions and seven decisions (origin,
+version, manifestless scope, std, symbol names, one manifestless producer, migration acceptance).
+The migration is held until those definitions are ratified.
 
 #### Five identities that must not substitute for one another
 

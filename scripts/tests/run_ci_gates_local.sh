@@ -131,7 +131,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 242 -> 243: check_kernel_recheck.sh (R-0208 slice 1b fresh kernel re-check), pinned in the same commit.
 # 243 -> 244: check_checker_policy.sh (R-0208 checker advisory policy), pinned in the same commit.
 # 244 -> 245: check_lean14576_reproducer.sh (R-0208 fire drill reproducer), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=245
+# 245 -> 246: check_identity_rows.sh (R-0482 frozen identity rows), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=246
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
