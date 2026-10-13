@@ -1,6 +1,7 @@
 # R-0208 closure record — tool-version drift, checker identity, advisory policy, Lean #14576 fire drill
 
-Status: closure record. Each recorded criterion is listed with the evidence that meets it and the
+Status: CLOSED 2026-10-13 at `2b570c5a` (push CI 38327442096 green; campaign 38327460557
+qualified, 116/116). Closure record. Each recorded criterion is listed with the evidence that meets it and the
 gate that keeps it true. Closure is stated against these criteria only; what stays open is listed at
 the end, not hidden. Native-trust receipts are a DEFERRED feature, withheld, and are not a closure
 criterion (user decision, 2026-10-12).
@@ -25,7 +26,7 @@ this repository is false, and no report says so.
 |---|---|---|
 | Evidence records the Lean version and build, the compiler, and the proof library | receiptV2 binds `toolchain` = hash(compiler identity, checker identity) and carries both in the clear; the checker identity is version, commit, platform and a digest of the images the replay process actually loaded; `imports` binds the proof library (ProofKit included) by source content | `check_checker_identity.sh`, `check_receipt_consumption.sh` |
 | A toolchain bump marks evidence needing re-check; old badges never silently reused | a receipt established under another checker is not current, and the report names what moved: an old 4.28.0 receipt "differs in: toolchain; still matching: subject, edge, tables, root, artifact, trust, workspace, imports" | `check_checker_policy.sh` |
-| Machine-readable advisory register keyed by implementation, exact version/build, advisory id; statuses accepted/affected/revoked/unknown | `Concrete/Proof/CheckerPolicy.lean` (policy v3): `lean4#14576` affects exactly `4.28.0`, replacement `4.34.1` (verified by the reproducer); accepted entries are MEASURED BUILDS (checker, version, commit, platform, build digest) | `check_checker_policy.sh` |
+| Machine-readable advisory register keyed by implementation, exact version/build, advisory id; statuses accepted/affected/revoked/unknown | `Concrete/Proof/CheckerPolicy.lean` (policy v4): `lean4#14576` affects exactly `4.28.0`, replacement `4.34.1` (verified by the reproducer); accepted entries are MEASURED BUILDS (checker, version, commit, platform, build digest) | `check_checker_policy.sh` |
 | Policy refuses or downgrades affected, revoked or unknown checkers; a register change re-evaluates | decisions are computed at read time beside currency and never written into receipts; revoked > affected > accepted; unknown is never accepted | `check_checker_policy.sh` (synthetic transitions) |
 | Who controls policy; missing, altered or rolled-back policy fails closed | the register is compiled into the consumer and its identity is named in every decision; a compiled `policyVersion` below `scripts/tests/fixtures/checker_policy_minimum` is refused. **Limited:** reverting both together is not refused | `check_checker_policy.sh` |
 | Checker identity binds the executable and build that actually ran | the replay process reports itself (nonce-correlated) and the consumer hashes its loaded images; Nix and elan load byte-identical images on macOS | `check_checker_identity.sh` |
@@ -60,6 +61,8 @@ accepted 4.34.1 build; the replay on 4.34.1 re-checks all 31 and every row is un
   reported `native_trust` and withheld; native-trust receipts are deferred, and when built must never
   satisfy a kernel-only policy.
 - **Rollback**: limited, as above.
-- **Linux**: no Linux build is accepted until its CI-measured digest has self-contained evidence
+- **Accepted builds**: exactly two measured builds of 4.34.1 (commit `5045d005…`): macOS aarch64
+  `137d3402…` (Nix and elan share it) and Linux x86_64 `3eb21141…`, each with self-contained evidence
   (`scripts/tools/checker_acceptance_evidence.sh`: identity, the hostile controls re-run with logs and
-  tied to that identity, axiom inventory, inventory replay). Until registered it reads `unknown`.
+  tied to that identity, the accepted-build consumer re-check, axiom inventory, inventory replay). Any
+  other build, commit or platform reads `unknown`; a rebuild is a new candidate.

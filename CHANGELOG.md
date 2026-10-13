@@ -10,6 +10,32 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### R-0208 CLOSED: Lean #14576 Fire Drill, Checker Identity And Advisory Policy
+
+Closed 2026-10-13 at `2b570c5a` (push CI 38327442096 green; 116-family campaign 38327460557
+qualified: 116 killed, 0 invalid, 0 survived, 0 could-not-apply, `completed=1`, `integrity_ok=1`,
+`qualified=1`). Lean issue #14576 (an axiom-free proof of `False` through wrong-structure
+projections) is accepted by lean 4.28.0, the checker this repository pinned, and rejected by 4.34.1;
+the retained upstream reproducer runs isolated in CI and must be rejected.
+
+What landed: receipts bind the checker that actually ran — version, commit, platform and a digest of
+the images the replay process loaded — beside the compiler identity (receiptV2, readable identity
+re-hashed on decode); issuance and consumption re-check every theorem's workspace constant closure
+in the kernel, with axioms allow-listed; a compiled advisory register (policy v4) decides
+revoked > affected > accepted > unknown at read time, accepting only measured builds — macOS aarch64
+`137d3402…` (shared by Nix and elan) and Linux x86_64 `3eb21141…`, each with self-contained evidence
+re-running the hostile controls on that exact build; ACCEPTED NOW requires an accepted build and this
+run's own re-check, so editing metadata or forging a consistent receipt never restores acceptance.
+The toolchain moved to Lean v4.34.1 (Nix, elan and CI aligned) against a frozen 71-claim inventory
+that replays identically; every source and evidence change is classified. The 31 receipts minted
+under 4.28.0 are named in `docs/verification/R-0208-closure.md`, which maps each criterion to its
+evidence and gate. The first campaign on the upgrade (`9204684d`) was UNQUALIFIED — one survivor where
+no Linux build was registered — and was repaired before closure.
+
+Remaining by decision: native-trust (`bv_decide`) receipts are withheld, a deferred feature; rollback
+protection is limited (a minimum `policyVersion`, not a signed register); the checker's self-report is
+nonce-correlated, not authenticated; toolchain `.olean` data is trusted via the build identity.
+
 ### Post-R-0004 Mutation Campaign Qualified
 
 On 2026-10-11 the full 95-family gate-mutation campaign qualified on the published `670ec85a`

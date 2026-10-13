@@ -30,21 +30,20 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **R-0208 Lean #14576 upgrade/revocation fire drill** | explain every proof/evidence delta and prove old checker-bound evidence cannot recover through metadata; no new authoritative evidence transition crosses this blocker |
-| 1 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
-| 2 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
-| 3 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 4 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 5 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 6 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 7 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 8 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 9 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 10 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 11 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+| 0 | **R-0482 identity freeze and ratification** | freeze canonical full rows, not `sort -u` population counts; ratify `PackageScopeIdentity`, `PackageArtifactIdentity`, `ResolutionContextIdentity`, `DefinitionIdentity`, and claim dependency-root ownership, including manifestless scope and legitimate many-to-one rows |
+| 1 | **R-0482 atomic identity migration** | emit a typed old-to-new row map with totality, definition-level collision/refusal accounting, and bootstrap support; migrate attestations, receipts, generated symbols and consumers atomically; prove unused dependency/content changes do not move scope while reachable dependency changes move roots |
+| 2 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 3 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 4 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 5 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 6 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 7 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 8 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 9 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 10 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
-R-0484 (closed 2026-10-08 at `245cd51c`) and R-0483 (closed 2026-10-09 at `4f005715`) moved to
-[CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
+R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
+(closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
@@ -276,12 +275,9 @@ proof-authoring modes; checked total contract functions; then R-0353 Layer 0. Ea
 migrates one real consumer, kills a production mutation, records the corpus denominator, and
 deletes its flattened predecessor only after shadow agreement.
 
-**Immediate release/evidence blocker:** complete R-0208's Lean #14576 fire drill before the next
-new authoritative evidence transition, receipt migration, checker graduation, or public proof-
-strength claim. Ordinary bug fixes and shadow instrumentation may continue; they may not mint a new
-stronger evidence class under the currently unaccepted toolchain. The drill freezes the before/after
-claim denominator, uses isolated hostile fixtures, explains every replay/golden change, and proves
-old checker-bound evidence cannot recover by editing metadata.
+**Release/evidence blocker lifted (2026-10-13):** R-0208's Lean #14576 fire drill closed at
+`2b570c5a`. New evidence is minted only under an accepted measured build of Lean 4.34.1; native-trust
+receipts stay withheld (a deferred feature, not a closure criterion).
 
 ### Standard Graduation Contract
 
@@ -533,7 +529,7 @@ reported = killed, 0 invalid, 0 survived, 0 could-not-apply, every clean-tree ba
 `completed=1`, `integrity_ok=1`, `qualified=1`. The aggregator re-run locally over the downloaded
 shard artifacts reproduced the CI verdict exactly. Slowest shard 92m; 14.1 runner-hours, 8.3 of them
 in the 21 families gated by `check_dependency_edges.sh`. The history below is kept as the record of
-how the campaign got there; R-0208 is now queue row 0.
+how the campaign got there; R-0208 has since closed (2026-10-13, `2b570c5a`).
 
 **Re-qualification for the next integration (2026-10-11).** The batch integrating R-0208 slice 1a
 adds seven families (inventory 102) and changes `check_dependency_edges.sh`, the gate of 21
@@ -13744,6 +13740,18 @@ Linux shard 3 — no Linux build is registered, so acceptance was unobservable t
 production use is covered by a separate family (`report-uses-acceptedNow`, inventory 116) killed on a
 registered build, and the Linux build is registered in the same commit with self-contained evidence.
 R-0208 closes only when the final commit passes CI and its complete campaign qualifies.
+**CLOSED 2026-10-13 at `2b570c5a`.** Push CI
+[38327442096](https://github.com/unbalancedparentheses/concrete2/actions/runs/38327442096) green;
+campaign [38327460557](https://github.com/unbalancedparentheses/concrete2/actions/runs/38327460557):
+116 discovered = killed, 0 invalid, 0 survived, 0 could-not-apply, `completed=1`, `integrity_ok=1`,
+`qualified=1`, the local aggregator re-run identical to CI. The Linux artifact `checker-acceptance-Linux`
+from that push run is the self-contained evidence for the registered build `3eb21141…` on the closure
+commit: register `registered`, identity 15/0, kernel re-check 10/0 and policy 24/0 with logs tied to
+that identity, the accepted-build consumer re-check leg (5 of 5 only after re-check), axiom inventory
+7/0, claim inventory IDENTICAL; the Lean #14576 reproducer is rejected there too. The earlier artifact
+and control logs stay as supporting evidence. Criteria → evidence: `docs/verification/R-0208-closure.md`.
+Still open by decision: native-trust receipts (withheld), limited rollback protection, correlated
+not authenticated checker self-report.
 
 Fragment-scoped narrowing is tested only after the broad fail-closed path. Surface VIR lacking the
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
