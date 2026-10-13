@@ -14,6 +14,10 @@
 #   C. the same std edit without those renames must be REFUSED — a consumer selecting a stale symbol
 #      is never silently absorbed.
 #
+# The RAW baseline (`docs/verification/identity-raw-baseline-pre-r0482.tsv`) keeps the digest bytes
+# the normalized rows drop, tied to its commit; this gate checks the two describe one population, and
+# does not hold later trees to the raw bytes.
+#
 # A legitimate change (a proved body, theorem, table or fingerprint moves) regenerates the frozen file
 # in the same commit and explains every changed row:
 #   bash scripts/tools/identity_rows.sh > docs/verification/identity-rows-pre-r0482.tsv
@@ -46,6 +50,36 @@ if diff "$FROZEN" "$TMP/now.tsv" > "$TMP/drift.diff"; then
 else
   no "rows moved ($(grep -c '^[<>]' "$TMP/drift.diff") diff lines). A legitimate change regenerates the freeze in the same commit and explains each row; the R-0482 migration maps each one:"
   head -20 "$TMP/drift.diff" | sed 's/^/         /'
+fi
+
+echo ""
+echo "=== the raw baseline (digest bytes the migration map is written against) ==="
+RAW="docs/verification/identity-raw-baseline-pre-r0482.tsv"
+if [ ! -f "$RAW" ]; then
+  no "$RAW missing — the exact old digests would be lost"
+else
+  if grep -qE '^# baseline-commit: [0-9a-f]{40}$' "$RAW"; then
+    ok "the raw baseline names its commit ($(awk '/^# baseline-commit:/ {print substr($3, 1, 8)}' "$RAW"))"
+  else
+    no "the raw baseline does not name a full baseline commit"
+  fi
+  for k in subject dependency reference selection link; do
+    a="$(grep -c "^$k	" "$RAW" || true)"; b="$(grep -c "^$k	" "$FROZEN" || true)"
+    [ "$a" = "$b" ] && ok "raw and normalized agree on $k rows ($a)" || no "raw has $a $k rows, normalized $b"
+  done
+  # The two files describe ONE population: the normalized rows must be exactly the raw rows' projection.
+  # The bijection the projection needs is a property of this BASELINE only; it is not imposed on trees
+  # after the migration, which are judged by the typed map against these raw bytes.
+  if bash scripts/tools/identity_rows.sh --normalize "$RAW" 2> "$TMP/proj.err" | cmp -s - "$FROZEN"; then
+    ok "the raw baseline projects exactly onto the frozen rows"
+  else
+    no "the raw baseline does not project onto the frozen rows: $(tail -2 "$TMP/proj.err" | tr '\n' ' ')"
+  fi
+  if grep -qE '^(subject|reference)	.*	[0-9a-f]{32}	' "$RAW"; then
+    ok "the raw baseline retains full 32-hex digests"
+  else
+    no "the raw baseline carries no full digests — it would not support an exact map"
+  fi
 fi
 
 # --- scratch copy: tracked + untracked-unignored files, plus the executable ----------------------------

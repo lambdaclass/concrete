@@ -6995,13 +6995,17 @@ language.
 `IDENTITY-OVERBINDING` (6/0) reproduces the fail-safe defect: an unused std-content change moves 7
 of 21 package identities. Those count gates are entrance evidence, not a migration map. Before any
 identity bytes change, freeze the canonical full rows so a rewrite cannot preserve every `sort -u`
-count while silently changing associations. **Rows frozen (2026-10-13):** `IDENTITY-ROWS` (11/0)
-pins 323 canonical rows (`docs/verification/identity-rows-pre-r0482.tsv`, from
-`scripts/tools/identity_rows.sh`) with package digests replaced by their producing fixture; a model
-swap that keeps every count moves the rows, and an unused std edit moves none. **Ratification draft:**
-`docs/verification/IDENTITY_SEPARATION.md` proposes the five definitions and seven decisions (origin,
-version, manifestless scope, std, symbol names, one manifestless producer, migration acceptance).
-The migration is held until those definitions are ratified.
+count while silently changing associations. **Rows frozen (2026-10-13):** `IDENTITY-ROWS` (19/0) pins 323 canonical rows
+(`docs/verification/identity-rows-pre-r0482.tsv`, from `scripts/tools/identity_rows.sh`) with package
+digests replaced by their producing fixture, plus the raw baseline with every digest byte
+(`docs/verification/identity-raw-baseline-pre-r0482.tsv`, tied to `61b2a261`) that the migration map
+is written against; a model swap that keeps every count moves the rows, and an unused std edit moves
+none. **Definitions RATIFIED 2026-10-13** (D1–D7 with amendments):
+`docs/verification/IDENTITY_SEPARATION.md` — tagged scope origins (declared / undeclared / standalone /
+reserved toolchain), version excluded from scope, content-addressed standalone scope, std as its own
+scope, ambiguous undeclared same-named packages refused at existing boundaries, and context changes
+distinguished from root changes. The migration (queue row 1) is a separate deliverable and has not
+started.
 
 #### Five identities that must not substitute for one another
 
