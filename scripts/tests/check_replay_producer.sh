@@ -277,7 +277,7 @@ probe "MINTED artifact=Concrete.Proof.parse_byte_correct toolchain=bound" \
     match SuccessfulReplay.of? r tgt.theoremName with
     | .error e => IO.println s!"TOKEN-REFUSED {e.canonical}"
     | .ok sr =>
-      match ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "cv" "ws" "im" with
+      match ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "cv" "ws" "cx" "im" with
       | none => IO.println "MATERIAL-REFUSED"
       | some m =>
         let rc := ProofEvidenceReceipt.mint sr m

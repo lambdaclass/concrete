@@ -1,11 +1,11 @@
 # Identity separation — ratified definitions (R-0482 step 0)
 
-Status: RATIFIED 2026-10-13 (definitions D1–D7, with the user's amendments). NOT IMPLEMENTED: the
-migration (execution-queue row 1) is a separate deliverable and has not started. The current code still
-uses the single over-bound `PackageIdentity` described in section 1. Measurements are against baseline
-`61b2a261`.
+Status: RATIFIED 2026-10-13 (definitions D1–D7, with the user's amendments) and IMPLEMENTED by the
+R-0482 migration (`IDENTITY_MIGRATION_PLAN.md`; decisions P1–P4 accepted 2026-10-13). Section 1
+records the pre-migration scheme as measured against baseline `61b2a261`; the old-to-new map is
+`identity-migration-map-r0482.tsv`.
 
-## 1. What is wrong today, measured
+## 1. What was wrong before the migration, measured
 
 One `PackageIdentity` (`Concrete/Proof/DefinitionIdentity.lean`) does three jobs. It is
 `(declaredName, origin, contentRoot)` where, for a project with a manifest:

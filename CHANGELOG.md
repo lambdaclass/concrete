@@ -10,6 +10,45 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### R-0482 Identity Separation: Freeze, Ratification And Atomic Migration
+
+Step 0 (2026-10-13, `1c013c7d`, `78d19e30`): canonical identity rows frozen — 323 normalized rows plus
+a raw-byte baseline tied to `61b2a261` — and definitions D1–D7 ratified with tagged scope origins
+(`docs/verification/IDENTITY_SEPARATION.md`).
+
+Migration (plan `docs/verification/IDENTITY_MIGRATION_PLAN.md`, P1–P4 accepted 2026-10-13): the single
+over-bound `PackageIdentity` — which hashed every source in the build, std included — is deleted and
+replaced by three identities, each with one producer and a private constructor:
+
+- `PackageScopeIdentity` — a tagged origin (`declared` namespace claim | `undeclared` | `standalone`
+  over the package's own artifact | `toolchain`, reserved for the bundled std) plus the declared
+  name. Never version, dependencies, std or content (except the stated standalone case).
+- `PackageArtifactIdentity` — sorted, PAIRED (module, content) records of the package's own files;
+  swapping two modules' bodies now moves it.
+- `ResolutionContextIdentity` — each resolved dependency's (binding, scope, artifact), std included.
+
+`DefinitionIdentity` is now `defIdV2`, scoped by its OWNER's scope (std's definitions under std's
+scope, not the project's); dependency roots render `depRootPreimageV3`; receipts are `receiptV3`
+with `scope` + `context` in place of `workspace`, derived from the ProofCore rather than supplied by
+the caller. A not-current receipt now names its repair: a moved root reads "re-establish", a
+context-only move reads "re-validate under policy". The resolver refuses an unidentifiable
+dependency, a dependency name bound twice, and two different undeclared packages sharing one name
+(D1, also refused at the attestation surface); the reference generator refuses 8-hex scope-prefix
+and symbol collisions (D5); the four manifestless producers are one (D6). The receipt decoder now
+reads the schema before refusing unknown keys, so an old envelope is `schema_unreadable` rather
+than a forgery.
+
+Measured: the old-to-new map (`identity-migration-map-r0482.tsv`) is total — 323 of 323 baseline
+rows mapped, 0 shared, 0 refused, no implementation digest changed — and the normalized freeze is
+byte-identical. An unused std edit now renames 0 symbols and moves 0 of 21 scopes (was 42 symbols
+in 7 packages); a sibling edit moves the artifact, not the scope; editing `check_nonce` moves
+exactly the roots of `check_nonce` and `verify_message`. New gate `check_identity_separation.sh`;
+`check_identity_overbinding.sh` and `check_identity_rows.sh` converted to their positive forms;
+8 mutation families (inventory 123).
+
+Deferred by decision (P1): claims whose closure reaches std or another package stay fail-closed;
+admitting them, with the reachable-std and cross-package sensitivity controls, is its own slice.
+
 ### R-0208 CLOSED: Lean #14576 Fire Drill, Checker Identity And Advisory Policy
 
 Closed 2026-10-13 at `2b570c5a` (push CI 38327442096 green; 116-family campaign 38327460557

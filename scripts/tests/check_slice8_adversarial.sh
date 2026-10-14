@@ -161,7 +161,7 @@ launder "trust boundary fabricated" \
 echo "=== decoding: partial, confused, and contradictory ==="
 
 attack "schema downgraded to an older envelope" \
-  'recs[0][1] = [l.replace("receiptV2", "receiptV1") for l in recs[0][1]]' 4 1
+  'recs[0][1] = [l.replace("receiptV3", "receiptV2") for l in recs[0][1]]' 4 1
 attack "required field removed" \
   'recs[0][1] = [l for l in recs[0][1] if not l.startswith("subject ")]' 4 1
 attack "required field duplicated with a different value" \
@@ -222,10 +222,14 @@ forge_attack() {
     no "$name — issued=$issued (wanted $wantissued), named=$named. A claim bound to an unrelated theorem must not mint."
   fi
 }
+# ALL FOUR honest claims still issue (R-0482). Before the identity separation the copy's attribute
+# edit moved the over-bound package digest, renaming the attestations `validate_header`'s closure rests
+# on, so it was withheld too and this expected 3 — the sibling-edit defect, not a property of the
+# attack. Scope now binds only name and origin, so only the forged claim is refused.
 # Same table, different declaration: binding the table cannot tell these apart, only the spec can.
-forge_attack "claim rebound to a sibling theorem" "Examples.ElfHeader.Proofs.check_class_correct" 3
+forge_attack "claim rebound to a sibling theorem" "Examples.ElfHeader.Proofs.check_class_correct" 4
 # Across programs: the record's own fields contradict each other (a crypto table under an ELF claim).
-forge_attack "claim rebound across programs" "Examples.CryptoVerify.Proofs.check_nonce_correct" 3
+forge_attack "claim rebound across programs" "Examples.CryptoVerify.Proofs.check_nonce_correct" 4
 
 echo "=== coverage and exit status are part of the verdict ==="
 

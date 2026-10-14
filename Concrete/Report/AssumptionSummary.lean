@@ -51,10 +51,12 @@ def Kind.tag : Kind → String
   | .trustedBoundary => "trusted-boundary"
 
 /-- Exactly one Concrete declaration: package scope, module path, declared name. The package is
-    the package's canonical identity (`PackageIdentity.digest` — from its manifest, or the
-    canonical synthetic identity over its module inventory and content when it has none). Only
-    when NO identity can be formed is it `unidentified:<name>`, and then every report marks the
-    attribution ambiguous (`AssumptionId.ambiguous`). Module names do not scope a declaration — two packages may each define
+    the package's `PackageScopeIdentity.digest` (R-0482 — from its manifest's name and origin, or
+    the `standalone` scope over its own paired inventory when it has none). Only when NO identity
+    can be formed is it `unidentified:<name>`, and then every report marks the attribution
+    ambiguous (`AssumptionId.ambiguous`). Since R-0482 a project load REFUSES an unidentifiable
+    dependency and two same-named undeclared packages (D1), so the marker survives only on a
+    standalone compilation whose inventory could not be identified. Module names do not scope a declaration — two packages may each define
     a module `util` binding `putchar`. -/
 structure AssumptionId where
   kind : Kind

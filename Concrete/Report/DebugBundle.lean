@@ -274,12 +274,13 @@ partial def capturePipeline (inputPath source : String)
   let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
   let registry := Report.synthesizeSourceLinks resolved.modules validCore.coreModules
   -- STANDALONE PATH: a debug bundle is produced for a single input with no manifest in scope, so the
-  -- identity is synthetic over the module inventory. `extractProofCore?` carries the refusal, and a
+  -- identity comes from the ONE manifestless producer (D6) over the complete paired source map —
+  -- never derived here from module names. `extractProofCore?` carries the refusal, and a
   -- refusal leaves `proofCore := none` — which `BundleState` already models and the renderer already
   -- handles. Fabricating an "unidentified" identity to keep the field populated would be the
   -- name-only fallback the identity migration exists to remove, and it would scope every definition
   -- in the bundle by a value shared with every other unidentified compilation.
-  let pkgId := Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name))
+  let pkgId := Proof.ResolvedIdentity.standalone inputPath srcMap
   let pc? := (extractProofCore? validCore pkgId (standaloneAssumptions validCore.coreModules pkgId)
                simpleLocMap registry).toOption
 

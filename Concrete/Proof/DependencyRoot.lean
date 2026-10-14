@@ -214,7 +214,9 @@ def dependencyRootMaterial (nodes : List DepNode) (id : DefinitionIdentity)
       let tr := tgt.canonical
       parts := parts ++
         [s!"E{k.canonical.length}:{k.canonical}:{tr.length}:{tr}:{tgtDigest.length}:{tgtDigest}"]
-  return { preimage := "depRootPreimageV2:" ++ s!"o{ownDigest.length}:{ownDigest}"
+  -- V3 (R-0482): every node renders `defIdV2`, scoped by its owner's scope rather than the
+  -- over-bound package digest, so a root now moves with what the claim reaches and nothing else.
+  return { preimage := "depRootPreimageV3:" ++ s!"o{ownDigest.length}:{ownDigest}"
                         ++ s!"n{closure.length}" ++ String.join parts
          , carriesTrust := trust }
 

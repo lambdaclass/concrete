@@ -39,14 +39,15 @@ open Lean
 
 /-- The environment identities issuance cannot derive for itself.
 
-    These come from the project, not from the replay: the workspace identity is over the package's
-    declared name and module set, and the import closure is over module digests. The replay knows
+    These come from the project, not from the replay: the import closure is over module digests.
+    The scope and resolution context are NOT supplied (R-0482): both come from the ProofCore itself —
+    the claim subject's own `DefinitionIdentity.scope` and `pc.identity.context` — so a caller cannot
+    bind a receipt to another package's scope. The replay knows
     which Lake workspace it ran in and which modules it imported by NAME, which is not the same
     thing — so they are supplied, and the toolchain half is NOT, because that one the replay does
     know and a caller must not be able to disagree with it. -/
 structure IssueEnvironment where
   compilerVersion : String
-  workspaceId     : String
   importsId       : String
   deriving Repr
 
@@ -254,7 +255,7 @@ def issueFor (pc : ProofCore) (res : ReplayResult) (env : IssueEnvironment)
     throw (.materialRefused subject)
   let some material := ReceiptMaterial.of? (some subjDigest) (edgeEvidenceOfRow row)
       rootMat.preimage rootMat.carriesTrust boundaries
-      env.compilerVersion env.workspaceId env.importsId
+      env.compilerVersion sid.scope pc.identity.context.digest env.importsId
     | throw (.materialRefused subject)
   return ProofEvidenceReceipt.mint sr material
 
@@ -299,7 +300,7 @@ def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option Ch
   let some checker := checker | throw (.checkerUnidentified subject)
   let ev := edgeEvidenceOfRow row
   let some material := ReceiptMaterial.of? (some subjDigest) ev rootMat.preimage
-      rootMat.carriesTrust boundaries env.compilerVersion env.workspaceId env.importsId
+      rootMat.carriesTrust boundaries env.compilerVersion sid.scope pc.identity.context.digest env.importsId
     | throw (.materialRefused subject)
   return { subjectDigest := material.subjectDigest
          , edge := material.edge
@@ -311,7 +312,8 @@ def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option Ch
          , carriesTrust := material.carriesTrust
          , trustedBoundaries := material.trustedBoundaries
          , toolchainId := toolchainIdOf material.compilerVersion checker.canonical
-         , workspaceId := material.workspaceId
+         , scopeId := material.scopeId
+         , contextId := material.contextId
          , importsId := material.importsId }
 
 /-- What a stored receipt is worth for one claim, against material computed fresh.
@@ -326,7 +328,7 @@ def storedDispositionFor (pc : ProofCore) (env : IssueEnvironment) (checker : Op
   let fresh ← freshFactsFor pc env checker trustedDepsOf e
   return if st.facts.isCurrentAgainst fresh.subjectDigest fresh.edge fresh.tableBindings
               fresh.dependencyRoot fresh.theoremArtifact fresh.carriesTrust fresh.trustedBoundaries
-              fresh.toolchainId fresh.workspaceId fresh.importsId
+              fresh.toolchainId fresh.scopeId fresh.contextId fresh.importsId
          then .current else .notCurrent
 
 /-- Which bound fields of a stored receipt differ from material computed fresh, by name. Reporting

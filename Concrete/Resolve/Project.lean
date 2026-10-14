@@ -295,11 +295,12 @@ structure ProjectContext where
   tomlContent   : String
   mainPath      : String                  -- entry point (src/main.con)
   depNames      : List String
-  /-- The scoped package identity, computed ONCE here and threaded, not re-derived per consumer.
-      `Except` rather than a defaulted value: a project with no declared name gets a typed refusal
-      and therefore no scoped evidence, because a default would make every unnamed project the same
-      package. -/
-  packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity
+  /-- The resolved identity (R-0482), computed ONCE here and threaded, not re-derived per consumer:
+      the project's scope, its own artifact, its resolution context, and every top-level module's
+      owning scope. `Except` rather than a defaulted value: a project with no declared name gets a
+      typed refusal and therefore no scoped evidence, because a default would make every unnamed
+      project the same package. -/
+  identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity
   policy        : Concrete.ProjectPolicy  -- the [policy] release profile, parsed once
   policyWarnings : List String            -- structural warnings from parsing [policy]
   -- proof/diagnostic facts derived once (Phase 4 #1): the source-location map, the
@@ -309,9 +310,8 @@ structure ProjectContext where
   registry      : Concrete.ProofRegistry
   pc            : Concrete.ProofCore
   /-- Which package each source file belongs to: (file, package key, package name). The key is
-      the package's `PackageIdentity.digest`, formed by the same `packageIdentityOf` the root uses
-      from the package's OWN manifest, or — with no usable manifest — the canonical synthetic
-      (manifestless) identity over its module inventory and source content. Never `""`, and
+      the package's `PackageScopeIdentity.digest` (R-0482) — from its OWN manifest, or the
+      `standalone` scope over its own paired inventory when it has none. Never `""`, and
       never a bare name label, which two manifestless packages could share. Module
       names cannot scope a declaration: two packages may each define a module `util` (R-0484 R10
       assumption identity). -/
@@ -350,8 +350,24 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       IO.eprintln "warning: builtin std not found\nhint: set CONCRETE_STD=/path/to/std or add std = { path = \"...\" } to [dependencies]"
       pure userDeps
 
+  -- One binding per name. A duplicate used to be appended silently, so which path a name meant
+  -- depended on list order (R-0482).
+  let depBindings := deps.map (·.1)
+  if let some dupName := depBindings.find? (fun n => (depBindings.filter (· == n)).length > 1) then
+    IO.eprintln s!"error: {(Proof.IdentityRefusal.duplicateBinding dupName).explain}\nhint: each [dependencies] name must be bound once"
+    return Except.error 1
+  -- The bundled std, canonically: only the std the resolver found beside the compiler receives the
+  -- reserved toolchain scope (D4). A user package or dependency NAMED `std` does not.
+  let bundledStd? ← do
+    match ← findBuiltinStd with
+    | some p => try pure (some (← IO.FS.realPath ⟨p⟩).toString) catch _ => pure (some p)
+    | none => pure none
+  let isBundledStd : String → IO Bool := fun path => do
+    let canon ← try pure (← IO.FS.realPath ⟨path⟩).toString catch _ => pure path
+    pure (bundledStd? == some canon)
   -- Load all dependencies
   let mut depModules : List Module := []
+  let mut depIdentities : List (String × Proof.PackageScopeIdentity × Proof.PackageArtifactIdentity) := []
   let mut depSrcMap : SourceMap := []
   let mut filePackages : List (String × String × String) := []
   let mut moduleOwners : List (String × String × String) := []  -- (module, package, file)
@@ -366,20 +382,30 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
       let depToml ← try pure (some (← readFile (resolvedPath ++ "/Concrete.toml"))) catch _ => pure none
-      -- No manifest, or one that refuses an identity: the CANONICAL manifestless identity, the
-      -- synthetic one standalone builds use, digested from the package's module inventory and
-      -- source CONTENT. A name label (`unscoped:<name>`) would let two manifestless dependencies
+      -- R-0482: the dependency's OWN artifact (its paired inventory, never its dependencies) and its
+      -- scope — the bundled std's reserved toolchain scope, its manifest's name and origin, or the
+      -- `standalone` scope over its own artifact when it has no manifest. An unidentifiable
+      -- dependency REFUSES the load: the old `unidentified:<name>` key let two such dependencies
       -- that share a name merge into one package.
-      let synthetic := match Proof.PackageIdentity.syntheticForModules (modules.map (·.name)) (srcMap.map (·.2)) with
-        | .ok pid => pid.digest
-        | .error _ => s!"unidentified:{depName}"
-      let key := match depToml with
-        | none => synthetic
-        | some t =>
-          match Proof.packageIdentityOf t (modules.map (·.name)) [] (srcMap.map (·.2)) with
-          | .ok pid => pid.digest
-          | .error _ => synthetic
-      filePackages := filePackages ++ srcMap.map fun (f, _) => (f, key, depName)
+      let bundled ← isBundledStd resolvedPath
+      let ident : Except Proof.IdentityRefusal (Proof.PackageScopeIdentity × Proof.PackageArtifactIdentity) := do
+        let paired ← Proof.pairSources (resolvedPath ++ "/src/lib.con") srcMap
+        let art ← Proof.PackageArtifactIdentity.of? paired
+        let scope ← if bundled && depName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+          else match depToml with
+            | none => pure (Proof.PackageScopeIdentity.standalone art)
+            | some t =>
+              match Proof.packageField t "name" with
+              | none => throw (.emptyComponent s!"[package] name of dependency '{depName}'")
+              | some n => Proof.PackageScopeIdentity.ofManifest n (Proof.packageFieldRaw t "origin")
+        pure (scope, art)
+      match ident with
+      | .error w =>
+        IO.eprintln s!"error: dependency '{depName}' has no identity: {w.explain}"
+        return Except.error 1
+      | .ok (scope, art) =>
+      depIdentities := depIdentities ++ [(depName, scope, art)]
+      filePackages := filePackages ++ srcMap.map fun (f, _) => (f, scope.digest, depName)
       moduleOwners := moduleOwners ++ modules.map fun m => (m.name, depName, m.sourceFile)
   let tDepsLoaded ← IO.monoMsNow
 
@@ -487,18 +513,34 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     let policyLocMap := Report.buildFnLocMap merged.modules mainPath
     let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
     let registry ← loadRegistryWithLinks mainPath merged.modules validCore.coreModules
-    -- THE PROJECT PATH has manifest material, so the identity is derived from it rather than
-    -- synthesized. Computed HERE, above `pc`, because `extractProofCore` requires it — it was
-    -- previously computed at the return statement, which is below this binding.
-    let packageIdentity := Proof.packageIdentityOf tomlContent (merged.modules.map (·.name)) depNames
-                             (allSrcMap.map (·.2))
-    let rootKey := match packageIdentity with
-      | .ok pid => pid.digest
-      | .error _ =>
-        match Proof.PackageIdentity.syntheticForModules (resolvedParsed.modules.map (·.name))
-            ([source] ++ subSrcMap.map (·.2)) with
-        | .ok pid => pid.digest
-        | .error _ => s!"unidentified:{selfName}"
+    -- THE PROJECT'S RESOLVED IDENTITY (R-0482), computed HERE, above `pc`, because
+    -- `extractProofCore` requires it. Three identities, not one over-bound digest:
+    --   scope     — the manifest's name and origin (never version, dependencies or content);
+    --   artifact  — the project's OWN paired modules (never dependencies or std);
+    --   context   — each resolved dependency's (binding, scope, artifact), std included.
+    -- The old single digest hashed every source in the build, std included, so an unused std edit
+    -- renamed every manifestful package's generated symbols.
+    let rootBundled ← isBundledStd projectRoot
+    let identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity := do
+      let paired ← Proof.pairSources mainPath ([(mainPath, source)] ++ subSrcMap)
+      let art ← Proof.PackageArtifactIdentity.of? paired
+      let scope ← if rootBundled && selfName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+        else Proof.PackageScopeIdentity.ofManifest selfName (Proof.packageFieldRaw tomlContent "origin")
+      -- D1 at the resolver: two distinct `undeclared` scopes of one name in one resolved graph.
+      Proof.refuseAmbiguousUndeclared ((scope, art) :: depIdentities.map (·.2))
+      let ctx ← Proof.ResolutionContextIdentity.of? depIdentities
+      let owners := moduleOwners.filterMap fun (m, depName, _) =>
+        (depIdentities.find? (·.1 == depName)).map fun (_, sc, _) => (m, sc)
+      pure { scope, artifact := art, context := ctx, owners }
+    -- A refusal other than the root's missing name (D1, inventory, binding) refuses the load here;
+    -- a missing name keeps its established path below (no ProofCore, with the manifest hint).
+    if let .error w := identity then
+      if w != .emptyComponent "name" then
+        IO.eprintln s!"error: {w.explain}"
+        return Except.error 1
+    let rootKey := match identity with
+      | .ok r => r.scope.digest
+      | .error _ => s!"unidentified:{selfName}"
     let rootFiles := [mainPath] ++ subSrcMap.map (·.1)
     let allFilePackages := filePackages ++ rootFiles.map fun f => (f, rootKey, selfName)
     -- Proof ADMISSION reads the same summary the authority reports do (R-0484 R10).
@@ -506,7 +548,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       (validCore.coreModules.filter fun m => !depNames.contains m.name)
       (validCore.coreModules.filter fun m => depNames.contains m.name)
       (Assumptions.packageOfFiles allFilePackages) (rootKey, selfName)
-    let pcE := extractProofCore? validCore packageIdentity assumptions simpleLocMap registry
+    let pcE := extractProofCore? validCore identity assumptions simpleLocMap registry
     -- A project whose manifest declares no name yields no scoped identity and therefore no
     -- ProofCore. Refusing the LOAD is correct: every downstream consumer of this context treats
     -- `pc` as authoritative, so a ProofCore built without scope would let unscoped definitions
@@ -555,7 +597,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
           message := Concrete.renderRegistryIssue issue }
       ledger := ledger.recordDiagnostic d
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
-                       mainPath, depNames, packageIdentity, policy, policyWarnings, policyLocMap,
+                       mainPath, depNames, identity, policy, policyWarnings, policyLocMap,
                        registry, pc, ledger, filePackages := allFilePackages }
 
 end Concrete

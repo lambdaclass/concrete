@@ -2293,7 +2293,7 @@ def attestationJoinReport (pc : Concrete.ProofCore) : String :=
           -- answered — and it searched one population, so an excluded callee that HAS an identity
           -- was reported as having none.
           let calleeName := d.localName
-          let idFields := s!"{d.digest}\t{d.packageIdentity}\t{d.moduleIdentity}\t{d.declarationIdentity}\t{d.implementationIdentity}"
+          let idFields := s!"{d.digest}\t{d.scope}\t{d.moduleIdentity}\t{d.declarationIdentity}\t{d.implementationIdentity}"
           match Proof.entryEvidenceWithProvenance tbl with
           | .error w =>
               some (hdr ++ s!"\tattested\tmodel=unresolved:{w.explain}\t{idFields}\n")
@@ -2319,12 +2319,12 @@ def attestationJoinReport (pc : Concrete.ProofCore) : String :=
     let thmStr := if thm.isEmpty then "-" else thm
     match e.definitionIdentity with
     | .ok d =>
-      s!"subject\t{d.digest}\t{d.packageIdentity}\t{d.moduleIdentity}\t{d.declarationIdentity}" ++
+      s!"subject\t{d.digest}\t{d.scope}\t{d.moduleIdentity}\t{d.declarationIdentity}" ++
       s!"\t{d.implementationIdentity}\t{thmStr}\t{tableStr}\n"
     | .error w =>
       s!"subject\tNO-IDENTITY\t-\t{e.callableId.defModule}\t{e.callableId.declName}\t-" ++
       s!"\t{thmStr}\t{tableStr}\t{w.explain}\n")
-  "# role<TAB>identity<TAB>package<TAB>module<TAB>decl<TAB>implementation<TAB>theorem<TAB>tables\n"
+  "# role<TAB>identity<TAB>scope<TAB>module<TAB>decl<TAB>implementation<TAB>theorem<TAB>tables\n"
     ++ "# role is `subject` (proof-linked declaration) or `dependency` (requested body-edge callee).\n"
     ++ "# A dependency row states WHICH implementation an edge points at. It is not proof linkage.\n"
     ++ String.join rows
@@ -2363,7 +2363,7 @@ def generatedImplementationsReport (pc : Concrete.ProofCore) : String :=
 " ++
     s!"def {sym} : Except DefinitionIdentityRefusal DefinitionIdentity :=
 " ++
-    s!"  DefinitionIdentity.of? \"{d.packageIdentity}\" \"{d.moduleIdentity}\" " ++
+    s!"  DefinitionIdentity.of? \"{d.scope}\" \"{d.moduleIdentity}\" " ++
     s!"\"{d.declarationIdentity}\" \"{d.implementationIdentity}\"
 ")
   let unscoped := pc.entries.length - named.length

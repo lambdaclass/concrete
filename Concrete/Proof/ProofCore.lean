@@ -1996,8 +1996,11 @@ structure ProofCore where
       REQUIRED, not defaulted. Every definition identity minted at this boundary is scoped by it, and
       a default would make definitions from unrelated packages compare equal — the collision the
       whole identity migration exists to close. A context that genuinely cannot supply one uses
-      `extractProofCore?` and takes a typed refusal instead of a value. -/
-  packageIdentity : Proof.PackageIdentity
+      `extractProofCore?` and takes a typed refusal instead of a value.
+
+      R-0482: the RESOLVED identity — subject scope, artifact, context and each top-level module's
+      owning scope. Each definition is scoped by its OWNER (`scopeOf`), never by the root package. -/
+  identity : Proof.ResolvedIdentity
   /-- Eligible functions with extraction results. -/
   entries     : List ProofCoreEntry
   /-- Excluded functions with reasons. -/
@@ -2777,7 +2780,7 @@ private def assessEligibility
 /-- Walk a module tree collecting eligibility + extraction for each function.
     This produces one ProofCoreEntry or ProofCoreExcluded per function. -/
 private partial def extractModule
-    (packageIdentity : Proof.PackageIdentity)
+    (identity : Proof.ResolvedIdentity)
     (externNames : List String)
     (recMap : List (String × RecursionKind × List String))
     (admission : String → List AdmissionRefusal)
@@ -2830,7 +2833,12 @@ private partial def extractModule
           else match Proof.validate d with
             | .error _ => .error (.legacyNameOnly cid.render)
             | .ok complete =>
-              Proof.DefinitionIdentity.of? packageIdentity.digest cid.defModule cid.declName
+              -- THE OWNER'S SCOPE, by the definition's top-level module. Scoping every definition
+              -- under the root package (the pre-R-0482 rule) labelled a dependency's functions as
+              -- the root's, so the same dependency definition had a different identity in every
+              -- project that used it.
+              let top := (cid.defModule.splitOn ".").head!
+              Proof.DefinitionIdentity.of? (identity.scopeOf top).digest cid.defModule cid.declName
                 (implementationDigest fx complete)
         | _, _ => .error (.legacyNameOnly cid.render)
     if elig.isTrusted then
@@ -2877,7 +2885,7 @@ private partial def extractModule
   ) ([], [])
   -- Recurse into submodules
   let (subEntries, subExcluded) := m.submodules.foldl (fun (accE, accX) sub =>
-    let (e, x) := extractModule packageIdentity externNames recMap admission locMap registry sub qualPrefix
+    let (e, x) := extractModule identity externNames recMap admission locMap registry sub qualPrefix
     (accE ++ e, accX ++ x)) ([], [])
   (entries ++ subEntries, excluded ++ subExcluded)
 
@@ -3364,14 +3372,16 @@ def applyCorrespondenceAuthority (pc : ProofCore) (graph : CallGraph) : ProofCor
     Calls into anything outside `modules` are unresolved edges in this table, so they refuse
     admission rather than reading as effect-free. -/
 def standaloneAssumptions (modules : List CModule)
-    (packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity) : Assumptions.Table :=
-  Assumptions.forProgram modules [] (fun _ => none) <| match packageIdentity with
-    | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
+    (identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity) : Assumptions.Table :=
+  Assumptions.forProgram modules [] (fun _ => none) <| match identity with
+    | .ok r => (r.scope.digest, "program")
+    -- No identity means no ProofCore either (`extractProofCore?` refuses on the same value); this
+    -- label only keeps the authority report renderable, and is never an evidence key.
     | .error _ => ("unidentified:program", "program")
 
 /-- Extract the proof-oriented fragment from validated Core.
     This is the primary entry point for the proof pipeline. -/
-def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdentity)
+def extractProofCore (vc : ValidatedCore) (identity : Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
@@ -3388,7 +3398,7 @@ def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdenti
   let externNames := modules.foldl (fun acc m => acc ++ collectExternNames m) []
   -- Extract entries and excluded (with spec attachment)
   let (entries, excluded) := modules.foldl (fun (accE, accX) m =>
-    let (e, x) := extractModule packageIdentity externNames recMap admission locMap registry m
+    let (e, x) := extractModule identity externNames recMap admission locMap registry m
     (accE ++ e, accX ++ x)) ([], [])
   -- Generate proof obligations and diagnostics
   let obligations := generateObligations entries excluded graph
@@ -3397,7 +3407,7 @@ def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdenti
   let regIssues := validateRegistry
     { entries, excluded, structs := [], enums := [], traitDefs := []
     , callGraph := graph, recMap, externNames, obligations := [], diagnostics := []
-    , packageIdentity }
+    , identity }
     registry
   let regDiags := registryIssuesToDiagnostics regIssues locMap
   let diagnostics := oblDiags ++ regDiags
@@ -3410,7 +3420,7 @@ def extractProofCore (vc : ValidatedCore) (packageIdentity : Proof.PackageIdenti
   -- put the authority in one surface and leave the others reporting the unchecked verdict.
   applyCorrespondenceAuthority
     { entries, excluded, structs := sts, enums := ens, traitDefs := tds
-    , callGraph := graph, recMap, externNames, obligations, diagnostics, packageIdentity }
+    , callGraph := graph, recMap, externNames, obligations, diagnostics, identity }
     graph
 
 -- ============================================================
@@ -3433,7 +3443,7 @@ def ProofCore.summary (pc : ProofCore) : String :=
 inductive ProofIdentityRefusal where
   /-- No package identity could be formed for this compilation, so no definition in it can be
       scoped. Carries the underlying reason rather than restating it. -/
-  | noPackageIdentity (why : Proof.PackageIdentityRefusal)
+  | noPackageIdentity (why : Proof.IdentityRefusal)
 deriving Repr, BEq
 
 def ProofIdentityRefusal.explain : ProofIdentityRefusal → String
@@ -3446,14 +3456,23 @@ def ProofIdentityRefusal.explain : ProofIdentityRefusal → String
     should not be able to accidentally proceed without one, and a caller that lacks one should have
     to say so. -/
 def extractProofCore? (vc : ValidatedCore)
-    (packageIdentity : Except Proof.PackageIdentityRefusal Proof.PackageIdentity)
+    (identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
     : Except ProofIdentityRefusal ProofCore :=
-  match packageIdentity with
+  match identity with
   | .error w => .error (.noPackageIdentity w)
-  | .ok pkg  => .ok (extractProofCore vc pkg assumptions locMap registry)
+  | .ok r    => .ok (extractProofCore vc r assumptions locMap registry)
+
+/-- How many definitions each scope owns in this ProofCore, sorted by scope digest. The observable
+    form of owner-scoped extraction (R-0482): a project's ProofCore holds its dependencies' and std's
+    definitions too, and each must carry its OWNER's scope, never the root's. -/
+def ProofCore.definitionsByScope (pc : ProofCore) : List (String × Nat) :=
+  let scopes := (pc.entries.map (·.definitionIdentity) ++ pc.excluded.map (·.definitionIdentity)).filterMap
+    fun d => match d with | .ok i => some i.scope | .error _ => none
+  let distinct := scopes.foldl (fun acc s => if acc.contains s then acc else acc ++ [s]) []
+  (distinct.map fun s => (s, (scopes.filter (· == s)).length)).mergeSort fun a b => a.1 ≤ b.1
 
 /-- Get all eligibility entries (both eligible and excluded). -/
 def ProofCore.allEligibility (pc : ProofCore) : List EligibilityEntry :=

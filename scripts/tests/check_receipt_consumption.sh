@@ -94,7 +94,7 @@ write(T + "/partial.txt", list(partial.items()))
 smuggled = dict(d); smuggled["main.check_data"] = d["main.check_data"] + "\nblessed true"
 write(T + "/smuggled.txt", list(smuggled.items()))
 # a record written under another envelope version
-older = dict(d); older["main.check_data"] = d["main.check_data"].replace("schema receiptV2", "schema receiptV1")
+older = dict(d); older["main.check_data"] = d["main.check_data"].replace("schema receiptV3", "schema receiptV2")
 write(T + "/older.txt", list(older.items()))
 PY
 

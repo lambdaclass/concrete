@@ -9,10 +9,11 @@
 # Three controls run in a scratch copy, so the working tree is never touched:
 #   A. swapping two consumers' models keeps every frozen COUNT and must still move the rows — the
 #      reason rows exist;
-#   B. an unused std edit (with the consumer renames today's scheme forces) must move NO row — the
-#      rows exclude the over-bound package bytes, so a std edit cannot train people to regenerate;
-#   C. the same std edit without those renames must be REFUSED — a consumer selecting a stale symbol
-#      is never silently absorbed.
+#   B′. an unused std edit must rename NO generated symbol, move no scope and move no row (R-0482:
+#      before the separation it renamed 42 symbols in 7 packages);
+#   C′/G. declaring an origin in one manifestful fixture must move exactly that scope (sensitivity);
+#      consumers left on the old symbols must be REFUSED — a stale selection is never absorbed — and
+#      the renames paired by source fixture must return the rows to the freeze.
 #
 # The RAW baseline (`docs/verification/identity-raw-baseline-pre-r0482.tsv`) keeps the digest bytes
 # the normalized rows drop, tied to its commit; this gate checks the two describe one population, and
@@ -116,47 +117,74 @@ fi
 restore
 
 echo ""
-echo "=== controls B and C: an unused std edit ==="
+echo "=== control B′: an unused std edit renames nothing (R-0482) ==="
 cp "$W/Concrete/Proof/GeneratedAttestations.lean" "$TMP/gen.before"
 (cd "$W" && ATTESTATION_JOIN_ROWS_OUT="$TMP/raw.before" bash scripts/gen/attestation_manifest.sh > /dev/null 2>&1)
 perl -0pi -e 's/if v == 62 \{ return 43; \}/if v == 62 { return 43; } if v == 63 { return 47; }/' "$W/std/src/base64.con"
-(cd "$W" && bash scripts/gen/attestation_refs.sh > /dev/null 2>&1)
-(cd "$W" && ATTESTATION_JOIN_ROWS_OUT="$TMP/raw.after" bash scripts/gen/attestation_manifest.sh > /dev/null 2>&1)
-ids(){ grep -oE '^def [A-Za-z0-9_]+' "$1" | awk '{print $2}' | sort; }
-RENAMED="$(comm -23 <(ids "$TMP/gen.before") <(ids "$W/Concrete/Proof/GeneratedAttestations.lean") | grep -c . || true)"
-if [ "$RENAMED" -eq 0 ]; then
-  no "the std edit renamed no generated symbol — control C would be vacuous (if R-0482 has landed, convert B/C to their post-migration form)"
+if cmp -s "$W/std/src/base64.con" "$ROOT_DIR/std/src/base64.con"; then
+  no "B′: the std edit did not apply — the anchor moved, so the control is vacuous"
 else
-  if (cd "$W" && bash scripts/tools/identity_rows.sh > /dev/null 2>&1); then
-    no "C: consumers still select the pre-edit symbols, yet the row producer accepted them"
+  (cd "$W" && bash scripts/gen/attestation_refs.sh > /dev/null 2>&1)
+  (cd "$W" && ATTESTATION_JOIN_ROWS_OUT="$TMP/raw.after" bash scripts/gen/attestation_manifest.sh > /dev/null 2>&1)
+  ids(){ grep -oE '^def [A-Za-z0-9_]+' "$1" | awk '{print $2}' | sort; }
+  RENAMED="$(comm -23 <(ids "$TMP/gen.before") <(ids "$W/Concrete/Proof/GeneratedAttestations.lean") | grep -c . || true)"
+  [ "$RENAMED" -eq 0 ] && ok "B′: the std edit renamed no generated symbol (pre-R-0482 it renamed 42 in 7 packages)" \
+    || no "B′: the std edit renamed $RENAMED generated symbols — std content has leaked back into scope"
+  scopes(){ awk -F'\t' '$1=="subject" && $3!="-" {print $NF "\t" $3}' "$1" | sort -u; }
+  if [ -s "$TMP/raw.before" ] && cmp -s <(scopes "$TMP/raw.before") <(scopes "$TMP/raw.after"); then
+    ok "B′: no scope moved ($(scopes "$TMP/raw.before" | wc -l | tr -d ' ') scopes compared)"
   else
-    ok "C: with consumers left on stale symbols the row producer refuses (it never absorbs them)"
+    no "B′: a std edit moved a scope digest"
   fi
-  # The renames today's scheme forces: old 8-hex package prefix -> new, per symbol, by matching the
-  # symbol with its prefix removed. Pairing is by the symbol's other parts, which the edit does not move.
-  # The renames today's scheme forces, paired BY SOURCE FIXTURE from the compiler's own rows (the
-  # pairing the recorded migrations used). Pairing by symbol shape is ambiguous: `cryptoFns_@_check_nonce`
-  # exists in two packages, and one of them has no other symbol to disambiguate it by.
-  pkgs(){ awk -F'\t' '$1=="subject" && $3!="-" {print $NF "\t" substr($3, 1, 8)}' "$1" | sort -u; }
-  join -t$'\t' <(pkgs "$TMP/raw.before") <(pkgs "$TMP/raw.after") \
-    | awk -F'\t' '$2 != $3 {print "_" $2 "_\t_" $3 "_"}' | sort -u > "$TMP/prefixes.tsv"
-  if [ "$(cut -f1 "$TMP/prefixes.tsv" | uniq -d | grep -c . || true)" -gt 0 ]; then
-    no "B: an old package prefix maps to two new ones — the rename map is ambiguous"
-  fi
-  while IFS=$'\t' read -r op np; do
-    grep -rl -- "$op" "$W/Concrete/Proof/Proof.lean" "$W/proofs" 2>/dev/null | xargs perl -pi -e "s/$op/$np/g"
-  done < "$TMP/prefixes.tsv"
-  if (cd "$W" && bash scripts/tools/identity_rows.sh > "$TMP/b.tsv" 2> "$TMP/b.err"); then
-    MOVED_B="$(diff "$FROZEN" "$TMP/b.tsv" | grep -c '^[<>]' || true)"
-    if [ "$MOVED_B" -eq 0 ]; then
-      ok "B: the std edit renamed $RENAMED symbols across $(wc -l < "$TMP/prefixes.tsv" | tr -d ' ') packages and moved NO row"
-    else
-      no "B: an unused std edit moved $MOVED_B row lines — over-bound bytes have leaked into the rows"
-    fi
+  if (cd "$W" && bash scripts/tools/identity_rows.sh > "$TMP/b.tsv" 2> "$TMP/b.err") && cmp -s "$FROZEN" "$TMP/b.tsv"; then
+    ok "B′: with no consumer edit at all, the rows still match the freeze"
   else
-    no "B: after the forced renames the row producer still refused: $(tail -2 "$TMP/b.err" | tr '\n' ' ')"
+    no "B′: the rows moved or refused after an unused std edit: $(tail -2 "$TMP/b.err" | tr '\n' ' ')"
   fi
 fi
+restore
+cp "$ROOT_DIR/std/src/base64.con" "$W/std/src/base64.con"
+
+echo ""
+echo "=== control C′/G: a declared origin moves its scope; stale consumers are refused ==="
+# The rename C used to force with a std edit is now forced only by what scope binds: the manifest's
+# name and origin. Declaring an origin in `crypto_verify` must rename exactly that package's symbols
+# (sensitivity, control G); consumers left on the old symbols must be REFUSED, never absorbed; and the
+# renames paired by source fixture must return the rows to the freeze.
+TOML="$W/examples/crypto_verify/Concrete.toml"
+cp "$TOML" "$TMP/toml.orig"
+cp "$W/Concrete/Proof/GeneratedAttestations.lean" "$TMP/gen.before"
+(cd "$W" && ATTESTATION_JOIN_ROWS_OUT="$TMP/raw.before" bash scripts/gen/attestation_manifest.sh > /dev/null 2>&1)
+perl -0pi -e 's/(\[package\]\nname = "crypto_verify"\n)/$1origin = "example.org\/r0482-control"\n/' "$TOML"
+if cmp -s "$TOML" "$TMP/toml.orig"; then
+  no "C′: could not declare the origin — the manifest anchor moved, so the control is vacuous"
+else
+  (cd "$W" && bash scripts/gen/attestation_refs.sh > /dev/null 2>&1)
+  (cd "$W" && ATTESTATION_JOIN_ROWS_OUT="$TMP/raw.after" bash scripts/gen/attestation_manifest.sh > /dev/null 2>&1)
+  pkgs(){ awk -F'\t' '$1=="subject" && $3!="-" {print $NF "\t" substr($3, 1, 8)}' "$1" | sort -u; }
+  join -t$'\t' <(pkgs "$TMP/raw.before") <(pkgs "$TMP/raw.after") \
+    | awk -F'\t' '$2 != $3 {print $1 "\t_" $2 "_\t_" $3 "_"}' | sort -u > "$TMP/prefixes.tsv"
+  MOVED_SCOPES="$(cut -f1 "$TMP/prefixes.tsv" | sort -u | tr '\n' ' ')"
+  if [ "$MOVED_SCOPES" = "examples/crypto_verify/src/main.con " ]; then
+    ok "G: declaring an origin moved exactly crypto_verify's scope"
+  else
+    no "G: declaring crypto_verify's origin moved the scopes of: ${MOVED_SCOPES:-nothing}"
+  fi
+  if (cd "$W" && bash scripts/tools/identity_rows.sh > /dev/null 2>&1); then
+    no "C′: consumers still select the pre-edit symbols, yet the row producer accepted them"
+  else
+    ok "C′: with consumers left on stale symbols the row producer refuses (it never absorbs them)"
+  fi
+  while IFS=$'\t' read -r _ op np; do
+    grep -rl -- "$op" "$W/Concrete/Proof/Proof.lean" "$W/proofs" 2>/dev/null | xargs perl -pi -e "s/$op/$np/g"
+  done < "$TMP/prefixes.tsv"
+  if (cd "$W" && bash scripts/tools/identity_rows.sh > "$TMP/c.tsv" 2> "$TMP/c.err") && cmp -s "$FROZEN" "$TMP/c.tsv"; then
+    ok "C′: after the renames paired by source fixture, every row matches the freeze"
+  else
+    no "C′: after the renames the rows still differ or refuse: $(tail -2 "$TMP/c.err" | tr '\n' ' ')"
+  fi
+fi
+cp "$TMP/toml.orig" "$TOML"
 restore
 
 echo ""

@@ -108,7 +108,7 @@ def evalPredicate (pred : Predicate) (source : String)
       match pred with
       | .resolveError substr => return diagsMatch ds substr
       | _ => return false
-    | .ok (resolved, _subSrcMap) =>
+    | .ok (resolved, subSrcMap) =>
     let summary := Pipeline.buildSummary resolved
     match Pipeline.resolve resolved summary with
     | .error ds =>
@@ -137,14 +137,14 @@ def evalPredicate (pred : Predicate) (source : String)
     -- consistency-violation and verify-warning check here
     match pred with
     | .consistencyViolation =>
-      -- STANDALONE PATH: no manifest in scope, so the identity is synthetic over the module
-      -- inventory. A refusal means the compilation has no content to identify, and this predicate
-      -- then answers "not violated" rather than inventing an identity — the fail-closed reading for
-      -- a reducer, which must not report a violation it cannot substantiate.
-      match Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name)) with
+      -- STANDALONE PATH: the identity comes from the ONE manifestless producer (D6) over the
+      -- complete paired inventory this predicate resolved — never derived here from module names.
+      -- A refusal answers "not violated" rather than inventing an identity — the fail-closed reading
+      -- for a reducer, which must not report a violation it cannot substantiate.
+      match Proof.ResolvedIdentity.standalone "./reduce.con" ([("./reduce.con", source)] ++ subSrcMap) with
       | .error _ => pure false
-      | .ok pkg =>
-      let pc := extractProofCore validCore pkg (standaloneAssumptions validCore.coreModules (.ok pkg)) [] []
+      | .ok ident =>
+      let pc := extractProofCore validCore ident (standaloneAssumptions validCore.coreModules (.ok ident)) [] []
       let violations := pc.selfCheck
       return !violations.isEmpty
     | .verifyWarning =>

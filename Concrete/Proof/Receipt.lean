@@ -48,7 +48,8 @@ needs to know WHICH moved:
 | field | binds | a change means |
 |---|---|---|
 | `toolchainId` | the Lean/compiler version the proof was checked under | the checker changed; the proof may not replay |
-| `workspaceId` | the deterministic workspace root | the proof was established somewhere else |
+| `scopeId` | the claim subject's `PackageScopeIdentity` (R-0482) | the claim belongs to another package |
+| `contextId` | the subject package's `ResolutionContextIdentity` (R-0482) | it was resolved against other dependencies; re-validate under policy |
 | `importsId` | the transitive import surface | something the proof could see has changed |
 | `schemaVersion` | this envelope's own format | the receipt cannot be compared field-wise |
 
@@ -129,7 +130,8 @@ structure ProofEvidenceReceipt where
       record malformed rather than unaffected. -/
   compilerVersion : String
   checker : String
-  workspaceId : String
+  scopeId : String
+  contextId : String
   importsId : String
 deriving Repr
 
@@ -161,24 +163,11 @@ def toolchainIdOf (compilerVersion checker : String) : String :=
   shortHash ("toolchainV2:" ++ toString compilerVersion.length ++ ":" ++ compilerVersion
              ++ "|checker:" ++ toString checker.length ++ ":" ++ checker)
 
-/-- The workspace, identified by its PACKAGE identity rather than its path.
-
-    A filesystem path is not a workspace identity: it differs between two checkouts of the same
-    commit, so receipts would disagree across machines while describing identical evidence, and
-    an identical path on a different machine would wrongly agree. Package name plus the module
-    set is reproducible from the source alone.
-
-    Modules are SORTED, so discovery order cannot enter the identity. -/
-def workspaceIdOf (packageName : String) (moduleNames : List String) : String :=
-  let mods := (moduleNames.mergeSort (· ≤ ·)).map (fun m => "m" ++ toString m.length ++ ":" ++ m)
-  shortHash ("workspaceV1:" ++ toString packageName.length ++ ":" ++ packageName
-             ++ "|n" ++ toString moduleNames.length ++ ":" ++ String.join mods)
-
 /-- The import closure a proof could see, as (module, digest) pairs.
 
     Names alone would not move when an imported module's CONTENT changes, which is the same
     defect `tableValueDigest` exists to prevent one level down. Sorted by module name for the
-    reason the workspace's module list is: import order is not part of what a proof depends on,
+    reason sorted lists are everywhere else: import order is not part of what a proof depends on,
     but import CONTENT is. -/
 def importsIdOf (imports : List (String × String)) : String :=
   let ps := (imports.mergeSort (fun a b => a.1 ≤ b.1)).map fun (m, d) =>
@@ -187,7 +176,7 @@ def importsIdOf (imports : List (String × String)) : String :=
 
 /-- The current envelope format. Bumping this makes every stored receipt `needs_recheck`,
     which is the intended behaviour and the reason the field exists. -/
-def receiptSchemaVersion : String := "receiptV2"
+def receiptSchemaVersion : String := "receiptV3"
 
 /-- Receipt material that has passed every field and consistency check, and nothing more.
 
@@ -216,7 +205,8 @@ structure ReceiptMaterial where
       it comes from the environment the kernel actually ran in, via the minting token, so a receipt
       cannot name a toolchain other than the one that checked it. -/
   compilerVersion   : String
-  workspaceId       : String
+  scopeId       : String
+  contextId       : String
   importsId         : String
   deriving Repr
 
@@ -235,7 +225,7 @@ def ReceiptMaterial.of?
     (subjectDigest? : Option String) (ev : EdgeEvidence)
     (dependencyRoot : String)
     (carriesTrust : Bool) (trustedBoundaries : List String)
-    (compilerVersion workspaceId importsId : String) : Option ReceiptMaterial := do
+    (compilerVersion scopeId contextId importsId : String) : Option ReceiptMaterial := do
   let subj ← subjectDigest?
   -- An EMPTY subject is not a subject. `none` was refused and `some ""` was not, which is the
   -- same hole as an empty environment identity: "" is a value that compares equal to another
@@ -261,7 +251,7 @@ def ReceiptMaterial.of?
   -- A duplicate binding for one table means the evidence disagrees with itself about that
   -- table's digest, and picking one would make the receipt depend on list order.
   else if (ev.tableDigests.map (toString ·.1)).eraseDups.length != ev.tableDigests.length then none
-  else if compilerVersion.isEmpty || workspaceId.isEmpty || importsId.isEmpty then none
+  else if compilerVersion.isEmpty || scopeId.isEmpty || contextId.isEmpty || importsId.isEmpty then none
   -- THE ROOT IS REQUIRED, on the same reasoning as the environment identities: an empty string is
   -- not "unknown", it is a value that compares equal to another empty string, so two claims
   -- established over different closures would agree.
@@ -289,7 +279,7 @@ def ReceiptMaterial.of?
          , tableBindings := bindings
          , dependencyRoot, carriesTrust
          , trustedBoundaries := trustedBoundaries.mergeSort (· ≤ ·)
-         , compilerVersion, workspaceId, importsId }
+         , compilerVersion, scopeId, contextId, importsId }
 
 /-- Mint a receipt. The ONLY producer of `ProofEvidenceReceipt`.
 
@@ -319,7 +309,8 @@ def ProofEvidenceReceipt.mint
   , toolchainId := toolchainIdOf m.compilerVersion sr.checker.canonical
   , compilerVersion := m.compilerVersion
   , checker := sr.checker.canonical
-  , workspaceId := m.workspaceId
+  , scopeId := m.scopeId
+  , contextId := m.contextId
   , importsId := m.importsId }
 
 /-! ## Storage: a receipt that has left the process is no longer evidence
@@ -356,7 +347,8 @@ def ProofEvidenceReceipt.encode (r : ProofEvidenceReceipt) : String :=
     ++ [ s!"toolchain {r.toolchainId}"
        , s!"compiler {r.compilerVersion}"
        , s!"checker {r.checker}"
-       , s!"workspace {r.workspaceId}"
+       , s!"scope {r.scopeId}"
+       , s!"context {r.contextId}"
        , s!"imports {r.importsId}" ])
 
 /-- Why a stored receipt could not be decoded.
@@ -438,7 +430,8 @@ structure StoredReceipt where
   toolchainId       : String
   compilerVersion   : String
   checker           : String
-  workspaceId       : String
+  scopeId       : String
+  contextId       : String
   importsId         : String
   deriving Repr
 
@@ -448,6 +441,10 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
   let mut single : List (String × String) := []
   let mut tables : List (Name × String) := []
   let mut boundaries : List String := []
+  -- AN UNKNOWN KEY IS HELD, NOT THROWN, until the schema is read. An older envelope legitimately
+  -- carries keys this one does not (receiptV2's `workspace`), and refusing it as `unknown_key` would
+  -- report a format change as smuggled state — the very confusion reading the schema first prevents.
+  let mut unknown : Option String := none
   for line in lines do
     let parts := line.trimAscii.toString.splitOn " "
     match parts with
@@ -461,16 +458,17 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
         if val.isEmpty then throw (.malformedField "boundary" val)
         boundaries := boundaries ++ [val]
       else if ["schema", "subject", "edge", "root", "artifact", "trust",
-               "toolchain", "compiler", "checker", "workspace", "imports"].contains key then
+               "toolchain", "compiler", "checker", "scope", "context", "imports"].contains key then
         if single.any (·.1 == key) then throw (.duplicateField key)
         single := single ++ [(key, val)]
-      else throw (.unknownKey key)
+      else if unknown.isNone then unknown := some key
     | [] => pure ()
   let field := fun (n : String) => (single.find? (·.1 == n)).map (·.2)
   let some schema := field "schema" | throw (.missingField "schema")
   -- SCHEMA FIRST, before any content is read. An older envelope is not comparable at all, and
   -- reporting a field mismatch for it would claim the program moved when the format did.
   if schema != receiptSchemaVersion then throw (.schemaUnreadable schema)
+  if let some k := unknown then throw (.unknownKey k)
   let req := fun (n : String) =>
     match field n with
     | none => Except.error (ReceiptDecodeRefusal.missingField n)
@@ -492,7 +490,8 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
   -- `toolchain`. If they could disagree, a record could be current under one checker while policy
   -- judged another, so a record whose readable identity does not re-hash to its binding is refused.
   if toolchainIdOf compiler checker != toolchain then throw (.identityNotBound toolchain)
-  let workspace ← req "workspace"
+  let scope ← req "scope"
+  let context ← req "context"
   let imports ← req "imports"
   -- THE SAME CONSISTENCY THE MINT REQUIRES. A stored receipt claiming trust while naming no
   -- boundary is a qualification a reader cannot act on, and one naming boundaries with the flag
@@ -503,7 +502,7 @@ def StoredReceipt.decode (s : String) : Except ReceiptDecodeRefusal StoredReceip
          , tableBindings := tables, dependencyRoot := root, theoremArtifact := artifact
          , carriesTrust, trustedBoundaries := boundaries
          , toolchainId := toolchain, compilerVersion := compiler, checker
-         , workspaceId := workspace, importsId := imports }
+         , scopeId := scope, contextId := context, importsId := imports }
 
 /-- The fields a currency comparison reads, from either kind of receipt.
 
@@ -520,7 +519,8 @@ structure ReceiptFacts where
   carriesTrust      : Bool
   trustedBoundaries : List String
   toolchainId       : String
-  workspaceId       : String
+  scopeId       : String
+  contextId       : String
   importsId         : String
   deriving Repr
 
@@ -528,13 +528,13 @@ def ProofEvidenceReceipt.facts (r : ProofEvidenceReceipt) : ReceiptFacts :=
   { subjectDigest := r.subjectDigest, edge := r.edge, tableBindings := r.tableBindings
   , dependencyRoot := r.dependencyRoot, theoremArtifact := r.theoremArtifact
   , carriesTrust := r.carriesTrust, trustedBoundaries := r.trustedBoundaries
-  , toolchainId := r.toolchainId, workspaceId := r.workspaceId, importsId := r.importsId }
+  , toolchainId := r.toolchainId, scopeId := r.scopeId, contextId := r.contextId, importsId := r.importsId }
 
 def StoredReceipt.facts (r : StoredReceipt) : ReceiptFacts :=
   { subjectDigest := r.subjectDigest, edge := r.edge, tableBindings := r.tableBindings
   , dependencyRoot := r.dependencyRoot, theoremArtifact := r.theoremArtifact
   , carriesTrust := r.carriesTrust, trustedBoundaries := r.trustedBoundaries
-  , toolchainId := r.toolchainId, workspaceId := r.workspaceId, importsId := r.importsId }
+  , toolchainId := r.toolchainId, scopeId := r.scopeId, contextId := r.contextId, importsId := r.importsId }
 
 /-- Which bound fields of `r` differ from `fresh`, by name, in envelope order (R-0208).
 
@@ -552,12 +552,31 @@ def ReceiptFacts.differingFields (r fresh : ReceiptFacts) : List String :=
   , ("trust", r.carriesTrust != fresh.carriesTrust
               || r.trustedBoundaries.mergeSort (· ≤ ·) != fresh.trustedBoundaries.mergeSort (· ≤ ·))
   , ("toolchain", r.toolchainId != fresh.toolchainId)
-  , ("workspace", r.workspaceId != fresh.workspaceId)
+  , ("scope", r.scopeId != fresh.scopeId)
+  , ("context", r.contextId != fresh.contextId)
   , ("imports", r.importsId != fresh.importsId) ].filterMap fun (n, d) => if d then some n else none
+
+/-- What a not-current receipt's moved fields REQUIRE (R-0482). Two distinct repairs, and neither
+    may read as the other:
+
+      * a moved claim ROOT (or subject, edge, tables, artifact, trust, scope) means a definition the
+        claim rests on changed — re-establish the claim; the old proof may no longer hold;
+      * with all of those intact, a moved resolution CONTEXT means the claim's reachable closure is
+        identical but was established against other dependencies — re-validate under policy (a fresh
+        re-check and policy decision, as R-0208 does for the checker), never a new proof.
+
+    Reporting only, like `differingFields`; `isCurrentAgainst` decides currency. -/
+def receiptRepairOf (moved : List String) : Option String :=
+  if moved.any (["subject", "edge", "tables", "root", "artifact", "trust", "scope"].contains ·) then
+    some "the claim's dependency closure changed — re-establish the claim (re-prove or re-replay); the old proof may no longer hold"
+  else if moved.contains "context" then
+    some "resolution context changed — re-validate under policy (fresh re-check and policy decision); the claim's closure is unchanged, no new proof is needed"
+  else if moved.isEmpty then none
+  else some "checking environment changed (toolchain or proof library) — re-validate under policy"
 
 /-- Every bound field name, in envelope order. -/
 def receiptFieldNames : List String :=
-  ["subject", "edge", "tables", "root", "artifact", "trust", "toolchain", "workspace", "imports"]
+  ["subject", "edge", "tables", "root", "artifact", "trust", "toolchain", "scope", "context", "imports"]
 
 /-- Is a stored receipt still current against freshly computed material?
 
@@ -568,7 +587,7 @@ def receiptFieldNames : List String :=
     `needsRecheck` draws against `stale`.
 
     Everything the receipt binds participates. A change to a table's body moves its digest; a
-    different toolchain, workspace or import closure moves those identities; a swapped pair of
+    different toolchain, scope, resolution context or import closure moves those identities; a swapped pair of
     table digests changes which name carries which value and survives the sort. Any of them
     means the recorded evidence was established against something other than what is here now. -/
 def ReceiptFacts.isCurrentAgainst
@@ -576,7 +595,7 @@ def ReceiptFacts.isCurrentAgainst
     (tableBindings : List (Name × String))
     (dependencyRoot theoremArtifact : String)
     (carriesTrust : Bool) (trustedBoundaries : List String)
-    (toolchainId workspaceId importsId : String) : Bool :=
+    (toolchainId scopeId contextId importsId : String) : Bool :=
   let normalized := tableBindings.mergeSort (fun a b => toString a.1 ≤ toString b.1)
   r.subjectDigest == subjectDigest
     -- The EDGE participates, and its omission was a real hole: a receipt recorded for a
@@ -591,7 +610,8 @@ def ReceiptFacts.isCurrentAgainst
     && r.carriesTrust == carriesTrust
     && r.trustedBoundaries == trustedBoundaries.mergeSort (· ≤ ·)
     && r.toolchainId == toolchainId
-    && r.workspaceId == workspaceId
+    && r.scopeId == scopeId
+    && r.contextId == contextId
     && r.importsId == importsId
 
 /-- Thin wrapper: a minted receipt's currency, through the one comparison. -/
@@ -600,9 +620,9 @@ def ProofEvidenceReceipt.isCurrentAgainst
     (tableBindings : List (Name × String))
     (dependencyRoot theoremArtifact : String)
     (carriesTrust : Bool) (trustedBoundaries : List String)
-    (toolchainId workspaceId importsId : String) : Bool :=
+    (toolchainId scopeId contextId importsId : String) : Bool :=
   r.facts.isCurrentAgainst subjectDigest edge tableBindings dependencyRoot theoremArtifact
-    carriesTrust trustedBoundaries toolchainId workspaceId importsId
+    carriesTrust trustedBoundaries toolchainId scopeId contextId importsId
 
 /-- Thin wrapper: a STORED receipt's currency, through the same comparison.
 
@@ -615,9 +635,9 @@ def StoredReceipt.isCurrentAgainst
     (tableBindings : List (Name × String))
     (dependencyRoot theoremArtifact : String)
     (carriesTrust : Bool) (trustedBoundaries : List String)
-    (toolchainId workspaceId importsId : String) : Bool :=
+    (toolchainId scopeId contextId importsId : String) : Bool :=
   r.facts.isCurrentAgainst subjectDigest edge tableBindings dependencyRoot theoremArtifact
-    carriesTrust trustedBoundaries toolchainId workspaceId importsId
+    carriesTrust trustedBoundaries toolchainId scopeId contextId importsId
 
 /-- A stored receipt is comparable only when it was written under this envelope version.
     Distinct from "the contents differ" for the same reason `needsRecheck` is distinct from
@@ -653,10 +673,10 @@ def ProofEvidenceReceipt.disposition
     (tableBindings : List (Name × String))
     (dependencyRoot theoremArtifact : String)
     (carriesTrust : Bool) (trustedBoundaries : List String)
-    (toolchainId workspaceId importsId : String) : ReceiptDisposition :=
+    (toolchainId scopeId contextId importsId : String) : ReceiptDisposition :=
   if !r.comparable then .needsRecheck
   else if r.isCurrentAgainst subjectDigest edge tableBindings dependencyRoot theoremArtifact
-      carriesTrust trustedBoundaries toolchainId workspaceId importsId
+      carriesTrust trustedBoundaries toolchainId scopeId contextId importsId
     then .current else .notCurrent
 
 

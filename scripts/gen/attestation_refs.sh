@@ -82,7 +82,8 @@ OUT="${ATTESTATION_REFS_OUT:-Concrete/Proof/GeneratedAttestations.lean}"
     decl="${moddecl#*.}"
     impl="$(printf '%s' "$rest" | grep -oE 'impl=[0-9a-f]+' | cut -d= -f2)"
     [ -n "$impl" ] || continue
-    # Symbol names the TABLE, the PACKAGE and the DECLARATION. A name omitting the package would
+    # Symbol names the TABLE, the SCOPE and the DECLARATION (R-0482: `$pkg` is the owning package's
+    # scope digest). A name omitting the package would
     # collide across packages for a reused table, which is the collapse this exists to prevent.
     tblshort="$(printf '%s' "$tbl" | sed 's/.*\.//')"
     sym="$(printf '%s_%s_%s' "$tblshort" "${pkg:0:8}" "$decl" | tr -c 'A-Za-z0-9_' '_')"
@@ -91,6 +92,31 @@ OUT="${ATTESTATION_REFS_OUT:-Concrete/Proof/GeneratedAttestations.lean}"
   done
   echo
   echo "end Concrete.Proof.GeneratedAttestations"
-} > "$OUT"
+} > "$OUT.tmp"
+
+# D5 (R-0482): the symbol keeps `<table>_<scope8>_<decl>`, so generation REFUSES what the truncation
+# could hide — two distinct scopes sharing an 8-hex prefix, and two distinct full keys rendering one
+# symbol. A collision would otherwise surface as a Lean redefinition error at best, or, if the two
+# rows ever deduplicated, as one reference silently answering for another scope's definition.
+# (Sorted with `sort -u` under the exported C locale, deliberately not spelled like the emit
+# pipeline's canonical sort, which check_attestation_refs_order.sh removes to build its control.)
+export LC_ALL=C
+COLL="$(awk '/^def /{sym=$2} /DefinitionIdentity.of\?/{print sym "\t" $2 $3 $4 $5}' "$OUT.tmp" \
+  | sort -u | awk -F'\t' 'seen[$1]++ {print $1}')"
+PFX="$(grep -oE 'DefinitionIdentity.of\? "[0-9a-f]{32}"' "$OUT.tmp" | grep -oE '[0-9a-f]{32}' | sort -u \
+  | awk '{p=substr($0,1,8); if (p in seen && seen[p] != $0) print p; seen[p]=$0}')"
+# One (table, scope/module.declaration) with two implementations is also two full keys for one
+# symbol: the emit dedupe keeps the first and would drop the other in silence.
+IMPLS="$(printf '%s\n' "$MAN" | grep ' <- ' | grep -v EXCLUDED \
+  | awk '{ k = $1 FS $3; i = ""; for (f = 4; f <= NF; f++) if ($f ~ /^impl=/) i = $f
+           if (i == "") next; if ((k in seen) && seen[k] != i) print k; seen[k] = i }' | sort -u)"
+[ -n "$IMPLS" ] && COLL="$COLL $IMPLS"
+if [ -n "$COLL$PFX" ]; then
+  rm -f "$OUT.tmp"
+  [ -n "$PFX" ] && echo "REFUSE: distinct scopes share the 8-hex symbol prefix: $PFX" >&2
+  [ -n "$COLL" ] && echo "REFUSE: distinct full keys render one symbol: $COLL" >&2
+  exit 1
+fi
+mv "$OUT.tmp" "$OUT"
 
 echo "wrote $OUT ($(grep -c '^def ' "$OUT") references)"

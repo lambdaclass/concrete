@@ -475,8 +475,8 @@ def proveSchemaVersion : String := "1"
     invoked file alone, which made two programs sharing one file the same package.
 
     Returns the `Except` rather than aborting, so each caller keeps its own refusal reporting. -/
-def resolvePackageIdentity (inputPath : String) (moduleNames : List String) (srcMap : SourceMap)
-    : IO (Except Proof.PackageIdentityRefusal Proof.PackageIdentity) := do
+def resolvePackageIdentity (inputPath : String) (srcMap : SourceMap)
+    : IO (Except Proof.IdentityRefusal Proof.ResolvedIdentity) := do
   match ← findProjectRoot (dirOf inputPath) with
   | some root =>
     -- THE PROJECT'S OWN COMPUTATION, not a re-derivation from whatever this command happened to
@@ -485,12 +485,13 @@ def resolvePackageIdentity (inputPath : String) (moduleNames : List String) (src
     -- how `concrete snapshot` and `--report proof-status` disagreed about the same program after the
     -- first fix. `loadProject` is the producer; everything else asks it.
     match ← loadProject root with
-    | .ok ctx => return ctx.packageIdentity
+    | .ok ctx => return ctx.identity
     -- A project that cannot load has no identity to report. Falling back to a synthetic one would
     -- reintroduce the second producer this function exists to remove, and would silently answer a
     -- question the project itself could not.
     | .error _ => return .error (.emptyComponent "project failed to load")
-  | none => return Proof.PackageIdentity.syntheticForModules moduleNames (srcMap.map (·.2))
+  -- THE ONE MANIFESTLESS PRODUCER (D6), over the complete paired source map.
+  | none => return Proof.ResolvedIdentity.standalone inputPath srcMap
 
 /-- Run pipeline to needed depth and produce a report. -/
 def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
@@ -509,7 +510,7 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
     -- placeholder: every definition identity minted from this ProofCore is package-scoped, and an
     -- "unidentified" fallback would be shared by every such compilation, reintroducing the
     -- collision this migration removes.
-    let packageIdentity ← resolvePackageIdentity inputPath (validCore.coreModules.map (·.name)) srcMap
+    let packageIdentity ← resolvePackageIdentity inputPath srcMap
     let pc ← match extractProofCore? validCore packageIdentity
         (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap registry with
       | .ok pc => pure pc
@@ -1563,14 +1564,14 @@ def compileAndReport (inputPath : String) (reportType : String)
   -- means one answer; carrying it here is what makes that true rather than intended.
   let frontendResult : Except UInt32
       (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
-       Except Proof.PackageIdentityRefusal Proof.PackageIdentity × List CModule ×
-       List (String × String × String)) ←
+       Except Proof.IdentityRefusal Proof.ResolvedIdentity × List CModule ×
+       List (String × String × String) × List (String × Nat)) ←
     match ← findProjectRoot inputDir with
     | some root =>
       match ← loadProject root with
       | .error ec => pure (Except.error ec)
       | .ok ctx =>
-        let { validCore, parsed, allSrcMap, depNames, packageIdentity, filePackages, .. } := ctx
+        let { validCore, parsed, allSrcMap, depNames, identity := packageIdentity, filePackages, .. } := ctx
         let userModules := validCore.coreModules.filter fun m => !depNames.contains m.name
         let fullValidCore : ValidatedCore := { validCore with coreModules := userModules }
         let scopedModules ← scopeUserModulesToFile userModules inputPath root
@@ -1578,7 +1579,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- The dependency modules travel too (R-0484 R10): the unsafe report lists the
         -- foreign-binding assumptions a program inherits from them.
         let depModules := validCore.coreModules.filter fun m => depNames.contains m.name
-        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages))
+        -- The WHOLE program's per-scope tally (dependencies and std included), from the ProofCore
+        -- `loadProject` already extracted; the report path's own ProofCore holds user modules only.
+        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages,
+          ctx.pc.definitionsByScope))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
       | .error ds =>
@@ -1589,15 +1593,15 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- Hashing one file made two programs sharing that file — and differing everywhere else —
         -- the same package, which is the collision content-binding exists to prevent.
         pure (Except.ok (parsed, validCore, validCore, srcMap,
-          Proof.PackageIdentity.syntheticForModules (validCore.coreModules.map (·.name))
-            (srcMap.map (·.2)), ([] : List CModule), ([] : List (String × String × String))))
+          Proof.ResolvedIdentity.standalone inputPath srcMap,
+          ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat))))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages) =>
+  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally) =>
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
-      | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
+      | .ok r => (r.scope.digest, r.scope.label)
       | .error _ => ("unidentified:program", "program")
     -- ONE constructor for the assumption summary every report surface AND proof admission read
     -- (R-0484 R10).
@@ -2733,9 +2737,6 @@ def compileAndReport (inputPath : String) (reportType : String)
         | some contents =>
         let records := Proof.decodeStore contents
         let compilerVersion := compilerEvidenceIdentity
-        let workspaceId := match packageIdentity with
-          | .ok p => p.digest
-          | .error _ => ""
         -- The CURRENT checker, asked without paying for a kernel run — the same producer `replay`
         -- resolves through, so "which toolchain" and "which proof library" each have one answer.
         let checkerNow ← Proof.resolveChecker
@@ -2752,7 +2753,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         let statusEntries := Report.proofStatusEntries validCore.coreModules locMap registry pc
         let trustedDepsOf := fun (qn : String) =>
           (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
-        let env : Proof.IssueEnvironment := { compilerVersion, workspaceId, importsId }
+        let env : Proof.IssueEnvironment := { compilerVersion, importsId }
         -- FRESH CONSUMER REPLAY (R-0208 decision 2). Receipts are unauthenticated bytes: a forger can
         -- rewrite the readable checker AND the toolchain id consistently, and the comparison alone would
         -- then call a receipt for an ill-typed theorem current under an accepted checker. So the consumer
@@ -2823,6 +2824,7 @@ def compileAndReport (inputPath : String) (reportType : String)
                 let held := Proof.receiptFieldNames.filter (!diff.contains ·)
                 lines := lines ++ [s!"    ✗ {subject} — receipt NOT current: it was established against different material"
                                  , s!"        differs in: {", ".intercalate diff}; still matching: {", ".intercalate held}"]
+                                 ++ ((Proof.receiptRepairOf diff).map (fun r => [s!"        requires: {r}"])).getD []
               | .ok .needsRecheck =>
                 unreadable := unreadable + 1
                 lines := lines ++ [s!"    ? {subject} — receipt written under a different envelope; re-verify and re-record"]
@@ -2886,6 +2888,10 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- immediately caught three of its own inputs.
     if reportType == "attestation-join" then
       IO.println (Report.attestationJoinReport (pc := pc))
+      return 0
+    if reportType == "package-identity" then
+      let tally := if programTally.isEmpty then pc.definitionsByScope else programTally
+      IO.println (pc.identity.render ++ String.join (tally.map fun (sc, n) => s!"definitions\t{sc}\t{n}\n"))
       return 0
     if reportType == "generated-implementations" then
       IO.println (Report.generatedImplementationsReport (pc := pc))
@@ -2955,9 +2961,6 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- deliberately absent: it comes from the replay that actually ran, so a caller cannot name a
       -- checker other than the one that checked.
       let compilerVersion := compilerEvidenceIdentity
-      let workspaceId := match packageIdentity with
-        | .ok p => p.digest
-        | .error _ => ""
       -- THE PROOF LIBRARY THE KERNEL ACTUALLY READ, by content, from the replay that just ran.
       -- Until 2026-08-16 this bound the compiler's checked-in classification table, which is
       -- compiled into the binary — so replaying the same theorem NAMES against a different proof
@@ -2971,7 +2974,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       let trustedDepsOf := fun (qn : String) =>
         (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
       let outcomes := Proof.issueAll pc res
-        { compilerVersion, workspaceId, importsId } trustedDepsOf
+        { compilerVersion, importsId } trustedDepsOf
       let issued := Proof.IssueOutcome.issued outcomes
       let withheld := Proof.IssueOutcome.withheld outcomes
       let mut out := "=== Replay Receipts ===\n"
@@ -3290,7 +3293,7 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
     match ← loadProject root with
     | .error exitCode => return exitCode
     | .ok ctx =>
-      let { validCore, parsed, allSrcMap, depNames, packageIdentity, .. } := ctx
+      let { validCore, parsed, allSrcMap, depNames, identity := packageIdentity, .. } := ctx
       -- Drop dependency modules (std etc.) so the report focuses on
       -- user-package code.
       let userModules := validCore.coreModules.filter fun m => !depNames.contains m.name
@@ -3315,7 +3318,7 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
             (validCore.coreModules.filter fun m => depNames.contains m.name)
             (Assumptions.packageOfFiles ctx.filePackages)
             (match packageIdentity with
-              | .ok pid => (pid.digest, if pid.declaredName.isEmpty then "program" else pid.declaredName)
+              | .ok r => (r.scope.digest, r.scope.label)
               | .error _ => ("unidentified:program", "program")))
           simpleLocMap with
         | .ok pc => pure pc
@@ -3333,15 +3336,14 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
       return 1
-    | .ok (parsed, _, validCore, _) =>
+    | .ok (parsed, _, validCore, frontSrcMap) =>
       let locMap := Report.buildFnLocMap parsed.modules inputPath
       let simpleLocMap := locMap.map fun (e : Report.FnLocEntry) => (e.qualName, (e.file, e.fnSpan.line))
       -- ONE PRODUCER: manifest identity when a project is in scope, synthetic otherwise. A refusal
       -- ABORTS rather than substituting a placeholder: every definition identity minted from this ProofCore is package-scoped, and an
       -- "unidentified" fallback would be shared by every such compilation, reintroducing the
       -- collision this migration removes.
-      let packageIdentity ← resolvePackageIdentity inputPath (validCore.coreModules.map (·.name))
-        [(inputPath, source)]
+      let packageIdentity ← resolvePackageIdentity inputPath frontSrcMap
       let pc ← match extractProofCore? validCore packageIdentity
           (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap with
         | .ok pc => pure pc
@@ -3823,7 +3825,7 @@ def main (args : List String) : IO UInt32 := do
       | .error ds =>
         IO.eprintln (renderDiagnostics ds (sourceMap := mainSrcMap))
         return 1
-      | .ok (parsed, _, validCore, _srcMap) =>
+      | .ok (parsed, _, validCore, frontSrcMap) =>
         let locMap := Report.buildFnLocMap parsed.modules inp
         let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
         let registry ← loadRegistryWithLinks inp parsed.modules validCore.coreModules
@@ -3831,8 +3833,7 @@ def main (args : List String) : IO UInt32 := do
         -- ABORTS rather than substituting a placeholder: every definition identity minted from this ProofCore is package-scoped, and an
         -- "unidentified" fallback would be shared by every such compilation, reintroducing the
         -- collision this migration removes.
-        let packageIdentity ← resolvePackageIdentity inp (validCore.coreModules.map (·.name))
-          [(inp, source)]
+        let packageIdentity ← resolvePackageIdentity inp frontSrcMap
         let pc ← match extractProofCore? validCore packageIdentity
             (standaloneAssumptions validCore.coreModules packageIdentity) simpleLocMap registry with
           | .ok pc => pure pc

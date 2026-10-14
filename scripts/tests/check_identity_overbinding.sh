@@ -1,29 +1,24 @@
 #!/usr/bin/env bash
-# IDENTITY OVER-BINDING — the entrance gate for the five-way separation.
+# IDENTITY OVER-BINDING — the separation's positive controls (R-0482, converted from the entrance gate).
 #
-# This gate PINS A DEFECT. Every leg below asserts what identity does TODAY, which is the wrong
-# thing, so that the migration cannot land quietly: when the separation is implemented these legs
-# FAIL, and that failure is the signal to convert each one into its positive form. Same discipline as
-# the 059/060 tripwires, which asserted the wrong verdict on purpose until the fix arrived.
+# Before R-0482 this gate PINNED A DEFECT: one `PackageIdentity` bound the whole build's content, std
+# included, and scoped every `DefinitionIdentity` by it. A two-line std edit moved 7 of 21 package
+# identities (168 lines of the attestation surface), and a sibling edit renamed a different function's
+# attestation symbol. Those legs failed when the separation landed, which was their purpose; each is
+# now asserted in its positive form:
 #
-# WHAT IS WRONG. `PackageIdentity` binds the complete dependency closure, which dependency roots
-# already model, AND it scopes `DefinitionIdentity` by package CONTENT. So:
+#   O1  an unused std edit moves NO scope (it moves std's artifact and so each dependent's resolution
+#       CONTEXT, which is where dependency content belongs);
+#   O2  a sibling edit in a manifestful package moves its ARTIFACT, not its scope, and the sibling's
+#       definition identity is unchanged;
+#   O2s the stated standalone exception: a sibling edit in a manifestless fixture moves its standalone
+#       scope (which contains its own artifact), while a std edit does not;
+#   O3  editing the subject's own body moves its implementation digest (unchanged in both schemes).
 #
-#   * editing a std module moves the identity of packages that never mention it, because std is
-#     auto-injected everywhere. MEASURED by control 1 below: a two-line code edit to
-#     std/src/base64.con moves 7 of 21 package identities and rewrites 168 of the surface's lines.
-#     On 2026-08-19 the same edit demoted three proved subjects to `dependency closure unjustified`.
-#     Not ALL 21 move — one package is unaffected — and the gate reports the measured ratio rather
-#     than a round claim, because "every" was what I wrote first and it was wrong.
-#   * editing one function renames the attestation symbol of a DIFFERENT function in the same
-#     package, whose module, declaration and implementation digest are all unchanged
-#
-# FAIL-SAFE, NOT UNSOUND. The failure mode is demotion and renaming, never a proof credited to a body
-# it does not describe. That is why this is an entrance gate for a migration rather than a bug fix.
-#
-# NO BUILD REQUIRED: package identity is computed from source content at REPORT time, so editing a
-# copy and running the existing binary against it is sufficient. The copy means the working tree is
-# never touched.
+# NO BUILD REQUIRED: identity is computed from source content at REPORT time, so editing a copy and
+# running the existing binary against it is sufficient. The copy means the working tree is never
+# touched. The binary is COPIED into the scratch tree, never linked: the compiler finds std relative to
+# `IO.appPath`, so a linked binary would read the original std and the std legs would measure nothing.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -36,6 +31,16 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 W="$TMP/repo"; mkdir -p "$W"
 cp -a "$ROOT_DIR/." "$W/" 2>/dev/null || { echo "error: could not copy the repository" >&2; exit 2; }
+WBIN="$W/.lake/build/bin/concrete"
+rm -f "$WBIN"; cp -c "$BIN" "$WBIN" 2>/dev/null || cp "$BIN" "$WBIN"
+BIN="$WBIN"
+# pid <example> <field> — one line of `--report package-identity` (scope | artifact | context).
+pid() { "$BIN" "$W/examples/$1/src/main.con" --report package-identity 2>/dev/null | awk -F'\t' -v f="$2" '$1 == f {print $2; exit}'; }
+# defid <example> <decl> — the definition identity digest of one subject.
+defid() {
+  "$BIN" "$W/examples/$1/src/main.con" --report attestation-join 2>/dev/null \
+    | awk -F'\t' -v d="$2" '$1 == "subject" && $5 == d {print $2; exit}'
+}
 
 # pkgid <root> <example> — the package identity the compiler reports for that example's subjects.
 pkgid() {
@@ -58,57 +63,67 @@ else
 fi
 
 echo ""
-echo "=== control 1: editing a std module moves other packages' identities ==="
-# MEASURED THROUGH THE GENERATOR, not through a per-fixture `--report attestation-join`. Those two
-# disagree: the direct report on one example keeps returning the same package identity after a std
-# edit, while regenerating the attestation surface moves it. The generator is the authority here
-# because it is what produces the symbols proofs actually select, so it is what a stale identity
-# breaks. (The disagreement itself is worth a look during the migration — two paths answering the
-# same question differently is the defect class this project keeps paying for — but the gate must
-# measure the one that matters.)
+echo "=== O1: an unused std edit moves no scope, only resolution context ==="
 GEN="$W/Concrete/Proof/GeneratedAttestations.lean"
 cp "$GEN" "$TMP/gen.before"
+CV_CTX0="$(pid crypto_verify context)"; CV_SCOPE0="$(pid crypto_verify scope)"
+SA_SCOPE0="$(pid proof_patterns/composition scope)"
 perl -0pi -e 's/if v == 62 \{ return 43; \}/if v == 62 { return 43; } if v == 63 { return 47; }/' "$W/std/src/base64.con" 2>/dev/null
-( cd "$W" && bash scripts/gen/attestation_refs.sh >/dev/null 2>&1 )
-ids_of(){ grep -oE 'of\? "[0-9a-f]{32}"' "$1" | sort -u; }
-MOVED="$(comm -23 <(ids_of "$TMP/gen.before") <(ids_of "$GEN") | grep -c . || true)"
-TOTAL="$(ids_of "$TMP/gen.before" | grep -c . || true)"
-CHANGED_LINES="$(diff "$TMP/gen.before" "$GEN" | grep -c '^[<>]' || true)"
-git -C "$W" checkout -- std/src/base64.con Concrete/Proof/GeneratedAttestations.lean 2>/dev/null || true
-
-if [ "${TOTAL:-0}" -lt 10 ]; then
-  no "only $TOTAL package identities parsed — the measurement is broken, not the scheme"
-elif [ "${MOVED:-0}" -gt 0 ]; then
-  ok "DEFECT PINNED: a two-line std code edit moved $MOVED of $TOTAL package identities and rewrote $CHANGED_LINES lines of the attestation surface. std is auto-injected, so packages that never mention it are rescoped by it. Under the separation, dependency content belongs to ResolutionContextIdentity and must not reach PackageScopeIdentity — convert this leg then."
+if cmp -s "$W/std/src/base64.con" "$ROOT_DIR/std/src/base64.con"; then
+  no "O1: the std edit did not apply — the anchor moved, so every O1 leg would be vacuous"
 else
-  no "a std edit no longer moves any package identity — if the separation has landed, convert this leg to its positive form; if not, the measurement has broken"
+  ( cd "$W" && bash scripts/gen/attestation_refs.sh >/dev/null 2>&1 )
+  ids_of(){ grep -oE 'of\? "[0-9a-f]{32}"' "$1" | sort -u; }
+  MOVED="$(comm -23 <(ids_of "$TMP/gen.before") <(ids_of "$GEN") | grep -c . || true)"
+  TOTAL="$(ids_of "$TMP/gen.before" | grep -c . || true)"
+  if [ "${TOTAL:-0}" -lt 10 ]; then
+    no "O1: only $TOTAL scopes parsed — the measurement is broken"
+  elif [ "${MOVED:-0}" -eq 0 ]; then
+    ok "O1: a two-line std code edit moved 0 of $TOTAL scopes (pre-R-0482: 7 of 21, 168 surface lines)"
+  else
+    no "O1: a std edit moved $MOVED of $TOTAL scopes — std content has reached PackageScopeIdentity"
+  fi
+  CV_CTX1="$(pid crypto_verify context)"; CV_SCOPE1="$(pid crypto_verify scope)"
+  [ -n "$CV_SCOPE0" ] && [ "$CV_SCOPE0" = "$CV_SCOPE1" ] && ok "O1: crypto_verify's scope is unchanged ($CV_SCOPE0)" \
+    || no "O1: crypto_verify's scope moved or was unreadable ('$CV_SCOPE0' -> '$CV_SCOPE1')"
+  [ -n "$CV_CTX0" ] && [ "$CV_CTX0" != "$CV_CTX1" ] && ok "O1: its resolution context moved ($CV_CTX0 -> $CV_CTX1) — std's artifact is where the edit is recorded" \
+    || no "O1: crypto_verify's context did not move under a std edit ('$CV_CTX0' -> '$CV_CTX1') — dependency content is not bound anywhere"
+  SA_SCOPE1="$(pid proof_patterns/composition scope)"
+  [ -n "$SA_SCOPE0" ] && [ "$SA_SCOPE0" = "$SA_SCOPE1" ] && ok "O2s: a std edit leaves the standalone composition scope unchanged" \
+    || no "O2s: a std edit moved a standalone scope ('$SA_SCOPE0' -> '$SA_SCOPE1')"
+fi
+cp "$ROOT_DIR/std/src/base64.con" "$W/std/src/base64.con"; cp "$TMP/gen.before" "$GEN"
+
+echo ""
+echo "=== O2: a sibling edit moves the ARTIFACT, not the scope ==="
+SIB="$W/examples/proof_pressure/src/main.con"
+if [ -f "$SIB" ]; then
+  S0="$(pid proof_pressure scope)"; A0="$(pid proof_pressure artifact)"; D0="$(defid proof_pressure check_nonce)"
+  printf '\n// transient probe: sibling-edit identity coupling\n' >> "$SIB"
+  S1="$(pid proof_pressure scope)"; A1="$(pid proof_pressure artifact)"; D1="$(defid proof_pressure check_nonce)"
+  cp "$ROOT_DIR/examples/proof_pressure/src/main.con" "$SIB"
+  [ -n "$S0" ] && [ "$S0" = "$S1" ] && ok "O2: proof_pressure's scope survives a sibling edit ($S0)" \
+    || no "O2: a sibling edit moved proof_pressure's scope ('$S0' -> '$S1')"
+  [ -n "$A0" ] && [ "$A0" != "$A1" ] && ok "O2: the sibling edit moved its artifact ($A0 -> $A1)" \
+    || no "O2: a sibling edit did not move the artifact ('$A0' -> '$A1') — own content is not bound"
+  [ -n "$D0" ] && [ "$D0" = "$D1" ] && ok "O2: check_nonce's definition identity is unchanged ($D0), so its symbol is too" \
+    || no "O2: a sibling edit moved check_nonce's definition identity ('$D0' -> '$D1')"
+else
+  no "examples/proof_pressure/src/main.con is missing — O2 could not run"
 fi
 
 echo ""
-echo "=== control 2: editing an unrelated module in the SAME package ==="
-# The sibling case. `proof_pressure` holds several functions; editing one must not move the identity
-# under which a DIFFERENT one is attested. Today it does, because the package's identity is a digest
-# over its whole content and every declaration is scoped by it.
-SIB="$W/examples/proof_pressure/src/main.con"
-if [ -f "$SIB" ]; then
-  BASE_PP="$(pkgid "$W" proof_pressure)"
-  BASE_CN="$(declid "$W" proof_pressure check_nonce)"
-  printf '\n// transient probe: sibling-edit identity coupling\n' >> "$SIB"
-  AFTER_PP="$(pkgid "$W" proof_pressure)"
-  AFTER_CN="$(declid "$W" proof_pressure check_nonce)"
-  git -C "$W" checkout -- examples/proof_pressure/src/main.con 2>/dev/null || true
-  if [ "$AFTER_CN" = "$BASE_CN" ]; then
-    ok "check_nonce's implementation digest survives a sibling edit ($BASE_CN)"
-  else
-    no "a comment-only sibling edit moved check_nonce's IMPLEMENTATION digest — the body digest is reading file text"
-  fi
-  if [ "$AFTER_PP" != "$BASE_PP" ]; then
-    ok "DEFECT PINNED: a sibling edit moved the package identity ($BASE_PP -> $AFTER_PP) that check_nonce is attested under, though its own module, declaration and implementation are unchanged. This is what renames its generated symbol and breaks every proof selecting it."
-  else
-    no "a sibling edit no longer moves the package identity — if the separation has landed, convert this leg; if not, the measurement has broken"
-  fi
+echo "=== O2s: the standalone exception — own edits move a standalone scope ==="
+SA="$W/examples/proof_patterns/composition/src/main.con"
+if [ -f "$SA" ] && [ ! -f "$W/examples/proof_patterns/composition/Concrete.toml" ]; then
+  T0="$(pid proof_patterns/composition scope)"
+  printf '\n// transient probe: standalone own-content edit\n' >> "$SA"
+  T1="$(pid proof_patterns/composition scope)"
+  cp "$ROOT_DIR/examples/proof_patterns/composition/src/main.con" "$SA"
+  [ -n "$T0" ] && [ "$T0" != "$T1" ] && ok "O2s: an own-content edit moved the standalone scope ($T0 -> $T1), as D3 states" \
+    || no "O2s: an own-content edit did not move the standalone scope ('$T0' -> '$T1')"
 else
-  no "examples/proof_pressure/src/main.con is missing — control 2 could not run"
+  no "examples/proof_patterns/composition is missing or gained a manifest — O2s could not run"
 fi
 
 echo ""
@@ -131,15 +146,12 @@ else
 fi
 
 echo ""
-echo "=== controls not yet representable ==="
-# Stated rather than silently omitted. Two rows of the agreed matrix cannot be measured while the
-# scheme is unsplit, and saying so is the difference between a gap and an oversight:
-#
-#   * "editing a REACHABLE std definition moves the affected dependency roots and receipts" needs
-#     roots and receipts to be separable from package identity, which is the migration itself
-#   * "changing publisher/origin moves all scoped definitions" needs a publisher/origin component,
-#     which does not exist until PackageScopeIdentity does
-ok "2 matrix rows deferred to the migration (reachable-std, publisher/origin) — recorded, not skipped"
+echo "=== deferred by decision ==="
+# P1 (accepted 2026-10-13): std definitions are now scoped under the std scope, but a claim whose
+# closure reaches std stays fail-closed (`unscopedEdge`), as before. "A reachable std edit moves
+# exactly the affected roots" therefore has no claim to measure; it lands with the slice that admits
+# std nodes into report roots. Origin sensitivity (G) moved to check_identity_rows.sh.
+ok "reachable-std sensitivity deferred to the std-in-roots slice (P1) — recorded, not skipped"
 
 echo ""
 echo "IDENTITY-OVERBINDING: PASS=$PASS FAIL=$FAIL"

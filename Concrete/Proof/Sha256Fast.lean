@@ -7,7 +7,7 @@ import Concrete.Proof.Sha256Spec
 code it is slow — every word is a bignum, every index walks a list — and `shortHash` runs it over
 the source of every module of every compilation. Measured on `examples/elf_header --report caps`:
 about 97% of an 8-second invocation was spent inside `Sha256Spec.hash`, reached from package
-identity (`PackageIdentity.syntheticForModules`, `packageIdentityOf`).
+identity (the package artifact and scope digests).
 
 This module computes SHA-256 on `UInt32` words over a `ByteArray`. It is NOT a second definition
 of SHA-256 for proofs, and nothing PROVES it equal to the spec. The `#guard`s below are equivalence

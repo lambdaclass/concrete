@@ -167,11 +167,11 @@ def combineFns : FnTable :=
   -- exclusion entry — and an exclusion here would dress an impossibility up as a judgement.
   FnTable.withAttestations
     { entries := #[dblFn, incFn], globals := combineFnsGlobals }
-    [ AttestedPFnDef.of dblFn Concrete.Proof.GeneratedAttestations.combineFns_6f99408c_dbl
-    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_6f99408c_inc
-    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_5b493da6_inc
-    , AttestedPFnDef.of dblFn Concrete.Proof.GeneratedAttestations.combineFns_f795a8cd_dbl
-    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_f795a8cd_inc ]
+    [ AttestedPFnDef.of dblFn Concrete.Proof.GeneratedAttestations.combineFns_cb56f94b_dbl
+    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_cb56f94b_inc
+    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_9b3a95ab_inc
+    , AttestedPFnDef.of dblFn Concrete.Proof.GeneratedAttestations.combineFns_2bf158ef_dbl
+    , AttestedPFnDef.of incFn Concrete.Proof.GeneratedAttestations.combineFns_2bf158ef_inc ]
 
 -- Keeps `simp only [eval, combineFns_globals, combineFnsGlobals]` working WITHOUT delta-unfolding
 -- the bare `combineFns`. The old `def combineFns : FnTable | "x" => …` produced equation lemmas

@@ -603,11 +603,11 @@ readonly MINT_DEFAULT_GROUP="Concrete.Proof.parse_byte_correct"
 # duplicate another and the total is still 18, both copies pass, and the deleted assertion is gone
 # with nothing to notice it. So the SET of labels is pinned by digest and duplicates are rejected.
 # Changing which probes mint must be a deliberate edit of both values.
-EXPECTED_MINT_PROBES=19
+EXPECTED_MINT_PROBES=20
 # Digest of the full manifest, not just the names — see mint_manifest_digest below. The constant is
 # a sha256 because this repository supports macOS, where GNU md5sum does not exist; the hasher
 # fallback follows the one in lib/treestate.sh rather than adding a third way to hash a thing.
-EXPECTED_MINT_MANIFEST_SHA256="0e47323de0a7abac9062cca10cd0c7b9d00e9e2ca650f9c958ba68a9cadb78c0"
+EXPECTED_MINT_MANIFEST_SHA256="df405b4213df40e3a0b113d6b8d74a33fe642135b44ef6699044ae6c346c89b3"
 if command -v sha256sum >/dev/null 2>&1; then _MINT_HASHER="sha256sum"
 elif command -v shasum >/dev/null 2>&1; then _MINT_HASHER="shasum -a 256"
 else _MINT_HASHER=""
@@ -689,9 +689,9 @@ def tid? (m d : String) : Option DefinitionIdentity :=
 def probeThm : String := "$thm"
 -- The pure half of \`mintProbe\`: same material validation, same mint, replay supplied by the group.
 def mintWith (sr : SuccessfulReplay) (subjectDigest? : Option String) (ev : EdgeEvidence)
-    (root : String) (trust : Bool) (bounds : List String) (cv ws im : String)
+    (root : String) (trust : Bool) (bounds : List String) (cv ws cx im : String)
     : Option ProofEvidenceReceipt :=
-  (ReceiptMaterial.of? subjectDigest? ev root trust bounds cv ws im).map
+  (ReceiptMaterial.of? subjectDigest? ev root trust bounds cv ws cx im).map
     (ProofEvidenceReceipt.mint sr)
 
 #eval show IO Unit from do
@@ -829,13 +829,13 @@ mint_ok(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); ok "$1"; }
 mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
-EXPECTED_ORDINARY_PROBES=244
-EXPECTED_ORDINARY_MANIFEST_SHA256="f11edc026a12778f2684b975bd24771fb6762f8c6312813b7ac2915f74a81a83"
+EXPECTED_ORDINARY_PROBES=247
+EXPECTED_ORDINARY_MANIFEST_SHA256="e18846955162265feba483d7414f51dc81a871e3a6d3f4912fa6d6991578eb80"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
-EXPECTED_TOTAL_ASSERTIONS=317
-EXPECTED_ASSERTION_LABELS_SHA256="8edcce27f227a567c62d531335def0eba60f68c8d04a1f34a95401e59d700809"
+EXPECTED_TOTAL_ASSERTIONS=321
+EXPECTED_ASSERTION_LABELS_SHA256="0c139a31738ae3b67f98dcc83cbbe2afd6cbc7ba85006ecf2a4769dcec7f344d"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -1424,7 +1424,7 @@ def elG (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
   , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
-  match tI "m" "caller", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match tI "m" "caller", (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.caller", bareName := "caller"
@@ -1440,7 +1440,7 @@ def elG (q : String) : EligibilityEntry :=
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.caller", ["m.ghost"])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     let vs := pc.selfCheck
@@ -1482,7 +1482,7 @@ def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
   , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
-  match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match aI "m" "solo", (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.solo", bareName := "solo"
@@ -1495,7 +1495,7 @@ def aEl (q : String) : EligibilityEntry :=
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.solo", [])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     match dependencyRootMaterial (dependencyNodesOf pc pc.callGraph) cid with
@@ -1512,7 +1512,7 @@ def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
   , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
-  match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match aI "m" "solo", (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.solo", bareName := "solo"
@@ -1525,7 +1525,7 @@ def aEl (q : String) : EligibilityEntry :=
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.solo", [])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     match correspondenceInputOf pc pc.callGraph entry.callableId with
@@ -1545,7 +1545,7 @@ def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
   , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
-  match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match aI "m" "solo", (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.solo", bareName := "solo"
@@ -1558,7 +1558,7 @@ def aEl (q : String) : EligibilityEntry :=
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.solo", [])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     match (applyCorrespondenceAuthority pc pc.callGraph).obligations.head? with
@@ -1581,7 +1581,7 @@ def aEl (q : String) : EligibilityEntry :=
   { qualName := q, eligible := true, sourceReasons := [], profileReasons := []
   , exclusionKind := none, isTrusted := false, admissionRefusals := [], loc := none }
 #eval show IO Unit from do
-  match aI "m" "solo", (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match aI "m" "solo", (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.solo", bareName := "solo"
@@ -1594,7 +1594,7 @@ def aEl (q : String) : EligibilityEntry :=
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.solo", [])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     match (applyCorrespondenceAuthority pc pc.callGraph).obligations.head? with
@@ -1656,10 +1656,10 @@ def mkEntryC (q d : String) : Option ProofCoreEntry :=
 #eval show IO Unit from do
   match mkEntryC "m.caller" "caller", mkExclC "m.trustedHelper" "trustedHelper" true,
         mkExclC "m.recursiveHelper" "recursiveHelper" false,
-        (PackageIdentity.syntheticForModules ["m"] ["src"]).toOption with
+        (ResolvedIdentity.standalone "m.con" [("m.con", "src")]).toOption with
   | some caller, some tX, some iX, some pkg =>
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [caller], excluded := [tX, iX]
+      { identity := pkg, entries := [caller], excluded := [tX, iX]
       , structs := [], enums := [], traitDefs := []
       , callGraph := [("m.caller", ["m.trustedHelper", "m.recursiveHelper"])]
       , recMap := [], externNames := [], obligations := [], diagnostics := [] }
@@ -1758,7 +1758,7 @@ probe "a receipt mints from complete evidence (control)" "MINTED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X]
                            , tableDigests := [(`X, some "d1")], quantifiesOverTable := false }
-  let r := ReceiptMaterial.of? (some "v2:abc") ev "ROOT" false [] "lean-4.28" "/ws" "imp1"
+  let r := ReceiptMaterial.of? (some "v2:abc") ev "ROOT" false [] "lean-4.28" "/ws" "ctx1" "imp1"
   IO.println (if r.isSome then "MINTED" else "REFUSED")'
 
 # The whole point. A body edge naming a table it could not bind announces a dependency whose
@@ -1767,14 +1767,14 @@ probe "an UNBOUND table refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X]
                            , tableDigests := [(`X, none)], quantifiesOverTable := false }
-  let r := ReceiptMaterial.of? (some "v2:abc") ev "ROOT" false [] "lean-4.28" "/ws" "imp1"
+  let r := ReceiptMaterial.of? (some "v2:abc") ev "ROOT" false [] "lean-4.28" "/ws" "ctx1" "imp1"
   IO.println (if r.isNone then "REFUSED" else "MINTED")'
 
 probe "an ABSENT subject digest refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X]
                            , tableDigests := [(`X, some "d1")], quantifiesOverTable := false }
-  let r := ReceiptMaterial.of? none ev "ROOT" false [] "lean-4.28" "/ws" "imp1"
+  let r := ReceiptMaterial.of? none ev "ROOT" false [] "lean-4.28" "/ws" "ctx1" "imp1"
   IO.println (if r.isNone then "REFUSED" else "MINTED")'
 
 # An empty identity is not "unknown" — it is a value, and it compares EQUAL to another empty
@@ -1784,15 +1784,19 @@ probe "an ABSENT subject digest refuses to mint" "REFUSED" '
 probe "an empty TOOLCHAIN id refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "" "/ws" "i").isNone then "REFUSED" else "MINTED")'
-probe "an empty WORKSPACE id refuses to mint" "REFUSED" '
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "" "/ws" "c" "i").isNone then "REFUSED" else "MINTED")'
+probe "an empty SCOPE id refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "lean" "" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "lean" "" "c" "i").isNone then "REFUSED" else "MINTED")'
+probe "an empty CONTEXT id refuses to mint" "REFUSED" '
+#eval show MetaM Unit from do
+  let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "lean" "/ws" "" "i").isNone then "REFUSED" else "MINTED")'
 probe "an empty IMPORTS id refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "lean" "/ws" "").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "ROOT" false [] "lean" "/ws" "c" "").isNone then "REFUSED" else "MINTED")'
 
 # Schema version is IN the receipt so an older one reads as a different format rather than as a
 # failed comparison — the same reason `v2:` is in the subject digest. Without it the first
@@ -1805,7 +1809,7 @@ probe "an empty IMPORTS id refuses to mint" "REFUSED" '
 probe_mint "...and a current-schema receipt IS comparable (control)" "COMPARABLE" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "i" with
+  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "c" "i" with
   | some r => IO.println (if r.comparable then "COMPARABLE" else "INCOMPARABLE")
   | none   => IO.println "MINT-REFUSED"'
 
@@ -1814,7 +1818,7 @@ probe_mint "a minted receipt carries the table binding it was given" "d1" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X]
                            , tableDigests := [(`X, some "d1")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "i" with
+  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "c" "i" with
   | some r => IO.println (String.intercalate "," (r.tableBindings.map (·.2)))
   | none   => IO.println "REFUSED"'
 
@@ -1827,16 +1831,16 @@ probe_mint "an unchanged environment is current (control)" "CURRENT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`A]
                            , tableDigests := [(`A, some "da")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 probe_mint "changing a TABLE BODY makes the receipt non-current" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`A]
                            , tableDigests := [(`A, some "da")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da-CHANGED")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da-CHANGED")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 # The swap. Sorting normalizes ORDER, and must not normalize away WHICH name carries which
@@ -1845,8 +1849,8 @@ probe_mint "SWAPPING two tables digests makes the receipt non-current" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`A, `B]
                            , tableDigests := [(`A, some "da"), (`B, some "db")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "db"), (`B, "da")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "db"), (`B, "da")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 # ...while REORDERING the same pairs must NOT. Order is normalized, so it carries no
@@ -1855,8 +1859,8 @@ probe_mint "REORDERING the same pairs leaves it current" "CURRENT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`B, `A]
                            , tableDigests := [(`B, some "db"), (`A, some "da")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da"), (`B, "db")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da"), (`B, "db")] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 # The structural table digest is toolchain-relative (recorded limit at tableValueDigest). That
@@ -1866,36 +1870,43 @@ probe_mint "a TOOLCHAIN change invalidates even with identical table digests" "N
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`A]
                            , tableDigests := [(`A, some "da")], quantifiesOverTable := false }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da")] "ROOT" r.theoremArtifact false [] "tc-NEW" "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [(`A, "da")] "ROOT" r.theoremArtifact false [] "tc-NEW" "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
-probe_mint "a WORKSPACE change invalidates" "NOT" '
+probe_mint "a SCOPE change invalidates" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws-NEW" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws-NEW" "cx" "im" then "CURRENT" else "NOT")
+  | none => IO.println "MINT-REFUSED"'
+
+probe_mint "a resolution CONTEXT change invalidates" "NOT" '
+#eval show MetaM Unit from do
+  let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx-NEW" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 probe_mint "an IMPORT-CLOSURE change invalidates" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im-NEW" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im-NEW" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 probe_mint "a SUBJECT change invalidates" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s-NEW" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s-NEW" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 # A CONTRACT edge names no tables, so it must not acquire a body dependency it does not have.
 probe_mint "a contract edge binds NO tables" "0" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .contract, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
   | some r => IO.println (toString r.tableBindings.length)
   | none => IO.println "MINT-REFUSED"'
 
@@ -1904,7 +1915,7 @@ probe "fewer digests than names refuses AT MINT" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`A, `B]
                            , tableDigests := [(`A, some "da")], quantifiesOverTable := false }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "tc" "ws" "im").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im").isNone then "REFUSED" else "MINTED")'
 
 # === HOSTILE CONTROLS: the invariant is the TYPE, not the smart constructor =================
 # The first version of this envelope claimed "partial evidence is unrepresentable" while the
@@ -1920,7 +1931,7 @@ echo "=== hostile controls (construction is closed) ==="
 # present. Each call now declares the diagnostic it expects, and the run must both exit nonzero and
 # produce THAT diagnostic.
 EXPECTED_NEGATIVE_TESTS=9
-EXPECTED_NEGATIVE_MANIFEST_SHA256="5fa458edeae85325235b877ae9a2fabeb920f245063c719b226235a86d8f3a1b"
+EXPECTED_NEGATIVE_MANIFEST_SHA256="d9bf40279e8fd70a9bfbc868b93e5e7c25709c7b2bf43f361b52acee7c196d9c"
 # THE LABEL ALONE DOES NOT IDENTIFY THE TEST. Nothing bound a negative test's label to its BODY and
 # its expected patterns, so one test's body and patterns could be replaced with another's while
 # keeping its label: the count stays 9, the total stays 310, the assertion labels are identical, and
@@ -1999,7 +2010,7 @@ judge_negative_tests() {
 expect_no_compile "direct construction does NOT compile (constructor is private)" '
 def forged : ProofEvidenceReceipt :=
   { schemaVersion := receiptSchemaVersion, subjectDigest := "", edge := .body
-  , tableBindings := [], toolchainId := "", workspaceId := "", importsId := "" }' \
+  , tableBindings := [], toolchainId := "", scopeId := "", contextId := "", importsId := "" }' \
   'constructor for .ProofEvidenceReceipt. is marked as private'
 
 expect_no_compile '`default` does NOT produce a receipt (no Inhabited)' '
@@ -2013,20 +2024,20 @@ probe "digests for the WRONG table identity refuse to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X]
                            , tableDigests := [(`Y, some "d")], quantifiesOverTable := false }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 
 probe "a DUPLICATE binding for one table refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [`X, `X]
                            , tableDigests := [(`X, some "d"), (`X, some "e")], quantifiesOverTable := false }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 
 # `none` was refused and `some ""` was not — the same hole as an empty environment identity.
 # "" is a value, and it compares equal to another "".
 probe "an EMPTY-STRING subject digest refuses to mint" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "") ev "ROOT" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "") ev "ROOT" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 
 # The EDGE must participate in currency. Its omission was a real hole: a receipt recorded for a
 # `contract` edge read current against `body` material — a claim surviving exactly the
@@ -2034,8 +2045,8 @@ probe "an EMPTY-STRING subject digest refuses to mint" "REFUSED" '
 probe_mint "an EDGE-KIND change makes the receipt non-current" "NOT" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .contract [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .contract [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im" then "CURRENT" else "NOT")
   | none => IO.println "MINT-REFUSED"'
 
 # ONE disposition, not two booleans in the right order. `comparable` then `isCurrentAgainst` was
@@ -2044,15 +2055,15 @@ probe_mint "an EDGE-KIND change makes the receipt non-current" "NOT" '
 probe_mint "disposition: unchanged material is current" "Concrete.Proof.ReceiptDisposition.current" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (toString (repr (r.disposition "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im")))
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (toString (repr (r.disposition "v2:s" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im")))
   | none => IO.println "MINT-REFUSED"'
 
 probe_mint "disposition: moved material is notCurrent (not needsRecheck)" "Concrete.Proof.ReceiptDisposition.notCurrent" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "im" with
-  | some r => IO.println (toString (repr (r.disposition "v2:MOVED" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "im")))
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "tc" "ws" "cx" "im" with
+  | some r => IO.println (toString (repr (r.disposition "v2:MOVED" .body [] "ROOT" r.theoremArtifact false [] r.toolchainId "ws" "cx" "im")))
   | none => IO.println "MINT-REFUSED"'
 
 # === ENVIRONMENT IDENTITIES ==================================================================
@@ -2070,15 +2081,20 @@ probe "toolchain id is deterministic and sensitive to BOTH inputs" "true" '
   let d := toolchainIdOf "0.1.0" "lean4:v4.29.0"
   a == b && a != c && a != d && c != d'
 
-# Discovery order must not enter the identity: the same workspace enumerated differently is the
-# same workspace.
-probe "workspace id ignores module ORDER but not module SET" "true" '
+# Discovery order must not enter the identity: the same resolution enumerated differently is the
+# same resolution context (R-0482; this replaced the workspace id).
+probe "resolution context ignores dependency ORDER but not the dependency SET" "true" '
 #eval
-  let a := workspaceIdOf "pkg" ["m1", "m2"]
-  let b := workspaceIdOf "pkg" ["m2", "m1"]
-  let c := workspaceIdOf "pkg" ["m1", "m3"]
-  let d := workspaceIdOf "other" ["m1", "m2"]
-  a == b && a != c && a != d'
+  match PackageArtifactIdentity.of? [("lib.con", "a")], PackageArtifactIdentity.of? [("lib.con", "b")],
+        PackageScopeIdentity.ofManifest "p" none, PackageScopeIdentity.ofManifest "q" none with
+  | .ok aa, .ok ab, .ok sp, .ok sq =>
+    let ctx := fun (l : List (String × PackageScopeIdentity × PackageArtifactIdentity)) =>
+      (ResolutionContextIdentity.of? l).toOption.map (fun (c : ResolutionContextIdentity) => c.digest)
+    let a := ctx [("p", sp, aa), ("q", sq, ab)]
+    let b := ctx [("q", sq, ab), ("p", sp, aa)]
+    let c := ctx [("p", sp, ab), ("q", sq, ab)]
+    a.isSome && a == b && a != c
+  | _, _, _, _ => false'
 
 # Import CONTENT, not just names — otherwise an imported module could change under a proof
 # without moving anything, which is the defect tableValueDigest exists to prevent one level down.
@@ -2096,7 +2112,7 @@ probe "imports id moves when an imported CONTENT digest changes" "true" '
 probe "an empty dependency ROOT refuses to mint" "REFUSED" \
 '#eval
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 # THE ARTIFACT IS NO LONGER ASSERTABLE. It used to be a `String` parameter, so a caller could name a
 # theorem nobody had replayed and receive a well-formed receipt for it; the only defence was a
 # runtime check that the string was non-empty, which stops "" and nothing else. It now comes from the
@@ -2114,7 +2130,7 @@ probe_mint "receipt issuance REFUSES a subject whose closure cannot root" "ISSUA
   -- everything it needs must be a binding inside that block.
   let aPk := Concrete.shortHash "authority-consumes-root"
   let cid? := (DefinitionIdentity.of? aPk "m" "solo" (Concrete.shortHash "impl:m.solo")).toOption
-  match cid?, (PackageIdentity.syntheticForModules ["m"] ["s"]).toOption with
+  match cid?, (ResolvedIdentity.standalone "m.con" [("m.con", "s")]).toOption with
   | some cid, some pkg =>
     let entry : ProofCoreEntry :=
       { definitionIdentity := .ok cid, qualName := "m.solo", bareName := "solo"
@@ -2131,11 +2147,11 @@ probe_mint "receipt issuance REFUSES a subject whose closure cannot root" "ISSUA
       , status := .proved, spec := none, expectedFp := "", eligibilityReasons := [], admissible := true
       , ineligCat := none, dependencies := [], notCurrentDeps := [], loc := none }
     let pc : ProofCore :=
-      { packageIdentity := pkg, entries := [entry], excluded := [], structs := [], enums := []
+      { identity := pkg, entries := [entry], excluded := [], structs := [], enums := []
       , traitDefs := [], callGraph := [("m.solo", [])], recMap := [], externNames := []
       , obligations := [obl], diagnostics := [] }
     let after := applyCorrespondenceAuthority pc pc.callGraph
-    let env : IssueEnvironment := { compilerVersion := "v", workspaceId := "w", importsId := "i" }
+    let env : IssueEnvironment := { compilerVersion := "v", importsId := "i" }
     match issueFor after rr env (fun _ => []) entry with
     -- The CONSTRUCTOR, not the rendered status. `st` here is the known-false cause tracked
     -- separately; printing it would make this assertion pin a diagnosis that is due to change.
@@ -2147,7 +2163,7 @@ probe_mint "receipt issuance REFUSES a subject whose closure cannot root" "ISSUA
 probe_mint "the minted artifact is the theorem that was REPLAYED, not a caller's claim" "ARTIFACT-MATCHES" \
 '#eval show IO Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "i" with
+  match ← mintProbe (some "v2:a") ev "ROOT" false [] "t" "w" "c" "i" with
   | none => IO.println "MINT-REFUSED"
   | some r => IO.println (if r.theoremArtifact == probeThm then "ARTIFACT-MATCHES" else s!"ARTIFACT-DIVERGED {r.theoremArtifact}")'
 # A TRUST CLAIM MUST AGREE WITH ITS EVIDENCE, both directions: a qualification with no boundary named
@@ -2155,35 +2171,35 @@ probe_mint "the minted artifact is the theorem that was REPLAYED, not a caller's
 probe "carriesTrust with no boundary named refuses" "REFUSED" \
 '#eval
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" true [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" true [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 probe "boundaries named while carriesTrust is false refuses" "REFUSED" \
 '#eval
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" false ["m.helper"] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" false ["m.helper"] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 # ...and the consistent case MINTS, so the refusals above are targeted rather than blanket.
 probe "a qualified receipt mints when flag and boundaries agree" "MINTED" \
 '#eval
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" true ["m.helper"] "t" "w" "i").isSome then "MINTED" else "REFUSED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:a") ev "R" true ["m.helper"] "t" "w" "c" "i").isSome then "MINTED" else "REFUSED")'
 # EVERY NEW FIELD PARTICIPATES IN CURRENCY. A field added to the envelope and left out of the
 # comparison is worse than an absent field: it reads as bound.
 probe_mint "a changed dependency ROOT makes the receipt non-current" "NOT" \
 '#eval show IO Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "i" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT-MOVED" r.theoremArtifact false [] r.toolchainId "w" "i" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT-MOVED" r.theoremArtifact false [] r.toolchainId "w" "c" "i" then "CURRENT" else "NOT")
   | none => IO.println "REFUSED"'
 probe_mint "a changed THEOREM ARTIFACT makes the receipt non-current" "NOT" \
 '#eval show IO Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "i" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" "THM-REPROVED" false [] r.toolchainId "w" "i" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" "THM-REPROVED" false [] r.toolchainId "w" "c" "i" then "CURRENT" else "NOT")
   | none => IO.println "REFUSED"'
 probe_mint "a receipt that gained a trusted boundary is non-current" "NOT" \
 '#eval show IO Unit from do
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
-  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "i" with
-  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact true ["m.h"] r.toolchainId "w" "i" then "CURRENT" else "NOT")
+  match ← mintProbe (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i" with
+  | some r => IO.println (if r.isCurrentAgainst "v2:s" .body [] "ROOT" r.theoremArtifact true ["m.h"] r.toolchainId "w" "c" "i" then "CURRENT" else "NOT")
   | none => IO.println "REFUSED"'
 
 probe "a receipt mints from produced identities" "MINTED" '
@@ -2191,7 +2207,7 @@ probe "a receipt mints from produced identities" "MINTED" '
   let ev : EdgeEvidence := { edge := .body, tables := [], tableDigests := [], quantifiesOverTable := true }
   let r := ReceiptMaterial.of? (some "v2:s") ev "ROOT" false []
              (toolchainIdOf "0.1.0" "lean4:v4.28.0")
-             (workspaceIdOf "pkg" ["m1"])
+             "SCOPE" "CONTEXT"
              (importsIdOf [("m1", "d1")])
   IO.println (if r.isSome then "MINTED" else "REFUSED")'
 
@@ -2209,16 +2225,16 @@ fi
 probe "a receipt refuses an UNCLASSIFIED edge" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .unclassified, tables := [], tableDigests := [], quantifiesOverTable := false }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 probe "a receipt refuses a MISSING edge" "REFUSED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .missing, tables := [], tableDigests := [], quantifiesOverTable := false }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "i").isNone then "REFUSED" else "MINTED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i").isNone then "REFUSED" else "MINTED")'
 # ...and a classified edge still mints, or the refusal above is just a broken constructor.
 probe "a CONTRACT edge still mints (the refusals are targeted)" "MINTED" '
 #eval show MetaM Unit from do
   let ev : EdgeEvidence := { edge := .contract, tables := [], tableDigests := [], quantifiesOverTable := true }
-  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "i").isSome then "MINTED" else "REFUSED")'
+  IO.println (if (ReceiptMaterial.of? (some "v2:s") ev "ROOT" false [] "t" "w" "c" "i").isSome then "MINTED" else "REFUSED")'
 
 # === THE CLASSIFICATION HAND-BACK (slice 6, step 1) ==========================================
 # The compiler cannot classify: the answer comes from a theorem's elaborated type, which exists
@@ -3188,11 +3204,11 @@ probe "a manifest key is matched exactly, not by prefix" "true" \
 '#eval
   let m := "[package]\nnamespace = \"wrong\"\nname = \"right\"\nversioning = \"9.9\"\n"
   (packageField m "name" == some "right") && (packageField m "version" == none)'
-# ...and EVERY identity component is checked for location dependence, including the content root,
-# which was exempt for no reason: an identity is reproducible only if all of it is.
-probe "a location-dependent content root is refused" "true" \
-'#eval match PackageIdentity.of? "pkg" "origin" "/home/someone/checkout" with
-   | .error (PackageIdentityRefusal.locationDependent _) => true
+# ...and EVERY identity component is checked for location dependence, including the module
+# identities an artifact pairs with content: an identity is reproducible only if all of it is.
+probe "a location-dependent artifact module identity is refused" "true" \
+'#eval match PackageArtifactIdentity.of? [("/home/someone/checkout/main.con", "src")] with
+   | .error (IdentityRefusal.locationDependent _) => true
    | _ => false'
 
 probe "cryptoFns is ATTESTED and yields 5 scoped entries" "some 5" \
@@ -3502,65 +3518,95 @@ else
   no "'main.validate_header' has $VH_IDS scoped identity — the cross-program collision is NOT separated"
 fi
 
-# PACKAGE IDENTITY IS COMPUTED FROM DECLARED MATERIAL, once, in project loading. `projectRoot` is
-# deliberately not an input, so two checkouts of one package agree.
-probe "the same manifest and module inventory give the SAME identity (reproducible)" "true" '
-#eval match packageIdentityOf "[package]\nname = \"app\"\nversion = \"1.0\"" ["main"] [],
-            packageIdentityOf "[package]\nname = \"app\"\nversion = \"1.0\"" ["main"] [] with
+# R-0482: THREE IDENTITIES, EACH WITH ONE PRODUCER (IDENTITY_SEPARATION.md section 3).
+# SCOPE binds origin and declared name only. Reproducible, and not moved by version (D2): the
+# producer takes no version, dependency or content input at all.
+probe "the same manifest name and origin give the SAME scope (reproducible)" "true" '
+#eval match PackageScopeIdentity.ofManifest "app" none, PackageScopeIdentity.ofManifest "app" none with
       | .ok a, .ok b => a.digest == b.digest
       | _, _ => false'
-# Same declared name, different module inventory -> different package. This is the realistic
-# collision: two projects both called "app".
-probe "the same declared name with a different module inventory differs" "true" '
-#eval match packageIdentityOf "[package]\nname = \"app\"" ["main"] [],
-            packageIdentityOf "[package]\nname = \"app\"" ["main", "extra"] [] with
-      | .ok a, .ok b => a.digest != b.digest
-      | _, _ => false'
-# NO DECLARED NAME -> typed refusal, not a default. A default would make every unnamed project the
-# same package, which is the collision the whole type exists to prevent.
-probe "a project with no declared name is REFUSED, not defaulted" "true" '
-#eval (packageIdentityOf "[package]\nversion = \"1.0\"" ["main"] []).toOption.isNone'
-# SECTION-AWARE. A `name` under [dependencies] is not the package name, and a whole-file grep would
-# have taken whichever came first — this refuses instead of adopting it.
-probe "a name under [dependencies] is not mistaken for the package name" "true" '
-#eval (packageIdentityOf "[dependencies]\nname = \"sneaky\"" ["main"] []).toOption.isNone'
-
-# PACKAGE IDENTITY. The manifest name alone is NOT sufficient — two unrelated packages can choose
-# the same name — so `declaredName` is bound with an origin and a canonical content root.
-probe "two packages with the SAME declared name but different origins differ" "true" '
-#eval match PackageIdentity.of? "app" "origin-a" "root1", PackageIdentity.of? "app" "origin-b" "root1" with
-      | .ok a, .ok b => a.digest != b.digest
-      | _, _ => false'
-probe "the same declared name, origin and content root give the SAME identity (reproducible)" "true" '
-#eval match PackageIdentity.of? "app" "origin-a" "root1", PackageIdentity.of? "app" "origin-a" "root1" with
-      | .ok a, .ok b => a.digest == b.digest
-      | _, _ => false'
+probe "the manifest reader takes name and origin, never version (D2)" "true" '
+#eval
+  let m1 := "[package]\nname = \"app\"\nversion = \"1.0\"\n"
+  let m2 := "[package]\nname = \"app\"\nversion = \"2.0\"\n"
+  let sc := fun (m : String) => (PackageScopeIdentity.ofManifest ((packageField m "name").getD "")
+                                    (packageFieldRaw m "origin")).toOption.map (·.digest)
+  sc m1 == sc m2 && (sc m1).isSome'
+# Same declared name, different origin -> different scope; and declared vs undeclared differ.
+probe "the SAME declared name under different origins gives different scopes" "true" '
+#eval match PackageScopeIdentity.ofManifest "app" (some "a.example"), PackageScopeIdentity.ofManifest "app" (some "b.example"),
+            PackageScopeIdentity.ofManifest "app" none with
+      | .ok a, .ok b, .ok u => a.digest != b.digest && a.digest != u.digest && b.digest != u.digest
+      | _, _, _ => false'
+# TAGGED ORIGIN (control T, unit level): a manifest origin always parses as `declared`, whatever its
+# text, so no literal impersonates another variant.
+probe "an origin spelled like another variant is still a declared namespace (T)" "true" '
+#eval match PackageScopeIdentity.ofManifest "app" (some "«undeclared»"), PackageScopeIdentity.ofManifest "app" none,
+            PackageScopeIdentity.ofManifest "std" (some "std"), PackageScopeIdentity.ofManifest "std" none,
+            PackageScopeIdentity.toolchainStd "resolver:bundled-std" with
+      | .ok fake, .ok und, .ok userStd, .ok userStdU, .ok tool =>
+        fake.digest != und.digest && userStd.digest != tool.digest && userStdU.digest != tool.digest
+      | _, _, _, _, _ => false'
+probe "the toolchain origin is refused to anything but the resolver (D4)" "true" '
+#eval match PackageScopeIdentity.toolchainStd "manifest" with
+      | .error (IdentityRefusal.reservedOrigin _) => true
+      | _ => false'
 # NO EMPTY SENTINEL. "not supplied" must not be a value that compares equal to every other absent one.
-probe "an empty declared name refuses by name" "true" '
-#eval match PackageIdentity.of? "" "o" "r" with
-      | .error (PackageIdentityRefusal.emptyComponent _) => true
+probe "an empty declared name, or an empty declared origin, refuses by name" "true" '
+#eval (match PackageScopeIdentity.ofManifest "" none with
+       | .error (IdentityRefusal.emptyComponent _) => true | _ => false)
+   && (match PackageScopeIdentity.ofManifest "app" (some "") with
+       | .error (IdentityRefusal.emptyComponent _) => true | _ => false)'
+# NO DECLARED NAME -> refusal, and SECTION-AWARE: a `name` under [dependencies] is not the package's.
+probe "a manifest with no [package] name yields no name to scope by" "true" '
+#eval (packageField "[package]\nversion = \"1.0\"" "name").isNone
+   && (packageField "[dependencies]\nname = \"sneaky\"" "name").isNone'
+# ARTIFACT: PAIRED (module, content). The independent sort this replaced could not see two modules'
+# bodies swapped; pairing must.
+probe "swapping two modules' bodies moves the artifact (pairing, not two sorted lists)" "true" '
+#eval match PackageArtifactIdentity.of? [("«entry»", "A"), ("util.con", "B")],
+            PackageArtifactIdentity.of? [("«entry»", "B"), ("util.con", "A")],
+            PackageArtifactIdentity.of? [("util.con", "B"), ("«entry»", "A")] with
+      | .ok a, .ok b, .ok c => a.digest != b.digest && a.digest == c.digest
+      | _, _, _ => false'
+probe "an artifact refuses an empty inventory and a duplicate module identity (D6)" "true" '
+#eval (match PackageArtifactIdentity.of? [] with
+       | .error (IdentityRefusal.incompleteInventory _) => true | _ => false)
+   && (match PackageArtifactIdentity.of? [("m.con", "x"), ("m.con", "x")] with
+       | .error (IdentityRefusal.duplicateModule _) => true | _ => false)'
+probe "a source outside the entry directory is an incomplete inventory, not a sanitized path" "true" '
+#eval match pairSources "pkg/src/main.con" [("pkg/src/main.con", "a"), ("other/x.con", "b")] with
+      | .error (IdentityRefusal.incompleteInventory _) => true
       | _ => false'
-# LOCATION-DEPENDENT IDENTITIES ARE REFUSED, not sanitized: a sanitized path is still a path, and an
-# identity that varies by checkout cannot be reproducible.
-probe "an absolute path as origin is refused as location-dependent" "true" '
-#eval match PackageIdentity.of? "app" "/home/user/checkout" "r" with
-      | .error (PackageIdentityRefusal.locationDependent _) => true
-      | _ => false'
-probe "a URL-shaped origin is refused as location-dependent" "true" '
-#eval match PackageIdentity.of? "app" "https://example.invalid/p" "r" with
-      | .error (PackageIdentityRefusal.locationDependent _) => true
-      | _ => false'
-# STANDALONE FILES get an explicit synthetic identity from CONTENT, so two different single files
-# cannot share one — which a constant `main` would guarantee they do.
-probe "two different standalone files get DIFFERENT synthetic identities" "true" '
-#eval match PackageIdentity.synthetic "496808fdd594d5047f23e823bc26b69c",
-            PackageIdentity.synthetic "7afedf51e742f4ce04201459a3965bc8" with
-      | .ok a, .ok b => a.digest != b.digest
+probe "a URL-shaped or absolute declared name is refused as location-dependent" "true" '
+#eval (match PackageScopeIdentity.ofManifest "https://example.invalid/p" none with
+       | .error (IdentityRefusal.locationDependent _) => true | _ => false)
+   && (match PackageScopeIdentity.ofManifest "/home/user/app" none with
+       | .error (IdentityRefusal.locationDependent _) => true | _ => false)'
+# STANDALONE FILES get a scope from their own content (D3), so two different single files cannot
+# share one — which a constant `main` would guarantee they do.
+probe "two different standalone files get DIFFERENT standalone scopes" "true" '
+#eval match ResolvedIdentity.standalone "a.con" [("a.con", "fn main() {}")],
+            ResolvedIdentity.standalone "a.con" [("a.con", "fn main() { }")] with
+      | .ok a, .ok b => a.scope.digest != b.scope.digest
       | _, _ => false'
-probe "a synthetic identity with no content material refuses" "true" '
-#eval match PackageIdentity.synthetic "" with
-      | .error (PackageIdentityRefusal.emptyComponent _) => true
-      | _ => false'
+# CONTEXT refusals (D1 at the context producer).
+probe "a context refuses a duplicate binding and two same-named undeclared scopes (D1)" "true" '
+#eval match PackageArtifactIdentity.of? [("lib.con", "a")], PackageArtifactIdentity.of? [("lib.con", "b")],
+            PackageScopeIdentity.ofManifest "util" none, PackageScopeIdentity.ofManifest "util" (some "x.example") with
+      | .ok aa, .ok ab, .ok und, .ok decl =>
+        let dup := ResolutionContextIdentity.of? [("u", und, aa), ("u", decl, ab)]
+        -- the same package twice (one artifact) is not ambiguous; one name over two artifacts is
+        let amb := refuseAmbiguousUndeclared [(und, aa), (PackageScopeIdentity.standalone ab, ab), (und, aa)]
+        let amb2 := match PackageScopeIdentity.ofManifest "util" none with
+          | .ok und2 => ResolutionContextIdentity.of? [("u1", und, aa), ("u2", und2, ab)]
+          | .error e => .error e
+        let ok := ResolutionContextIdentity.of? [("u1", und, aa), ("u2", decl, ab)]
+        (match dup with | .error (IdentityRefusal.duplicateBinding _) => true | _ => false)
+          && amb.toOption.isSome
+          && (match amb2 with | .error (IdentityRefusal.ambiguousUndeclared _) => true | _ => false)
+          && ok.toOption.isSome
+      | _, _, _, _ => false'
 
 DI='
   let implA := "496808fdd594d5047f23e823bc26b69c"

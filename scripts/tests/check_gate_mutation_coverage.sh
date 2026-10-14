@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=116
+EXPECTED_FAMILIES=123
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1091,15 +1091,57 @@ add "manifest-drift-classified" "scripts/gen/attestation_manifest.sh" "check_att
   $'DRIFT="$(grep -rlE \'^// .*DRIFTED variant\' examples --include=\'*.con\' 2>/dev/null | sort)"' \
   $'DRIFT="$(grep -rlE \'^// .*NO_SUCH_MARKER\' examples --include=\'*.con\' 2>/dev/null | sort)"'
 
-# R-0004 attestation provenance. PACKAGE COLLAPSE: `contentRoot` binds module CONTENT. The mutation
-# reverts it to module NAMES ONLY, which is the state that collapsed `composition` and
-# `composition_trusted_helper` — two different programs — into one package identity.
-# The mutation makes CONTENT contribute nothing while keeping every binding live. A first version
-# deleted `srcPart` from the concatenation, which left it unused and failed the build on a lint — the
-# harness correctly called that INVALID, because a mutation that cannot compile tests nothing.
-add "package-identity-binds-content" "Concrete/Proof/DefinitionIdentity.lean" "check_attestation_manifest.sh" yes \
-  $'    let srcPart := srcs.foldl (fun a d => a ++ "|S" ++ d) ""\n    PackageIdentity.synthetic (Concrete.shortHash ("pkgSyntheticV1:" ++ mods ++ srcPart))' \
-  $'    let srcPart := srcs.foldl (fun a _ => a) ""\n    PackageIdentity.synthetic (Concrete.shortHash ("pkgSyntheticV1:" ++ mods ++ srcPart))'
+# R-0004 attestation provenance, carried through R-0482. CONTENT BINDING: a package's artifact binds
+# its modules' CONTENT (the old `contentRoot` collapse of `composition` and `composition_trusted_helper`
+# into one package). The mutation makes content contribute nothing while keeping every binding live,
+# so a sibling edit no longer moves the artifact and a standalone scope no longer moves with its own
+# content (O2, O2s).
+add "artifact-binds-content" "Concrete/Proof/DefinitionIdentity.lean" "check_identity_overbinding.sh" yes \
+  $'  let recs := paired.map fun (m, src) => (m, Concrete.shortHash src)' \
+  $'  let recs := paired.map fun (m, src) => (m, Concrete.shortHash (src.take 0).toString)'
+
+# R-0482. ARTIFACT PAIRING: the artifact binds sorted (module, content) PAIRS. The mutation reinstates
+# the pre-R-0482 limit — names and contents sorted independently — under which swapping two modules'
+# bodies leaves the package unchanged.
+add "artifact-pairs-module-with-content" "Concrete/Proof/DefinitionIdentity.lean" "check_dependency_edges.sh" yes \
+  $'  .ok (PackageArtifactIdentity.mk (recs.mergeSort fun a b => a.1 ≤ b.1))' \
+  $'  .ok (PackageArtifactIdentity.mk (List.zip ((recs.map (·.1)).mergeSort (· ≤ ·)) ((recs.map (·.2)).mergeSort (· ≤ ·))))'
+
+# R-0482. TAGGED ORIGIN: each ScopeOrigin variant renders under its own tag. The mutation renders
+# `undeclared` exactly as a manifest declaring `origin = "«undeclared»"` would, the impersonation the
+# tagged variant exists to make unrepresentable (control T).
+add "scope-origin-tagged" "Concrete/Proof/DefinitionIdentity.lean" "check_dependency_edges.sh" yes \
+  $'  | .undeclared     => "U"' \
+  $'  | .undeclared     => "D12:«undeclared»"'
+
+# R-0482 D4. RESERVED ORIGIN: only the resolver's bundled std may take the toolchain scope.
+add "toolchain-origin-reserved" "Concrete/Proof/DefinitionIdentity.lean" "check_dependency_edges.sh" yes \
+  $'  if requester == "resolver:bundled-std" then .ok' \
+  $'  if requester == requester then .ok'
+
+# R-0482 D1. Two different packages sharing one name with no declared origin have ONE scope by
+# construction; the refusal is what keeps them from keying as one package. The mutation disables it.
+add "d1-undeclared-collision-refused" "Concrete/Proof/DefinitionIdentity.lean" "check_dependency_edges.sh" yes \
+  $'s2.name == s.name && a2.digest != a.digest)' \
+  $'s2.name == s.name && a2.digest != a.digest && s2.name == "")'
+
+# R-0482. OWNER-SCOPED EXTRACTION: each definition carries its OWNING package's scope. The mutation
+# scopes every definition by the root (the pre-R-0482 rule), so std's functions read as the project's.
+add "owner-scoped-extraction" "Concrete/Proof/ProofCore.lean" "check_identity_separation.sh" yes \
+  $'Proof.DefinitionIdentity.of? (identity.scopeOf top).digest cid.defModule cid.declName' \
+  $'Proof.DefinitionIdentity.of? (identity.scopeOf (top.take 0).toString).digest cid.defModule cid.declName'
+
+# R-0482. CONTEXT VS ROOT: a receipt whose closure is intact but whose resolution context moved must
+# read "re-validate under policy", never "re-establish" and never a generic environment change.
+add "receipt-context-vs-root" "Concrete/Proof/Receipt.lean" "check_identity_separation.sh" yes \
+  $'  else if moved.contains "context" then' \
+  $'  else if moved.contains "context" && moved.isEmpty then'
+
+# R-0482. MAP TOTALITY: a baseline row with no counterpart must refuse the map. The mutation records
+# it as mapped, so a migration that lost a row would read as total.
+add "migration-map-totality" "scripts/tools/identity_migration_map.sh" "check_identity_separation.sh" no \
+  $'            emit(kind, "refused", describe(o), "no-counterpart"); refused += 1; continue' \
+  $'            emit(kind, "mapped", describe(o), "no-counterpart"); continue'
 
 # R-0004 attestation provenance. OMISSION OF THE SOURCE-LINKED POPULATION. The manifest scans fixtures
 # carrying `#[proof_by]`/`#[ensures_proof]`; dropping that population leaves only whatever the other
@@ -1186,16 +1228,16 @@ add "cross-package-caps-empty-not-unknown" "Concrete/Check/CoreCheck.lean" "chec
   $'    match env.importedCaps.lookup name with\n    | some _ => return some CapSet.empty'
 
 add "attestation-conversion-complete" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of checkDataFn       GeneratedAttestations.elfFns_7f35f419_check_data\n    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_7f35f419_check_magic' \
-  $'    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_7f35f419_check_magic'
+  $'    , AttestedPFnDef.of checkDataFn       GeneratedAttestations.elfFns_4ce9c9d8_check_data\n    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_4ce9c9d8_check_magic' \
+  $'    , AttestedPFnDef.of checkMagicFn      GeneratedAttestations.elfFns_4ce9c9d8_check_magic'
 
 # ...and the same mutation PER CONVERTED TABLE, because the reconciliation is per table: a version
 # that only reconciled the table someone happened to mutate would leave every other conversion
 # unmeasured. `elfFns` above has a named exclusion, so its arithmetic is rows = attested + 1;
 # `fixedCapacityFns` has none, so it is the control for the simple case rows = attested.
 add "attestation-conversion-complete-fixedcapacity" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_push' \
-  $'    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_push'
+  $'    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_86ab616e_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_86ab616e_ring_push' \
+  $'    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_86ab616e_ring_push'
 
 # R-0004 package 2, and the same family for the table whose manifest rows are FEWER than its entries.
 # `parseValidateFns` has 8 entries and 3 rows, so a reader could mistake a dropped attestation for
@@ -1205,8 +1247,8 @@ add "attestation-conversion-complete-fixedcapacity" "Concrete/Proof/Proof.lean" 
 # `validateVersionFn`, which are FOUR lines apart in the attested list — each line was present, so a
 # line-wise check saw a match while an exact substring could never apply. Adjacent lines only.
 add "attestation-conversion-complete-parsevalidate" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of validateHeaderFieldsFn GeneratedAttestations.parseValidateFns_cf03eda0_validate_header_fields\n    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_cf03eda0_validate_msg_type' \
-  $'    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_cf03eda0_validate_msg_type'
+  $'    , AttestedPFnDef.of validateHeaderFieldsFn GeneratedAttestations.parseValidateFns_3cf1596c_validate_header_fields\n    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_3cf1596c_validate_msg_type' \
+  $'    , AttestedPFnDef.of validateMsgTypeFn      GeneratedAttestations.parseValidateFns_3cf1596c_validate_msg_type'
 
 # R-0004 package 2. A DRIFTED IMPLEMENTATION ATTESTED. This is the exclusion that is NOT a
 # judgement call: `evidence_classes/stale_proof` links the same theorem while its body starts `diff`
@@ -1221,8 +1263,8 @@ add "attestation-conversion-complete-parsevalidate" "Concrete/Proof/Proof.lean" 
 # 2 attested + 1 declared exclusion) and only the drift check can catch it — and only because it
 # reads what the table site BOUND, not what the exclusion list DECLARED.
 add "attestation-never-binds-drifted-impl" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_404dc2c1_ct_compare ]' \
-  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_13c8e415_ct_compare ]'
+  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_3d667120_ct_compare ]' \
+  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_f2ce224d_ct_compare ]'
 
 # R-0004 package 2. A DEPENDENCY REFERENCE LEFT UNBOUND. The subject/dependency split only matters if
 # an unbound reference is caught, and the earlier reconciliation could not see one: it compared
@@ -1230,8 +1272,8 @@ add "attestation-never-binds-drifted-impl" "Concrete/Proof/Proof.lean" "check_at
 # reconciliation now runs over the distinct reference set for each table, so a model the table could
 # describe exactly and does not is a failure.
 add "attestation-dependency-reference-bound" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    [ AttestedPFnDef.of computeChecksumFn      GeneratedAttestations.parseValidateFns_cf03eda0_compute_checksum\n    , AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_cf03eda0_parse_header' \
-  $'    [ AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_cf03eda0_parse_header'
+  $'    [ AttestedPFnDef.of computeChecksumFn      GeneratedAttestations.parseValidateFns_3cf1596c_compute_checksum\n    , AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_3cf1596c_parse_header' \
+  $'    [ AttestedPFnDef.of parseHeaderFn          GeneratedAttestations.parseValidateFns_3cf1596c_parse_header'
 
 # R-0004 package 2. THE ENTRANCE ASSERTION MUST BE ABLE TO SAY NO. It exists to be red until the flip
 # is safe, and a completion gate that cannot fail is worse than none — it converts an unchecked
@@ -1244,7 +1286,7 @@ add "attestation-dependency-reference-bound" "Concrete/Proof/Proof.lean" "check_
 # SURVIVED, which is the honest answer for a mutation that changed no behaviour. It now empties the
 # attestation list outright, which is the actual unattested state.
 add "atomic-flip-entrance-refuses-pending" "Concrete/Proof/Proof.lean" "check_atomic_flip_entrance.sh" yes \
-  $'    [ AttestedPFnDef.of fcTagFn         GeneratedAttestations.fixedCapacityFns_c33c5f39_compute_tag\n    , AttestedPFnDef.of ringContainsFn  GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_contains\n    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_c33c5f39_ring_push ]' \
+  $'    [ AttestedPFnDef.of fcTagFn         GeneratedAttestations.fixedCapacityFns_86ab616e_compute_tag\n    , AttestedPFnDef.of ringContainsFn  GeneratedAttestations.fixedCapacityFns_86ab616e_ring_contains\n    , AttestedPFnDef.of ringNewFn       GeneratedAttestations.fixedCapacityFns_86ab616e_ring_new\n    , AttestedPFnDef.of ringPushFn      GeneratedAttestations.fixedCapacityFns_86ab616e_ring_push ]' \
   $'    []'
 
 # ...and it must also refuse a table whose bound references are not LOAD-BEARING. Binding an
@@ -1252,8 +1294,8 @@ add "atomic-flip-entrance-refuses-pending" "Concrete/Proof/Proof.lean" "check_at
 # nothing: the mutation attests a model the table does not hold, which `scopedEntryEvidence` refuses
 # as `attestedModelNotInTable` — so the membership no longer equals the bound count.
 add "atomic-flip-entrance-refuses-inert-binding" "Concrete/Proof/Proof.lean" "check_atomic_flip_entrance.sh" yes \
-  $'    [ AttestedPFnDef.of checkClassFn      GeneratedAttestations.elfFns_7f35f419_check_class' \
-  $'    [ AttestedPFnDef.of checkNonceFn      GeneratedAttestations.elfFns_7f35f419_check_class'
+  $'    [ AttestedPFnDef.of checkClassFn      GeneratedAttestations.elfFns_4ce9c9d8_check_class' \
+  $'    [ AttestedPFnDef.of checkNonceFn      GeneratedAttestations.elfFns_4ce9c9d8_check_class'
 
 
 # ---------------------------------------------------------------------------
@@ -1267,7 +1309,7 @@ add "atomic-flip-entrance-refuses-inert-binding" "Concrete/Proof/Proof.lean" "ch
 # `main_drifted`'s edges match `elfFns` again — the exact substitution the flip closed, measured on
 # a real fixture rather than argued.
 add "scoped-identity-compares-package" "Concrete/Proof/DefinitionIdentity.lean" "check_dependency_edges.sh" yes \
-  $'  a.packageIdentity == b.packageIdentity\n    && a.moduleIdentity == b.moduleIdentity' \
+  $'  a.scope == b.scope\n    && a.moduleIdentity == b.moduleIdentity' \
   $'  a.moduleIdentity == b.moduleIdentity'
 
 # SUBSTITUTION: the same declaration in the same package with a DIFFERENT body. The corpus has no
@@ -1502,8 +1544,8 @@ add "receipt-decode-refuses-partial" "Concrete/Proof/Receipt.lean" "check_receip
 
 # SKIPPING AN UNKNOWN KEY makes a newer format — or a smuggled field — look like a clean parse.
 add "receipt-decode-refuses-unknown-key" "Concrete/Proof/Receipt.lean" "check_receipt_consumption.sh" yes \
-  '      else throw (.unknownKey key)' \
-  '      else pure ()'
+  '  if let some k := unknown then throw (.unknownKey k)' \
+  '  if let some _k := unknown then pure ()'
 
 # SCHEMA IS CHECKED BEFORE CONTENT, so an older envelope reads as a different format rather than as
 # a program that moved.

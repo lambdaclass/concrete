@@ -17,15 +17,16 @@ becomes authoritative.
 
 **Four components, and each is load-bearing:**
 
-- `packageIdentity` — stable SEMANTIC package identity from the manifest. Deliberately not a
-  checkout path or a mutable workspace id: those would break reproducibility and legitimate package
-  reuse, so the same package built in two locations must yield the same identity.
+- `scope` — the OWNING package's `PackageScopeIdentity` digest: who the package claims to be (its
+  manifest name and origin, or the `standalone` variant over its own artifact). Deliberately not a
+  checkout path, and — since R-0482 — not its content, version, dependencies or std either: those
+  are `PackageArtifactIdentity` and `ResolutionContextIdentity`, bound into receipts, never here.
 - `moduleIdentity` — the resolved module.
 - `declarationIdentity` — the declaration within that module.
 - `implementationIdentity` — binds typed signature, capabilities, generics, contracts and canonical
-  body (this is `implementationDigest`). Package identity alone is insufficient because
-  implementations change within a package; a body digest alone is insufficient because contracts,
-  signature and capabilities matter.
+  body (this is `implementationDigest`). Scope alone is insufficient because implementations change
+  within a package; a body digest alone is insufficient because contracts, signature and
+  capabilities matter.
 
 `CallableId` REMAINS the compiler-local name. Rewriting every use would be churn without benefit —
 inside one compilation a source name is unambiguous. What must use the stronger identity is the
@@ -34,125 +35,11 @@ evidence boundary: correspondence, proof-table entries, receipts, and package ar
 
 namespace Concrete.Proof
 
-/-- Why a package identity could not be formed. -/
-inductive PackageIdentityRefusal where
-  /-- A component is empty. `""` must never represent "not supplied": two unrelated packages would
-      both bind as `""` and compare EQUAL, which is the collision the whole type exists to prevent. -/
-  | emptyComponent (which : String)
-  /-- A checkout path or other mutable location was offered as identity. Rejected on principle
-      rather than sanitized: an identity that varies by where the code sits cannot be reproducible,
-      and legitimate package reuse in two locations must yield the SAME identity. -/
-  | locationDependent (found : String)
-deriving Repr, BEq
-
-def PackageIdentityRefusal.explain : PackageIdentityRefusal → String
-  | .emptyComponent w   => s!"package identity component '{w}' is empty"
-  | .locationDependent f => s!"'{f}' looks location-dependent — an identity must not vary by checkout"
-
-/-- Stable semantic package identity.
-
-    THE MANIFEST NAME ALONE IS NOT SUFFICIENT, which is the correction that produced this type: two
-    unrelated packages can choose the same name, so `declaredName` is a claim rather than an
-    identity. It is bound together with an origin/namespace and a canonical content root, and the
-    result is deterministic and checkout-independent.
-
-    Private constructor. An identity missing a component has no representation, and in particular
-    there is no empty-string sentinel for "not supplied" — a caller without an identity must take a
-    typed refusal, not a value that compares equal to every other absent one. -/
-structure PackageIdentity where
-  private mk ::
-  /-- The name the package declares for itself. A claim, not an identity. -/
-  declaredName : String
-  /-- Stable namespace or origin identity — what distinguishes two packages that chose one name. -/
-  originIdentity : String
-  /-- Canonical module/content root, so a package whose contents change is not silently the same
-      package for evidence purposes. -/
-  contentRoot : String
-deriving Repr, BEq
-
 /-- Reject identities that vary by where the code happens to sit. Heuristic and deliberately
     conservative: it refuses rather than sanitizes, because a sanitized path is still a path. -/
-private def looksLocationDependent (v : String) : Bool :=
+def looksLocationDependent (v : String) : Bool :=
   v.startsWith "/" || v.startsWith "./" || v.startsWith "../" || v.contains '\\'
     || (v.splitOn "://").length > 1
-
-/-- Build a package identity, or refuse. -/
-def PackageIdentity.of? (declaredName originIdentity contentRoot : String)
-    : Except PackageIdentityRefusal PackageIdentity :=
-  if declaredName.isEmpty then .error (.emptyComponent "declaredName")
-  else if originIdentity.isEmpty then .error (.emptyComponent "originIdentity")
-  else if contentRoot.isEmpty then .error (.emptyComponent "contentRoot")
-  else if looksLocationDependent declaredName then .error (.locationDependent declaredName)
-  else if looksLocationDependent originIdentity then .error (.locationDependent originIdentity)
-  -- THE CONTENT ROOT IS CHECKED TOO. It was exempt, and the exemption had no justification: an
-  -- identity is reproducible only if EVERY component is, and a content root carrying a checkout path
-  -- makes the whole identity vary by where the code sits — the exact failure the other two
-  -- components are checked for. Nothing in the corpus supplies a path here today, which is why the
-  -- omission survived; a future producer that did would have been accepted in silence.
-  else if looksLocationDependent contentRoot then .error (.locationDependent contentRoot)
-  else .ok (PackageIdentity.mk declaredName originIdentity contentRoot)
-
-/-- The identity for a STANDALONE single-file compilation, derived from canonical content.
-
-    Explicit rather than implicit, and derived from the module/content material rather than from a
-    path or a generic `main`. Two different single files must not share an identity — which a
-    constant `"main"` would guarantee they do — and the same file compiled in two locations must
-    share one, which a path would guarantee it does not. `contentDigest` is the canonical content
-    material; the caller computes it once and it is bound here. -/
-def PackageIdentity.synthetic (contentDigest : String)
-    : Except PackageIdentityRefusal PackageIdentity :=
-  if contentDigest.isEmpty then .error (.emptyComponent "contentDigest")
-  else PackageIdentity.of? "«standalone»" ("synthetic:" ++ contentDigest) contentDigest
-
-/-- The synthetic identity for a standalone compilation, from its MODULE INVENTORY.
-
-    ONE producer for the four standalone `extractProofCore` paths. Each deriving its own content
-    digest would be four answers to "which package is this", and they would drift — the defect class
-    this codebase gates for. Callers supply the module names; the canonical ordering and the digest
-    formula live here.
-
-    Refuses an empty inventory: a compilation with no modules has no content to identify, and a
-    constant fallback would make every such compilation the same package. -/
-def PackageIdentity.syntheticForModules (moduleNames : List String)
-    (moduleSources : List String := [])
-    : Except PackageIdentityRefusal PackageIdentity :=
-  if moduleNames.isEmpty then .error (.emptyComponent "moduleInventory")
-  else
-    -- CONTENT, not just names, for the same reason `packageIdentityOf` binds it: measured on the
-    -- corpus, `composition` and `composition_trusted_helper` are different programs whose module
-    -- INVENTORY is identical (`calls`), so a name-only synthetic identity assigned them one package.
-    -- Sources are digested and sorted by CONTENT, never by path, so ordering cannot reintroduce
-    -- checkout dependence.
-    let mods := (moduleNames.mergeSort (· ≤ ·)).foldl (fun a m => a ++ s!"|M{m.length}:{m}") ""
-    -- SORTED BY CONTENT, and no longer deduplicated. An earlier version erased duplicate digests and
-    -- claimed that "loses nothing"; an independent review showed the claim was false, and it was.
-    -- Collapsing `[X, X]` into `[X]` also collapses a module that went MISSING into one that was
-    -- merely enumerated twice, so the dedup could hide the very omission an identity should catch.
-    -- The duplicate is prevented at its producer instead: `resolveModules` compares its
-    -- already-visited paths CANONICALLY, so one file cannot enter the source list under two
-    -- spellings. Removing the dedup left every corpus identity unchanged, which is the measurement
-    -- that shows it had become a no-op rather than a load-bearing filter.
-    --
-    -- KNOWN LIMIT, recorded rather than glossed: names and contents are still sorted INDEPENDENTLY,
-    -- so this binds "these modules exist" beside "these contents exist" and never says which content
-    -- belongs to which module — swapping two modules' bodies does not move it. Binding sorted
-    -- `(module, content)` records is the correct form and changes every package identity in the
-    -- corpus, so it is an identity-scheme migration with a generator bootstrap step (the attestation
-    -- generator consults the tables' own scoped evidence, which the migration invalidates) rather
-    -- than a local edit. Scoped as follow-up work, not silently accepted.
-    let srcs := (moduleSources.map Concrete.shortHash).mergeSort (· ≤ ·)
-    let srcPart := srcs.foldl (fun a d => a ++ "|S" ++ d) ""
-    PackageIdentity.synthetic (Concrete.shortHash ("pkgSyntheticV1:" ++ mods ++ srcPart))
-
-/-- Canonical rendering, length-prefixed per component. -/
-def PackageIdentity.canonical (p : PackageIdentity) : String :=
-  s!"pkgIdV1:N{p.declaredName.length}:{p.declaredName}"
-    ++ s!"|O{p.originIdentity.length}:{p.originIdentity}"
-    ++ s!"|R{p.contentRoot.length}:{p.contentRoot}"
-
-/-- Domain-separated digest — the value `DefinitionIdentity.packageIdentity` carries. -/
-def PackageIdentity.digest (p : PackageIdentity) : String :=
-  Concrete.shortHash p.canonical
 
 /-- Read a scalar field from the `[package]` section, or `none`.
 
@@ -182,61 +69,263 @@ def packageField (content : String) (field : String) : Option String :=
       else go rest inPkg
   go lines false
 
-/-- The package identity for this project, or a typed refusal.
+/-- A `[package]` field as written, including an empty value — `packageField` maps `""` to `none`,
+    which would let `origin = ""` read as an undeclared origin rather than refuse. -/
+def packageFieldRaw (content : String) (field : String) : Option String :=
+  let lines := content.splitOn "\n" |>.map (·.trimAscii.toString)
+  let rec go : List String → Bool → Option String
+    | [], _ => none
+    | l :: rest, inPkg =>
+      if l.startsWith "[package]" then go rest true
+      else if l.startsWith "[" then go rest false
+      else if inPkg && ((l.splitOn "=").head?.map (·.trimAscii.toString) == some field) then
+        let v := "=".intercalate ((l.splitOn "=").drop 1) |>.trimAscii.toString
+        let v := if v.startsWith "\"" then (v.drop 1).toString else v
+        some (if v.endsWith "\"" then (v.dropEnd 1).toString else v)
+      else go rest inPkg
+  go lines false
 
-    DERIVED FROM DECLARED MATERIAL AND CONTENT, never from a path. `projectRoot` is deliberately not
-    an input: the same package built in two checkouts must yield ONE identity, and
-    `PackageIdentity.of?` refuses location-dependent components outright.
+-- ============================================================
+-- R-0482 identity separation (docs/verification/IDENTITY_SEPARATION.md, ratified 2026-10-13)
+-- ============================================================
+--
+-- The single over-bound `PackageIdentity` this replaced (deleted, not deprecated) did three jobs at once — who the package claims to
+-- be, what its code is, and how it was resolved — so an unused std edit renamed every manifestful
+-- package's generated symbols and a sibling edit renamed a function's attestation. The three jobs
+-- are three identities now, each with one producer, a canonical length-prefixed rendering under its
+-- own domain tag, and a private constructor reached only through a refusing `of?`.
 
-    LIMITATION, stated because it is the residual collision rather than a closed one: the manifest
-    has no origin or namespace field — only `name` and `version` exist across the corpus — so
-    `originIdentity` is derived from the declared coordinate plus the dependency inventory, and
-    `contentRoot` from the module inventory. Two UNRELATED packages sharing name, version,
-    dependency names and module names would still collide. Fully closing that needs a declared
-    origin in `Concrete.toml`, which is a manifest surface change and therefore a decision rather
-    than an implementation detail. -/
-def packageIdentityOf (tomlContent : String) (moduleNames : List String)
-    (depNames : List String) (moduleSources : List String := [])
-    : Except PackageIdentityRefusal PackageIdentity :=
-  match packageField tomlContent "name" with
+/-- Why one of the separated identities could not be formed. -/
+inductive IdentityRefusal where
+  /-- A component is empty. `""` must never stand for "not supplied". -/
+  | emptyComponent (which : String)
+  /-- A location-dependent value was offered as identity (see `looksLocationDependent`). -/
+  | locationDependent (found : String)
+  /-- D6: a module without its source, or a source without its module. An incomplete inventory
+      cannot be identified — a partial answer would be a different package's identity. -/
+  | incompleteInventory (detail : String)
+  /-- One module identity twice in one package. Never deduplicated: collapsing `[X, X]` into `[X]`
+      also collapses a module that went missing into one enumerated twice (bug 074 discipline). -/
+  | duplicateModule (moduleId : String)
+  /-- D1: two different packages with one name and no declared origin at one boundary. Neither
+      claims a namespace, so their scopes are identical and choosing one would be a guess. -/
+  | ambiguousUndeclared (name : String)
+  /-- The reserved `toolchain` origin was requested by something other than the resolver's bundled
+      std (D4). -/
+  | reservedOrigin (requestedBy : String)
+  /-- Two dependencies bound under one name in one resolution. -/
+  | duplicateBinding (name : String)
+deriving Repr, BEq
+
+def IdentityRefusal.explain : IdentityRefusal → String
+  | .emptyComponent w        => s!"identity component '{w}' is empty"
+  | .locationDependent f     => s!"'{f}' looks location-dependent — an identity must not vary by checkout"
+  | .incompleteInventory d   => s!"incomplete module inventory: {d}"
+  | .duplicateModule m       => s!"module identity '{m}' appears twice in one package"
+  | .ambiguousUndeclared n   => s!"two packages named '{n}' declare no origin, so nothing distinguishes them (declare `origin` in one [package] section)"
+  | .reservedOrigin by_      => s!"the toolchain origin is reserved for the bundled std (requested by {by_})"
+  | .duplicateBinding n      => s!"dependency '{n}' is bound twice in one resolution"
+
+/-- What a package's OWN code is: the sorted, PAIRED `(module identity, content digest)` records of
+    its own source files. Pairing fixes the old independent sort, where swapping two modules' bodies
+    left the package unchanged. Never binds dependencies or std.
+
+    A module identity is the file's path relative to the package's entry directory, with the entry
+    file itself rendered `«entry»` — location-independent (no checkout path survives), and exactly
+    the structure `mod X;` resolution reads (`X.con` or `X/mod.con`). -/
+structure PackageArtifactIdentity where
+  private mk ::
+  modules : List (String × String)
+deriving Repr, BEq
+
+/-- The ONE artifact producer (D6), from paired `(module identity, source text)` records.
+    Refuses an empty or unpaired inventory and any duplicate module identity. -/
+def PackageArtifactIdentity.of? (paired : List (String × String))
+    : Except IdentityRefusal PackageArtifactIdentity :=
+  if paired.isEmpty then .error (.incompleteInventory "no modules")
+  else match paired.find? (fun (m, _) => m.isEmpty) with
+  | some _ => .error (.incompleteInventory "a source has no module identity")
   | none =>
-    -- A project with no declared name gets no identity, and therefore no scoped evidence. Refusing
-    -- is the point: a default would make every unnamed project the same package.
-    .error (.emptyComponent "declaredName")
-  | some declared =>
-    let version := (packageField tomlContent "version").getD "«unversioned»"
-    let deps := (depNames.mergeSort (· ≤ ·)).foldl (fun a d => a ++ s!"|D{d.length}:{d}") ""
-    let mods := (moduleNames.mergeSort (· ≤ ·)).foldl (fun a m => a ++ s!"|M{m.length}:{m}") ""
-    let origin := Concrete.shortHash s!"pkgOriginV1:N{declared.length}:{declared}|V{version.length}:{version}{deps}"
-    -- CONTENT, not just names. `contentRoot` used module NAMES alone, and the corpus showed what
-    -- that costs: `composition` and `composition_trusted_helper` are DIFFERENT PROGRAMS declaring
-    -- the same package name and the same module inventory, so they collapsed to ONE package
-    -- identity. Their implementations differ, so `DefinitionIdentity` still separated them — but a
-    -- package identity that cannot tell two programs apart is not a package identity.
-    --
-    -- Sources are digested by CONTENT and sorted by content, never by path: sorting by path would
-    -- reintroduce checkout dependence through the ordering, which is the same defect the
-    -- location-dependence refusal exists to prevent.
-    -- SORTED BY CONTENT, and no longer deduplicated. An earlier version erased duplicate digests and
-    -- claimed that "loses nothing"; an independent review showed the claim was false, and it was.
-    -- Collapsing `[X, X]` into `[X]` also collapses a module that went MISSING into one that was
-    -- merely enumerated twice, so the dedup could hide the very omission an identity should catch.
-    -- The duplicate is prevented at its producer instead: `resolveModules` compares its
-    -- already-visited paths CANONICALLY, so one file cannot enter the source list under two
-    -- spellings. Removing the dedup left every corpus identity unchanged, which is the measurement
-    -- that shows it had become a no-op rather than a load-bearing filter.
-    --
-    -- KNOWN LIMIT, recorded rather than glossed: names and contents are still sorted INDEPENDENTLY,
-    -- so this binds "these modules exist" beside "these contents exist" and never says which content
-    -- belongs to which module — swapping two modules' bodies does not move it. Binding sorted
-    -- `(module, content)` records is the correct form and changes every package identity in the
-    -- corpus, so it is an identity-scheme migration with a generator bootstrap step (the attestation
-    -- generator consults the tables' own scoped evidence, which the migration invalidates) rather
-    -- than a local edit. Scoped as follow-up work, not silently accepted.
-    let srcs := (moduleSources.map Concrete.shortHash).mergeSort (· ≤ ·)
-    let srcPart := srcs.foldl (fun a d => a ++ "|S" ++ d) ""
-    let root := Concrete.shortHash s!"pkgRootV1:{mods}{srcPart}"
-    PackageIdentity.of? declared origin root
+  match paired.find? (fun (m, _) => looksLocationDependent m || (m.splitOn "..").length > 1) with
+  | some (m, _) => .error (.locationDependent m)
+  | none =>
+  let ids := paired.map (·.1)
+  match ids.find? (fun m => (ids.filter (· == m)).length > 1) with
+  | some m => .error (.duplicateModule m)
+  | none =>
+  let recs := paired.map fun (m, src) => (m, Concrete.shortHash src)
+  .ok (PackageArtifactIdentity.mk (recs.mergeSort fun a b => a.1 ≤ b.1))
+
+/-- Canonical rendering: length-prefixed pairs, sorted by module identity. -/
+def PackageArtifactIdentity.canonical (a : PackageArtifactIdentity) : String :=
+  a.modules.foldl (fun acc (m, d) => acc ++ s!"|M{m.length}:{m}|C{d.length}:{d}") "pkgArtifactV1:"
+
+def PackageArtifactIdentity.digest (a : PackageArtifactIdentity) : String :=
+  Concrete.shortHash a.canonical
+
+/-- Pair a resolved source map with module identities, relative to the package's entry file.
+    Every source must lie under the entry's directory; one that does not is an incomplete inventory
+    rather than a path to be sanitized. -/
+def pairSources (entryPath : String) (srcMap : List (String × String))
+    : Except IdentityRefusal (List (String × String)) :=
+  let parts := entryPath.splitOn "/"
+  let dir := "/".intercalate (parts.take (parts.length - 1))
+  let pre := if dir.isEmpty then "" else dir ++ "/"
+  srcMap.mapM fun (path, src) =>
+    if path == entryPath then .ok ("«entry»", src)
+    else if pre.isEmpty || path.startsWith pre then .ok ((path.drop pre.length).toString, src)
+    else .error (.incompleteInventory s!"'{path}' lies outside the package of '{entryPath}'")
+
+/-- Where a package's claimed identity comes from. A TAGGED variant, never a string convention: a
+    manifest's `origin` text always parses as `declared`, so no literal can impersonate another
+    variant. -/
+inductive ScopeOrigin where
+  /-- A manifest's `origin`: a namespace CLAIM, not an authenticated publisher identity (D1). -/
+  | declared (ns : String)
+  /-- A manifest without `origin`. -/
+  | undeclared
+  /-- No manifest at all: the scope contains the package's own artifact (D3). -/
+  | standalone (artifact : PackageArtifactIdentity)
+  /-- Reserved for the resolver's bundled std (D4). -/
+  | toolchain (component : String)
+deriving Repr, BEq
+
+def ScopeOrigin.render : ScopeOrigin → String
+  | .declared ns    => s!"D{ns.length}:{ns}"
+  | .undeclared     => "U"
+  | .standalone a   => let d := a.digest; s!"S{d.length}:{d}"
+  | .toolchain c    => s!"T{c.length}:{c}"
+
+/-- Who a package claims to be: origin and declared name. Never binds version (D2), dependencies,
+    std, or content — except the `standalone` variant, which contains its own artifact (D3). -/
+structure PackageScopeIdentity where
+  private mk ::
+  origin : ScopeOrigin
+  name   : String
+deriving Repr, BEq
+
+/-- A scope from a manifest. `origin? = none` is `undeclared`; any present text is `declared`,
+    whatever it says. An empty origin refuses rather than reading as undeclared. -/
+def PackageScopeIdentity.ofManifest (name : String) (origin? : Option String)
+    : Except IdentityRefusal PackageScopeIdentity :=
+  if name.isEmpty then .error (.emptyComponent "name")
+  else if looksLocationDependent name then .error (.locationDependent name)
+  else match origin? with
+    | none => .ok (PackageScopeIdentity.mk .undeclared name)
+    | some o =>
+      if o.isEmpty then .error (.emptyComponent "origin")
+      else if looksLocationDependent o then .error (.locationDependent o)
+      else .ok (PackageScopeIdentity.mk (.declared o) name)
+
+/-- The scope of a package with no manifest. -/
+def PackageScopeIdentity.standalone (a : PackageArtifactIdentity) : PackageScopeIdentity :=
+  PackageScopeIdentity.mk (.standalone a) "«standalone»"
+
+/-- The bundled std's scope. Only the resolver may call this, and only for the std it found beside
+    the compiler; `requester` is checked so a misuse is a typed refusal rather than an impersonation. -/
+def PackageScopeIdentity.toolchainStd (requester : String)
+    : Except IdentityRefusal PackageScopeIdentity :=
+  if requester == "resolver:bundled-std" then .ok (PackageScopeIdentity.mk (.toolchain "std") "std")
+  else .error (.reservedOrigin requester)
+
+def PackageScopeIdentity.canonical (s : PackageScopeIdentity) : String :=
+  s!"pkgScopeV1:{s.origin.render}|N{s.name.length}:{s.name}"
+
+def PackageScopeIdentity.digest (s : PackageScopeIdentity) : String :=
+  Concrete.shortHash s.canonical
+
+def PackageScopeIdentity.isUndeclared (s : PackageScopeIdentity) : Bool :=
+  s.origin == .undeclared
+
+/-- Human label for reports: the declared name, or `«standalone»`. -/
+def PackageScopeIdentity.label (s : PackageScopeIdentity) : String := s.name
+
+/-- D1 at a boundary: refuse two DIFFERENT packages that share one name and declare no origin.
+
+    Detected by ARTIFACT, never by scope: `undeclared` plus a name IS the whole scope, so two such
+    packages have the same scope digest by construction — which is exactly why they are ambiguous.
+    The same package seen twice (one artifact, say under two bindings) is not an ambiguity. -/
+def refuseAmbiguousUndeclared (pkgs : List (PackageScopeIdentity × PackageArtifactIdentity))
+    : Except IdentityRefusal Unit :=
+  let und := pkgs.filter (·.1.isUndeclared)
+  match und.find? (fun (s, a) => und.any fun (s2, a2) => s2.name == s.name && a2.digest != a.digest) with
+  | some (s, _) => .error (.ambiguousUndeclared s.name)
+  | none => .ok ()
+
+/-- How a package was interpreted: its resolved dependencies, each as (binding name, scope digest,
+    artifact digest), std included (D4). Bound into receipts and evidence bundles; NEVER into a
+    `DefinitionIdentity`. -/
+structure ResolutionContextIdentity where
+  private mk ::
+  deps : List (String × String × String)
+deriving Repr, BEq
+
+def ResolutionContextIdentity.of? (deps : List (String × PackageScopeIdentity × PackageArtifactIdentity))
+    : Except IdentityRefusal ResolutionContextIdentity :=
+  let names := deps.map (·.1)
+  match names.find? (fun n => n.isEmpty) with
+  | some _ => .error (.emptyComponent "binding name")
+  | none =>
+  match names.find? (fun n => (names.filter (· == n)).length > 1) with
+  | some n => .error (.duplicateBinding n)
+  | none =>
+  match refuseAmbiguousUndeclared (deps.map (·.2)) with
+  | .error e => .error e
+  | .ok () =>
+  let triples := deps.map fun (n, s, a) => (n, s.digest, a.digest)
+  .ok (ResolutionContextIdentity.mk (triples.mergeSort fun a b => a.1 ≤ b.1))
+
+def ResolutionContextIdentity.canonical (c : ResolutionContextIdentity) : String :=
+  c.deps.foldl (fun acc (n, s, a) => acc ++ s!"|B{n.length}:{n}|S{s.length}:{s}|A{a.length}:{a}")
+    "resolutionCtxV1:"
+
+def ResolutionContextIdentity.digest (c : ResolutionContextIdentity) : String :=
+  Concrete.shortHash c.canonical
+
+/-- Everything identity-bearing one resolution produced: the subject package's scope, artifact and
+    context, and the OWNING scope of every top-level module in the program (bug 074 guarantees a
+    top-level module name has one owner). Definitions are scoped by their owner, never by the root. -/
+structure ResolvedIdentity where
+  scope    : PackageScopeIdentity
+  artifact : PackageArtifactIdentity
+  context  : ResolutionContextIdentity
+  /-- (top-level module name, owning scope). Modules absent here belong to `scope`. -/
+  owners   : List (String × PackageScopeIdentity) := []
+deriving Repr
+
+/-- The scope that owns a module, by its top-level name. -/
+def ResolvedIdentity.scopeOf (r : ResolvedIdentity) (topModule : String) : PackageScopeIdentity :=
+  ((r.owners.find? (·.1 == topModule)).map (·.2)).getD r.scope
+
+/-- The ONE manifestless producer (D6): a standalone scope over the paired inventory, with an empty
+    resolution context (nothing is resolved beside a standalone compilation). -/
+def ResolvedIdentity.standalone (entryPath : String) (srcMap : List (String × String))
+    : Except IdentityRefusal ResolvedIdentity := do
+  let paired ← pairSources entryPath srcMap
+  let art ← PackageArtifactIdentity.of? paired
+  let ctx ← ResolutionContextIdentity.of? []
+  pure { scope := .standalone art, artifact := art, context := ctx }
+
+/-- How a scope's origin reads in a report. A declared origin is labelled a CLAIM (D1): nothing
+    authenticates who published under that namespace. -/
+def ScopeOrigin.describe : ScopeOrigin → String
+  | .declared ns  => s!"declared {ns} (a namespace claim, not an authenticated publisher)"
+  | .undeclared   => "undeclared"
+  | .standalone _ => "standalone (no manifest; the scope contains its own artifact)"
+  | .toolchain c  => s!"toolchain {c} (reserved: the bundled std)"
+
+/-- `--report package-identity`: the three separated identities of one resolution, and the owner of
+    each top-level module. Tab-separated, one fact per line, so a gate can read one column. -/
+def ResolvedIdentity.render (r : ResolvedIdentity) : String :=
+  let head := "# package identity (R-0482): scope = who the package claims to be; artifact = its own code;\n"
+    ++ "# context = how it was resolved. Definitions are scoped by their OWNER's scope only.\n"
+  let deps := r.context.deps.map fun (n, sc, a) => s!"dependency\t{n}\t{sc}\t{a}\n"
+  let owners := (r.owners.mergeSort fun a b => a.1 ≤ b.1).map fun (m, sc) =>
+    s!"owner\t{m}\t{sc.digest}\t{sc.label}\n"
+  head ++ s!"scope\t{r.scope.digest}\t{r.scope.label}\t{r.scope.origin.describe}\n"
+    ++ s!"artifact\t{r.artifact.digest}\t{r.artifact.modules.length} modules\n"
+    ++ s!"context\t{r.context.digest}\t{r.context.deps.length} dependencies\n"
+    ++ String.join deps ++ String.join owners
 
 /-- Why a definition identity could not be formed. -/
 inductive DefinitionIdentityRefusal where
@@ -262,27 +351,29 @@ def DefinitionIdentityRefusal.explain : DefinitionIdentityRefusal → String
     has no representation, rather than being checked wherever someone remembers to. -/
 structure DefinitionIdentity where
   private mk ::
-  packageIdentity        : String
+  /-- The OWNING package's `PackageScopeIdentity.digest` (R-0482). Was the over-bound package
+      digest, which moved with every dependency and std edit. -/
+  scope                  : String
   moduleIdentity         : String
   declarationIdentity    : String
   implementationIdentity : String
 deriving Repr, BEq
 
 /-- Build a scoped identity, or refuse. -/
-def DefinitionIdentity.of? (packageIdentity moduleIdentity declarationIdentity
+def DefinitionIdentity.of? (scope moduleIdentity declarationIdentity
     implementationIdentity : String) : Except DefinitionIdentityRefusal DefinitionIdentity :=
   let isHex := fun (d : String) => d.length == 32 && d.all fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')
-  if packageIdentity.isEmpty then .error (.emptyComponent "packageIdentity")
+  if scope.isEmpty then .error (.emptyComponent "scope")
   else if moduleIdentity.isEmpty then .error (.emptyComponent "moduleIdentity")
   else if declarationIdentity.isEmpty then .error (.emptyComponent "declarationIdentity")
   else if !isHex implementationIdentity then
     .error (.implementationNotCanonical implementationIdentity)
-  else .ok (DefinitionIdentity.mk packageIdentity moduleIdentity declarationIdentity
+  else .ok (DefinitionIdentity.mk scope moduleIdentity declarationIdentity
               implementationIdentity)
 
 /-- Canonical rendering, length-prefixed per component so no two component splits collide. -/
 def DefinitionIdentity.canonical (d : DefinitionIdentity) : String :=
-  s!"defIdV1:P{d.packageIdentity.length}:{d.packageIdentity}"
+  s!"defIdV2:S{d.scope.length}:{d.scope}"
     ++ s!"|M{d.moduleIdentity.length}:{d.moduleIdentity}"
     ++ s!"|D{d.declarationIdentity.length}:{d.declarationIdentity}"
     ++ s!"|I{d.implementationIdentity.length}:{d.implementationIdentity}"
@@ -298,7 +389,7 @@ def DefinitionIdentity.digest (d : DefinitionIdentity) : String :=
     program's edge of the same name. A helper that compared three would be a weaker join wearing
     this type's name, so there is exactly one comparison and it is total. -/
 def DefinitionIdentity.sameDefinition (a b : DefinitionIdentity) : Bool :=
-  a.packageIdentity == b.packageIdentity
+  a.scope == b.scope
     && a.moduleIdentity == b.moduleIdentity
     && a.declarationIdentity == b.declarationIdentity
     && a.implementationIdentity == b.implementationIdentity

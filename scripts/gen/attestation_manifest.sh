@@ -34,6 +34,7 @@ DRIFT="$(grep -rlE '^// .*DRIFTED variant' examples --include='*.con' 2>/dev/nul
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 : > "$TMP/rows.tsv"
 : > "$TMP/deprows.tsv"
+: > "$TMP/scopes.tsv"
 SUBJECTS=0; NOID=0; SCANNED=0; EXCLUDED=0
 while IFS= read -r con; do
   SCANNED=$((SCANNED+1))
@@ -55,7 +56,24 @@ while IFS= read -r con; do
     SUBJECTS=$((SUBJECTS+1))
     case "$line" in *"NO-IDENTITY"*) NOID=$((NOID+1)) ;; esac
   done < <("$BIN" "$con" --report attestation-join 2>/dev/null || true)
+  # The fixture's scope, origin and artifact, for the D1 check below (R-0482).
+  "$BIN" "$con" --report package-identity 2>/dev/null \
+    | awk -F'\t' -v c="$con" '$1 == "scope" {s = $2 "\t" $3 "\t" $4} $1 == "artifact" {a = $2}
+                              END {if (s != "") print c "\t" s "\t" a}' >> "$TMP/scopes.tsv"
 done < <(grep -rlE '#\[(proof_by|ensures_proof)\(' examples --include='*.con' 2>/dev/null | sort)
+
+# D1 AT THE ATTESTATION SURFACE (R-0482). Two fixtures that are DIFFERENT packages (different
+# artifacts) under one undeclared name have one scope digest by construction — `undeclared` plus a
+# name is the whole scope — so their attestations would key as one package's. Refused, naming both;
+# declaring an `origin` in either [package] section resolves it.
+if [ -s "$TMP/scopes.tsv" ]; then
+  while IFS=$'\t' read -r name fixtures; do
+    refuse "two different packages named '$name' declare no origin, so they share one scope: $fixtures — declare \`origin\` in one [package] section"
+  done < <(awk -F'\t' '$4 == "undeclared" {
+             k = $2; if (!(k in art)) {art[k] = $5; who[k] = $1; nm[k] = $3}
+             else if (art[k] != $5) {bad[k] = 1; who[k] = who[k] " " $1} }
+           END {for (k in bad) print nm[k] "\t" who[k]}' "$TMP/scopes.tsv" | sort)
+fi
 
 # TEST SEAM, unset in normal use. `scripts/tools/identity_rows.sh` freezes the COMPILER's rows for the
 # R-0482 migration; reading them here keeps one enumeration of the corpus instead of a second copy of

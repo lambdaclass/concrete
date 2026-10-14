@@ -192,7 +192,7 @@ def attestationSites : List (String × FnTable) :=
     -- The identities a site ACTUALLY selected, so a check can ask what was omitted rather than only
     -- what was declared. Package and declaration are enough to name a manifest row.
     for (_, d) in t.attested do
-      IO.println s!"BOUND {n} {d.packageIdentity} {d.declarationIdentity}"
+      IO.println s!"BOUND {n} {d.scope} {d.declarationIdentity}"
     -- The declarations this table actually MODELS. A reference for a declaration the table has no
     -- model of cannot be bound at all — `withAttestations` needs a `PFnDef` to bind — and that is
     -- normal: a proof table models the callees a proof unfolds, and the SUBJECT of that proof need
@@ -235,7 +235,7 @@ site_field() { printf '%s' "$SITES" | grep -E "^SITE $1 " | grep -oE "$2=[0-9]+"
 # because the rule relaxed, but because the fixture was repaired: its misattached `#[proof_by]` is
 # gone, so the manifest no longer offers the row and an exclusion for it would be stale. This is the
 # path the "declared exclusion must be a REAL manifest row" check exists to force.
-EXCLUSIONS="Concrete.Proof.ctTagFns:13c8e4151b399c089fad1a4124686597:ct_compare"
+EXCLUSIONS="Concrete.Proof.ctTagFns:f2ce224db4c57094cad39e2b62023610:ct_compare"
 
 for ex in $EXCLUSIONS; do
   extbl="${ex%%:*}"; rest="${ex#*:}"; expkg="${rest%%:*}"; exdecl="${rest##*:}"
