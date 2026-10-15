@@ -90,7 +90,8 @@ GATES=36
 # 40 -> 41 with the advisory-policy families, which introduced `check_checker_policy.sh`.
 # 41 -> 43 with R-0482's identity-migration families, which introduced `check_identity_overbinding.sh`
 # and `check_identity_separation.sh`.
-DRIVER_GATES=43
+# 43 -> 44 with the external re-check families, which introduced `check_external_checker.sh`.
+DRIVER_GATES=44
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2

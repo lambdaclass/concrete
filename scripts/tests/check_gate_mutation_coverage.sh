@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=123
+EXPECTED_FAMILIES=127
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1142,6 +1142,34 @@ add "receipt-context-vs-root" "Concrete/Proof/Receipt.lean" "check_identity_sepa
 add "migration-map-totality" "scripts/tools/identity_migration_map.sh" "check_identity_separation.sh" no \
   $'            emit(kind, "refused", describe(o), "no-counterpart"); refused += 1; continue' \
   $'            emit(kind, "mapped", describe(o), "no-counterpart"); continue'
+
+# EXTERNAL RE-CHECK. THE SWAP MUST SWAP. The hostile control hands one theorem another's proof; the
+# mutation hands it its own, so the doctored stream is the accepted one and both checkers accept it.
+# Killed because the leg requires a type-mismatch rejection at the receiver, not merely any verdict.
+add "external-swap-is-a-real-swap" "scripts/tools/export_inventory.py" "check_external_checker.sh" no \
+  $'                    r["thm"]["value"] = value[donor]' \
+  $'                    r["thm"]["value"] = value[receiver]'
+
+# EXTERNAL RE-CHECK. NATIVE OWNERS ARE EXACT. Dropping a declared owner of a native axiom must fail:
+# otherwise a new `bv_decide` (or a lost one) changes what rests on compiled code without a reviewer
+# seeing the trust move.
+add "external-native-owners-exact" "scripts/tests/axiom_native_owners.txt" "check_external_checker.sh" no \
+  $'Examples.HmacSha256.Proofs.ch_refines' \
+  $'# Examples.HmacSha256.Proofs.ch_refines'
+
+# EXTERNAL RE-CHECK. THE POPULATION IS TIED TO SOURCE. The enumerator decides what the checkers are
+# handed; the mutation drops the compiler library from it. Every remaining leg would still pass over
+# the smaller population — killed only by the source-module coverage leg, which is why it exists.
+add "external-population-both-libraries" "scripts/tools/proof_layer_theorems.lean" "check_external_checker.sh" no \
+  $'    | some `Concrete | some `Examples => true' \
+  $'    | some `Examples => true'
+
+# EXTERNAL RE-CHECK. STATEMENT FIDELITY COMPARES CONTENT. An exporter that rewrote a literal would
+# hand the checkers a different statement under the same name; the mutation makes the export-side
+# rendering do exactly that. Killed by the byte comparison against Lean's own statements.
+add "external-statement-fidelity" "scripts/tools/export_inventory.py" "check_external_checker.sh" no \
+  $'            elif "natVal" in r: out = f"(n {r[\'natVal\']})"' \
+  $'            elif "natVal" in r: out = "(n 0)"'
 
 # R-0004 attestation provenance. OMISSION OF THE SOURCE-LINKED POPULATION. The manifest scans fixtures
 # carrying `#[proof_by]`/`#[ensures_proof]`; dropping that population leaves only whatever the other

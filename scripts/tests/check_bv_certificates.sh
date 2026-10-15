@@ -90,39 +90,47 @@ fi
 # failure verdict "s NOT VERIFIED".
 verdict_verified(){ printf '%s' "$1" | tr -d '\r' | grep -q '^s VERIFIED$'; }
 
+# check_cnfs TAG CNF... — independently re-solve each CNF and check its DRAT certificate; counts the
+# non-trivial certificates verified in CERTS.
+check_cnfs() {
+  local tag=$1; shift
+  local i=0 c vars cls rc DT
+  CERTS=0
+  for c in "$@"; do
+    i=$((i+1))
+    vars=$(awk '/^p cnf/{print $3; exit}' "$c")
+    cls=$(awk '/^p cnf/{print $4; exit}' "$c")
+    # Independent solve. --no-binary so drat-trim reads a textual DRAT proof (Lean asks
+    # cadical for BINARY LRAT, a different format drat-trim does not consume).
+    cadical "$c" "$WORK/proof.$tag.$i.drat" --no-binary --unsat --quiet >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -eq 20 ]; then
+      ok "$tag CNF $i ($vars vars, $cls clauses): independently UNSAT"
+    else
+      no "$tag CNF $i: expected UNSAT (exit 20), got exit $rc — bit-blasting disagreement"
+      continue
+    fi
+    DT="$(drat-trim "$c" "$WORK/proof.$tag.$i.drat" 2>&1)"
+    if ! verdict_verified "$DT"; then
+      no "$tag CNF $i: drat-trim did not verify the certificate"
+      printf '%s\n' "$DT" | tr -d '\r' | tail -5 >&2
+      continue
+    fi
+    # A CNF that is contradictory on its own (complementary unit clauses) is reported
+    # VERIFIED without the proof being read at all. That verifies nothing about the
+    # certificate, so it must not be counted as a certificate check.
+    if printf '%s' "$DT" | tr -d '\r' | grep -q 'stop reading proof'; then
+      ok "$tag CNF $i: trivially UNSAT from the CNF alone (certificate not exercised)"
+    else
+      CERTS=$((CERTS+1))
+      ok "$tag CNF $i: DRAT certificate VERIFIED by drat-trim (independent of Lean)"
+    fi
+  done
+}
+
 echo "=== independently re-solving each CNF and checking its DRAT certificate ==="
-i=0
-CERTS=0
-for c in $CNFS; do
-  i=$((i+1))
-  vars=$(awk '/^p cnf/{print $3; exit}' "$c")
-  cls=$(awk '/^p cnf/{print $4; exit}' "$c")
-  # Independent solve. --no-binary so drat-trim reads a textual DRAT proof (Lean asks
-  # cadical for BINARY LRAT, a different format drat-trim does not consume).
-  cadical "$c" "$WORK/proof.$i.drat" --no-binary --unsat --quiet >/dev/null 2>&1
-  rc=$?
-  if [ "$rc" -eq 20 ]; then
-    ok "CNF $i ($vars vars, $cls clauses): independently UNSAT"
-  else
-    no "CNF $i: expected UNSAT (exit 20), got exit $rc — bit-blasting disagreement"
-    continue
-  fi
-  DT="$(drat-trim "$c" "$WORK/proof.$i.drat" 2>&1)"
-  if ! verdict_verified "$DT"; then
-    no "CNF $i: drat-trim did not verify the certificate"
-    printf '%s\n' "$DT" | tr -d '\r' | tail -5 >&2
-    continue
-  fi
-  # A CNF that is contradictory on its own (complementary unit clauses) is reported
-  # VERIFIED without the proof being read at all. That verifies nothing about the
-  # certificate, so it must not be counted as a certificate check.
-  if printf '%s' "$DT" | tr -d '\r' | grep -q 'stop reading proof'; then
-    ok "CNF $i: trivially UNSAT from the CNF alone (certificate not exercised)"
-  else
-    CERTS=$((CERTS+1))
-    ok "CNF $i: DRAT certificate VERIFIED by drat-trim (independent of Lean)"
-  fi
-done
+# shellcheck disable=SC2086
+check_cnfs sample $CNFS
 
 # The whole point is checking at least one REAL certificate. Trivial CNFs passing
 # would otherwise let this gate look green while exercising no proof.
@@ -146,6 +154,39 @@ if verdict_verified "$BAD"; then
 else
   ok "an empty certificate is rejected (checker has teeth)"
 fi
+
+echo "=== the project's own bv_decide goals ==="
+# The goals above are SAMPLES shaped like the project's. The trust AXIOMS.md names is in the
+# project's own: each lemma in axiom_native_owners.txt mints one `._native.bv_decide.ax_<n>` axiom
+# per SAT-backed bv_decide call. Re-elaborating the files that define those lemmas through the
+# shim captures exactly those SAT problems; their count must equal the number of native axioms
+# Lean's environment holds, so a goal can neither be missed nor be counted twice.
+PROJ_DIR="$WORK/cnf-project"; mkdir -p "$PROJ_DIR"
+OWNER_FILES=$(grep -vE '^(#|$)' scripts/tests/axiom_native_owners.txt | while read -r o; do
+  grep -rlE "^(private |protected )*theorem ${o##*.}( |$)" Concrete proofs; done | sort -u)
+for f in $OWNER_FILES; do
+  CNF_CAPTURE_DIR="$PROJ_DIR" lake env lean -Dsat.solver="$SHIM" "$f" > "$WORK/proj.out" 2>&1 \
+    || { no "re-elaborating $f under the shim failed"; head -5 "$WORK/proj.out" >&2; }
+done
+EXPECTED=$(lake env lean scripts/tools/proof_layer_theorems.lean 2>/dev/null \
+  | awk -F'\t' '{n=split($2,a," "); for(i=1;i<=n;i++) print a[i]}' | sort -u \
+  | grep -cE '\._native\.bv_decide\.ax_[0-9_]+$' || true)
+PCNFS=$(find "$PROJ_DIR" -name '*.dimacs' | sort)
+PCOUNT=$(printf '%s\n' "$PCNFS" | grep -c '[^[:space:]]' || true)
+if [ "$PCOUNT" -ge 1 ] && [ "$PCOUNT" = "$EXPECTED" ]; then
+  ok "captured $PCOUNT SAT problems from $(echo $OWNER_FILES | wc -w | tr -d ' ') file(s) — one per native axiom ($EXPECTED)"
+else
+  no "captured $PCOUNT SAT problems from the owners' files, but the environment holds $EXPECTED native bv_decide axioms"
+fi
+# shellcheck disable=SC2086
+check_cnfs project $PCNFS
+# MEASURED (2026-10-15): all six are 1-variable, 2-clause CNFs — bv_decide's normalization and AIG
+# construction already reduced each goal to a contradiction, so there is no non-trivial certificate
+# for drat-trim to check. The trust the native axioms carry is therefore the COMPILED bit-blasting
+# (`verifyBVExpr` evaluated natively), which no certificate check can reach; AXIOMS.md says so. The
+# split is reported, not asserted, so that a goal that does need a real certificate later is
+# checked here, not waved through.
+echo "  note project certificates: $CERTS non-trivial, $((PCOUNT - CERTS)) trivially UNSAT from the CNF alone"
 
 echo ""
 echo "BV-CERTIFICATES: PASS=$PASS  FAIL=$FAIL"

@@ -1,0 +1,9 @@
+# The lemmas whose own `bv_decide` calls mint native-trust axioms (Lean 4.34 names them
+# `<lemma>._native.bv_decide.ax_<n>`), one per line. Every theorem resting on native trust rests on
+# an axiom owned by one of these; the evidence theorems among them are axiom_native_trust.txt.
+# check_external_checker.sh fails on an owner not listed here, on a listed owner that no longer
+# mints one, and on an owner docs/verification/AXIOMS.md does not name.
+Concrete.Proof.and255_lo
+Examples.HmacSha256.Proofs.be64_low_byte
+Examples.HmacSha256.Proofs.ch_refines
+Examples.HmacSha256.Proofs.round_refines

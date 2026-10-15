@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Every Theorem Re-Checked Outside The Lean Kernel (con-leche, nanoda)
+
+Every theorem Concrete's Lean sources declare — 3869 at `ab01f856`, read from the elaborated
+environment, 48 of them `#[proof_by]` evidence — is exported with lean4export (format 3.1.0, Lean
+4.34.1) and re-checked outside the Lean kernel. The 3834 on the three standard axioms are accepted by
+con-leche `--verified`, whose acceptance implies a set-theoretic model (no proof of `False` is
+accepted), and by nanoda, an independent Rust checker. The 35 resting on native trust, HMAC/SHA-256
+among them, are declined by con-leche and accepted by nanoda with exactly their six native axioms
+permitted. Every exported statement equals Lean's own in the kernel's view (lean4export shares
+expressions modulo binder names and the `let` `nondep` flag, so those are erased before comparing).
+Gate `check_external_checker.sh` (20 legs), CI job `External proof re-check`, three tools pinned,
+four mutation families (inventory 127). The hostile control hands one theorem another's proof and
+requires the specific rejection — a first draft was green on a malformed stream.
+
+Found on the way: the drat-trim corroboration of `bv_decide` checked only sample goals.
+`check_bv_certificates.sh` now captures the project's own SAT problems (six, one per native axiom)
+and measured all six trivial — one variable, two clauses — so the native trust lies in the compiled
+bit-blasting, which no certificate check reaches. `docs/verification/AXIOMS.md` now says so, names
+the four lemmas that own the native axioms (`axiom_native_owners.txt`), and records the pin-update
+procedure.
+
 ### R-0482 Identity Separation: Freeze, Ratification And Atomic Migration
 
 Step 0 (2026-10-13, `1c013c7d`, `78d19e30`): canonical identity rows frozen — 323 normalized rows plus

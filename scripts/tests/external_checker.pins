@@ -1,0 +1,14 @@
+# Pinned external tools for check_external_checker.sh (sourced). The CI cache for the built tools
+# is keyed on this file, so changing a revision rebuilds them.
+# lean4export v4.34.0 writes export format 3.1.0; it is built with this repository's lean-toolchain.
+LEAN4EXPORT_URL=https://github.com/leanprover/lean4export
+LEAN4EXPORT_REV=076e8e57707e813375e8f9da8bf989799ace9680
+# con-leche dd695ca: the revision the Lean Kernel Arena evaluated (69/72 soundness, 129/135
+# completeness, 0 wrong verdicts). Built with its own lean-toolchain.
+CONLECHE_URL=https://github.com/leanprover/con-leche
+CONLECHE_REV=dd695ca631306626e3bff8df30208fc594779d75
+# nanoda e0d76f5: an independent Lean checker in Rust (no shared code with Lean or con-leche), at the
+# revision the Lean Kernel Arena evaluated. Built with cargo; the thread stack is raised from 16 MiB
+# to 256 MiB exactly as the arena patches it.
+NANODA_URL=https://github.com/ammkrn/nanoda_lib
+NANODA_REV=e0d76f5ec30bba244023466875b4845a57fd3ea5
