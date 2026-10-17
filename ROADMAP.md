@@ -15341,14 +15341,40 @@ validation. The later full BackendIR, independent verifier and functional-proof 
 not prerequisites for a tested foreign-library integration. Changes to evidence formats still
 obey their existing owners and compatibility rules.
 
-The outcome is a developer declaring a foreign dependency, importing its generated Concrete
-module and running the normal build/test commands. Build scripts invoke Cargo or the C compiler,
-generate bindings, link native artifacts and reuse unchanged outputs. Record exact dependency
+The outcome is a developer declaring a foreign dependency, using a normal Concrete import and
+running the normal build/test commands. Binding selection and generation are automatic for the
+supported interface; applications do not write bridge declarations or configure linker flags.
+Build scripts invoke Cargo or the C compiler, generate bindings, link native artifacts and reuse
+unchanged outputs. Record exact dependency
 revisions/lockfiles, selected features, bridge inputs, compiler/linker flags, target and artifact
 identities. A changed header, bridge, feature or target invalidates the affected output. Failed
 generation, unsupported ABI shapes and failed foreign builds produce source-located diagnostics;
 they never reuse an older artifact as if the new build succeeded. A public registry is not
 required: local binding packages with pinned dependencies establish the first workflow.
+
+**Ease-of-use acceptance:** the application workflow is dependency -> ordinary import -> build.
+Prefer a reviewed binding package automatically when one is available. For an uncovered library,
+discover its C headers or Rust package/API metadata and generate the supported declarations,
+Rust adapter, Concrete wrappers and boundary documentation together. Validate Rust adapters
+against the actual crate. An explicit bridge interface remains an advanced escape hatch, not a
+mandatory handwritten step for every application. Report the supported/unsupported API surface
+and retain original documentation/source links for completion and diagnostics.
+
+Ownership, effects or lifetime facts absent from an upstream interface are binding-maintainer
+questions. Infer only established facts; generate specific requests or a draft description for
+the missing ones, then retain the reviewed description for every downstream application. Name
+patterns alone cannot establish pointer ownership or authorize a capability-free declaration.
+Already reviewed facts are not requested again per application or build. Never silently fall
+back to unsafe raw calls or serialize/copy every buffer to make generation appear successful;
+record required conversions and copies and support call-scoped borrowing where its contract is
+known.
+
+The non-author trial starts from a clean application and exercises initial setup, normal imports,
+build/run/test, warm rebuild and a dependency upgrade. For the three acceptance dependencies,
+require zero handwritten application FFI/bridge code, zero edits to generated files and zero
+manual compiler/linker flags. Keep any maintained custom adapter code counted in its binding
+package and in the port inventory. Cached binding/native artifacts must match their pinned inputs;
+an API/ABI change produces an actionable source-located error before it becomes a runtime call.
 
 **Binding contract:**
 

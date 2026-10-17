@@ -34,12 +34,26 @@ features, bridge inputs, toolchains, flags and targets, and record their artifac
 identities. Start with local binding packages; publishing a registry is a separate
 milestone. Failed generation/builds cannot silently retain an old linked artifact.
 
+**Application contract: dependency -> normal Concrete import -> build.** Binding discovery,
+generation, compilation and linking are automatic for supported interfaces. Applications write
+no raw foreign declarations, bridge modules or linker flags for the supported binding packages.
+Reuse reviewed bindings when available. Otherwise inspect the C headers or Rust package/API
+metadata and generate the supported adapter, Concrete module and documentation. Keep explicit
+bridge declarations as an advanced escape hatch. Expose supported/unsupported API coverage and
+source links through generated documentation and editor diagnostics.
+
 C header import supplies declarations and ABI facts. A reviewed binding description
 supplies ownership, buffer lengths, pointer retention, cleanup, errors, threading and
 capabilities that a header cannot establish. A typed Rust bridge generates Rust
 C-ABI shims and Concrete declarations from one selected interface and checks the
 shims against the Rust implementation. Arbitrary Rust ABI does not become a public
 Concrete compatibility boundary.
+
+Where upstream metadata cannot establish ownership, effects or lifetime facts, ask for only those
+facts at binding-package creation and retain the reviewed result for downstream applications.
+Tools may propose a draft; a naming heuristic is not an ownership or safety check. Application
+developers do not repeat that work, and the generator must not silently substitute unsafe calls
+or blanket buffer copying for an unsupported safe interface.
 
 Generated wrappers expose ordinary Concrete methods, scoped borrows, explicit
 consuming close/drop, error values and capability-bearing handles. They retain the
@@ -60,7 +74,10 @@ the bindings advertise, and R-0286 supplies the library/export subset.
 
 R-0285's first acceptance cases are RocksDB's C API, a real operation from ethlambda's
 Rust crypto stack, and a bounded libp2p adapter. A non-author builds and runs them
-through the normal project workflow, with ABI, ownership, error and saturation/
-cancellation controls. Proposed command names remain a tooling design choice;
-current code uses the direct foreign declarations documented in [FFI.md](FFI.md).
+through the normal project workflow from a clean application: setup/import, build/run/test,
+warm rebuild and dependency upgrade, with no handwritten application FFI/bridge code, edits to
+generated files or manual linker flags. Count maintained custom adapters in their binding packages.
+Retain ABI, ownership, error and saturation/cancellation controls. Proposed command names remain
+a tooling design choice; current code uses the direct foreign declarations documented in
+[FFI.md](FFI.md).
 See [SAFETY.md](../language/SAFETY.md) for the current trust-boundary model.
