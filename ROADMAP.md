@@ -32,7 +32,7 @@ the next transition; completed milestones move to the changelog rather than accu
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **R-0285 C/Rust package interop, with R-0283/R-0286/R-0287** | normal builds generate, compile and link auditable bindings; exercise RocksDB's C API, a real Rust crypto operation and a bounded networking adapter, with ABI, ownership, capabilities, errors and native dependency identity checked or explicitly assumed |
+| 2 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
 | 3 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
 | 4 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 5 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
@@ -44,11 +44,15 @@ the next transition; completed milestones move to the changelog rather than accu
 | 11 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
 | 12 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
-**Delivery decision, 2026-10-17:** comfortable C/Rust interop is the next delivery investment
+**Delivery decision, 2026-10-17:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
-its three acceptance adapters; further dependencies are integrated when a port slice needs them.
+its four acceptance adapters; further dependencies are integrated when a port slice needs them.
+The application contract is dependency -> ordinary Concrete import -> normal build/test.
+Reusable binding packages describe ownership, errors and authority once; generation and native
+builds are tooling responsibilities. The [interop design](docs/platform/FFI_GLUE.md) defines the
+shared boundary description, language-specific front ends, cache/upgrade behavior and exit bars.
 Compiler safety, protocol conformance and regression testing remain continuous. Functional
 proofs of client components follow the working port, through the evidence and contract owners
 below. New soundness defects still enter at the front. The port is an engineering workload,
@@ -15312,7 +15316,10 @@ evidence.
 
 ### Task R-0283
 
-**Objective:** Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment, calling conventions.
+**Objective:** Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment and
+calling conventions, including the C-compatible adapters generated for Rust and Zig packages.
+Execute native/Concrete round trips on every advertised target; type layout calculations alone
+do not qualify a target or an aggregate calling shape.
 
 ### Task R-0284
 
@@ -15331,7 +15338,7 @@ fact, unchecked assumptions are `unsafe`/trusted and reported, and backend IR
 alignment metadata is emitted only from Concrete facts.
 ### Task R-0285
 
-**Objective:** Make C and Rust libraries usable as normal Concrete dependencies, with generated
+**Objective:** Make C, Rust and Zig libraries usable as normal Concrete dependencies, with generated
 bindings and one build command, before the bulk ethlambda port.
 
 **Scheduling (2026-10-17):** promoted into the current execution queue after the active soundness
@@ -15344,9 +15351,9 @@ obey their existing owners and compatibility rules.
 The outcome is a developer declaring a foreign dependency, using a normal Concrete import and
 running the normal build/test commands. Binding selection and generation are automatic for the
 supported interface; applications do not write bridge declarations or configure linker flags.
-Build scripts invoke Cargo or the C compiler, generate bindings, link native artifacts and reuse
-unchanged outputs. Record exact dependency
-revisions/lockfiles, selected features, bridge inputs, compiler/linker flags, target and artifact
+Tooling invokes Cargo, the C build/compiler or Zig's build/compiler, generates bindings, links
+native artifacts and reuses unchanged outputs. Record exact dependency revisions/lockfiles,
+selected features, bridge inputs, compiler/linker flags, target and artifact
 identities. A changed header, bridge, feature or target invalidates the affected output. Failed
 generation, unsupported ABI shapes and failed foreign builds produce source-located diagnostics;
 they never reuse an older artifact as if the new build succeeded. A public registry is not
@@ -15354,26 +15361,32 @@ required: local binding packages with pinned dependencies establish the first wo
 
 **Ease-of-use acceptance:** the application workflow is dependency -> ordinary import -> build.
 Prefer a reviewed binding package automatically when one is available. For an uncovered library,
-discover its C headers or Rust package/API metadata and generate the supported declarations,
-Rust adapter, Concrete wrappers and boundary documentation together. Validate Rust adapters
-against the actual crate. An explicit bridge interface remains an advanced escape hatch, not a
-mandatory handwritten step for every application. Report the supported/unsupported API surface
+discover its C headers, supported Rust package/API metadata or selected Zig module metadata and
+generate the supported native adapter, Concrete wrappers and boundary documentation together.
+Use one versioned internal boundary description for generation, checks, docs and harnesses;
+retain whether each fact was compiler-derived, checked or reviewed as an assumption. Validate
+Rust/Zig adapters against the actual upstream package with its pinned compiler. An explicit
+bridge interface remains an advanced escape hatch, not a mandatory handwritten step for every
+application. Report the supported/unsupported API surface
 and retain original documentation/source links for completion and diagnostics.
 
 Ownership, effects or lifetime facts absent from an upstream interface are binding-maintainer
 questions. Infer only established facts; generate specific requests or a draft description for
 the missing ones, then retain the reviewed description for every downstream application. Name
 patterns alone cannot establish pointer ownership or authorize a capability-free declaration.
-Already reviewed facts are not requested again per application or build. Never silently fall
-back to unsafe raw calls or serialize/copy every buffer to make generation appear successful;
+Already reviewed facts are not requested again per application or build. Upgrade review is
+limited to affected interfaces and facts; a changed declaration cannot silently inherit an old
+ownership assumption. Never silently fall back to unsafe raw calls or serialize/copy every
+buffer to make generation appear successful;
 record required conversions and copies and support call-scoped borrowing where its contract is
 known.
 
 The non-author trial starts from a clean application and exercises initial setup, normal imports,
-build/run/test, warm rebuild and a dependency upgrade. For the three acceptance dependencies,
-require zero handwritten application FFI/bridge code, zero edits to generated files and zero
-manual compiler/linker flags. Keep any maintained custom adapter code counted in its binding
-package and in the port inventory. Cached binding/native artifacts must match their pinned inputs;
+build/run/test, warm and populated-cache offline rebuilds, and a dependency upgrade. For the four
+acceptance dependencies, require zero handwritten application FFI/bridge code, zero application
+build scripts, zero edits to generated files and zero manual compiler/linker flags. Keep any
+maintained custom adapter code counted in its binding package and in the port inventory.
+Cached binding/native artifacts must match their pinned inputs;
 an API/ABI change produces an actionable source-located error before it becomes a runtime call.
 
 **Binding contract:**
@@ -15382,36 +15395,61 @@ an API/ABI change produces an actionable source-located error before it becomes 
   supplies allocation/free pairs, owned versus call-scoped borrowed values, buffer lengths,
   retained pointers, errors, blocking/threading requirements and external authority. Unknown
   ownership or effects do not become safe, capability-free declarations through generation.
+  The binding package records the supported upstream build recipe once when C package metadata
+  is insufficient; applications do not maintain native build instructions.
 - A narrow typed Rust bridge selects concrete functions/types and generates Rust C-ABI shims
   plus Concrete declarations from one interface. Check the shim against the real Rust API.
   Begin with scalars, records/enums, `Option`/`Result`, bytes/UTF-8 and opaque objects through
   explicitly defined ABI representations; arbitrary Rust ABI, generic APIs and trait objects
   do not cross the boundary directly. Unsupported forms refuse with an adapter diagnostic.
+- Zig packages reuse existing C-compatible exports or generate exported adapters around
+  selected public operations. Use supported compiler/comptime metadata with concrete
+  instantiations; compile against the pinned module and resolve its `build.zig`/`build.zig.zon`
+  graph. Lower slices, error unions, optional values and allocator-backed objects to explicit
+  ABI representations; keep native allocator and internal layout details inside Zig. A public
+  declaration alone does not establish safe ownership. No manual Zig glue is required in an
+  application using a supported binding package.
 - Generated safe APIs use Concrete's existing ownership and capability model:
   explicit consuming close/drop, scoped borrows, matching library deallocation and capability-
   bearing handles. Fallible cleanup retains an explicit result. Generation does not introduce
   implicit scope-end destruction, returned references or undeclared authority. Foreign behavior
   and ownership assertions remain named assumptions unless independently checked.
-- Networking adapters may keep their runtime in Rust and expose typed events and bounded
+- Start the shared ABI subset with scalars, pointer/length buffers, opaque handles and
+  status/out-parameter calls. Advertise aggregate forms only after target-specific round trips.
+  Record Rust panic policy and Zig panic/trap/OOM behavior; ordinary errors become `Result`,
+  while process aborts and unsupported unwinding do not become recoverable errors by generation.
+- Networking adapters may keep their runtime in Rust or Zig and expose typed events and bounded
   queues with poll/wait, cancellation and shutdown. Specify full-queue behavior, thread affinity,
   callback retention and completion/cancellation lifetimes. This bounded bridge does not require
   or establish a general Concrete concurrency memory model.
 - Generated headers, imported declarations, host stubs, symbol names, calling conventions,
-  ownership rules, capability labels and trust assumptions round-trip through C/Rust harnesses
+  ownership rules, capability labels and trust assumptions round-trip through C/Rust/Zig harnesses
   and Concrete callers. Check ABI size/alignment/offsets and observable calls on each claimed
   target. Keep generated output deterministic and source-linked, with its reviewed inputs and
   native dependencies visible in build/audit metadata. Reference decision:
   [FFI glue](docs/platform/FFI_GLUE.md).
+- Integrate transitive libraries and runtime/deployment requirements into the normal build graph.
+  Cache the dependency/header closure, toolchains/sysroot, target/CPU, features, build mode,
+  generator version, reviewed description and declared build inputs. Unchanged warm builds do
+  no binding regeneration or foreign recompilation. Missing inputs cannot justify a reusable
+  artifact; failed builds never fall back to stale linked output. Show upgrade diffs for APIs,
+  effects, reviewed facts and copy/allocation behavior, with source-located errors.
 
 **Acceptance workload:** use RocksDB's C API for open/read/write/close and buffer ownership; a real
-operation from ethlambda's Rust crypto stack for typed input/results and errors; and the smallest
-libp2p adapter needed to exchange messages between a Concrete caller and a Rust peer. Retain clean
-and warm builds, ABI/ownership and malformed-input controls, queue saturation, cancellation and
+operation from ethlambda's Rust crypto stack for typed input/results and errors; the smallest
+libp2p adapter needed to exchange messages between a Concrete caller and a Rust peer; and one
+pinned upstream Zig library for a real compression or hashing operation plus allocator-backed
+output/cleanup. Select and record the Zig upstream/revision before claiming its gate; a local
+arithmetic shim does not qualify. Retain clean, warm and offline builds, ABI/ownership and
+malformed-input controls, queue saturation, cancellation and
 shutdown controls, and applicable sanitizers. A non-author must build and run these through the
-normal project workflow without hand-editing generated glue or invoking the linker manually.
+normal project workflow without hand-editing generated glue or invoking native build tools manually.
 Measure setup steps, binding/adapter code maintained by hand, build cost and actionable diagnostic
 quality. Register mutations for the authority, ownership and build invalidation rules the gates claim to
-enforce. This bounded exit unlocks R-0490; it does not require wrapping every dependency in advance.
+enforce. Include wrong-deallocator, use-after-close, retained-borrow, missing-capability,
+native-build failure, stale-cache and incompatible-upgrade controls. Retain the selected boundary
+format and supported API/target matrix with the acceptance record. This bounded exit unlocks
+R-0490; it does not require wrapping every dependency in advance. Implementation remains pending.
 
 ### Task R-0490
 
@@ -15427,7 +15465,7 @@ The port covers client-owned protocol and application logic: types/serialization
 transitions, fork choice, storage orchestration, networking orchestration, validator duties and
 operational build/run/test tooling. Existing crypto, storage and transport/runtime dependencies may
 remain behind R-0285 bindings. Inventory every retained native dependency and handwritten shim;
-client consensus logic left in a Rust helper is unported work, not a completed Concrete component.
+client consensus logic left in a foreign helper is unported work, not a completed Concrete component.
 Reimplementing dependency internals is not part of initial parity.
 
 Keep the node executable through successive replacements. Start with a Concrete component called
@@ -15502,7 +15540,8 @@ scalar parameters and returns, small and large structs, arrays, nested
 aggregates, alignment/padding, by-value versus by-reference lowering,
 varargs policy, calling convention labels, symbol names, and ownership/
 capability/trust annotations. Wire `scripts/tests/check_c_abi_matrix.sh`
-with both generated C callers and Concrete callers.
+with generated C callers and Concrete callers, plus Rust/Zig adapters and callers for the
+package interop subset. Keep target-specific positive and unsupported-shape controls.
 ### Task R-0288
 
 **Objective:** Add `BackendIR` as a structured backend contract between `ValidatedSSA` and LLVM/native emission. This is useful even if Concrete never ships its own native backend: it gives the compiler a typed, inspectable place to preserve runtime checks, trap/source-span facts, layout/ABI decisions, target constants, trusted/runtime helper calls, and capability/trust labels before they disappear into LLVM text or target code. The intended ladder is `ValidatedSSA -> BackendIR -> ValidatedBackendIR -> EmitLLVM` first; later emitters (native, C, WASM, QBE-style) may consume the same `ValidatedBackendIR` only after the contract is stable.
