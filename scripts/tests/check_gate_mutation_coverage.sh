@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=127
+EXPECTED_FAMILIES=130
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1143,6 +1143,26 @@ add "migration-map-totality" "scripts/tools/identity_migration_map.sh" "check_id
   $'            emit(kind, "refused", describe(o), "no-counterpart"); refused += 1; continue' \
   $'            emit(kind, "mapped", describe(o), "no-counterpart"); continue'
 
+# BUG 079. THE BODY IS COMPARED. The binding keeps only the specification values whose digest is the
+# extracted body's; the mutation keeps them all, so a theorem about a different body would match on
+# the specification NAME alone — the defect. Killed by the reason, not the verdict: always_seven still
+# refuses (its parameters differ), but no longer as "a different body".
+add "subject-binding-compares-body" "Concrete/Proof/ProofCore.lean" "check_subject_binding.sh" yes \
+  $'  let same := cand.filter (·.2.2.1 == d)' \
+  $'  let same := cand'
+
+# BUG 079. THE PARAMETERS ARE COMPARED. The specification's body under other parameters is a
+# different function; the mutation accepts any parameters.
+add "subject-binding-compares-params" "Concrete/Proof/ProofCore.lean" "check_subject_binding.sh" yes \
+  $'    if ps == e.params then return' \
+  $'    if true then return'
+
+# BUG 079. THE BINDING GOVERNS PROVED. An unbound claim must not read `proved`; the mutation drops the
+# status, so a claim never shown to be about its body is proved by fingerprint alone again.
+add "subject-binding-governs-proved" "Concrete/Proof/ProofCore.lean" "check_subject_binding.sh" yes \
+  $'    else if specUnbound then .specUnbound' \
+  $'    else if specUnbound && false then .specUnbound'
+
 # EXTERNAL RE-CHECK. THE SWAP MUST SWAP. The hostile control hands one theorem another's proof; the
 # mutation hands it its own, so the doctored stream is the accepted one and both checkers accept it.
 # Killed because the leg requires a type-mismatch rejection at the receiver, not merely any verdict.
@@ -1407,8 +1427,8 @@ add "root-leaf-only-trusted-exclusions" "Concrete/Proof/ProofCore.lean" "check_d
 # maintenance. Killed by `check_effect_opacity.sh` (drift coverage falls 11 -> 8) and by
 # `check_purecore_proofs.sh`, whose pending claims stop being asked about.
 add "admission-does-not-select-replay-targets" "Concrete/Proof/ProofCore.lean" "check_effect_opacity.sh" yes \
-  $'    let status := deriveObligationStatus e.eligibility.eligible\n        e.eligibility.isTrusted extracted specDrifted e.spec e.fingerprint e.subjectDigest' \
-  $'    let status := deriveObligationStatus e.eligibility.admissible\n        e.eligibility.isTrusted extracted specDrifted e.spec e.fingerprint e.subjectDigest'
+  $'    let status := deriveObligationStatus e.eligibility.eligible\n        e.eligibility.isTrusted extracted e.binding? e.spec e.fingerprint e.subjectDigest' \
+  $'    let status := deriveObligationStatus e.eligibility.admissible\n        e.eligibility.isTrusted extracted e.binding? e.spec e.fingerprint e.subjectDigest'
 
 # 2. ADMISSION NOT RENDERED ON `proved`. The first implementation appended the admission
 # line inside each status arm and skipped exactly one — `proved` — which is the single
@@ -2463,6 +2483,18 @@ apply(){ mut_anchor apply "$1" "$2" "$3"; }
 # A workspace that will not restore invalidates the rest of the campaign, so this is fatal, not a
 # warning.
 WORK_DIRTY=0
+# RESTORING THE SOURCE DOES NOT RESTORE WHAT WAS BUILT FROM IT. Every `_timed_build` that runs while a
+# mutation is applied leaves the compiler binary and the oleans built FROM THAT MUTATION, and
+# `restore_work` puts back only the file. A following BUILD=yes family rebuilds (the restored file's
+# hash moved), but a BUILD=no family runs its gate on whatever is there: measured on the ab01f856
+# campaign, the D1 family's final red leg rebuilt the mutated tree, the source was restored, and the
+# next family (`migration-map-totality`, BUILD=no) copied that executable — its restored control then
+# failed D1 and the family scored INVALID for a mutation it never applied.
+#
+# So this records whether the workspace's build artifacts are from a mutated source, and a family that
+# will not rebuild for itself first rebuilds the restored tree. Fail-closed: if that rebuild fails the
+# workspace is not trustworthy and the campaign stops, exactly as for a failed source restore.
+ARTIFACTS_FROM_MUTATION=0
 restore_work(){ # file
   if ! git -C "$WORK" checkout -- "$1" 2>"$TMP/rerr"; then
     echo "  FATAL: could not restore $1 in the workspace ($(tr '\n' ' ' < "$TMP/rerr"))" >&2
@@ -2674,7 +2706,7 @@ EVIDENCE_DIR="$ROOT_DIR/.mutation-evidence/$RUN_ID"
 # clean.log is deliberately NOT here: it is written by the BASELINE loop, not by any family, and
 # including it is what let the last baseline gate's transcript be copied into every family record.
 # The baseline keeps its own per-gate transcripts under _baseline/.
-EV_LOGS="build.log gate.log confirm_clean.log confirm_red.log confirm_build.log confirm_build2.log aerr aerr2"
+EV_LOGS="build.log gate.log confirm_clean.log confirm_red.log confirm_build.log confirm_build2.log reclean_build.log aerr aerr2"
 
 # ONE PRODUCER, because the baseline is implemented TWICE — once for the campaign sweep and once for
 # single-family selection — and adding retention to only one of them is exactly the drift this
@@ -2803,6 +2835,20 @@ run_one(){
     publish_evidence "$nm" "$i" "$file" "${GATE[$i]}" 0 1 "INVALID — gate not green on the unmutated workspace"
     return
   fi
+  # A FAMILY THAT WILL NOT REBUILD MUST NOT INHERIT A MUTATED BUILD (see ARTIFACTS_FROM_MUTATION). The
+  # source is pristine here — every earlier family restored its file — so this build is the clean one.
+  if [ "$ARTIFACTS_FROM_MUTATION" = "1" ] && [ "$needs" != yes ]; then
+    if _timed_build "$TMP/reclean_build.log"; then
+      ARTIFACTS_FROM_MUTATION=0
+    else
+      echo "  FATAL: the restored workspace did not rebuild, so its artifacts are still the previous" >&2
+      echo "         family's mutation. Every later verdict would describe that compiler. Aborting." >&2
+      FAIL=$((FAIL+1)); INVALID=$((INVALID+1))
+      publish_evidence "$nm" "$i" "$file" "${GATE[$i]}" 0 1 "INVALID — the restored workspace did not rebuild after the previous family's mutated build"
+      WORK_DIRTY=1
+      return
+    fi
+  fi
   if ! apply "$WORK/$file" "$TMP/old" "$TMP/new" 2>"$TMP/aerr"; then
     echo "  FAIL $nm: could not apply mutation ($(cat "$TMP/aerr"))"
     FAIL=$((FAIL+1)); COULD_NOT_APPLY=$((COULD_NOT_APPLY+1))
@@ -2812,6 +2858,8 @@ run_one(){
   fi
   local killed=0 note="" invalid=0
   if [ "$needs" = yes ]; then
+    # Set BEFORE the build: a failed build may still have written artifacts for modules it reached.
+    ARTIFACTS_FROM_MUTATION=1
     if ! _timed_build "$TMP/build.log"; then
       # A build failure is NOT automatically a kill. Distinguish two very different things:
       #
@@ -2986,7 +3034,7 @@ through its declared check: $_want)"
           invalid=1; note="(INVALID — could not restore $file to confirm the kill)"; _confirm_ok=0
         fi
         if [ "$_confirm_ok" = "1" ] && [ "$needs" = yes ]; then
-          _timed_build "$TMP/confirm_build.log" || _confirm_ok=0
+          if _timed_build "$TMP/confirm_build.log"; then ARTIFACTS_FROM_MUTATION=0; else _confirm_ok=0; fi
         fi
         if [ "$_confirm_ok" = "1" ]; then
           _clean_rc=0
@@ -3004,6 +3052,7 @@ failure under mutation is not attributable to the mutation)"
           fi
         fi
         if [ "$_confirm_ok" = "1" ] && [ "$needs" = yes ]; then
+          ARTIFACTS_FROM_MUTATION=1
           # NOT `|| true`. Ignoring this rebuild meant the second red leg could be produced by a
           # FAILED BUILD rather than by the gate — and the leg below then accepted any nonzero exit
           # without the exit-97, precondition, or end-shape checks the FIRST red leg gets. The

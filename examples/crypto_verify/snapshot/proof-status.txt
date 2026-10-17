@@ -11,7 +11,7 @@
 
   trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.computeTagExpr, the specification Examples.CryptoVerify.Proofs.compute_tag_correct evaluates (body 4a152a2d16c99501665e2cba7a2910a1, parameters [key, message, nonce])
 
   origin: source_linked
 
@@ -26,7 +26,7 @@
 
   trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.verifyTagExpr, the specification Examples.CryptoVerify.Proofs.verify_tag_correct evaluates (body 574f017b82f8ec2e8a96f3a02a49d1cd, parameters [key, message, nonce, expected_tag])
 
   origin: source_linked
 
@@ -41,7 +41,7 @@
 
   trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.checkNonceExpr, the specification Examples.CryptoVerify.Proofs.check_nonce_correct evaluates (body 01aa5d81c104c6a205a28852bd825b95, parameters [nonce, max_nonce])
 
   origin: source_linked
 
@@ -56,7 +56,7 @@
 
   trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.verifyMessageExpr, the specification Examples.CryptoVerify.Proofs.verify_message_composed_correct evaluates (body 405b50465d34ee67641bacb19e43f057, parameters [key, message, nonce, expected_tag, max_nonce])
 
   origin: source_linked
 
@@ -71,5 +71,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 5 functions — 4 proved, 0 stale, 0 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 5 functions — 4 proved, 0 stale, 0 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 0 spec-unbound, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
 

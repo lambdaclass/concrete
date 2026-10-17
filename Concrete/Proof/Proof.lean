@@ -373,6 +373,16 @@ structure PFnDef where
   body : PExpr
   deriving Repr, BEq
 
+/-- A specification's PARAMETERS, declared beside its body (bug 079).
+
+    A specification is a function body over named inputs. When no `PFnDef` carries the body — a
+    leaf spec that no function table needs — this is where its inputs are named and ordered, so the
+    subject binding can compare them with the claimed function's parameters. It carries no identity:
+    it is not an implementation and attests nothing. -/
+structure SpecDecl where
+  params : List String
+  body   : PExpr
+
 /-- An entry that HAS identity. The receipt path takes this type, so a legacy
     entry cannot reach it — the boundary is the type, not a runtime check. -/
 structure IdentifiedPFnDef where
@@ -2703,11 +2713,10 @@ def chExpr : PExpr :=
 -- ============================================================
 -- Relocated SHA-256/HMAC chain spec exprs (task #22).
 --
--- These are the registered specs for the hmac_sha256 flagship's
--- internal chain. They live HERE (not in Sha256Refine) because the
--- `specs` table below — consulted by the spec-drift gate in
--- `ProofCore.validateRegistry` — can only reference exprs in this
--- module. Each is the EXACT extracted source body (`concrete
+-- These are the specs for the hmac_sha256 flagship's internal chain.
+-- They live HERE (not in Sha256Refine) for historical reasons: a
+-- name-keyed `specs` table, removed by bug 079, could only reference
+-- exprs in this module. Each is the EXACT extracted source body (`concrete
 -- examples/hmac_sha256/src/main.con --report lean-stubs`), so the
 -- gate passes by identity, not merely by normalization. The
 -- refinement THEOREMS about them remain in `Concrete.Sha256Refine`
@@ -2941,9 +2950,9 @@ def hmac_sha256Expr : PExpr :=
 -- `driftTestSpec` is a deliberately-wrong spec for
 -- `test_drift.simple_add` (whose source is `return a + b;`).
 -- The spec evaluates to `.int 42` (a literal), not the sum.
--- Adding the (qualName, specExpr) row to `specs` below makes
--- the gate fire when extraction runs on the adversarial test
--- program.
+-- The subject binding (bug 079) compares the source body with the
+-- specification value the linked theorem evaluates, so the gate fires
+-- when extraction runs on the adversarial test program.
 --
 -- The trivial theorem `drift_test_theorem` exists so the
 -- registry's `proof` field resolves to a real Lean theorem
@@ -3142,65 +3151,10 @@ def base64ValOfExpr : PExpr :=
       base64ValOfK1Expr)
     base64ValOfK1Expr
 
-/-- Spec table keys are the registry entries' QUALIFIED function names
-    (`qualName`, e.g. `std.option.option_Option_map`) — the drift check in
-    `validateRegistry` looks specs up by that exact key, so any other key
-    silently leaves the entry drift-uncovered (`proof-status` now renders
-    which it is per entry). -/
-def specs : List (String × PExpr) :=
-  [ -- pure-core stdlib (slices 1-2)
-    ("std.bytes.bytes_Bytes_view",             bytesViewExpr)
-  , ("std.option.option_Option_unwrap_or",     optionUnwrapOrExpr)
-  , ("std.option.option_Option_map",           optionMapExpr)
-  , ("std.result.result_Result_map",           resultMapExpr)
-  , ("std.result.result_Result_map_err",       resultMapErrExpr)
-  , ("std.numeric.numeric_NonZeroU32_try_new",      numericTryNewExpr)
-  , ("std.numeric.numeric_NonZeroU64_try_new",      numericTryNewExpr)
-  , ("std.numeric.numeric_Port_try_new",            numericTryNewExpr)
-  , ("std.numeric.numeric_NonZeroU32_try_from_u64", numericTryFromExpr 4294967295)
-  , ("std.numeric.numeric_Port_try_from_u32",       numericTryFromExpr 65535)
-  , ("std.base64.base64_char_of",                   base64CharOfExpr)
-  , ("std.base64.base64_val_of",                    base64ValOfExpr)
-    -- parse_validate
-  ,
-    ("parse_validate.validate_version",       validateVersionExpr)
-  , ("parse_validate.validate_header_fields", validateHeaderFieldsExpr)
-  , ("parse_validate.parse_header",           parseHeaderExpr)
-    -- crypto_verify (toy MAC)
-  , ("main.compute_tag",   computeTagExpr)
-  , ("main.verify_tag",    verifyTagExpr)
-  , ("main.check_nonce",   checkNonceExpr)
-  , ("main.verify_message", verifyMessageExpr)
-    -- fixed_capacity
-  , ("fixed_capacity.ring_new",      ringNewExpr)
-  , ("fixed_capacity.ring_push",     ringPushExpr)
-  , ("fixed_capacity.ring_contains", ringContainsExpr)
-  , ("fixed_capacity.compute_tag",   fcTagExpr)
-    -- constant_time_tag
-  , ("constant_time_tag.ct_compare", ctCompareExpr)
-    -- hmac_sha256 (bar #1 leaves)
-  , ("hmac_sha256.sha256_init",      sha256_initExpr)
-  , ("hmac_sha256.ch",               chExpr)
-    -- hmac_sha256 (bar #2 chain — refinement-tied, task #22)
-  , ("hmac_sha256.block_to_words",     blockToWordsExpr)
-  , ("hmac_sha256.block_to_words_at",  blockToWordsAtExpr)
-  , ("hmac_sha256.sha256_schedule",    scheduleExpr)
-  , ("hmac_sha256.sha256_round",       roundExpr)
-  , ("hmac_sha256.sha256_compress",    sha256_compressExpr)
-  , ("hmac_sha256.sha256_compress_at", sha256_compressAtExpr)
-  , ("hmac_sha256.state_to_bytes",     stateToBytesExpr)
-  , ("hmac_sha256.sha256_hash",        sha256_hashExpr)
-  , ("hmac_sha256.hmac_sha256",        hmac_sha256Expr)
-    -- adversarial spec-drift fixture (deliberately wrong)
-  , ("test_drift.simple_add",        driftTestSpec)
-  ]
-
-/-- The one spec lookup: registry drift checking AND the proof-status
-    "spec: drift-checked / NOT drift-covered" line both go through this,
-    so the rendered coverage state is a faithful witness of what the
-    drift check actually consulted. -/
-def specFor (qualName : String) : Option PExpr :=
-  (specs.find? fun (n, _) => n == qualName).map (·.2)
+-- The name-keyed `specs` table and `specFor` lookup were REMOVED (bug 079). They compared a body
+-- with a specification only when the function's SOURCE NAME had an entry, and skipped every other
+-- link silently. `subjectBindingOf` (ProofCore) compares every link with the specification VALUES
+-- its theorem evaluates, read from `specBindingTable` (ClassificationTable, generated).
 
 -- ============================================================
 -- Reusable verification library (the proof ladder)
@@ -3436,5 +3390,22 @@ theorem eval_while_count (fns : FnTable)
           cond assigns cont hc' ha']
     rw [show N - (m + 1) + 1 = N - m by omega]
     exact ih (by omega)
+
+/-! ## Specification parameters (bug 079)
+
+The subject binding compares a claimed function's parameters with its specification's. These
+specifications have no `PFnDef`, so their inputs are declared here, by name and in order. Methods
+take `self` first, as the elaborated function does. -/
+def optionMapSpec : SpecDecl := { params := ["self", "f"], body := optionMapExpr }
+def optionUnwrapOrSpec : SpecDecl := { params := ["self", "default"], body := optionUnwrapOrExpr }
+def resultMapSpec : SpecDecl := { params := ["self", "f"], body := resultMapExpr }
+def resultMapErrSpec : SpecDecl := { params := ["self", "f"], body := resultMapErrExpr }
+def numericTryNewSpec : SpecDecl := { params := ["value"], body := numericTryNewExpr }
+def nonZeroU32TryFromU64Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 4294967295 }
+def portTryFromU32Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 65535 }
+def base64CharOfSpec : SpecDecl := { params := ["v"], body := base64CharOfExpr }
+def base64ValOfSpec : SpecDecl := { params := ["c"], body := base64ValOfExpr }
+def sha256CompressSpec : SpecDecl := { params := ["state", "block"], body := sha256_compressExpr }
+def hmacSha256Spec : SpecDecl := { params := ["k", "k_len", "m", "m_len"], body := hmac_sha256Expr }
 
 end Concrete.Proof

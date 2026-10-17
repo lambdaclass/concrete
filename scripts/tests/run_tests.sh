@@ -3713,9 +3713,9 @@ with open('$TMPDIR/spec_identity.json') as f:
     data = json.load(f)
 exts = {f['function']: f for f in data['facts'] if f['kind'] == 'extraction'}
 assert exts['main.pure_add'].get('spec') == 'add_commutativity', 'add spec wrong'
-assert exts['main.pure_add'].get('proof') == 'Concrete.Proof.pure_add_correct', 'add proof wrong'
+assert exts['main.pure_add'].get('proof') == 'Examples.TestFixtures.Proofs.pure_add_correct', 'add proof wrong'
 assert exts['main.pure_mul'].get('spec') == 'mul_associativity', 'mul spec wrong'
-assert exts['main.pure_mul'].get('proof') == 'Concrete.Proof.pure_mul_correct', 'mul proof wrong'
+assert exts['main.pure_mul'].get('proof') == 'Examples.TestFixtures.Proofs.pure_mul_correct', 'mul proof wrong'
 " 2>/dev/null; then
     echo "  ok  spec-identity: extraction facts carry spec/proof from registry"
     PASS=$((PASS + 1))
@@ -3750,7 +3750,7 @@ with open('$TMPDIR/spec_identity.json') as f:
     data = json.load(f)
 obs = {f['function']: f for f in data['facts'] if f['kind'] == 'obligation'}
 assert obs['main.pure_add']['spec'] == 'add_commutativity', 'add spec wrong'
-assert obs['main.pure_add']['proof'] == 'Concrete.Proof.pure_add_correct', 'add proof wrong'
+assert obs['main.pure_add']['proof'] == 'Examples.TestFixtures.Proofs.pure_add_correct', 'add proof wrong'
 assert obs['main.pure_add']['source'] == 'registry', 'add source wrong'
 assert obs['main.pure_add']['status'] == 'proved', 'add not proved'
 " 2>/dev/null; then
@@ -3804,7 +3804,7 @@ check_report "$SPEC_PROG" extraction \
     "spec-identity: extraction report should show spec name"
 
 check_report "$SPEC_PROG" extraction \
-    "proof: Concrete.Proof.pure_add_correct" \
+    "proof: Examples.TestFixtures.Proofs.pure_add_correct" \
     "spec-identity: extraction report shows proof name" \
     "spec-identity: extraction report should show proof name"
 
@@ -3860,7 +3860,7 @@ with open('$TMPDIR/obl_gen.json') as f:
 obs = {f['function']: f for f in data['facts'] if f['kind'] == 'obligation'}
 o = obs['main.pure_add']
 assert o['spec'] == 'add_commutativity', 'spec wrong'
-assert o['proof'] == 'Concrete.Proof.pure_add_correct', 'proof wrong'
+assert o['proof'] == 'Examples.TestFixtures.Proofs.pure_add_correct', 'proof wrong'
 assert o['source'] == 'registry', 'source wrong'
 " 2>/dev/null; then
     echo "  ok  obligation-gen: proved obligation carries spec identity"
@@ -6570,31 +6570,32 @@ echo "=== Adversarial proof system tests ==="
 ADV_SNAP_DIR=$(mktemp -d)
 ADV_DIR="$TESTDIR"
 
-# --- 2. Fabricated proof name (known limitation) ---
-# Registry claims Nonexistent.Module.totally_fake_theorem with correct fingerprint.
-# System currently grants "proved" because it only checks fingerprints.
-# This test DOCUMENTS the limitation — it asserts the current (wrong) behavior.
+# --- 2. Fabricated proof name — CLOSED by bug 079 ---
+# The registry claims Nonexistent.Module.totally_fake_theorem with a correct fingerprint. This used to
+# DOCUMENT a limitation: the claim read `proved` because only the fingerprint was checked. A theorem
+# that does not exist evaluates no specification, so the claim is not shown to be about its body.
 
 fab_out=$($COMPILER "$ADV_DIR/adversarial_proof_fabricated/test_proof_registry.con" --report proof-status 2>&1 || true)
-if grep <<<"$fab_out" -q "1 proved"; then
-    echo "  ok  adversarial: fabricated proof name with valid fingerprint → proved (KNOWN LIMITATION: proof names are not validated against Lean)"
+if grep <<<"$fab_out" -q "0 proved" && grep <<<"$fab_out" -q "1 spec-unbound"; then
+    echo "  ok  adversarial: fabricated proof name with valid fingerprint → spec_unbound, not proved (bug 079)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  adversarial: fabricated proof name behavior changed (was: proved despite fake name)"
+    echo "FAIL  adversarial: a fabricated proof name with a valid fingerprint is not refused as spec_unbound"
     FAIL=$((FAIL + 1))
 fi
 
-# Verify the fake proof name appears in the report
-if grep <<<"$fab_out" -q "pure_add.*proof matches"; then
-    echo "  ok  adversarial: fabricated proof name still passes fingerprint check"
+# The refusal names the theorem and why — the fingerprint is fine, the theorem is about no body.
+if grep <<<"$fab_out" -q "totally_fake_theorem' evaluates no specification"; then
+    echo "  ok  adversarial: the refusal names the fabricated theorem"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  adversarial: fingerprint check should still pass with fake proof name"
+    echo "FAIL  adversarial: the refusal does not name the fabricated theorem"
     FAIL=$((FAIL + 1))
 fi
 
 # --- 3. Fabricated proof name in snapshot artifact ---
-# The snapshot must propagate the unchecked name, so downstream tools can audit it.
+# The snapshot must still propagate the unchecked name, so downstream tools can audit it — now beside
+# the refusal rather than beside a false `proved`.
 
 $COMPILER snapshot "$ADV_DIR/adversarial_proof_fabricated/test_proof_registry.con" -o "$ADV_SNAP_DIR/fabricated.json" 2>/dev/null
 if python3 -c "
@@ -6605,12 +6606,12 @@ facts = s['facts']
 ps = [f for f in facts if f['kind'] == 'proof_status' and f['function'] == 'main.pure_add']
 assert len(ps) == 1
 assert ps[0]['proof'] == 'Nonexistent.Module.totally_fake_theorem'
-assert ps[0]['state'] == 'proved'
+assert ps[0]['state'] == 'spec_unbound'
 " 2>/dev/null; then
-    echo "  ok  adversarial: snapshot propagates fabricated proof name (auditable)"
+    echo "  ok  adversarial: snapshot propagates the fabricated proof name and its spec_unbound state (auditable)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  adversarial: snapshot should contain the fabricated proof name for auditing"
+    echo "FAIL  adversarial: snapshot should contain the fabricated proof name and state spec_unbound"
     FAIL=$((FAIL + 1))
 fi
 

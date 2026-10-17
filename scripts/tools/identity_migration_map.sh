@@ -21,12 +21,18 @@
 #   selection   (file, holding declaration, model, reference content key) -> the mapped symbol
 #   link        (file, fn, fingerprint) — must be byte-unchanged
 #
-# Usage: scripts/tools/identity_migration_map.sh BASELINE_RAW NEW_RAW
+# AMENDMENTS (optional third argument, docs/verification/identity-rows-amendments.tsv): a row
+# legitimately re-frozen after the baseline is listed there as its baseline value (`-`) and its new
+# value (`+`). Each `-` row must appear exactly once in the baseline or the tool refuses; it is
+# replaced before pairing and reported as an `amended` line. Anything not listed still has to pair.
+# Without the argument nothing is amended, which is how the committed R-0482 map was produced.
+#
+# Usage: scripts/tools/identity_migration_map.sh BASELINE_RAW NEW_RAW [AMENDMENTS]
 set -uo pipefail
-[ "$#" -eq 2 ] || { echo "usage: $0 BASELINE_RAW NEW_RAW" >&2; exit 2; }
-for f in "$1" "$2"; do [ -r "$f" ] || { echo "FATAL: cannot read $f" >&2; exit 2; }; done
+{ [ "$#" -eq 2 ] || [ "$#" -eq 3 ]; } || { echo "usage: $0 BASELINE_RAW NEW_RAW [AMENDMENTS]" >&2; exit 2; }
+for f in "$@"; do [ -r "$f" ] || { echo "FATAL: cannot read $f" >&2; exit 2; }; done
 export LC_ALL=C
-python3 -I - "$1" "$2" <<'PY'
+python3 -I - "$@" <<'PY'
 import sys
 
 def load(path):
@@ -40,6 +46,21 @@ def load(path):
 
 old, new = load(sys.argv[1]), load(sys.argv[2])
 out, refused, shared = [], 0, 0
+amended_lines = []
+if len(sys.argv) > 3:
+    minus, plus = [], []
+    for line in open(sys.argv[3], encoding="utf-8"):
+        line = line.rstrip("\n")
+        if line.startswith("-\t"): minus.append(line[2:].split("\t"))
+        elif line.startswith("+\t"): plus.append(line[2:].split("\t"))
+    if len(minus) != len(plus):
+        print("FATAL: amendments must pair each - row with a + row", file=sys.stderr); sys.exit(2)
+    for o, n in zip(minus, plus):
+        if o[0] != n[0] or old.get(o[0], []).count(o[1:]) != 1:
+            print("FATAL: amendment is not exactly one baseline row: " + "\t".join(o), file=sys.stderr); sys.exit(2)
+        rows = old[o[0]]
+        rows[rows.index(o[1:])] = n[1:]
+        amended_lines.append("\t".join(["amended", o[0], "\t".join(o[1:]), "->", "\t".join(n[1:])]))
 
 def emit(kind, verdict, *parts):
     out.append("\t".join((verdict, kind) + parts))
@@ -148,14 +169,15 @@ pair("link", lambda lab: (lambda r: tuple(r)), lambda r: f"{r[0]}:{r[1]}")
 
 print("# identity-migration-map v1 — scripts/tools/identity_migration_map.sh; do not edit by hand")
 print("# verdict<TAB>kind<TAB>row<TAB>old->new (or refusal reason)")
-for line in out:
+for line in amended_lines + out:
     print(line)
 counts = {}
 for line in out:
     v = line.split("\t", 1)[0]; counts[v] = counts.get(v, 0) + 1
 total = sum(len(v) for v in old.values())
 print(f"# totals: baseline-rows={total} mapped={counts.get('mapped', 0)} "
-      f"shared={counts.get('shared', 0)} refused={counts.get('refused', 0)}")
+      f"shared={counts.get('shared', 0)} refused={counts.get('refused', 0)}"
+      + (f" amended={len(amended_lines)}" if amended_lines else ""))
 if refused or counts.get("mapped", 0) != total:
     print(f"REFUSE: the map is not total ({counts.get('mapped', 0)} of {total} mapped, {refused} refused)",
           file=sys.stderr)

@@ -172,14 +172,18 @@ Then run the gate; the export metadata leg fails if the exporter and toolchain d
 ## Fixture-only theorem names
 
 Some `#[proof_by(...)]` attributes in test fixtures name theorems that do
-not exist as Lean constants (`Concrete.Proof.pure_add_correct`,
-`pure_sub_correct`, `pure_mul_correct`, `left_add_correct`,
-`right_add_correct`, `compute_checksum_correct`, `PureAdd.add_comm`,
-`Nonexistent.Module.totally_fake_theorem`, `Examples.DoesNotExist.*`).
-These exercise the documented limitation that
-`proof-status` validates fingerprints, not names — `concrete prove --check`
-is the net that catches fabricated names. The gate keeps this list closed:
-a *new* unresolvable name is a broken proof link and fails.
+not exist as Lean constants (`Concrete.Proof.compute_checksum_correct`,
+`Nonexistent.Module.totally_fake_theorem`, `Examples.DoesNotExist.*`, and the
+`not_yet_proved` / `drift_test_theorem` adversarial names). Such a claim is
+not proved: a theorem that does not exist evaluates no specification, so the
+subject binding refuses it (bug 079), and `concrete prove --check` names the
+missing theorem. The gate keeps this list closed: a *new* unresolvable name is
+a broken proof link and fails.
+
+Until bug 079 the plumbing fixtures' theorems (`pure_add_correct` and siblings,
+`PureAdd.add_comm`) were on this list too, and those claims read `proved`
+because `proof-status` validated fingerprints, not names. They are now real
+theorems about real specifications, in `proofs/Examples/TestFixtures/Proofs.lean`.
 
 ## What no axiom check can see (unproven trust, tracked elsewhere)
 

@@ -155,6 +155,13 @@ fingerprint freshness ran, the model tie did not. Fixed three ways:
 The `fabricated_proof` adversarial fixture now visibly renders
 `NOT drift-covered`, which is that fixture doing its job.
 
+**Superseded by bug 079 (2026-10-17).** "NOT drift-covered" was not a
+visible gap but a hole: an uncovered link was still `proved`, and minted
+receipts. The name-keyed table and `specFor` are removed; every link is
+compared with the specification values its theorem evaluates, and the
+proof-status line reads `spec: bound to …` or `spec: NOT bound — <reason>`.
+`fabricated_proof` is now `spec_unbound`.
+
 **Stage 2 — checked conversions: DONE.** `base64.char_of` and
 `base64.val_of` (the RFC 4648 alphabet and its inverse, workload-1's pull)
 are kernel-linked with total (`iff`) coverage — 11 std links — plus the

@@ -79,7 +79,22 @@ private def classificationTable : List (String × String × String × List (Stri
   ("Examples.ProofPatterns.Proofs.inc_correct", "body", "fd852e9cb68ec0e688ce498b94c30f48", [("Examples.ProofPatterns.Proofs.combineFns", "eb2ee875cd9380680b46377cb930a56b")], false, ["Examples.ProofPatterns.Proofs.incExpr"]),
   ("Examples.ProofPatterns.Proofs.put_writes_index_1_frames_rest", "body", "bd9815f6d17d42dee8216f4fbf39d431", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.ProofPatterns.Proofs.putExpr"]),
   ("Examples.ProofPatterns.Proofs.scale_by_two_correct", "body", "82d7729065bed619adc93c019326c576", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.ProofPatterns.Proofs.scaleByTwoExpr"]),
-  ("Examples.ProofPatterns.Proofs.sum4_totals_concrete", "body", "1a54f82358822e04fdfd107b1bbafd58", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.ProofPatterns.Proofs.sum4Expr"])
+  ("Examples.ProofPatterns.Proofs.sum4_totals_concrete", "body", "1a54f82358822e04fdfd107b1bbafd58", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.ProofPatterns.Proofs.sum4Expr"]),
+  ("Examples.PureCore.Proofs.base64_char_of_correct", "body", "be5acf726d3868b52f3a6c6e0755f0c4", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.base64CharOfExpr"]),
+  ("Examples.PureCore.Proofs.base64_val_of_correct", "body", "e3164de01b84e50ed67e03d9527e5bad", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.base64ValOfExpr"]),
+  ("Examples.PureCore.Proofs.nonzero_u32_try_from_u64_correct", "body", "cd36d3f9e0feb116b8f6353aed197cb4", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.numericTryFromExpr"]),
+  ("Examples.PureCore.Proofs.numeric_try_new_correct", "body", "97fff358ad9dd757562e17f19caa7e13", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.numericTryNewExpr"]),
+  ("Examples.PureCore.Proofs.option_map_correct", "body", "84bb94d6810ef2eb5aa51617647b1d04", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.optionMapExpr"]),
+  ("Examples.PureCore.Proofs.option_unwrap_or_correct", "body", "3b97c066ea1ef2987fe67b6f6ae679fd", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.optionUnwrapOrExpr"]),
+  ("Examples.PureCore.Proofs.port_try_from_u32_correct", "body", "7d6096caf37e0d0fe8974357c75200b7", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.numericTryFromExpr"]),
+  ("Examples.PureCore.Proofs.result_map_correct", "body", "b2dedc1df2fe28222493b5900e08320a", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.resultMapExpr"]),
+  ("Examples.PureCore.Proofs.result_map_err_correct", "body", "b1e290fe9228c9d9ba3ba7bd44c7f1ed", [("Concrete.Proof.pureCoreFns", "d4bd64481f74f57d14fb1b5f0166eb5b")], false, ["Concrete.Proof.resultMapErrExpr"]),
+  ("Examples.TestFixtures.Proofs.left_add_correct", "body", "162672097b97f8bd8cc491412f24d11d", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["left_add_spec"]),
+  ("Examples.TestFixtures.Proofs.pure_add_correct", "body", "3956e7fb38cfc5ea1565cb7a89753764", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
+  ("Examples.TestFixtures.Proofs.pure_mul_correct", "body", "d7ea490b15433f91eed8e92e25783c54", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["mul_associativity"]),
+  ("Examples.TestFixtures.Proofs.pure_sub_correct", "body", "fd8fc003043fa7a5a8dbd72151ba5caf", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["sub_identity"]),
+  ("Examples.TestFixtures.Proofs.right_add_correct", "body", "dd9322963e35c34e18fa667394116aef", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["right_add_spec"]),
+  ("PureAdd.add_comm", "body", "1f64d1eca5de8c866eb02e9a15db0aa2", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["PureAdd.spec_add"])
 -- END GENERATED CLASSIFICATION ROWS
 ]
 
@@ -237,6 +252,81 @@ def externalScopedEntries : List (String × List (String × String × String × 
   ("Examples.ProofPatterns.Proofs.combineFns", [("cb56f94bf4b1af104e7f17461bc5170d", "calls", "dbl", "c3f254410bdebc8d14050f5087629bf0", "b78225e71dcabeba3282cf29cdc93ef5"), ("cb56f94bf4b1af104e7f17461bc5170d", "calls", "inc", "697ea521ed81fbf8df819cc45438561d", "547e67b5f2b072131034d8cec278c032"), ("9b3a95aba8fa59274bc00e04a0301b7a", "calls", "inc", "697ea521ed81fbf8df819cc45438561d", "547e67b5f2b072131034d8cec278c032"), ("2bf158ef936ab1bc69004fbb1e86d7f1", "calls", "dbl", "c3f254410bdebc8d14050f5087629bf0", "b78225e71dcabeba3282cf29cdc93ef5"), ("2bf158ef936ab1bc69004fbb1e86d7f1", "calls", "inc", "697ea521ed81fbf8df819cc45438561d", "547e67b5f2b072131034d8cec278c032")]),
   ("Examples.HmacSha256.Proofs.shaFns", [("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "big_sigma0", "2fc56fcc1fe1179b08d9634389f4e6da", "3ab667a7aa7008cf6f2b0410906846fc"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "big_sigma1", "bf9e5f67627630de3db89a6a505259bb", "5eba5036845c396a1525f1552acc5ce9"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "block_to_words", "2566f0877ae2ddb261ffb5ffe3d745ff", "224375466a2d80c59a71920a1caf490e"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "block_to_words_at", "db8c024f5788e80b30e6997a0e84f903", "f3752e9a1e0c1684752788d52f862e2e"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "ch", "3e315e17b9a1420dc0c9c4988af52511", "81002eaa06b8442660382499ad6b3a51"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "maj", "24c6e19e81df257bf73ad1a67b7d9d44", "3e7f5397ade0a4c3d133d5f48328de94"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_compress_at", "0419685e7ed4f0816654b1ddf3a67c43", "41a4d518a4d1c212fe9497b2cf258e7b"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_hash", "a75e1f52a094df0bfbbb0b3f5d9bb0e1", "0df3d0146c48c1d9feefaf63c7355ee9"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_init", "1cbbcac2dedb20c50ca91b1953ab562f", "6a966052949f39009ae27d6e18fbb38e"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_k", "a857c18a4abd382142dd072913aa3e6f", "a4726fb469497e7733a03c39ed145ff2"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_round", "629f9b2876a77f0f5d52a860659daeb8", "13fe613e1d54ede8cacb86345780b26b"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "sha256_schedule", "b40af686e1947479a7135f852e1e0f36", "0d08dda9f27ef3f7d9de6b9a8a0e2442"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "small_sigma0", "e153ac437b8dbdd5315d8728fde99e3b", "346c88e7b30d01981384dc8ddd142835"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "small_sigma1", "ebdbe65affa2c57d59b8906600aa02f4", "9b64d43896c89316c83ac438d21f9b92"), ("1217df442ecef82341d7977b0e0bfd49", "hmac_sha256", "state_to_bytes", "9744d6bcb60e617a310af956a8ba1b6a", "00bb5f1fe704e930efbb13c7755c353c")])
 -- END GENERATED EXTERNAL SCOPED ENTRIES
+]
+
+/-- (theorem, specification head, canonical value digest, declared parameters) — bug 079.
+
+    For every linked theorem, the VALUE of each specification term its statement evaluates, digested
+    by `sourceBodyDigestV1Of` — the producer the compiler applies to an extracted body — together with
+    the parameters of the `PFnDef` whose body is that specification (`none` when no declaration, or
+    disagreeing ones, exist). A claim names a theorem and a spec; this is what lets the compiler ask
+    whether the spec the theorem actually uses IS the claimed body, instead of trusting the name.
+
+    Generated in the theorem's own environment because most specifications live under `proofs/`,
+    which the compiler cannot import. Freshness-gated with the rest of this file. -/
+def specBindingTable : List (String × String × String × Option (List String)) :=
+[
+-- BEGIN GENERATED SPEC BINDINGS
+  ("Concrete.Proof.parse_byte_correct", "Concrete.Proof.parseByteExpr", "314d8160dbe1d21a697ef7d858cac7d0", (some ["data", "offset"])),
+  ("Concrete.Proof.check_length_rejects_short", "Concrete.Proof.checkLengthExpr", "34041a6ae6346f734e5ba502c2b1b816", (some ["len"])),
+  ("Concrete.Proof.decode_header_rejects_short", "Concrete.Proof.decodeHeaderExpr", "04a11efc156ec8552dcf3aa210ee6d51", (some ["data", "len"])),
+  ("Examples.CryptoVerify.Proofs.compute_tag_correct", "Concrete.Proof.computeTagExpr", "4a152a2d16c99501665e2cba7a2910a1", (some ["key", "message", "nonce"])),
+  ("Examples.CryptoVerify.Proofs.verify_tag_correct", "Concrete.Proof.verifyTagExpr", "574f017b82f8ec2e8a96f3a02a49d1cd", (some ["key", "message", "nonce", "expected_tag"])),
+  ("Examples.CryptoVerify.Proofs.check_nonce_correct", "Concrete.Proof.checkNonceExpr", "01aa5d81c104c6a205a28852bd825b95", (some ["nonce", "max_nonce"])),
+  ("Examples.ElfHeader.Proofs.check_magic_correct", "Concrete.Proof.checkMagicExpr", "17d8ab0be07223a73a5e1507aafd5e4d", (some ["b0", "b1", "b2", "b3"])),
+  ("Examples.ElfHeader.Proofs.check_class_correct", "Concrete.Proof.checkClassExpr", "ebd1b1ca35adf407143b2220e7e9921d", (some ["cls"])),
+  ("Examples.ElfHeader.Proofs.check_data_correct", "Concrete.Proof.checkDataExpr", "f5ed9c79607fbc0d64ef723c703aa299", (some ["encoding"])),
+  ("Examples.ElfHeader.Proofs.check_version_correct", "Concrete.Proof.checkVersionExpr", "f42ef4400948bbdb10ccb19733cd0993", (some ["ver"])),
+  ("Examples.ElfHeader.Proofs.validate_header_correct", "Concrete.Proof.validateHeaderExpr", "adbcf58c39059203cf4296adbceab87a", (some ["b0", "b1", "b2", "b3", "cls", "encoding", "ver"])),
+  ("Concrete.Proof.drift_test_theorem", "Concrete.Proof.driftTestSpec", "86cdf45d9a8d0fad50c6b369632bcdeb", none),
+  ("Concrete.Proof.drift_test_theorem", "Concrete.Proof.PExpr.lit", "86cdf45d9a8d0fad50c6b369632bcdeb", none),
+  ("Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct", "Concrete.Proof.ctCompareExpr", "d0019cee08c5091696df3f7bee5ece3c", (some ["a", "b"])),
+  ("Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct", "Concrete.Proof.ctCompareExpr", "d0019cee08c5091696df3f7bee5ece3c", (some ["a", "b"])),
+  ("Examples.CryptoVerify.Proofs.verify_message_composed_correct", "Concrete.Proof.verifyMessageExpr", "405b50465d34ee67641bacb19e43f057", (some ["key", "message", "nonce", "expected_tag", "max_nonce"])),
+  ("Examples.FixedCapacity.Proofs.compute_tag_zero_correct", "Concrete.Proof.fcTagExpr", "fe55b50d3fca30c4cffe988b2bbb7fea", (some ["buf"])),
+  ("Examples.FixedCapacity.Proofs.ring_new_correct", "Concrete.Proof.ringNewExpr", "b37a2218caee8f0dfa4ad3e51a28c62a", (some [])),
+  ("Examples.FixedCapacity.Proofs.ring_push_then_contains_correct", "Concrete.Proof.ringContainsExpr", "b0d47d6eb1a041583ca1a98d7ce7fca4", (some ["rb", "val"])),
+  ("Examples.FixedCapacity.Proofs.ring_push_zero_correct", "Concrete.Proof.ringPushExpr", "bdd5f35bd8d52c02a06eeb4e6b6fb318", (some ["rb", "val"])),
+  ("Examples.HmacSha256.Proofs.block_to_words_at_refines_spec", "Concrete.Proof.blockToWordsAtExpr", "f3752e9a1e0c1684752788d52f862e2e", (some ["buf", "off"])),
+  ("Examples.HmacSha256.Proofs.block_to_words_refines_spec", "Concrete.Proof.blockToWordsExpr", "224375466a2d80c59a71920a1caf490e", (some ["block"])),
+  ("Examples.HmacSha256.Proofs.ch_refines", "Concrete.Proof.chExpr", "81002eaa06b8442660382499ad6b3a51", (some ["x", "y", "z"])),
+  ("Examples.HmacSha256.Proofs.ch_selects_high", "Concrete.Proof.chExpr", "81002eaa06b8442660382499ad6b3a51", (some ["x", "y", "z"])),
+  ("Examples.HmacSha256.Proofs.hmac_sha256_refines_spec", "Concrete.Proof.hmac_sha256Expr", "79f070e008d23737faacb4a4570d8c72", (some ["k", "k_len", "m", "m_len"])),
+  ("Examples.HmacSha256.Proofs.round_refines_list", "Concrete.Proof.roundExpr", "13fe613e1d54ede8cacb86345780b26b", (some ["state", "k", "w"])),
+  ("Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec", "Concrete.Proof.sha256_compressAtExpr", "41a4d518a4d1c212fe9497b2cf258e7b", (some ["state", "buf", "off"])),
+  ("Examples.HmacSha256.Proofs.sha256_compress_refines_spec", "Concrete.Proof.sha256_compressExpr", "72c7c864b6a975387573c73705a95b7d", (some ["state", "block"])),
+  ("Examples.HmacSha256.Proofs.sha256_hash_refines_spec", "Concrete.Proof.sha256_hashExpr", "0df3d0146c48c1d9feefaf63c7355ee9", (some ["data", "len"])),
+  ("Examples.HmacSha256.Proofs.sha256_init_correct", "Concrete.Proof.sha256_initExpr", "6a966052949f39009ae27d6e18fbb38e", (some [])),
+  ("Examples.HmacSha256.Proofs.sha256_schedule_refines_spec", "Concrete.Proof.scheduleExpr", "0d08dda9f27ef3f7d9de6b9a8a0e2442", (some ["w16"])),
+  ("Examples.HmacSha256.Proofs.state_to_bytes_refines_spec", "Concrete.Proof.stateToBytesExpr", "00bb5f1fe704e930efbb13c7755c353c", (some ["state"])),
+  ("Examples.ParseValidate.Proofs.parse_header_too_short", "Concrete.Proof.parseHeaderExpr", "2b151225316f2a5e9eb18e9ae1dc4f06", (some ["data", "len"])),
+  ("Examples.ParseValidate.Proofs.validate_header_fields_success", "Concrete.Proof.validateHeaderFieldsExpr", "a5d590db87bc54cb19ca011b73c98346", (some ["v", "t", "plen", "total_len", "cs_expected", "cs_computed"])),
+  ("Examples.ParseValidate.Proofs.validate_version_correct", "Concrete.Proof.validateVersionExpr", "bae419f8b3b19c7738eb88d25593e4a5", (some ["v"])),
+  ("Examples.ProofPatterns.Proofs.add_three_correct", "Examples.ProofPatterns.Proofs.addThreeExpr", "cd88354f1f35a8ff7aeadc4be00c1e7c", (some ["x"])),
+  ("Examples.ProofPatterns.Proofs.combine_correct", "Examples.ProofPatterns.Proofs.combineExpr", "ad024dc89cde1a01e1b10a10337b44f7", (some ["x"])),
+  ("Examples.ProofPatterns.Proofs.copy2_copies_faithfully", "Examples.ProofPatterns.Proofs.copy2Expr", "23036c2494b36ec0456e93a029343b61", (some ["src"])),
+  ("Examples.ProofPatterns.Proofs.dbl_correct", "Examples.ProofPatterns.Proofs.dblExpr", "b78225e71dcabeba3282cf29cdc93ef5", (some ["x"])),
+  ("Examples.ProofPatterns.Proofs.ghost_sum_correct", "Examples.ProofPatterns.Proofs.ghostSumExpr", "272fda7ecfc05fb89209b3e1e93f63d9", (some [])),
+  ("Examples.ProofPatterns.Proofs.inc_correct", "Examples.ProofPatterns.Proofs.incExpr", "547e67b5f2b072131034d8cec278c032", (some ["x"])),
+  ("Examples.ProofPatterns.Proofs.put_writes_index_1_frames_rest", "Examples.ProofPatterns.Proofs.putExpr", "fd5593616de3e9109955db7c89e77004", (some ["a", "v"])),
+  ("Examples.ProofPatterns.Proofs.scale_by_two_correct", "Examples.ProofPatterns.Proofs.scaleByTwoExpr", "b78225e71dcabeba3282cf29cdc93ef5", (some ["x"])),
+  ("Examples.ProofPatterns.Proofs.sum4_totals_concrete", "Examples.ProofPatterns.Proofs.sum4Expr", "18d06a6aea9b091671f14df0e2bf9252", (some ["a"])),
+  ("Examples.PureCore.Proofs.base64_char_of_correct", "Concrete.Proof.base64CharOfExpr", "6f07847d244f18972677c31d5901ae9b", (some ["v"])),
+  ("Examples.PureCore.Proofs.base64_val_of_correct", "Concrete.Proof.base64ValOfExpr", "c573bbc86a6aa952ba6c3277748d31f5", (some ["c"])),
+  ("Examples.PureCore.Proofs.nonzero_u32_try_from_u64_correct", "Concrete.Proof.numericTryFromExpr", "4016e20299564f06b5772b4c544cbdc1", (some ["value"])),
+  ("Examples.PureCore.Proofs.numeric_try_new_correct", "Concrete.Proof.numericTryNewExpr", "cd492e0924684bc1716880c16f3d6df1", (some ["value"])),
+  ("Examples.PureCore.Proofs.option_map_correct", "Concrete.Proof.optionMapExpr", "ecc8d06bd2c4277c0b16707c6cceae7c", (some ["self", "f"])),
+  ("Examples.PureCore.Proofs.option_unwrap_or_correct", "Concrete.Proof.optionUnwrapOrExpr", "b4cf4c6d197b7f70ba94b8aaedbcd8d7", (some ["self", "default"])),
+  ("Examples.PureCore.Proofs.port_try_from_u32_correct", "Concrete.Proof.numericTryFromExpr", "3b12d35877b660c41f1cebb2c3474348", (some ["value"])),
+  ("Examples.PureCore.Proofs.result_map_correct", "Concrete.Proof.resultMapExpr", "8c357434d3270140b185b7e0c8dcae75", (some ["self", "f"])),
+  ("Examples.PureCore.Proofs.result_map_err_correct", "Concrete.Proof.resultMapErrExpr", "d98dc4d959a4af111ffdb97e0b61c3ad", (some ["self", "f"])),
+  ("Examples.TestFixtures.Proofs.left_add_correct", "left_add_spec", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"])),
+  ("Examples.TestFixtures.Proofs.pure_add_correct", "add_commutativity", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"])),
+  ("Examples.TestFixtures.Proofs.pure_mul_correct", "mul_associativity", "1732dea29f91dcd1550197c34018de59", (some ["a", "b"])),
+  ("Examples.TestFixtures.Proofs.pure_sub_correct", "sub_identity", "b78f1fe80a3ad10957d1e5f906a62710", (some ["a", "b"])),
+  ("Examples.TestFixtures.Proofs.right_add_correct", "right_add_spec", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"])),
+  ("PureAdd.add_comm", "PureAdd.spec_add", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"]))
+-- END GENERATED SPEC BINDINGS
 ]
 
 /-- Why a theorem has no usable classification. NAMED, because `DependencyClosure`

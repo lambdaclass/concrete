@@ -777,6 +777,9 @@ jobs:
       - name: "Identity separation (R-0482 — reachable vs context edits, tagged origins, D1/D5/D6, the map, old bytes)"
         run: bash scripts/tests/check_identity_separation.sh
 
+      - name: "Subject binding (bug 079 — a claim is proved only when its body and parameters ARE its theorem's specification)"
+        run: bash scripts/tests/check_subject_binding.sh
+
       - name: "Match guard effects (bug 066 — a guard's effects are observable and identical under interp and compiled)"
         run: bash scripts/tests/check_match_guard_effects.sh
 

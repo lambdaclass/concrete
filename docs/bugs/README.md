@@ -85,6 +85,7 @@ Those belong in:
 - [076_proof_admission_blind_to_dependencies.md](076_proof_admission_blind_to_dependencies.md) — fixed 2026-10-06: proof admission used a program-only call graph, so indirect calls and foreign bindings inside dependencies, and type-parameter dispatch, were admitted as effect-free; now reads the shared assumption summary, with fixture, gate, #guards and mutations
 - [077_nested_submodule_relative_call_undefined_symbol.md](077_nested_submodule_relative_call_undefined_symbol.md) — OPEN: a call `util::poke` from `tb.a` into `tb.a.util` lowers to the undefined `@util_poke` (LLVM validation fails); the assumption summary over-resolves the same call
 - [078_if_else_both_diverge_open_merge.md](078_if_else_both_diverge_open_merge.md) — FIXED: an if/else (statement or expression) whose arms both diverge left its merge block open, so an enclosing branch used the unreachable block as a phi source and SSA verification rejected a valid program (E0703)
+- [079_receipt_for_a_body_the_theorem_is_not_about.md](079_receipt_for_a_body_the_theorem_is_not_about.md) — FIXED: a body was compared with a specification only when its source name keyed a side table, so `fn always_seven() { return 7; }` linked to `check_nonce_correct` was proved and minted a receipt; one subject binding (body and parameters ARE the specification the theorem evaluates) now governs proved, issuance and consumption
 
 ## Open Numbered Bugs
 

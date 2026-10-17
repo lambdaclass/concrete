@@ -830,12 +830,15 @@ mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
 EXPECTED_ORDINARY_PROBES=247
-EXPECTED_ORDINARY_MANIFEST_SHA256="e18846955162265feba483d7414f51dc81a871e3a6d3f4912fa6d6991578eb80"
+EXPECTED_ORDINARY_MANIFEST_SHA256="81f3f3926194fa824ba59edfb915b52a9acc40b2a00df878d635101ce5d398cf"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
 EXPECTED_TOTAL_ASSERTIONS=321
-EXPECTED_ASSERTION_LABELS_SHA256="0c139a31738ae3b67f98dcc83cbbe2afd6cbc7ba85006ecf2a4769dcec7f344d"
+# Re-pinned 2026-10-17 (bug 079) for exactly three relabelled assertions, each explained where it is
+# made: the corpus-wide proved count (35 -> 32), the corpus split (164 -> 169 body), and the dispatch
+# leg, which now passes with pureCoreFns dispatched. The ordinary manifest moved for the split's label.
+EXPECTED_ASSERTION_LABELS_SHA256="7ac62e6e6589e7f960655b1a9c36727afeb3751478b590a23510f04a1a946863"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -1074,7 +1077,12 @@ echo "=== corpus split, pinned ==="
 # came from a simp set naming the def — including two sites my line-anchored grep never saw,
 # because the table name sat on a CONTINUATION line. `pureCoreFns.eq_1` remains, from
 # `proofs/Examples/PureCore/Proofs.lean`; that table is not manifest-backed and is not converted.
-probe "the corpus splits 113 contract / 164 body" "113/164" \
+# 164 -> 169 on 2026-10-17 (bug 079), and the five are named: `Examples.TestFixtures.Proofs.`
+# `pure_add_correct`, `pure_mul_correct`, `pure_sub_correct`, `left_add_correct`, `right_add_correct` —
+# the test programs' plumbing theorems, real now instead of names nothing defined. Each evaluates its
+# specification over `FnTable.empty`, so the classifier counts it as `body`. (`PureAdd.add_comm` is the
+# sixth, outside the counted prefixes.)
+probe "the corpus splits 113 contract / 169 body" "113/169" \
 '#eval show MetaM Unit from do
    let env ← getEnv
    let mut nc := 0; let mut nb := 0
@@ -1298,10 +1306,13 @@ for f in $(grep -rlE '#\[(proof_by|ensures_proof)\(' examples --include='*.con' 
   CORPUS_PROVED=$((CORPUS_PROVED + $(cc "$f" proof-status | grep -cE "^-- proved" || true)))
   CORPUS_UNJUST=$((CORPUS_UNJUST + $(cc "$f" proof-status | grep -cE "^-- dependency closure unjustified" || true)))
 done
-if [ "$CORPUS_PROVED" = "35" ] && [ "$CORPUS_UNJUST" = "0" ]; then
-  ok "corpus-wide: 35 proved, 0 unjustified closures (the fixture corpus is clean under the authority pass)"
+# 35 -> 32 on 2026-10-17 (bug 079): `loop_invariant.count_up`, `fabricated_proof`'s `cn.f` and
+# `repair`'s `needs_proof` are `spec not bound to body` — their theorems are not shown to be about their
+# bodies. Same three as check_coverage_baseline.sh.
+if [ "$CORPUS_PROVED" = "32" ] && [ "$CORPUS_UNJUST" = "0" ]; then
+  ok "corpus-wide: 32 proved, 0 unjustified closures (the fixture corpus is clean under the authority pass)"
 else
-  no "corpus-wide verdicts moved to $CORPUS_PROVED proved / $CORPUS_UNJUST unjustified (was 35/0) — say which subject changed and why"
+  no "corpus-wide verdicts moved to $CORPUS_PROVED proved / $CORPUS_UNJUST unjustified (was 32/0) — say which subject changed and why"
 fi
 # ...and the live case must stay live, or the pass has no corpus exercise at all.
 DH_UNJUST="$(cc tests/programs/proof_decode_header.con proof-status | grep -cE "^-- dependency closure unjustified" || true)"

@@ -51,6 +51,10 @@ assert_absent() {
 
 CT="examples/constant_time_tag/src/main.con"
 LI="examples/loop_invariant/src/main.con"
+# The PROVED exemplar. loop_invariant.count_up was it until bug 079: its theorem evaluates no
+# specification, so it is no longer proved. straight_line.add_three is source-linked, bound to the
+# specification its theorem evaluates, and replays — the shape these assertions are about.
+SL="examples/proof_patterns/straight_line/src/main.con"
 CC="tests/programs/contract_callsite/main.con"
 
 echo "=== prove --emit-link ==="
@@ -107,7 +111,7 @@ echo "=== prove --json (structured proof context) ==="
 # fingerprinted, so it exercises the proved shape for real. Both states are
 # asserted: the CLI must distinguish them, which is the whole point of `unbound`.
 assert_json "json proved status"   'd["status"]=="proved" and d["proof_link"]["origin"]=="source_linked"' \
-  "$COMPILER" prove examples/loop_invariant/src/main.con loop_invariant.count_up --json
+  "$COMPILER" prove "$SL" straight_line.add_three --json
 assert_json "json unbound status"  'd["status"]=="unbound" and d["proof_link"]["origin"]=="source_linked"' \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --json
 assert_json "json next_actions"    'len(d["next_actions"])>=1 and all("kind" in a and "command" in a for a in d["next_actions"])' \
@@ -276,8 +280,8 @@ echo "=== report check-proofs --json (whole-file kernel summary) ==="
 if command -v lake >/dev/null 2>&1; then
   assert_json "check-proofs --json (verified, source_linked)" \
     'd["all_checked"] is True and d["schema_version"]=="1" and any(c["status"]=="checked" and c["origin"]=="source_linked" and "source_line" in c for c in d["checks"])' \
-    "$COMPILER" "$LI" --report check-proofs --json
-  assert_exit "check-proofs --json proved → exit 0" 0 "$COMPILER" "$LI" --report check-proofs --json
+    "$COMPILER" "$SL" --report check-proofs --json
+  assert_exit "check-proofs --json proved → exit 0" 0 "$COMPILER" "$SL" --report check-proofs --json
   # STATUS IS PER CLAIM, not per theorem: `states.partial` (proved) and `states.stale` (stale) link the
   # same theorem, and a theorem-keyed lookup reported the proved one stale (found by the R-0208 claim
   # inventory). Both statuses must come out, each on its own claim.
@@ -287,7 +291,7 @@ if command -v lake >/dev/null 2>&1; then
   # The re-check verdict and the checker are part of the summary (R-0208).
   assert_json "check-proofs --json names the checker and each claim's kernel re-check" \
     'd["checker"].startswith("lean ") and all(c.get("recheck") in ("rechecked","native_trust","recheck_failed","recheck_not_run") for c in d["checks"]) and any(c["recheck"]=="rechecked" for c in d["checks"])' \
-    "$COMPILER" "$LI" --report check-proofs --json
+    "$COMPILER" "$SL" --report check-proofs --json
 else
   echo "  skip check-proofs --json assertions (lake not on PATH)"
 fi

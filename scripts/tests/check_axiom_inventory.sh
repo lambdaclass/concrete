@@ -69,7 +69,7 @@ echo "=== axiom inventory: $TOTAL linked theorems, $CHECKED checked, $UNKNOWN un
 # names (DoesNotExist), or fixture-only registry names that the documented
 # proof-status limitation deliberately does not validate (caught by
 # `prove --check`). Anything NEW that fails to resolve is a broken link.
-BAD_UNKNOWN=$(grep -vE "DoesNotExist|not_yet_proved|drift_test_theorem|totally_fake_theorem|^PureAdd\.add_comm$|^Concrete\.Proof\.(pure_(add|sub|mul)_correct|left_add_correct|right_add_correct|compute_checksum_correct)$" "$TMP/unknown.txt" || true)
+BAD_UNKNOWN=$(grep -vE "DoesNotExist|not_yet_proved|drift_test_theorem|totally_fake_theorem|^Concrete\.Proof\.compute_checksum_correct$" "$TMP/unknown.txt" || true)
 [ -z "$BAD_UNKNOWN" ] \
   && ok "every unresolvable proof_by name is a known negative/fixture-only name" \
   || no "proof_by names that resolve to nothing (broken links): $BAD_UNKNOWN"

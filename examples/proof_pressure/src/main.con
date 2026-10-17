@@ -31,9 +31,9 @@
 // `main.check_nonce` (checkNonceExpr) and theorem
 // `check_nonce_correct` — that is what makes it "proved".
 
-#[spec(check_nonce.spec)]
+#[spec(Concrete.Proof.checkNonceExpr)]
 #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
-#[proof_fingerprint("v2:4955d6cc09961305512d96a7a054a0f2")]
+#[proof_fingerprint("v2:e83f888fed44f06537168062486f4da1")]
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     if nonce > 0 {
         if nonce <= max_nonce {

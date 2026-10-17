@@ -77,6 +77,10 @@ def tableByName : String → Option FnTable
   | "Concrete.Proof.elfFns"            => some elfFns
   | "Concrete.Proof.fixedCapacityFns"  => some fixedCapacityFns
   | "Concrete.Proof.parseValidateFns"  => some parseValidateFns
+  -- std's pure-core table. Named by std's own theorems, which the classification generator reads since
+  -- bug 079; undispatched, their edges refused as an UNKNOWN table instead of as what they are — a
+  -- linked table whose scoped membership is still empty (tripwired by check_purecore_proofs.sh).
+  | "Concrete.Proof.pureCoreFns"       => some pureCoreFns
   -- The EMPTY table is a real table a theorem can name, and omitting it was a hole found by the
   -- dispatch-coverage check rather than by reading: a theorem over `FnTable.empty` would have had
   -- its dependency reported as unresolvable instead of as the (vacuously empty) membership it is.

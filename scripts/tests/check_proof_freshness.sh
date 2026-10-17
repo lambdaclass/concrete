@@ -104,8 +104,12 @@ echo "=== CONTROLS: the freshness mechanism works at all ==="
 # If these fail, every "gap still open" leg below is meaningless — a fingerprint
 # that never matches, or never mismatches, would produce the same output.
 v="$(verdict "$LI")"
-[ "$v" = "proved [invariant]" ] && ok "baseline loop_invariant is proved ($v)" \
-                                || no "baseline loop_invariant is '$v', expected 'proved [invariant]'"
+# NOT `proved` since bug 079: `count_up_loop_preserves` evaluates no specification, so the claim is not
+# shown to be about this body. It is still the right control for FRESHNESS: every freshness finding
+# (stale, unbound, needs-recheck) outranks `spec_unbound`, so this verdict says the stored subject
+# MATCHES — a fingerprint that never matched would read `proof stale` here instead.
+[ "$v" = "spec not bound to body" ] && ok "baseline loop_invariant is fresh and only spec-unbound ($v)" \
+                                    || no "baseline loop_invariant is '$v', expected 'spec not bound to body' (fresh, unbound to a specification)"
 
 edit "$LI/src/main.con" 'acc = acc + i;' 'acc = acc + i + 1000;'
 v="$(verdict "$LI")"

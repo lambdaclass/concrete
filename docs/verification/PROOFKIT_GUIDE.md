@@ -165,14 +165,18 @@ The manual path (still useful for flagship refinement proofs):
    - bridge casts with `ProofKit.BitVec` and close leaves with `bv_decide`/`omega`;
    - bridge the result list to the spec view with `ProofKit.Refinement`.
 
-5. **Register and gate it.** Add a row to `Concrete.Proof.specs`
-   (`(qualName, {name}Expr)`), then attach the proof in source: paste the block
+5. **Register and gate it.** Declare the specification's parameters — the
+   `PFnDef` whose body it is, or a `SpecDecl { params, body := {name}Expr }` —
+   and regenerate the classification table (`bash scripts/gen/refresh_classifications.sh`),
+   which records the value of every specification your theorem evaluates. A claim
+   is proved only when its body and parameters ARE one of those values (bug 079).
+   Then attach the proof in source: paste the block
    from `concrete prove examples/<flagship>/src/main.con <fn> --emit-link` above
    the function (`#[proof_by]`/`#[spec]`/`#[proof_coverage]`/`#[proof_fingerprint]`
    — the fingerprint is computed for you). Then verify:
    ```sh
    concrete examples/<flagship>/src/main.con --report check-proofs   # kernel: theorem exists & type-checks
-   concrete audit examples/<flagship>/src/main.con                    # spec-drift gate: spec == extracted, fingerprint fresh
+   concrete audit examples/<flagship>/src/main.con                    # subject binding: body == the theorem's spec, fingerprint fresh
    ```
    `check-proofs` should report your theorem verified; the audit should show
    `0` spec-drift and `0` stale. To convince yourself the tie is real, perturb a

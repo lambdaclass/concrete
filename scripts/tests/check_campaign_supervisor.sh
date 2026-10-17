@@ -91,7 +91,8 @@ GATES=36
 # 41 -> 43 with R-0482's identity-migration families, which introduced `check_identity_overbinding.sh`
 # and `check_identity_separation.sh`.
 # 43 -> 44 with the external re-check families, which introduced `check_external_checker.sh`.
-DRIVER_GATES=44
+# 44 -> 45 with bug 079's subject-binding families, which introduced `check_subject_binding.sh`.
+DRIVER_GATES=45
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2

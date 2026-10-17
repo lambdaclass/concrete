@@ -71,10 +71,33 @@ else
   # The two files describe ONE population: the normalized rows must be exactly the raw rows' projection.
   # The bijection the projection needs is a property of this BASELINE only; it is not imposed on trees
   # after the migration, which are judged by the typed map against these raw bytes.
-  if bash scripts/tools/identity_rows.sh --normalize "$RAW" 2> "$TMP/proj.err" | cmp -s - "$FROZEN"; then
-    ok "the raw baseline projects exactly onto the frozen rows"
+  # AMENDED, NOT REWRITTEN. A row legitimately re-frozen after the baseline (the header's rule) is listed
+  # in AMEND as its baseline projection and its new value; the baseline's bytes stay tied to their
+  # commit. The projection with exactly those replacements must equal the frozen rows — an unlisted
+  # change, a listed one that did not happen, or a listed row the baseline never had all fail.
+  AMEND="docs/verification/identity-rows-amendments.tsv"
+  bash scripts/tools/identity_rows.sh --normalize "$RAW" 2> "$TMP/proj.err" > "$TMP/proj.tsv"
+  if python3 - "$TMP/proj.tsv" "$AMEND" "$TMP/amended.tsv" > "$TMP/amend.err" 2>&1 <<'PY'
+import sys
+proj = open(sys.argv[1]).read().splitlines()
+minus, plus = [], []
+for line in open(sys.argv[2]).read().splitlines():
+    if line.startswith("-\t"): minus.append(line[2:])
+    elif line.startswith("+\t"): plus.append(line[2:])
+if len(minus) != len(plus): sys.exit("amendments must pair each - row with a + row")
+for old, new in zip(minus, plus):
+    if proj.count(old) != 1: sys.exit(f"amended row is not exactly once in the baseline projection: {old}")
+    proj[proj.index(old)] = new
+open(sys.argv[3], "w").write("\n".join(proj) + ("\n" if proj else ""))
+PY
+  then
+    if cmp -s "$TMP/amended.tsv" "$FROZEN"; then
+      ok "the raw baseline projects onto the frozen rows, with $(grep -c '^+' "$AMEND") explained amendment(s)"
+    else
+      no "the raw baseline, amended, does not equal the frozen rows: $(diff "$TMP/amended.tsv" "$FROZEN" | grep -c '^[<>]') unexplained diff lines"
+    fi
   else
-    no "the raw baseline does not project onto the frozen rows: $(tail -2 "$TMP/proj.err" | tr '\n' ' ')"
+    no "the amendments do not apply to the raw baseline: $(tail -1 "$TMP/amend.err")"
   fi
   if grep -qE '^(subject|reference)	.*	[0-9a-f]{32}	' "$RAW"; then
     ok "the raw baseline retains full 32-hex digests"

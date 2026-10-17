@@ -980,6 +980,8 @@ inductive ProofState where
       linked theorem names could not be read. A statement about the evidence, not about this body
       or any callee's freshness. -/
   | correspondenceUnjustified
+  /-- The body is not shown to be the specification the linked theorem evaluates (bug 079). -/
+  | specUnbound
 
 /-- Canonical string for a ProofState. Uses the same terminology as
     ObligationStatus.canonical to prevent cross-surface drift. -/
@@ -988,6 +990,7 @@ def ProofState.canonical : ProofState → String
   | .needsRecheck   => "needs_recheck"
   | .depsNotCurrent => "deps_not_current"
   | .correspondenceUnjustified => "correspondence_unjustified"
+  | .specUnbound => "spec_unbound"
   | .proved     => "proved"
   | .stale      => "stale"
   | .notProved  => "missing"
@@ -1018,7 +1021,9 @@ structure ProofStatusEntry where
   proofSource   : String       -- "registry" | "hardcoded" | "none"
   origin        : String       -- "source_linked" | "json_backed" | "hardcoded" | "" (link provenance)
   coverage      : String       -- proof coverage kind: point|one_direction|iff|invariant|runtime_error|full_contract|""
-  specDriftCovered : Bool := false  -- Proof.specFor hit for qualName (the drift check ran)
+  /-- The subject binding's verdict, rendered (bug 079): what the claim's body was compared with,
+      or why the comparison could not be made. Empty when the function makes no proof claim. -/
+  specBinding : String := ""
   /-- Reachable dependencies that are not current, when `state` is
       `depsNotCurrent`. Carried so the report can NAME them: "a dependency is
       not current" without saying which one is not actionable, and the whole
@@ -1036,6 +1041,7 @@ private def obligationStatusToProofState : Concrete.ObligationStatus → ProofSt
   | .needsRecheck => .needsRecheck
   | .depsNotCurrent => .depsNotCurrent
   | .correspondenceUnjustified => .correspondenceUnjustified
+  | .specUnbound => .specUnbound
   | .proved => .proved
   | .stale => .stale
   | .missing => .notProved
@@ -1094,7 +1100,10 @@ private partial def collectProofStatus
         | some o => o.admissionReasons
         | none => ["no proof obligation was formed for this function, so no admission verdict exists"]
     , proofSource := pSrc, origin, coverage
-    , specDriftCovered := (Concrete.Proof.specFor qualName).isSome
+    , specBinding := match (pc.findEntry qualName).bind (·.binding?) with
+        | some (.ok b) => s!"bound to {b.spec}, the specification {b.theoremName} evaluates (body {b.valueDigest}, parameters [{", ".intercalate b.params}])"
+        | some (.error w) => s!"NOT bound — {w.explain}"
+        | none => ""
     , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
     , trustedDeps := match obl with | some o => o.trustedDeps | none => []
     , loc := fnLoc, fnSpan := fnSp }
@@ -1146,20 +1155,26 @@ private def renderProofStatusBody (e : ProofStatusEntry) (sourceMap : SourceMap)
     let trustLine :=
       "\n\n  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`"
         ++ trustedBoundaryLine e
-    let specLine :=
-      if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
-      else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
+    let specLine := if e.specBinding.isEmpty then "" else s!"\n\n  spec: {e.specBinding}"
     s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{trustLine}{specLine}{originLine}"
   | .stale =>
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    -- STALE BY THE BINDING, not by a body edit (bug 079): the specification the theorem evaluates is
+    -- a different body. "The body changed" would be false — it may never have matched — so say what
+    -- was found instead of showing two identical fingerprints under a claim of change.
+    if e.specBinding.startsWith "NOT bound" then
+      -- BOTH findings when both hold: a body can also have changed since it was pinned, and that diff
+      -- is the first thing a reader repairing it needs.
+      let fpLines := if e.expectedFp.isEmpty || e.expectedFp == e.currentFp then ""
+        else s!"\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}"
+      s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  `{e.qualName}`: the linked theorem is about a different body.{snippet}\n\n  spec: {e.specBinding}{fpLines}{originLine}\n\n  hint: Link the theorem whose specification is this body, or restore the body the theorem is about."
+    else
     s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}{originLine}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."
   | .unbound =>
     -- Carry the drift line here too. `unbound` supersedes the status a drifted
     -- spec would otherwise produce, so without this the spec-drift signal would
     -- vanish from the report for exactly the links that are least verified.
-    let specLine :=
-      if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
-      else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
+    let specLine := if e.specBinding.isEmpty then "" else s!"\n\n  spec: {e.specBinding}"
     -- Coverage and origin are still KNOWN facts about the link — what is unknown
     -- is its freshness. Dropping them (as the first version of this block did)
     -- traded away information the proved block shows, for no reason: snapshot
@@ -1173,9 +1188,7 @@ private def renderProofStatusBody (e : ProofStatusEntry) (sourceMap : SourceMap)
     -- generics, capabilities and contracts. A v1 value answers a strictly weaker
     -- question, so no comparison against it establishes v2 freshness — and
     -- rendering that as "the body changed" would invent a fact.
-    let specLine :=
-      if e.specDriftCovered then "\n\n  spec: drift-checked (Concrete.Proof.specs)"
-      else s!"\n\n  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed '{e.qualName}'"
+    let specLine := if e.specBinding.isEmpty then "" else s!"\n\n  spec: {e.specBinding}"
     let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- proof needs re-check {String.ofList (List.replicate 36 '-')} {locStr}\n\n  `{e.qualName}` has a stored proof-subject digest from an EARLIER SCHEMA.{snippet}\n\n  current subject digest:\n    {e.currentFp}\n\n  Not proved, and not stale. The stored value is a v1 (body-only) digest: it\n  covers no signature, capability or contract, so it cannot answer whether the\n  v2 subject is unchanged. The format changed; the program may not have.{coverageTag}{originLine}{specLine}\n\n  hint: Re-verify against the current subject and record the new v2 value as #[proof_fingerprint(\"v2:...\")]."
@@ -1187,6 +1200,10 @@ private def renderProofStatusBody (e : ProofStatusEntry) (sourceMap : SourceMap)
     let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
     let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
     s!"-- dependency not current {String.ofList (List.replicate 34 '-')} {locStr}\n\n  `{e.qualName}` cannot contribute proved evidence: it reaches a dependency that is not current.{snippet}\n\n  not current:\n{depLines}\n\n  This function's own subject is FRESH — the problem is downstream. Make the\n  listed dependencies current and this claim recovers on its own.{coverageTag}{originLine}\n\n  hint: Re-verify and update those fingerprints, attach their missing proofs, or mark a boundary trusted."
+  | .specUnbound =>
+    let coverageTag := if e.coverage.isEmpty then "" else s!"\n\n  coverage: {e.coverage}"
+    let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    s!"-- spec not bound to body {String.ofList (List.replicate 33 '-')} {locStr}\n\n  `{e.qualName}` is not shown to be what its theorem is about.{snippet}\n\n  spec: {e.specBinding}\n\n  A theorem is about the specification VALUES its statement evaluates. A current\n  fingerprint says the body did not change since it was linked; it does not say\n  the linked theorem is about this body.{coverageTag}{originLine}\n\n  hint: Link a theorem whose specification is this body, name in #[spec] the specification it evaluates, or declare that specification's parameters with a PFnDef whose body it is."
   | .correspondenceUnjustified =>
     -- NAME THE EDGES, for the same reason `depsNotCurrent` names the dependencies: "the closure is
     -- unjustified" without saying which edge is unactionable, and the fix is in the EVIDENCE rather
@@ -1283,7 +1300,10 @@ def proofStatusReport (modules : List CModule) (locMap : FnLocMap := [])
     match e.state with | .correspondenceUnjustified => true | _ => false).length
   let needsRe := (entries.filter fun e =>
     match e.state with | .needsRecheck => true | _ => false).length
-  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {unboundCnt} unbound, {needsRe} needs-recheck, {depsNC} dependency-not-current, {unjust} closure-unjustified, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
+  -- And `specUnbound` (bug 079), added with this line in mind.
+  let specUnb := (entries.filter fun e =>
+    match e.state with | .specUnbound => true | _ => false).length
+  let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {unboundCnt} unbound, {needsRe} needs-recheck, {depsNC} dependency-not-current, {unjust} closure-unjustified, {specUnb} spec-unbound, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
   s!"{header}\n\n{"\n\n".intercalate body}\n\n{summary}\n"
 
 /-- Program-level conformance check against `docs/verification/PROVABLE_V1.md`.
@@ -1497,6 +1517,7 @@ private def diagnosticKindLabel : Concrete.ProofDiagnosticKind → String
   | .unboundProofLink => "unbound_proof_link"
   | .dependencyNotCurrent => "dependency_not_current"
   | .dependencyClosureUnjustified => "dependency_closure_unjustified"
+  | .specNotBound => "spec_not_bound"
 
 /-- Render a proof diagnostic severity as a string. -/
 private def diagnosticSeverityLabel : Concrete.ProofDiagnosticSeverity → String
@@ -4662,6 +4683,8 @@ private def collectTraceEntries
         -- Not "proved" either, and for a strictly stronger reason: the closure's justification was
         -- never established, so traceability must not present it as evidence.
         | .correspondenceUnjustified => "correspondence_unjustified"
+        -- Nor a claim never shown to be about this body (bug 079).
+        | .specUnbound => "spec_unbound"
         | .notProved => "enforced"
         | .blocked => "blocked"
         | .notEligible => "reported"

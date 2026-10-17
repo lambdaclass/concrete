@@ -162,11 +162,11 @@ elif ! printf '%s' "$pc" | grep -q "PURECORE-PROOFS: PASS=[0-9]* FAIL=[0-9]*"; t
   no "check_purecore_proofs produced no summary line at all — its verdict cannot be read"
   printf '%s\n' "$pc" | tail -3 | sed 's/^/       /'
 else
-  if printf '%s' "$pc" | grep -q "drift coverage: all 11 std links are drift-checked"; then
-    ok "drift coverage stays at 11 with admission live"
+  if printf '%s' "$pc" | grep -q "spec binding: all 11 std links are bound"; then
+    ok "spec binding stays at 11 with admission live"
   else
-    no "drift coverage moved — admission is erasing claims from maintenance"
-    printf '%s\n' "$pc" | grep -i drift | awk 'NR<=2' | sed 's/^/       /'
+    no "spec binding moved — admission is erasing claims from maintenance"
+    printf '%s\n' "$pc" | grep -i 'spec binding' | awk 'NR<=2' | sed 's/^/       /'
   fi
   if printf '%s' "$pc" | grep -q "PURECORE-PROOFS: PASS=[0-9]* FAIL=0"; then
     ok "registered inadmissible claims remain replay targets (purecore 0 failures)"

@@ -2,7 +2,7 @@
 // Exercises all 5 obligation statuses: proved, stale, missing, ineligible, trusted.
 
 #[spec(add_commutativity)]
-#[proof_by(Concrete.Proof.pure_add_correct)]
+#[proof_by(Examples.TestFixtures.Proofs.pure_add_correct)]
 #[proof_fingerprint("v2:40abbb4c0f93a96458e8e4db73175690")]
 fn pure_add(a: i64, b: i64) -> i64 {
     return a + b;
@@ -10,7 +10,7 @@ fn pure_add(a: i64, b: i64) -> i64 {
 
 // STALE: #[proof_fingerprint] is the hash of an old body, so it no longer matches.
 #[spec(sub_identity)]
-#[proof_by(Concrete.Proof.pure_sub_correct)]
+#[proof_by(Examples.TestFixtures.Proofs.pure_sub_correct)]
 #[proof_fingerprint("v2:deadbeefdeadbeefdeadbeefdeadbeef")]
 fn pure_stale(a: i64, b: i64) -> i64 {
     return a - b;

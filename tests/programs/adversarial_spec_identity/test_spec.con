@@ -2,14 +2,14 @@
 // Used with in-source proof links to verify spec attachment flows through ProofCore.
 
 #[spec(add_commutativity)]
-#[proof_by(Concrete.Proof.pure_add_correct)]
+#[proof_by(Examples.TestFixtures.Proofs.pure_add_correct)]
 #[proof_fingerprint("v2:40abbb4c0f93a96458e8e4db73175690")]
 fn pure_add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
 #[spec(mul_associativity)]
-#[proof_by(Concrete.Proof.pure_mul_correct)]
+#[proof_by(Examples.TestFixtures.Proofs.pure_mul_correct)]
 #[proof_fingerprint("v2:8fa79500f4deac6fa02ddbf8f74baea8")]
 fn pure_mul(a: i64, b: i64) -> i64 {
     return a * b;

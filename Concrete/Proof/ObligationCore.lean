@@ -211,6 +211,9 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
     -- ITS OWN LEDGER KIND. Folding it into `dependency_not_current` would tell a release gate that
     -- a callee needs re-verification, when what is missing is this claim's per-edge justification.
     | .correspondenceUnjustified => ("dependency_closure_unjustified", "correspondence_unjustified")
+    -- Its own kind (bug 079): the repair is the LINK — which theorem, which specification — not
+    -- the body, a callee or the evidence tables.
+    | .specUnbound => ("spec_not_bound", "spec_unbound")
     | .notProved   => ("missing_theorem",   "missing")
     | .blocked     => ("blocked_proof",     "unproven")
     | .notEligible => ("ineligible_construct", "ineligible")
@@ -226,6 +229,7 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
     | .correspondenceUnjustified =>
       if e.notCurrentDeps.isEmpty then "dependency closure has no validated per-edge justification"
       else s!"unjustified dependency edges: {", ".intercalate e.notCurrentDeps}"
+    | .specUnbound => s!"spec not bound to body: {e.specBinding}"
     | .proved      =>
       let base := if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
       if e.trustedDeps.isEmpty then base

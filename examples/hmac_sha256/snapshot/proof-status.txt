@@ -29,7 +29,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.sha256_initExpr, the specification Examples.HmacSha256.Proofs.sha256_init_correct evaluates (body 6a966052949f39009ae27d6e18fbb38e, parameters [])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -65,7 +65,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.chExpr, the specification Examples.HmacSha256.Proofs.ch_selects_high evaluates (body 81002eaa06b8442660382499ad6b3a51, parameters [x, y, z])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -185,7 +185,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.blockToWordsExpr, the specification Examples.HmacSha256.Proofs.block_to_words_refines_spec evaluates (body 224375466a2d80c59a71920a1caf490e, parameters [block])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -207,7 +207,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.scheduleExpr, the specification Examples.HmacSha256.Proofs.sha256_schedule_refines_spec evaluates (body 0d08dda9f27ef3f7d9de6b9a8a0e2442, parameters [w16])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -229,7 +229,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.roundExpr, the specification Examples.HmacSha256.Proofs.round_refines_list evaluates (body 13fe613e1d54ede8cacb86345780b26b, parameters [state, k, w])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -251,7 +251,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.sha256_compressExpr, the specification Examples.HmacSha256.Proofs.sha256_compress_refines_spec evaluates (body 72c7c864b6a975387573c73705a95b7d, parameters [state, block])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -273,7 +273,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.blockToWordsAtExpr, the specification Examples.HmacSha256.Proofs.block_to_words_at_refines_spec evaluates (body f3752e9a1e0c1684752788d52f862e2e, parameters [buf, off])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -295,7 +295,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.sha256_compressAtExpr, the specification Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec evaluates (body 41a4d518a4d1c212fe9497b2cf258e7b, parameters [state, buf, off])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -317,7 +317,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.stateToBytesExpr, the specification Examples.HmacSha256.Proofs.state_to_bytes_refines_spec evaluates (body 00bb5f1fe704e930efbb13c7755c353c, parameters [state])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -339,7 +339,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.sha256_hashExpr, the specification Examples.HmacSha256.Proofs.sha256_hash_refines_spec evaluates (body 0df3d0146c48c1d9feefaf63c7355ee9, parameters [data, len])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -361,7 +361,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.hmac_sha256Expr, the specification Examples.HmacSha256.Proofs.hmac_sha256_refines_spec evaluates (body 79f070e008d23737faacb4a4570d8c72, parameters [k, k_len, m, m_len])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -432,5 +432,5 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 24 functions — 0 proved, 0 stale, 11 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 12 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 24 functions — 0 proved, 0 stale, 11 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 0 spec-unbound, 12 unproved, 0 blocked, 1 ineligible, 0 trusted
 

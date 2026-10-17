@@ -16,3 +16,4 @@ import Examples.ConstantTimeTag.Proofs
 import Examples.ElfHeader.Proofs
 import Examples.ProofPatterns.Proofs
 import Examples.PureCore.Proofs
+import Examples.TestFixtures.Proofs

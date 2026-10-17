@@ -175,10 +175,12 @@ assert_contains "duplicate #[spec] rejected at parse time" "duplicate #[spec(...
 
 echo "=== fabricated_proof (nonexistent theorem name) ==="
 FAB="$CN/fabricated_proof/src/main.con"
-# documents the known limitation: proof-status trusts the fingerprint...
-assert_contains "proof-status reports proved (known limitation)" "proof matches current body" \
+# CLOSED by bug 079. This leg used to pin the limitation: proof-status trusted the fingerprint and said
+# "proof matches current body" for a theorem that does not exist. A theorem that does not exist
+# evaluates no specification, so the claim is not shown to be about this body and is not proved.
+assert_contains "proof-status refuses a nonexistent theorem (bug 079)" "is not shown to be what its theorem is about" \
   "$COMPILER" "$FAB" --report proof-status
-# ...but --check is the safety net that catches it.
+# --check still names the missing theorem itself.
 if command -v lake >/dev/null 2>&1; then
   assert_json "prove --check catches fabricated name → missing_theorem" \
     'd["all_checked"] is False and d["checks"][0]["status"]=="missing_theorem"' \

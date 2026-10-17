@@ -11,7 +11,7 @@
 
   trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
 
-  spec: drift-checked (Concrete.Proof.specs)
+  spec: bound to Concrete.Proof.validateVersionExpr, the specification Examples.ParseValidate.Proofs.validate_version_correct evaluates (body bae419f8b3b19c7738eb88d25593e4a5, parameters [v])
 
   origin: source_linked
 
@@ -155,5 +155,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 1 proved, 0 stale, 0 unbound, 0 needs-recheck, 2 dependency-not-current, 0 closure-unjustified, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 1 proved, 0 stale, 0 unbound, 0 needs-recheck, 2 dependency-not-current, 0 closure-unjustified, 0 spec-unbound, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
 

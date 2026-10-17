@@ -1,0 +1,10 @@
+# Amendments to the frozen identity rows after the raw baseline (61b2a261), one per changed row.
+# `-` is the row as the baseline projects it, `+` the row now frozen, `#` why. check_identity_rows.sh
+# requires the raw baseline's projection, with exactly these replacements, to equal the frozen rows —
+# so every post-baseline change is explained here, and an unexplained one still fails.
+#
+# 2026-10-17, bug 079: proof_pressure's check_nonce named `#[spec(check_nonce.spec)]`, which is no
+# specification; it was "drift-checked" only because its source name keyed the removed name table. The
+# attribute now names the specification its theorem evaluates, which moves its subject digest.
+-	link	examples/proof_pressure/src/main.con	check_nonce	v2:4955d6cc09961305512d96a7a054a0f2
++	link	examples/proof_pressure/src/main.con	check_nonce	v2:e83f888fed44f06537168062486f4da1

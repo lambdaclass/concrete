@@ -31,7 +31,10 @@ LIVE="$TMP/live.txt"
 TABLE_SRC="Concrete/Proof/ClassificationTable.lean"
 TABLE_NEXT="$TMP/ClassificationTable.lean"
 
-grep -rhoE '#\[(proof_by|ensures_proof)\(([A-Za-z0-9_.]+)\)\]' examples/ \
+# std's own proof links, and the test programs', are claims too (bug 079): a link whose theorem is
+# not generated here has no specification values, so it could never bind — the adversarial drift
+# fixture under tests/ would refuse as unbound instead of demonstrating drift.
+grep -rhoE '#\[(proof_by|ensures_proof)\(([A-Za-z0-9_.]+)\)\]' examples/ std/src/ tests/ \
   | sed -E 's/.*\(([^)]*)\)\]/\1/' | LC_ALL=C sort -u > "$NAMES"
 
 # Work on a temporary generator first. If Lean refuses, neither checked-in file moves.
@@ -69,10 +72,11 @@ import sys
 
 table = Path(sys.argv[1]).read_text()
 live = Path(sys.argv[3]).read_text()
-if live.count("-- EXTERNAL\n") != 1 or live.count("-- EXTERNAL-SCOPED\n") != 1:
+if any(live.count(m) != 1 for m in ("-- EXTERNAL\n", "-- EXTERNAL-SCOPED\n", "-- SPEC-BINDINGS\n")):
     raise SystemExit("generator output must contain each channel marker exactly once")
 rows_text, tail = live.split("-- EXTERNAL\n", 1)
-external_text, scoped_text = tail.split("-- EXTERNAL-SCOPED\n", 1)
+external_text, tail = tail.split("-- EXTERNAL-SCOPED\n", 1)
+scoped_text, bindings_text = tail.split("-- SPEC-BINDINGS\n", 1)
 
 def rows(channel: str, label: str) -> list[str]:
     result = [line for line in channel.splitlines() if line.strip()]
@@ -86,6 +90,9 @@ def rows(channel: str, label: str) -> list[str]:
 classification = rows(rows_text, "classification rows")
 external = rows(external_text, "external table rows")
 scoped = rows(scoped_text, "external scoped rows")
+bindings = rows(bindings_text, "spec bindings")
+if len(set(bindings)) != len(bindings):
+    raise SystemExit("spec bindings contain a duplicate row")
 
 def leading_name(line: str) -> str:
     match = re.match(r'^  \("([^"]+)"', line)
@@ -127,8 +134,14 @@ table = replace_block(
     "-- END GENERATED EXTERNAL SCOPED ENTRIES",
     scoped,
 )
+table = replace_block(
+    table,
+    "-- BEGIN GENERATED SPEC BINDINGS",
+    "-- END GENERATED SPEC BINDINGS",
+    bindings,
+)
 Path(sys.argv[2]).write_text(table)
-print(f"derived {len(classification)} classifications, {len(external)} external tables, {len(scoped)} scoped tables")
+print(f"derived {len(classification)} classifications, {len(external)} external tables, {len(scoped)} scoped tables, {len(bindings)} spec bindings")
 PY
 
 if [ "$MODE" = "check" ]; then

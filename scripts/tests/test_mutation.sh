@@ -724,10 +724,10 @@ MUT_OLD+=("  | .proved | .trusted => true
   | .stale | .missing | .blocked | .ineligible | .unbound | .needsRecheck
   -- A claim whose own dependency justification was never established is NOT current for anyone
   -- else's: propagating it would let an unjustified closure become the foundation of a second one.
-  | .depsNotCurrent | .correspondenceUnjustified => false")
+  | .depsNotCurrent | .correspondenceUnjustified | .specUnbound => false")
 MUT_NEW+=("  | .proved | .trusted | .stale => true -- MUTATION: stale counts as current
   | .missing | .blocked | .ineligible | .unbound | .needsRecheck
-  | .depsNotCurrent | .correspondenceUnjustified => false")
+  | .depsNotCurrent | .correspondenceUnjustified | .specUnbound => false")
 MUT_DESC+=("ProofCore: trap inventory of dependency currency admits stale (slice 3)")
 gate_for_last "scripts/tests/check_proof_freshness.sh"
 

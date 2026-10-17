@@ -96,22 +96,17 @@ LEAN
   fi
 fi
 
-# 1c. every std proved link is SPEC-DRIFT-COVERED — the specs table is keyed
-#     by qualified name and proof-status witnesses the lookup (a mis-keyed
-#     spec silently skips the drift check; slice 2 made that state visible).
-drift_ok=$(grep -c "spec: drift-checked" <<<"$st")
-drift_no=$(grep -c "spec: NOT drift-covered" <<<"$st")
-# 2 -> 11 at the V2 activation, and the direction is the point: drift coverage is reported for links
-# that can carry evidence, and the nine moved from `closure unjustified` (which took them out of that
-# set) to `needs_recheck` (which does not). ALL ELEVEN std links are now drift-checked.
-#
-# 0 UNCOVERED is the half that carries the weight and is unchanged. An uncovered link is a mis-keyed
-# spec silently skipping its drift check — a different and real defect — and it is the only outcome
-# here that would mean something had broken. The covered count is pinned exactly so that a DROP is
-# caught too: fewer drift-checked links would mean claims quietly left the evidence-bearing set.
-[ "$drift_ok" -eq 11 ] && [ "$drift_no" -eq 0 ] \
-  && ok "drift coverage: all 11 std links are drift-checked, none uncovered" \
-  || no "drift coverage: expected 11 drift-checked / 0 uncovered, got $drift_ok/$drift_no"
+# 1c. every std link is SUBJECT-BOUND (bug 079): its body and parameters ARE the specification
+#     value its theorem evaluates. This replaced a drift check keyed by the function's source name
+#     in a side table, which skipped any link whose name had no entry; the binding has no uncovered
+#     set — a link either binds or says why it cannot.
+bound_ok=$(grep -c "spec: bound to " <<<"$st")
+bound_no=$(grep -c "spec: NOT bound" <<<"$st")
+# 11 BOUND, 0 NOT BOUND. The bound count is pinned exactly so that a DROP is caught: fewer bound links
+# would mean claims quietly left the evidence-bearing set. A NOT-bound std link is the defect itself.
+[ "$bound_ok" -eq 11 ] && [ "$bound_no" -eq 0 ] \
+  && ok "spec binding: all 11 std links are bound to their theorem's specification, none unbound" \
+  || no "spec binding: expected 11 bound / 0 not bound, got $bound_ok/$bound_no"
 
 # 2. the Lean kernel verifies the referenced theorems (import-reachable)
 #

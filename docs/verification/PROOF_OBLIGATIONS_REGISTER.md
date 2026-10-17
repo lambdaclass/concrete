@@ -69,7 +69,7 @@ means.
 | ID | Gate | What it verifies | Phase 12 obligation |
 |---:|---|---|---|
 | G-01 | Body fingerprint check | `hash` of the source `CExpr/CStmt` fingerprint matches the in-source `#[proof_fingerprint]`. Drift downgrades obligation status to `stale`; a source proof link with no stored hash is `unbound` (E0810), never proved. This is body-level containment, not the full signature/contract/dependency subject (R-0004). | `fingerprint_determinism`: source produces a single canonical fingerprint string; equivalent source produces same fingerprint. |
-| G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr equals `normalizePExpr (Concrete.Proof.specs[function])`.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`.  Regression: `tests/programs/adversarial_spec_drift/test_drift.con` with `driftTestSpec` deliberately differing from source; CI asserts the gate fires and status downgrades. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
+| G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr and parameters equal a specification value the linked theorem's statement evaluates (`subjectBindingOf`, bug 079; values generated into `specBindingTable`). Before bug 079 this compared only functions whose source name keyed `Concrete.Proof.specs`, and skipped the rest.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`.  Regression: `tests/programs/adversarial_spec_drift/test_drift.con` with `driftTestSpec` deliberately differing from source; CI asserts the gate fires and status downgrades. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
 | G-03 | Linked-proof attachment | The in-source `#[proof_by]` references a Lean theorem by name; the Lean module containing the theorem is part of `make build` (Lean kernel rejection fails the build). | `theorem_lookup_completeness`: every `#[proof_by]` resolves to a Lean theorem; theorem statement uses the `#[spec]` symbol. |
 | G-04 | Eligibility profile | Functions can only be registered if they pass `predictable` (no recursion, bounded loops, no alloc, no FFI).  Restricts what shapes ever reach extraction. | `eligibility_preservation`: a proof-eligible function's source semantics agrees with PExpr semantics within the modeled fragment. |
 | G-05 | FnTable completeness check (commit 2026-05-30 landing) | For every (registered spec, FnTable) pair, every `.call X` site in the spec resolves to `some _` in the FnTable.  A missing entry makes `eval` silently return `none` and the theorem becomes vacuous.  Enforced by `decide`-checked `example` blocks in `Concrete.ProofSoundness`; failure surfaces as a Lean build error. | `fntable_completeness_completeness`: no false negatives — if the assertion fires, the gap is real. |
@@ -606,8 +606,8 @@ exercises it every CI build:
   .lit (.int 42)` — deliberately wrong.
 - CI asserts the gate produces the diagnostic
   `spec drift for 'test_drift.simple_add' — registered spec
-  'Concrete.Proof.driftTestSpec' (via Concrete.Proof.specs)
-  does not match the source-extracted PExpr` AND downgrades
+  'Concrete.Proof.driftTestSpec' does not match the
+  source-extracted PExpr` AND downgrades
   obligation status from `proved` to `stale`.
 
 If either link breaks (the gate stops detecting drift, or the
@@ -615,11 +615,10 @@ status pipeline stops downgrading), the test fails.  This is
 the regression that prevents future commits from silently
 bypassing the gate.
 
-In production: exercised by 11 attached proofs every CI build
-(parse_validate's 3, crypto_verify's 4, fixed_capacity's 4)
-with zero false positives.  The fixture is the 12th entry in
-`Concrete.Proof.specs` and is the only one where the spec
-deliberately doesn't match the source.
+In production: every proof link is compared — the subject binding
+has no uncovered set (bug 079 removed the name-keyed `Concrete.Proof.specs`,
+which skipped any link whose source name it did not contain). The fixture
+is the one link where the specification deliberately doesn't match the source.
 
 ## What's NOT yet in this register (intentional)
 

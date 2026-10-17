@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Claim Is Proved Only When Its Body Is What Its Theorem Is About (bug 079)
+
+On `b87152ba`, `fn always_seven(x: Int) -> Int { return 7; }` linked to `check_nonce_correct` was
+`proved` and minted a receipt that read back current. A body was compared with a specification only
+when the function's SOURCE NAME keyed a side table (`Concrete.Proof.specs`); otherwise the claimed
+`#[spec]` — the author's choice — was all issuance checked. One subject binding (`subjectBindingOf`)
+now governs the proved status, receipt issuance and receipt consumption: the extracted body's
+canonical digest and the function's parameters must be a specification VALUE the theorem's statement
+evaluates, with the parameters its `PFnDef` or `SpecDecl` declares. The values are computed in the
+theorem's own environment and checked in with the classification table, freshness-gated. The name
+table is removed. New status `spec_unbound` (E0813). Of the ten proved claims that were not
+drift-covered, nine bind; `loop_invariant.count_up` does not (its theorem evaluates no
+specification). Gate `check_subject_binding.sh` (12 legs, including rejection of the receipt
+`b87152ba` issued), three mutation families (inventory 130).
+
 ### Every Theorem Re-Checked Outside The Lean Kernel (con-leche, nanoda)
 
 Every theorem Concrete's Lean sources declare — 3869 at `ab01f856`, read from the elaborated

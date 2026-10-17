@@ -214,22 +214,31 @@ forge_attack() {
   sed -i "s/#\\[proof_by(Examples.ElfHeader.Proofs.check_magic_correct)\\]/#[proof_by($thm)]/" "$FORGE/f/src/main.con"
   local out; out="$("$BIN" "$FORGE/f/src/main.con" --report receipts --out "$TMP/forge.txt" 2>/dev/null || true)"
   local issued; issued="$(grep -oE 'Summary: [0-9]+ issued' <<<"$out" | grep -oE '[0-9]+' || echo -1)"
-  local named; named="$(grep -c 'theorem_not_about_subject' <<<"$out" || true)"
+  # SINCE BUG 079 the subject binding refuses the rebound claim at STATUS, before issuance: its claimed
+  # spec is not one the theorem evaluates, so it is `spec_unbound` — and `validate_header`, which reaches
+  # it, is contained (`deps_not_current`). Issuance's own theorem_not_about_subject check is now behind
+  # the binding and is not what fires. One result governs proved, issuance and consumption.
+  local named; named="$(grep -c "main.check_magic \[claim_not_proved\] 'main.check_magic' is 'spec_unbound'" <<<"$out" || true)"
+  local contained; contained="$(grep -c "main.validate_header \[claim_not_proved\] 'main.validate_header' is 'deps_not_current'" <<<"$out" || true)"
   rm -rf "$FORGE"
-  if [ "$issued" = "$wantissued" ] && [ "$named" -ge 1 ]; then
-    ok "$name — refused as theorem_not_about_subject; $issued honest claim(s) still issued"
+  if [ "$issued" = "$wantissued" ] && [ "$named" -ge 1 ] && [ "$contained" -ge 1 ]; then
+    ok "$name — refused as spec_unbound, its caller contained; $issued honest claim(s) still issued"
   else
-    no "$name — issued=$issued (wanted $wantissued), named=$named. A claim bound to an unrelated theorem must not mint."
+    no "$name — issued=$issued (wanted $wantissued), named=$named, contained=$contained. A claim bound to an unrelated theorem must not mint, nor anything resting on it."
   fi
 }
 # ALL FOUR honest claims still issue (R-0482). Before the identity separation the copy's attribute
 # edit moved the over-bound package digest, renaming the attestations `validate_header`'s closure rests
 # on, so it was withheld too and this expected 3 — the sibling-edit defect, not a property of the
 # attack. Scope now binds only name and origin, so only the forged claim is refused.
+# THREE AGAIN since bug 079, for a different reason, and the leg asserts the reason so the two cannot be
+# confused: the forged claim is not proved (`spec_unbound`), so `validate_header`, which reaches it, is
+# CONTAINED (`deps_not_current`) — a claim resting on a non-proved callee must not mint. The sibling-edit
+# defect withheld it for an identity rename; this withholds it for containment, and says so.
 # Same table, different declaration: binding the table cannot tell these apart, only the spec can.
-forge_attack "claim rebound to a sibling theorem" "Examples.ElfHeader.Proofs.check_class_correct" 4
+forge_attack "claim rebound to a sibling theorem" "Examples.ElfHeader.Proofs.check_class_correct" 3
 # Across programs: the record's own fields contradict each other (a crypto table under an ELF claim).
-forge_attack "claim rebound across programs" "Examples.CryptoVerify.Proofs.check_nonce_correct" 4
+forge_attack "claim rebound across programs" "Examples.CryptoVerify.Proofs.check_nonce_correct" 3
 
 echo "=== coverage and exit status are part of the verdict ==="
 

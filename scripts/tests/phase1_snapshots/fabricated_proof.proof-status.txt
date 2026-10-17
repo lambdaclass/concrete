@@ -1,19 +1,23 @@
 === Proof Status Report ===
 
--- proved [iff] ------------------------------------------------ examples/contract_negatives/fabricated_proof/src/main.con:11
+-- spec not bound to body --------------------------------- examples/contract_negatives/fabricated_proof/src/main.con:11
 
-  ✓ `cn.f` — proof matches current body.
+  `cn.f` is not shown to be what its theorem is about.
 
  11 |     fn f(x: i32) -> i32 { return x; }
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+  spec: NOT bound — theorem 'Examples.DoesNotExist.fake_theorem' evaluates no specification, so it is about no function body
+
+  A theorem is about the specification VALUES its statement evaluates. A current
+  fingerprint says the body did not change since it was linked; it does not say
+  the linked theorem is about this body.
+
   coverage: iff
-
-  trust: linked + fingerprint-fresh — kernel replay via `--report check-proofs`
-
-  spec: NOT drift-covered — no Concrete.Proof.specs entry keyed 'cn.f'
 
   origin: source_linked
 
-Totals: 1 functions — 1 proved, 0 stale, 0 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 0 unproved, 0 blocked, 0 ineligible, 0 trusted
+  hint: Link a theorem whose specification is this body, name in #[spec] the specification it evaluates, or declare that specification's parameters with a PFnDef whose body it is.
+
+Totals: 1 functions — 0 proved, 0 stale, 0 unbound, 0 needs-recheck, 0 dependency-not-current, 0 closure-unjustified, 1 spec-unbound, 0 unproved, 0 blocked, 0 ineligible, 0 trusted
 

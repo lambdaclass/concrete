@@ -96,9 +96,10 @@ owners() {  # label | fragment | expected set (space separated, in code_refs ord
 }
 
 # The canonical body-digest producer. Report and DependencyEdge must READ it, never re-derive it —
-# Report held a second copy of this formula until 2d351a2d.
+# Report held a second copy of this formula until 2d351a2d. ProofCore reads it for the subject binding
+# (bug 079), the same digest the generator computes over each specification's value.
 owners "sourceBodyDigestV1Of" 'sourceBodyDigestV1Of' \
-  'Concrete/Proof/BodyIdentity.lean Concrete/Proof/DependencyEdge.lean Concrete/Proof/ImplementationIdentity.lean Concrete/Report/Report.lean'
+  'Concrete/Proof/BodyIdentity.lean Concrete/Proof/DependencyEdge.lean Concrete/Proof/ImplementationIdentity.lean Concrete/Proof/ProofCore.lean Concrete/Report/Report.lean'
 
 # Edge KIND classification. This is the fact `shadowEdgeKinds` had a second, weaker producer for.
 owners "classifiedEdgeOf" 'classifiedEdgeOf' \

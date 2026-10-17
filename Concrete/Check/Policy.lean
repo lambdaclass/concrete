@@ -207,6 +207,10 @@ private def enforceRequireProofs (pc : ProofCore) : Diagnostics :=
     | .correspondenceUnjustified => some (mkDiag
         s!"'{o.functionId.qualName}' has no validated per-edge justification for its dependency closure, so it contributes no proved evidence"
         "attest the entries of the table its theorem names, or repair a proof link that names a table describing a different program's function; or change [policy] require-proofs")
+    -- REQUIRE-PROOFS MUST NOT BE SATISFIED BY A CLAIM NEVER SHOWN TO BE ABOUT THIS BODY (bug 079).
+    | .specUnbound => some (mkDiag
+        s!"'{o.functionId.qualName}' is not shown to be what its theorem is about (the theorem's specification was not bound to this body)"
+        "link a theorem whose specification is this body, name in #[spec] the specification it evaluates, or declare that specification's parameters; or change [policy] require-proofs")
     | .proved | .ineligible | .trusted => none
 
 /-- Reject vacuous contracts. A function whose precondition is unsatisfiable has

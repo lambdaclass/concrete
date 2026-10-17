@@ -237,4 +237,15 @@ theorem ghost_sum_correct (fuel : Nat) :
     eval FnTable.empty Env.empty (fuel + 14) ghostSumExpr = some (.int 6) := by
   simp [ghostSumExpr, eval, evalBinOp, Env.bind, eval.evalAssigns]
 
+/-! ## Specification parameters (bug 079)
+
+The subject binding compares a claimed function's parameters with its specification's. These
+specifications have no `PFnDef`, so their inputs are declared here, by name and in order. -/
+def addThreeSpec : SpecDecl := { params := ["x"], body := addThreeExpr }
+def putSpec : SpecDecl := { params := ["a", "v"], body := putExpr }
+def copy2Spec : SpecDecl := { params := ["src"], body := copy2Expr }
+def sum4Spec : SpecDecl := { params := ["a"], body := sum4Expr }
+def combineSpec : SpecDecl := { params := ["x"], body := combineExpr }
+def ghostSumSpec : SpecDecl := { params := [], body := ghostSumExpr }
+
 end Examples.ProofPatterns.Proofs

@@ -42,12 +42,13 @@ STALE="$(count_of 'proof stale')"
 DEPSNC="$(count_of 'dependency not current')"
 BLOCKED="$(count_of 'blocked')"
 UNJUST="$(count_of 'dependency closure unjustified')"
+SPECUNB="$(count_of 'spec not bound to body')"
 
-TOTAL=$((PROVED + NOPROOF + UNBOUND + INELIG + TRUSTED + STALE + DEPSNC + BLOCKED + UNJUST))
+TOTAL=$((PROVED + NOPROOF + UNBOUND + INELIG + TRUSTED + STALE + DEPSNC + BLOCKED + UNJUST + SPECUNB))
 LINES="$(printf '%s' "$CENSUS" | grep -c '^-- ' || true)"
 
 echo "  proved=$PROVED no-proof=$NOPROOF unbound=$UNBOUND ineligible=$INELIG trusted=$TRUSTED"
-echo "  stale=$STALE deps-not-current=$DEPSNC blocked=$BLOCKED unjustified=$UNJUST  total=$TOTAL"
+echo "  stale=$STALE deps-not-current=$DEPSNC blocked=$BLOCKED unjustified=$UNJUST spec-unbound=$SPECUNB  total=$TOTAL"
 
 # THE DENOMINATOR RECONCILES. Every reported line lands in exactly one disposition; a line that
 # matched none would mean a status exists that this baseline cannot see, which is precisely how a
@@ -70,10 +71,15 @@ else
 fi
 
 # THE BASELINE ITSELF, pinned exactly.
-if [ "$PROVED" = "35" ] && [ "$ELIGIBLE" = "91" ]; then
-  ok "BASELINE: 35 of 91 eligible claims are proved (2026-08-16, exact)"
+# 35 -> 32 of 91 on 2026-10-17 (bug 079): three claims moved from `proved` to `spec not bound to body`,
+# each because its theorem is not shown to be about its body — `loop_invariant.count_up`
+# (`count_up_loop_preserves` evaluates no specification), `contract_negatives/fabricated_proof`'s `cn.f`
+# and `proof_patterns/repair`'s `needs_proof` (both link theorems that do not exist). The denominator
+# is unchanged: the claims did not leave the eligible set, they stopped counting as proved.
+if [ "$PROVED" = "32" ] && [ "$ELIGIBLE" = "91" ]; then
+  ok "BASELINE: 32 of 91 eligible claims are proved (2026-10-17, exact)"
 else
-  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 35 of 91) — say which claims changed and why"
+  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 32 of 91) — say which claims changed and why"
 fi
 # 31/15 -> 32/14 on 2026-08-18: ONE claim moved from `unbound` to `no-proof`, and the sum is
 # unchanged. `proof_pressure.validate_header` had its misattributed `#[proof_by]` deleted, leaving

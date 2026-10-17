@@ -287,12 +287,22 @@ fi
 NEWRAW="$TMP/new.raw"
 (cd "$W" && bash scripts/tools/identity_rows.sh --raw > "$NEWRAW" 2> "$TMP/newraw.err") \
   || no "M: the current tree's raw rows refused: $(tail -2 "$TMP/newraw.err" | tr '\n' ' ')"
+AMEND="docs/verification/identity-rows-amendments.tsv"
 if [ -s "$NEWRAW" ]; then
+  # THE CONTROL FOR THE LEGS BELOW. Each doctors the current tree and requires a specific refusal; if
+  # the UNDOCTORED tree already refused, every one of them would pass on that refusal alone — measured:
+  # bug 079's explained proof_pressure re-freeze did exactly this, and the map-totality mutation
+  # survived. The current tree must map totally, with the explained amendments and nothing else.
+  if bash scripts/tools/identity_migration_map.sh "$RAW" "$NEWRAW" "$AMEND" > "$TMP/current.map" 2> "$TMP/current.err"; then
+    ok "M: the current tree maps totally onto the baseline — $(grep '^# totals' "$TMP/current.map" | sed 's/# totals: //')"
+  else
+    no "M: the current tree does not map totally, so the refusal legs below are vacuous: $(grep -E '^refused' "$TMP/current.map" | head -2 | tr '\n' ' ')$(tail -1 "$TMP/current.err")"
+  fi
   doctor() { # doctor <label> <awk program> <expected refusal text>
     awk "$2" "$NEWRAW" > "$TMP/doctored.raw"
-    if bash scripts/tools/identity_migration_map.sh "$RAW" "$TMP/doctored.raw" > "$TMP/doctored.map" 2>/dev/null; then
+    if bash scripts/tools/identity_migration_map.sh "$RAW" "$TMP/doctored.raw" "$AMEND" > "$TMP/doctored.map" 2>/dev/null; then
       no "M: the map tool accepted a tree with $1"
-    elif grep -q "$3" "$TMP/doctored.map"; then
+    elif grep -E "^refused" "$TMP/doctored.map" | grep -q "$3"; then
       ok "M: the map tool refuses a tree with $1 ($3)"
     else
       no "M: the map tool refused a tree with $1, but not as $3"
@@ -300,7 +310,10 @@ if [ -s "$NEWRAW" ]; then
   }
   doctor "a lost subject row" 'BEGIN{d=0} /^subject\t/ && !d {d=1; next} {print}' "no-counterpart"
   doctor "a changed implementation" 'BEGIN{d=0} /^subject\t/ && !d {d=1; OFS="\t"; $7="00000000000000000000000000000000"} {print}' "implementation-changed"
-  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "selects"
+  # Re-pointing one selection at another's symbol leaves two selections on one symbol and none on the
+  # other: the tool refuses it by MULTIPLICITY. The leg used to expect "selects" and passed only because
+  # a MAPPED line elsewhere contained `ch_selects_high` — the match is now on refused lines only.
+  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "multiplicity"
 fi
 
 echo ""
