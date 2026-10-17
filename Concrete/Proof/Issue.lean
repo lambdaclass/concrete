@@ -180,6 +180,9 @@ def replayTargetsOf (pc : ProofCore) : List ReplayTarget :=
       -- moved, so the kernel's answer is worth having while no honest v2 value exists to record.
       else if o.status == .proved || o.status == .stale || o.status == .unbound
            || o.status == .depsNotCurrent || o.status == .correspondenceUnjustified
+           -- A claim not shown to be about its body (bug 079) is still a theorem the kernel can be asked
+           -- about; dropping it hid "missing_theorem" for a fabricated name behind the refusal.
+           || o.status == .specUnbound
            -- `needsRecheck` is precisely the state the V1->V2 migration exists to clear, so it must
            -- be replayable: excluding it would make the migration unable to ask about the very
            -- claims it is for, the moment activation made them all needsRecheck.
