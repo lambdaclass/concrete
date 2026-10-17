@@ -16918,6 +16918,34 @@ consumer. Public registry/publishing, hosted docs, remote reuse and ecosystem-sc
 post-foundation work. This split avoids both bad extremes: releasing a public evidence schema never
 tested across a dependency boundary, or blocking a narrow release on operating a package registry.
 
+**Integrated package management (decided 2026-10-17; implementation planned).**
+Package management belongs to the Concrete language toolchain and ships inside
+the `concrete` executable. `Concrete.toml`, `Concrete.lock` and source-level
+imports describe one package model. The driver owns add/remove, resolution,
+fetching, updates, workspaces and native builds/linking; the compiler checks
+imports, visibility, capabilities, contracts and dependency evidence against
+that resolved graph. CLI, compiler sessions, reports and editor tooling share
+the same graph and identities. Reading an import never implicitly downloads a
+package or runs dependency code; the frontend receives resolved driver inputs.
+
+Primary references are Cargo's project workflow, Go modules' explicit resolution
+discipline, Zig's integrated compiler/build/package experience and Nix's declared
+inputs and reproducibility. Decisions and upstream references live in
+[package-manager-design.md](research/packages-tooling/package-manager-design.md).
+
+R-0285's queued interop checkpoint pulls forward the minimal local manifest,
+lockfile and native-build graph needed by its automatic application workflow;
+it does not wait for the full Phase 18 package protocol or registry. R-0364–R-0367
+own the shared package model, explicit updates, locked/offline builds, workspace
+lockfile, host-versus-target separation and dependency-path explanations.
+Reuse the existing compiler graph as incremental/package infrastructure lands;
+do not introduce a separate resolver or cache for foreign bindings. Normal
+builds preserve selected versions; explicit package commands own manifest/lock
+changes. R-0182/R-0183 own the authority/assumption/evidence upgrade diff.
+Public publishing and a separate package-manager executable are outside this
+local foundation. This decision scopes existing tasks without reordering the
+current execution queue or reducing R-0285's automatic generation/build exit.
+
 ### Task R-0363
 
 **Objective:** Expand package artifacts only after reports, policies, assumptions, interface artifacts, and CI gates prove what packages must carry. The first package artifact refactor must define exact files:
@@ -16941,13 +16969,45 @@ claim to support multi-team codebases rather than only single-repo examples.
 
 **Objective:** Design and parse package manifest.
 
+Use one compiler-owned model for Concrete source packages and R-0285's reusable
+C/Rust/Zig binding packages. Record upstream selections and locks, reviewed
+boundary inputs, toolchain/sysroot, target/CPU/profile, generated binding and
+native artifact identities, ordered transitive link inputs and runtime/system
+libraries. Applications declare dependencies; the integrated driver selects
+bindings and invokes supported foreign build tools without application scripts
+or manual compiler/linker flags. Keep normal, test-only and build-tool edges
+distinct; build tools target the host while linked libraries target the program.
+Build-time tool authority and linked-library runtime authority are separate facts.
+Imports resolve only declared dependencies against this same graph.
+
 ### Task R-0365
 
 **Objective:** Add version constraints, dependency resolution, and lockfile.
 
+Specify deterministic version selection and permitted duplicate versions before
+admitting ranges. Cover diamond graphs, cycles, incompatible requirements,
+root-only overrides and native link-identity conflicts; explain the introducing
+dependency path and remedy. Lock exact source/header/binding/native input
+identities, std/toolchain, target/profile and transitive link requirements.
+Paths alone are insufficient: replacing an archive at the same path rejects a
+locked build or requires an explicit refresh and dependent revalidation.
+
+Planned `--locked` forbids lock changes, `--offline` forbids network access and
+`--frozen` requires both. Explicit add/remove/update/lock commands own resolution
+changes; upgrades preview R-0182's API, authority, assumptions and evidence facts.
+Fetch and verify locked content before an offline build. A changed native input
+invalidates dependent implementation evidence even when its public header stays
+unchanged; identity/integrity never supplies behavioral trust or proof validity.
+Use existing package/evidence roots and invalidation rules throughout.
+
 ### Task R-0366
 
 **Objective:** Add workspace and multi-package support.
+
+Use one root, shared lockfile, dependency graph and compiler session. Root-only
+overrides and policy apply consistently to every member and command. Gate member
+selection, local path edits and host/target separation with matching package
+facts and native link inputs under build, test, check and report.
 
 ### Task R-0367
 

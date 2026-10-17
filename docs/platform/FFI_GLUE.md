@@ -21,6 +21,14 @@ Its reviewed boundary description is reused by every downstream application. Reg
 discovery can follow local packages without changing application imports or calls.
 Supported public interfaces must be bindable without editing or forking upstream sources.
 
+The planned package management is built into the `concrete` toolchain. Its driver resolves,
+fetches, generates, builds and links against one `Concrete.toml`/`Concrete.lock`
+graph shared with compiler checks, reports and editor queries. Source imports
+consume that resolved graph without performing network access or executing a
+dependency during semantic analysis. The integrated package decision and planned
+locked/offline modes are in
+[package-manager-design.md](../../research/packages-tooling/package-manager-design.md#integrated-toolchain-decision).
+
 The initial application manifest can use the existing local dependency shape:
 
 ```toml
@@ -187,6 +195,14 @@ features/defines, source and transitive lock inputs, boundary description, gener
 and custom adapter code. Toolchain provisioning uses the repository's explicit development
 environment or configured toolchain source, with an actionable diagnostic when unavailable.
 Application authors do not manually reproduce native compiler commands.
+
+Resolve build tools for the host separately from libraries for the target.
+For Rust dependencies, generate one coordinating Rust build where required to
+avoid conflicting independently produced `staticlib` archives; preserve the
+compiler-reported native-library flags and their significant order/duplication.
+See the upstream [Rust linkage contract](https://doc.rust-lang.org/reference/linkage.html).
+Native link-identity conflicts need a dependency-path diagnostic rather than a
+silent duplicate library or an application-maintained linker workaround.
 
 Cache keys cover those inputs and the dependency/header closure, including generated inputs
 and declared build-script/environment inputs. Deterministic generation gives identical

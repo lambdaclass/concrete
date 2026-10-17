@@ -1,6 +1,7 @@
 # Package Manager Design
 
-Status: open
+Status: integrated-toolchain direction decided 2026-10-17; detailed syntax,
+resolution policy and unimplemented commands below remain design work.
 
 This note sketches a Concrete package manager that is:
 
@@ -30,6 +31,57 @@ The user-facing shape should feel like one coherent toolchain:
 - package management as subcommands, not a second executable
 - Cargo-like everyday UX
 - Concrete-specific authority/report/evidence outputs
+
+## Integrated Toolchain Decision
+
+Package management is part of the Concrete language toolchain and will be
+implemented and distributed inside the `concrete` executable. A project has one `Concrete.toml`,
+one resolved dependency graph and one `Concrete.lock` per workspace. Source
+imports, package visibility, native linking, capabilities and evidence are
+checked against that graph. This is the direction for ROADMAP R-0364–R-0367
+and R-0285; it does not claim those features have shipped.
+
+The integrated driver performs package operations and gives resolved inputs to
+the compiler. The frontend and editor do not fetch from the network or execute
+dependency code while reading an import. Compiler sessions, CLI reports, tests
+and editor queries reuse the same resolution context and Phase 8.5 graph rather
+than constructing independent package databases. Ordinary source imports name
+declared dependencies; version requirements and native build settings remain
+declarative project configuration.
+
+The planned user-facing package commands are `concrete add`, `remove`, `fetch`,
+`update` and `lock`, alongside build/run/test/check/report/graph. Resolution
+changes are explicit: normal builds preserve selected versions, while package
+commands update the manifest/lockfile and show the resulting graph change.
+`--locked` forbids lockfile changes, `--offline` forbids network access and
+`--frozen` combines both. A missing or stale lockfile, unavailable offline input
+or unsupported dependency has a diagnostic with a valid next action.
+
+Primary inspirations and the particular ideas to carry forward:
+
+| reference | Concrete decision |
+|---|---|
+| [Cargo workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html) | one project workflow and shared workspace lockfile, with distinct normal/test/build dependencies |
+| [Go modules](https://go.dev/ref/mod) | explicit dependency requirements and deterministic resolution; choose and document Concrete's version algorithm before supporting ranges |
+| [Zig's build system](https://ziglang.org/learn/build-system/) | compiler-owned package/build integration, explicit module/native dependencies and target-aware builds |
+| [Nix derivations](https://github.com/NixOS/nix/blob/master/doc/manual/source/store/derivation/index.md) | declared build inputs/outputs and reproducible artifact identity, expressed through Concrete's existing compiler graph |
+
+These are design choices inspired by those systems, not promises to reproduce
+their full semantics. Elm, uv, Bazel and Buck2 remain secondary references for
+compatibility discipline, workspace UX and graph/cache correctness.
+
+The first local-package acceptance workload covers a workspace diamond graph,
+explicit upgrade, locked and offline rebuilds, and C/Rust/Zig wrapper dependencies.
+Resolve build tools for the host separately from libraries for the target.
+Document duplicate-version policy, root-only overrides and conflicts between
+native link identities. A `concrete graph`/dependency explanation must show why
+a package or capability is present and the path that introduced a conflict.
+Upgrade preview reuses R-0182/R-0183's authority, assumptions and evidence diffs.
+Source/content hashes check integrity; they do not establish behavioral trust.
+R-0285 pulls forward the minimal local graph/manifest/lock support needed by its
+automatic C/Rust/Zig generation and build workflow. Its queued acceptance still
+requires ordinary application imports with no handwritten application adapters
+or native build commands. Registry/publishing follows the local foundation.
 
 ## Example-First UX
 
@@ -111,6 +163,7 @@ It should take the strongest parts from a few systems that are good for differen
 |---|---|---|
 | **Cargo** | familiar commands, obvious project layout, low-friction everyday workflow | it makes ordinary development easy without requiring users to think about the build graph all day |
 | **Go modules** | simplicity, small manifest surface, low-ceremony defaults | it proves a package manager can stay boring and still work well for real projects |
+| **Zig** | integrated compiler/build/package workflow, explicit native dependencies and target settings | package resolution and compilation belong to one toolchain |
 | **Nix** | reproducibility, explicit inputs/outputs, graph honesty | it treats builds as something that should be inspectable and repeatable rather than shell folklore |
 | **Elm** | ecosystem restraint, compatibility discipline, willingness to say no | it keeps the package ecosystem coherent by refusing complexity that weakens user trust |
 | **uv** | workspace coherence, lock/sync discipline, simple project commands | it shows how project state can stay consistent without making the user think about environment internals |
@@ -305,15 +358,14 @@ Users should feel Cargo/Go simplicity, not Bazel complexity.
 
 ## Lockfile Modes
 
-Concrete should not treat the lockfile as just “present” or “absent.”
+Planned lockfile behavior has explicit controls:
 
-It should eventually support explicit modes such as:
+- package commands (`add`, `remove`, `update`, `lock`) own resolution changes;
+- `--locked` refuses changes to the selected dependency graph;
+- `--offline` refuses network access;
+- `--frozen` requires both locked resolution and offline operation.
 
-- `update`
-- `refresh`
-- `error`
-- `off`
-
+Resolution must not bypass locked identity in an evidence-bearing build.
 The point is to make dependency resolution behavior visible and policy-friendly.
 
 That matters especially for:
@@ -449,11 +501,15 @@ The first commands should be:
 Later:
 
 - `concrete add`
+- `concrete remove`
+- `concrete fetch`
 - `concrete update`
+- `concrete lock`
 - `concrete audit`
 
-The package manager should not become a second compiler.
-It should resolve graphs, manage lockfiles, and invoke the compiler with explicit inputs.
+These operations live in the same executable and project driver as compilation.
+The driver resolves graphs, manages lockfiles and supplies explicit inputs to
+the compiler session; semantic checking remains in the compiler.
 
 Single-file mode can still exist as a convenience:
 
@@ -477,9 +533,13 @@ The MVP should support only:
 Avoid early support for:
 
 - arbitrary git dependencies everywhere
-- build scripts
-- package-time code generation
+- unrestricted Concrete package build scripts
+- arbitrary package-time code execution
 - complex feature unification
+
+R-0285's checked binding generation and configured foreign-toolchain builds are
+integrated driver operations with recorded inputs/outputs. Applications do not
+provide their own scripts for these operations.
 
 ## Workspace Model
 
