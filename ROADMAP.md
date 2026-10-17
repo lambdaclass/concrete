@@ -30,15 +30,29 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 1 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 2 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 3 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 4 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 5 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 6 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 7 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 8 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+| 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
+| 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
+| 2 | **R-0285 C/Rust package interop, with R-0283/R-0286/R-0287** | normal builds generate, compile and link auditable bindings; exercise RocksDB's C API, a real Rust crypto operation and a bounded networking adapter, with ABI, ownership, capabilities, errors and native dependency identity checked or explicitly assumed |
+| 3 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
+| 4 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 5 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 6 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 7 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 8 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 9 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 10 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 11 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 12 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+
+**Delivery decision, 2026-10-17:** comfortable C/Rust interop is the next delivery investment
+after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
+and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
+to find language, library and tooling gaps through execution. Bound the interop checkpoint to
+its three acceptance adapters; further dependencies are integrated when a port slice needs them.
+Compiler safety, protocol conformance and regression testing remain continuous. Functional
+proofs of client components follow the working port, through the evidence and contract owners
+below. New soundness defects still enter at the front. The port is an engineering workload,
+not a fourth verified flagship or a claim that foreign libraries have been proved.
 
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
 (closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
@@ -15317,7 +15331,109 @@ fact, unchecked assumptions are `unsafe`/trusted and reported, and backend IR
 alignment metadata is emitted only from Concrete facts.
 ### Task R-0285
 
-**Objective:** Add C/ABI glue validation: generated headers, imported declarations, host stubs, symbol names, calling conventions, ownership transfer, capability labels, and trust assumptions must round-trip through at least one C harness and one Concrete caller.
+**Objective:** Make C and Rust libraries usable as normal Concrete dependencies, with generated
+bindings and one build command, before the bulk ethlambda port.
+
+**Scheduling (2026-10-17):** promoted into the current execution queue after the active soundness
+and R-0482 work. This task owns the user workflow. R-0279 owns target/runtime facts;
+R-0283/R-0287 own ABI checks, R-0286 owns exports/library artifacts and R-0289 owns sanitizer
+validation. The later full BackendIR, independent verifier and functional-proof milestones are
+not prerequisites for a tested foreign-library integration. Changes to evidence formats still
+obey their existing owners and compatibility rules.
+
+The outcome is a developer declaring a foreign dependency, importing its generated Concrete
+module and running the normal build/test commands. Build scripts invoke Cargo or the C compiler,
+generate bindings, link native artifacts and reuse unchanged outputs. Record exact dependency
+revisions/lockfiles, selected features, bridge inputs, compiler/linker flags, target and artifact
+identities. A changed header, bridge, feature or target invalidates the affected output. Failed
+generation, unsupported ABI shapes and failed foreign builds produce source-located diagnostics;
+they never reuse an older artifact as if the new build succeeded. A public registry is not
+required: local binding packages with pinned dependencies establish the first workflow.
+
+**Binding contract:**
+
+- C headers supply declarations and target-specific layout facts. An explicit binding description
+  supplies allocation/free pairs, owned versus call-scoped borrowed values, buffer lengths,
+  retained pointers, errors, blocking/threading requirements and external authority. Unknown
+  ownership or effects do not become safe, capability-free declarations through generation.
+- A narrow typed Rust bridge selects concrete functions/types and generates Rust C-ABI shims
+  plus Concrete declarations from one interface. Check the shim against the real Rust API.
+  Begin with scalars, records/enums, `Option`/`Result`, bytes/UTF-8 and opaque objects through
+  explicitly defined ABI representations; arbitrary Rust ABI, generic APIs and trait objects
+  do not cross the boundary directly. Unsupported forms refuse with an adapter diagnostic.
+- Generated safe APIs use Concrete's existing ownership and capability model:
+  explicit consuming close/drop, scoped borrows, matching library deallocation and capability-
+  bearing handles. Fallible cleanup retains an explicit result. Generation does not introduce
+  implicit scope-end destruction, returned references or undeclared authority. Foreign behavior
+  and ownership assertions remain named assumptions unless independently checked.
+- Networking adapters may keep their runtime in Rust and expose typed events and bounded
+  queues with poll/wait, cancellation and shutdown. Specify full-queue behavior, thread affinity,
+  callback retention and completion/cancellation lifetimes. This bounded bridge does not require
+  or establish a general Concrete concurrency memory model.
+- Generated headers, imported declarations, host stubs, symbol names, calling conventions,
+  ownership rules, capability labels and trust assumptions round-trip through C/Rust harnesses
+  and Concrete callers. Check ABI size/alignment/offsets and observable calls on each claimed
+  target. Keep generated output deterministic and source-linked, with its reviewed inputs and
+  native dependencies visible in build/audit metadata. Reference decision:
+  [FFI glue](docs/platform/FFI_GLUE.md).
+
+**Acceptance workload:** use RocksDB's C API for open/read/write/close and buffer ownership; a real
+operation from ethlambda's Rust crypto stack for typed input/results and errors; and the smallest
+libp2p adapter needed to exchange messages between a Concrete caller and a Rust peer. Retain clean
+and warm builds, ABI/ownership and malformed-input controls, queue saturation, cancellation and
+shutdown controls, and applicable sanitizers. A non-author must build and run these through the
+normal project workflow without hand-editing generated glue or invoking the linker manually.
+Measure setup steps, binding/adapter code maintained by hand, build cost and actionable diagnostic
+quality. Register mutations for the authority, ownership and build invalidation rules the gates claim to
+enforce. This bounded exit unlocks R-0490; it does not require wrapping every dependency in advance.
+
+### Task R-0490
+
+**Objective:** Port the complete client-owned ethlambda implementation to Concrete, get it running
+and tested, and use concrete blockers to improve the language before proving client components.
+
+**Status (2026-10-17): planned; follows the bounded R-0285 interop checkpoint.** The initial
+reference is [ethlambda at afc491b2](https://github.com/lambdaclass/ethlambda/tree/afc491b28d12de8c161fb5cd140b160ebf6d965d).
+Pin its protocol/specification and fixture revisions before measuring parity. Advancing a pin is
+an explicit compatibility change, with differences retained rather than absorbed into new goldens.
+
+The port covers client-owned protocol and application logic: types/serialization, consensus state
+transitions, fork choice, storage orchestration, networking orchestration, validator duties and
+operational build/run/test tooling. Existing crypto, storage and transport/runtime dependencies may
+remain behind R-0285 bindings. Inventory every retained native dependency and handwritten shim;
+client consensus logic left in a Rust helper is unported work, not a completed Concrete component.
+Reimplementing dependency internals is not part of initial parity.
+
+Keep the node executable through successive replacements. Start with a Concrete component called
+from the Rust client through R-0286, then move consensus processing and surrounding application
+logic into Concrete. The existing Rust client supplies differential executions while pinned
+protocol fixtures supply independent expected outcomes. For every completed slice retain accepted
+and rejected inputs, state/root and error behavior, resource/ownership checks and appropriate
+latency/allocation measurements. State precisely what happens to owned state after an error or
+cancellation. Test bounded work and malformed peer inputs rather than accepting process aborts as
+ordinary protocol rejection.
+
+Each language/library gap found in the port gets a minimal reproducer, an owned fix and a permanent
+regression. Preserve awkward-but-working cases in the friction record, including annotations,
+callbacks/context passing, cleanup, diagnostics, compilation and debugging. R-0485/R-0488 own
+related ergonomics and parameter-mutation work; the port supplies their forcing cases. Add SSZ,
+bounded collections, narrow const generics or other language support only as actual cases require.
+General concurrency remains research-gated; bounded foreign-runtime adapters have their own
+explicit contracts. Record protocol parity, resource costs and open defects rather than treating
+translated lines or a successful compilation as completion.
+
+**Exit:** a Concrete node clean-builds and runs, syncs from peers, proposes, attests and finalizes
+in a retained mixed-client devnet against the pinned reference. Preserve conformance/differential
+results, restart and bounded-queue/failure scenarios, native dependency inventory, operational
+instructions and measured resource costs. All remaining client-owned Rust logic and unsupported
+scenarios are accounted for before calling the full port complete.
+
+Full functional proofs are a subsequent increment, starting with serialization, state transitions,
+fork-choice invariants and signing constraints once their models are supported. During the port,
+ownership/capability enforcement, compiler regressions, protocol tests and honest evidence labels
+remain mandatory. Existing verification release criteria and the three verified public flagships
+are unchanged. Silver is a later, separate systems pressure test; its shared-state and thread
+architecture does not expand this task's exit.
 
 ### Task R-0286
 
