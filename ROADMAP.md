@@ -58,6 +58,15 @@ proofs of client components follow the working port, through the evidence and co
 below. New soundness defects still enter at the front. The port is an engineering workload,
 not a fourth verified flagship or a claim that foreign libraries have been proved.
 
+**Implementation and feedback decision, 2026-10-17:** once queue rows 0–1 meet
+their recorded exits, start R-0285 with a working RocksDB C-API consumer and the
+minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
+examples and only the resolution decisions needed by that slice, then implement,
+run and measure it. Each later adapter repeats that feedback loop. Full registry,
+range-resolution, schema breadth and functional-proof work are not entrance
+requirements for this tested slice; their existing acceptance bars remain owned.
+R-0285's four-adapter exit still precedes the bulk R-0490 port.
+
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
 (closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
@@ -15359,6 +15368,33 @@ generation, unsupported ABI shapes and failed foreign builds produce source-loca
 they never reuse an older artifact as if the new build succeeded. A public registry is not
 required: local binding packages with pinned dependencies establish the first workflow.
 
+**First executable slice and feedback (2026-10-17; planned):**
+
+1. Pin the RocksDB source, target/toolchain and selected C API. Retain the exact
+   application/binding manifests, expected lockfile, ordinary imports and commands
+   with R-0364/R-0365. Decide the exact-pin, override and native-link conflict
+   behavior needed here. Draft workspace and Rust/Zig binding examples alongside
+   it; those examples do not require implementing every adapter before this slice.
+2. Implement the compiler-owned path from manifest parsing and dependency
+   resolution through reviewed binding generation, foreign build/link and the
+   runnable Concrete consumer. Exercise open/read/write/close and library-owned
+   buffer cleanup through normal build/run/test. Keep the application executable
+   throughout; include clean, unchanged warm and populated-cache offline rebuilds.
+3. Retain controls for missing toolchains, changed archives, failed generation or
+   foreign builds, unsupported targets and incompatible upgrades. Each failure
+   names the relevant dependency/input and a valid next action; old generated or
+   linked output cannot stand in for the failed new build.
+4. Obtain a non-author trial as soon as this slice works. Record setup and manual
+   intervention, maintained binding code, build/cache and copy/allocation costs,
+   diagnostic quality and concrete friction. Turn each blocker into a minimal
+   reproducer, owned fix and regression; use those results to adjust the shared
+   implementation before adding Rust crypto, the selected upstream Zig operation
+   and the bounded libp2p runtime adapter. Retain the same feedback for each slice.
+
+Report the scope as each slice becomes usable. The first consumer supplies
+engineering feedback; it does not close the four-adapter checkpoint or prove
+foreign behavior. Broader package work grows from the observed requirements.
+
 **Ease-of-use acceptance:** the application workflow is dependency -> ordinary import -> build.
 Prefer a reviewed binding package automatically when one is available. For an uncovered library,
 discover its C headers, supported Rust package/API metadata or selected Zig module metadata and
@@ -16980,6 +17016,12 @@ distinct; build tools target the host while linked libraries target the program.
 Build-time tool authority and linked-library runtime authority are separate facts.
 Imports resolve only declared dependencies against this same graph.
 
+R-0285's first slice supplies exact application/binding manifest examples and
+expected lock output; include workspace and C/Rust/Zig package cases. Label draft
+fields until implemented, then keep the examples in executable fixtures so docs
+and parser behavior move together. Expand the schema when a working slice needs
+the next field, preserving the shared graph and identity contracts.
+
 ### Task R-0365
 
 **Objective:** Add version constraints, dependency resolution, and lockfile.
@@ -16999,6 +17041,12 @@ Fetch and verify locked content before an offline build. A changed native input
 invalidates dependent implementation evidence even when its public header stays
 unchanged; identity/integrity never supplies behavioral trust or proof validity.
 Use existing package/evidence roots and invalidation rules throughout.
+
+Define how one workspace lock represents multiple host/target configurations and
+conditional dependencies, so switching targets preserves unrelated selections.
+Retain expected outcomes for duplicate-version/native-library conflicts and
+root-only overrides. The first R-0285 slice can use exact pins; introduce ranges
+only after their selection/compatibility rules and conflict fixtures are decided.
 
 ### Task R-0366
 
