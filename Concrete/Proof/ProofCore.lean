@@ -2208,6 +2208,9 @@ structure ProofCoreEntry where
       rebuilt. Kept beside declFacts because the facts record cannot reference the tree
       (EvidenceTree imports SubjectFacts), and looked up by IDENTITY, never by position. -/
   evidenceBody : Option Proof.EvidenceBodyDraftV2 := none
+  /-- What each call spelling of the enclosing module resolves to, threaded from Elab (bug 081).
+      The extracted body keeps spellings; this is what they REACH. Module-wide, like `constBindings`. -/
+  callTargets : List (String × CallableId) := []
   /-- The DEPENDENCY MATERIAL this entry can see: every constant the enclosing module
       binds, with a canonical encoding of its initializer. Carried per entry because the
       dependency axis is a property of the SUBJECT, and the subject is a declaration.
@@ -2305,7 +2308,12 @@ inductive RegistryIssue where
   | renamedFunction (entry : ProofRegistryEntry) (newName : String)
   | duplicateEntry (function : String) (count : Nat)
   | conflictingEntry (function : String) (specs : List String)
-  | staleFingerprint (entry : ProofRegistryEntry) (currentFp : String)
+  /-- `pinValue` is what to store in `#[proof_fingerprint]` for the CURRENT subject — `v2:` plus the
+      short subject digest, the value `--report migration-manifest` reports as `current` — or `none`
+      when no subject digest is computable. Bug 081's companion: the warning printed
+      `shortHash currentFp`, a short hash of the V1 BODY fingerprint, which is not a value any
+      stored link can hold, so an author following it re-pinned a stale claim forever. -/
+  | staleFingerprint (entry : ProofRegistryEntry) (currentFp : String) (pinValue : Option String)
   | ineligibleFunction (entry : ProofRegistryEntry) (reasons : List String)
   | emptyProofName (entry : ProofRegistryEntry)
   | emptySpecName (entry : ProofRegistryEntry)
@@ -2331,7 +2339,7 @@ def RegistryIssue.isError : RegistryIssue → Bool
   | .renamedFunction _ _ => true
   | .duplicateEntry _ _ => true
   | .conflictingEntry _ _ => true
-  | .staleFingerprint _ _ => false  -- stale is a warning, not an error
+  | .staleFingerprint _ _ _ => false  -- stale is a warning, not an error
   | .ineligibleFunction _ _ => true
   | .emptyProofName _ => true
   | .emptySpecName _ => true
@@ -2621,6 +2629,20 @@ def dependencyNodesOf (pc : ProofCore) (graph : CallGraph) : List Proof.DepNode 
       some { id := xid, label := x.callableId, digest := some x.fingerprint
            , edges := [], unscoped := [] }
 
+/-- The DEFINITION-call keys in an extracted body: the names its `.call` nodes select table entries
+    by (bug 081). `.applyVar` is a locally bound callable and selects nothing from a table. -/
+private partial def pexprCallKeys : Proof.PExpr → List String
+  | .lit _ | .var _ => []
+  | .while_step c _ st k => pexprCallKeys c ++ pexprCallKeys st ++ pexprCallKeys k
+  | .binOp _ l r | .letIn _ l r | .arrayIndex l r => pexprCallKeys l ++ pexprCallKeys r
+  | .ifThenElse c t e | .arraySet c t e => pexprCallKeys c ++ pexprCallKeys t ++ pexprCallKeys e
+  | .call fn args => fn :: args.flatMap pexprCallKeys
+  | .applyVar _ args | .arrayLit args => args.flatMap pexprCallKeys
+  | .structLit _ fs | .enumLit _ _ fs => fs.flatMap (fun (_, e) => pexprCallKeys e)
+  | .fieldAccess o _ | .cast o | .wrapCast _ _ o => pexprCallKeys o
+  | .match_ sc arms => pexprCallKeys sc ++ arms.flatMap (fun (_, b) => pexprCallKeys b)
+  | .while_ c assigns k => pexprCallKeys c ++ assigns.flatMap (fun (_, e) => pexprCallKeys e) ++ pexprCallKeys k
+
 /-- The closed correspondence request for one subject, built from what the compiler actually has.
 
     REQUESTED EDGES are the subject's own dependency-node edges — the same node set the root reads,
@@ -2717,8 +2739,69 @@ def correspondenceInputOf (pc : ProofCore) (graph : CallGraph) (id : CallableId)
         match Proof.scopedEntryEvidenceForTable tn with
         | .error w => some w
         | .ok _    => none)
+  -- BIND EVERY CALL BY ITS KEY (bug 081). The witnesses above ask whether a named table CONTAINS
+  -- each callee. The specification asks something else: `.call "k"` means the entry the theorem's
+  -- table holds under `k`. The extracted body keeps the call's local spelling, which an import alias
+  -- makes independent of the callee, so containment let `check_class(cls)` — an alias of
+  -- `check_version` — match a specification calling `check_class` while the edge to `check_version`
+  -- was justified by the table's own `check_version` entry. For each key: the callee the ELABORATOR
+  -- resolved for it must be an edge the call graph records, and every named table's entry under that
+  -- key must be attested to that exact definition. A trusted callee is the exception, below.
+  --
+  -- Only a CLAIM is checked: with no linked theorem nothing is asserted about the calls, and the
+  -- subject is not `proved` to begin with.
+  let tableRows : List (String × List Proof.ScopedEntryEvidence) := match Proof.validatedRowOf thm with
+    | .error _ => []
+    | .ok row  => row.tables.filterMap (fun (tn, _) =>
+        match Proof.scopedEntryEvidenceForTable tn with
+        | .ok rows => some (tn, rows)
+        | .error _ => none)
+  let keys := if thm.isEmpty then [] else
+    ((subjEntry.bind (·.extracted)).map pexprCallKeys |>.getD []).eraseDups
+  let callTargets := subjEntry.map (·.callTargets) |>.getD []
+  let edgesOfNode := node.map (·.edges) |>.getD []
+  let keyRefusals : List Proof.CallKeyRefusal := keys.filterMap fun k =>
+    match callTargets.lookup k with
+    | none => some (.unresolved k)
+    | some cid =>
+      let scopedId : Option (Except Proof.DefinitionIdentityRefusal Proof.DefinitionIdentity) :=
+        match pc.entries.find? (fun (e : ProofCoreEntry) => e.callableId == cid) with
+        | some e => some e.definitionIdentity
+        | none => (pc.excluded.find? (fun (x : ProofCoreExcluded) => x.callableId == cid)).map
+                    (fun (x : ProofCoreExcluded) => x.definitionIdentity)
+      match scopedId with
+      | none | some (.error _) => some (.unscoped k cid)
+      | some (.ok d) =>
+        match edgesOfNode.find? (fun (p : Proof.DependencyEdge × Proof.DefinitionIdentity) => p.2.sameDefinition d) with
+        | none => some (.notAnEdge k d)
+        -- A TRUSTED callee is not bound by key. Its edge is justified by the declared boundary, and
+        -- what the theorem's table says about that call is part of the trust the claim discloses
+        -- (`assumes <callee>`, `proved_by_lean_modulo_trusted`) — the disclosure names the callee the
+        -- call REACHES, not the key it was spelled with, so the assumption is stated about the right
+        -- function. `composition_trusted_helper` is that shape: its trusted `dbl` is not the
+        -- definition `combineFns` attests under `dbl`, and that difference is what it trusts.
+        | some (kind, _) =>
+          if kind == Proof.DependencyEdge.trusted then none else
+          -- PER TABLE: the key selects ONE model, and that model must be attested to `d`. One model
+          -- may be attested to several definitions — `cryptoFns` attests `check_nonce` once per
+          -- consuming package — so "every attestation under the key is `d`" would refuse a sound
+          -- table; "some attestation under the key is `d`, and the key selects a single model"
+          -- (one body digest) is the question the specification's call actually asks.
+          let perTable : List Proof.CallKeyRefusal := tableRows.filterMap fun (tn, rows) =>
+            let held := Proof.scopedEntriesUnderKey rows k
+            match held with
+            | [] => none
+            | r :: _ =>
+              if (held.map (·.sourceBodyDigest)).eraseDups.length != 1 then some (.keyAmbiguous k tn)
+              else if held.any (·.definition.sameDefinition d) then none
+              else some (.keyBindsOther k d tn (some r.definition))
+          let anyHolder := tableRows.any fun (_, rows) => !(Proof.scopedEntriesUnderKey rows k).isEmpty
+          match perTable with
+          | w :: _ => some w
+          | [] =>
+            if !anyHolder then some (.keyUnbound k d) else none
   .ok { subject := subject, requestedEdges := requested, unscopedEdges := unscoped
-      , candidateWitnesses := witnesses, resolverRefusals := refusals }
+      , candidateWitnesses := witnesses, resolverRefusals := refusals, keyRefusals := keyRefusals }
 
 /-- What a STORED `#[proof_fingerprint]` is worth against the program right now.
 
@@ -2913,7 +2996,8 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
       -- and repeating it here would double-report one fact in two vocabularies.
       | some h =>
         let sd := (pc.entries.find? fun e => e.qualName == re.function).bind (·.subjectDigest)
-        if storedFreshness h sd == StoredFreshness.moved then some (.staleFingerprint re currentFp)
+        if storedFreshness h sd == StoredFreshness.moved
+        then some (.staleFingerprint re currentFp (sd.map fun d => "v2:" ++ shortHash d))
         else none
       | none   =>
         -- No stored short hash. What that means depends on where the entry came
@@ -2926,7 +3010,7 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
         -- link to be unbound, so reporting one told the author to pin a fingerprint for a proof
         -- that does not exist.
         if re.sourceLinked && re.claimsProof then some (.unboundProofSubject re)
-        else if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp)
+        else if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp none)
         else none
     | none => none  -- already caught as unknown
   -- Check for entries targeting ineligible functions
@@ -2957,7 +3041,7 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
   -- Spec-drift check: the subject binding's affirmative mismatch, for each entry not already
   -- stale (those are reported by `staleFingerprint`, and the user is updating both anyway).
   let staleNames := stales.filterMap fun
-    | .staleFingerprint re _ => some re.function
+    | .staleFingerprint re _ _ => some re.function
     | _ => none
   let specDrifts := registry.filterMap fun re =>
     if staleNames.contains re.function then none
@@ -2983,10 +3067,15 @@ def renderRegistryIssue : RegistryIssue → String
     s!"error: {n} duplicate registry entries for '{fn}'"
   | .conflictingEntry fn specs =>
     s!"error: conflicting specs for '{fn}': {", ".intercalate specs}"
-  | .staleFingerprint re currentFp =>
+  | .staleFingerprint re currentFp pinValue =>
     match re.expectedHash with
     | some h =>
-      s!"warning: stale fingerprint for '{re.function}' (#[proof_fingerprint] \"{h}\" ≠ current \"{shortHash currentFp}\" — body changed since the proof was linked; re-verify and update the fingerprint)"
+      -- THE VALUE TO PIN, not a hash of the V1 body fingerprint (bug 081): a stored link is compared
+      -- against `v2:` + the short subject digest, so that is the only "current" worth printing.
+      let cur := match pinValue with
+        | some v => s!"current \"{v}\""
+        | none => "no current subject digest is computable"
+      s!"warning: stale fingerprint for '{re.function}' (#[proof_fingerprint] \"{h}\" ≠ {cur} — body changed since the proof was linked; re-verify and update the fingerprint)"
     | none =>
       s!"warning: stale fingerprint for '{re.function}' (registry: {re.bodyFingerprint.take 40}…, current: {currentFp.take 40}…)"
   | .ineligibleFunction re reasons =>
@@ -3012,7 +3101,7 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
       | .renamedFunction _ newName => [s!"renamed to {newName}"]
       | .duplicateEntry _ n => [s!"{n} duplicate entries"]
       | .conflictingEntry _ specs => specs
-      | .staleFingerprint _ _ => ["stale fingerprint"]
+      | .staleFingerprint _ _ _ => ["stale fingerprint"]
       | .ineligibleFunction _ reasons => reasons
       | .emptyProofName _ => ["empty proof name"]
       | .emptySpecName _ => ["empty spec name"]
@@ -3020,7 +3109,7 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
       | .specDrift _ => ["spec drift"]
       | .unboundProofSubject _ => ["no stored proof subject"]
     let fn := match issue with
-      | .unknownFunction re | .renamedFunction re _ | .staleFingerprint re _
+      | .unknownFunction re | .renamedFunction re _ | .staleFingerprint re _ _
       | .ineligibleFunction re _ | .emptyProofName re | .emptySpecName re
       | .extractionBlocked re _
       | .unboundProofSubject re
@@ -3034,7 +3123,7 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
            | .renamedFunction _ newName => s!"Update the registry entry's function field to '{newName}'."
            | .duplicateEntry _ _ => "Remove duplicate registry entries."
            | .conflictingEntry _ _ => "Ensure each function has exactly one spec."
-           | .staleFingerprint _ _ => "Update the registry fingerprint to match the current body."
+           | .staleFingerprint _ _ _ => "Update the registry fingerprint to match the current body."
            | .ineligibleFunction _ _ => "Remove the registry entry or make the function eligible."
            | .emptyProofName _ => "Add a proof name to the registry entry."
            | .emptySpecName _ => "Add a spec name to the registry entry."
@@ -3045,10 +3134,10 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
          , failureClass := failureClassOf .attachmentIntegrity
          , repairClass := repairClassOf .attachmentIntegrity
          , fingerprint := match issue with
-           | .staleFingerprint _ currentFp => currentFp
+           | .staleFingerprint _ currentFp _ => currentFp
            | _ => ""
          , expectedFp := match issue with
-           | .staleFingerprint re _ => re.bodyFingerprint
+           | .staleFingerprint re _ _ => re.bodyFingerprint
            | _ => ""
          , loc }
 
@@ -3226,6 +3315,7 @@ private partial def extractModule
       let definitionIdentity := scopedIdentityOf ()
       (accE ++ [{ definitionIdentity, qualName, bareName, callableId := cid,
                    declFacts := facts?, evidenceBody := evBody?,
+                   callTargets := m.callTargets,
                    constBindings := m.constBindings,
                    subjectDigest := subjDigest, fn := f, extracted
                  , unsupported := unsup
@@ -3671,7 +3761,9 @@ def applyCorrespondenceAuthority (pc : ProofCore) (graph : CallGraph) : ProofCor
       -- No outgoing edges means a vacuously justified closure — there is nothing to justify — and
       -- must not be downgraded. `usable` compares the matched COUNT against the requested count, so
       -- the empty case is only vacuous here, never a way to pass with dropped requests.
-      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty then true
+      -- ...unless a call's key is unbound (bug 081): a call the graph did not record as an edge
+      -- must not reach `proved` through the empty case.
+      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty && i.keyRefusals.isEmpty then true
       else (Proof.correspond i).usable i.requestedEdges.length
   -- STEP 1: downgrade the claims whose own justification fails.
   let downgraded := pc.obligations.map fun o =>
@@ -4174,5 +4266,14 @@ def tableResolutionRefusalsOf (pc : ProofCore) (graph : CallGraph) (id : Callabl
   match correspondenceInputOf pc graph id with
   | .error _ => []
   | .ok i    => i.resolverRefusals.map (·.explain)
+
+/-- The calls whose key does not denote the callee the compiler resolved (bug 081), explained.
+    The same correspondence input the verdict reads, so the reason printed is the reason refused. -/
+def calleeKeyRefusalsOf (pc : ProofCore) (graph : CallGraph) (id : CallableId) : List String :=
+  let graph := if pc.program.isSome then pc.closureView.callGraph else graph
+  let pc := pc.closureView
+  match correspondenceInputOf pc graph id with
+  | .error _ => []
+  | .ok i    => i.keyRefusals.map (·.explain)
 
 end Concrete

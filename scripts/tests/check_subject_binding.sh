@@ -23,7 +23,13 @@
 #   L   count_up's `coverage: invariant` label discharges its loop step in none of contracts, prove
 #       and the VC report — there is no loop-step binding;
 #   H   a specification mentioned only as an assumption — a top-level hypothesis, an implication's
-#       domain beneath a conjunction, or a disjunct never established — binds nothing.
+#       domain beneath a conjunction, or a disjunct never established — binds nothing;
+#   X   bug 081 — a call's KEY must denote the callee it reaches. tests/programs/bug081_alias_key
+#       imports `check_version as check_class`; the body is validateHeaderExpr's, the subject is
+#       fresh and bound, and the claim is refused (closure unjustified) and not minted, while the
+#       unaliased examples/elf_header validate_header stays proved and minted. The same attack with
+#       a colliding `check_class` definition is refused too, and the stale-fingerprint warning
+#       prints the value migration-manifest reports as current.
 #
 # Everything runs in a scratch copy: receipts are minted only for a workspace resolved from the input.
 set -uo pipefail
@@ -100,6 +106,55 @@ grep -q "Summary: 1 issued, 0 withheld" "$TMP/p.issue" \
 "$C" "$PB" --report proof-status --receipts "$TMP/p.store" > "$TMP/p.consume" 2>&1
 grep -q "1 current, 0 not current" "$TMP/p.consume" \
   && ok "P: and reads back current" || no "P: the bound claim's receipt does not read back current"
+
+echo ""
+echo "=== X: bug 081 — a call's key must denote the callee it reaches ==="
+EHX=examples/elf_header/src/main.con
+B="$(block "$(status "$EHX")" main.validate_header)"
+grep -q "^-- proved" <<<"$B" && grep -q "spec: bound to Concrete.Proof.validateHeaderExpr" <<<"$B" \
+  && ok "X: control — the unaliased elf_header validate_header is proved and bound" \
+  || no "X: control — elf_header validate_header is not proved, so the legs below are vacuous: $(head -1 <<<"$B")"
+"$C" "$EHX" --report receipts --out "$TMP/x0.store" > "$TMP/x0.issue" 2>&1
+grep -q "^== main.validate_header" "$TMP/x0.store" \
+  && ok "X: control — its receipt is issued" \
+  || no "X: control — no receipt for the unaliased validate_header: $(grep -m1 -E 'validate_header|Summary' "$TMP/x0.issue")"
+FX=tests/programs/bug081_alias_key/src/main.con
+EV=main.evil.evil_validate_header
+fresh "$FX" evil_validate_header && ok "X: the aliased claim's stored fingerprint is fresh, so only the key can refuse" \
+  || no "X: the aliased claim's fingerprint is not fresh — the leg cannot isolate the key"
+# `dependency closure unjustified` is a DOWNGRADE of `proved`: it is reached only by a claim whose
+# subject is fresh and bound to its theorem's specification, so the key is the only thing refusing.
+B="$(block "$(status "$FX")" "$EV")"
+grep -q "^-- dependency closure unjustified" <<<"$B" \
+  && grep -q "call \`check_class\` reaches 'main.check_version', but 'Concrete.Proof.elfFns' binds \`check_class\` to 'main.check_class'" <<<"$B" \
+  && ok "X: refused — check_class reaches check_version, and elfFns binds the key check_class to check_class" \
+  || no "X: the aliased claim is not refused by its key: $(head -1 <<<"$B")"
+"$C" "$FX" --report receipts --out "$TMP/x.store" > "$TMP/x.issue" 2>&1
+grep -q "$EV \[claim_not_proved\]" "$TMP/x.issue" && ! grep -q "^== $EV" "$TMP/x.store" \
+  && ok "X: no receipt is minted for it, and the refusal is claim_not_proved" \
+  || no "X: the aliased claim's receipt was not withheld: $(grep -m1 -E 'evil|Summary' "$TMP/x.issue")"
+grep -q "^== main.check_magic" "$TMP/x.store" \
+  && ok "X: the fixture's own unaliased claims still mint (the refusal is not the whole package)" \
+  || no "X: the fixture minted nothing — the refusal leg may be refusing everything"
+# The same attack where `check_class` IS defined. The call graph then resolves the spelling to the
+# definition, not the import, so the edge set it reports is not what the elaborator resolved.
+FC=tests/programs/bug081_alias_key_collide/src/main.con
+mkdir -p "$(dirname "$FC")"; cp tests/programs/bug081_alias_key/Concrete.toml "$(dirname "$(dirname "$FC")")/"
+perl -pe 's/fn check_class_orig\(/fn check_class(/' "$FX" > "$FC"
+B="$(block "$(status "$FC")" main.check_class)"
+grep -q "^-- proved" <<<"$B" && ok "X: collision — main.check_class is proved" \
+  || no "X: collision — the rename did not produce a proved check_class: $(head -1 <<<"$B")"
+B="$(block "$(status "$FC")" "$EV")"
+grep -q "^-- dependency closure unjustified" <<<"$B" && grep -q "call \`check_class\` reaches 'main.check_version'" <<<"$B" \
+  && ok "X: collision — the aliased claim is still refused by its key" \
+  || no "X: collision — the aliased claim is not refused: $(head -1 <<<"$B")"
+# The stale-fingerprint warning names the value to pin. `check_class_orig` is the fixture's stale link
+# (the rename moved its subject); the printed value must be migration-manifest's `current`.
+WARN="$("$C" "$FX" --report proof-status 2>&1 >/dev/null | grep "stale fingerprint for 'main.check_class_orig'" | grep -oE 'current "[^"]*"' | head -1 | sed -E 's/current "(.*)"/\1/')"
+MAN="$("$C" "$FX" --report migration-manifest 2>/dev/null | awk -F' [|] ' '$1 == "main.check_class_orig" {sub(/^current=/, "", $6); print $6}')"
+[ -n "$WARN" ] && [ "$WARN" = "$MAN" ] && [[ "$WARN" == v2:* ]] \
+  && ok "X: the stale-fingerprint warning prints the value to pin ($WARN), as migration-manifest reports it" \
+  || no "X: the stale-fingerprint warning prints '$WARN', migration-manifest reports '$MAN'"
 
 echo ""
 echo "=== A: always_seven is not what check_nonce_correct is about ==="

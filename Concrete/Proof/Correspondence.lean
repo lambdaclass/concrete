@@ -87,6 +87,49 @@ structure EdgeWitness where
   source  : String := ""
 deriving Repr, BEq
 
+/-- Why a call in the subject's extracted body is not bound, BY ITS KEY, to the callee the
+    compiler resolved for it (bug 081).
+
+    A specification calls by NAME: `.call "check_class"` means whatever the theorem's table stores
+    under the key `check_class`. The extracted body keeps the call's LOCAL spelling, which an import
+    alias makes independent of the callee — `import main.{ check_version as check_class }` spells a
+    call to `check_version` as `check_class`. Containment ("some table the theorem names holds this
+    callee") never asked which KEY holds it, so a body calling `check_version` under the spelling
+    `check_class` matched a specification calling `check_class`, and the edge to `check_version` was
+    justified by the table's `check_version` entry. Each call must be bound key by key. -/
+inductive CallKeyRefusal where
+  /-- The elaborator recorded no callee for this spelling, so what the call reaches is unknown. -/
+  | unresolved (key : String)
+  /-- The resolved callee has no scoped identity, so no table entry can be compared with it. -/
+  | unscoped (key : String) (callee : CallableId)
+  /-- The resolved callee is not an edge of the subject in the call graph: the two resolvers that
+      name this call disagree, and neither is evidence for the other. -/
+  | notAnEdge (key : String) (callee : DefinitionIdentity)
+  /-- No table the theorem names holds an entry under this key, so the specification's call does
+      not denote this callee. -/
+  | keyUnbound (key : String) (callee : DefinitionIdentity)
+  /-- A named table's entry under this key is attested to a DIFFERENT definition, or to none: the
+      specification's call denotes something other than what the body calls. -/
+  | keyBindsOther (key : String) (callee : DefinitionIdentity) (table : String) (modeled : Option DefinitionIdentity)
+  /-- A named table holds DIFFERENT models under this key, so which one the call selects is not
+      determined by the table's evidence. -/
+  | keyAmbiguous (key : String) (table : String)
+deriving Repr, BEq
+
+def CallKeyRefusal.explain : CallKeyRefusal → String
+  | .unresolved k => s!"call `{k}` has no resolved callee, so its key cannot be bound"
+  | .unscoped k c => s!"call `{k}` resolves to '{c.render}', which has no scoped identity"
+  | .notAnEdge k c =>
+      s!"call `{k}` resolves to '{c.localName}', which the call graph does not record as an edge"
+  | .keyUnbound k c =>
+      s!"call `{k}` reaches '{c.localName}', but no table the theorem names has an entry under `{k}`"
+  | .keyBindsOther k c t m =>
+      let what := match m with
+        | some d => s!"'{d.localName}'"
+        | none => "no attested definition"
+      s!"call `{k}` reaches '{c.localName}', but '{t}' binds `{k}` to {what}"
+  | .keyAmbiguous k t => s!"'{t}' holds more than one model under `{k}`, so the call's key selects no single entry"
+
 /-- A witness that cannot enter the join, with the exact field that failed. -/
 inductive WitnessRefusal where
   /-- Returned for a different subject than the one being corresponded. -/
@@ -102,6 +145,10 @@ inductive WitnessRefusal where
       never derivable. Collapsing the two would report an unkeyable edge as an unjustified one and
       send a reader looking for a witness that was never the problem. -/
   | unscopedCallee (callee : CallableId) (kind : DependencyEdge) (why : DefinitionIdentityRefusal)
+  /-- A call whose KEY in the theorem's table does not denote the callee the compiler resolved
+      (bug 081). Malformed rather than missing: the edge may well have a witness by containment —
+      that is exactly the hole — and what fails is the binding of the call's name to it. -/
+  | calleeKey (why : CallKeyRefusal)
 deriving Repr, BEq
 
 def WitnessRefusal.explain : WitnessRefusal → String
@@ -111,6 +158,7 @@ def WitnessRefusal.explain : WitnessRefusal → String
       s!"'{c.localName}' is a {r.canonical} edge but its witness claims {cl.canonical}"
   | .unscopedCallee c k w =>
       s!"'{c.render}' ({k.canonical} edge) has no scoped identity: {w.explain} — the request cannot be keyed"
+  | .calleeKey w => w.explain
 
 /-- One requested edge with the single valid witness that justifies it. -/
 structure EdgeJustification where
@@ -137,6 +185,10 @@ structure CorrespondenceInput where
       `CorrespondenceResult` could not distinguish the two. It was previously appended to a report
       string, which put the fact outside the type that decides usability. -/
   resolverRefusals   : List TableResolveRefusal := []
+  /-- Calls in the subject's extracted body whose key in the theorem's tables does not denote the
+      callee the compiler resolved for them (bug 081). Carried into `malformed`, so usability cannot
+      be reached around them. -/
+  keyRefusals        : List CallKeyRefusal := []
 
 /-- All four sets retained, plus the witnesses that never entered the join.
 
@@ -204,8 +256,9 @@ def correspond (i : CorrespondenceInput) : CorrespondenceResult :=
   -- UNSCOPED EDGES ARE MALFORMED, NOT MISSING. The distinction is the point: the compiler has the
   -- edge and could not key it, which is a different failure from having a key and no witness.
   let unscopedRefusals := i.unscopedEdges.map (fun (c, k, w) => WitnessRefusal.unscopedCallee c k w)
+  let keyRefusals := i.keyRefusals.map WitnessRefusal.calleeKey
   { matched := matched, missing := missing, ambiguous := ambiguous, surplus := surplus
-  , malformed := subjectRefusals ++ kindRefusals ++ unscopedRefusals
+  , malformed := subjectRefusals ++ kindRefusals ++ unscopedRefusals ++ keyRefusals
   , resolverRefusals := i.resolverRefusals }
 
 /-- Usable only when every set is empty and the count is exact.

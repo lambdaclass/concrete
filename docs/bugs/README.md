@@ -127,6 +127,7 @@ there or adds one.
 - [092_reference_stored_in_aggregate.md](092_reference_stored_in_aggregate.md) — FIXED: a reference stored in a struct field, enum payload or array did not freeze its source, so `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory. References are never stored in an aggregate (E0239)
 - [093_shadowing_local_escapes_scope_check.md](093_shadowing_local_escapes_scope_check.md) — FIXED: a block local or match binder that shadowed an outer name was skipped by the never-consumed check (E0208), so it leaked; checker bindings now carry an identity and scope/merge checks match by it, not by name
 - [094_binding_state_updates_keyed_by_name.md](094_binding_state_updates_keyed_by_name.md) — FIXED: per-binding state updates (consume, use, reassign, `defer`, borrow freeze) marked every entry sharing the name, so a binder shadowing a live linear binding consumed it too and the outer value leaked; state updates now match by binding identity (arm binders may shadow; the outer binding is still owed after the match) and a destructure binder refuses to shadow a live non-Copy binding (E0292)
+- [081_call_key_not_bound_to_callee.md](081_call_key_not_bound_to_callee.md) — FIXED: the proof model's `.call "k"` means the theorem table's entry under `k`, but edges were justified by table CONTAINMENT, so `import main.{ check_version as check_class }` borrowed `validate_header_correct`; every call is now bound by key to the callee the elaborator resolved, and the stale-fingerprint warning prints the v2 value to pin
 
 ## Open Numbered Bugs
 

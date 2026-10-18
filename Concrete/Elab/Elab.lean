@@ -15,6 +15,7 @@ import Concrete.Resolve.TypeId
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
+import Concrete.Proof.CallCollect
 
 namespace Concrete
 
@@ -2692,6 +2693,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
     evidenceBodies := fnResults.map fun ((f, implTy), _cfn, _bii, evidenceBody) =>
       (CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length,
        evidenceBody)
+    -- Bug 081: every direct-call spelling in this module's bodies, with the callee THIS module's
+    -- resolver gives it — the resolver evidence already used for its call nodes. An unresolvable
+    -- spelling is left out, so a consumer finds nothing and refuses.
+    callTargets := (fns.flatMap fun cfn => collectCallsStmts cfn.body).eraseDups.filterMap fun n =>
+      (resolveContractCall n).map (n, ·)
     structs := cStructs ++ cImportedStructs
     enums := allEnums.map fun ed =>
       { name := ed.name, typeParams := ed.typeParams,

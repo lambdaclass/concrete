@@ -203,6 +203,15 @@ structure CModule where
       by position: a positional pairing with declFacts would be a second fact that can
       drift out of alignment. -/
   evidenceBodies : List (CallableId × Proof.EvidenceBodyDraftV2) := []
+  /-- WHAT EACH CALL SPELLING IN THIS MODULE RESOLVES TO, as the elaborator resolved it (bug 081).
+
+      Core keeps a direct call's LOCAL spelling — an import alias included — and so does the
+      extracted proof body, where `.call "f"` is then read against the theorem's table under the key
+      `f`. Binding that key to the callee needs the callee each spelling actually reaches, and that
+      is a fact of THIS module's imports, decided here by the same resolver that gave evidence its
+      callee identities. A spelling absent from this list was not resolved, and a consumer must
+      refuse rather than guess. -/
+  callTargets : List (String × CallableId) := []
   /-- DEPENDENCY MATERIAL for constants: each module constant's identity paired with a
       canonical encoding of its INITIALIZER.
 

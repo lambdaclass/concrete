@@ -128,6 +128,17 @@ fields were all built from the pre-iteration env: `x = x + 1; x = x + 1;` steppe
 dropping the for-loop step. Assignments now bind sequentially (`letIn` + `Cont x := x`), and branches
 continue with the rest of the body. No shipped claim's extraction changed; `check_model_diff.sh` leg S
 pins ten loop shapes to their runtime values.
+### A Call In The Proof Model Is Bound To The Function It Calls (bug 081)
+
+A specification calls by name — `.call "check_class"` is the theorem table's entry under that key —
+and the extracted body keeps a call's local spelling, import aliases included. Edges were justified by
+table CONTAINMENT, so a `validate_header` that imported `check_version as check_class` was `proved`
+against `validate_header_correct` and minted a receipt while computing a different function. The
+elaborator now records what each call spelling reaches, scoped table evidence carries each entry's key,
+and every call of a claimed body must select, by key, an entry attested to that exact callee; anything
+else is `dependency closure unjustified`, naming the call, and issues no receipt. The stale-fingerprint
+warning now prints the `v2:` value to pin (it printed a hash of the V1 fingerprint). Gate legs X in
+`check_subject_binding.sh`, fixture `tests/programs/bug081_alias_key`.
 
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 

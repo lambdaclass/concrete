@@ -266,7 +266,7 @@ partial def conclusionSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
     let mut srows : List String := []
     for r in srowsRes do
       let d := r.definition
-      srows := srows ++ [s!"(\"{d.scope}\", \"{d.moduleIdentity}\", \"{d.declarationIdentity}\", \"{d.implementationIdentity}\", \"{r.sourceBodyDigest}\")"]
+      srows := srows ++ [s!"(\"{d.scope}\", \"{d.moduleIdentity}\", \"{d.declarationIdentity}\", \"{d.implementationIdentity}\", \"{r.sourceBodyDigest}\", \"{r.operationalKey}\")"]
     slits := slits ++ [s!"  (\"{nm}\", [" ++ String.intercalate ", " srows ++ "])"]
   IO.println (String.intercalate ",\n" elits)
   IO.println "-- EXTERNAL-SCOPED"

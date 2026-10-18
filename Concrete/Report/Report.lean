@@ -1104,7 +1104,16 @@ private partial def collectProofStatus
         | some (.ok b) => s!"bound to {b.spec}, the specification {b.theoremName} evaluates (body {b.valueDigest}, parameters [{", ".intercalate b.params}])"
         | some (.error w) => s!"NOT bound — {w.explain}"
         | none => ""
-    , notCurrentDeps := match obl with | some o => o.notCurrentDeps | none => []
+    -- An unjustified closure names what is unjustified. A call whose key denotes another callee
+    -- (bug 081) is named by the correspondence input the verdict read, not re-derived here.
+    , notCurrentDeps := match obl with
+        | some o =>
+          if o.status == .correspondenceUnjustified
+          then o.notCurrentDeps ++ (match pc.entries.find? (·.qualName == qualName) with
+            | some e => Concrete.calleeKeyRefusalsOf pc pc.callGraph e.callableId
+            | none => [])
+          else o.notCurrentDeps
+        | none => []
     , trustedDeps := match obl with | some o => o.trustedDeps | none => []
     , loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
@@ -1917,7 +1926,7 @@ private def shadowCorrespondenceLine (pc : Concrete.ProofCore) (id : CallableId)
   | .ok inp =>
   let r := Proof.correspond inp
   let qual := (pc.entries.find? (fun e => e.callableId == id)).map (·.qualName) |>.getD ""
-  if inp.requestedEdges.isEmpty && inp.unscopedEdges.isEmpty then "none (no outgoing edge)"
+  if inp.requestedEdges.isEmpty && inp.unscopedEdges.isEmpty && inp.keyRefusals.isEmpty then "none (no outgoing edge)"
   -- NO CLAIM is not an unjustified claim. A subject with no linked theorem asserts nothing about
   -- its dependencies, so there is nothing for correspondence to justify, and reporting `usable=no`
   -- would count "nobody proved this" as "this proof is unsound". `fixed_capacity.validate_message`
@@ -1939,7 +1948,9 @@ private def shadowCorrespondenceLine (pc : Concrete.ProofCore) (id : CallableId)
                         else s!" unscoped={inp.unscopedEdges.length}"
     let sets := s!"matched={r.matched.length} missing={r.missing.length} " ++
                 s!"ambiguous={r.ambiguous.length} surplus={r.surplus.length} malformed={r.malformed.length}{unscopedNote}"
-    s!"{sets} usable={if r.usable inp.requestedEdges.length then "yes" else "no"}{refusalNote}"
+    let keyNote := if inp.keyRefusals.isEmpty then ""
+                   else s!" | callee keys: {" ; ".intercalate (inp.keyRefusals.map (·.explain))}"
+    s!"{sets} usable={if r.usable inp.requestedEdges.length then "yes" else "no"}{refusalNote}{keyNote}"
 
 /-- The CALL-GRAPH view of a subject's outgoing edges — the source `dependencyRootMaterial`
     actually reads, printed so it can be compared against `shadow edgeKinds`, which reads the

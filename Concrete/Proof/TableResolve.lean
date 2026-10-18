@@ -194,10 +194,13 @@ def scopedEntryEvidenceForTable (name : String)
     match externalScopedEntries.filter (fun e => e.1 == name) with
     | [] => .error (.unknownTable name)
     | [(_, rows)] =>
-      rows.foldlM (init := ([] : List ScopedEntryEvidence)) (fun acc (pkg, mod, decl, impl, sbd) =>
+      rows.foldlM (init := ([] : List ScopedEntryEvidence)) (fun acc (pkg, mod, decl, impl, sbd, key) =>
         match DefinitionIdentity.of? pkg mod decl impl with
         | .error w => .error (.externalRowMalformed name w.explain)
-        | .ok d    => .ok (acc ++ [{ definition := d, sourceBodyDigest := sbd }]))
+        -- An entry with no key cannot be selected by any call, so the row is malformed rather than
+        -- silently unreachable (bug 081).
+        | .ok d    => if key.isEmpty then .error (.externalRowMalformed name s!"'{d.localName}' has no operational key")
+                      else .ok (acc ++ [{ definition := d, sourceBodyDigest := sbd, operationalKey := key }]))
     | _ => .error (.externalRowAmbiguous name)
 
 /-- Does the named table hold a MODEL of this declaration, by NAME?

@@ -222,6 +222,10 @@ scope is exactly what would distinguish two same-named definitions. -/
 structure ScopedEntryEvidence where
   definition       : DefinitionIdentity
   sourceBodyDigest : String
+  /-- The key a specification's `.call` selects this entry by — the attested model's
+      `operationalKey` (bug 081). Containment alone says the table holds the definition SOMEWHERE;
+      a call names a key, and what the call denotes is the entry under that key. -/
+  operationalKey   : String
 deriving Repr, BEq
 
 /-- Why a table yielded no scoped membership. -/
@@ -291,7 +295,8 @@ def scopedEntryEvidence (t : FnTable)
           let recomputed := Concrete.sourceBodyDigestV1Of model.body
           if stored.value != recomputed then
             .error (.bodyMismatch d stored.value recomputed)
-          else .ok (acc ++ [{ definition := d, sourceBodyDigest := stored.value }])
+          else .ok (acc ++ [{ definition := d, sourceBodyDigest := stored.value
+                            , operationalKey := model.operationalKey }])
     match (rows.map (·.definition.digest)).find?
             (fun x => ((rows.map (·.definition.digest)).filter (· == x)).length > 1) with
     | some dup =>
@@ -303,6 +308,10 @@ def scopedEntryEvidence (t : FnTable)
 /-- Does this table contain that DEFINITION? All four identity components, never a name. -/
 def scopedEvidenceContains (rows : List ScopedEntryEvidence) (d : DefinitionIdentity) : Bool :=
   rows.any (fun r => r.definition.sameDefinition d)
+
+/-- The entries a table holds UNDER A KEY — what a specification's `.call key` can select (bug 081). -/
+def scopedEntriesUnderKey (rows : List ScopedEntryEvidence) (key : String) : List ScopedEntryEvidence :=
+  rows.filter (·.operationalKey == key)
 
 /-- Why a table yielded no entry evidence. NAMED, one constructor per distinct check.
 
