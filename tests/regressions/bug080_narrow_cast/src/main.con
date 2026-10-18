@@ -1,0 +1,9 @@
+// Bug 080 regression: a narrowing cast. The proof model modeled every cast as the identity, so
+// narrow(300) was 300 in the model while the binary returned 44. check_model_diff.sh requires the
+// model and the runtime to agree on every boundary input, including 300 -> 44.
+mod main {
+    fn narrow(x: u64) -> u8 { return x as u8; }
+    fn to_signed(x: u32) -> i32 { return x as i32; }
+    fn widen(x: u8) -> u64 { return x as u64; }
+    pub fn main() -> i32 { let r: u8 = narrow(300); return r as i32; }
+}

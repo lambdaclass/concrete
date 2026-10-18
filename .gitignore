@@ -170,4 +170,6 @@ tests/regressions/*/*/*
 !tests/regressions/*/*/
 !tests/regressions/*/*/Concrete.toml
 !tests/regressions/*/*/src/
+!tests/regressions/*/src/*.con
+!tests/regressions/*/*/src/*.con
 !tests/regressions/*/README.md

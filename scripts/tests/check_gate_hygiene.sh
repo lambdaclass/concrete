@@ -299,6 +299,28 @@ else
 fi
 
 echo ""
+echo "=== no fixture source is silently ignored ==="
+# The tests/regressions ignore rule once hid every single-project fixture's
+# src/main.con (bug 080's model-diff fixture passed locally and could not exist on
+# CI), while its comment promised new fixtures are never silently ignored. Both a
+# synthetic path for each fixture layout and the real tree are checked.
+for probe in tests/regressions/zz_probe/src/main.con tests/regressions/zz_probe/app/src/main.con \
+             tests/regressions/zz_probe/repro.con tests/programs/zz_probe/main.con; do
+  if git -C "$ROOT_DIR" check-ignore -q --no-index "$probe"; then
+    no "fixture layout $probe would be ignored"
+  else
+    ok "fixture layout $probe is tracked"
+  fi
+done
+ignored_src="$(git -C "$ROOT_DIR" ls-files --others --ignored --exclude-standard -- tests examples 2>/dev/null \
+  | grep -E '\.(con|toml|lean|sh|py|json|md)$' | grep -v '/\.lake/' || true)"
+if [ -z "$ignored_src" ]; then
+  ok "no source-like file under tests/ or examples/ is ignored"
+else
+  no "ignored source-like files: $(tr '\n' ' ' <<<"$ignored_src")"
+fi
+
+echo ""
 echo "=== the pre-push hook is installed in this clone ==="
 # Advisory, not a failure: core.hooksPath is per-clone local config and cannot be
 # versioned, so a gate cannot assert it for anyone else. It CAN tell the person
