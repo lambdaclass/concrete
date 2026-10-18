@@ -63,6 +63,30 @@ assert_contains "emit-link spec"     "#[spec(Concrete.Proof.ctCompareExpr)]" \
 assert_contains "emit-link proof_by" "#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]" \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --emit-link
 
+# THE EMITTED FINGERPRINT IS THE ONE FRESHNESS READS. It printed shortHash of the BODY fingerprint — a
+# v1 value — so a block pasted as PROOFKIT_GUIDE says left the claim `needs_recheck` forever. Round
+# trip: pin the unpinned ct_compare with the emitted line, in a scratch copy, and require `proved`.
+EMIT_FP="$("$COMPILER" prove "$CT" constant_time_tag.ct_compare --emit-link 2>/dev/null | grep -E '^#\[proof_fingerprint\("v2:[0-9a-f]+"\)\]$')"
+RT_DIR="$(mktemp -d)"; cp -R "$(dirname "$(dirname "$CT")")"/. "$RT_DIR/"
+if [ -n "$EMIT_FP" ] && python3 - "$RT_DIR/src/main.con" "$EMIT_FP" <<'PY'
+import sys
+p, line = sys.argv[1], sys.argv[2]
+s = open(p).read()
+anchor = "    #[proof_coverage(iff)]\n    #[ensures((a == b"
+if anchor not in s: sys.exit(1)
+open(p, "w").write(s.replace(anchor, "    #[proof_coverage(iff)]\n    " + line + "\n    #[ensures((a == b", 1))
+PY
+then
+  RT_ST="$("$COMPILER" "$RT_DIR/src/main.con" --report proof-status 2>/dev/null | awk '/^-- /{st=$0} /`constant_time_tag.ct_compare`/{print st; exit}')"
+  case "$RT_ST" in
+    "-- proved"*) echo "  ok   emit-link round trip: the emitted v2 fingerprint pins ct_compare as proved"; PASS=$((PASS+1)) ;;
+    *) echo "  FAIL emit-link round trip: pinning with the emitted line gave '$RT_ST'"; FAIL=$((FAIL+1)) ;;
+  esac
+else
+  echo "  FAIL emit-link round trip: no v2 fingerprint emitted, or the fixture anchor moved ('$EMIT_FP')"; FAIL=$((FAIL+1))
+fi
+rm -rf "$RT_DIR"
+
 echo "=== prove --show-obligation ==="
 assert_contains "show-obl O4 concl"  "0 ≤ (8 - i)" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --show-obligation O4

@@ -1654,8 +1654,8 @@ def compileAndReport (inputPath : String) (reportType : String)
       | .ok qual =>
         -- --emit-link: print the in-source proof-link block (text or JSON).
         if proveEmitLink then
-          IO.println (if proveJson then Report.emitProofLinkJson registry qual inputPath
-                      else Report.emitProofLink registry qual)
+          IO.println (if proveJson then Report.emitProofLinkJson pc registry qual inputPath
+                      else Report.emitProofLink pc registry qual)
           return 0
         let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
         -- --nearest-lemmas: proof-recipe hints per obligation kind + features.

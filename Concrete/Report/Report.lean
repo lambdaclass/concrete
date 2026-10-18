@@ -4051,7 +4051,7 @@ def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
     emitted as commented placeholders so the author sees what still needs a name.
     Read-only: the author pastes the block above the function and deletes the
     JSON entry. -/
-def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
+def emitProofLink (pc : Concrete.ProofCore) (registry : ProofRegistry) (qual : String) : String :=
   match registry.find? (·.function == qual) with
   | none => s!"// no proof link or registry entry for `{qual}` — nothing to emit"
   | some e =>
@@ -4060,9 +4060,12 @@ def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
     let ens := match e.ensuresProof with
       | some t => s!"#[ensures_proof({t})]"
       | none => "// #[ensures_proof(...)]   ← none (omit if the postcondition is single-direction)"
-    -- The registry entry's bodyFingerprint is the CURRENT body fingerprint;
-    -- hashing it gives the staleness token to store in source.
-    let fp := s!"#[proof_fingerprint(\"{shortHash e.bodyFingerprint}\")]"
+    -- THE V2 SUBJECT DIGEST, the value freshness compares against (`storedFreshness`). This emitted
+    -- `shortHash` of the BODY fingerprint — a v1 value, which the v2 authority reads as an earlier
+    -- schema: a block pasted as the guide says was `needs_recheck` forever, never `proved`.
+    let fp := match (pc.findEntry qual).bind (·.subjectDigest) with
+      | some d => s!"#[proof_fingerprint(\"v2:{shortHash d}\")]"
+      | none => "// #[proof_fingerprint(...)]   ← the subject digest is not computable (facts incomplete); nothing can be pinned"
     String.join [
       s!"// in-source proof link for `{qual}` — paste this block above the function.\n",
       req "spec" e.spec, "\n",
@@ -4172,12 +4175,12 @@ def showObligationJson (modules : List Module) (qualName oblId0 : String)
     return s!"\{\"error\": {q s!"obligation '{oblId}' not found on {qualName}"}}"
 
 /-- `concrete prove --emit-link --json`: the link fields + the pasteable block. -/
-def emitProofLinkJson (registry : ProofRegistry) (qual inputPath : String) : String :=
+def emitProofLinkJson (pc : Concrete.ProofCore) (registry : ProofRegistry) (qual inputPath : String) : String :=
   let q := jsonStr
   match registry.find? (·.function == qual) with
   | none => s!"\{\"error\": {q s!"no proof link for '{qual}'"}}"
   | some e =>
-    let block := emitProofLink registry qual
+    let block := emitProofLink pc registry qual
     String.join [
       "{\n",
       s!"  \"function\": {q qual},\n",
@@ -4541,7 +4544,7 @@ def workspaceFiles (pc : Concrete.ProofCore) (registry : ProofRegistry)
   files := files ++ [("manifest.json", proveReportJson pc registry modules qualName provedVCs inputPath schemaVersion ++ "\n")]
   files := files ++ [("context.json", contextJson)]
   files := files ++ [(leanFile, emitLeanStub pc registry modules qualName provedVCs)]
-  files := files ++ [("link.con.txt", emitProofLink registry qualName ++ "\n")]
+  files := files ++ [("link.con.txt", emitProofLink pc registry qualName ++ "\n")]
   -- obligations/<id>.json — per-obligation facts + recipe + commands
   let oblFile := fun (id kind status srcLine : String) (hyps : List String) (concl : String) =>
     let (tac, lemmas, note) := lemmaRecipeFor kind

@@ -173,7 +173,7 @@ The manual path (still useful for flagship refinement proofs):
    Then attach the proof in source: paste the block
    from `concrete prove examples/<flagship>/src/main.con <fn> --emit-link` above
    the function (`#[proof_by]`/`#[spec]`/`#[proof_coverage]`/`#[proof_fingerprint]`
-   — the fingerprint is computed for you). Then verify:
+   — the fingerprint is the v2 subject digest, computed for you). Then verify:
    ```sh
    concrete examples/<flagship>/src/main.con --report check-proofs   # kernel: theorem exists & type-checks
    concrete audit examples/<flagship>/src/main.con                    # subject binding: body == the theorem's spec, fingerprint fresh
