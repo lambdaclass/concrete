@@ -109,7 +109,7 @@ proofs.
     | Module/import target | alias or basename | R-0008 |
     | Generic specialization | forgeable display/link symbol | R-0007 |
     | Aggregate declaration and payload footprint | type name or restated size constant | R-0434 |
-    | Structural destruction | `tyName` lookup / empty fallback | R-0006 |
+    | Structural destruction | `tyName` lookup / empty fallback | R-0006 (empty fallback retired for non-Copy types by the bug 052 fix; named lookup remains) |
     | ProofCore global call vs local application | one `PExpr.call` string | R-0442 |
 
 ## Short Positioning

@@ -295,6 +295,13 @@ def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   -- `b as bool` is the identity (the compiled code aliases the i1). Converting it to `.int 1 bool`
   -- made `true as bool` an integer the proof model (`.bool true`) and a later condition disagreed on.
   | .bool b => if targetTy == .bool then .ok (.bool b) else .ok (.int (if b then 1 else 0) targetTy)
+  -- A reference cast to a raw pointer (`&mut x as *mut T`) keeps its path:
+  -- the heapless model has no addresses, and a deref through the pointer
+  -- reads/writes the same place the reference names. Pointer arithmetic on
+  -- such a value stays unsupported.
+  | .ref p => match targetTy with
+    | .ptrMut _ | .ptrConst _ | .ref _ | .refMut _ => .ok (.ref p)
+    | _ => .error "interp: unsupported cast"
   | _ => .error "interp: unsupported cast"
 
 -- ============================================================
@@ -696,25 +703,12 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
       | _, [arg] =>
         -- H18 drop-glue: a symbolic `T_destroy(&elem)` (Elab's trait-method
         -- call on a `Destroy`-bounded type param) reaches the PRE-mono
-        -- interpreter unresolved. Dispatch on the RUNTIME value's type: run
-        -- its `{Type}_destroy` if defined (user destructor side effects must
-        -- match the compiled binary); otherwise a no-op — Copy elements have
-        -- trivial destruction, and memory-only destructors are no-ops in the
-        -- heapless model (mirrors vec_free/drop_string above).
+        -- interpreter unresolved. Dispatch on the RUNTIME value's type (see
+        -- `destroyValue`): user destructor side effects must match the
+        -- compiled binary, including per-element glue for arrays (bug 052).
         if fnName.endsWith "_destroy" then
-          let target ← autoDeref env arg
-          let tyName? : Option String := match target with
-            | .struct_ n _ => some n
-            | .enum_ n _ _ => some n
-            | _ => none
-          match tyName?.bind fun tn => findFn fns (tn ++ "_destroy") with
-          | some fdef =>
-            let outerLen := env.length
-            let callEnv := bindParams env fdef.params [arg]
-            let (postEnv, _flow) ← evalStmts fns enums callEnv fdef.body
-            let restored := postEnv.drop (postEnv.length - outerLen)
-            return (restored, .val .unit)
-          | none => return (env, .val .unit)
+          let env' ← destroyValue fns enums env arg
+          return (env', .val .unit)
         else .error s!"interp: undefined function '{fnName}'"
       | _, _ => .error s!"interp: undefined function '{fnName}'"
 
@@ -805,6 +799,35 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
   | .fnRef name _ => return (env, .val (.fnPtr name))
   | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
+
+/-- H18 drop-glue for the pre-mono interpreter, mirroring Mono's synthesized
+    glue: an array destroys each element once, in index order (bug 052 — the
+    array used to fall through to the no-op); a struct/enum runs its
+    `{Type}_destroy` if one is defined; anything else (Copy values, and
+    memory-only destructors in the heapless model) is a no-op. `arg` is the
+    destroy call's argument: a reference (element refs extend its path) or a
+    value. -/
+partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (arg : IVal) :
+    Except String Env := do
+  let target ← autoDeref env arg
+  match target with
+  | .array elems _ _ =>
+    let mut env := env
+    for i in [0:elems.size] do
+      let elemArg : IVal := match arg with
+        | .ref p => .ref { p with steps := p.steps ++ [.index i] }
+        | _ => elems[i]!
+      env ← destroyValue fns enums env elemArg
+    return env
+  | .struct_ n _ | .enum_ n _ _ =>
+    match findFn fns (n ++ "_destroy") with
+    | some fdef =>
+      let outerLen := env.length
+      let callEnv := bindParams env fdef.params [arg]
+      let (postEnv, _flow) ← evalStmts fns enums callEnv fdef.body
+      return postEnv.drop (postEnv.length - outerLen)
+    | none => return env
+  | _ => return env
 
 partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
   let (env, f) ← evalExpr fns enums env e

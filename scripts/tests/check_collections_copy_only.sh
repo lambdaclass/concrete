@@ -13,6 +13,9 @@
 # is compiler-resolved glue, never caller-supplied destructors.
 # Remaining collections (map/set/deque/heap/ordered_*) are slice 2 — H18 stays
 # OPEN (narrowed) until they destroy elements too.
+# Bug 052 legs: array elements ([T; N], nested, [Vec<T>; N]) get per-element
+# glue compiled and under --interp; non-destroyable arrays are E0241 and an
+# unresolved element type is E0814 — never a synthesized no-op.
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
@@ -153,6 +156,59 @@ fi
 grep -q "drop_with\|clear_with\|remove_with" std/src/vec.con \
   && no "*_with destructor-passing family present — the permanent design is compiler glue" \
   || ok "no *_with family (glue is compiler-resolved, never caller-supplied)"
+
+echo "=== bug 052: arrays as elements are destroyed element-wise, never a silent no-op ==="
+# Before the fix Mono answered the element destroy of `[T; N]` with an empty
+# synthesized `T_destroy` (tyName is "" for arrays), and the interpreter no-oped
+# arrays too: every count below was 0. Fixtures: tests/regressions/bug052_*.
+B52="$ROOT_DIR/tests/regressions/bug052_vec_array_destroy"
+cp -R "$B52/project" "$TMP/b52p"
+if (cd "$TMP/b52p" && "$C" build >"$TMP/b52p.out" 2>&1); then
+  got="$(cd "$TMP/b52p" && ./arrdrop 2>&1 | tr '\n' ' ')"
+  # 4 = 2 arrays x 2; 8 = clear(2) + drop(2); 14 = [[T;2];3] six leaves;
+  # 17 = [Vec<Tracked>; 2] three leaves through Vec's own glue;
+  # 21 = Deque<[Tracked; 2]> with a front and a back array.
+  [ "$got" = "4 8 14 17 21 " ] && ok "Vec/Deque<[T;N]> drop/clear, nested arrays, [Vec<T>;N]: every leaf destroyed once (4 8 14 17 21)" \
+    || no "array-element destruction counts wrong: got '$got', want '4 8 14 17 21 '"
+  (cd "$TMP/b52p" && "$C" build --emit-llvm >"$TMP/b52p.ll" 2>&1)
+  glue="$(awk '/^define void @Ref_T_Arr2_T_Tracked_E_E_destroy/,/^}/' "$TMP/b52p.ll")"
+  if printf '%s' "$glue" | grep -q "call void @Tracked_destroy" \
+     && ! grep -q "^define void @T_destroy" "$TMP/b52p.ll"; then
+    ok "array glue calls @Tracked_destroy per element; no literal @T_destroy is synthesized"
+  else
+    no "array glue does not call @Tracked_destroy (or a literal @T_destroy no-op is back)"
+  fi
+else
+  no "bug 052 project fixture failed to build"; sed 's/^/        /' "$TMP/b52p.out" | head -5
+fi
+# compiled vs --interp on the single-file form (Destroy-bounded generic on arrays)
+if "$C" "$B52/single.con" -o "$TMP/b52s" >"$TMP/b52s.out" 2>&1; then
+  cgot="$( { "$TMP/b52s" 2>&1; echo "$?"; } | tr '\n' ' ')"
+  igot="$("$C" "$B52/single.con" --interp 2>&1 | tr '\n' ' ')"
+  [ "$cgot" = "2 8 9 0 " ] && ok "single-file array glue compiled: 2 8 9 (exit 0)" \
+    || no "single-file array glue compiled output '$cgot', want '2 8 9 0 '"
+  [ "$igot" = "2 8 9 0 " ] && ok "single-file array glue --interp agrees: 2 8 9 0" \
+    || no "single-file array glue --interp output '$igot', want '2 8 9 0 '"
+else
+  no "bug 052 single-file fixture failed to compile"; sed 's/^/        /' "$TMP/b52s.out" | head -5
+fi
+# negative control 1: an array of a non-destroyable element is not destroyable
+cp -R "$B52/refuse_nondestroy" "$TMP/b52n"
+if (cd "$TMP/b52n" && "$C" build >"$TMP/b52n.out" 2>&1); then
+  no "Vec<[Res; 2]>.drop() compiled — a non-destroyable array element was accepted"
+else
+  grep -q "E0241" "$TMP/b52n.out" && grep -qF "[Res; 2]" "$TMP/b52n.out" \
+    && ok "Vec<[non-Destroy; N]>.drop() rejected (E0241 naming [Res; 2])" \
+    || no "Vec<[non-Destroy; N]> rejected without E0241 naming the array type"
+fi
+# negative control 2: a destroy whose element type is unresolved is refused,
+# not guessed away (Elab infers T = Placeholder through a field access)
+if "$C" "$B52/refuse_unresolved.con" -o "$TMP/b52u" >"$TMP/b52u.out" 2>&1; then
+  no "destroy of an unresolved (Placeholder) type compiled — the silent no-op is back"
+else
+  grep -q "E0814" "$TMP/b52u.out" && ok "destroy of an unresolved element type refused (E0814)" \
+    || no "unresolved-type destroy rejected without E0814"
+fi
 
 echo "=== traversal policy (P7 #8): HashMap unordered; OrderedMap/Set own defined order ==="
 M="docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv"

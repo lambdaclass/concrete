@@ -21,7 +21,7 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 The complete numbered list and status are in
 [the bug ledger](../bugs/README.md#open-numbered-bugs). Current high-consequence
-classes include structural destruction (bug 052 / R-0006), trap preservation
+classes include trap preservation
 (bug 053 / R-0005), specialization and import identity (bugs 054–055 /
 R-0007–R-0008), callable SSA identity (bug 056 / R-0436), proof-subject
 freshness (bugs 058–060 / R-0004), ProofCore callable identity (bug 061 /
@@ -530,7 +530,7 @@ with collections phase 2). Deterministic internals remain fine for replay.
 
 ## Recently closed
 
-### H18. Collection destruction for named element types — CLOSED 2026-07-16; structural nesting remains open
+### H18. Collection destruction for named element types — CLOSED 2026-07-16; array remainder (bug 052) fixed 2026-10-18
 
 All collections now carry compiler drop glue for supported named element types:
 Vec (slice 1), HashMap/HashSet/
@@ -552,16 +552,20 @@ see it). All four keyed containers now require `K: Destroy` on remove and
 destroy the stored key before tombstoning/shifting; proven by Destroy-counter
 sentinel tests per container (the original map test used i64 keys, which is
 exactly why it missed this — sentinels now use non-Copy keys).
-Gate: COLLECTIONS-DROP-GLUE (30 checks). Residual (deliberate, documented):
+Gate: COLLECTIONS-DROP-GLUE (36 checks, six of them bug 052). Residual (deliberate, documented):
 `slice.set_unchecked`/`vec.set_unchecked` remain raw trusted overwrite escapes.
 
-**Open structural remainder:** bug 052 shows that an array or another unnamed
-element type can still miss `tyName` lookup and receive synthesized no-op drop
-glue, so `Vec<[T; N]>.drop()` can skip the leaves. The permanent rule is
-structural, type-directed destruction independent of a printable type name;
-R-0006 owns containment and the root fix. Until it lands, “nesting composes”
-must be read as limited to the named element shapes exercised by
-COLLECTIONS-DROP-GLUE.
+**Structural remainder (bug 052) — fixed 2026-10-18:** an array element no
+longer misses `tyName` lookup into a synthesized no-op. Mono decides the
+destructor from the argument type: `[E; N]` gets per-element glue (nested
+arrays and generic elements compose), Copy types alone get the empty no-op,
+and an unresolved or destructor-less type is refused (E0814). Check's
+`destroyable` no longer accepts every unmatched type (E0241 for arrays of
+non-destroyable elements, `Heap<T>`, `HeapArray<T>`, `&mut T`). Gated by the
+bug 052 legs of COLLECTIONS-DROP-GLUE, compiled and under `--interp`.
+Remaining limit: Elab can still instantiate a generic call at `Placeholder`
+when an argument is a field access; a destroy reaching Mono that way is
+refused (E0814), not guessed, and needs a turbofish.
 
 This does **not** authorize implicit scope-end destruction. Concrete stays
 linear, not affine: the outer disposal remains a source-visible consuming

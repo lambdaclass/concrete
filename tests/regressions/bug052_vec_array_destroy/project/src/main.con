@@ -1,0 +1,73 @@
+// Bug 052 regression: Vec<[T; N]>.drop()/clear() must destroy every element
+// of every live array exactly once. Before the fix the element destructor was
+// a synthesized empty `T_destroy` and every count below printed 0.
+mod arrdrop {
+    import std.vec.{Vec};
+    import std.deque.{Deque};
+
+    // Observable destructor: counts invocations through a raw cell.
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+
+        // [Tracked; 2] elements: drop destroys 2 arrays x 2 = 4.
+        let mut v: Vec<[Tracked; 2]> = Vec::<[Tracked; 2]>::new();
+        v.push([Tracked { cell: cell }, Tracked { cell: cell }]);
+        v.push([Tracked { cell: cell }, Tracked { cell: cell }]);
+        v.drop();
+        print_int(count(cell) as i64);
+        print_char(10);
+
+        // clear() destroys the live arrays too (+2), then drop the rest (+2).
+        let mut w: Vec<[Tracked; 2]> = Vec::<[Tracked; 2]>::new();
+        w.push([Tracked { cell: cell }, Tracked { cell: cell }]);
+        w.clear();
+        w.push([Tracked { cell: cell }, Tracked { cell: cell }]);
+        w.drop();
+        print_int(count(cell) as i64);
+        print_char(10);
+
+        // Nested arrays: [[Tracked; 2]; 3] destroys 6 leaves.
+        let mut n: Vec<[[Tracked; 2]; 3]> = Vec::<[[Tracked; 2]; 3]>::new();
+        n.push([[Tracked { cell: cell }, Tracked { cell: cell }],
+                [Tracked { cell: cell }, Tracked { cell: cell }],
+                [Tracked { cell: cell }, Tracked { cell: cell }]]);
+        n.drop();
+        print_int(count(cell) as i64);
+        print_char(10);
+
+        // Arrays of a destroyable generic element: [Vec<Tracked>; 2] = 3 leaves.
+        let mut a: Vec<Tracked> = Vec::<Tracked>::new();
+        a.push(Tracked { cell: cell });
+        let mut b: Vec<Tracked> = Vec::<Tracked>::new();
+        b.push(Tracked { cell: cell });
+        b.push(Tracked { cell: cell });
+        let mut g: Vec<[Vec<Tracked>; 2]> = Vec::<[Vec<Tracked>; 2]>::new();
+        g.push([a, b]);
+        g.drop();
+        print_int(count(cell) as i64);
+        print_char(10);
+
+        // Deque shares the glue: front + back arrays = 4 leaves.
+        let mut d: Deque<[Tracked; 2]> = Deque::<[Tracked; 2]>::new();
+        d.push_back([Tracked { cell: cell }, Tracked { cell: cell }]);
+        d.push_front([Tracked { cell: cell }, Tracked { cell: cell }]);
+        d.drop();
+        print_int(count(cell) as i64);
+        print_char(10);
+
+        // Arrays of a Copy element stay a no-op and still build.
+        let mut k: Vec<[i64; 2]> = Vec::<[i64; 2]>::new();
+        k.push([1, 2]);
+        k.drop();
+        return 0;
+    }
+}

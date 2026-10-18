@@ -283,6 +283,15 @@ private partial def tyToSuffix : Ty → String
   | .fn_ params _ ret =>
     "Fn_T_" ++ "_".intercalate (params.map tyToSuffix) ++ "_to_" ++ tyToSuffix ret ++ "_E"
 
+/-- Does a type still contain an unresolved component (`.placeholder` or
+    `.typeVar`)? Used to refuse destructor synthesis for such types (bug 052). -/
+private partial def tyUnresolved : Ty → Bool
+  | .placeholder | .typeVar _ => true
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t | .heapArray t | .array t _ => tyUnresolved t
+  | .generic _ args _ => args.any tyUnresolved
+  | .fn_ ps _ r => ps.any tyUnresolved || tyUnresolved r
+  | _ => false
+
 /-- Compute monomorphized function name: `fnName_for_T1_T2`. -/
 private def monoNameFor (fnName : String) (typeArgs : List Ty) : String :=
   fnName ++ "_for_" ++ "_".intercalate (typeArgs.map tyToSuffix)
@@ -356,6 +365,10 @@ structure MonoState where
   queue : List (String × CFnDef) := []
   /-- Already-generated mono names (avoid duplicates). -/
   generated : List String := []
+  /-- All struct/enum definitions, for the Copy judgment that decides whether a
+      `_destroy` call with no definition may be a no-op (bug 052). -/
+  structs : List CStructDef := []
+  enums : List CEnumDef := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
@@ -464,23 +477,92 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         -- H18 drop-glue: `T_destroy(&elem)` in a `Destroy`-bounded generic
         -- body gets rewritten per instantiation to `{Concrete}_destroy`
         -- (typeArgs are empty — the rewrite is name-only). When no such fn
-        -- exists the instantiation's element is Copy (the `Destroy` BOUND
-        -- accepts Copy trivially and Check enforced it at the call site) —
-        -- destruction is trivial. Synthesize an empty no-op so the call
-        -- links. Never collides: no extern or builtin ends in `_destroy`,
-        -- and a direct user call to a nonexistent `X_destroy` is an E0101
-        -- at Resolve.
+        -- exists, the destructor is decided from the ARGUMENT TYPE, never
+        -- from the name (bug 052: `tyName` is "" for arrays, so the call kept
+        -- the literal `T_destroy` and was answered with an empty body):
+        --   * Copy element: destruction is trivial — synthesize an empty no-op
+        --     so the call links;
+        --   * array `[E; N]` of a non-Copy E: synthesize glue that destroys
+        --     each of the N elements once, in index order, with E's destroy
+        --     (nested arrays recurse through this same branch);
+        --   * anything else is a non-Copy value with no destructor: refuse
+        --     (E0814). Check's `Destroy` bound should have rejected it first;
+        --     this is the containment, never a silent no-op.
+        -- Never collides with a user fn: no extern or builtin ends in
+        -- `_destroy`, and a direct user call to a nonexistent `X_destroy` is
+        -- an E0101 at Resolve.
         if fn.endsWith "_destroy" then
-          let noopFn : CFnDef := {
-            name := fn
-            typeParams := []
-            params := args'.zipIdx.map fun (a, i) => (s!"x{i}", a.ty)
-            retTy := .unit
-            body := []
-            isPublic := false
-            isTest := false
-          }
-          enqueueMono fn noopFn
+          match args' with
+          | [a] =>
+            let argTy := cexprTy a
+            let target := match argTy with
+              | .ref t | .refMut t => t
+              | t => t
+            let st ← get
+            -- Glue for a type `tyName` cannot spell is named by the full
+            -- argument type (by-ref and by-value calls get distinct glue).
+            let glueName := if tyName target == "" then tyToSuffix argTy ++ "_destroy" else fn
+            -- An unresolved type (`.placeholder`/`.typeVar`) is judged Copy by the
+            -- shared judgment (error-recovery policy), so it would get the no-op.
+            -- It reaches here when Elab's shallow argument-type peek could not
+            -- type an argument (e.g. `kill(&self.items)` infers T = Placeholder).
+            -- Refuse rather than guess the destructor away.
+            if tyUnresolved target then throw [{
+                severity := .error
+                message := s!"destructor call '{fn}' on an unresolved type '{tyToSuffix target}': the element's destructor cannot be determined (bug 052)"
+                pass := "mono"
+                span := none
+                hint := some "name the type argument explicitly (turbofish, e.g. `f::<[T; 2]>(&x.field)`) so the destructor is resolved. Tracking: docs/bugs/052_array_element_destroy_noop.md"
+                code := "E0814" }]
+            if Layout.isCopyTyCore st.structs st.enums (typeVarIsCopy := false) target then
+              let noopFn : CFnDef := {
+                name := glueName
+                typeParams := []
+                params := [("x0", argTy)]
+                retTy := .unit
+                body := []
+                isPublic := false
+                isTest := false
+              }
+              enqueueMono glueName noopFn
+              return .call glueName [] args' ty
+            else match target with
+              | .array elem size =>
+                let elemRefTy : Ty := .ref elem
+                let elemDestroy := if tyName elem == "" then tyToSuffix elemRefTy ++ "_destroy"
+                  else tyName elem ++ "_destroy"
+                let idx : CExpr := .ident "i" .uint
+                let elemRef : CExpr := .borrow (.arrayIndex (.ident "x0" argTy) idx elem) elemRefTy
+                let glueFn : CFnDef := {
+                  name := glueName
+                  typeParams := []
+                  params := [("x0", argTy)]
+                  retTy := .unit
+                  body := [
+                    .letDecl "i" true .uint (.intLit 0 .uint),
+                    .while_ (.binOp .lt idx (.intLit size .uint) .bool)
+                      [ .expr (.call elemDestroy [] [elemRef] .unit) false,
+                        .assign "i" (.binOp .add idx (.intLit 1 .uint) .uint) ]
+                      none [] ]
+                  isPublic := false
+                  isTest := false
+                }
+                enqueueMono glueName glueFn
+                return .call glueName [] args' ty
+              | _ => throw [{
+                  severity := .error
+                  message := s!"no destructor for non-Copy type '{tyToSuffix target}': '{fn}' would be a silent no-op and leak the value (bug 052)"
+                  pass := "mono"
+                  span := none
+                  hint := some "a `Destroy` bound accepted a type with no destructor; destroy or drain it explicitly. Tracking: docs/bugs/052_array_element_destroy_noop.md"
+                  code := "E0814" }]
+          | _ => throw [{
+              severity := .error
+              message := s!"destructor call '{fn}' has {args'.length} arguments, expected 1 (bug 052)"
+              pass := "mono"
+              span := none
+              hint := some "this is a compiler containment failure, not a program error. Tracking: docs/bugs/052_array_element_destroy_noop.md"
+              code := "E0814" }]
         return .call fn [] args' ty
     -- Look up the generic function
     let fnDef? ← lookupFn fn
@@ -1177,7 +1259,10 @@ def monoProgram (modules : List CModule)
   -- `allFns.find?` semantics) — O(1) call resolution instead of O(fns) per call.
   let fnMap : Std.HashMap String CFnDef :=
     allFns.foldl (fun m f => if m.contains f.name then m else m.insert f.name f) ∅
-  let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap }
+  let allStructs := modules.foldl (fun acc m => acc ++ collectAllModuleStructs m) []
+  let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap,
+                                 structs := allStructs, enums := allEnums }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms0 =>

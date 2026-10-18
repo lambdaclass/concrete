@@ -5870,6 +5870,19 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
 **Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
 
+   The bug 052 fix landed the containment and the array root fix: Mono
+   decides a missing `_destroy` from the argument type (per-element glue for
+   `[E; N]`, nested and generic elements included; the empty no-op only for
+   Copy; E0814 for unresolved or destructor-less types), Check's
+   `destroyable` lost its accept-anything catch-all, and the interpreter
+   destroys array elements too. Gated by six legs in
+   `check_collections_copy_only.sh` (Vec drop/clear, nesting, `[Vec<T>; N]`,
+   Deque, compiled vs `--interp`, two refusal controls). What remains here:
+   BinaryHeap and keyed-container legs with array elements, partial
+   construction/failure, the mutation that restores the no-op fallback, and
+   retiring the name-based `{Type}_destroy` rewrite for named types in favour
+   of type identity.
+
 ### Task R-0007
 
 **Phase:** 1, 2, 4

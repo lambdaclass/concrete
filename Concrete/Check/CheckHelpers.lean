@@ -835,9 +835,18 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
               | .typeVar n =>
                 let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
                 return callerBounds.contains "Destroy" || callerBounds.contains "Copy"
-              | _ => return true  -- primitives
+              -- bug 052: an array is destroyable iff its element is (mono
+              -- synthesizes per-element glue). The old catch-all accepted ANY
+              -- unmatched type, so a non-Copy array, Heap, or a String with no
+              -- `Destroy` impl satisfied the bound and mono answered the
+              -- destroy call with a silent no-op.
+              | .array elem _ => destroyable fuel elem
+              | .string =>
+                return env.traitImpls.any fun (ty, tr) => ty == "String" && tr == "Destroy"
+              | .heap _ | .heapArray _ | .refMut _ => return false
+              | _ => return true  -- remaining shapes are Copy (handled above)
           if !(← destroyable 8 concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | _ => "<type>"
+            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | t => tyToString t
             throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
         else
           match concreteType with

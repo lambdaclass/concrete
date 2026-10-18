@@ -1,0 +1,12 @@
+// Bug 052 negative control: an array whose element has no destructor is not
+// destroyable, so Vec<[Res; 2]>.drop() must be rejected (E0241 naming the
+// array type) — never compiled to a silent no-op.
+mod arrrefuse {
+    import std.vec.{Vec};
+    struct Res { token: i64 }
+    fn main() with(Std) -> Int {
+        let mut v: Vec<[Res; 2]> = Vec::<[Res; 2]>::new();
+        v.drop();
+        return 0;
+    }
+}

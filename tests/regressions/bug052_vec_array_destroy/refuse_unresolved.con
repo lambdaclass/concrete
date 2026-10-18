@@ -1,0 +1,47 @@
+// Bug 052 containment: without a turbofish, Elab infers `kill(&self.items)`
+// as T = Placeholder (its argument-type peek cannot see through a field
+// access). The destructor of an unresolved type cannot be determined, so the
+// build must REFUSE with E0814 instead of synthesizing a no-op.
+mod single {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    fn kill<T: Destroy>(x: &T) {
+        x.destroy();
+    }
+    struct Pair { items: [Tracked; 2] }
+    impl Destroy for Pair {
+        pub fn destroy(&self) {
+            kill(&self.items);
+        }
+    }
+    struct Grid { rows: [[Tracked; 2]; 3] }
+    impl Destroy for Grid {
+        pub fn destroy(&self) {
+            kill(&self.rows);
+        }
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let p: Pair = Pair { items: [Tracked { cell: cell }, Tracked { cell: cell }] };
+        destroy(p);
+        print_int(count(cell) as i64);
+        print_char(10);
+        let t: Tracked = Tracked { cell: cell };
+        let g: Grid = Grid { rows: [[Tracked { cell: cell }, Tracked { cell: cell }],
+                                    [Tracked { cell: cell }, Tracked { cell: cell }],
+                                    [Tracked { cell: cell }, Tracked { cell: cell }]] };
+        destroy(g);
+        print_int(count(cell) as i64);
+        print_char(10);
+        destroy(t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}
