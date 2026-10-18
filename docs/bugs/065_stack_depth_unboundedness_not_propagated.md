@@ -1,9 +1,73 @@
 # Bug 065: `--report stack-depth` drops recursive callees from the call graph, so a caller of unbounded code reports a finite stack bound
 
-**Status:** Open
+**Status:** FIXED 2026-10-18 (per-function propagation 3d9b63a5; summary and consumers this fix)
 **Discovered:** 2026-07-31, while auditing the user-exposed surface for
 under-gated features (`--report stack-depth` had zero references in
 `scripts/tests/`).
+
+## Resolution (2026-10-18)
+
+The fix landed in two parts.
+
+**Per-function propagation** (3d9b63a5, gated by `check_loop_control.sh` leg 6):
+`closeUnbounded` closes the unbounded set backwards over the call graph, so a
+caller of recursive or indirect-call code is itself `stack: unbounded`.
+
+**The summary was still fail-OPEN after that.** `Max stack bound:` maximised over
+`bounded` only, so it kept printing a number whenever at least one function was
+bounded, and printed `0 bytes ((none))` when none was. On the regression fixture
+(`depth` recurses, `main` calls it, `leaf` is a bounded helper) it read
+`Max stack bound: 20 bytes (leaf)` while `main` was unbounded, and all three
+consumers below took `20` as the program's maximum: a `max_stack_bytes = 100000`
+policy and a `stack_max_bytes = 100000` assumption both PASSED, and a release
+bundle would have published `"max_stack_bytes": 20`.
+
+**Mechanism of the fix.**
+
+- *One producer.* `stackSummaryLine` (`Concrete/Report/Report.lean`) builds the
+  line. It covers every function the report lists — the report has no
+  entry-point notion, so the summary is over all functions, not those reachable
+  from `main` — and reads `Max stack bound: unbounded (K of N functions have no
+  bound: a, b, c)` whenever any of them is unbounded. Only when all are bounded
+  does it print `N bytes (fn)`; an empty program prints `0 bytes (no functions)`.
+- *One reader.* `scripts/tests/lib/stack_bound.sh` is the only parser of that
+  line (`stack_max_bound`: number / `unbounded` / nothing, with distinct exit
+  codes). `check_policy.sh` (`max_stack_bytes`) and `check_assumptions.sh`
+  (`stack_max_bytes`) call `stack_budget_check`, which FAILS on `unbounded`
+  ("but the stack is UNBOUNDED: …"), on an unparseable report, and on a
+  non-integer budget. `capture_release_bundle.sh` writes
+  `evidence.max_stack_bytes` via `stack_bound_json`: a number, `"unbounded"`, or
+  `"unknown"`.
+- *Adjacent bundle defects found by the gate.* The old `|| echo "?"` fallback never
+  fired (the pipeline's status was `head`'s), so a missing report would have
+  written `"max_stack_bytes": ,`; and `grep -c … || echo 0` wrote `0\n0` for
+  `proved_functions` on any project with no proved function. Both produced
+  invalid JSON; both are fixed, and the capture now refuses a manifest that does
+  not parse.
+
+**Controls.** `scripts/tests/check_stack_budget.sh` over
+`tests/regressions/bug065_unbounded_stack/{unbounded,bounded}` (14 legs):
+
+1. the unbounded program's summary says `unbounded` and names `main.depth` and
+   `main.main`; no numeric maximum is printed; the reader returns rc 3; `leaf`
+   keeps its own `stack: 20 bytes` row (propagation goes to callers, not callees);
+2. `check_policy.sh` and `check_assumptions.sh` REFUSE budgets of 100000, naming
+   unboundedness; the release bundle publishes `"unbounded"` as valid JSON; a
+   missing or unparseable report yields `"unknown"`;
+3. positive control: the bounded program reports exactly
+   `Max stack bound: 40 bytes (main)`, passes a budget of exactly 40 in both
+   gates, FAILS a policy budget of 39, and its bundle publishes `40`;
+4. no script other than `lib/stack_bound.sh` scrapes a number from the line.
+
+Reverting `stackSummaryLine` to maximise over the bounded subset reproduces the
+symptom (`20 bytes (leaf)`) and fails 6 of the 14 legs (all of legs 1–2 except
+the leaf row and the `"unknown"` check). The five budgeted examples are
+unchanged (all bounded; their snapshots and budgets still pass).
+
+What this does not do: the class-level reachability assertion cross-checked
+against `--report recursion` (R-0469) is still unbuilt.
+
+The sections below are the original filing.
 
 ## Symptom
 

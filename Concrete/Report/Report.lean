@@ -671,6 +671,30 @@ private def closeUnbounded (callGraph : CallGraph) (seed : List String) (fuel : 
     List String :=
   closeBackward callGraph seed fuel
 
+/-- The `Max stack bound:` line -- the ONE producer of the program-level stack figure.
+
+    Bug 065: this maximised over the BOUNDED subset only, so a program with any unbounded
+    function still printed a finite number (`48 bytes (leaf)` while `main` recursed; `0 bytes
+    ((none))` when nothing was bounded). That number is what `[policy] max_stack_bytes`,
+    `[allocation] stack_max_bytes` and the release bundle's `evidence.max_stack_bytes` read, so a
+    budget PASSED a program with unbounded stack. The line covers every function the report
+    lists (the report has no entry-point notion), so it is `unbounded` if ANY of them is: a
+    maximum over a set with an unbounded member is unbounded. Shell consumers parse this line
+    only through `scripts/tests/lib/stack_bound.sh`; the word `unbounded` is the contract. -/
+private def stackSummaryLine (infos : List FnStackInfo) : String :=
+  let unboundedFns := infos.filter (·.isRecursive)
+  if !unboundedFns.isEmpty then
+    let shown := (unboundedFns.take 3).map (·.qualName)
+    let more := if unboundedFns.length > 3 then s!", ... (+{unboundedFns.length - 3})" else ""
+    s!"Max stack bound: unbounded ({unboundedFns.length} of {infos.length} functions have no bound: {", ".intercalate shown}{more})"
+  else
+    match infos.foldl (fun best i =>
+      match best with
+      | none => some i
+      | some b => if i.stackBound > b.stackBound then some i else best) none with
+    | some i => s!"Max stack bound: {i.stackBound} bytes ({i.name})"
+    | none => "Max stack bound: 0 bytes (no functions)"
+
 /-- Stack-depth report for functions passing the no-recursion profile. -/
 def stackDepthReport (modules : List CModule) (locMap : FnLocMap := [])
     (pc : Concrete.ProofCore) : String :=
@@ -708,14 +732,7 @@ def stackDepthReport (modules : List CModule) (locMap : FnLocMap := [])
   -- Summary
   let bounded := infos.filter (!·.isRecursive)
   let recursive := infos.filter (·.isRecursive)
-  let maxStack := bounded.foldl (fun best i => if i.stackBound > best then i.stackBound else best) 0
-  let maxName := match bounded.foldl (fun best i =>
-    match best with
-    | none => some i
-    | some b => if i.stackBound > b.stackBound then some i else best) none with
-    | some i => i.name
-    | none => "(none)"
-  let summary := s!"\nTotals: {infos.length} functions, {bounded.length} bounded, {recursive.length} recursive (unbounded)\nMax stack bound: {maxStack} bytes ({maxName})"
+  let summary := s!"\nTotals: {infos.length} functions, {bounded.length} bounded, {recursive.length} recursive (unbounded)\n{stackSummaryLine infos}"
   s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n"
 
 -- ============================================================

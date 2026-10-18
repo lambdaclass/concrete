@@ -1,0 +1,16 @@
+// Bug 065 regression: `depth` recurses, `main` calls it, `leaf` is bounded.
+// The stack is unbounded, so the summary must say so and a max_stack_bytes /
+// stack_max_bytes budget must be REFUSED -- even a generous one.
+fn leaf(a: i32, b: i32) -> i32 {
+    let s: i32 = a + b;
+    return s;
+}
+
+fn depth(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return 1 + depth(n - 1);
+}
+
+fn main() -> i32 {
+    return depth(3) - leaf(1, 2);
+}

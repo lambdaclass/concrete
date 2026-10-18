@@ -67,6 +67,11 @@ out/release/<example-name>/
 }
 ```
 
+`evidence.max_stack_bytes` is a number only when every function has a stack bound; otherwise it
+is the string `"unbounded"` (or `"unknown"` if the stack-depth report is missing). It is read
+through `scripts/tests/lib/stack_bound.sh`, the same parser the policy and assumption gates use
+(bug 065). A manifest that is not valid JSON is refused.
+
 `evidence.*` is a quick-scan summary; the actual reports and source
 are present alongside for verification.
 

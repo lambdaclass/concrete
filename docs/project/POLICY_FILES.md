@@ -84,7 +84,7 @@ boolean is enforced as "not forbidden" (no-op).
 | `no_unsafe = true` | `--report unsafe` says "No unsafe signatures found." | Source added an unsafe signature. |
 | `no_trusted = true` | `--report unsafe` lists no trusted functions or shells. | Source added a trusted boundary. |
 | `no_externs = true` | Source has no extern declarations. | Source added an FFI declaration. |
-| `max_stack_bytes = N` | `--report stack-depth` max ≤ N. | Source grew the stack past the budget. |
+| `max_stack_bytes = N` | `--report stack-depth` max ≤ N; an `unbounded` max (any function recursive or reaching recursion/an indirect call) FAILS at every N. | Source grew the stack past the budget, or made it unbounded (bug 065). |
 | `forbidden_capabilities = [...]` | No function in `--report caps` uses any forbidden capability. | Source pulled in a forbidden cap. |
 | `allowed_capabilities = [...]` | Every function's cap set ⊆ `allowed`. Empty list means pure. | Source widened authority past the budget. |
 

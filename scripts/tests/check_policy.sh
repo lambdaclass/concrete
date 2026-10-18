@@ -9,6 +9,7 @@
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/stack_bound.sh"
 require_fresh_binary || exit 1
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -20,7 +21,14 @@ if [ ! -x "$COMPILER" ]; then
   exit 2
 fi
 
-mapfile -t TOML_FILES < <(find examples -name Concrete.toml | sort)
+# With arguments, check exactly those Concrete.toml files and skip the controls (used by
+# check_stack_budget.sh to run a fixture project through this same check_project).
+EXPLICIT=0
+if [ $# -gt 0 ]; then
+  TOML_FILES=("$@"); EXPLICIT=1
+else
+  mapfile -t TOML_FILES < <(find examples -name Concrete.toml | sort)
+fi
 
 if [ ${#TOML_FILES[@]} -eq 0 ]; then
   echo "No Concrete.toml files found under examples/. Nothing to check."
@@ -183,19 +191,11 @@ check_project() {
   fi
 
   # --- max_stack_bytes ---
-  local max_stack actual_max
+  # Read through lib/stack_bound.sh (bug 065): an UNBOUNDED stack refuses the budget.
+  local max_stack
   max_stack=$(policy_get "$toml" max_stack_bytes)
   if [ -n "$max_stack" ]; then
-    actual_max=$(grep -oE 'Max stack bound:\s*[0-9]+' <<<"$report_stack" | grep -oE '[0-9]+' | head -1)
-    if [ -z "$actual_max" ]; then
-      echo "  FAIL max_stack_bytes=$max_stack but stack-depth report has no max bound"
-      errs=$((errs + 1))
-    elif [ "$actual_max" -gt "$max_stack" ]; then
-      echo "  FAIL max_stack_bytes=$max_stack but actual max is $actual_max"
-      errs=$((errs + 1))
-    else
-      echo "  ok   max_stack_bytes=$max_stack (actual=$actual_max)"
-    fi
+    stack_budget_check max_stack_bytes "$max_stack" "$report_stack" || errs=$((errs + 1))
   fi
 
   # --- forbidden_capabilities / allowed_capabilities ---
@@ -278,6 +278,11 @@ check_project() {
 for toml in "${TOML_FILES[@]}"; do
   check_project "$toml"
 done
+
+if [ "$EXPLICIT" -eq 1 ]; then
+  echo ""; echo "POLICY: PASS=$PASS  FAIL=$FAIL"
+  [ "$FAIL" -gt 0 ] && exit 1 || exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # CONTROLS: the authority checks must be able to FAIL. Each control is a throwaway project run

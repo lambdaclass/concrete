@@ -92,7 +92,7 @@ checks the following at first landing:
 | Field | Compiler surface | Failure means |
 |---|---|---|
 | `allocation.heap = "none"` | `--report alloc` says "No allocation activity found." | Source added an allocation. |
-| `allocation.stack_max_bytes = N` | `--report stack-depth` max ≤ N | Source grew the stack past the budget. |
+| `allocation.stack_max_bytes = N` | `--report stack-depth` max ≤ N; an `unbounded` max FAILS at every N | Source grew the stack past the budget, or made it unbounded (bug 065). |
 | `authority.required = [...]` | Every function's `--report caps` cap set ⊆ `required`. | Source widened authority beyond the budget. |
 | `authority.forbidden = [...]` | No function in `--report caps` uses any forbidden cap. | Source pulled in a forbidden capability. |
 | `ffi.externs = [...]` | Externs in the program match this list. | Source added or removed an FFI declaration. |

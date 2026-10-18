@@ -10,6 +10,7 @@
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/stack_bound.sh"
 require_fresh_binary || exit 1
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -22,7 +23,14 @@ if [ ! -x "$COMPILER" ]; then
 fi
 
 # Find every assumptions.toml under examples/.
-mapfile -t ASSUMPTION_FILES < <(find examples -name assumptions.toml | sort)
+# With arguments, check exactly those assumptions.toml files and skip the controls (used by
+# check_stack_budget.sh to run a fixture through this same check_example).
+EXPLICIT=0
+if [ $# -gt 0 ]; then
+  ASSUMPTION_FILES=("$@"); EXPLICIT=1
+else
+  mapfile -t ASSUMPTION_FILES < <(find examples -name assumptions.toml | sort)
+fi
 
 if [ ${#ASSUMPTION_FILES[@]} -eq 0 ]; then
   echo "No assumption files found under examples/. Nothing to check."
@@ -128,18 +136,10 @@ check_example() {
   esac
 
   # --- allocation.stack_max_bytes ---
-  local stack_budget actual_max
+  # Read through lib/stack_bound.sh (bug 065): an UNBOUNDED stack refuses the budget.
+  local stack_budget
   stack_budget=$(toml_get "$af" allocation stack_max_bytes)
-  actual_max=$(grep -oE 'Max stack bound:\s*[0-9]+' <<<"$report_stack" | grep -oE '[0-9]+' | head -1)
-  if [ -z "$actual_max" ]; then
-    echo "  FAIL stack-depth report did not produce a max bound"
-    errs=$((errs + 1))
-  elif [ "$actual_max" -gt "$stack_budget" ]; then
-    echo "  FAIL allocation.stack_max_bytes=$stack_budget but actual max is $actual_max"
-    errs=$((errs + 1))
-  else
-    echo "  ok   allocation.stack_max_bytes=$stack_budget (actual=$actual_max)"
-  fi
+  stack_budget_check allocation.stack_max_bytes "$stack_budget" "$report_stack" || errs=$((errs + 1))
 
   # --- authority.required + authority.forbidden ---
   local errs_before_authority=$errs
@@ -301,6 +301,10 @@ for af in "${ASSUMPTION_FILES[@]}"; do
 done
 
 echo ""
+if [ "$EXPLICIT" -eq 1 ]; then
+  echo "ASSUMPTIONS: PASS=$PASS  FAIL=$FAIL"
+  [ "$FAIL" -gt 0 ] && exit 1 || exit 0
+fi
 # CONTROLS: the authority checks must be able to FAIL. Throwaway examples run through the same
 # check_example, in a subshell so the counters above are untouched; only authority lines are judged.
 echo "=== controls: authority checks read real capabilities ==="

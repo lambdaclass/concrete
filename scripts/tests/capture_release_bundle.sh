@@ -124,8 +124,15 @@ echo "$RUNTIME_STDOUT" > "$OUT/runtime-stdout.txt"
 "$COMPILER" --version > "$OUT/compiler-version.txt" 2>&1 || echo "unknown" > "$OUT/compiler-version.txt"
 
 # --- Manifest ---
-PROVED_COUNT=$(grep -c '✓' "$OUT/reports/proof-status.txt" 2>/dev/null || echo 0)
-STACK_MAX=$(grep -oE 'Max stack bound:\s*[0-9]+' "$OUT/reports/stack-depth.txt" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo "?")
+# `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` used to emit "0\n0" into the JSON.
+PROVED_COUNT=$(grep -c '✓' "$OUT/reports/proof-status.txt" 2>/dev/null || true)
+PROVED_COUNT=${PROVED_COUNT:-0}
+# Through lib/stack_bound.sh (bug 065): a number only when EVERY function is bounded; otherwise
+# the string "unbounded" (or "unknown" when the report is missing). The old grep published the
+# largest BOUNDED frame for a recursive program, and its `|| echo "?"` never fired (the pipeline's
+# exit was head's), so a missing report wrote invalid JSON (`"max_stack_bytes": ,`).
+source "$ROOT_DIR/scripts/tests/lib/stack_bound.sh"
+STACK_MAX=$(stack_bound_json "$OUT/reports/stack-depth.txt")
 HAS_ASSUMPTIONS=$([ -f "$OUT/assumptions.toml" ] && echo true || echo false)
 HAS_POLICY=$(grep -q '^\[policy\]' "$OUT/Concrete.toml" 2>/dev/null && echo true || echo false)
 HAS_CATCHES=$([ -d "$OUT/catches" ] && [ -n "$(ls -A "$OUT/catches" 2>/dev/null)" ] && echo true || echo false)
@@ -150,8 +157,14 @@ cat > "$OUT/manifest.json" <<EOF
 }
 EOF
 
+# Refuse to leave a manifest no consumer can parse (both defects above produced one).
+if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$OUT/manifest.json" 2>/dev/null; then
+  echo "error: $OUT/manifest.json is not valid JSON. Refusing to publish this bundle." >&2
+  exit 1
+fi
+
 echo "Release bundle written: $OUT"
 echo "  proved functions: $PROVED_COUNT"
-echo "  max stack: $STACK_MAX bytes"
+echo "  max stack: $STACK_MAX$( [[ "$STACK_MAX" =~ ^[0-9]+$ ]] && echo " bytes")"
 echo "  assumptions: $HAS_ASSUMPTIONS  policy: $HAS_POLICY  catches: $HAS_CATCHES  snapshots: $HAS_SNAPSHOTS"
 ls "$OUT" | sed 's/^/  /'

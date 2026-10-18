@@ -144,7 +144,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 252 -> 253: check_example_outputs.sh (every runnable example's stdout + exit code, native and
 #   interpreter), which replaces the inline "Run compiled examples (smoke test)" step; that step ran no
 #   scripts/ command, so removing it changes nothing here. Pinned in the same commit.
-EXPECTED_GATE_COMMANDS=253
+# 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
+EXPECTED_GATE_COMMANDS=254
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

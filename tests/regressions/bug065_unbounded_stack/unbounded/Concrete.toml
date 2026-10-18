@@ -1,0 +1,7 @@
+[package]
+name = "bug065_unbounded"
+version = "0.1.0"
+
+# Bug 065 fixture, driven by scripts/tests/check_stack_budget.sh.
+[policy]
+max_stack_bytes = 100000   # generous on purpose: an unbounded stack must be refused at ANY budget

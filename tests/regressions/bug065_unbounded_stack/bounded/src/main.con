@@ -1,0 +1,15 @@
+// Bug 065 positive control: the same shape with the recursion unrolled into a
+// bounded chain. Every function is bounded, so the summary must state the exact
+// maximum and a sufficient budget must pass.
+fn leaf(a: i32, b: i32) -> i32 {
+    let s: i32 = a + b;
+    return s;
+}
+
+fn middle(n: i32) -> i32 {
+    return leaf(n, 1);
+}
+
+fn main() -> i32 {
+    return middle(2) - 3;
+}

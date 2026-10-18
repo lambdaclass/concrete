@@ -977,6 +977,9 @@ jobs:
       - name: "Policy enforcement (the [policy] surface is gated, not merely documented)"
         run: bash scripts/tests/check_policy.sh
 
+      - name: "Stack budget fails closed (an unbounded stack is never a number; bug 065)"
+        run: bash scripts/tests/check_stack_budget.sh
+
       - name: "Evidence reproducibility (retained evidence regenerates to the same digests)"
         run: bash scripts/tests/check_evidence_reproducibility.sh
 

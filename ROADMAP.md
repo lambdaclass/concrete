@@ -5773,6 +5773,14 @@ bundle consumers tolerate a non-numeric `evidence.max_stack_bytes` — the fallb
 is `"?"` today, so prefer an explicit `"unbounded"`. A mutation restoring the
 `!isRecursive c` filter must fail the gate.
 
+The summary and its consumers are fixed (bug 065, 2026-10-18): `Max stack bound:` reads
+`unbounded` whenever any listed function has no bound, the policy gate, the assumptions gate and
+the release bundle read it through `scripts/tests/lib/stack_bound.sh` (an unbounded stack refuses
+every budget; the bundle publishes `"unbounded"`), and `check_stack_budget.sh` gates that with a
+recursive budgeted fixture and a bounded positive control. What remains of this task is the
+class-level reachability assertion cross-checked against `--report recursion`, and a gate for
+`--report recursion` itself.
+
 ### Task R-0450
 
 **Phase:** 2, 3, 4, 5
