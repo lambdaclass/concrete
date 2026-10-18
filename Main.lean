@@ -2962,6 +2962,10 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println out
       return 0
     if reportType == "receipts" then
+      let receiptEnsuresTargets : List Proof.ReplayTarget :=
+        registry.filterMap fun e => e.ensuresProof.map fun thm =>
+          { subject := e.function, theoremName := thm, kind := .ensures
+          , origin := .sourceLinked, binding := .bound }
       -- PRODUCTION RECEIPT ISSUANCE. Until this existed, `ProofEvidenceReceipt` was a well-tested
       -- helper type: the envelope was closed and the minting authority was closed, and nothing in
       -- the pipeline ever minted one. This is the path from "the kernel accepted this" to a
@@ -2971,7 +2975,9 @@ def compileAndReport (inputPath : String) (reportType : String)
           { inputPath := inputPath
           , fallbackDir := "."
           , imports := ["Concrete", "Examples"]
-          , targets := Proof.replayTargetsOf pc } with
+          -- The `#[ensures_proof]` theorems are replayed too (bug 089), so a claim whose postcondition
+          -- link names a theorem the kernel rejects is withheld below rather than minted current.
+          , targets := Proof.replayTargetsOf pc ++ receiptEnsuresTargets } with
       | .error .noTargets =>
         IO.println "=== Replay Receipts ===\n\nNo claims with proof links to replay, so nothing to issue."
         return 0
@@ -2997,8 +3003,22 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- "which boundaries does this rest on", and the receipt would be the copy nobody re-checks.
       let trustedDepsOf := fun (qn : String) =>
         (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
-      let outcomes := Proof.issueAll pc res
-        { compilerVersion, importsId } trustedDepsOf
+      -- A FAILED ENSURES REPLAY WITHHOLDS THE CLAIM'S RECEIPT (bug 089). The receipt binds the subject
+      -- digest, which covers the declaration's contracts; minting it current while the theorem linked
+      -- to that contract was rejected by the kernel let a fabricated `#[ensures_proof]` ride on a
+      -- genuine refinement receipt.
+      let ensuresRefusal : String → Option Proof.IssueRefusal := fun subject =>
+        (receiptEnsuresTargets.filter (·.subject == subject)).findSome? fun t =>
+          match (res.checks.find? (fun c => c.target.kind == .ensures && c.target.subject == subject
+                                           && c.target.theoremName == t.theoremName)).map (·.verdict) with
+          | some Proof.ReplayVerdict.accepted | some Proof.ReplayVerdict.acceptedUnbound => none
+          | some v => some (.replay t.theoremName (.notAccepted t.theoremName v))
+          | none => some (.replay t.theoremName (.notReplayed t.theoremName))
+      let outcomes := (Proof.issueAll pc res
+        { compilerVersion, importsId } trustedDepsOf).map fun o =>
+          match o.result, ensuresRefusal o.subject with
+          | .ok _, some why => { o with result := .error why }
+          | _, _ => o
       let issued := Proof.IssueOutcome.issued outcomes
       let withheld := Proof.IssueOutcome.withheld outcomes
       let mut out := "=== Replay Receipts ===\n"
@@ -3092,12 +3112,34 @@ def compileAndReport (inputPath : String) (reportType : String)
           IO.println s!"=== Lean Proof Kernel Check ===\n\nerror: {msg}"
         return 1
       | .ok res =>
-      -- `ensures` checks are deliberately kept OUT of the verified/failed counts, which have always
-      -- been refinement-only; they are rendered in their own section below.
+      -- `verified` stays refinement-only: an `#[ensures]` theorem the kernel accepts is still NOT a
+      -- discharge (bug 089 — nothing checks that its conclusion is the clause), so it is never counted
+      -- as verified. A REJECTED ensures theorem is a failure like any other and IS counted: before
+      -- bug 089 a missing `#[ensures_proof]` theorem exited 1 under a summary reading "1 verified,
+      -- 0 failed", so the counts and the exit code disagreed about the same run.
       let refs := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .refinement)
+      let enss := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .ensures)
       let verified := (refs res.accepted).map (·.target.subject)
       let unboundChecked := (refs res.acceptedUnbound).map (·.target.subject)
-      let failed := (refs res.rejected).map fun c => (c.target.subject, c.target.theoremName)
+      let ensFailed := (enss res.rejected).map fun c => (c.target.subject, c.target.theoremName)
+      let failed := (refs res.rejected).map (fun c => (c.target.subject, c.target.theoremName)) ++ ensFailed
+      -- The ensures verdict per (function, theorem), from the replay plus THE ensures decision
+      -- (`Report.ensuresVerdictOf`) plus the bug-079 subject binding, for the reader. None of the three
+      -- can produce a discharge today: the conclusion is not matched against the clause.
+      let ensVerdictOf := fun (fn thm : String) =>
+        match (res.checks.find? (fun c => c.target.kind == .ensures && c.target.subject == fn
+                                         && c.target.theoremName == thm)).map (·.verdict) with
+        | some Proof.ReplayVerdict.rejected => "failed"
+        | some Proof.ReplayVerdict.notAttempted | none => "not_attempted"
+        | some _ => "not_discharged"
+      let ensBindingNote := fun (fn thm : String) =>
+        match pc.entries.find? (·.qualName == fn) with
+        | none => "the function has no extracted ProofCore entry, so the theorem cannot be bound to its body"
+        | some e => match e.spec with
+          | none => "no #[spec] names a specification for this function, so the theorem cannot be bound to its body"
+          | some a => match subjectBindingOf e { a with proofName := thm } with
+            | .ok b => s!"bound to this body via '{b.spec}'"
+            | .error r => s!"NOT bound to this body: {r.explain}"
       let notAttempted := (refs res.notAttempted).map (·.target.subject)
       let generalFailure := res.generalFailure
       let combined := res.transcript
@@ -3134,7 +3176,16 @@ def compileAndReport (inputPath : String) (reportType : String)
           -- value of itself.
           checkObj t.subject t.theoremName "refinement" t.origin.canonical
             ((statusBySubject.find? (·.1 == t.subject)).map (·.2) |>.getD "unknown")
-        let ensChecks := ensuresThms.map fun (fn, thm) => checkObj fn thm "ensures" "source_linked" "proved"
+        -- NOT `"proved"` (bug 089). This hardcoded the obligation status, so every ensures check read
+        -- `checked` whatever the kernel said and whether or not the theorem was about the clause.
+        let ensChecks := ensuresThms.map fun (fn, thm) =>
+          let st := if generalFailure then "env_failure" else ensVerdictOf fn thm
+          String.join ["    {\"function\": ", q fn, ", \"theorem\": ", q thm, ", \"obligation_kind\": ", q "ensures",
+            ", \"origin\": ", q "source_linked", ", \"status\": ", q st,
+            ", \"discharged\": false",
+            ", \"note\": ", q s!"{ensBindingNote fn thm}; {(Report.ensuresVerdictOf registry fn).reason}",
+            ", \"recheck\": ", q (((res.recheck.find? (·.1 == thm)).map (·.2.canonical)).getD "recheck_not_run"),
+            ", \"source_line\": ", toString (lineOf fn), "}"]
         let allObjs := refChecks ++ ensChecks
         let leanErr := if generalFailure || !failed.isEmpty then String.ofList (combined.toList.take 800) else ""
         IO.println (String.join [
@@ -3182,12 +3233,21 @@ def compileAndReport (inputPath : String) (reportType : String)
       if !failed.isEmpty then
         out := out ++ s!"\n  Failed ({failed.length}):\n"
         for (fn, proofName) in failed do
-          out := out ++ s!"    ✗ {fn} — {proofName} (theorem not found)\n"
+          let tag := if ensFailed.contains (fn, proofName) then "#[ensures_proof] theorem not found" else "theorem not found"
+          out := out ++ s!"    ✗ {fn} — {proofName} ({tag})\n"
       if !ensuresThms.isEmpty then
-        out := out ++ s!"\n  Contract obligations — #[ensures] discharge ({ensuresThms.length}):\n"
+        -- NEVER ✓ (bug 089). The mark was a substring test of the Lean transcript, so any theorem that
+        -- type-checked — about anything — printed "✓ ensures discharged by …". A ✓ needs a replay of
+        -- the CLAIM, and nothing yet checks that a theorem's conclusion is the `#[ensures]` clause.
+        out := out ++ s!"\n  Contract obligations — #[ensures] NOT discharged ({ensuresThms.length}):\n"
         for (fn, thm) in ensuresThms do
-          let mark := if (combined.splitOn s!"`{thm}`").length != 1 then "✗" else "✓"
-          out := out ++ s!"    {mark} {fn} — ensures discharged by {thm}\n"
+          match ensVerdictOf fn thm with
+          | "failed" => out := out ++ s!"    ✗ {fn} — {thm}: theorem not found (counted as failed)\n"
+          | "not_attempted" => out := out ++ s!"    · {fn} — {thm}: not attempted\n"
+          | _ =>
+            out := out ++ s!"    ? {fn} — {thm} type-checks, but is NOT a discharge\n"
+            out := out ++ s!"        {ensBindingNote fn thm}\n"
+            out := out ++ s!"        {(Report.ensuresVerdictOf registry fn).reason}\n"
       if generalFailure then
         -- THE FILE DID NOT COMPILE, so no theorem has an individual verdict. Naming them as
         -- individually failed — which is what this report did while `generalFailure` was
@@ -3226,11 +3286,8 @@ def compileAndReport (inputPath : String) (reportType : String)
         out := out ++ "\n  NOTE: an unbound claim is not evidence. `[policy] require-proofs`"
         out := out ++ " rejects these (E0612)."
       IO.println out
-      -- ENSURES REJECTIONS COUNT TOWARD THE VERDICT. A contract-discharge theorem the kernel
-      -- refused was rendered with an X and then exited 0, so `--report check-proofs` reported
-      -- success on a program whose `#[ensures]` obligation had no accepted proof. The verified/
-      -- failed COUNTS stay refinement-only because gates extract them by exact string; the
-      -- VERDICT is over every target the kernel judged, which is what an exit code is for.
+      -- ENSURES REJECTIONS COUNT TOWARD THE VERDICT — and, since bug 089, toward the `failed` count
+      -- too, so the summary line and the exit code describe the same run.
       return (if failed.isEmpty && res.rejected.isEmpty && !generalFailure then 0 else 1)
     if reportType == "diagnostics-json" then
       IO.println (Report.diagnosticsJson validCore.coreModules locMap (registry := registry) (pc := pc) (assumptions := mkAssumptions ()))

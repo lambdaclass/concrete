@@ -11,7 +11,7 @@ This corpus is the worked reference for each, snapshot-backed.
 | `proved_by_lean/` | proved_by_lean (refinement, kernel-checked) | `--report proof-status` / `check-proofs` |
 | `proved_by_kernel_decision_omega/` | proved_by_kernel_decision (omega) | `--report contracts` |
 | `proved_by_kernel_decision_bv/` | proved_by_kernel_decision (bv_decide) | `--report contracts` |
-| `partial_contract/` | partial — one direction proved, converse outstanding | `--report contracts` |
+| `partial_contract/` | one direction linked, converse outstanding — reads `unproven` since bug 089 (a coverage label grants nothing) | `--report contracts` |
 | `stale_proof/` | stale (the negative case) | `--report proof-status` |
 | `assumed_boundary/` | assumed (precondition assumed at entry) | `--report contracts` |
 | `trusted_boundary/` | trusted (declared trust boundary) | `--report proof-status` / `effects` |

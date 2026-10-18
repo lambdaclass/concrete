@@ -2817,23 +2817,14 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   -- requires / ensures
   for r in f.requires do
     vcLines := vcLines ++ [s!"  requires {Concrete.fmtExpr r}    assumed_at_entry"]
-  let regEntry := registry.find? (fun re => re.function == e.qualName)
-  let ensuresProof : Option String := regEntry.bind (·.ensuresProof)
-  -- A registered directional proof discharges one direction of the iff.
-  let oneDir := match regEntry with
-    | some re => re.ensuresProof.isNone && !re.proof.isEmpty && re.coverage == "one_direction"
-    | none => false
-  let isIff := match regEntry with
-    | some re => re.ensuresProof.isSome && !re.proof.isEmpty && re.coverage == "iff"
-    | none => false
-  let fwdProof := match regEntry with | some re => re.proof | none => "?"
+  -- THE ensures verdict (bug 089): no link discharges a clause until a checked matcher confirms the
+  -- theorem's conclusion is that clause. This used to print `proved_by_lean (full iff)` from the
+  -- `#[proof_coverage(iff)]` label.
+  let ensV := ensuresVerdictOf registry e.qualName
   for ens in f.ensures do
-    let st := match ensuresProof with
-      | some thm =>
-        if isIff then s!"proved_by_lean (full iff): forward {fwdProof}, converse {thm}"
-        else s!"linked to Lean theorem {thm}"
-      | none => if oneDir then "partial — one direction proved_by_lean, converse outstanding"
-                else "missing (no registered ensures_proof)"
+    let st := match ensV with
+      | .noLink => "missing (no registered ensures_proof)"
+      | .unmatched ts => s!"unproven — linked to {", ".intercalate ts}; conclusion not checked against this clause"
     vcLines := vcLines ++ [s!"  ensures {Concrete.fmtExpr ens}    {st}"]
   -- loop obligations
   let extraLets := letConstMap f.body
@@ -2841,13 +2832,13 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   let mut nextOb : Option (String × String) := none  -- (id, reason)
   -- The function postcondition IS the contract; completing it takes priority
   -- over the loop's operational step (which the literal-bound proof can bypass).
-  if !f.ensures.isEmpty && ensuresProof.isNone then
-    if oneDir then
-      nextOb := some ("#[ensures] converse direction",
-        "the proved direction discharges half the postcondition; prove the converse (the other direction of the iff) to fully discharge #[ensures]")
-    else
+  if !f.ensures.isEmpty then
+    match ensV with
+    | .noLink =>
       nextOb := some ("#[ensures] postcondition",
         "state the spec and prove the postcondition; no registered theorem discharges it yet")
+    | .unmatched _ =>
+      nextOb := some ("#[ensures] postcondition", ensV.reason)
   for lc in f.loopContracts do
     let omegaSt := fun (obl : String) =>
       if provedVCs.contains (loopVCKey e.qualName lc.line obl) then "discharged by omega" else "PLANNED"
@@ -2871,7 +2862,7 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   if nextOb.isNone then
     if e.extracted.isNone then
       nextOb := some ("extraction", s!"function is not extractable: {", ".intercalate e.unsupported}")
-    else if f.ensures.any (fun _ => ensuresProof.isNone) then
+    else if !f.ensures.isEmpty then
       nextOb := some ("ensures", "state the refinement spec and prove `<fn> refines spec`; no registered theorem yet")
   let vcSection := if vcLines.isEmpty then "  (no source contracts or loop obligations on this function)"
                    else "\n".intercalate vcLines
@@ -3323,24 +3314,17 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     let fq := pfx ++ f.name
     if f.ensures.isEmpty then continue
     let (file, line) := loc fq
-    let reg := registry.find? (·.function == fq)
-    let dep := match reg with
-      | some e => (match e.ensuresProof with | some t => [t] | none => []) ++ (if !e.proof.isEmpty then [e.proof] else [])
-      | none => []
-    -- a one-direction registry proof discharges ONE direction of the
-    -- postcondition → `partial`, not a full `proved_by_lean` (Phase 3 #10).
-    let onePartial := match reg with
-      | some e => e.ensuresProof.isNone && e.coverage == "one_direction" && !e.proof.isEmpty
-      | none => false
+    -- THE ensures verdict (bug 089). The dependency list is what the link OFFERS, so a reader can
+    -- follow it; the status is never a proof class until a checked matcher confirms the theorem
+    -- concludes this clause. This used to be `proved_by_lean` whenever any theorem was linked and the
+    -- coverage label was not `one_direction` — `#[proof_coverage(iff)]` alone discharged it.
+    let v := ensuresVerdictOf registry fq
+    let mode := if v.theorems.isEmpty then "none" else "lean"
     let mut ei := 0
     for ens in f.ensures do
-      let (mode, status, engine) :=
-        if dep.isEmpty then ("none", "missing", "")
-        else if onePartial then ("lean", "partial", "lean")
-        else ("lean", "proved_by_lean", "lean")
       out := out ++ [mkVC s!"{fq}#ensures{ei}" "postcondition" fq file line
         (f.requires.map Concrete.fmtExpr) (Concrete.fmtExpr ens) s!"postcondition in {fq}"
-        dep "refinement" mode status engine]
+        v.theorems "refinement" mode v.status ""]
       ei := ei + 1
   -- contract-clause diagnostics: malformed #[requires]/#[ensures]/#[invariant]/
   -- #[variant] clauses surface as `ineligible` ledger obligations (Phase 3 #10).

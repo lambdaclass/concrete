@@ -23,7 +23,7 @@ registry or in-source links, and a release bundle):
 | flagship | shows |
 |---|---|
 | [`hmac_sha256/`](hmac_sha256/) | full refinement: the extracted body computes exactly the SHA-256/HMAC spec, whole composition chain kernel-verified. |
-| [`constant_time_tag/`](constant_time_tag/) | mixed evidence: functional correctness `proved_by_lean` (full iff, in-source link), loop arithmetic by `omega`, constant-time `enforced/reported`, machine timing `assumed/trusted`. |
+| [`constant_time_tag/`](constant_time_tag/) | mixed evidence: functional correctness linked in source (both iff directions; `#[ensures]` reads `unproven` until exact property acceptance — bug 089), loop arithmetic by `omega`, constant-time `enforced/reported`, machine timing `assumed/trusted`. |
 | [`crypto_verify/`](crypto_verify/), [`parse_validate/`](parse_validate/) | refinement proofs over a toy MAC and a header parser. |
 | [`fixed_capacity/`](fixed_capacity/) | bounded, no-alloc ring/message buffers with proved invariants. |
 | [`elf_header/`](elf_header/) | trusted FFI shell + pure proved validator core; biconditional correctness theorem. |

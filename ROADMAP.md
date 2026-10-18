@@ -4635,6 +4635,10 @@ assumptions and kernel proofs retain their separate dispositions; proposition
 matching does not establish model-to-machine correspondence or that the chosen
 specification captures the user's intent. No new coverage label becomes
 authoritative before its matching rule and rejecting controls exist.
+Until this lands, `#[ensures]` obligations have no discharge path at all: bug 089
+found every report printing `proved_by_lean` from an `#[ensures_proof]` link or an
+`iff` label alone, and `Report.ensuresVerdictOf` now reports every linked
+postcondition `unproven`. The matcher plugs in there and nowhere else.
 
 **Total-model admission is a semantic prerequisite, not merely sequencing.** A model used as
 logical contract semantics may carry a current `implements`, `refines`, `equivalent`, or

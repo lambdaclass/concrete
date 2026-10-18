@@ -1,8 +1,8 @@
 // contract negatives: a postcondition proved in only one direction.
 // The function claims #[ensures(result > x)] but links a proof with
 // #[proof_coverage(one_direction)] and NO #[ensures_proof] for the converse.
-// The report must say `partial — one direction proved_by_lean, converse
-// outstanding`, NOT report the postcondition as fully proved.
+// The report must say `unproven — NOT discharged` (bug 089: a coverage label
+// is not evidence), NOT report the postcondition as proved or partial.
 mod cn {
     #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]

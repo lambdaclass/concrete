@@ -63,10 +63,10 @@ rejects "impure #[ensures] is rejected, naming the impure call and the rule" \
   "$CN/spec_ghost_totality/src/main.con" \
   "contract on 'bad': impure call 'tick' — spec/ghost must be pure and total"
 
-echo "=== one-direction proof → partial (ledger no longer overclaims proved_by_lean) ==="
-ck "weakened postcondition is partial, not proved_by_lean" \
+echo "=== one-direction proof → unproven (bug 089: a coverage label discharges nothing) ==="
+ck "weakened postcondition is unproven, not partial or proved_by_lean" \
   "$CN/weakened_postcondition/src/main.con" \
-  "st('cn.weak#ensures0')=='partial'"
+  "st('cn.weak#ensures0')=='unproven'"
 
 echo "=== negative control: a valid-but-unpreserved invariant is NOT a clause diagnostic ==="
 ck "invalid_invariant emits NO invalid/impure diagnostic (it is an O2 failure)" \

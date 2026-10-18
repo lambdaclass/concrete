@@ -94,9 +94,11 @@ echo "=== loop obligations: variant_decreases discharged by omega ==="
 check_json "variant_decreases proved_by_kernel_decision via omega" "$POS" \
   "any(v['kind']=='variant_decreases' and v['status']=='proved_by_kernel_decision' and v['engine']=='omega' for v in d['vcs'])"
 
-echo "=== postcondition with a registered proof → proved_by_lean + dependency ==="
-check_json "ch ensures proved_by_lean, depends on its ensures_proof" "$HMAC" \
-  "any(v['kind']=='postcondition' and v['function']=='hmac_sha256.ch' and len(v['dependencies'])>0 and v['status']=='proved_by_lean' and v['engine']=='lean' for v in d['vcs'])"
+echo "=== postcondition with a linked proof → unproven + dependency (bug 089) ==="
+# The link is kept as a dependency a reader can follow; the status is NOT a proof class, because
+# nothing checks that ch_refines concludes the clause (ROADMAP "Exact property acceptance").
+check_json "ch ensures unproven, depends on its ensures_proof" "$HMAC" \
+  "any(v['kind']=='postcondition' and v['function']=='hmac_sha256.ch' and 'Examples.HmacSha256.Proofs.ch_refines' in v['dependencies'] and v['status']=='unproven' and v['engine']=='' for v in d['vcs'])"
 
 echo ""
 echo "VC-SCHEMA: PASS=$PASS  FAIL=$FAIL"

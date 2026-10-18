@@ -58,7 +58,7 @@ fi
 want "omega → kernel decision"                contracts    proved_by_kernel_decision_omega "proved_by_kernel_decision"
 want "omega → engine omega"                   contracts    proved_by_kernel_decision_omega "omega"
 want "bv → engine bv_decide"                  contracts    proved_by_kernel_decision_bv "bv_decide"
-want "partial → partial status"               contracts    partial_contract "partial — one direction proved_by_lean"
+want "partial → unproven (bug 089: no label)"  contracts    partial_contract "unproven — NOT discharged"
 want "assumed → assumed_at_entry"             contracts    assumed_boundary "assumed_at_entry"
 want "assumed → call-site proved (kernel)"    contracts    assumed_boundary "proved_by_kernel_decision"
 want "trusted → trusted/bypassed"             proof-status trusted_boundary "trusted"

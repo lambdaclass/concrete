@@ -66,8 +66,11 @@ assert_contains "ensures reported missing, not proved" "missing (no in-source pr
   "$COMPILER" "$CN/missing_postcondition/src/main.con" --report contracts
 
 echo "=== weakened_postcondition (only one direction proved) ==="
-assert_contains "one_direction postcondition reported partial, not proved" \
-  "partial — one direction proved_by_lean, converse outstanding" \
+# Bug 089: a #[proof_coverage(one_direction)] label used to grant "partial — one direction
+# proved_by_lean" although add_three_correct concludes nothing about `result > x`. No label grants
+# any part of a postcondition until exact property acceptance exists.
+assert_contains "one_direction postcondition reported unproven, not proved or partial" \
+  "unproven — NOT discharged" \
   "$COMPILER" "$CN/weakened_postcondition/src/main.con" --report contracts
 
 echo "=== invalid_attribute (malformed #[proof_fingerprint]) ==="
@@ -446,6 +449,86 @@ else
   echo "  FAIL impurity criterion diverged — Check:$CRIT_CHECK ReportVC:$CRIT_REPORT occurrences of capSet.isEmpty"
   echo "       one surface would reject a contract the other accepts"
   FAIL=$((FAIL+1))
+fi
+
+# ---------------------------------------------------------------------------------------------
+# BUG 089 — an `#[ensures]` is not discharged by a link. `#[ensures_proof(No.Such.Theorem)]` on
+# `return x` with `#[ensures(result == 42)]` read `proved_by_lean` on contracts, vcs,
+# obligation-ledger and audit with no Lean run; a real but unrelated theorem printed ✓ in
+# check-proofs; a missing theorem beside a valid #[proof_by] exited 1 under "1 verified, 0 failed"
+# and its receipt minted; `#[proof_coverage(iff)]` alone discharged the clause in vcs/ledger.
+# ONE verdict (`Report.ensuresVerdictOf`) now decides, and no link discharges a clause until a
+# checked matcher confirms the theorem concludes it (ROADMAP "Exact property acceptance").
+# Every fixture must read NOT proved on EVERY surface, and the surfaces must agree.
+echo "=== bug 089: no link discharges an #[ensures] (four fixtures × every surface) ==="
+B89="tests/regressions/bug089_ensures_proof"
+for fx in ens_missing_theorem ens_unrelated_theorem ens_missing_with_proof_by ens_coverage_only; do
+  S="$B89/$fx/src/main.con"
+  if [ ! -f "$S" ]; then echo "  FAIL $fx — fixture missing (vacuous)"; FAIL=$((FAIL+1)); continue; fi
+  ens_block(){ sed -n '/=== Source Contracts/,/^=== /p' | awk '/  O1  ensures result == 42/{f=1} f{print} f&&/^$/{exit}'; }
+  CST="$("$COMPILER" "$S" --report contracts 2>/dev/null | ens_block | grep -m1 'status:' | sed 's/.*status:  //')"
+  AST="$("$COMPILER" "$S" --report audit 2>/dev/null | ens_block | grep -m1 'status:' | sed 's/.*status:  //')"
+  VST="$("$COMPILER" "$S" --report vcs --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(','.join(v['status'] for v in d['vcs'] if v['kind']=='postcondition'))" 2>/dev/null)"
+  LST="$("$COMPILER" "$S" --report obligation-ledger --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(','.join(o['status'] for o in d['obligations'] if o['kind']=='postcondition'))" 2>/dev/null)"
+  if [ "$VST" = "unproven" ] && [ "$LST" = "unproven" ] \
+     && [ "${CST%% *}" = "unproven" ] && [ "${AST%% *}" = "unproven" ]; then
+    echo "  ok   $fx: contracts, audit, vcs and obligation-ledger all read unproven"; PASS=$((PASS+1))
+  else
+    echo "  FAIL $fx: surfaces disagree or overclaim — contracts='$CST' audit='$AST' vcs='$VST' ledger='$LST'"; FAIL=$((FAIL+1))
+  fi
+done
+# Positive control: the same checks see a proof class when one is present, so "unproven" above is
+# not just what the parser returns for everything. The refinement claim of compute_tag is genuinely
+# proved and must stay so — the fix withdraws the ENSURES discharge, not the body proof.
+PS="$("$COMPILER" "$B89/ens_missing_with_proof_by/src/main.con" --report obligation-ledger --json 2>/dev/null \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print([o['status'] for o in d['obligations'] if o['id']=='main.compute_tag#prooflink'])" 2>/dev/null)"
+if [ "$PS" = "['proved_by_lean']" ]; then
+  echo "  ok   control: the refinement claim beside the bogus ensures link is still proved_by_lean"; PASS=$((PASS+1))
+else
+  echo "  FAIL control: the refinement claim is not proved_by_lean ($PS) — the legs above may be vacuous"; FAIL=$((FAIL+1))
+fi
+if command -v lake >/dev/null 2>&1; then
+  for fx in ens_missing_theorem ens_unrelated_theorem ens_missing_with_proof_by; do
+    S="$B89/$fx/src/main.con"
+    if TXT="$("$COMPILER" "$S" --report check-proofs 2>&1)"; then TRC=0; else TRC=$?; fi
+    if JS="$("$COMPILER" "$S" --report check-proofs --json 2>/dev/null)"; then JRC=0; else JRC=$?; fi
+    SECTION="$(sed -n '/Contract obligations/,/^$/p' <<<"$TXT")"
+    if [ -n "$SECTION" ] && ! grep -q '✓' <<<"$SECTION" && ! grep -q 'discharged by' <<<"$SECTION"; then
+      echo "  ok   $fx: check-proofs prints no ✓ / 'discharged by' for the ensures link"; PASS=$((PASS+1))
+    else
+      echo "  FAIL $fx: check-proofs ensures section overclaims or is missing:"; printf '%s\n' "$SECTION" | sed 's/^/      /'; FAIL=$((FAIL+1))
+    fi
+    # The text summary, the JSON summary and both exit codes must describe the same run.
+    TF="$(grep -oE 'Summary: [0-9]+ verified, [0-9]+ failed' <<<"$TXT" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+')"
+    VERD="$(python3 -c "
+import json,sys; d=json.loads(sys.argv[1])
+e=[c for c in d['checks'] if c['obligation_kind']=='ensures']
+ok = e and all(c['discharged'] is False and c['status'] in ('failed','not_discharged') for c in e)
+nf = sum(1 for c in d['checks'] if c['status'] in ('failed','missing_theorem'))
+print(('ok' if ok else 'bad'), d['summary']['failed'], nf)" "$JS" 2>/dev/null)"
+    read -r JOK JF JN <<<"$VERD"
+    if [ "$fx" = ens_unrelated_theorem ]; then WANTF=0; else WANTF=1; fi
+    EXITOK=0
+    if [ "$WANTF" = 0 ]; then [ "$TRC" = 0 ] && [ "$JRC" = 0 ] && EXITOK=1
+    else [ "$TRC" != 0 ] && [ "$JRC" != 0 ] && EXITOK=1; fi
+    if [ "$JOK" = ok ] && [ "$TF" = "$WANTF" ] && [ "$JF" = "$WANTF" ] && [ "$JN" = "$WANTF" ] && [ "$EXITOK" = 1 ]; then
+      echo "  ok   $fx: text/JSON summaries say $WANTF failed, exit codes agree ($TRC/$JRC), JSON never 'discharged'"; PASS=$((PASS+1))
+    else
+      echo "  FAIL $fx: summaries/exit disagree — text failed=$TF json failed=$JF failed-checks=$JN ensures=$JOK exit=$TRC/$JRC (want $WANTF)"; FAIL=$((FAIL+1))
+    fi
+  done
+  # Receipts: a rejected ensures theorem withholds the claim's receipt; a type-checking one does not
+  # (that control makes the withholding attributable to the ensures replay, not to the fixture).
+  R1="$("$COMPILER" "$B89/ens_missing_with_proof_by/src/main.con" --report receipts 2>&1)"
+  R2="$("$COMPILER" "$B89/ens_unrelated_theorem/src/main.con" --report receipts 2>&1)"
+  if grep -q 'Summary: 0 issued, 1 withheld' <<<"$R1" && grep -q "No.Such.Theorem.*'rejected'" <<<"$R1" \
+     && grep -q 'Summary: 1 issued, 0 withheld' <<<"$R2"; then
+    echo "  ok   receipts: withheld on a rejected ensures replay, issued when the ensures theorem replays"; PASS=$((PASS+1))
+  else
+    echo "  FAIL receipts: $(grep -m1 Summary <<<"$R1") / control $(grep -m1 Summary <<<"$R2")"; FAIL=$((FAIL+1))
+  fi
+else
+  echo "  skip bug 089 check-proofs/receipts legs (lake not on PATH)"
 fi
 
 echo "CONTRACT-NEGATIVES: PASS=$PASS  FAIL=$FAIL"

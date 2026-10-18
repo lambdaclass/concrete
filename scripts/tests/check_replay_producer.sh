@@ -367,8 +367,9 @@ if [ "$RC" -ne 0 ]; then
 else
   no "an ensures theorem the kernel refused still exits 0 — the report marks it and the build passes"
 fi
-if grep -q 'ensures discharged by' <<<"$OUT"; then
-  ok "...and the refusal is still rendered in the contract-obligations section"
+if grep -q 'no_such_discharge_theorem: theorem not found (counted as failed)' <<<"$OUT" \
+   && grep -qE 'Summary: [0-9]+ verified, [1-9][0-9]* failed' <<<"$OUT"; then
+  ok "...and the refusal is rendered in the contract-obligations section AND counted as failed (bug 089)"
 else
   no "the ensures section vanished, so the exit code is the only signal left"
 fi

@@ -1,12 +1,12 @@
-// Evidence class: partial contract (one direction proved, converse outstanding).
+// Evidence class: partial contract (one direction linked, converse outstanding).
 //
 // ct_compare's #[ensures] is a full iff, but only the same-tag direction
-// (a == b -> 1) is linked here (coverage one_direction, no ensures_proof). The
-// audit is HONEST about it: `--report contracts` shows the postcondition
-// `partial — one direction proved_by_lean, converse outstanding`, and
-// `concrete prove ... ` reports the converse as the next obligation. (The
-// shipped flagship proves both directions; this subexample deliberately keeps
-// only one to demonstrate the partial state.)
+// (a == b -> 1) is linked here (coverage one_direction, no ensures_proof). Since
+// bug 089 a coverage label grants nothing: `--report contracts` shows the
+// postcondition `unproven — NOT discharged` until exact property acceptance can
+// check what the theorem concludes. `concrete prove` names it the next obligation.
+// (The flagship links both directions; this subexample deliberately keeps
+// only one, so it must never read stronger than the flagship.)
 mod demo {
     #[spec(Concrete.Proof.ctCompareExpr)]
     #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]

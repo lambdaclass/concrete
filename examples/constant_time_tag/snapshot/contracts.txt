@@ -9,9 +9,9 @@ sha256.rotr
 
 constant_time_tag.ct_compare
   O1  ensures (a == b && result == 1) || (a != b && result == 0)
-     status:  proved_by_lean (full iff)
-     forward direction:  Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
-     converse direction: Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
+     status:  unproven — NOT discharged
+     linked:  Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct, Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
+     note:    no checked matcher confirms a linked theorem's conclusion is this clause (exact property acceptance is not implemented); a link and a #[proof_coverage] label are not evidence
 
 
 === Loop contracts ===

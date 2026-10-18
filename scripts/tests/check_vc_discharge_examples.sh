@@ -46,10 +46,13 @@ else
 fi
 
 echo "=== proof-backed statuses — existing verified references ==="
-assert_in "proved_by_lean → proved_by_lean (ref: hmac_sha256 ch)" \
-  "examples/hmac_sha256/src/main.con" contracts "status:  proved_by_lean"
-assert_in "partial        → partial (ref: weakened_postcondition)" \
-  "examples/contract_negatives/weakened_postcondition/src/main.con" contracts "partial — one direction proved_by_lean"
+# Bug 089: no #[ensures] reaches proved_by_lean or partial from a link alone — nothing yet checks a
+# theorem's conclusion is the clause (ROADMAP "Exact property acceptance"). The references now
+# pin the honest status; the proved_by_lean class is still exercised by proof-status claims.
+assert_in "linked ensures → unproven (ref: hmac_sha256 ch)" \
+  "examples/hmac_sha256/src/main.con" contracts "status:  unproven — NOT discharged"
+assert_in "one_direction  → unproven (ref: weakened_postcondition)" \
+  "examples/contract_negatives/weakened_postcondition/src/main.con" contracts "status:  unproven — NOT discharged"
 assert_in "stale          → proof stale (ref: stale_missing_partial)" \
   "examples/proof_patterns/stale_missing_partial/src/main.con" proof-status "proof stale"
 

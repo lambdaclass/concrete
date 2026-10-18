@@ -2628,30 +2628,78 @@ def loopContractSection (modules : List Module) (_registry : ProofRegistry)
       | none => pure ()
   return out ++ "\n"
 
+/-! ### The `#[ensures]` discharge decision (bug 089)
+
+An `#[ensures(P)]` obligation is discharged by a theorem only when THREE things hold:
+
+1. the kernel accepted the theorem (a replay, not a name in source);
+2. the theorem is about THIS function's body — its specification value is the extracted body with
+   these parameters (the bug-079 subject binding, `subjectBindingOf`);
+3. the theorem's CONCLUSION is the clause `P`, under the function's parameters and `result`.
+
+No checked matcher for (3) exists yet: that is ROADMAP "Exact property acceptance". Until it does,
+NO link discharges an `#[ensures]`, whatever it names and whatever `#[proof_coverage]` says. Before
+this, `contracts`, `vcs`, `obligation-ledger` and `audit` each decided from the registry entry alone
+and printed `proved_by_lean` for `#[ensures_proof(No.Such.Theorem)] #[ensures(result == 42)]` on
+`return x` — no Lean ran, and the clause is false.
+
+This is the ONE answer. Every surface — the contracts renderer, the VC schedule (and through it the
+obligation ledger and audit), `concrete prove`, and the `check-proofs` ensures section — consumes it
+instead of re-reading `ensuresProof`/`coverage` from the registry. When the matcher lands, it is
+added here and nowhere else. -/
+inductive EnsuresVerdict where
+  /-- No link offers any theorem for this function's postcondition. -/
+  | noLink
+  /-- Theorem(s) are linked, but nothing checks that any of them concludes the clause. -/
+  | unmatched (theorems : List String)
+  deriving BEq, Repr
+
+/-- The canonical obligation status of a verdict. Never a proof class: `unproven` for a link that
+    proves nothing checked, `missing` when there is no link at all. -/
+def EnsuresVerdict.status : EnsuresVerdict → String
+  | .noLink => "missing"
+  | .unmatched _ => "unproven"
+
+/-- The theorems a link OFFERS for the postcondition — the dependency edge a reader can follow. -/
+def EnsuresVerdict.theorems : EnsuresVerdict → List String
+  | .noLink => []
+  | .unmatched ts => ts
+
+/-- Why the clause is not discharged, in one sentence. -/
+def EnsuresVerdict.reason : EnsuresVerdict → String
+  | .noLink => "no #[ensures_proof] links a theorem to this postcondition"
+  | .unmatched _ =>
+    "no checked matcher confirms a linked theorem's conclusion is this clause (exact property acceptance is not implemented); a link and a #[proof_coverage] label are not evidence"
+
+/-- THE decision (bug 089). Offered theorems: the `#[ensures_proof]` theorem, and the `#[proof_by]`
+    theorem when a `#[proof_coverage]` label claims it covers the postcondition (`iff`,
+    `one_direction`). Either way the verdict is `unmatched` — see the section comment. -/
+def ensuresVerdictOf (registry : ProofRegistry) (qual : String) : EnsuresVerdict :=
+  match registry.find? (·.function == qual) with
+  | none => .noLink
+  | some e =>
+    let coverageClaim := (e.coverage == "iff" || e.coverage == "one_direction") && !e.proof.isEmpty
+    let offered := e.ensuresProof.toList ++ (if coverageClaim then [e.proof] else [])
+    if offered.isEmpty then .noLink else .unmatched offered.eraseDups
+
+-- No verdict is a proof class: the property this whole section exists to hold.
+example (v : EnsuresVerdict) : v.status ≠ "proved_by_lean" ∧ v.status ≠ "partial" := by
+  cases v <;> simp [EnsuresVerdict.status]
+
 partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     (provedVCs : List String := []) (provedVacuous : List String := []) : String := Id.run do
   let callables := callableContractNames modules
   let consts := contractConstNames modules
   let impures := impureFnNames modules
-  -- Discharge status for an `#[ensures]` on `qual`. Tiers, honest about partial
-  -- coverage: a registered `ensures_proof` → fully proved_by_lean. Otherwise, a
-  -- registered `proof` with directional coverage (`one_direction`) discharges
-  -- ONE direction of the postcondition — shown as partial, with the converse
-  -- still outstanding — rather than collapsing to a bare "missing".
+  -- Discharge status for an `#[ensures]` on `qual`: rendered from THE verdict (bug 089), never
+  -- re-derived here from the registry entry.
   let discharge (qual : String) : String :=
-    match registry.find? (fun e => e.function == qual) with
-    | some e => match e.ensuresProof with
-      | some thm =>
-        -- `iff` coverage with both a `proof` and an `ensures_proof` means the
-        -- two directions of an iff postcondition are each kernel-checked.
-        if e.coverage == "iff" && !e.proof.isEmpty then
-          s!"\n     status:  proved_by_lean (full iff)\n     forward direction:  {e.proof}\n     converse direction: {thm}"
-        else s!"\n     status:  proved_by_lean\n     theorem: {thm}"
-      | none =>
-        if !e.proof.isEmpty && e.coverage == "one_direction" then
-          s!"\n     status:  partial — one direction proved_by_lean, converse outstanding\n     theorem: {e.proof}  (coverage: one_direction)\n     note:    full postcondition not yet discharged; the converse is the next obligation"
-        else "\n     status:  missing (registry entry has no ensures_proof)"
-    | none => "\n     status:  missing (no in-source proof link for this function)"
+    let v := ensuresVerdictOf registry qual
+    match v with
+    | .noLink =>
+      if (registry.find? (·.function == qual)).isSome then "\n     status:  missing (registry entry has no ensures_proof)"
+      else "\n     status:  missing (no in-source proof link for this function)"
+    | .unmatched _ => s!"\n     status:  unproven — NOT discharged\n     linked:  {", ".intercalate v.theorems}\n     note:    {v.reason}"
   let rec go (m : Module) (acc : String) : String := Id.run do
     let mut out := acc
     let pfx := if m.name.isEmpty then "" else m.name ++ "."
@@ -2685,7 +2733,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
           out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}{st}"
           ri := ri + 1
         -- postconditions: vacuous if the precondition is unsatisfiable, else
-        -- discharged by a registered ensures_proof, or missing.
+        -- decided by `ensuresVerdictOf` (bug 089): no link discharges a clause yet.
         let mut i := 1
         for e in f.ensures do
           let issues := validateContractExpr postVars callables e

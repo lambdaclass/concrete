@@ -150,6 +150,19 @@ an in-source `#[spec]` + `#[proof_by]` + `#[proof_fingerprint("v2:…")]`. Every
 (`thesis_demo`, `crypto_verify_drifted`, nine `tests/programs/` fixtures) now links in source, with
 verdicts unchanged except `origin` and one fixture helper (`check_version`) that had been reported stale
 against the ELF example's proof. `regress_083_no_claim_by_name.con` must report no claim.
+### A Link Does Not Discharge A Postcondition (bug 089)
+
+`#[ensures_proof(No.Such.Theorem)] #[ensures(result == 42)] fn f(x: Int) -> Int { return x; }` read
+`proved_by_lean` on contracts, vcs, obligation-ledger and audit with no Lean run. Each surface decided
+from the registry entry alone, so a nonexistent theorem, an unrelated theorem, or a bare
+`#[proof_coverage(iff)]` label was enough. `check-proofs` printed ✓ for any theorem that type-checked,
+and a rejected one exited 1 under "0 failed" while its receipt minted. One verdict,
+`Report.ensuresVerdictOf`, now decides every `#[ensures]`, and every surface reads it. Until ROADMAP
+"Exact property acceptance" can check that a theorem concludes the clause, no link or coverage label
+discharges a postcondition: linked clauses read `unproven`, including `ct_compare` and `hmac.ch`.
+`check-proofs` counts a rejected ensures theorem as failed and never marks one ✓. Receipts are
+withheld when the ensures replay fails. Gated by `check_contract_negatives.sh` (bug 089 section, four
+fixtures × every surface).
 
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 

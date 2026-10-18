@@ -68,7 +68,9 @@ contract. `concrete prove constant_time_tag.ct_compare` and
 `--report contracts` show the layers, each in its own evidence class:
 
 ```
-functional correctness:  proved_by_lean (full iff)
+functional correctness:  unproven in --report contracts (bug 089: both
+                         directions are linked, but no matcher yet checks that
+                         they conclude the #[ensures] clause)
   same-tag direction (a == b → 1):      ct_compare_same_tag_correct
   different-tag direction (a != b → 0): ct_compare_different_tag_correct
 
@@ -103,8 +105,8 @@ Both directions are now proved (2026-06-03). The different-tag direction
 unfolds the 16-iteration loop, then collapses the resulting Nat OR/XOR chain
 with two bit-extensionality lemmas (`nat_xor_eq_zero_iff` /
 `nat_lor_eq_zero_iff`, proved via `Nat.testBit`). `--report check-proofs`
-verifies both directions; the source `#[ensures]` is `proved_by_lean (full
-iff)`. The constant-time and machine-timing layers are unchanged — only the
+verifies both directions. The source `#[ensures]` reads `unproven` since bug
+089: no checked matcher yet confirms the two theorems conclude the clause. The constant-time and machine-timing layers are unchanged — only the
 value-semantics layer moved from partial to complete.
 
 ## What this candidate is NOT

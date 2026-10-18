@@ -1,0 +1,9 @@
+mod main {
+    #[ensures_proof(No.Such.Theorem)]
+    #[ensures(result == 42)]
+    fn f(x: Int) -> Int {
+        return x;
+    }
+
+    pub fn main() -> Int { return f(1); }
+}

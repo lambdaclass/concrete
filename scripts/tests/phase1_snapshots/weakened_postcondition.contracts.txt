@@ -2,7 +2,7 @@
 
 cn.weak
   O1  ensures result > x
-     status:  partial — one direction proved_by_lean, converse outstanding
-     theorem: Examples.ProofPatterns.Proofs.add_three_correct  (coverage: one_direction)
-     note:    full postcondition not yet discharged; the converse is the next obligation
+     status:  unproven — NOT discharged
+     linked:  Examples.ProofPatterns.Proofs.add_three_correct
+     note:    no checked matcher confirms a linked theorem's conclusion is this clause (exact property acceptance is not implemented); a link and a #[proof_coverage] label are not evidence
 

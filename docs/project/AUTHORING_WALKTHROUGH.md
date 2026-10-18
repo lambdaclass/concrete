@@ -173,14 +173,15 @@ concrete examples/constant_time_tag/src/main.con --report contracts
 ```
 constant_time_tag.ct_compare
   O1  ensures (a == b && result == 1) || (a != b && result == 0)
-     status:  proved_by_lean (full iff)
-     forward direction:  Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
-     converse direction: Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
+     status:  unproven — NOT discharged
+     linked:  Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct, Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
+     note:    no checked matcher confirms a linked theorem's conclusion is this clause (exact property acceptance is not implemented); a link and a #[proof_coverage] label are not evidence
   … loop obligations: O1/O4/O5 omega; O2 arithmetic omega + operational Lean …
 ```
 
 The audit never collapses to one green badge: the postcondition is
-`proved_by_lean`, the loop arithmetic is `proved_by_kernel_decision`, and (for
+`unproven` until a checked matcher confirms the linked theorems conclude it
+(bug 089; ROADMAP "Exact property acceptance"), the loop arithmetic is `proved_by_kernel_decision`, and (for
 the full example) constant-time is `enforced/reported` while machine-level timing
 is `assumed/trusted`. Each claim carries its own evidence class — see
 [EVIDENCE_CLASSES.md](../verification/EVIDENCE_CLASSES.md).

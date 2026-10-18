@@ -1,0 +1,13 @@
+mod main {
+    #[spec(Concrete.Proof.computeTagExpr)]
+    #[proof_by(Examples.CryptoVerify.Proofs.compute_tag_correct)]
+    #[ensures_proof(Examples.CryptoVerify.Proofs.check_nonce_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:541394bce99c9dfdf86a776e4e8d2fc5")]
+    #[ensures(result == 42)]
+    fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
+        return key * message + nonce;
+    }
+
+    pub fn main() -> Int { return compute_tag(1, 2, 3); }
+}
