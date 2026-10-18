@@ -58,6 +58,35 @@ proofs of client components follow the working port, through the evidence and co
 below. New soundness defects still enter at the front. The port is an engineering workload,
 not a fourth verified flagship or a claim that foreign libraries have been proved.
 
+**Soundness track, 2026-10-18 (parallel to rows 2–3, not behind them):** the evidence layer is now
+strong — every theorem is re-checked outside Lean by con-leche and nanoda, and since bug 079 a claim is
+proved only when its body and parameters are the specification its theorem evaluates. The gaps that
+remain are recorded here so the queue does not read as if rows 0–1 settle soundness:
+
+- **The model-to-binary link (H19, owned by R-0460).** Nothing proves the extracted `PExpr` means what
+  the compiled code does; `PExpr` integers are unbounded and narrowing casts are unmodeled, so the
+  provable subset's eligibility rules carry the weight. This is the largest open soundness gap. R-0460
+  runs as its own track beside interop: first per-claim translation validation of proved functions
+  (`PExpr` evaluation against `--interp` against the compiled binary), then the extraction lemmas.
+- **The compiler itself** (elaboration through LLVM emission) is trusted, covered by the differential
+  fuzzer and mutation-qualified gates; translation validation stays Phase 15 (R-0299).
+- **The checker's own rules** — linear ownership, second-class references, capabilities, the Unsafe
+  boundary — are enforced and gated but have no soundness proof, and no task yet owns one.
+- **`#[proof_coverage]` is author-declared.** Bug 079 checks which body a theorem is about, not that its
+  statement has the declared shape (`iff`, `one_direction`, …). A checked statement-shape
+  classification belongs with the bug 079 generator.
+- **Loop-invariant claims have no binding.** `loop_invariant.count_up` is `spec_unbound` since bug 079:
+  its theorem is about a loop-assignment list, which nothing ties to the source loop. Binding
+  loop-assignment specifications to extracted loop bodies restores it honestly.
+- **Trusted std boundaries** (`trusted impl Bytes`, IO and others) rest on human audit; claims reaching
+  them say "carries trust".
+- **Local validation misses one CI step.** The checker-acceptance step and its frozen claim inventory
+  (`scripts/tools/claim_inventory.sh` against `docs/verification/claim-inventory-v4.34.1.tsv`) run only
+  on Linux CI, so a local green run did not predict bug 079's first CI result. It belongs in the local
+  gate set.
+- **The bug ledger's open list** has entries later work appears to have closed (R-0010 owns
+  mechanically checked per-bug states).
+
 **Implementation and feedback decision, 2026-10-17:** once queue rows 0–1 meet
 their recorded exits, start R-0285 with a working RocksDB C-API consumer and the
 minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
