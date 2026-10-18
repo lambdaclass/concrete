@@ -22,6 +22,24 @@ only trusted std methods roots and carries trust, and a claim reaching an unprov
 unattested dependency function is still not proved. Carries the cross-package half of the migration's
 S control, deferred at `ab01f856`. Gate legs X1–X5 in `check_identity_separation.sh`; family
 `p1-closure-reads-program` (inventory 131).
+||||||| 01343f6d
+
+### Sparkle Analysis And Emitted-Code Validation Plan (2026-10-18)
+
+Added a [source-based analysis](research/compiler/sparkle-emitted-code-validation.md)
+of Sparkle at `1614cee`, compared with Concrete at `f5b201af`. It records emitted
+output validation, exact refactor/replacement claims, proof dependency separation,
+fresh downstream CI and counterexample-first proof work, with remaining trust
+boundaries and source references.
+
+R-0299/R-0300 now explicitly plan a separate relation from checked SSA or validated
+BackendIR to the actual emitted LLVM text, starting with `u8` checked increment,
+its real overflow helper and rejecting mutations. Their existing BackendIR V1
+scope stays separate. R-0297/R-0413 retain a bounded comparison of Lean 4 and
+Concrete implementations of a possible small native backend, including ISA/ABI,
+encoding and assembler/linker trust. This is a completed documentation/planning
+milestone; no semantic checker, native backend or machine-code proof shipped here,
+and the current implementation queue is unchanged.
 
 ### A Claim Is Proved Only When Its Body Is What Its Theorem Is About (bug 079)
 

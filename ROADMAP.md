@@ -96,6 +96,32 @@ range-resolution, schema breadth and functional-proof work are not entrance
 requirements for this tested slice; their existing acceptance bars remain owned.
 R-0285's four-adapter exit still precedes the bulk R-0490 port.
 
+**Behavioral-contract decision, 2026-10-18 (planned):** make failure states,
+interface laws and the exact meaning of proof claims explicit through the existing
+API, contract and evidence machinery. R-0285 exercises resource recovery and
+partial progress in the first applicable foreign-library slice; R-0488 carries
+the same questions into ordinary library APIs. R-0031 owns a bounded equality/hash
+law example, R-0271 owns its generic/instance proof meaning, and R-0482 owns checking
+the claimed property against the actual theorem proposition. Their acceptance
+criteria below extend those owners; they create no additional execution queue.
+Start with ordinary types, explicit contracts and selected proofs. Add syntax or
+type-system machinery only after a real workload establishes the need. Tested API
+behavior can ship with the interop slices; formal error-state and generic-law
+composition follow the queued typed-contract and evidence prerequisites. These
+increments do not expand rows 0–1's recorded exits; newly reproduced false
+guarantees still enter through the existing soundness-repair rule.
+
+**Emitted-code validation analysis, 2026-10-18 (planned):** the
+[Sparkle review](research/compiler/sparkle-emitted-code-validation.md) records
+the existing SSA/LLVM foundations and a bounded check of actual emitted LLVM,
+beyond optional `llvm-as` well-formedness checks. R-0299/R-0300 own that additional
+semantic edge and its independent replay; their existing BackendIR V1 relation
+keeps its scope. R-0297/R-0413 compare a possible small native backend in Lean 4
+with a later Concrete implementation. Lean 4 is the recommended first host for
+the assurance experiment; implementation language alone supplies no correctness
+guarantee. Fresh-consumer checks join R-0285; deeper backend research does not
+reorder the queue or delay its first executable dependency slice.
+
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
 (closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
@@ -7143,6 +7169,29 @@ These are not aliases. A one-direction refinement cannot be rendered or consumed
 Trust is an evidence mode/disposition, not a semantic relation kind; a trusted model remains an
 assumption even when the implementation reference is exact.
 
+**Exact property acceptance (2026-10-18; planned):** bug 079's body/spec binding
+does not establish that the theorem states the annotated `#[proof_coverage]`
+(`iff`, `one_direction`, etc.). For every
+supported claim family, construct the expected typed proposition from the selected
+subject/model, parameters, domain, relation and scope, then check the attached
+theorem's type against it under the admitted normalization rules. A theorem about
+the right body is insufficient if it proves a different property. An arbitrary
+theorem that cannot be matched remains explicitly unclassified/unsupported for
+that coverage; its author's annotation cannot grant a stronger verdict.
+
+Retain a sorting example whose properties are distinct: preserving length,
+producing sorted output, and preserving the input elements. A length-only theorem
+must never authorize either of the latter claims. Gate a matching theorem, a wrong
+property over the same body, a narrower input domain, and one-direction evidence
+relabeled as equivalence. Drive those controls through status, receipt issuance,
+receipt consumption and independent replay as each consumer graduates. Bind the
+checked proposition, relation, domain, assumptions and exact implementation/model
+and dependency identities in the existing canonical evidence objects. Tests,
+assumptions and kernel proofs retain their separate dispositions; proposition
+matching does not establish model-to-machine correspondence or that the chosen
+specification captures the user's intent. No new coverage label becomes
+authoritative before its matching rule and rejecting controls exist.
+
 **Total-model admission is a semantic prerequisite, not merely sequencing.** A model used as
 logical contract semantics may carry a current `implements`, `refines`, `equivalent`, or
 `contract_only` attestation only when it is effect-free, terminating, free of unhandled traps, and
@@ -10371,6 +10420,31 @@ tracking to the hash collections.
   item should move ahead of allocator-heavy collection stabilization if the
   validation project needs arenas, test allocators, reload-safe allocation,
   or freestanding pools.
+- 1h. Pilot **behavioral laws for explicit interfaces** (planned 2026-10-18).
+  R-0031 owns the API example; R-0271 owns its proof/instantiation semantics,
+  using R-0473/R-0474's typed contracts and R-0482's evidence identities when
+  formal composition is admitted. Start with the existing explicit equality
+  and hash functions: state the equality laws and that equal keys have equal
+  hashes. This complements 1c's dictionary compatibility: two maps can use
+  the same dictionary while that dictionary's own functions disagree.
+  Retain a matching pair and a deliberately inconsistent pair that treats
+  `"Hello"` and `"hello"` as equal while hashing their original case
+  differently; exercise insertion and lookup to expose the bad behavior.
+  Finite tests report their tested domain; they do not prove the universal law.
+  Bind each law's exact proposition and assumptions to the selected callable
+  implementations, their dictionary and the admitted generic instance. An
+  implementation change invalidates dependent evidence. Missing evidence
+  withholds the corresponding functional guarantee; an explicit assumption
+  remains visible through callers and package boundaries. A safe API must
+  preserve memory/resource safety even when an unproved behavioral law fails.
+  Keep ordinary programs usable without proofs. Begin with normal declarations,
+  existing static/explicit dispatch and selected proof attachments; this does
+  not admit new trait syntax, implicit instance search or blanket proof
+  requirements. Use the example and measured authoring/review friction to decide
+  whether to expand to comparator ordering or codec round trips. Pull this
+  bounded pilot when collection/generic-proof work reaches it; it is not a
+  prerequisite for the first R-0285 consumer or the R-0490 executable port.
+
 ### Task R-0032
 
 **Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend `docs/project/ITERATION_PROTOCOL.md` when these land),
@@ -11583,6 +11657,14 @@ bounded audit does not bypass identity, receipt or typed-contract prerequisites.
    clarity, duplicated cleanup, missed errors and audit effort. Reuse R-0485's
    review criteria and R-0486's flagship component; no new public flagship. Require
    repeated workload evidence before introducing more expressive language features.
+   Include one fallible writer or owned-handle operation with R-0285's failure
+   contract: record partial progress, ownership and usable state on error, and
+   whether retry is valid. Retain a successful operation and a controlled failure
+   after partial progress, checking explicit cleanup and preventing a retry from
+   silently duplicating completed work. Reuse the existing effect-simulation seam
+   when applicable. State guarantees first with ordinary types and API contracts;
+   formal before/after and `Result`-case specifications follow R-0473/R-0474 and
+   the queued two-state mutation work. Fatal abort/OOM remains a separate boundary.
 3. **Optional read/write footprints — existing contract owners.** Feed a concrete
    preservation need into R-0473/R-0474, the queue's two-state mutation contracts,
    and R-0175. Start with bounded records/fixed arrays: update a cache or counter
@@ -13390,6 +13472,14 @@ case remains accepted. Dropping a relevant fact or dependency edge must yield a
 detected failure or incomplete coverage, never an unchanged/clean verdict. Keep the
 later allocation, runtime and stdlib dimensions behind their existing fact producers.
 
+**Selected-function equivalence follow-on (planned 2026-10-18):** use the
+[Sparkle analysis](research/compiler/sparkle-emitted-code-validation.md) as a
+reference for refactor checks. State the exact old/new relation, domain, failures
+and assumptions, retaining each revision's own dependency and target context.
+Re-elaborating an old body against current imports cannot establish equivalence
+to the old program. Keep this behind the typed contract/model and R-0482 identity
+prerequisites; a model-level proof does not supply an unchecked codegen edge.
+
 ### Task R-0184
 
 **Objective:** Add early **capability budget files** before full package facts exist.
@@ -14861,6 +14951,17 @@ record must name them so a proof's replay surface stays reproducible.
 
 **Objective:** Define proof preservation across monomorphization and capability-polymorphic instantiation. The compiler must report whether a theorem proves a specific generated instance (`proved_for_instance`) or a generic body (`proved_generic`), and it must prevent one instance proof from being presented as proof for every future instantiation.
 
+**Behavioral-law acceptance (planned 2026-10-18):** use R-0031's equality/hash
+pilot to show that a generic proof imports explicit semantic laws as well as
+method signatures. Bind each law to the exact callable/dictionary, proposition,
+assumptions and instance identities through the existing evidence machinery.
+Retain a valid instantiation, a substituted inconsistent implementation, a missing
+law, and an explicit assumed law. The latter must propagate trust, while missing
+evidence cannot silently become an assumption. An instance theorem cannot justify
+other instances or a generic verdict. Keep testing, conditional proofs and
+discharged law obligations distinct, and require no implicit trait resolution or
+mandatory proofs for ordinary generic code.
+
 ### Task R-0272
 
 **Objective:** [historical origin: Phase 4 items 44f/44g] Finish the remaining compiler-correctness hardening:
@@ -15420,9 +15521,41 @@ required: local binding packages with pinned dependencies establish the first wo
    implementation before adding Rust crypto, the selected upstream Zig operation
    and the bounded libp2p runtime adapter. Retain the same feedback for each slice.
 
+Automate a fresh-consumer CI case outside the compiler checkout as soon as the
+first slice runs. Fetch the exact candidate origin/revision and toolchain,
+including fork-PR origins; use only declared dependencies and the installed
+workflow. Compare actual results and expected failures, including resource
+cleanup, rather than accepting a build or output marker alone. Record setup,
+build and run timings on each claimed platform, with clean/warm/offline checks
+as applicable. R-0352/R-0354 reuse this consumer for distribution acceptance.
+
 Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
+
+**Failure and resource contract (2026-10-18; planned):** for each selected
+fallible operation, state what success and each recoverable error mean for
+ownership, partial progress, observable state and retry. An owned input is
+returned with a stated resource state, retained by a named owner, or released;
+ownership never disappears behind an error code. Borrowed mutable state has a
+stated preservation or partial-update rule. Use
+ordinary `Result`, records/enums, scoped borrows and explicit cleanup first.
+An error does not imply rollback, and an external operation whose outcome is
+unknown must say so rather than authorize a blind retry. Retain upstream
+guarantees and reviewed assumptions with their provenance; generated wrappers
+cannot manufacture atomicity or recovery guarantees absent from the foreign API.
+
+In the first RocksDB slice, exercise a real recoverable error and the exact
+ownership/release behavior of its results and handles. Where the selected API
+supports partial progress or retry, retain an independent observable control;
+otherwise state that limit and use the first applicable writer/runtime adapter
+for that case. Gate successful use, controlled failure, exactly-once cleanup,
+and safe resource recovery or explicit consumption. R-0488 reuses the contract
+for ordinary stdlib operations. More expressive `Result`-case, `old` and frame
+proofs belong to R-0473/R-0474 and the queued two-state contract work; they are
+not entrance requirements for the tested consumer. Fatal abort, OOM and foreign
+unwinding retain their existing separate policies. No automatic rollback,
+scope-end destruction or general exception machinery is introduced.
 
 **Annotation reuse and generated checks (2026-10-18; planned):**
 
@@ -15705,6 +15838,24 @@ direct SSA->LLVM path once parity is established.
   universal machine IR. Require behavior coverage and target/ABI matrices
   comparable to the LLVM/QBE gates before any native backend becomes a
   default for any build mode.
+
+**Small owned backend investigation (planned 2026-10-18):** compare a Lean 4
+implementation with a later Concrete implementation under R-0413; record the
+tradeoffs in [the Sparkle/native-backend analysis](research/compiler/sparkle-emitted-code-validation.md)
+and [QBE implementation research](research/compiler/qbe-in-concrete.md).
+Recommend Lean 4 first so executable target semantics and preservation theorems
+can be developed with the existing compiler. Begin, only when pulled, with one
+explicit ISA/ABI/object-format target, integer/boolean functions and simple
+instruction selection with explicit stack locations. A full QBE reimplementation,
+optimizing register allocator and target matrix are not entrance requirements.
+State which lowering edges are proved, checked or trusted; include the actual
+assembly/object encoding and remaining assembler/linker/runtime assumptions.
+Compare against external QBE/LLVM and an independent semantic oracle. Agreement
+is testing, not a preservation theorem. Keep the existing workload gate and
+record the new independent bug detection or reduced trust that justifies a third
+backend's maintenance cost. Neither host language makes the output correct by
+itself, and this investigation does not block R-0299/R-0300 or interop delivery.
+
 ### Task R-0298
 
 **Objective:** Define backend-default policy explicitly if multiple production backends graduate: defaults are a versioned `(target, build_mode) -> backend` table, visible in help/audit/build receipts and overridable by an explicit flag. Changing a default requires clean-build/incremental equivalence, behavior and optimization matrices, performance data, a rollback switch, and release notes. Backend availability must never change source-language semantics, proof status, diagnostics before codegen, or package resolution.
@@ -15735,6 +15886,29 @@ direct SSA->LLVM path once parity is established.
  Lean-proved/Core-level claim cannot be presented as native-code evidence
  unless the backend artifact is either translation-validated or explicitly
  backend-trusted in the audit bundle.
+
+**Actual emitted LLVM increment (planned 2026-10-18):** extend validation beyond
+the existing `ValidatedBackendIR` boundary with a separate, explicitly scoped
+relation to the emitted `.ll` bytes. Follow the
+[analysis and acceptance experiment](research/compiler/sparkle-emitted-code-validation.md#bounded-emitted-llvm-experiment):
+retain checked SSA, generate LLVM normally, parse the actual output with a
+separate reader and compare independent source/LLVM semantics for every input
+in the admitted domain. The first case is checked `u8` increment: `10 -> 11`,
+`254 -> 255`, and `255 -> required overflow failure`. A silent wrap to zero must
+refuse. Start with integer/boolean functions and acyclic branches, and include
+the real checked-arithmetic helper bodies and their required call closure;
+checking helper names or the producer's pre-render AST alone is insufficient.
+
+Retain controls for a corrupted helper, wrong width/signedness, changed branch
+or return, missing failure edge, new LLVM poison/undefined behavior, malformed
+output and unsupported instructions. Unsupported shapes, timeout and checker
+errors remain distinct incomplete results and cannot grant a validated verdict.
+Keep finite-domain checking, solver trust and kernel-checked proof separate.
+Parser/reflection soundness and model-to-source correspondence remain explicit
+assurance obligations. A direct probe of the current SSA emitter is permitted;
+the full BackendIR migration is not a prerequisite for learning from it.
+LLVM optimization and LLVM-to-machine-code correctness are separate edges.
+
 ### Task R-0300
 
 **Objective:** Make the Phase 15 translation-validation slice independently replayable.
@@ -15781,12 +15955,37 @@ direct SSA->LLVM path once parity is established.
  the absence of an externally expected root the checker must report an
  unvalidated backend edge, not claim semantic mismatch detection. Wire
  `scripts/tests/check_backend_translation_certificates.sh`.
+
+**Emitted-LLVM replay increment (planned 2026-10-18):** R-0299's emitted-text
+relation is distinct from the V1 relation above and must not reinterpret an old
+certificate as covering output it never checked. Use the existing canonical
+task/evidence objects with a separately versioned relation/profile. Bind the
+exact checked input, emitted bytes, selected function and actual helper/callee
+closure, target/arithmetic semantics, domain, checker/rules, proof artifacts and
+assumptions. Independent replay parses the retained output and checks the
+relation without calling producer Emit/Lower helpers. Gate a valid bundle,
+wrong/stale output, wrong target/profile, a modified helper and a consistently
+rehashed but semantically wrong bundle. Incomplete parsing or checking cannot
+be hidden by a matching hash or a partial set of obligations.
+
+Report the independently checked edge precisely: checked SSA/BackendIR to
+emitted LLVM, followed separately by LLVM optimization, machine-code emission,
+object/linking and runtime/ABI boundaries. LLVM transformation checking such as
+Alive2 keeps its supported scope and solver trust; it does not become a Lean
+proof or a Concrete-to-LLVM proof by relabeling. Object/binary identities remain
+identity-only until their own semantic edge is checked. Extend hostile schema
+fixtures and the R-0353 consumer when this profile graduates; do not freeze
+producer-only bytes or mint stronger receipts during the development probe.
+
 ### Task R-0301
 
 **Objective:** Add the Phase 15 validation artifact: a backend/std-lib contract project with ABI/layout C round trips, C/ABI glue generation/import checks, the C ABI classification matrix, alignment-fact fixtures if Task R-0284 is pulled into implementation, backend-IR emission/verifier checks, producer translation-validation checks, independent `BackendTranslationCertificateV1` replay and mutations, sanitizer runs, compiled-oracle differential tests, native debug/source-map smoke tests, clean-vs-incremental fact equivalence, cached-object substitution negatives, and stdlib
 
  authority/allocation/evidence gates. The artifact must show the exact point
  at which independent checking stops and backend/toolchain trust begins.
+ Include R-0299/R-0300's actual emitted-LLVM fixture and independent replay once
+ that profile graduates, with overflow-helper and output-substitution negatives;
+ keep its coverage separate from the BackendIR V1 and native-code edges.
 ### Task R-0302
 
 **Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/language/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/compiler/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
@@ -17074,6 +17273,16 @@ distinct; build tools target the host while linked libraries target the program.
 Build-time tool authority and linked-library runtime authority are separate facts.
 Imports resolve only declared dependencies against this same graph.
 
+**Proof-authoring edges (planned 2026-10-18):** record heavy proof/tactic
+dependencies separately from runtime, host build-tool and test edges within this
+same model, following the [Sparkle sidecar lesson](research/compiler/sparkle-emitted-code-validation.md#additional-workflow-lessons).
+Ordinary builds need not fetch or build unused proof-authoring packages. A build
+requiring evidence must still validate its retained bundle or replay with the
+required dependencies; absence cannot excuse missing/stale proof evidence.
+Keep proof dependencies/toolchains in evidence roots even when they do not enter
+the executable link graph. Implement this schema increment when a proof-bearing
+package needs it; it does not delay the first exact-pin native dependency slice.
+
 R-0285's first slice supplies exact application/binding manifest examples and
 expected lock output; include workspace and C/Rust/Zig package cases. Label draft
 fields until implemented, then keep the examples in executable fixtures so docs
@@ -17614,6 +17823,18 @@ must not silently reinterpret or overwrite their source scope.
  decision record states whether the approach actually shrinks the TCB, merely
  duplicates it, or creates a second source of truth. Pull forward only if a
  real pass can be checked without weakening the no-second-truth-source rule.
+
+**Native backend comparison (planned 2026-10-18):** R-0297 owns the possible
+target-specific backend; this task owns evaluating a Concrete implementation
+alongside a Lean 4 reference. Recommend Lean 4 for the first assurance prototype,
+with explicit instruction semantics and preservation/validation obligations.
+Writing the generator in Lean does not prove it correct; writing it in Concrete
+also requires accounting for how Concrete compiled the generator. Keep bootstrap,
+host-runtime and target-runtime trust distinct. The compiler's Lean runtime and
+reference counting are not automatically linked into programs whose machine code
+it emits. Compare maintained code, proof/annotation burden, independent bug
+detection, reproducibility and actual TCB reduction. See
+[QBE/native-backend research](research/compiler/qbe-in-concrete.md#lean-4-alternative-and-generated-runtime-2026-10-18).
 ### Task R-0414
 
 **Objective:** Research a Datalog-style / stratified relational **rule layer** only when the shipped Phase 8.5 `CompilerDB` has real relational consumers that typed queries/maps cannot express cleanly.
