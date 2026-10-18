@@ -7199,6 +7199,11 @@ run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
 run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "E0208"
 # A local shadowing a `&mut` parameter was exempt from the exit check by name.
 run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "E0208"
+# Bug 082: one binding per name per module. An import colliding with a local
+# function, or two imports of different definitions under one name, is E0299
+# (the positive alias rows are tests/codegen/import_alias_binding.con).
+run_err "$TESTDIR/error_082_import_alias_shadows_local.con" "E0299"
+run_err "$TESTDIR/error_082_import_duplicate_binding.con" "E0299"
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5
@@ -11123,6 +11128,8 @@ fi
 #     empty slots must return instead of wrapping forever)
 #   regress_057_hashmap_by_value/src/main.con  (bug 057 — a HashMap passed BY
 #     VALUE must arrive whole: hash_fn for get (SIGSEGV pre-fix), cap for drop)
+#   regress_082_project_alias_binding/src/main.con  (bugs 082+055 — a sibling
+#     submodule alias builds, and std.math.abs is not hijacked by a sibling's abs)
 # `timeout` is coreutils; present in the devshell and on CI. Degrade to running
 # without a watchdog rather than skipping the fixtures entirely, but say so, so
 # a hang on such a machine is at least explicable.

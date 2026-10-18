@@ -291,6 +291,22 @@ program with recursion still printed a number (`20 bytes (leaf)` while `main` re
 invalid-JSON paths in the bundle manifest were fixed on the way. Gated by
 `check_stack_budget.sh` with a recursive budgeted fixture and a bounded positive control.
 
+### Import Aliases Bind Their Name (bug 082, 2026-10-18)
+
+`import a.{check_version as check_class}` beside another module's `check_class` ran that other
+function on both backends: the alias spelling went into Core, and every consumer resolved it against
+the whole program before any alias table. Elab now spells a call, function value or `fnRef` through
+an import by the definition it names (`<sub>_<orig>`, the prefixed path, or `<module>_<orig>` for a
+sibling top-level module, which is also used unaliased when several top-level modules define the
+name). CoreCheck records the import's capabilities under that spelling. The interpreter reaches
+top-level functions under `<module>_<fn>`, so `module::fn` and aliased calls run under `--interp`. A
+module that binds one name twice (an import and a local function, or two imports of different
+definitions) is refused with E0299. Elab's cross-module rename no longer rewrites a name the body's
+module imports from elsewhere: a submodule's `std.math.abs` was being sent to a sibling's `abs`. A
+project's aliased import from a sibling submodule now builds (bug 055).
+Regression: `tests/codegen/import_alias_binding.con` (differential, pinned 77324; previous compiler
+12814), the project test `regress_082_project_alias_binding`, and two `run_err E0299` fixtures. See [docs/bugs/082](docs/bugs/082_import_alias_loses_to_same_named_definition.md).
+
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
 A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:

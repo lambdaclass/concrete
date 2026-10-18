@@ -1203,10 +1203,20 @@ end -- mutual
 -- Entry point
 -- ============================================================
 
+/-- Bug 082: a call into a sibling TOP-LEVEL module is spelled `<module>_<fn>` in
+    Core (the `module::fn` form, and an aliased or ambiguous import of one), while
+    the definition keeps its bare name. The compiled path resolves that spelling
+    through the sibling linker aliases; the interpreter had no such table and
+    rejected every one of them as an undefined function. Each top-level function
+    is therefore also reachable under its qualified spelling. Appended AFTER the
+    real definitions, so an exact definition name still wins. -/
+def qualifiedTopLevelFns (modules : List CModule) : List CFnDef :=
+  modules.flatMap fun m => m.functions.map fun f => { f with name := m.name ++ "_" ++ f.name }
+
 /-- Interpret a program from its validated Core modules.
     Finds and runs `main`, returns exit code. -/
 def interpret (modules : List CModule) : Except String (Option Int × String) := do
-  let fns := collectFns modules
+  let fns := collectFns modules ++ qualifiedTopLevelFns modules
   let enums := collectEnums modules
   match fns.find? (fun f => f.name == "main") with
   | none => .error "interp: no 'main' function found"

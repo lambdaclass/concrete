@@ -170,6 +170,11 @@ inductive CheckError where
   | newtypeConstructPrivate (name : String)
   | structLiteralPrivateField (structName : String) (fieldName : String)
   | fieldAccessPrivate (structName : String) (fieldName : String)
+  /-- Bug 082: one module binds `name` twice — an import and a local definition,
+      or two imports naming different definitions. Which one a call means was
+      decided by lookup order, and Check, Elab and the backends used different
+      orders. -/
+  | importBindingCollision (name : String) (other : String)
   -- Slice 5: Struct/enum/field + function calls
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
@@ -351,6 +356,7 @@ def CheckError.message : CheckError → String
   | .newtypeConstructPrivate name => s!"newtype '{name}' cannot be constructed here: direct construction is private to its defining module"
   | .structLiteralPrivateField structName fieldName => s!"cannot construct '{structName}' here: field '{fieldName}' is private to its defining module"
   | .fieldAccessPrivate structName fieldName => s!"field '{fieldName}' of '{structName}' is private to its defining module"
+  | .importBindingCollision name other => s!"import binds '{name}', which {other}"
   | .discardNonCopy tyName => s!"`discard(...)` only acknowledges discarding a Copy value; '{tyName}' is a non-Copy resource"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
@@ -390,6 +396,7 @@ def CheckError.hint : CheckError → Option String
   | .newtypeConstructPrivate name => some s!"use {name}'s public constructor function (e.g. `{name}::try_new(...)`); its representation is opaque across modules (docs/language/CONSTRUCTION_RIGHTS.md)"
   | .structLiteralPrivateField structName _ => some s!"'{structName}''s representation is private; construct it through a public constructor function of its defining module, or mark the field `pub` (docs/language/CONSTRUCTION_RIGHTS.md)"
   | .fieldAccessPrivate structName _ => some s!"use a public accessor method on '{structName}', or mark the field `pub` in its defining module (docs/language/CONSTRUCTION_RIGHTS.md)"
+  | .importBindingCollision name _ => some s!"a name has one binding per module: rename the import (`import m.\{{name} as other_name}`) or the local definition, or call it qualified as `module::{name}`"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
@@ -498,6 +505,7 @@ def CheckError.code : CheckError → String
   | .fieldAccessPrivate _ _ => "E0298"
   | .guardMovesLinear _ => "E0300"
   | .refStoredInAggregate _ _ => "E0239"
+  | .importBindingCollision _ _ => "E0299"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=

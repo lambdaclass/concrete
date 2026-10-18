@@ -1,0 +1,11 @@
+import std.math.{ abs };
+import util.{ pick as f };
+import util.{ abs as util_abs };
+pub fn probe() -> Int {
+    // std.math.abs, NOT the sibling submodule's same-named util.abs: 2
+    let std_abs: i64 = abs(0 - 2);
+    // the sibling's abs under an alias: 99
+    let sib_abs: i64 = util_abs(0);
+    // aliased import from a sibling submodule (bug 055): pick(1) = 2
+    return (std_abs as Int) * 1000 + (sib_abs as Int) * 10 + f(1);
+}

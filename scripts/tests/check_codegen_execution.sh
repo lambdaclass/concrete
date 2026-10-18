@@ -91,6 +91,8 @@ expect two_d_write 99
 expect mod_nested_generic 42
 expect mod_two_instantiations 18
 expect mod_triple_nested 55
+# Bug 082: an import alias is the only binding of its local name (pre-fix 12814).
+expect import_alias_binding 77324
 
 echo ""
 echo "CODEGEN-EXECUTION: PASS=$PASS FAIL=$FAIL"

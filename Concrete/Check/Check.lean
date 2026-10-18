@@ -2260,8 +2260,56 @@ private partial def specBodyCalls : Expr → List String
   | .arrayIndex _ a i => specBodyCalls a ++ specBodyCalls i
   | _ => []
 
+/-- Bug 082: every name a module can CALL has exactly one binding in that module.
+
+    `import a.{check_version as check_class}` beside another module's
+    `check_class` compiled, and both the binary and `--interp` called the OTHER
+    `check_class`: the alias was a lookup-order preference, and each consumer had
+    its own order. Check searched imports before local functions, Elab's callee
+    identity searched local functions first, and the backends searched every
+    definition in the program before any alias. A rename that only wins some of
+    those races is not a binding.
+
+    Two shapes are refused here, where the module's import list and its own
+    definitions are both in view:
+      * an imported FUNCTION whose local name is also a function or extern
+        defined in this module;
+      * two imports binding one local name to different definitions.
+    Re-importing the SAME definition twice stays legal. Elab then spells an
+    aliased call by the definition it names, so no global table is consulted
+    with the alias spelling (see `Elab.importCallSpellings`). -/
+def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnostics :=
+  let localFnNames := m.functions.map (·.name) ++ m.externFns.map (·.name)
+  -- `imports.functions` is keyed by local name and covers functions AND externs.
+  let importedFnNames := imports.functions.map (·.1)
+  let syms : List (String × String × String × Span) := m.imports.flatMap fun imp =>
+    imp.symbols.map fun sym => (sym.effectiveName, imp.moduleName, sym.name, imp.span)
+  let fnSyms := syms.filter fun (local_, _, _, _) => importedFnNames.contains local_
+  let vsLocal : Diagnostics := fnSyms.filterMap fun (local_, modName, orig, sp) =>
+    if localFnNames.contains local_ then
+      let e := CheckError.importBindingCollision local_
+        s!"is also a function defined in this module (import of '{modName}.{orig}')"
+      some { severity := .error, message := e.message, pass := "check", span := some sp,
+             hint := e.hint, code := e.code }
+    else none
+  -- Duplicates: report the SECOND binding of a name, once per name.
+  let (_, dups) := syms.foldl (init := (([] : List (String × String × String)), ([] : Diagnostics)))
+    fun (seen, ds) (local_, modName, orig, sp) =>
+      match seen.find? fun (l, _, _) => l == local_ with
+      | some (_, m0, o0) =>
+        if m0 == modName && o0 == orig then (seen, ds)
+        else
+          let e := CheckError.importBindingCollision local_
+            s!"is already bound to '{m0}.{o0}' by another import (here: '{modName}.{orig}')"
+          (seen, ds ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
+                          hint := e.hint, code := e.code }])
+      | none => ((local_, modName, orig) :: seen, ds)
+  vsLocal ++ dups
+
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
+  let collisions := importBindingCollisions m imports
+  if !collisions.isEmpty then .error collisions else
   -- Use pre-built summaries from FileSummary
   let fnSigs : List FnSummary := summary.functions.map Prod.snd
   let externSigs : List FnSummary := summary.externFnSigs.map Prod.snd

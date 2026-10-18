@@ -1,6 +1,6 @@
 # Bug 055: project-mode sibling file-module import alias is unusable — valid program rejected
 
-**Status:** Open
+**Status:** Fixed 2026-10-18 with [bug 082](082_import_alias_loses_to_same_named_definition.md)
 **Discovered:** 2026-07-18, middle-end audit (reproduced: `import a.{pick
 as f}` from a sibling file module resolves at Check, then EmitSSA emits a
 call to undefined `@pick` — generic AND non-generic callees both fail at
@@ -29,3 +29,11 @@ Extend the sibling-module alias branch to also register
 `("f", "a_pick")` (def-name orientation), matching what
 `prefixModuleFnNames` produces. Regression: a two-file project with a
 renamed sibling import (generic and plain) builds and runs.
+
+## Fixed (2026-10-18, bug 082)
+
+Elab no longer carries an alias into Core. `importCallSpellingsFor` spells a call
+through `import a.{pick as f}` from a sibling submodule of a top-level module as
+the sibling's definition, `a_pick`. Regression:
+`tests/programs/regress_082_project_alias_binding/` (project test, exit 0). The
+previous compiler fails it at llvm-as with `use of undefined value '@pick'`.

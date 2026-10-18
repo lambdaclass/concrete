@@ -1,0 +1,13 @@
+// Bug 082: two imports may not bind one name to different definitions. Before
+// the fix this compiled and called whichever `f` a lookup found first (a.f).
+mod a { pub fn f(c: Int) -> Int { return 1; } }
+mod c { pub fn f(c: Int) -> Int { return 2; } }
+mod b {
+    import a.{ f };
+    import c.{ f };
+    pub fn probe(c: Int) -> Int { return f(c); }
+}
+mod main {
+    import b.{ probe };
+    fn main() -> Int { return probe(2); }
+}

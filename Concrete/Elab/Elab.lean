@@ -66,6 +66,12 @@ structure ElabEnv where
   -- rule. Installed at ElabEnv CONSTRUCTION, so there is no window in which this
   -- silently answers `none` and callers emit gaps for a reason that is not real.
   resolveCallee : String → Option CallableId := fun _ => none
+  -- Bug 082: the Core spelling of a call to an imported function whose LOCAL name
+  -- does not uniquely name its definition (an `as` alias, or a sibling-module
+  -- function whose bare name several top-level modules define). Keyed by the local
+  -- name; see `importCallSpellingsFor`. Every Core consumer below resolves a direct
+  -- callee by spelling, so the alias must not survive into Core.
+  callSpellings : List (String × String) := []
   -- Enclosing loops, INNERMOST FIRST, each with its optional label. `break`/`continue`
   -- evidence carries a RELATIVE target (0 = innermost), never a label string: renaming
   -- a label must not move a digest. Restored by restoreScope with the rest of the
@@ -339,6 +345,12 @@ private def lookupFnSig (name : String) : ElabM (Option FnSummary) := do
   let env ← getEnv
   return (env.fnSigs.find? fun (n, _) => n == name).map Prod.snd
 
+/-- The Core spelling of a direct reference to the function bound to `name` in
+    this module (bug 082). The local name unless an import says otherwise. -/
+private def coreFnSpelling (name : String) : ElabM String := do
+  let env ← getEnv
+  return (env.callSpellings.lookup name).getD name
+
 private def lookupStruct (name : String) : ElabM (Option StructDef) := do
   let env ← getEnv
   return env.structs.find? fun sd => sd.name == name
@@ -535,7 +547,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       match ← lookupFnSig name with
       | some sig =>
         let paramTys := sig.params.map Prod.snd
-        return ElaboratedExprV2.mk (CExpr.ident name (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
+        return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
       | none =>
@@ -1054,7 +1066,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     match env.allFnSigPairs.lookup fnName with
     | some sig =>
       let paramTys := sig.params.map Prod.snd
-      return ElaboratedExprV2.mk (CExpr.fnRef fnName (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee fnName with
+      return ElaboratedExprV2.mk (CExpr.fnRef (← coreFnSpelling fnName) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee fnName with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn reference: callee not resolvable")
     | none => throwElab (.unknownFunctionRef fnName) (some e.getSpan)
@@ -1547,9 +1559,9 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
       cArgs := cArgs ++ [cArg]
       argEvs := cArgEv.evidence :: argEvs
     -- Use canonical name for intrinsics (e.g., string_substr → string_slice)
-    let callName := match intrinsic with
-      | some id => id.canonicalName
-      | none => fnName
+    let callName ← match intrinsic with
+      | some id => pure id.canonicalName
+      | none => coreFnSpelling fnName
     return ElaboratedExprV2.mk (CExpr.call callName inferredTypeArgs cArgs retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
@@ -2219,9 +2231,81 @@ partial def prefixModuleFnNames (pfx : String) (cm : CModule) : CModule :=
 
 -- Builtin function signatures: shared definition in BuiltinSigs.lean (builtinFnSigs)
 
+/-- Bug 082: how a call to an imported function is SPELLED in Core.
+
+    Core names a direct callee by a string, and every consumer below Elab (Mono,
+    CoreCheck, Interp, EmitSSA) resolves that string against definitions it
+    collected program-wide. An import alias was carried into Core as the alias:
+    `import a.{check_version as check_class}` emitted `check_class(c)`, and when
+    another module defined `check_class` both backends found THAT definition
+    before consulting any alias table. The alias decided nothing.
+
+    So the alias is resolved here, where the import list is in scope, and Core
+    carries the spelling of the definition instead — the same spelling the
+    existing linker-alias tables map to, so no consumer meets a new shape:
+
+      * an import from a submodule of this module: `<sub>_<orig>`, the name
+        `prefixModuleFnNames` gives the definition;
+      * an import by a dotted path: the prefixed path, as the nested-import
+        linker aliases compute it;
+      * an import from a sibling TOP-LEVEL module: `<module>_<orig>`, the spelling
+        `module::orig` already elaborates to. Top-level definitions keep their bare
+        names in Core, so this is also applied WITHOUT an alias when several
+        top-level modules define `orig` — the bare spelling would then name
+        whichever of them a consumer finds first.
+
+    Externs keep their spelling: they name C symbols and are never prefixed.
+    Unaliased imports of uniquely-named definitions keep theirs too, so the
+    common case and every evidence digest over it are unchanged. -/
+def importCallSpellingsFor (m : Module) (summary : FileSummary)
+    (summaryTable : List (String × FileSummary))
+    (topLevel : List (String × FileSummary))
+    (siblingSubs : List (String × FileSummary) := []) : List (String × String) :=
+  m.imports.flatMap fun imp =>
+    imp.symbols.filterMap fun sym =>
+      let orig := sym.name
+      let localName := sym.effectiveName
+      let aliased := localName != orig
+      match summary.submoduleSummaries.find? fun (n, _) => n == imp.moduleName with
+      | some (subName, sub) =>
+        if aliased && sub.functions.any (·.1 == orig)
+        then some (localName, subName ++ "_" ++ orig) else none
+      | none =>
+      -- A SIBLING submodule of a top-level module (`src/b.con` importing
+      -- `util.{pick as f}`): its definitions are `<sibling>_<orig>`. Bug 055 was
+      -- this shape emitting the bare alias, an undefined symbol.
+      match siblingSubs.find? fun (n, _) => n == imp.moduleName with
+      | some (sibName, sib) =>
+        if aliased && sib.functions.any (·.1 == orig)
+        then some (localName, sibName ++ "_" ++ orig) else none
+      | none =>
+        let parts := imp.moduleName.splitOn "."
+        if parts.length ≥ 2 then
+          let isLocalNested := summary.submoduleSummaries.any fun (n, _) => n == parts.headD ""
+          let subPath := if isLocalNested then parts else parts.drop 1
+          match summaryTable.find? fun (n, _) => n == imp.moduleName with
+          | some (_, ms) =>
+            if aliased && ms.functions.any (·.1 == orig)
+            then some (localName, "_".intercalate subPath ++ "_" ++ orig) else none
+          | none => none
+        else if imp.moduleName == m.name || imp.moduleName == "main" then none
+        else match topLevel.find? fun (n, _) => n == imp.moduleName with
+          | some (_, ts) =>
+            if !(ts.functions.any (·.1 == orig)) then none
+            else
+              let definers := topLevel.filter fun (_, t) => t.functions.any (·.1 == orig)
+              if aliased || definers.length > 1
+              then some (localName, imp.moduleName ++ "_" ++ orig) else none
+          | none => none
+
 partial def elabModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {})
     (summaryTable : List (String × FileSummary) := [])
+    -- Bug 082: the program's top-level modules, for `importCallSpellingsFor`.
+    (topLevel : List (String × FileSummary) := [])
+    -- Bug 082/055: this module's sibling submodules, when its parent is a
+    -- top-level module (so a sibling's definitions are `<sibling>_<fn>`).
+    (siblingSubs : List (String × FileSummary) := [])
     (prefixSubs : Bool := true)
     (proofModulePath : String := "")
     (proofFnPrefix : String := "") : Except Diagnostics CModule :=
@@ -2373,6 +2457,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   --
   -- Functions, externs and impl methods all, because the hole was never specific
   -- to one of them: four of the six measured escapes were free functions.
+  let callSpellings := importCallSpellingsFor m summary summaryTable topLevel siblingSubs
   let importedFnCaps : List (String × CapSet) := m.imports.flatMap fun imp =>
     let summary? := match summary.submoduleSummaries.find? fun (n, _) => n == imp.moduleName with
       | some (_, s) => some s
@@ -2484,6 +2569,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     vars := []
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
+    callSpellings := callSpellings
     structs := allStructs
     enums := allEnums
     fnSigs := allSigs
@@ -2599,7 +2685,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let childPath := thisProofPath ++ "." ++ sub.name
       let childPrefix := if proofFnPrefix.isEmpty then sub.name
                          else proofFnPrefix ++ "_" ++ sub.name
-      match elabModule sub subSummary subImports summaryTable
+      match elabModule sub subSummary subImports summaryTable (topLevel := topLevel)
+          (siblingSubs := if prefixSubs then summary.submoduleSummaries.filter (·.1 != sub.name) else [])
           (prefixSubs := false) (proofModulePath := childPath)
           (proofFnPrefix := childPrefix) with
       | .ok csub => .ok (lst ++ [{ csub with sourceFile := sub.sourceFile }])
@@ -2634,13 +2721,28 @@ partial def elabModule (m : Module) (summary : FileSummary)
      | some (_, c) => c == 1
      | none => true)
     && !(parentFnNames.contains bare)
+  -- Bug 082 (same class): the renames above are keyed by BARE name and were applied
+  -- to every body regardless of what that body's module imports. A submodule doing
+  -- `import std.math.{abs}` while a sibling submodule defined `abs` had its call
+  -- rewritten to the sibling's `util_abs` (measured: 99 instead of 2, compiled).
+  -- A name the module binds by an import keeps the rename only when that import
+  -- names the very submodule the rename points into.
+  let renamesFor (imps : List ImportDecl) : List (String × String) :=
+    crossModuleRenames.filter fun (bare, tgt) =>
+      let from? := imps.findSome? fun imp =>
+        if imp.symbols.any (·.effectiveName == bare) then some imp.moduleName else none
+      match from? with
+      | none => true
+      | some modName => tgt == ((modName.splitOn ".").getLastD modName) ++ "_" ++ bare
   -- Rewrite cross-module call sites in the parent's function bodies.
+  let parentRenames := renamesFor m.imports
   let fns := fns.map fun f =>
-    { f with body := renameFnStmts crossModuleRenames f.body }
+    { f with body := renameFnStmts parentRenames f.body }
   -- Rewrite cross-module call sites in submodule function bodies (sibling references).
-  let subs := subs.map fun csub =>
+  let subs := (subs.zip (m.submodules.map (·.imports))).map fun (csub, subImps) =>
+    let rn := renamesFor subImps
     { csub with functions := csub.functions.map fun f =>
-        { f with body := renameFnStmts crossModuleRenames f.body } }
+        { f with body := renameFnStmts rn f.body } }
   -- SUBJECT FACTS, captured HERE because this is the last point at which they all
   -- exist: `requires`/`ensures`, type bounds and capability parameters are on the
   -- AST `FnDef` and are gone from `CFnDef` below. Computing them downstream would
@@ -2726,7 +2828,13 @@ partial def elabModule (m : Module) (summary : FileSummary)
         methodNames := tb.methods.map (·.name),
         methodRetTys := tb.methods.map fun f => (f.name, f.retTy),
         builtinTraitId := traitBuiltinId, declSpan := some tb.span : CTraitImpl }
-    importedFnCaps := importedFnCaps ++ preludeMethodCaps
+    -- Bug 082: a call re-spelled by `callSpellings` is looked up by CoreCheck under
+    -- the NEW spelling, so its requirement is recorded under that spelling too.
+    -- Without these rows an aliased call would read as "requires nothing".
+    importedFnCaps := importedFnCaps
+      ++ callSpellings.filterMap (fun (localName, spelling) =>
+           (importedFnCaps.lookup localName).map fun cs => (spelling, cs))
+      ++ preludeMethodCaps
     linkerAliases :=
       -- Import aliases: imported bare name → prefixed definition (subName_fnName)
       -- When user writes `import math.{add}` and calls `add(...)`, the call emits `@add`
@@ -2835,7 +2943,7 @@ def elabProgram (resolved : List ResolvedModule)
       let imports := { imports with
         functions := imports.functions ++ siblingFns
         linkerAliases := imports.linkerAliases ++ siblingAliases }
-      match elabModule m summary imports summaryTable with
+      match elabModule m summary imports summaryTable (topLevel := moduleSummaryList) with
       -- Top-level modules keep their source file too (submodules already did): the assumption
       -- summary scopes declarations by the package that file belongs to (R-0484 R10).
       | .ok cm => (acc ++ [{ cm with sourceFile := m.sourceFile }], errs)

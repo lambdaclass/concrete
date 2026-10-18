@@ -1,0 +1,15 @@
+// Bug 082: an import may not bind a name the module also defines. Before the
+// fix this compiled; Check typed the call against the import while both
+// backends ran the local function.
+mod a {
+    pub fn g(c: Int) -> Int { return 3; }
+}
+mod b {
+    import a.{ g as f };
+    fn f(c: Int) -> Int { return 4; }
+    pub fn probe(c: Int) -> Int { return f(c); }
+}
+mod main {
+    import b.{ probe };
+    fn main() -> Int { return probe(2); }
+}

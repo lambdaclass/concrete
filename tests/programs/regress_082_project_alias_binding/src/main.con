@@ -1,0 +1,11 @@
+// Bug 082 (project shapes). Exit 0 iff every binding reaches the definition its
+// import names. Pre-fix: did not build (bug 055: the sibling alias `f` lowered to
+// an undefined @pick), and with that row removed `abs` from std.math returned
+// the sibling submodule's 99 instead of 2.
+mod util;
+mod b;
+import b.{ probe };
+fn main() -> Int {
+    if probe() == 2 * 1000 + 99 * 10 + 2 { return 0; }
+    return 1;
+}

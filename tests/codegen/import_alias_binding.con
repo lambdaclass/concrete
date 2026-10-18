@@ -1,0 +1,47 @@
+// Bug 082: an import alias is the ONLY binding of its local name in the
+// importing module. Expected 77324. Before the fix the compiled binary
+// returned 12814 — every aliased term reached a same-named definition in
+// ANOTHER module, and the unaliased `f` reached a.f — and the interpreter
+// could not run the program at all (undefined function 'plus'). Agreement
+// alone is not the oracle here: the alias rows went wrong identically on both
+// backends in the original report, so the value is also pinned in
+// check_codegen_execution.sh.
+mod a {
+    pub fn check_class(c: Int) -> Int { return 1; }
+    pub fn check_version(v: Int) -> Int { if v == 1 { return 1; } return 7; }
+    pub fn pick<T: Copy>(x: T, y: T) -> T { return x; }
+    pub fn other<T: Copy>(x: T, y: T) -> T { return y; }
+    pub fn f(c: Int) -> Int { return 1; }
+}
+mod c {
+    // Same bare name as a.f: an UNALIASED import of c.f must still reach c.f.
+    pub fn f(c: Int) -> Int { return 2; }
+}
+mod b {
+    // Inline submodule: an aliased import from a local submodule.
+    mod inner {
+        pub fn add(x: Int, y: Int) -> Int { return x + y; }
+    }
+    import inner.{ add as plus };
+    import a.{ check_version as check_class };
+    import a.{ other as pick };
+    import c.{ f };
+    pub fn probe() -> Int {
+        // alias over another module's same-named fn: check_version(2) = 7
+        let direct: Int = check_class(2);
+        // the alias as a function VALUE: 7
+        let g: fn(Int) -> Int = check_class;
+        let via_value: Int = g(2);
+        // generic alias, explicit and inferred type args: other(.., 3) = 3
+        let gen: Int = pick::<Int>(9, 3) + pick(9, 0);
+        // unaliased import of a name two top-level modules define: 2
+        let unaliased: Int = f(0);
+        // aliased import from a local submodule: 4
+        let sub: Int = plus(1, 3);
+        return direct * 10000 + via_value * 1000 + gen * 100 + unaliased * 10 + sub;
+    }
+}
+mod m {
+    import b.{ probe };
+    pub fn main() -> Int { return probe(); }
+}

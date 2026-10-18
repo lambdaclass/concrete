@@ -1,0 +1,2 @@
+pub fn abs(value: i64) -> i64 { return 99; }
+pub fn pick(x: Int) -> Int { return x + 1; }

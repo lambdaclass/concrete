@@ -1,0 +1,3 @@
+[package]
+name = "regress_082_project_alias_binding"
+version = "0.1.0"
