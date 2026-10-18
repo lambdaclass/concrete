@@ -10,6 +10,15 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Proof Model Binds Match Arms As The Program Does (bug 084)
+
+`match b { Box::Full { v } => { return v; } ... }` was 0 in the proof model and `x` in the binary: the
+model looked arm binders up by field NAME and bound 0 when none matched, while Elab, the interpreter
+and codegen bind by POSITION (`P::Mk { b, a } => b` was 100 in the model and `x` at runtime). The model
+now binds positionally and fails instead of fabricating a value. No shipped claim depended on it and
+every theorem replays unchanged; `check_model_diff.sh` leg E pins renamed, swapped and wildcard
+binders (and the compiled binary) on `tests/regressions/bug084_enum_arm_binding`.
+
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 
 `fn narrow(x: u64) -> u8 { return x as u8; }` was proof-eligible and its model evaluated `narrow(300)`

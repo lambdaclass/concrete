@@ -1,0 +1,48 @@
+// Bug 084: the proof model bound match-arm binders BY NAME (falling back to 0 when no
+// field had the binder's name); Elab, Core, the interpreter and the compiled binary bind
+// them BY POSITION. Each function's arm returns a binder whose name disagrees with the
+// field it positionally takes, so a by-name model computes a different value.
+enum Box {
+    Full { value: i32 },
+    Empty {},
+}
+fn mk(x: i32) -> Box {
+    if x > 0 { return Box::Full { value: x }; }
+    return Box::Empty {};
+}
+// Binder `v` takes field `value`. By name: no field `v` -> the model said 0.
+fn renamed(x: i32) -> i32 {
+    let b: Box = mk(x);
+    match b {
+        Box::Full { v } => { return v; },
+        Box::Empty {} => { return 0 - 1; },
+    }
+}
+// Binder name equals field name: both readings agree (the control).
+fn same(x: i32) -> i32 {
+    let b: Box = mk(x);
+    match b {
+        Box::Full { value } => { return value; },
+        Box::Empty {} => { return 0 - 1; },
+    }
+}
+enum P {
+    Mk { a: i32, b: i32 },
+}
+// `{ b, a }` binds b := field a (= x), a := field b (= 100). By name the model said 100.
+fn swapped(x: i32) -> i32 {
+    let p: P = P::Mk { a: x, b: 100 };
+    match p {
+        P::Mk { b, a } => { return b; },
+    }
+}
+// Wildcard first: `_` takes field a, `a` takes field b (= 7). By name the model said x.
+fn skipped(x: i32) -> i32 {
+    let p: P = P::Mk { a: x, b: 7 };
+    match p {
+        P::Mk { _, a } => { return a; },
+    }
+}
+fn main() -> i32 {
+    return renamed(5) + same(5) + swapped(5) + skipped(5);
+}

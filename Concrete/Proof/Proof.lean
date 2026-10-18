@@ -1323,7 +1323,7 @@ where
   matchPat (env : Env) : PMatchPat → PVal → Option Env
     | .enumPat eName variant bindings, .enum_ sEnum sVar sFields =>
       if eName == sEnum && variant == sVar
-      then some (bindEnumFields env bindings sFields)
+      then bindEnumFields env bindings sFields
       else none
     | .litPat (.int n), .int m =>
       if n == m then some env else none
@@ -1370,17 +1370,23 @@ where
       match eval fns env fuel expr with
       | none => none
       | some v => evalAssigns fns (env.bind name v) fuel rest
-  /-- Bind a list of arm-binding names to their corresponding
-      field values in a matched enum variant.  Bindings whose
-      names are not present in the variant's fields skip silently
-      (Concrete's enumArm bindings are always a subset of the
-      declared variant fields, enforced at Check time). -/
-  bindEnumFields (env : Env) : List String → List (String × PVal) → Env
-    | [], _ => env
-    | name :: rest, fields =>
-      let val := match fields.find? (fun p => p.1 == name) with
-        | some (_, v) => v
-        | none => .int 0  -- unreachable under Check; safe default
+  /-- Bind a list of arm-binding names to the field values of a
+      matched enum variant, POSITIONALLY: the i-th binder takes the
+      i-th field in the variant's declaration order.  This is exactly
+      what Elab does (it zips the arm's binders with the variant's
+      declared fields; Core enum literals carry their fields in
+      declaration order) and what the interpreter does since bug 045.
+      Bug 084: this used to look each binder up BY NAME and fall back
+      to `.int 0` when no field had that name, so `Box::Full { v }`
+      (field `value`) modeled `v = 0` and `P::Mk { b, a }` bound `b`
+      to field `b` where the runtime binds it to field `a`.  A binder
+      with no field left to take is now a model failure (`none`), never
+      a fabricated value; fewer binders than fields binds the prefix,
+      as Elab's `zip` does. -/
+  bindEnumFields (env : Env) : List String → List (String × PVal) → Option Env
+    | [], _ => some env
+    | _ :: _, [] => none
+    | name :: rest, (_, val) :: fields =>
       bindEnumFields (env.bind name val) rest fields
 
 -- ============================================================

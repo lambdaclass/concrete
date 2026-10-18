@@ -11,6 +11,11 @@
 #      always answers `agree` cannot pass;
 #   F  the bug 080 fixture: narrowing (300 -> 44), sign change and widening all agree, and the 300 row
 #      shows the WRAPPED value on both sides.
+#   E  the bug 084 fixture: match-arm binders bind BY POSITION in the model as in Elab, the
+#      interpreter and the binary. Every row agrees, and the pinned rows carry the POSITIONAL
+#      value — a by-name model reads 0 for `Full { v }`, 100 for `Mk { b, a }` and x for
+#      `Mk { _, a }`, so each pin fails under the old binding. The compiled binary is run too
+#      (exit 22 = 5+5+5+7), so "runtime" is not only the interpreter.
 #
 # Sampling, not proof: agreement on boundaries is evidence, not a theorem (R-0460 owns the theorems).
 set -uo pipefail
@@ -55,6 +60,31 @@ for fn in narrow to_signed widen; do
   if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "F: every input of $fn agrees ($(grep -c . <<<"$r"))"
   else no "F: $fn has a non-agreeing or missing row: $(grep -v '^agree' <<<"$r" | head -1 | tr '\t' ' ')"; fi
 done
+
+echo ""
+echo "=== E: the bug 084 fixture ==="
+E="tests/regressions/bug084_enum_arm_binding/repro.con"
+"$BIN" "$E" --report model-diff > "$TMP/e" 2>&1
+pin(){ # fn input value why
+  grep -qP "^agree\tmain\.$1\tunclaimed\t\($2\)\tmodel=$3\truntime=$3\$" "$TMP/e" \
+    && ok "E: $1($2) is $3 in the model and at runtime ($4)" \
+    || no "E: $1($2) does not read model=$3 runtime=$3 ($4): $(grep -P "\tmain\.$1\t.*\($2\)" "$TMP/e" | tr '\t' ' ')"
+}
+pin renamed 300 300 "binder v takes field value; by name it was 0"
+pin swapped 300 300 "{ b, a }: b takes field a; by name it was 100"
+pin swapped -1 -1 "{ b, a }: b takes field a; by name it was 100"
+pin skipped 300 7 "{ _, a }: a takes field b; by name it was 300"
+pin same 300 300 "binder name = field name: the control"
+for fn in renamed same swapped skipped; do
+  r="$(grep -P "\tmain\.$fn\t" "$TMP/e")"
+  if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "E: every input of $fn agrees ($(grep -c . <<<"$r"))"
+  else no "E: $fn has a non-agreeing or missing row: $(grep -v '^agree' <<<"$r" | head -1 | tr '\t' ' ')"; fi
+done
+if "$BIN" "$E" -o "$TMP/e.bin" > /dev/null 2>&1; then
+  "$TMP/e.bin"; rc=$?
+  [ "$rc" -eq 22 ] && ok "E: the compiled binary binds positionally too (exit 22)" \
+    || no "E: the compiled binary exits $rc, expected 22 (5+5+5+7)"
+else no "E: the fixture does not compile"; fi
 
 echo ""
 echo "MODEL-DIFF-GATE: PASS=$PASS FAIL=$FAIL"
