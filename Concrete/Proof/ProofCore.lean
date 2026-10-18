@@ -718,6 +718,76 @@ def castToPExpr (src tgt : Ty) (pi : Proof.PExpr) : Option Proof.PExpr :=
   | none, some _, _ => match src with | .named _ | .generic _ _ _ => some (.cast pi) | _ => none
   | some _, some _, none => none  -- unreachable: an integer range always has a width
 
+/-! ### Escape analysis for non-tail positions (bug 086)
+
+A `return` (or `break`/`continue`) nested in an expression LEAVES the function, but the extractor
+models the branch of an `if`/`match` expression as that expression's VALUE. The two coincide only
+when the expression is itself in tail position: `return if c { return 1; } else { 2 };` returns 1
+either way, while `let y = if c { return 1; } else { 2 }; return y + 10;` returns 1 at runtime and
+11 in the model. Every non-tail expression site therefore requires `cExprNoEscape`; a tail site
+requires `cExprTailOk`, which lets a return through only on the branch chain of a top-level
+`if`/`match` (whose branch bodies are extracted, and checked, by the statement extractor). -/
+mutual
+partial def cExprNoEscape : CExpr → Bool
+  | .binOp _ l r _ => cExprNoEscape l && cExprNoEscape r
+  | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _
+  | .cast e _ => cExprNoEscape e
+  | .call _ _ args _ | .arrayLit args _ => args.all cExprNoEscape
+  | .structLit _ _ fields _ | .enumLit _ _ _ fields _ => fields.all (cExprNoEscape ·.2)
+  | .match_ s arms _ => cExprNoEscape s && arms.all cArmNoEscape
+  | .arrayIndex a i _ => cExprNoEscape a && cExprNoEscape i
+  | .allocCall a b _ => cExprNoEscape a && cExprNoEscape b
+  | .ifExpr c t e _ => cExprNoEscape c && t.all cStmtNoEscape && e.all cStmtNoEscape
+  | _ => true
+
+partial def cArmNoEscape : CMatchArm → Bool
+  | .enumArm _ _ _ g body | .varArm _ _ g body =>
+    (g.map cExprNoEscape).getD true && body.all cStmtNoEscape
+  | .litArm v g body =>
+    cExprNoEscape v && (g.map cExprNoEscape).getD true && body.all cStmtNoEscape
+  | .rangeArm lo hi _ g body =>
+    cExprNoEscape lo && cExprNoEscape hi && (g.map cExprNoEscape).getD true
+      && body.all cStmtNoEscape
+
+partial def cStmtNoEscape : CStmt → Bool
+  | .return_ .. | .break_ .. | .continue_ .. => false
+  | .letDecl _ _ _ v | .assign _ v | .expr v _ | .defer v => cExprNoEscape v
+  | .ifElse c t e => cExprNoEscape c && t.all cStmtNoEscape && (e.map (·.all cStmtNoEscape)).getD true
+  | .while_ c body _ step => cExprNoEscape c && body.all cStmtNoEscape && step.all cStmtNoEscape
+  | .fieldAssign o _ v | .derefAssign o v => cExprNoEscape o && cExprNoEscape v
+  | .arrayIndexAssign a i v => cExprNoEscape a && cExprNoEscape i && cExprNoEscape v
+  | .borrowIn _ _ _ _ _ body => body.all cStmtNoEscape
+end
+
+-- Every path through these statements ends in `return` (bug 086). A statement-position
+-- `match`/`if` expression (`match x { 0 => { return 5; } _ => { return 6; } }` with no `;`
+-- after it) is modeled by its arms' values; that is exact only when no arm can fall through to
+-- what follows — a fall-through arm's value is discarded at runtime.
+mutual
+partial def cStmtsDiverge (ss : List CStmt) : Bool :=
+  match ss.getLast? with
+  | some (.return_ (some _) _) => true
+  | some (.ifElse _ t (some e)) => cStmtsDiverge t && cStmtsDiverge e
+  | some (.expr e _) => cExprDiverges e
+  | _ => false
+
+partial def cExprDiverges : CExpr → Bool
+  | .ifExpr _ t e _ => cStmtsDiverge t && cStmtsDiverge e
+  | .match_ _ arms _ => !arms.isEmpty && arms.all fun
+    | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => cStmtsDiverge b
+  | _ => false
+end
+
+/-- A TAIL expression (`return e`, a trailing value, a loop `Break`) may contain a `return` only on
+    the branch chain of a top-level `if`/`match`: its condition/scrutinee must not escape, and its
+    branch bodies go through the statement extractor, which applies these checks to every site in
+    them. Any other expression must not escape at all — `return f(if c { return 1; } else { 2 })`
+    returns 1, not `f(1)`. -/
+def cExprTailOk : CExpr → Bool
+  | .ifExpr c _ _ _ => cExprNoEscape c
+  | .match_ s _ _ => cExprNoEscape s
+  | e => cExprNoEscape e
+
 mutual
 def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
@@ -824,9 +894,19 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     A function body extracts by calling this with `k = none`. -/
 def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
-  | [.return_ (some e) _], _ => cExprToPExprImpl e
-  | [.expr e _], _ => cExprToPExprImpl e
+  | [.return_ (some e) _], _ => if cExprTailOk e then cExprToPExprImpl e else none
+  -- Only a VALUE-position trailing expression (no `;`, `isValue`) is the block's value (bug 086).
+  -- A discarded `e;` is a statement: it neither produces the value nor ends the block, so treating
+  -- it as the value (`if c { id(x); } return 7;` modeled as `if c then id(x) else 7`) was wrong.
+  -- A pure discard is rejected by the checker (E0294), so what remains is a call or a control-flow
+  -- expression with effects the model cannot see; it falls through to the refusal below.
+  | [.expr e true], _ => if cExprTailOk e then cExprToPExprImpl e else none
+  -- A discarded `match`/`if` whose every arm returns is the function's exit, so its arms' values
+  -- are the result and the continuation is unreachable.
+  | [.expr e false], _ =>
+    if cExprDiverges e && cExprTailOk e then cExprToPExprImpl e else none
   | (.letDecl name _ _ val) :: rest, k => do
+    if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
     some (.letIn name pv pb)
@@ -837,6 +917,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- docs/verification/PROOF_STATE_MODEL.md § 2.  More complex `arr` (e.g.
   -- `obj.field[i] = v`) needs structSet first; deferred.
   | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
+    if !(cExprNoEscape idx && cExprNoEscape val) then none
     let pi ← cExprToPExprImpl idx
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
@@ -852,6 +933,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- identifyUnsupportedStmt (which reports the actual blocker,
   -- not "while loop").
   | (.while_ cond body _ _step) :: rest, k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pCont ← cStmtsToPExprKImpl rest k
     -- First try flat-assign extraction (every body stmt is a
@@ -869,6 +951,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- outer continuation. If a branch returns, k is dead; if it falls
   -- through, k is used.
   | [.ifElse cond thenBranch (some elseBranch)], k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExprKImpl thenBranch k
     let pe ← cStmtsToPExprKImpl elseBranch k
@@ -876,6 +959,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- If-else followed by more statements: both branches' fall-through
   -- continuation is `rest with the outer k`.
   | (.ifElse cond thenBranch (some elseBranch)) :: rest, k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprKImpl rest k
     let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
@@ -890,6 +974,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- through because the inner if's continuation is the outer's
   -- continuation.
   | (.ifElse cond thenBranch none) :: rest, k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprKImpl rest k
     let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
@@ -937,13 +1022,16 @@ def cStmtsToStepExpr
   | [] =>
     some (.enumLit "LoopStep" "Cont" assigns)
   | (.return_ (some e) _) :: _ => do
+    if !cExprTailOk e then none
     let pv ← cExprToPExprImpl e
     some (.enumLit "LoopStep" "Break" [("value", pv)])
   | (.letDecl name _ _ val) :: rest => do
+    if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToStepExpr assigns rest
     some (.letIn name pv pb)
   | (.assign name val) :: rest => do
+    if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
     let assigns' :=
       if assigns.any (·.1 == name) then
@@ -952,6 +1040,7 @@ def cStmtsToStepExpr
         assigns ++ [(name, pv)]
     cStmtsToStepExpr assigns' rest
   | (.ifElse cond thenBr none) :: rest => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToStepExpr assigns thenBr
     let pe ← cStmtsToStepExpr assigns rest
@@ -1011,10 +1100,12 @@ def cAssignBodyToUpdates :
   | s :: rest =>
     match s with
     | .assign name val => do
+      if !cExprNoEscape val then none
       let pv ← cExprToPExprImpl val
       let prest ← cAssignBodyToUpdates rest
       some ((name, pv) :: prest)
     | .arrayIndexAssign (.ident name _) idx val => do
+      if !(cExprNoEscape idx && cExprNoEscape val) then none
       let pi ← cExprToPExprImpl idx
       let pv ← cExprToPExprImpl val
       let prest ← cAssignBodyToUpdates rest
@@ -1104,13 +1195,15 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     reducible when val itself is in the supported fragment. -/
 def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
-  | [.return_ (some e) _], _ => cExprToPExpr e
-  | [.expr e _], _ => cExprToPExpr e
+  | [.return_ (some e) _], _ => if cExprTailOk e then cExprToPExpr e else none
+  | [.expr e true], _ => if cExprTailOk e then cExprToPExpr e else none
   | (.letDecl name _ _ val) :: rest, k => do
+    if !cExprNoEscape val then none
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
   | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
+    if !(cExprNoEscape idx && cExprNoEscape val) then none
     let pi ← cExprToPExpr idx
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
@@ -1118,6 +1211,7 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   -- if-without-else (early-return shape): then branch's cont
   -- is `rest with k`; implicit else is the same.
   | (.ifElse cond thenBranch none) :: rest, k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExpr cond
     let pkRest ← cStmtsToPExprK rest k
     let pt ← cStmtsToPExprK thenBranch (some pkRest)
@@ -1125,6 +1219,7 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   -- Bounded while loop: flat-assign body extracts to PExpr.while_;
   -- richer body falls back to PExpr.while_step.
   | (.while_ cond body _ _step) :: rest, k => do
+    if !cExprNoEscape cond then none
     let pc ← cExprToPExpr cond
     let pCont ← cStmtsToPExprK rest k
     match cAssignBodyToUpdates body with

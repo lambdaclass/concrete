@@ -16,6 +16,8 @@
 #      value — a by-name model reads 0 for `Full { v }`, 100 for `Mk { b, a }` and x for
 #      `Mk { _, a }`, so each pin fails under the old binding. The compiled binary is run too
 #      (exit 22 = 5+5+5+7), so "runtime" is not only the interpreter.
+#   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
+#      extracted; a tail match/if whose arms return agrees.
 #
 # Sampling, not proof: agreement on boundaries is evidence, not a theorem (R-0460 owns the theorems).
 set -uo pipefail
@@ -85,6 +87,26 @@ if "$BIN" "$E" -o "$TMP/e.bin" > /dev/null 2>&1; then
   [ "$rc" -eq 22 ] && ok "E: the compiled binary binds positionally too (exit 22)" \
     || no "E: the compiled binary exits $rc, expected 22 (5+5+5+7)"
 else no "E: the fixture does not compile"; fi
+echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="
+want(){ grep -qP "^agree\tmain\.$2\t[a-z]+\t\($3\)\tmodel=$4\truntime=$4\$" "$1" \
+  && ok "$5: $2($3) is $4 in the model and at runtime" \
+  || no "$5: $2($3) does not read model=$4 runtime=$4: $(grep -P "\tmain\.$2\t.*\($3\)" "$1" | tr '\t' ' ')"; }
+allagree(){ r="$(grep -P "\tmain\.$2\t" "$1")"
+  if [ -n "$r" ] && ! grep -qvE '^(agree|partial)' <<<"$r"; then ok "$3: every input of $2 agrees ($(grep -c . <<<"$r"))"
+  else no "$3: $2 has a disagreeing or missing row: $(grep -vE '^(agree|partial)' <<<"$r" | head -1 | tr '\t' ' ')"; fi; }
+T="tests/regressions/bug086_discarded_tail/repro.con"
+"$BIN" "$T" --report model-diff > "$TMP/t" 2>&1
+# Not modelable exactly (a call the model cannot see; a return out of a non-tail expression):
+# they must not be extracted at all, so no row can claim a value.
+for fn in g letret argret; do
+  grep -qP "\tmain\.$fn\t" "$TMP/t" && no "T: $fn is extracted: $(grep -m1 -P "\tmain\.$fn\t" "$TMP/t" | tr '\t' ' ')" \
+    || ok "T: $fn is not extracted"
+done
+want "$TMP/t" tailmatch 0 5 T
+want "$TMP/t" tailmatch 1 6 T
+want "$TMP/t" tailif 1 3 T
+want "$TMP/t" tailif 0 4 T
+for fn in tailmatch tailif; do allagree "$TMP/t" "$fn" T; done
 
 echo ""
 echo "MODEL-DIFF-GATE: PASS=$PASS FAIL=$FAIL"

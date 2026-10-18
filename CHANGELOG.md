@@ -19,6 +19,15 @@ now binds positionally and fails instead of fabricating a value. No shipped clai
 every theorem replays unchanged; `check_model_diff.sh` leg E pins renamed, swapped and wildcard
 binders (and the compiled binary) on `tests/regressions/bug084_enum_arm_binding`.
 
+### A Discarded Statement Is Not A Value (bug 086)
+
+`fn g(x) { if x > 0 { id(x); } return 7; }` extracted to `if x > 0 then id(x) else 7`: a one-statement
+block's expression was taken as its value whether or not it was a discarded `e;`, and the continuation
+was ignored. The same extractor modeled a `return` nested in a `let` initializer as that initializer's
+value (`11` in the model, `1` at runtime). Only a value-position trailing expression is now a block's
+value; a discarded call refuses extraction; an expression at a non-tail site must not contain a
+`return`, `break` or `continue`. `check_model_diff.sh` leg T pins the shapes.
+
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 
 `fn narrow(x: u64) -> u8 { return x as u8; }` was proof-eligible and its model evaluated `narrow(300)`

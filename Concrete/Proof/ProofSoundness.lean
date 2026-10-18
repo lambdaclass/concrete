@@ -317,11 +317,12 @@ theorem let_preservation
     (name : String) (isMut : Bool) (ty : Ty) (val : CExpr)
     (rest : List CStmt) (k : Option PExpr)
     (pv pb : PExpr)
+    (h_esc  : cExprNoEscape val = true)
     (h_val  : cExprToPExpr val = some pv)
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK ((CStmt.letDecl name isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  simp [cStmtsToPExprK, h_val, h_rest]
+  simp [cStmtsToPExprK, h_esc, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -432,13 +433,15 @@ theorem array_set_preservation
     (name : String) (idxTy : Ty)
     (idx val : CExpr) (rest : List CStmt) (k : Option PExpr)
     (pi pv pb : PExpr)
+    (h_esc  : (cExprNoEscape idx && cExprNoEscape val) = true)
     (h_idx  : cExprToPExpr idx = some pi)
     (h_val  : cExprToPExpr val = some pv)
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK
       ((CStmt.arrayIndexAssign (.ident name idxTy) idx val) :: rest) k
       = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
-  simp [cStmtsToPExprK, h_idx, h_val, h_rest]
+  simp only [Bool.and_eq_true] at h_esc
+  simp [cStmtsToPExprK, h_esc, h_idx, h_val, h_rest]
 
 /-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
 
@@ -463,12 +466,13 @@ Lean accepts the structural recursion on the nested
 theorem if_no_else_as_fallthrough_preservation
     (cond : CExpr) (thenBranch rest : List CStmt) (k : Option PExpr)
     (pc pkRest pt : PExpr)
+    (h_esc  : cExprNoEscape cond = true)
     (h_cond : cExprToPExpr cond = some pc)
     (h_rest : cStmtsToPExprK rest k = some pkRest)
     (h_then : cStmtsToPExprK thenBranch (some pkRest) = some pt) :
     cStmtsToPExprK ((CStmt.ifElse cond thenBranch none) :: rest) k
       = some (.ifThenElse pc pt pkRest) := by
-  simp [cStmtsToPExprK, h_cond, h_rest, h_then]
+  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_then]
 
 /-! ## Rules unlocked by the partial-def → def lift (2026-05-30)
 
@@ -545,12 +549,13 @@ theorem while_flat_preservation
     (cond : CExpr) (body : List CStmt) (label : Option String)
     (step_body : List CStmt) (rest : List CStmt) (k : Option PExpr)
     (pc : PExpr) (updates : List (String × PExpr)) (pCont : PExpr)
+    (h_esc  : cExprNoEscape cond = true)
     (h_cond : cExprToPExpr cond = some pc)
     (h_rest : cStmtsToPExprK rest k = some pCont)
     (h_updates : cAssignBodyToUpdates body = some updates) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_ pc updates pCont) := by
-  simp [cStmtsToPExprK, h_cond, h_rest, h_updates]
+  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_updates]
 
 /-! ## R-20: `while_step_preservation` (extraction)
 
@@ -562,13 +567,14 @@ theorem while_step_preservation
     (cond : CExpr) (body : List CStmt) (label : Option String)
     (step_body : List CStmt) (rest : List CStmt) (k : Option PExpr)
     (pc : PExpr) (stepE : PExpr) (pCont : PExpr)
+    (h_esc  : cExprNoEscape cond = true)
     (h_cond : cExprToPExpr cond = some pc)
     (h_rest : cStmtsToPExprK rest k = some pCont)
     (h_not_flat : cAssignBodyToUpdates body = none)
     (h_step : cStmtsToStepExpr [] body = some stepE) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_step pc (extractCarried body) stepE pCont) := by
-  simp [cStmtsToPExprK, h_cond, h_rest, h_not_flat, h_step]
+  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_not_flat, h_step]
 
 /-! ## Eval-side compositional reductions (closing the remaining gaps)
 
