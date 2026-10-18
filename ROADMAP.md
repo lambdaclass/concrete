@@ -67,6 +67,21 @@ range-resolution, schema breadth and functional-proof work are not entrance
 requirements for this tested slice; their existing acceptance bars remain owned.
 R-0285's four-adapter exit still precedes the bulk R-0490 port.
 
+**Behavioral-contract decision, 2026-10-18 (planned):** make failure states,
+interface laws and the exact meaning of proof claims explicit through the existing
+API, contract and evidence machinery. R-0285 exercises resource recovery and
+partial progress in the first applicable foreign-library slice; R-0488 carries
+the same questions into ordinary library APIs. R-0031 owns a bounded equality/hash
+law example, R-0271 owns its generic/instance proof meaning, and R-0482 owns checking
+the claimed property against the actual theorem proposition. Their acceptance
+criteria below extend those owners; they create no additional execution queue.
+Start with ordinary types, explicit contracts and selected proofs. Add syntax or
+type-system machinery only after a real workload establishes the need. Tested API
+behavior can ship with the interop slices; formal error-state and generic-law
+composition follow the queued typed-contract and evidence prerequisites. These
+increments do not expand rows 0–1's recorded exits; newly reproduced false
+guarantees still enter through the existing soundness-repair rule.
+
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
 (closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
@@ -7114,6 +7129,29 @@ These are not aliases. A one-direction refinement cannot be rendered or consumed
 Trust is an evidence mode/disposition, not a semantic relation kind; a trusted model remains an
 assumption even when the implementation reference is exact.
 
+**Exact property acceptance (2026-10-18; planned):** bug 079's body/spec binding
+does not establish that the theorem states the annotated `#[proof_coverage]`
+(`iff`, `one_direction`, etc.). For every
+supported claim family, construct the expected typed proposition from the selected
+subject/model, parameters, domain, relation and scope, then check the attached
+theorem's type against it under the admitted normalization rules. A theorem about
+the right body is insufficient if it proves a different property. An arbitrary
+theorem that cannot be matched remains explicitly unclassified/unsupported for
+that coverage; its author's annotation cannot grant a stronger verdict.
+
+Retain a sorting example whose properties are distinct: preserving length,
+producing sorted output, and preserving the input elements. A length-only theorem
+must never authorize either of the latter claims. Gate a matching theorem, a wrong
+property over the same body, a narrower input domain, and one-direction evidence
+relabeled as equivalence. Drive those controls through status, receipt issuance,
+receipt consumption and independent replay as each consumer graduates. Bind the
+checked proposition, relation, domain, assumptions and exact implementation/model
+and dependency identities in the existing canonical evidence objects. Tests,
+assumptions and kernel proofs retain their separate dispositions; proposition
+matching does not establish model-to-machine correspondence or that the chosen
+specification captures the user's intent. No new coverage label becomes
+authoritative before its matching rule and rejecting controls exist.
+
 **Total-model admission is a semantic prerequisite, not merely sequencing.** A model used as
 logical contract semantics may carry a current `implements`, `refines`, `equivalent`, or
 `contract_only` attestation only when it is effect-free, terminating, free of unhandled traps, and
@@ -10342,6 +10380,31 @@ tracking to the hash collections.
   item should move ahead of allocator-heavy collection stabilization if the
   validation project needs arenas, test allocators, reload-safe allocation,
   or freestanding pools.
+- 1h. Pilot **behavioral laws for explicit interfaces** (planned 2026-10-18).
+  R-0031 owns the API example; R-0271 owns its proof/instantiation semantics,
+  using R-0473/R-0474's typed contracts and R-0482's evidence identities when
+  formal composition is admitted. Start with the existing explicit equality
+  and hash functions: state the equality laws and that equal keys have equal
+  hashes. This complements 1c's dictionary compatibility: two maps can use
+  the same dictionary while that dictionary's own functions disagree.
+  Retain a matching pair and a deliberately inconsistent pair that treats
+  `"Hello"` and `"hello"` as equal while hashing their original case
+  differently; exercise insertion and lookup to expose the bad behavior.
+  Finite tests report their tested domain; they do not prove the universal law.
+  Bind each law's exact proposition and assumptions to the selected callable
+  implementations, their dictionary and the admitted generic instance. An
+  implementation change invalidates dependent evidence. Missing evidence
+  withholds the corresponding functional guarantee; an explicit assumption
+  remains visible through callers and package boundaries. A safe API must
+  preserve memory/resource safety even when an unproved behavioral law fails.
+  Keep ordinary programs usable without proofs. Begin with normal declarations,
+  existing static/explicit dispatch and selected proof attachments; this does
+  not admit new trait syntax, implicit instance search or blanket proof
+  requirements. Use the example and measured authoring/review friction to decide
+  whether to expand to comparator ordering or codec round trips. Pull this
+  bounded pilot when collection/generic-proof work reaches it; it is not a
+  prerequisite for the first R-0285 consumer or the R-0490 executable port.
+
 ### Task R-0032
 
 **Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend `docs/project/ITERATION_PROTOCOL.md` when these land),
@@ -11554,6 +11617,14 @@ bounded audit does not bypass identity, receipt or typed-contract prerequisites.
    clarity, duplicated cleanup, missed errors and audit effort. Reuse R-0485's
    review criteria and R-0486's flagship component; no new public flagship. Require
    repeated workload evidence before introducing more expressive language features.
+   Include one fallible writer or owned-handle operation with R-0285's failure
+   contract: record partial progress, ownership and usable state on error, and
+   whether retry is valid. Retain a successful operation and a controlled failure
+   after partial progress, checking explicit cleanup and preventing a retry from
+   silently duplicating completed work. Reuse the existing effect-simulation seam
+   when applicable. State guarantees first with ordinary types and API contracts;
+   formal before/after and `Result`-case specifications follow R-0473/R-0474 and
+   the queued two-state mutation work. Fatal abort/OOM remains a separate boundary.
 3. **Optional read/write footprints — existing contract owners.** Feed a concrete
    preservation need into R-0473/R-0474, the queue's two-state mutation contracts,
    and R-0175. Start with bounded records/fixed arrays: update a cache or counter
@@ -14832,6 +14903,17 @@ record must name them so a proof's replay surface stays reproducible.
 
 **Objective:** Define proof preservation across monomorphization and capability-polymorphic instantiation. The compiler must report whether a theorem proves a specific generated instance (`proved_for_instance`) or a generic body (`proved_generic`), and it must prevent one instance proof from being presented as proof for every future instantiation.
 
+**Behavioral-law acceptance (planned 2026-10-18):** use R-0031's equality/hash
+pilot to show that a generic proof imports explicit semantic laws as well as
+method signatures. Bind each law to the exact callable/dictionary, proposition,
+assumptions and instance identities through the existing evidence machinery.
+Retain a valid instantiation, a substituted inconsistent implementation, a missing
+law, and an explicit assumed law. The latter must propagate trust, while missing
+evidence cannot silently become an assumption. An instance theorem cannot justify
+other instances or a generic verdict. Keep testing, conditional proofs and
+discharged law obligations distinct, and require no implicit trait resolution or
+mandatory proofs for ordinary generic code.
+
 ### Task R-0272
 
 **Objective:** [historical origin: Phase 4 items 44f/44g] Finish the remaining compiler-correctness hardening:
@@ -15394,6 +15476,30 @@ required: local binding packages with pinned dependencies establish the first wo
 Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
+
+**Failure and resource contract (2026-10-18; planned):** for each selected
+fallible operation, state what success and each recoverable error mean for
+ownership, partial progress, observable state and retry. An owned input is
+returned with a stated resource state, retained by a named owner, or released;
+ownership never disappears behind an error code. Borrowed mutable state has a
+stated preservation or partial-update rule. Use
+ordinary `Result`, records/enums, scoped borrows and explicit cleanup first.
+An error does not imply rollback, and an external operation whose outcome is
+unknown must say so rather than authorize a blind retry. Retain upstream
+guarantees and reviewed assumptions with their provenance; generated wrappers
+cannot manufacture atomicity or recovery guarantees absent from the foreign API.
+
+In the first RocksDB slice, exercise a real recoverable error and the exact
+ownership/release behavior of its results and handles. Where the selected API
+supports partial progress or retry, retain an independent observable control;
+otherwise state that limit and use the first applicable writer/runtime adapter
+for that case. Gate successful use, controlled failure, exactly-once cleanup,
+and safe resource recovery or explicit consumption. R-0488 reuses the contract
+for ordinary stdlib operations. More expressive `Result`-case, `old` and frame
+proofs belong to R-0473/R-0474 and the queued two-state contract work; they are
+not entrance requirements for the tested consumer. Fatal abort, OOM and foreign
+unwinding retain their existing separate policies. No automatic rollback,
+scope-end destruction or general exception machinery is introduced.
 
 **Annotation reuse and generated checks (2026-10-18; planned):**
 
