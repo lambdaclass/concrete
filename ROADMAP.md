@@ -30,19 +30,20 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
+| 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 089 repairs, each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
-| 3 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
-| 4 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 5 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 6 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 7 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 8 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 9 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 10 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 11 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 12 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+| 2 | **Structural soundness refactor S1–S4, S8 (R-0491–R-0494, R-0498)** | the three-way fuzzer (model/interpreter/binary over generated programs) reproduces 084–088 from their pre-fix commits; no `String` binder, callee or field key remains in Core, SSA or `PExpr` and `ElabVerify` runs in every pipeline; every integer op and literal carries its type with one `IntArith`; one `Verdict` authority renders every evidence surface; every enforcement claim cites a gate leg. S5–S7 (R-0495–R-0497) continue beside rows 3–4. See [the refactor plan](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) |
+| 3 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
+| 4 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
+| 5 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 6 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 7 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 8 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 9 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 10 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 11 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 12 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 13 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
 **Delivery decision, 2026-10-17:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
@@ -58,7 +59,7 @@ proofs of client components follow the working port, through the evidence and co
 below. New soundness defects still enter at the front. The port is an engineering workload,
 not a fourth verified flagship or a claim that foreign libraries have been proved.
 
-**Soundness track, 2026-10-18 (parallel to rows 2–3, not behind them):** the evidence layer is now
+**Soundness track, 2026-10-18 (parallel to rows 3–4, not behind them):** the evidence layer is now
 strong — every theorem is re-checked outside Lean by con-leche and nanoda, and since bug 079 a claim is
 proved only when its body and parameters are the specification its theorem evaluates. The gaps that
 remain are recorded here so the queue does not read as if rows 0–1 settle soundness:
@@ -87,7 +88,24 @@ remain are recorded here so the queue does not read as if rows 0–1 settle soun
 - **The bug ledger's open list** has entries later work appears to have closed (R-0010 owns
   mechanically checked per-bug states).
 
-**Implementation and feedback decision, 2026-10-17:** once queue rows 0–1 meet
+**Structural refactor decision, 2026-10-18:** a read-only hunt after bugs 079 and 080 found nine
+more defects in an afternoon (081 – 089): a proof model that binds match fields by name while the
+runtime binds by position (084), loop steps evaluated in the pre-iteration environment (085), a
+discarded `expr;` read as a branch value (086), block `let` shadowing resolved differently by the
+interpreter and the binary (087), unchecked unhinted literals and a folder that drops casts (088),
+an import alias that lets a theorem's table entry name a different callee (081) or is ignored at
+runtime (082), a hardcoded name list that marks code proved (083), and `#[ensures_proof]`
+discharging a postcondition by theorem name alone (089). They share four structural causes — the
+language's meaning is implemented four times, evidence is joined by name, names are not unique
+after resolution, and prose claims enforcement nothing performs — so point fixes alone will keep
+finding more. Row 2 removes those causes before interop: the
+[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) (R-0491 – R-0498)
+makes each class unrepresentable in the IR types or mechanically caught, stage by stage, every
+slice reviewed by Codex before publication. Its S5 – S7 stages (generated claim statements, one
+total Core semantics, typed pass contracts) are the end state and continue beside rows 3 – 4.
+The fixes for 081 – 089 land first as ordinary soundness repairs (row 0).
+
+**Implementation and feedback decision, 2026-10-17:** once queue rows 0–2 meet
 their recorded exits, start R-0285 with a working RocksDB C-API consumer and the
 minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
 examples and only the resolution decisions needed by that slice, then implement,
@@ -15725,6 +15743,171 @@ ownership/capability enforcement, compiler regressions, protocol tests and hones
 remain mandatory. Existing verification release criteria and the three verified public flagships
 are unchanged. Silver is a later, separate systems pressure test; its shared-state and thread
 architecture does not expand this task's exit.
+
+### Task R-0491
+
+**Objective:** Catch model/interpreter/binary disagreement on generated programs, not only on the
+corpus, while the structural stages remove its causes. Stage S1 of the
+[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md).
+
+**Status (2026-10-18): planned; starts now.** `--report model-diff` (bug 080) compares the
+extracted model with the interpreter on boundary inputs of the corpus's own scalar functions; the
+2026-10-18 hunts found five model/runtime defects (084 – 088) in shapes the corpus never uses.
+
+1. Extend `scripts/tests/fuzz_differential.py` with the extracted model as a third side. Its
+   generator must produce: sequential assignments in loop bodies, `let` after assignment,
+   `return` inside loops, if-without-else fall-through inside loops, discarded `expr;` inside
+   branches, block `let` shadowing, positional match bindings with renamed binders, unhinted
+   literals at and beyond 2^63 and 2^64, and casts across every width pair.
+2. model-diff: zero-argument functions, `bool` parameters as booleans, non-scalar signatures
+   (structs in declaration order, enums by variant index, arrays, newtypes resolved), a
+   compiled-binary leg through an injected test driver, and both-sides-fail reported as an error.
+3. The four 2026-10-18 hunts (model vs runtime, name-keyed evidence, stated-but-unenforced
+   invariants, adversarial false proof) run before every release candidate; each reproducer is
+   kept as a fixture.
+4. `check_gate_negative_controls.sh`: every registered gate leg names the fixture or mutation it
+   must reject.
+
+**Exit:** from the pre-fix commits of 084, 085, 086, 087 and 088 the fuzzer's CI seed set fails;
+from their fixed commits it passes; model-diff covers every claimed function with a supported
+signature (≥ 53) and its binary leg agrees on all of them; the negative-control lint passes with
+zero exemptions.
+
+### Task R-0492
+
+**Objective:** No IR, table or evidence record joins on a `String` after Resolve. Stage S2.
+
+**Status (2026-10-18): planned; starts now.** Today `CExpr.ident`, `CStmt.letDecl`/`assign`,
+`CMatchArm.enumArm` bindings, `structLit`/`enumLit` field keys, `fnRef`, `Callee.direct` and every
+`PExpr` binder and call are `String`; Elab alpha-renames only match payloads (bug 045). Bugs
+039 – 045, 081, 082, 083 and 087 are this class.
+
+1. Identity types `LocalId` (function-unique), `DefId` (wrapping `DefinitionIdentity`), `FieldIdx`,
+   `VariantIdx`; source spellings move to a display side table.
+2. Elab assigns a `LocalId` to every binder (block `let`, loop, match arm, parameter); Interp,
+   Lower, extraction and the checker consume it. Struct/enum fields are keyed by declaration index.
+3. `ElabVerify` after Elab: each `LocalId` bound once and used in scope, each `DefId` exists, each
+   match binding is a field of its variant.
+4. `PExpr` binders and calls use `LocalId`/`DefId`; `FnTable` is keyed by `DefId`.
+5. Language: a block `let` may not shadow a visible name; an import alias colliding with a name in
+   scope is an error; a match binding equals its field name or names it (`Full { value: v }`).
+6. Migration by `Coe` from the old string fields (the R-0002 technique), one consumer at a time,
+   then delete the coercions; name-churn consumers normalize at comparison.
+
+**Exit:** `check_ir_no_string_identity.sh` finds no `String` binder, callee or field key in
+`Elab/Core.lean`, `IR/*.lean` or `Proof/Proof.lean` outside display tables; `ElabVerify` runs in
+every pipeline; the 081, 082 and 087 reproducers are diagnostics or bind correctly; mutation
+families prove `ElabVerify` and the theorem-table key check load-bearing.
+
+### Task R-0493
+
+**Objective:** Every integer operation, literal and cast carries its type, and one module
+implements integer meaning. Stage S3; depends on R-0492's identity types.
+
+**Status (2026-10-18): planned.** Bugs 080 and 088 are this class; `IntArith` exists but the SSA
+folder, the interpreter and `Proof.eval` each compute wraps and ranges themselves.
+
+1. `BinOp`/`UnaryOp` carry their operand `IntTy`, filled by the checker.
+2. `intLit` is built only by `CExpr.mkIntLit : Int → IntTy → Except Diag CExpr`; an unhinted
+   literal takes its type from context or is an error.
+3. `cast` carries source and target types.
+4. `IntArith` is the only implementation of wrap, range, overflow, division, shift and cast;
+   `check_single_arithmetic.sh` refuses integer wrapping arithmetic outside it.
+5. `PVal.int` carries its `IntTy`; overflowable arithmetic yields an explicit no-overflow
+   obligation, so an unbounded-`Int` theorem cannot bind to an `i8` body (red-team `rt_ovf`).
+6. `Backend.lean`'s contract text is generated from the trap helpers actually emitted.
+
+**Exit:** `intLit`'s constructor is private; every op in Core, SSA and `PExpr` carries a width;
+the arithmetic lint passes; 088's C1/C2 reproducers agree on model, interpreter and binary; the
+`rt_ovf` binding is refused.
+
+### Task R-0494
+
+**Objective:** One authority decides every evidence verdict; every surface renders it. Stage S4.
+
+**Status (2026-10-18): planned; starts now.** 35 `"proved"` literals and 58 `proved_by_lean`
+sites across `Report.lean`, `ReportObligations.lean` and `Main.lean`; contracts, vcs,
+obligation-ledger, audit, check-proofs and receipts each compute a status. Bugs 079, 083 and
+089 are this class.
+
+1. `Concrete/Proof/Verdict.lean`: `Verdict` with a private constructor for discharging cases,
+   produced only by `Verdict.decide` from kernel replay, subject binding and dependency closure.
+2. One `ClaimJudgment` per claim and per contract clause, computed once per compilation; every
+   surface, receipt issuance and receipt consumption renders it.
+3. Delete `Proof.provedFunctions` and name-substring replay checks.
+4. `check_single_verdict_authority.sh` refuses status literals outside `Verdict.lean` and its
+   renderers.
+5. Split `Report.lean` and `Main.lean` by surface; surface modules import `Verdict` and not the
+   checker internals.
+
+**Exit:** status literals appear only in the renderer table; 089's four reproducers read
+not-proved on every surface; a cross-surface gate asserts identical verdicts for every claim in
+the corpus.
+
+### Task R-0495
+
+**Objective:** The compiler generates each claim's Lean statement; the author supplies only the
+proof. Stage S5; depends on R-0492 and R-0494.
+
+**Status (2026-10-18): planned.**
+
+1. Emit, per claim, the spec equation with the extracted body inserted by value and callees by
+   `DefId`, and per `#[ensures]` clause its exact proposition.
+2. Derive coverage (`iff`, `one_direction`, `point`, …) from the statement's shape;
+   `#[proof_coverage]` becomes a checked assertion.
+3. Migrate: emit statements beside existing theorems, prove each old theorem implies its
+   generated statement, switch the authority, delete the classification scan and subject-binding
+   table generator.
+
+**Exit:** every claim in `examples/`, `std/` and `tests/` replays against a generated statement;
+`scripts/gen/classifications.lean`'s theorem scan is deleted; coverage labels are checked.
+
+### Task R-0496
+
+**Objective:** One total semantics for Core, used by the interpreter and by proofs. Stage S6;
+depends on R-0492 and R-0493. Closes the lowering half of H19 with R-0460.
+
+**Status (2026-10-18): planned.**
+
+1. `Concrete/Semantics/CoreEval.lean`: total fuel-based big-step evaluator over post-S3 Core with
+   `IntArith` arithmetic.
+2. The interpreter becomes `CoreEval` plus I/O; its `partial def`s go away.
+3. Proofs are about Core under `CoreEval`; `PExpr` is retired, or kept with a Lean proof
+   `extract_sound` relating `CoreEval f` and `Proof.eval (extract f)` on the eligible subset.
+
+**Exit:** no `partial def` in the interpreter or `CoreEval`; every claim is about `CoreEval` or
+transported by `extract_sound`; `VC_BRIDGE_REGISTER.md` lowering rows discharged by name.
+
+### Task R-0497
+
+**Objective:** The pipeline is a typed stage sequence in which skipping a verifier fails to
+compile. Stage S7; after R-0493.
+
+**Status (2026-10-18): planned.**
+
+1. `Parse → Resolve → Elab+ElabVerify → Check → Mono+MonoVerify → Lower → SSAVerify →
+   Fold+FoldVerify → Emit`, each output a structure carrying its invariant or the token only its
+   verifier returns.
+2. New `FoldVerify` (constants normalized to their type) and `LowerVerify` (Core types preserved).
+3. One mutation family per verifier; per-stage timing and IR size reported.
+
+**Exit:** `Pipeline.lean` exposes only the typed sequence; every verifier's mutation family is
+killed in a qualified campaign.
+
+### Task R-0498
+
+**Objective:** Every enforcement claim in docs and proof/checker/backend comments cites the gate
+leg that enforces it. Stage S8.
+
+**Status (2026-10-18): planned; starts now.** Bug 080's comment, the backend contract text and
+register rows R-18 – R-20 claimed enforcement nothing performed.
+
+1. `check_enforcement_citations.sh` over `docs/verification`, `docs/language` and doc comments in
+   `Concrete/Proof`, `Concrete/Check`, `Concrete/Backend`: enforcement phrases require an existing
+   `[gate: <script>#<leg>]` or `[test: <path>]` citation.
+2. Relabel R-18 – R-20 as shape-only until R-0496 discharges them.
+
+**Exit:** zero uncited enforcement phrases; every cited leg exists and has a negative control.
 
 ### Task R-0286
 
