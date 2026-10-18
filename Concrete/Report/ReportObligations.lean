@@ -2549,7 +2549,7 @@ def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
     hand-linked via a `coverage: invariant` registry entry; init/variant
     (O1/O4/O5) are kernel-discharged by `omega` when their key appears in
     `provedVCs`; the rest are `planned`. -/
-def loopContractSection (modules : List Module) (registry : ProofRegistry)
+def loopContractSection (modules : List Module) (_registry : ProofRegistry)
     (provedVCs : List String := []) (provedVacuous : List String := []) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
@@ -2558,11 +2558,12 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
   let impures := impureFnNames modules
   let mut out := "\n\n=== Loop contracts ==="
   for (pfx, f) in withLoops do
-    -- a registered `coverage: invariant` proof discharges invariant_preservation
-    let preserveProof : Option String :=
-      match registry.find? (fun e => e.function == pfx ++ f.name) with
-      | some e => if e.coverage == "invariant" && !e.proof.isEmpty then some e.proof else none
-      | none => none
+    -- A COVERAGE LABEL IS NOT EVIDENCE (bug 079 follow-up). This used to discharge the loop's
+    -- invariant-preservation step whenever the link said `coverage: invariant` and named a proof —
+    -- `loop_invariant.count_up` read `proved_by_lean` here while its claim was `spec_unbound`. A loop
+    -- step is discharged by a theorem only once a loop-step binding ties that theorem to this loop;
+    -- none exists yet (ROADMAP soundness track), so no label discharges anything.
+    let preserveProof : Option String := none
     let extraLets := letConstMap f.body
     let fq := pfx ++ f.name
     let outer := f.requires  -- Phase 3 #9: function preconditions are in scope for loop VCs

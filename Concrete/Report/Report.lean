@@ -2795,10 +2795,12 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   -- (2) fingerprint, (3) extracted PExpr
   let pcStr := match e.extracted with | some p => renderPExpr p | none => "(not extracted)"
   -- (4) contract / VC list
-  let preserveProof : Option String :=
-    match registry.find? (fun re => re.function == e.qualName) with
-    | some re => if re.coverage == "invariant" && !re.proof.isEmpty then some re.proof else none
-    | none => none
+  -- A COVERAGE LABEL IS NOT EVIDENCE (bug 079 follow-up). This used to discharge the loop's
+  -- invariant-preservation step whenever the link said `coverage: invariant` and named a proof —
+  -- `loop_invariant.count_up` read `proved_by_lean` here while its claim was `spec_unbound`. A loop
+  -- step is discharged by a theorem only once a loop-step binding ties that theorem to this loop;
+  -- none exists yet (ROADMAP soundness track), so no label discharges anything.
+  let preserveProof : Option String := none
   let mut vcLines : List String := []
   -- requires / ensures
   for r in f.requires do
@@ -3292,8 +3294,9 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     let (file, _) := loc fq
     let extraLets := letConstMap f.body
     let retExpr := loopExitReturn f.body
-    let reg := registry.find? (·.function == fq)
-    let invDep := match reg with | some e => if e.coverage == "invariant" && !e.proof.isEmpty then [e.proof] else [] | none => []
+    let _reg := registry.find? (·.function == fq)
+    -- No coverage label discharges a loop step (see `proveReportEntry`): there is no loop-step binding.
+    let invDep : List String := []
     for lc in f.loopContracts do
       for oid in ["O1", "O2", "O3", "O4", "O5"] do
         match loopObInfo lc oid fq f.ensures extraLets retExpr [] f.requires with
