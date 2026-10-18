@@ -45,10 +45,17 @@ def isFloatTy : Ty → Bool
   | _ => false
 
 /-- The committed typing decision for an integer literal: the adopted type, plus
-    the range obligation the literal value must satisfy (present only when the
-    *hint* was a concrete integer type — a defaulted `Int` from a non-integer
-    hint is NOT range-checked, matching the historical Check behavior). Both
-    Check and Elab consume the whole record; neither re-derives a field. -/
+    the range obligation the literal value must satisfy. EVERY concrete integer
+    type the literal ends up with carries its range — the defaulted `Int` too.
+    Only a type-variable hint has no range here (the literal's width is not known
+    until monomorphization). Both Check and Elab consume the whole record;
+    neither re-derives a field.
+
+    Bug 088: the defaulted `Int` used to carry NO range ("matching the historical
+    Check behavior"), so `let x = 18446744073709551615;` was accepted as an `Int`
+    holding 2^64-1. The interpreter and the proof model kept the mathematical
+    value; the binary emitted `i64 18446744073709551615`, which LLVM truncates to
+    -1. A literal must fit the type it is given, whichever path gave it. -/
 structure IntLitDecision where
   ty : Ty
   range : Option (Int × Int × String)
@@ -56,7 +63,7 @@ structure IntLitDecision where
 /-- Canonical typing decision for an integer literal given its (already-resolved)
     hint. An integer or `char` hint is adopted (and carries its range
     obligation); a type-variable hint is adopted (accepts integer literals, no
-    range); anything else defaults to `Int` with no range obligation. This is the
+    range); anything else defaults to `Int` WITH `Int`'s range obligation. This is the
     one `intLit` decision Check and Elab share, so they cannot disagree. -/
 def intLitDecision (hint : Option Ty) : IntLitDecision :=
   match hint with
@@ -64,8 +71,27 @@ def intLitDecision (hint : Option Ty) : IntLitDecision :=
     if isInteger t || t == .char then
       { ty := t, range := intTyRange t }
     else
-      { ty := (match t with | .typeVar _ => t | _ => .int), range := none }
-  | none => { ty := .int, range := none }
+      match t with
+      | .typeVar _ => { ty := t, range := none }
+      | _ => { ty := .int, range := intTyRange .int }
+  | none => { ty := .int, range := intTyRange .int }
+
+/-- The hint an integer-literal CAST OPERAND is typed under. A cast operand has
+    no type context (`as` exists to convert, so neither the target nor the outer
+    hint may leak in), so a bare literal would default to `Int`. That is right
+    for every literal `Int` can hold; a literal in `(Int max, Uint max]` — the
+    bit-pattern idiom `0xFFFF_FFFF_FFFF_FFFF as i64` — is typed `Uint` instead,
+    so the cast reinterprets a well-typed `u64` (giving -1 in the interpreter, the
+    folder and the binary alike) rather than smuggling an out-of-range `Int`
+    through. Anything wider than `Uint` stays `Int` and is rejected by its range.
+    Parentheses are looked through. Check and Elab both call this (bug 088). -/
+partial def castOperandHint : Expr → Option Ty
+  | .paren _ inner => castOperandHint inner
+  | .intLit _ n =>
+    match IntArith.intRange .int with
+    | some (_, hi) => if n > hi && IntArith.fitsType .uint n then some .uint else none
+    | none => none
+  | _ => none
 
 /-- Convenience: the adopted type of an integer literal (the `.ty` field). -/
 @[inline] def intLitType (hint : Option Ty) : Ty := (intLitDecision hint).ty

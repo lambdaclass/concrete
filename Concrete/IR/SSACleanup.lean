@@ -383,9 +383,38 @@ private partial def eliminateDeadInstsFixpoint (blocks : List SBlock) : List SBl
 -- Pass 5: Constant folding + algebraic simplifications
 -- ============================================================
 
-/-- Try to fold a binary operation on two constant operands. -/
+/-- Normalize an integer constant into its type's representation — the value the
+    emitted `iN` constant actually denotes (two's-complement wrap, sign-correct),
+    by the ONE arithmetic reference (`IntArith.wrapToType`). Every fold reads its
+    constants through this, so a fold computes on what the binary would hold,
+    never on an unnormalized mathematical `Int`.
+
+    Bug 088: an `Int` constant holding 2^64-1 reached `lt` unwrapped, so
+    `0xFFFF_FFFF_FFFF_FFFF as i64 < 0` folded to `false` (the binary would hold
+    -1). The front end now rejects such a literal, but the folder must not depend
+    on that: a constant's meaning is its bit pattern at its width. -/
+def normIntConst : SVal → SVal
+  | .intConst n ty => if IntArith.isIntTy ty then .intConst (IntArith.wrapToType ty n) ty else .intConst n ty
+  | v => v
+
+/-- Fold an integer-to-integer cast of a constant: the same wrap the interpreter's
+    `evalCast` applies (`IntArith.wrapToType` into the target), taken from the
+    NORMALIZED source value — so a signed source sign-extends and an unsigned one
+    zero-extends, exactly LLVM's `sext`/`zext`/`trunc`. `none` for anything that is
+    not an integer constant cast to an integer type (bool, char, float, pointers). -/
+def foldCastConst (val : SVal) (tgt : Ty) : Option SVal :=
+  match normIntConst val with
+  | .intConst n src =>
+    if IntArith.isIntTy src && IntArith.isIntTy tgt then some (.intConst (IntArith.wrapToType tgt n) tgt)
+    else none
+  | _ => none
+
+/-- Try to fold a binary operation on two constant operands. Operands are read
+    NORMALIZED (`normIntConst`): the comparisons below are mathematical `Int`
+    comparisons, which are the signed/unsigned LLVM comparisons only when each
+    constant already holds its type's value. -/
 private def foldBinOpConst (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option SVal :=
-  match lhs, rhs with
+  match normIntConst lhs, normIntConst rhs with
   | .intConst a _, .intConst b _ =>
     match op with
     -- Checked arithmetic (add/sub/mul/div/mod) folds through the ONE arithmetic
@@ -522,16 +551,31 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
   let (replacements0, rewrites0, _) := blocks.foldl (fun (acc : List (String × SVal) × List (String × SInst) × Std.HashMap String SVal) b =>
     b.insts.foldl (fun (acc : List (String × SVal) × List (String × SInst) × Std.HashMap String SVal) inst =>
       let env := acc.2.2
-      let rv : SVal → SVal := fun v => match v with | .reg r _ => (env.get? r).getD v | _ => v
+      -- Operands are resolved AND normalized (bug 088): every fold below reads a
+      -- constant as the value its emitted `iN` denotes — except a negation's
+      -- operand (`rvNeg`), see that arm.
+      let rvNeg : SVal → SVal := fun v => match v with | .reg r _ => (env.get? r).getD v | _ => v
+      let rv : SVal → SVal := fun v => normIntConst (rvNeg v)
       match inst with
+      -- Constant cast: wrap into the target exactly as `evalCast` does. Before
+      -- bug 088 there was no cast fold at all; the only cast "folding" was
+      -- identity-cast elimination, which forwarded an unnormalized constant.
+      | .cast dst val tgt =>
+        match foldCastConst (rv val) tgt with
+        | some c => ((dst, c) :: acc.1, acc.2.1, env.insert dst c)
+        | none => acc
       -- Constant negation: fold `neg (const)` to the negated constant when the
       -- RESULT fits the type — range-check the result, not the inner literal, so
       -- `-128 : i8` (parsed as `neg 128`) becomes the valid constant -128 instead
       -- of a runtime `0 - 128` that overflows and traps. If the result does NOT
       -- fit (e.g. `-(i8::MIN)` after constant propagation), leave the op live so
       -- the checked negation helper traps at runtime — matching the interpreter.
+      -- The operand is read RAW, not normalized: `-128 : i8` lowers to `neg 128`,
+      -- whose inner literal is the one constant that legitimately exceeds its
+      -- type (Check range-checks the negated value). Normalizing it would read
+      -- 128 as -128, refuse the fold, and leave a runtime negation that traps.
       | .unaryOp dst .neg operand ty =>
-        match rv operand with
+        match rvNeg operand with
         | .intConst n _ =>
           if IntArith.fitsType ty (-n) then ((dst, .intConst (-n) ty) :: acc.1, acc.2.1, env.insert dst (.intConst (-n) ty)) else acc
         | _ => acc
@@ -548,7 +592,7 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
           -- Strength reduction: unsigned div by power-of-2 → shr (sound: the
           -- quotient always fits and the shift amount is < width).
           if op == .div && isUnsignedTy ty then
-            match rhs with
+            match rv rhs with
             | .intConst n _ =>
               match isPowerOfTwo n with
               | some exp => (acc.1, (dst, SInst.binOp dst .shr lhs (.intConst exp ty) ty) :: acc.2.1, acc.2.2)
@@ -667,7 +711,10 @@ private def eliminateIdentityCasts (blocks : List SBlock) : List SBlock :=
     b.insts.foldl (fun acc inst =>
       match inst with
       | .cast dst val tgt =>
-        if val.ty == tgt then (dst, val) :: acc else acc
+        -- Forward the operand NORMALIZED (bug 088): an identity cast of a
+        -- constant is still a cast to `tgt`, and means the constant's value at
+        -- `tgt`'s width.
+        if val.ty == tgt then (dst, normIntConst val) :: acc else acc
       | _ => acc) acc) []
   if replacements.isEmpty then blocks
   else applyReplacements blocks replacements

@@ -1283,7 +1283,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | .cast _ inner targetTy =>
     -- Legal cast operands are numeric (Copy): nothing to consume. Place mode
     -- so an ILLEGAL `s as Int` reports "cannot cast", not a consume error.
-    let _innerTy ← checkExpr inner none .place
+    -- A literal operand gets the shared cast-operand hint (bug 088): `Uint` for a
+    -- literal only `Uint` can hold, otherwise none (defaulted, range-checked `Int`).
+    let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) .place
     -- CoreCheck validates cast legality and capability requirements
     return targetTy
   | .methodCall _ obj methodName typeArgs args =>

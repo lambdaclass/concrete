@@ -140,6 +140,17 @@ class is now checked: `--report model-diff` evaluates the extracted model and th
 boundary inputs of every scalar extracted function, and `check_model_diff.sh` requires zero mismatches
 across the corpus (140 functions, 5666 inputs). Restoring the old model makes it report
 `narrow(300): model=300 runtime=44`.
+### Bug 088: Literals Fit Their Type; The Folder Reads Constants At Their Width (2026-10-18)
+
+An unhinted integer literal defaulted to `Int` with no range check, so `let x = 18446744073709551615`
+was 2^64-1 in the interpreter and proof model and -1 in the binary. Every concrete type a literal
+receives now carries its range, the defaulted `Int` included (E0227). A cast operand only `Uint` can
+hold is typed `Uint`, so `0xFFFFFFFFFFFFFFFF as i64` is -1 on every path. A post-mono verifier
+range-checks literals instantiated at a type variable, and `--interp` runs it as well. The SSA folder
+reads every constant through `IntArith.wrapToType`, folds constant integer casts with the interpreter's
+wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
+false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
+[docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

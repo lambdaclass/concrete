@@ -1039,7 +1039,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     -- Do NOT pass any hint: the point of `as` is to convert between types.
     -- Passing targetTy would mistype literals in `(100 + m) as i32` where m is Int.
     -- Passing the outer hint could also leak i32 context into the inner expression.
-    let cInnerEv ← elabExprEv inner none
+    -- The one exception is the shared cast-operand hint (bug 088): a literal only
+    -- `Uint` can hold is typed `Uint`, exactly as Check typed it.
+    let cInnerEv ← elabExprEv inner (TypeJudgment.castOperandHint inner)
     let cInner := cInnerEv.core
     -- The cast TARGET is the whole point of the expression: `x as i32` and `x as i64`
     -- are different programs, and before this the two were one gap.

@@ -897,6 +897,20 @@ add "shared-type-judgment" "Concrete/Check/Check.lean" "check_type_agreement.sh"
   'let d := TypeJudgment.intLitDecision hintR' \
   'let d := TypeJudgment.intLitDecision (if hintR.isSome then none else hintR)'
 
+# Bug 088, restored exactly: the DEFAULTED `Int` carries no range obligation, so an
+# unhinted 18446744073709551615 is accepted (interp 2^64-1, binary -1). The cast
+# matrix's both-paths-reject rows go red.
+add "literal-default-range" "Concrete/Semantics/TypeJudgment.lean" "check_cast_matrix.sh" yes \
+  '  | none => { ty := .int, range := intTyRange .int }' \
+  '  | none => { ty := .int, range := none }'
+
+# Bug 088, the type-variable half: post-mono stops range-checking literals, so
+# `let y: T = 300` at u8 compiles to 44 while the interpreter runs 300. The cast
+# matrix's generic-literal reject row goes red.
+add "post-mono-literal-range" "Concrete/Check/Verify.lean" "check_cast_matrix.sh" yes \
+  '  | .intLit v ty => some (check v ty)' \
+  '  | .intLit v ty => some ((check v ty).filter (fun _ => false))'
+
 # R-0455 Register B row 1. Making the transformation a NO-OP still preserves meaning — the
 # soundness theorem holds — so the thing that must fail is the non-vacuity lock. It does, at
 # BUILD time, because those locks are `rfl` examples: for a compile-time lock, "killed by

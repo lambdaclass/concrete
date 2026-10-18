@@ -1,0 +1,7 @@
+// Bug 088: an unhinted integer literal defaults to `Int` and must fit it.
+// Pre-fix the default carried no range obligation: the interpreter (and the
+// proof model) returned 2^64-1, the binary -1.
+mod main {
+    fn g(a: i64) -> i64 { let x = 18446744073709551615; return x; }
+    pub fn main() -> i32 { if g(0) == 0 - 1 { return 2; } return 0; }
+}

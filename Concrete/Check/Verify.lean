@@ -1,6 +1,7 @@
 import Concrete.Elab.Core
 import Concrete.Report.Diagnostic
 import Concrete.Check.Layout
+import Concrete.Semantics.IntArith
 
 namespace Concrete
 
@@ -72,109 +73,112 @@ structure VerifyViolation where
 mutual
 /-- Scan a CExpr for types satisfying `pred`, collecting violations. -/
 partial def collectExprViolations (fnName : String) (pred : Ty → Bool) (label : String)
-    (e : CExpr) : List VerifyViolation :=
+    (e : CExpr) (hook : CExpr → Option (List VerifyViolation) := fun _ => none) : List VerifyViolation :=
+  match hook e with
+  | some handled => handled
+  | none =>
   let checkTy (t : Ty) : List VerifyViolation :=
     if pred t then [{ fnName, message := s!"{label} in expression type: {tyToStr t}" }] else []
   let self := checkTy e.ty
   let children := match e with
     | .binOp _ lhs rhs _ =>
-      collectExprViolations fnName pred label lhs ++
-      collectExprViolations fnName pred label rhs
+      collectExprViolations (hook := hook) fnName pred label lhs ++
+      collectExprViolations (hook := hook) fnName pred label rhs
     | .unaryOp _ operand _ =>
-      collectExprViolations fnName pred label operand
+      collectExprViolations (hook := hook) fnName pred label operand
     | .call _ typeArgs args _ =>
       typeArgs.foldl (fun acc t => acc ++ if pred t then [{ fnName, message := s!"{label} in call type arg: {tyToStr t}" }] else []) [] ++
-      args.foldl (fun acc a => acc ++ collectExprViolations fnName pred label a) []
+      args.foldl (fun acc a => acc ++ collectExprViolations (hook := hook) fnName pred label a) []
     | .structLit _ typeArgs fields _ =>
       typeArgs.foldl (fun acc t => acc ++ if pred t then [{ fnName, message := s!"{label} in struct type arg: {tyToStr t}" }] else []) [] ++
-      fields.foldl (fun acc (_, fe) => acc ++ collectExprViolations fnName pred label fe) []
+      fields.foldl (fun acc (_, fe) => acc ++ collectExprViolations (hook := hook) fnName pred label fe) []
     | .enumLit _ _ typeArgs fields _ =>
       typeArgs.foldl (fun acc t => acc ++ if pred t then [{ fnName, message := s!"{label} in enum type arg: {tyToStr t}" }] else []) [] ++
-      fields.foldl (fun acc (_, fe) => acc ++ collectExprViolations fnName pred label fe) []
-    | .fieldAccess obj _ _ => collectExprViolations fnName pred label obj
-    | .borrow inner _ => collectExprViolations fnName pred label inner
-    | .borrowMut inner _ => collectExprViolations fnName pred label inner
-    | .deref inner _ => collectExprViolations fnName pred label inner
-    | .cast inner _ => collectExprViolations fnName pred label inner
+      fields.foldl (fun acc (_, fe) => acc ++ collectExprViolations (hook := hook) fnName pred label fe) []
+    | .fieldAccess obj _ _ => collectExprViolations (hook := hook) fnName pred label obj
+    | .borrow inner _ => collectExprViolations (hook := hook) fnName pred label inner
+    | .borrowMut inner _ => collectExprViolations (hook := hook) fnName pred label inner
+    | .deref inner _ => collectExprViolations (hook := hook) fnName pred label inner
+    | .cast inner _ => collectExprViolations (hook := hook) fnName pred label inner
     | .arrayLit elems _ =>
-      elems.foldl (fun acc el => acc ++ collectExprViolations fnName pred label el) []
+      elems.foldl (fun acc el => acc ++ collectExprViolations (hook := hook) fnName pred label el) []
     | .arrayIndex arr idx _ =>
-      collectExprViolations fnName pred label arr ++
-      collectExprViolations fnName pred label idx
+      collectExprViolations (hook := hook) fnName pred label arr ++
+      collectExprViolations (hook := hook) fnName pred label idx
     | .allocCall inner allocExpr _ =>
-      collectExprViolations fnName pred label inner ++
-      collectExprViolations fnName pred label allocExpr
+      collectExprViolations (hook := hook) fnName pred label inner ++
+      collectExprViolations (hook := hook) fnName pred label allocExpr
     | .match_ scrutinee arms _ =>
-      collectExprViolations fnName pred label scrutinee ++
-      arms.foldl (fun acc arm => acc ++ collectArmViolations fnName pred label arm) []
+      collectExprViolations (hook := hook) fnName pred label scrutinee ++
+      arms.foldl (fun acc arm => acc ++ collectArmViolations (hook := hook) fnName pred label arm) []
     | .ifExpr cond then_ else_ _ =>
-      collectExprViolations fnName pred label cond ++
-      then_.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++
-      else_.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+      collectExprViolations (hook := hook) fnName pred label cond ++
+      then_.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) [] ++
+      else_.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
     | .fnRef _ _ => []
     | _ => []  -- literals and ident: no children
   self ++ children
 
 /-- Scan a match arm for type violations. -/
 partial def collectArmViolations (fnName : String) (pred : Ty → Bool) (label : String)
-    (arm : CMatchArm) : List VerifyViolation :=
-  let gv := fun (g : Option CExpr) => (g.map (collectExprViolations fnName pred label ·)).getD []
+    (arm : CMatchArm) (hook : CExpr → Option (List VerifyViolation) := fun _ => none) : List VerifyViolation :=
+  let gv := fun (g : Option CExpr) => (g.map (collectExprViolations (hook := hook) fnName pred label ·)).getD []
   match arm with
   | .enumArm _ _ bindings guard body =>
     bindings.foldl (fun acc (_, t) => acc ++ if pred t then [{ fnName, message := s!"{label} in match binding type: {tyToStr t}" }] else []) [] ++
-    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
   | .litArm value guard body =>
-    collectExprViolations fnName pred label value ++ gv guard ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    collectExprViolations (hook := hook) fnName pred label value ++ gv guard ++
+    body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
   | .varArm _ bindTy guard body =>
     (if pred bindTy then [{ fnName, message := s!"{label} in match var binding type: {tyToStr bindTy}" }] else []) ++
-    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
   | .rangeArm lo hi _ guard body =>
-    collectExprViolations fnName pred label lo ++
-    collectExprViolations fnName pred label hi ++ gv guard ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    collectExprViolations (hook := hook) fnName pred label lo ++
+    collectExprViolations (hook := hook) fnName pred label hi ++ gv guard ++
+    body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
 
 /-- Scan a CStmt for type violations. -/
 partial def collectStmtViolations (fnName : String) (pred : Ty → Bool) (label : String)
-    (stmt : CStmt) : List VerifyViolation :=
+    (stmt : CStmt) (hook : CExpr → Option (List VerifyViolation) := fun _ => none) : List VerifyViolation :=
   match stmt with
   | .letDecl _ _ ty value =>
     (if pred ty then [{ fnName, message := s!"{label} in let binding type: {tyToStr ty}" }] else []) ++
-    collectExprViolations fnName pred label value
-  | .assign _ value => collectExprViolations fnName pred label value
+    collectExprViolations (hook := hook) fnName pred label value
+  | .assign _ value => collectExprViolations (hook := hook) fnName pred label value
   | .return_ (some value) retTy =>
     (if pred retTy then [{ fnName, message := s!"{label} in return type: {tyToStr retTy}" }] else []) ++
-    collectExprViolations fnName pred label value
+    collectExprViolations (hook := hook) fnName pred label value
   | .return_ none retTy =>
     if pred retTy then [{ fnName, message := s!"{label} in return type: {tyToStr retTy}" }] else []
-  | .expr e _ => collectExprViolations fnName pred label e
+  | .expr e _ => collectExprViolations (hook := hook) fnName pred label e
   | .ifElse cond then_ else_ =>
-    collectExprViolations fnName pred label cond ++
-    then_.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++
+    collectExprViolations (hook := hook) fnName pred label cond ++
+    then_.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) [] ++
     match else_ with
-    | some stmts => stmts.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    | some stmts => stmts.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
     | none => []
   | .while_ cond body _ step =>
-    collectExprViolations fnName pred label cond ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++
-    step.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    collectExprViolations (hook := hook) fnName pred label cond ++
+    body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) [] ++
+    step.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
   | .fieldAssign obj _ value =>
-    collectExprViolations fnName pred label obj ++
-    collectExprViolations fnName pred label value
+    collectExprViolations (hook := hook) fnName pred label obj ++
+    collectExprViolations (hook := hook) fnName pred label value
   | .derefAssign target value =>
-    collectExprViolations fnName pred label target ++
-    collectExprViolations fnName pred label value
+    collectExprViolations (hook := hook) fnName pred label target ++
+    collectExprViolations (hook := hook) fnName pred label value
   | .arrayIndexAssign arr idx value =>
-    collectExprViolations fnName pred label arr ++
-    collectExprViolations fnName pred label idx ++
-    collectExprViolations fnName pred label value
-  | .break_ (some value) _ => collectExprViolations fnName pred label value
+    collectExprViolations (hook := hook) fnName pred label arr ++
+    collectExprViolations (hook := hook) fnName pred label idx ++
+    collectExprViolations (hook := hook) fnName pred label value
+  | .break_ (some value) _ => collectExprViolations (hook := hook) fnName pred label value
   | .break_ none _ => []
   | .continue_ _ => []
-  | .defer body => collectExprViolations fnName pred label body
+  | .defer body => collectExprViolations (hook := hook) fnName pred label body
   | .borrowIn _ _ _ _ refTy body =>
     (if pred refTy then [{ fnName, message := s!"{label} in borrow ref type: {tyToStr refTy}" }] else []) ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+    body.foldl (fun acc s => acc ++ collectStmtViolations (hook := hook) fnName pred label s) []
 end
 
 -- ============================================================
@@ -316,13 +320,60 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
       else acc) ([] : Diagnostics)
     here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
 
+/-- The literal-range check for one expression node, as a walker hook. An
+    integer literal must fit the integer type it is stamped with; a negated
+    literal `-N` is checked as the value `-N` (so `-128 : i8`, whose inner `128`
+    alone does not fit, is accepted) and its inner literal is not visited again.
+    `none` = not a literal node, keep walking. -/
+private def literalRangeHook (fnName : String) (e : CExpr) : Option (List VerifyViolation) :=
+  let check (v : Int) (ty : Ty) : List VerifyViolation :=
+    match IntArith.intRange ty with
+    | some (lo, hi) =>
+      if lo ≤ v && v ≤ hi then []
+      else [{ fnName, message := s!"integer literal {v} is out of range for type '{tyToStr ty}' ({lo}..={hi}) after monomorphization" }]
+    | none => []
+  match e with
+  | .intLit v ty => some (check v ty)
+  | .unaryOp .neg (.intLit v _) ty => some (check (-v) ty)
+  | _ => none
+
+/-- **Post-Mono literal-range verifier** (bug 088). Check range-checks every
+    literal whose type it knows, but a literal adopted at a type VARIABLE
+    (`let y: T = 300`) gets its width only when Mono substitutes `T` — and Mono
+    substitutes silently. Instantiated at `u8`, the binary emitted `i8 300` (44)
+    while the interpreter kept 300. This re-asserts the literal-range rule on the
+    monomorphized copies, where every literal's type is concrete, as a USER error
+    with the same code as Check's (E0227). Generic definitions are skipped; only
+    their instances are checked. -/
+partial def verifyLiteralRanges (modules : List CModule) : Diagnostics :=
+  let rec goModule (m : CModule) : List VerifyViolation :=
+    let noTy : Ty → Bool := fun _ => false
+    let fnVs := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc
+      else fn.body.foldl (fun acc2 st =>
+        acc2 ++ collectStmtViolations fn.name noTy "" st (hook := literalRangeHook fn.name)) acc) []
+    let constVs := m.constants.foldl (fun acc (name, _, value) =>
+      acc ++ collectExprViolations name noTy "" value (hook := literalRangeHook name)) []
+    fnVs ++ constVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+  let violations := modules.foldl (fun acc m => acc ++ goModule m) []
+  violations.map fun v => {
+    severity := .error
+    message := s!"{v.fnName}: {v.message}"
+    pass := "post-mono"
+    span := none
+    hint := some "a literal must fit the type it is instantiated at; use a value within that range or an explicit `as` cast"
+    code := "E0227"
+  }
+
 /-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
     fields validate after instantiation, and no SAFE function exposes a
-    reference-return type (references are second-class). Mixed-width binops
+    reference-return type (references are second-class), and every integer
+    literal fits its now-concrete type (bug 088). Mixed-width binops
     (class 3) are already re-asserted at the CoreCheck boundary (E0502) — see
     docs/compiler/COMPILER_BOUNDARY.md. -/
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
+    ++ verifyLiteralRanges modules
 
 -- ============================================================
 -- Rendering

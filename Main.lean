@@ -360,6 +360,15 @@ def interpProgram (inputPath : String) : IO UInt32 := do
     IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
     return 1
   | .ok (_, _, validCore, _) =>
+    -- The interpreter runs the generic Core, but a program the compiler would
+    -- reject at the post-mono boundary must not run here either (bug 088: a
+    -- literal instantiated out of range, `let y: T = 300` at `T = u8`). Run the
+    -- same monomorphization + post-mono verification as validation only.
+    match Pipeline.monomorphize validCore with
+    | .error ds =>
+      IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
+      return 1
+    | .ok _ =>
     match Interp.interpret validCore.coreModules with
     | .error msg =>
       IO.eprintln msg

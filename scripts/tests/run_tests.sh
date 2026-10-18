@@ -7114,6 +7114,11 @@ run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.
 run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
+# Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
+# interp 2^64-1, binary -1), and constant casts fold with the interpreter's
+# wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
+run_ok "$TESTDIR/regress_088_const_fold_casts.con" "1048575"
+run_err "$TESTDIR/error_088_unhinted_literal_range.con" "out of range for type 'Int'"
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5
