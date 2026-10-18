@@ -455,12 +455,12 @@ abbrev shaInitFn : PFnDef :=
 abbrev shaStateToBytesFn : PFnDef :=
   { identity := .semantic (Concrete.CallableId.ofUser "hmac_sha256" "state_to_bytes")
     operationalKey := "state_to_bytes"
-    sourceBodyDigest := some { value := "00bb5f1fe704e930efbb13c7755c353c" }
+    sourceBodyDigest := some { value := "c1c47c9904780edfa1aaaa15ca127050" }
     displayName := "state_to_bytes", params := ["state"], body := stateToBytesExpr }
 abbrev shaHashFn : PFnDef :=
   { identity := .semantic (Concrete.CallableId.ofUser "hmac_sha256" "sha256_hash")
     operationalKey := "sha256_hash"
-    sourceBodyDigest := some { value := "0df3d0146c48c1d9feefaf63c7355ee9" }
+    sourceBodyDigest := some { value := "16d6b41d4261d39cd88b8850557cab98" }
     displayName := "sha256_hash", params := ["data", "len"], body := sha256_hashExpr }
 
 def shaFnsGlobals : String → Option PFnDef
@@ -1892,7 +1892,8 @@ theorem sb_shr_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel s : 
       = some (.int (state.getD i 0).toNat) :=
     arr_read state env (fuel + 1) i (by omega) "state" hst _ (by simp [eval, hiv])
   simp only [sbStore, eval, hre, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
-    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast]
+    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast,
+    wrapInt_bv_toNat]
 
 theorem sb_and_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel : Nat) (hi : i < 8)
     (h8 : 8 ≤ state.length)
@@ -1904,7 +1905,7 @@ theorem sb_and_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel : Na
       = some (.int (state.getD i 0).toNat) :=
     arr_read state env (fuel + 1) i (by omega) "state" hst _ (by simp [eval, hiv])
   simp only [sbStore3, eval, hre, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
-    Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast]
+    Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, wrapInt_bv_toNat]
 
 -- ---- 4-stores-per-iteration step + loop ----
 theorem bind_shadow (env : Env) (k : String) (a b : PVal) :
@@ -2075,19 +2076,24 @@ theorem lenStore0_eval (env : Env) (fuel len : Nat)
     eval shaFns env (fuel + 2) lenStore0 = some (.int (lenByte len 0).toNat) := by
   simp only [lenStore0, eval, hb, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
     Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast,
-    Nat.mul_zero, BitVec.ushiftRight_zero]
+    Nat.mul_zero, BitVec.ushiftRight_zero, wrapInt_bv_toNat]
 theorem lenStoreS_eval (env : Env) (fuel len s : Nat)
     (hb : env "bits" = some (.int ((len * 8 : Nat) : Int))) :
     eval shaFns env (fuel + 3) (lenStoreS (8 * s)) = some (.int (lenByte len s).toNat) := by
   simp only [lenStoreS, eval, hb, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
-    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq,
+    wrapInt_bv_toNat]
 
 
 -- helper: bits binding value
-theorem bits_val (e : Env) (len : Nat) (hlenv : e "len" = some (.int (len : Int))) (fuel : Nat) :
-    eval shaFns e (fuel + 2) (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+theorem bits_val (e : Env) (len : Nat) (hlenv : e "len" = some (.int (len : Int))) (fuel : Nat)
+    (hb : len * 8 < 2 ^ 32) :
+    eval shaFns e (fuel + 2) (.wrapCast 32 false (.binOp .mul (.var "len") (.lit (.int 8))))
       = some (.int ((len * 8 : Nat) : Int)) := by
-  simp only [eval, hlenv, evalBinOp, Option.some.injEq, PVal.int.injEq]; omega
+  -- `(len * 8) as u32` is a wrap (bug 080); it is the identity because `len * 8 < 2^32`.
+  have hw : wrapInt 32 false ((len : Int) * 8) = ((len * 8 : Nat) : Int) := by
+    rw [wrapInt_unsigned_of_lt 32 _ (by omega) (by push_cast; omega)]; push_cast; rfl
+  simp only [eval, hlenv, evalBinOp, Option.some.injEq, PVal.int.injEq, hw]
 
 theorem bufArr_length (bf : Nat → BitVec 8) : (bufArr bf).length = 384 := by simp [bufArr]
 
@@ -2177,7 +2183,7 @@ theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len
         (plen_eval _ nb (fuel + 87 + nb) (by simp [Env.bind]))]
   rw [show fuel + 87 + nb = ((fuel + 85 + nb) + 1) + 1 by omega,
       eval_letIn _ _ ((fuel + 85 + nb) + 1) _ _ _ _
-        (bits_val _ len (by simpa [Env.bind] using hlenv) (fuel + 85 + nb)),
+        (bits_val _ len (by simpa [Env.bind] using hlenv) (fuel + 85 + nb) (by omega)),
       show (fuel + 85 + nb) + 1 = fuel + 86 + nb by omega]
   rw [show fuel + 86 + nb = ((fuel + 84 + nb) + 1) + 1 by omega,
       eval_letIn _ _ ((fuel + 84 + nb) + 1) _ _ _ _

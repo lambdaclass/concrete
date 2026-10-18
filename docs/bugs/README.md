@@ -86,6 +86,7 @@ Those belong in:
 - [077_nested_submodule_relative_call_undefined_symbol.md](077_nested_submodule_relative_call_undefined_symbol.md) — OPEN: a call `util::poke` from `tb.a` into `tb.a.util` lowers to the undefined `@util_poke` (LLVM validation fails); the assumption summary over-resolves the same call
 - [078_if_else_both_diverge_open_merge.md](078_if_else_both_diverge_open_merge.md) — FIXED: an if/else (statement or expression) whose arms both diverge left its merge block open, so an enclosing branch used the unreachable block as a phi source and SSA verification rejected a valid program (E0703)
 - [079_receipt_for_a_body_the_theorem_is_not_about.md](079_receipt_for_a_body_the_theorem_is_not_about.md) — FIXED: a body was compared with a specification only when its source name keyed a side table, so `fn always_seven() { return 7; }` linked to `check_nonce_correct` was proved and minted a receipt; one subject binding (body and parameters ARE the specification the theorem evaluates) now governs proved, issuance and consumption
+- [080_narrowing_cast_modeled_as_identity.md](080_narrowing_cast_modeled_as_identity.md) — FIXED: `PExpr.cast` was the identity, so `x as u8` was 300 in the proof model and 44 in the binary; value-changing casts now extract as `wrapCast` (the runtime's wrap formula), affected proofs show their values fit, and `check_model_diff.sh` compares model and runtime on boundary inputs across the corpus
 
 ## Open Numbered Bugs
 

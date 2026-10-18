@@ -317,7 +317,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: bound to Concrete.Proof.stateToBytesExpr, the specification Examples.HmacSha256.Proofs.state_to_bytes_refines_spec evaluates (body 00bb5f1fe704e930efbb13c7755c353c, parameters [state])
+  spec: bound to Concrete.Proof.stateToBytesExpr, the specification Examples.HmacSha256.Proofs.state_to_bytes_refines_spec evaluates (body c1c47c9904780edfa1aaaa15ca127050, parameters [state])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 
@@ -339,7 +339,7 @@ error: proof link for 'hmac_sha256.hmac_sha256' has no stored proof subject — 
 
   origin: source_linked
 
-  spec: bound to Concrete.Proof.sha256_hashExpr, the specification Examples.HmacSha256.Proofs.sha256_hash_refines_spec evaluates (body 0df3d0146c48c1d9feefaf63c7355ee9, parameters [data, len])
+  spec: bound to Concrete.Proof.sha256_hashExpr, the specification Examples.HmacSha256.Proofs.sha256_hash_refines_spec evaluates (body 16d6b41d4261d39cd88b8850557cab98, parameters [data, len])
 
   hint: Re-verify the proof against the current body, then record the result as #[proof_fingerprint("...")].
 

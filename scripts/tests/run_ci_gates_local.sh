@@ -133,7 +133,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 244 -> 245: check_lean14576_reproducer.sh (R-0208 fire drill reproducer), pinned in the same commit.
 # 245 -> 246: check_identity_rows.sh (R-0482 frozen identity rows), pinned in the same commit.
 # 248 -> 249: check_subject_binding.sh (bug 079 subject binding), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=249
+# 249 -> 250: check_model_diff.sh (bug 080 model vs runtime), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=250
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

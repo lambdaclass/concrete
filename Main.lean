@@ -1,6 +1,7 @@
 import Concrete
 import Concrete.Proof.ObligationCore
 import Concrete.Report.CompilerLedger
+import Concrete.Report.ModelDiff
 import Concrete.Backend.Backend
 import Concrete.Resolve.Project
 
@@ -2914,6 +2915,11 @@ def compileAndReport (inputPath : String) (reportType : String)
       return 0
     if reportType == "subject-facts" then
       IO.println (Report.subjectFactsReport (pc := pc))
+      return 0
+    -- Bug 080 prevention: the extracted model against the interpreter, per function, on boundary
+    -- inputs. The interpreter needs every callee, std's included, so it gets the whole program.
+    if reportType == "model-diff" then
+      IO.println (modelDiffReport pc (fullValidCore.coreModules ++ depModules))
       return 0
     if reportType == "lean-stubs" then
       IO.println (Report.leanStubsReport pc (registry := registry))

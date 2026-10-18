@@ -376,11 +376,25 @@ theorem field_access_preservation
 `.cast inner _` extracts to `.cast pi` given
 `cExprToPExpr inner = some pi`.  The eval-side identity
 (cast is identity at `Int`) is structural via the eval rule. -/
-theorem cast_identity_preservation
+theorem cast_preservation
     (inner : CExpr) (ty : Ty)
     (pi : PExpr) (h_inner : cExprToPExpr inner = some pi) :
-    cExprToPExpr (.cast inner ty) = some (.cast pi) := by
+    cExprToPExpr (.cast inner ty) = castToPExpr (CExpr.ty inner) ty pi := by
   simp [cExprToPExpr, h_inner]
+
+/-- Bug 080. The identity model is reserved for VALUE-PRESERVING integer casts: a cast whose target
+    range does not contain the source's is a wrap. `cast_identity_preservation` stated the identity
+    for every target type, which was the model the defect lived in. -/
+theorem narrowing_cast_wraps :
+    castToPExpr .uint .u8 (.var "x") = some (.wrapCast 8 false (.var "x")) := rfl
+
+theorem widening_cast_is_identity :
+    castToPExpr .u8 .u32 (.var "x") = some (.cast (.var "x")) := rfl
+
+/-- The control the defect fails: 300 as u8 is 44, in the model as at runtime. -/
+theorem wrapCast_300_u8 :
+    eval FnTable.empty Env.empty 2 (.wrapCast 8 false (.lit (.int 300))) = some (.int 44) := by
+  simp [eval, wrapInt]
 
 theorem eval_cast_identity
     (fns : FnTable) (env : Env) (fuel : Nat)
@@ -796,6 +810,7 @@ def pexprCalls : PExpr → List String
   | .arrayIndex a i => pexprCalls a ++ pexprCalls i
   | .match_ s arms => pexprCalls s ++ pexprCallsArms arms
   | .cast i => pexprCalls i
+  | .wrapCast _ _ i => pexprCalls i
   | .arrayLit elems => pexprCallsList elems
   | .arraySet a i v => pexprCalls a ++ pexprCalls i ++ pexprCalls v
   | .while_ c assigns cont =>
@@ -833,6 +848,7 @@ def pexprApplies : PExpr → List String
   | .arrayIndex a i => pexprApplies a ++ pexprApplies i
   | .match_ s arms => pexprApplies s ++ pexprAppliesArms arms
   | .cast i => pexprApplies i
+  | .wrapCast _ _ i => pexprApplies i
   | .arrayLit elems => pexprAppliesList elems
   | .arraySet a i v => pexprApplies a ++ pexprApplies i ++ pexprApplies v
   | .while_ c assigns cont =>

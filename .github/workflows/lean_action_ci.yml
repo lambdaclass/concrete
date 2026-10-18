@@ -780,6 +780,9 @@ jobs:
       - name: "Subject binding (bug 079 — a claim is proved only when its body and parameters ARE its theorem's specification)"
         run: bash scripts/tests/check_subject_binding.sh
 
+      - name: "Model vs runtime (bug 080 — the extracted proof model and the interpreter compute the same values)"
+        run: bash scripts/tests/check_model_diff.sh
+
       - name: "Match guard effects (bug 066 — a guard's effects are observable and identical under interp and compiled)"
         run: bash scripts/tests/check_match_guard_effects.sh
 

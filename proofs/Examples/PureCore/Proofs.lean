@@ -132,13 +132,15 @@ theorem numeric_try_new_correct (v : Int) (fuel : Nat) :
     simp [numericTryNewExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd, h]
 
 set_option linter.unusedSimpArgs false in
-/-- `numeric` try_from (shared by NonZeroU32::try_from_u64 with
-    max = u32::MAX and Port::try_from_u32 with max = u16::MAX): zero and
-    out-of-range rejected, in-range wrapped. The narrowing cast is
-    guard-dominated, so the identity-cast model is faithful on every
-    reached path. -/
-theorem numeric_try_from_correct (max v : Int) (fuel : Nat) :
-    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6) (numericTryFromExpr max)
+/-- `numeric` try_from (shared by NonZeroU32::try_from_u64 with max = u32::MAX at 32 bits and
+    Port::try_from_u32 with max = u16::MAX at 16 bits): zero and out-of-range rejected, in-range
+    narrowed and wrapped. The narrowing is a two's-complement wrap (bug 080); it is the identity on
+    every reached path because the guard keeps `v ≤ max < 2^w` and the parameter is unsigned
+    (`0 ≤ v`) — which this statement now has to say, where the identity-cast model let it claim every
+    integer. -/
+theorem numeric_try_from_correct (max v : Int) (w : Nat) (fuel : Nat)
+    (hv : 0 ≤ v) (hmax : max < 2 ^ w) :
+    eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6) (numericTryFromExpr max w)
     = some (if v = 0 ∨ v > max then .enum_ "Option" "None" []
             else .enum_ "Option" "Some" [("value", .int v)]) := by
   by_cases h0 : v = 0
@@ -149,23 +151,24 @@ theorem numeric_try_from_correct (max v : Int) (fuel : Nat) :
     · have hd1 : decide (max < v) = true := decide_eq_true h1
       simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, hd1, h0, h1]
     · have hd1 : decide (max < v) = false := decide_eq_false (by omega)
-      simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, hd1, h0, h1]
+      have hw : wrapInt w false v = v := wrapInt_unsigned_of_lt w v hv (by omega)
+      simp [numericTryFromExpr, eval, eval.evalFields, Env.bind, evalBinOp, BEq.beq, hd0, hd1, h0, h1, hw]
 
-/-- NonZeroU32::try_from_u64 — `numeric_try_from_correct` at max = u32::MAX. -/
-theorem nonzero_u32_try_from_u64_correct (v : Int) (fuel : Nat) :
+/-- NonZeroU32::try_from_u64 — `numeric_try_from_correct` at max = u32::MAX, 32 bits. -/
+theorem nonzero_u32_try_from_u64_correct (v : Int) (fuel : Nat) (hv : 0 ≤ v) :
     eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6)
-      (numericTryFromExpr 4294967295)
+      (numericTryFromExpr 4294967295 32)
     = some (if v = 0 ∨ v > 4294967295 then .enum_ "Option" "None" []
             else .enum_ "Option" "Some" [("value", .int v)]) :=
-  numeric_try_from_correct 4294967295 v fuel
+  numeric_try_from_correct 4294967295 v 32 fuel hv (by decide)
 
-/-- Port::try_from_u32 — `numeric_try_from_correct` at max = u16::MAX. -/
-theorem port_try_from_u32_correct (v : Int) (fuel : Nat) :
+/-- Port::try_from_u32 — `numeric_try_from_correct` at max = u16::MAX, 16 bits. -/
+theorem port_try_from_u32_correct (v : Int) (fuel : Nat) (hv : 0 ≤ v) :
     eval pureCoreFns (Env.empty.bind "value" (.int v)) (fuel + 6)
-      (numericTryFromExpr 65535)
+      (numericTryFromExpr 65535 16)
     = some (if v = 0 ∨ v > 65535 then .enum_ "Option" "None" []
             else .enum_ "Option" "Some" [("value", .int v)]) :=
-  numeric_try_from_correct 65535 v fuel
+  numeric_try_from_correct 65535 v 16 fuel hv (by decide)
 
 /-- Semantic mirror of `base64.char_of` — the RFC 4648 alphabet as a plain
     Int function (guard-shaped, so the eval theorem's cases align 1:1). -/
@@ -196,21 +199,26 @@ def base64ValOfSem (c : Int) : Int :=
 
 set_option linter.unusedSimpArgs false in
 /-- `base64.char_of` computes the RFC 4648 alphabet byte — total over v. -/
-theorem base64_char_of_correct (v : Int) (fuel : Nat) :
+theorem base64_char_of_correct (v : Int) (fuel : Nat) (hv : 0 ≤ v) :
     eval pureCoreFns (Env.empty.bind "v" (.int v)) (fuel + 8) base64CharOfExpr
     = some (.int (base64CharOfSem v)) := by
   unfold base64CharOfSem
   by_cases h1 : v < 26
   · have hd1 : decide (v < 26) = true := decide_eq_true h1
-    simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1]
+    have hw : wrapInt 8 false (65 + v) = 65 + v := wrapInt_unsigned_of_lt 8 _ (by omega) (by omega)
+    simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, h1, hw]
   · have hd1 : decide (v < 26) = false := decide_eq_false h1
     by_cases h2 : v < 52
     · have hd2 : decide (v < 52) = true := decide_eq_true h2
-      simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2]
+      have hw : wrapInt 8 false (97 + (v - 26)) = 97 + (v - 26) :=
+        wrapInt_unsigned_of_lt 8 _ (by omega) (by omega)
+      simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, h1, h2, hw]
     · have hd2 : decide (v < 52) = false := decide_eq_false h2
       by_cases h3 : v < 62
       · have hd3 : decide (v < 62) = true := decide_eq_true h3
-        simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, hd3, h1, h2, h3]
+        have hw : wrapInt 8 false (48 + (v - 52)) = 48 + (v - 52) :=
+          wrapInt_unsigned_of_lt 8 _ (by omega) (by omega)
+        simp [base64CharOfExpr, eval, Env.bind, evalBinOp, BEq.beq, hd1, hd2, hd3, h1, h2, h3, hw]
       · have hd3 : decide (v < 62) = false := decide_eq_false h3
         by_cases h4 : v = 62
         · have hd4 : decide (v = 62) = true := decide_eq_true h4

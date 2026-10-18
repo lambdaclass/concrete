@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Proof Model Computes What The Program Computes For Casts (bug 080)
+
+`fn narrow(x: u64) -> u8 { return x as u8; }` was proof-eligible and its model evaluated `narrow(300)`
+to 300 while the binary returned 44: `PExpr.cast` was the identity for every cast, and the eligibility
+rule its documentation relied on did not exist. Value-changing casts now extract as `wrapCast` — the
+runtime's own two's-complement formula — and the specifications that had narrowed as the identity
+(HMAC byte and length stores, base64 `char_of`, numeric `try_from`) now prove their values fit. The
+class is now checked: `--report model-diff` evaluates the extracted model and the interpreter on
+boundary inputs of every scalar extracted function, and `check_model_diff.sh` requires zero mismatches
+across the corpus (140 functions, 5666 inputs). Restoring the old model makes it report
+`narrow(300): model=300 runtime=44`.
+
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
 A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:

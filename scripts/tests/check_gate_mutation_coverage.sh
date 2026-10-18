@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=131
+EXPECTED_FAMILIES=132
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1169,6 +1169,13 @@ add "subject-binding-governs-proved" "Concrete/Proof/ProofCore.lean" "check_subj
 add "p1-closure-reads-program" "Concrete/Proof/ProofCore.lean" "check_identity_separation.sh" yes \
   $'  | some (es, xs, os, g, r) =>\n    { pc with entries := es, excluded := xs, obligations := os, callGraph := g, recMap := r, program := none }' \
   $'  | some _ =>\n    pc'
+
+# BUG 080. THE COMPARATOR COMPARES. A model/runtime value mismatch must read MISMATCH; the mutation
+# answers `agree` whatever the values, so the next modeling defect would pass silently. Killed by the
+# gate's independent re-derivation of every verdict from its own columns (leg V).
+add "model-diff-compares-values" "Concrete/Report/ModelDiff.lean" "check_model_diff.sh" yes \
+  $'        | some a, some b => if a == b then "agree" else "MISMATCH"' \
+  $'        | some a, some b => if a == b || true then "agree" else "MISMATCH"'
 
 # EXTERNAL RE-CHECK. THE SWAP MUST SWAP. The hostile control hands one theorem another's proof; the
 # mutation hands it its own, so the doctored stream is the accepted one and both checkers accept it.

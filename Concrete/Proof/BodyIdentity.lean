@@ -74,6 +74,7 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
         | .litPat _ => false
       !shadows && pexprFreeIn name body
   | .cast inner => pexprFreeIn name inner
+  | .wrapCast _ _ inner => pexprFreeIn name inner
   | .arrayLit elems => elems.any (pexprFreeIn name)
   | .arraySet arr idx val =>
     pexprFreeIn name arr || pexprFreeIn name idx || pexprFreeIn name val
@@ -181,6 +182,7 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
           | other => other
         (pat', normalizePExpr body))
   | .cast inner => .cast (normalizePExpr inner)
+  | .wrapCast w sg inner => .wrapCast w sg (normalizePExpr inner)
   | .arrayLit elems => .arrayLit (elems.map normalizePExpr)
   | .arraySet arr idx val =>
     .arraySet (normalizePExpr arr) (normalizePExpr idx) (normalizePExpr val)

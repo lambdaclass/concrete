@@ -3,6 +3,7 @@ import Concrete.Proof.CallCollect
 import Concrete.Report.AssumptionSummary
 import Concrete.Pipeline.Pipeline
 import Concrete.Proof.Proof
+import Concrete.Semantics.IntArith
 import Concrete.Resolve.Intrinsic
 import Concrete.Proof.Sha256Spec
 import Concrete.Proof.BodyIdentity
@@ -696,6 +697,27 @@ def cExprIdentToPExpr : CExpr → Option Proof.PExpr
   | .ident name _ => some (.var name)
   | _             => none
 
+
+/-- The model of `inner as tgt`, where `inner : src` (bug 080).
+
+    A cast whose target range CONTAINS the source range is value-preserving: the identity `.cast`.
+    Any other integer cast — narrowing, or a signedness change — is `.wrapCast` at the target's width,
+    the two's-complement wrap the runtime performs (`IntArith.wrapToType`). A cast between distinct
+    non-integer types has no model here and refuses extraction, so the function is not proof-eligible
+    rather than modeled as the identity. -/
+def castToPExpr (src tgt : Ty) (pi : Proof.PExpr) : Option Proof.PExpr :=
+  match IntArith.intRange src, IntArith.intRange tgt, IntArith.intBitWidth tgt with
+  | some (slo, shi), some (tlo, thi), some (w, sg) =>
+    if tlo ≤ slo && shi ≤ thi then some (.cast pi) else some (.wrapCast w sg pi)
+  | none, none, _ => if src == tgt then some (.cast pi) else none
+  -- A NEWTYPE WRAP OR UNWRAP is the identity: CoreCheck admits a cast with a named type on one side
+  -- only when the other side is that newtype's one-step inner type (CoreCheck.lean, "Newtype
+  -- wrap/unwrap"), and the representation does not change. Only `.named`/`.generic` qualify — `char`,
+  -- `bool` and the rest keep refusing, since a `char` narrowing would be the same defect again.
+  | some _, none, _ => match tgt with | .named _ | .generic _ _ _ => some (.cast pi) | _ => none
+  | none, some _, _ => match src with | .named _ | .generic _ _ _ => some (.cast pi) | _ => none
+  | some _, some _, none => none  -- unreachable: an integer range always has a width
+
 mutual
 def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
@@ -749,9 +771,9 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let ps ← cExprToPExprImpl scrutinee
     let parms ← cMatchArmsToP arms
     some (.match_ ps parms)
-  | .cast inner _ => do
+  | .cast inner tgt => do
     let pi ← cExprToPExprImpl inner
-    some (.cast pi)
+    castToPExpr (CExpr.ty inner) tgt pi
   | .arrayLit elems _ => do
     let pelems ← cExprListToPExpr elems
     some (.arrayLit pelems)
@@ -1027,9 +1049,9 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let pl ← cExprToPExpr lhs
     let pr ← cExprToPExpr rhs
     some (.binOp pop pl pr)
-  | .cast inner _ => do
+  | .cast inner tgt => do
     let pi ← cExprToPExpr inner
-    some (.cast pi)
+    castToPExpr (CExpr.ty inner) tgt pi
   | .fieldAccess obj field _ => do
     let po ← cExprToPExpr obj
     some (.fieldAccess po field)

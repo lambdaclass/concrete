@@ -1630,6 +1630,7 @@ private partial def renderPExpr : Proof.PExpr → String
       s!"{patStr} => {renderPExpr body}"
     s!"match {renderPExpr scrutinee} \{ {"; ".intercalate armStrs} }"
   | .cast inner => s!"({renderPExpr inner} as _)"
+  | .wrapCast w sg inner => s!"({renderPExpr inner} as {if sg then "i" else "u"}{w})"
   | .arrayLit elems => s!"[{", ".intercalate (elems.map renderPExpr)}]"
   | .arraySet arr idx val =>
     s!"{renderPExpr arr}.set({renderPExpr idx}, {renderPExpr val})"
@@ -1773,6 +1774,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
       s!"({patLean}, {renderPExprAsLean body})"
     s!".match_\n      ({renderPExprAsLean scrutinee})\n      [{", ".intercalate armsLean}]"
   | .cast inner => s!".cast ({renderPExprAsLean inner})"
+  | .wrapCast w sg inner => s!".wrapCast {w} {sg} ({renderPExprAsLean inner})"
   | .arrayLit elems =>
     let elemsLean := elems.map fun e => s!"({renderPExprAsLean e})"
     s!".arrayLit [{", ".intercalate elemsLean}]"

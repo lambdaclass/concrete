@@ -233,16 +233,20 @@ inductive PExpr where
       Bodies are PExprs (the source-level CStmt list is already
       extracted to a single PExpr via cStmtsToPExprK). -/
   | match_ (scrutinee : PExpr) (arms : List (PMatchPat × PExpr))
-  /-- Integer-width cast (e.g. `u8 as i32`, `i32 as i64`).
-      Evaluates the inner expression and returns its value
-      unchanged: `PVal.int` is mathematical `Int`, with no
-      width, so widening casts are identity. Narrowing /
-      wrapping semantics are NOT modeled — a proof that
-      assumes `(x : u32) as i32` truncates would be unsound
-      here. The eligibility profile is responsible for
-      keeping narrowing casts out of proof-eligible code,
-      or for adding a narrow_int side-condition. -/
+  /-- A VALUE-PRESERVING integer cast (e.g. `u8 as i32`, `i32 as i64`): every value of the source
+      type is a value of the target, so the cast is the identity on `PVal.int`. Extraction emits
+      this ONLY when the target's range contains the source's (bug 080); any other integer cast is
+      `wrapCast`. -/
   | cast (inner : PExpr)
+  /-- A VALUE-CHANGING integer cast — narrowing (`u64 as u8`) or sign-changing (`i32 as u64`):
+      two's-complement wrap into `width` bits, read signed or unsigned. The SAME formula as
+      `IntArith.wrapToType`, which is what the interpreter and the compiled code do.
+
+      Bug 080: `.cast` modeled every cast as the identity, so `x as u8` with x = 300 evaluated to 300
+      in the model while the binary returned 44; a theorem about the model was a theorem about a
+      different function. The doc comment said eligibility kept narrowing casts out, and nothing
+      did. -/
+  | wrapCast (width : Nat) (signed : Bool) (inner : PExpr)
   /-- `[e1, e2, ..., eN]` — fixed-shape array literal.
       Evaluates each element left-to-right; the result is a
       `PVal.array_` carrying the evaluated values in the same
@@ -643,6 +647,7 @@ def pexprCanonical : PExpr → String
   | .arrayIndex a i => lpx "X" (pexprCanonical a) ++ lpx "i" (pexprCanonical i)
   | .match_ sc arms => lpx "M" (pexprCanonical sc) ++ lpx "m" (pexprArmsCanonical arms)
   | .cast i => lpx "K" (pexprCanonical i)
+  | .wrapCast w sg i => lpx "W" (toString w ++ (if sg then "s" else "u")) ++ lpx "i" (pexprCanonical i)
   | .arrayLit es => lpx "R" (pexprListCanonical es)
   | .arraySet a i v =>
     lpx "P" (pexprCanonical a) ++ lpx "i" (pexprCanonical i) ++ lpx "v" (pexprCanonical v)
@@ -887,6 +892,27 @@ def Env.bind (env : Env) (name : String) (val : PVal) : Env :=
 -- ============================================================
 -- Evaluation semantics
 -- ============================================================
+
+/-- Two's-complement wrap of `n` into `w` bits, read signed or unsigned — exactly
+    `IntArith.wrapToType` for an integer type of that width and signedness (bug 080). -/
+def wrapInt (w : Nat) (signed : Bool) (n : Int) : Int :=
+  if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
+
+/-- Wrapping a value already in range is the identity — what a proof uses when a narrowed value is
+    known to fit (for example after `& 255`). -/
+theorem wrapInt_unsigned_of_lt (w : Nat) (n : Int) (h0 : 0 ≤ n) (hlt : n < 2 ^ w) :
+    wrapInt w false n = n := by
+  unfold wrapInt
+  simp only [Bool.false_eq_true, ↓reduceIte]
+  rw [BitVec.toNat_ofInt]
+  have hc : ((2 ^ w : Nat) : Int) = 2 ^ w := by push_cast; rfl
+  rw [hc, Int.emod_eq_of_lt h0 hlt]
+  exact Int.toNat_of_nonneg h0
+
+/-- A `w`-bit value is already in range for a `w`-bit unsigned wrap. -/
+@[simp] theorem wrapInt_bv_toNat (w : Nat) (x : BitVec w) :
+    wrapInt w false (x.toNat : Int) = x.toNat :=
+  wrapInt_unsigned_of_lt w _ (by omega) (by exact_mod_cast x.isLt)
 
 /-- Evaluate a binary operation on two values. -/
 def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
@@ -1225,6 +1251,10 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     | none => none
     | some sv => evalArms fns env fuel sv arms
   | fuel + 1, .cast inner => eval fns env fuel inner
+  | fuel + 1, .wrapCast w sg inner =>
+    match eval fns env fuel inner with
+    | some (.int n) => some (.int (wrapInt w sg n))
+    | _ => none
   | fuel + 1, .arrayLit elems =>
     match evalElems fns env fuel elems with
     | none => none
@@ -2821,11 +2851,11 @@ def sha256_compressAtExpr : PExpr :=
 
 -- ---- state_to_bytes ----
 def sbStore (s : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
+  .wrapCast 8 false (.binOp (.bitand 32 false)
     (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
     (.lit (.int 255)))
 def sbStore3 : PExpr :=
-  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
+  .wrapCast 8 false (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
 def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
 def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
 def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
@@ -2845,9 +2875,9 @@ def assignsH : List (String × PExpr) :=
   [ ("state", .call "sha256_compress_at"
       [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
   , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
-def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
+def lenStore0 : PExpr := .wrapCast 8 false (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
 def lenStoreS (sh : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
+  .wrapCast 8 false (.binOp (.bitand 32 false)
     (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
 def sha256_hashExpr : PExpr :=
   .letIn "buf" (.var "data")
@@ -2855,7 +2885,7 @@ def sha256_hashExpr : PExpr :=
   (.letIn "nblocks" (.binOp (.div 32 true)
       (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
   (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
-  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+  (.letIn "bits" (.wrapCast 32 false (.binOp .mul (.var "len") (.lit (.int 8))))
   (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
   (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
   (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
@@ -3090,28 +3120,29 @@ def numericTryNewExpr : PExpr :=
     (.enumLit "Option" "None" [])
     (.enumLit "Option" "Some" [("value", .cast (.var "value"))])
 
-/-- Extracted spec shared by `NonZeroU32::try_from_u64` (max = u32::MAX) and
-    `Port::try_from_u32` (max = u16::MAX): zero and out-of-range are rejected,
-    in-range values narrow (guard-dominated, so the identity-cast model is
-    faithful on every reached path) and wrap in the newtype. -/
-def numericTryFromExpr (max : Int) : PExpr :=
+/-- Extracted spec shared by `NonZeroU32::try_from_u64` (max = u32::MAX, w = 32) and
+    `Port::try_from_u32` (max = u16::MAX, w = 16): zero and out-of-range are rejected, in-range values
+    narrow to `w` bits (a `wrapCast`, bug 080 — the identity only because the guard keeps them in
+    range, which the theorem now has to show) and wrap in the newtype. -/
+def numericTryFromExpr (max : Int) (w : Nat) : PExpr :=
   .ifThenElse (.binOp .eq (.var "value") (.lit (.int 0)))
     (.enumLit "Option" "None" [])
     (.ifThenElse (.binOp .gt (.var "value") (.lit (.int max)))
       (.enumLit "Option" "None" [])
-      (.enumLit "Option" "Some" [("value", .cast (.cast (.var "value")))]))
+      (.enumLit "Option" "Some" [("value", .cast (.wrapCast w false (.var "value")))]))
 
 /-- Extracted spec for `base64.char_of` (std/src/base64.con): the RFC 4648
     alphabet — 0..25 → 'A'..'Z', 26..51 → 'a'..'z', 52..61 → '0'..'9',
     62 → '+', 63 → '/'. Terminal early-return guards become a nested
-    ifThenElse chain; the u8 casts are width-erased identities. -/
+    ifThenElse chain; the `u64 as u8` casts are wraps (bug 080), the identity on every reached path
+    because each branch's value is below 256 — which the theorem has to show. -/
 def base64CharOfExpr : PExpr :=
   .ifThenElse (.binOp .lt (.var "v") (.lit (.int 26)))
-    (.cast (.binOp .add (.lit (.int 65)) (.var "v")))
+    (.wrapCast 8 false (.binOp .add (.lit (.int 65)) (.var "v")))
     (.ifThenElse (.binOp .lt (.var "v") (.lit (.int 52)))
-      (.cast (.binOp .add (.lit (.int 97)) (.binOp .sub (.var "v") (.lit (.int 26)))))
+      (.wrapCast 8 false (.binOp .add (.lit (.int 97)) (.binOp .sub (.var "v") (.lit (.int 26)))))
       (.ifThenElse (.binOp .lt (.var "v") (.lit (.int 62)))
-        (.cast (.binOp .add (.lit (.int 48)) (.binOp .sub (.var "v") (.lit (.int 52)))))
+        (.wrapCast 8 false (.binOp .add (.lit (.int 48)) (.binOp .sub (.var "v") (.lit (.int 52)))))
         (.ifThenElse (.binOp .eq (.var "v") (.lit (.int 62)))
           (.lit (.int 43))
           (.lit (.int 47)))))
@@ -3401,8 +3432,8 @@ def optionUnwrapOrSpec : SpecDecl := { params := ["self", "default"], body := op
 def resultMapSpec : SpecDecl := { params := ["self", "f"], body := resultMapExpr }
 def resultMapErrSpec : SpecDecl := { params := ["self", "f"], body := resultMapErrExpr }
 def numericTryNewSpec : SpecDecl := { params := ["value"], body := numericTryNewExpr }
-def nonZeroU32TryFromU64Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 4294967295 }
-def portTryFromU32Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 65535 }
+def nonZeroU32TryFromU64Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 4294967295 32 }
+def portTryFromU32Spec : SpecDecl := { params := ["value"], body := numericTryFromExpr 65535 16 }
 def base64CharOfSpec : SpecDecl := { params := ["v"], body := base64CharOfExpr }
 def base64ValOfSpec : SpecDecl := { params := ["c"], body := base64ValOfExpr }
 def sha256CompressSpec : SpecDecl := { params := ["state", "block"], body := sha256_compressExpr }
