@@ -20,8 +20,10 @@
 #       fallback.
 #
 # Everything that edits source does so in a scratch copy; the working tree is never touched.
-# P1 (2026-10-13): a claim whose closure reaches std or another package stays fail-closed, so S is
-# demonstrated in-package only; the cross-package leg lands with the slice that admits such nodes.
+# P1 (2026-10-13 decision, slice landed 2026-10-17): a project's closures read the whole program, so a
+# claim reaching std or another package now roots. X1-X5 below: S across a package edge, the D3
+# manifestless control, std reached/unreached, a closure of only trusted std methods, and the refusals
+# that must survive (unjustified edge, missing evidence, unsupported body).
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -351,6 +353,177 @@ else
   no "V: no issued store to rewrite into the old envelope (R did not issue one)"
 fi
 
+
+echo ""
+echo "=== X: P1 — closures across a package edge (manifestful projects) ==="
+# A dependency with a DECLARED origin: its scope is name+origin, so an edit to its own code moves its
+# artifact (context), and moves a caller's root only through what the caller reaches.
+XD="$W/examples/p1x_nlib"; XA="$W/examples/p1x_app"
+mkdir -p "$XD/src" "$XA/src"
+printf '[package]\nname = "p1x_nlib"\norigin = "p1x.example"\n' > "$XD/Concrete.toml"
+cat > "$XD/src/lib.con" <<'CON'
+mod p1x_nlib {
+    pub fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
+        if nonce > 0 {
+            if nonce <= max_nonce {
+                return 1;
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    }
+    pub fn unrelated(x: Int) -> Int { return x + 1; }
+}
+CON
+printf '[package]\nname = "p1x_app"\n\n[dependencies]\np1x_nlib = { path = "%s" }\n' "$XD" > "$XA/Concrete.toml"
+APP_SRC='mod main {
+    import p1x_nlib.{check_nonce};
+    import std.bytes.{Bytes};
+
+    #[spec(Concrete.Proof.computeTagExpr)]
+    #[proof_by(Examples.CryptoVerify.Proofs.compute_tag_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("")]
+    fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
+        return key * message + nonce;
+    }
+
+    #[spec(Concrete.Proof.verifyTagExpr)]
+    #[proof_by(Examples.CryptoVerify.Proofs.verify_tag_correct)]
+    #[proof_coverage(one_direction)]
+    #[proof_fingerprint("")]
+    fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
+        let computed: Int = compute_tag(key, message, nonce);
+        if computed == expected_tag {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    #[spec(Concrete.Proof.verifyMessageExpr)]
+    #[proof_by(Examples.CryptoVerify.Proofs.verify_message_composed_correct)]
+    #[proof_coverage(one_direction)]
+    #[proof_fingerprint("")]
+    fn verify_message(key: Int, message: Int, nonce: Int, expected_tag: Int, max_nonce: Int) -> Int {
+        if verify_tag(key, message, nonce, expected_tag) != 1 { return 0; }
+        if check_nonce(nonce, max_nonce) != 1 { return 0; }
+        return 1;
+    }
+
+    #[spec(Concrete.Proof.checkNonceExpr)]
+    #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("")]
+    fn blen(b: &Bytes) -> u64 { return b.len(); }
+
+    pub fn main() -> Int { return verify_message(42, 100, 7, 4207, 1000); }
+}'
+printf '%s\n' "$APP_SRC" > "$XA/src/main.con"
+XF="$XA/src/main.con"
+# Pin each claim's CURRENT subject, as an author would: these legs are about closures, not freshness.
+xpin(){
+  local d
+  d="$("$WBIN" "$XF" --report subject-facts 2>/dev/null | awk -v n="$1" '
+    /^[^ ]/ {k = split($1, h, "."); cur = h[k]}
+    cur == n && /subjectFreshness:/ {match($0, /v2:[0-9a-f]+/); print substr($0, RSTART, RLENGTH); exit}')"
+  [ -n "$d" ] && perl -0pi -e "s/(#\[proof_fingerprint\(\")[^\"]*(\"\)\]\s*\n\s*fn $1\()/\${1}$d\${2}/" "$XF"
+}
+for f in compute_tag verify_tag verify_message blen; do xpin "$f" || no "X: could not pin $f"; done
+xroots(){ CONCRETE_STD="${1:-$W/std}" "$WBIN" "$XF" --report subject-facts 2>/dev/null | awk '
+    /^[^ ]/ { n = split($1, h, "."); cur = h[n] }
+    /^  shadow depRoot: / { sub(/^  shadow depRoot: /, ""); print cur "\t" $0 }' | sort; }
+xctx(){ CONCRETE_STD="${1:-$W/std}" "$WBIN" "$XF" --report package-identity 2>/dev/null | awk -F'\t' '$1 == "context" {print $2; exit}'; }
+moved(){ join -t$'\t' "$1" "$2" | awk -F'\t' '$2 != $3 {print $1}' | sort | tr '\n' ' '; }
+xroots > "$TMP/x.r0"; XC0="$(xctx)"
+grep -q "^verify_message	[0-9a-f]" "$TMP/x.r0" \
+  && ok "X1: verify_message, which calls into p1x_nlib, roots (before P1 it refused as unscoped)" \
+  || no "X1: verify_message does not root across the package edge: $(grep verify_message "$TMP/x.r0")"
+cp "$XD/src/lib.con" "$TMP/lib.orig"
+perl -0pi -e 's/if nonce <= max_nonce \{/if max_nonce >= nonce {/' "$XD/src/lib.con"
+xroots > "$TMP/x.r1"; XC1="$(xctx)"; cp "$TMP/lib.orig" "$XD/src/lib.con"
+[ "$(moved "$TMP/x.r0" "$TMP/x.r1")" = "verify_message " ] && [ "$XC0" != "$XC1" ] \
+  && ok "X1: S across the package edge — editing p1x_nlib.check_nonce moved exactly verify_message's root (and the context)" \
+  || no "X1: the reached dependency edit moved: '$(moved "$TMP/x.r0" "$TMP/x.r1")' context ${XC0:0:8}->${XC1:0:8} (expected verify_message, and a moved context)"
+perl -0pi -e 's/return x \+ 1;/return x + 2;/' "$XD/src/lib.con"
+xroots > "$TMP/x.r2"; XC2="$(xctx)"
+[ -z "$(moved "$TMP/x.r0" "$TMP/x.r2" | tr -d ' ')" ] && [ "$XC0" != "$XC2" ] \
+  && ok "X1: context-only — an edit to p1x_nlib.unrelated, which no claim reaches, moved no root, only the context" \
+  || no "X1: the unreached dependency edit moved: '$(moved "$TMP/x.r0" "$TMP/x.r2")' context ${XC0:0:8}->${XC2:0:8}"
+cp "$TMP/lib.orig" "$XD/src/lib.con"
+
+echo ""
+echo "=== X2: D3 — a MANIFESTLESS dependency is content-addressed ==="
+mv "$XD/Concrete.toml" "$TMP/nlib.toml"
+xroots > "$TMP/x.m0"
+perl -0pi -e 's/return x \+ 1;/return x + 2;/' "$XD/src/lib.con"
+xroots > "$TMP/x.m1"; cp "$TMP/lib.orig" "$XD/src/lib.con"; mv "$TMP/nlib.toml" "$XD/Concrete.toml"
+M2="$(moved "$TMP/x.m0" "$TMP/x.m1")"
+if [ "$M2" = "verify_message " ]; then
+  ok "X2: an unreached edit in a manifestless dependency moved verify_message's root — its scope is its artifact — and no root that does not reach it"
+else
+  no "X2: the manifestless control moved: '$M2' (expected exactly verify_message, the dependency's caller)"
+fi
+
+echo ""
+echo "=== X3: std — a reached std edit moves the root, an unreached one only the context ==="
+cp "$W/std/src/bytes.con" "$TMP/bytes.orig"
+perl -0pi -e 's/(pub fn len\(&self\) -> u64 \{\n\s*)return self\.len;/${1}let n: u64 = self.len;\n            return n;/' "$W/std/src/bytes.con"
+if cmp -s "$TMP/bytes.orig" "$W/std/src/bytes.con"; then
+  no "X3: the Bytes::len edit did not apply — the anchor moved"
+else
+  xroots > "$TMP/x.s1"; XS1="$(xctx)"
+  [ "$(moved "$TMP/x.r0" "$TMP/x.s1")" = "blen " ] && [ "$XS1" != "$XC0" ] \
+    && ok "X3: editing std's Bytes::len moved exactly blen's root (and the context)" \
+    || no "X3: the reached std edit moved: '$(moved "$TMP/x.r0" "$TMP/x.s1")'"
+fi
+cp "$TMP/bytes.orig" "$W/std/src/bytes.con"
+perl -0pi -e 's/(pub fn is_empty\(&self\) -> bool \{)/${1}\n            let _unused: u64 = 0;/' "$W/std/src/bytes.con"
+xroots > "$TMP/x.s2"; XS2="$(xctx)"; cp "$TMP/bytes.orig" "$W/std/src/bytes.con"
+[ -z "$(moved "$TMP/x.r0" "$TMP/x.s2" | tr -d ' ')" ] && [ "$XS2" != "$XC0" ] \
+  && ok "X3: an unreached std edit moved no root, only the context" \
+  || no "X3: the unreached std edit moved: '$(moved "$TMP/x.r0" "$TMP/x.s2")' context ${XC0:0:8}->${XS2:0:8}"
+
+echo ""
+echo "=== X4/X5: rooting is not evidence — refusals that must survive P1 ==="
+grep -q "^blen	[0-9a-f]* \[carries trust\]" "$TMP/x.r0" \
+  && ok "X4: blen's closure is only trusted std methods, and its root says it carries trust" \
+  || no "X4: blen's root does not carry trust: $(grep '^blen' "$TMP/x.r0")"
+XS="$(CONCRETE_STD="$W/std" "$WBIN" "$XF" --report proof-status 2>/dev/null)"
+xstatus(){ awk -v q="\`main.$1\`" '/^-- /{if (hit) exit; st=$0} index($0, q){hit=1} END{if (hit) print st}' <<<"$XS"; }
+case "$(xstatus blen)" in
+  "-- proof stale"*) ok "X4: a trusted-only closure that roots is still not proved: check_nonce_correct is not about blen's body (bug 079)" ;;
+  *) no "X4: blen is $(xstatus blen) — a rooted, trusted-only closure must not make a borrowed theorem evidence" ;;
+esac
+case "$(xstatus verify_message)" in
+  "-- dependency not current"*) ok "X5: missing evidence — verify_message binds its specification but reaches p1x_nlib.check_nonce, which has no proof, so it is not proved" ;;
+  *) no "X5: verify_message is $(xstatus verify_message) (expected dependency not current)" ;;
+esac
+CONCRETE_STD="$W/std" "$WBIN" "$XF" --report subject-facts 2>/dev/null \
+  | awk '/^[^ ]/{cur=$1} cur ~ /main\.verify_message$/ && /shadow correspondence:/' | grep -q "usable=no" \
+  && ok "X5: unjustified edge — no table the theorem names attests p1x_nlib.check_nonce, so the closure's correspondence is unusable" \
+  || no "X5: verify_message's cross-package edge reads as justified"
+# UNSUPPORTED BODY: the same app against a dependency whose check_nonce the model cannot represent.
+XU="$W/examples/p1x_nlib_div"; XB="$W/examples/p1x_app_div"
+mkdir -p "$XU/src" "$XB/src"
+printf '[package]\nname = "p1x_nlib"\norigin = "p1x-div.example"\n' > "$XU/Concrete.toml"
+sed 's/if nonce > 0 {/if nonce \/ 1 > 0 {/' "$XD/src/lib.con" > "$XU/src/lib.con"
+printf '[package]\nname = "p1x_app_div"\n\n[dependencies]\np1x_nlib = { path = "%s" }\n' "$XU" > "$XB/Concrete.toml"
+cp "$XF" "$XB/src/main.con"
+XBS="$(CONCRETE_STD="$W/std" "$WBIN" "$XB/src/main.con" --report proof-status 2>/dev/null)"
+XVM='`main.verify_message`'
+XBST="$(awk -v q="$XVM" '/^-- /{if (hit) exit; st=$0} index($0, q){hit=1} END{if (hit) print st}' <<<"$XBS")"
+case "$XBST" in
+  "-- dependency not current"*) ok "X5: unsupported body — against a dependency whose check_nonce the model cannot extract, verify_message is not proved" ;;
+  *) no "X5: verify_message over an unsupported dependency body is not refused" ;;
+esac
+CONCRETE_STD="$W/std" "$WBIN" "$XF" --report receipts --out "$TMP/x.store" > "$TMP/x.issue" 2>&1
+grep -q "main.verify_message \[claim_not_proved\]" "$TMP/x.issue" \
+  && grep -q "main.blen \[claim_not_proved\]" "$TMP/x.issue" \
+  && ok "X5: no receipt is issued for verify_message or blen, each withheld as claim_not_proved" \
+  || no "X5: receipts were not all withheld: $(grep -E 'Summary|\+ main' "$TMP/x.issue" | tr '\n' ' ')"
 echo ""
 echo "IDENTITY-SEPARATION: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

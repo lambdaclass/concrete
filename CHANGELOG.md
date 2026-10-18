@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
+
+A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:
+the report path's ProofCore held only the user's modules, and a cross-package call is spelled by the
+caller (`BoundView_len`) rather than the definition (`numeric_BoundView_len`). The report path now reads
+the loader's whole-program ProofCore through a scoped view, so closures, correspondence and edge typing
+see the program while every listing stays the user's; the call graph resolves such a callee through
+the program's linker aliases when exactly one definition answers. Rooting is not evidence: a closure of
+only trusted std methods roots and carries trust, and a claim reaching an unproven, unsupported or
+unattested dependency function is still not proved. Carries the cross-package half of the migration's
+S control, deferred at `ab01f856`. Gate legs X1–X5 in `check_identity_separation.sh`; family
+`p1-closure-reads-program` (inventory 131).
+
 ### A Claim Is Proved Only When Its Body Is What Its Theorem Is About (bug 079)
 
 On `b87152ba`, `fn always_seven(x: Int) -> Int { return 7; }` linked to `check_nonce_correct` was

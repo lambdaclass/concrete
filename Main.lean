@@ -1565,7 +1565,7 @@ def compileAndReport (inputPath : String) (reportType : String)
   let frontendResult : Except UInt32
       (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
        Except Proof.IdentityRefusal Proof.ResolvedIdentity × List CModule ×
-       List (String × String × String) × List (String × Nat)) ←
+       List (String × String × String) × List (String × Nat) × Option ProofCore) ←
     match ← findProjectRoot inputDir with
     | some root =>
       match ← loadProject root with
@@ -1582,7 +1582,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- The WHOLE program's per-scope tally (dependencies and std included), from the ProofCore
         -- `loadProject` already extracted; the report path's own ProofCore holds user modules only.
         pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages,
-          ctx.pc.definitionsByScope))
+          ctx.pc.definitionsByScope, some (ctx.pc.scopeToUser depNames)))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
       | .error ds =>
@@ -1594,10 +1594,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- the same package, which is the collision content-binding exists to prevent.
         pure (Except.ok (parsed, validCore, validCore, srcMap,
           Proof.ResolvedIdentity.standalone inputPath srcMap,
-          ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat))))
+          ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat)), none))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally) =>
+  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally, programPc?) =>
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
@@ -1636,9 +1636,16 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- placeholder: every definition identity minted from this ProofCore is package-scoped, and an
     -- "unidentified" fallback would be shared by every such compilation, reintroducing the
     -- collision this migration removes.
-    let pc ← match extractProofCore? fullValidCore packageIdentity (mkAssumptions ()) simpleLocMap registry with
-      | .ok pc => pure pc
-      | .error w => IO.eprintln s!"error: {w.explain}"; return 1
+    -- R-0482 P1: in a PROJECT, the loader's whole-program ProofCore, viewed through the user scope.
+    -- Statuses, correspondence and dependency roots were derived over the whole program, so a claim
+    -- reaching std or a dependency package is judged by what it reaches; only the listing is
+    -- scoped. A second extraction over the user modules alone could not see past the package edge.
+    -- Standalone has no dependency context and keeps its own extraction.
+    let pc ← match programPc? with
+      | some p => pure (p.relocate simpleLocMap)
+      | none => match extractProofCore? fullValidCore packageIdentity (mkAssumptions ()) simpleLocMap registry with
+        | .ok pc => pure pc
+        | .error w => IO.eprintln s!"error: {w.explain}"; return 1
     -- Report output still iterates only the scoped modules.
     let validCore := scopedValidCore
     -- Validate registry against ProofCore and surface warnings/errors

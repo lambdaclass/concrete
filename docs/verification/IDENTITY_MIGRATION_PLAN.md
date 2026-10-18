@@ -245,6 +245,21 @@ commit:
     leaves claim closures that reach std fail-closed, as they are today. Admitting std nodes into report
     roots then becomes its own slice, with a fixture whose claim calls std and the reachable-std control.
   - **Alternative:** include it in the migration, which enlarges the atomic commit.
+  - **Closure record for control S.** The migration (`ab01f856`) demonstrated S **in-package only**;
+    the cross-package half required by section 7 was NOT run at closure, because P1 kept such claims
+    fail-closed and there was no cross-package root to move. It was carried as an open obligation of
+    the P1 slice, not counted as a passed control.
+  - **P1 slice (2026-10-17, manifestful projects only).** The report path reads the loader's
+    whole-program ProofCore through a scoped view (`ProofCore.scopeToUser` keeps the program's
+    populations; `closureView` is what closures, correspondence and edge typing read), and the call graph
+    resolves a cross-package callee through the program's linker aliases — only when the spelling has
+    exactly one target defined exactly once. `check_identity_separation.sh` X1–X5 now carry the
+    deferred cross-package S control with a manifestful (declared-origin) dependency, the context-only
+    control, the D3 manifestless control (an unreached edit there DOES move its callers' roots, since its
+    scope is its artifact), std reached/unreached, a closure of only trusted std methods (roots, carries
+    trust, still not proved — bug 079), and the refusals: missing evidence, an unsupported dependency
+    body, an unjustified edge. Standalone compilation still injects no std and is unchanged; adding std
+    imports there needs std recorded as its own scope/artifact in the resolution context first.
 - **P2 — receipt fields.**
   - **Recommended:** `workspace` → `scope` + `context` under `receiptV3`, as in section 4.
 - **P3 — publication.**

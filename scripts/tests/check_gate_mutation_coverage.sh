@@ -478,7 +478,7 @@ cd "$ROOT_DIR"
 # candidate's population describes the CORPUS rather than merely agreeing with itself, and it exits
 # inside its own branch long before the inventory is built — so a constant defined next to that
 # build is invisible to the role that audits it.
-EXPECTED_FAMILIES=130
+EXPECTED_FAMILIES=131
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1162,6 +1162,13 @@ add "subject-binding-compares-params" "Concrete/Proof/ProofCore.lean" "check_sub
 add "subject-binding-governs-proved" "Concrete/Proof/ProofCore.lean" "check_subject_binding.sh" yes \
   $'    else if specUnbound then .specUnbound' \
   $'    else if specUnbound && false then .specUnbound'
+
+# R-0482 P1. A CLOSURE READS THE WHOLE PROGRAM. The mutation makes a scoped view's closure read only
+# the reported scope again, so a claim calling into another package refuses as unscoped — the state
+# before P1. Killed by X1 (verify_message must root across the package edge).
+add "p1-closure-reads-program" "Concrete/Proof/ProofCore.lean" "check_identity_separation.sh" yes \
+  $'  | some (es, xs, os, g, r) =>\n    { pc with entries := es, excluded := xs, obligations := os, callGraph := g, recMap := r, program := none }' \
+  $'  | some _ =>\n    pc'
 
 # EXTERNAL RE-CHECK. THE SWAP MUST SWAP. The hostile control hands one theorem another's proof; the
 # mutation hands it its own, so the doctored stream is the accepted one and both checkers accept it.
