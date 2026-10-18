@@ -562,7 +562,14 @@ theorem while_flat_preservation
 When the source while body is NOT all flat assigns
 (`cAssignBodyToUpdates body = none`), the extractor falls
 back to `PExpr.while_step` with the `LoopStep` enum
-encoding from `docs/verification/PROOF_STATE_MODEL.md` § 4. -/
+encoding from `docs/verification/PROOF_STATE_MODEL.md` § 4.
+
+SHAPE ONLY. This states which constructor the extractor builds from `stepE`; it says nothing
+about whether `stepE` computes what the loop body computes. Bug 085 lived entirely below this
+theorem: the step built every `Cont` field from the pre-iteration env (`x = x + 1; x = x + 1;`
+stepped by 1) and dropped the rest of the body after a fall-through `if`, while this theorem
+held unchanged. Agreement of the step with the body is sampled by `check_model_diff.sh` (legs
+S/T), not proved here. -/
 theorem while_step_preservation
     (cond : CExpr) (body : List CStmt) (label : Option String)
     (step_body : List CStmt) (rest : List CStmt) (k : Option PExpr)

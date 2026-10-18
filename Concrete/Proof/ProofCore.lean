@@ -778,6 +778,12 @@ partial def cExprDiverges : CExpr → Bool
   | _ => false
 end
 
+/-- Set a loop step's `Cont` field: replace `name`'s entry in place, or append it. -/
+def upsertAssign (assigns : List (String × Proof.PExpr)) (name : String) (pv : Proof.PExpr) :
+    List (String × Proof.PExpr) :=
+  if assigns.any (·.1 == name) then assigns.map fun (n, e) => if n == name then (n, pv) else (n, e)
+  else assigns ++ [(name, pv)]
+
 /-- A TAIL expression (`return e`, a trailing value, a loop `Break`) may contain a `return` only on
     the branch chain of a top-level `if`/`match`: its condition/scrutinee must not escape, and its
     branch bodies go through the statement extractor, which applies these checks to every site in
@@ -945,7 +951,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     | some updates => some (.while_ pc updates pCont)
     | none => do
       let carried := extractCarried body
-      let step ← cStmtsToStepExpr [] body
+      let step ← cStmtsToStepExprK [] body none
       some (.while_step pc carried step pCont)
   -- Singleton if-else (last stmt of body): each branch inherits the
   -- outer continuation. If a branch returns, k is dead; if it falls
@@ -1004,48 +1010,65 @@ def extractCarried : List CStmt → List String
     evaluates to a `PVal.enum_ "LoopStep" variant fields` value
     per `docs/verification/PROOF_STATE_MODEL.md` § 4.
 
-    `assigns` accumulates loop-carried-variable updates from `assign`
-    statements walked so far.  When control falls off the end of the
-    body, the result is `Cont assigns`; an early `return e` aborts
-    with `Break e`.  Local `let` bindings wrap the surrounding step
-    PExpr.
+    SEQUENTIAL SEMANTICS (bug 085). The `Cont` payload is evaluated once, in the env at the point
+    control falls off the body — after every `letIn` the walk has emitted. So an assignment that
+    anything later on the path could observe is emitted as a shadowing `letIn name pv`, and its
+    `Cont` field is `.var name`: a later `let`, condition, assignment or `return` reads the NEW
+    value, and two assignments to one name compose. Only an assignment that is the LAST statement
+    of the whole body (`k = none`, nothing after it) goes into `Cont` directly — that is the old
+    shape (`Cont [i := i + 1]`), and it is exact because nothing runs between it and the rebind.
+    Before this, every `Cont` field was built from the PRE-iteration env and a second assignment
+    overwrote the first: `x = x + 1; x = x + 1;` stepped by 1, the runtime by 2.
+
+    `assigns` accumulates the `Cont` fields so far. `k` is the continuation for control falling
+    off THESE statements: `none` is the end of the loop body (emit `Cont assigns`); `some f` is
+    "continue with the statements after the enclosing `if`" (bug 085: a fall-through
+    then-branch used to end the iteration there, dropping the rest of the body — including the
+    for-loop step `i = i + 1` — so the model looped without progress). An early `return e`
+    aborts with `Break e` and discards `k`.
 
     Supported body shapes (anything else returns `none`):
       - `letDecl name _ _ val`: wraps rest in `letIn`
-      - `assign name val`: extends `assigns`, walks rest
+      - `assign name val`: `letIn` + `Cont` field `.var name` (or the value itself when last)
       - `return_ (some e)`: produces `Break e`
-      - `ifElse cond thenBr none`: branches; then is its own
-        step-expr (may Break or fall-through), else is `rest`. -/
-def cStmtsToStepExpr
+      - `ifElse cond thenBr elseBr?`: each branch continues with the rest of the body. -/
+def cStmtsToStepExprK
     (assigns : List (String × Proof.PExpr)) :
-    List CStmt → Option Proof.PExpr
-  | [] =>
+    List CStmt → Option (List (String × Proof.PExpr) → Option Proof.PExpr) → Option Proof.PExpr
+  | [], none =>
     some (.enumLit "LoopStep" "Cont" assigns)
-  | (.return_ (some e) _) :: _ => do
+  | [], some f => f assigns
+  | (.return_ (some e) _) :: _, _ => do
     if !cExprTailOk e then none
     let pv ← cExprToPExprImpl e
     some (.enumLit "LoopStep" "Break" [("value", pv)])
-  | (.letDecl name _ _ val) :: rest => do
+  | (.letDecl name _ _ val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToStepExpr assigns rest
+    let pb ← cStmtsToStepExprK assigns rest k
     some (.letIn name pv pb)
-  | (.assign name val) :: rest => do
+  | [.assign name val], none => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let assigns' :=
-      if assigns.any (·.1 == name) then
-        assigns.map fun (n, e) => if n == name then (name, pv) else (n, e)
-      else
-        assigns ++ [(name, pv)]
-    cStmtsToStepExpr assigns' rest
-  | (.ifElse cond thenBr none) :: rest => do
+    some (.enumLit "LoopStep" "Cont" (upsertAssign assigns name pv))
+  | (.assign name val) :: rest, k => do
+    if !cExprNoEscape val then none
+    let pv ← cExprToPExprImpl val
+    let pb ← cStmtsToStepExprK (upsertAssign assigns name (.var name)) rest k
+    some (.letIn name pv pb)
+  | (.ifElse cond thenBr none) :: rest, k => do
     if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
-    let pt ← cStmtsToStepExpr assigns thenBr
-    let pe ← cStmtsToStepExpr assigns rest
+    let pt ← cStmtsToStepExprK assigns thenBr (some fun a => cStmtsToStepExprK a rest k)
+    let pe ← cStmtsToStepExprK assigns rest k
     some (.ifThenElse pc pt pe)
-  | _ => none
+  | (.ifElse cond thenBr (some elseBr)) :: rest, k => do
+    if !cExprNoEscape cond then none
+    let pc ← cExprToPExprImpl cond
+    let pt ← cStmtsToStepExprK assigns thenBr (some fun a => cStmtsToStepExprK a rest k)
+    let pe ← cStmtsToStepExprK assigns elseBr (some fun a => cStmtsToStepExprK a rest k)
+    some (.ifThenElse pc pt pe)
+  | _, _ => none
 
 /-- Helper: extract a list of CExprs into a list of PExprs.
     Replaces `args.mapM cExprToPExprImpl` and
@@ -1182,6 +1205,11 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let parms ← cMatchArmsToP arms
     some (.match_ ps parms)
   | e             => cExprToPExprImpl e
+
+/-- A loop body's step expression: `cStmtsToStepExprK` with no enclosing continuation. -/
+def cStmtsToStepExpr (assigns : List (String × Proof.PExpr)) (body : List CStmt) :
+    Option Proof.PExpr :=
+  cStmtsToStepExprK assigns body none
 
 /-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
     `.letDecl :: rest` directly so Phase 12 R-06 (letIn
@@ -1336,10 +1364,12 @@ private partial def identifyUnsupportedStmt : CStmt → List String
       | (.assign ..) :: rest => bodyFitsStep rest
       | (.return_ (some _) _) :: _ => true  -- early Break, body terminates here
       | (.ifElse _ thenBr none) :: rest => bodyFitsStep thenBr && bodyFitsStep rest
+      | (.ifElse _ thenBr (some elseBr)) :: rest =>
+        bodyFitsStep thenBr && bodyFitsStep elseBr && bodyFitsStep rest
       | _ :: _ => false
     let shapeReason :=
       if bodyFitsStep body then []
-      else ["while loop body shape (only let/assign/return/if-no-else supported)"]
+      else ["while loop body shape (only let/assign/return/if supported)"]
     let condUnsup := identifyUnsupportedExpr cond
     -- Recurse into body statements for nested unsupported exprs.
     let bodyUnsup := body.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []

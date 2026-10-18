@@ -28,6 +28,15 @@ value (`11` in the model, `1` at runtime). Only a value-position trailing expres
 value; a discarded call refuses extraction; an expression at a non-tail site must not contain a
 `return`, `break` or `continue`. `check_model_diff.sh` leg T pins the shapes.
 
+### Loop Bodies Run In Order In The Proof Model (bug 085)
+
+A loop body with control flow richer than flat assignments extracted to a `while_step` whose `Cont`
+fields were all built from the pre-iteration env: `x = x + 1; x = x + 1;` stepped by 1, a `let` or
+`return` after an assignment read the old value, and a fall-through `if` ended the iteration early,
+dropping the for-loop step. Assignments now bind sequentially (`letIn` + `Cont x := x`), and branches
+continue with the rest of the body. No shipped claim's extraction changed; `check_model_diff.sh` leg S
+pins ten loop shapes to their runtime values.
+
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 
 `fn narrow(x: u64) -> u8 { return x as u8; }` was proof-eligible and its model evaluated `narrow(300)`

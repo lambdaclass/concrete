@@ -1,0 +1,107 @@
+// Bug 085 — a while_step loop body's model must run its statements in order.
+// Every function here disagreed with the runtime before the fix (or was model_stuck); the values
+// in the comments are the runtime's, which check_model_diff.sh requires the model to equal.
+mod main {
+    // Two assignments to one name compose: 2 per iteration (model was 1). twice(7) = 14.
+    fn twice(n: u8) -> u32 {
+        let mut x: u32 = 0;
+        for (let mut i: u8 = 0; i < n; i = i + 1) {
+            let one: u32 = 1;
+            x = x + one;
+            x = x + one;
+        }
+        return x;
+    }
+    // A later assignment reads the earlier one's new value. seq(7) = 28 (model was 21).
+    fn seq(n: u8) -> u32 {
+        let mut x: u32 = 0;
+        let mut y: u32 = 0;
+        for (let mut i: u8 = 0; i < n; i = i + 1) {
+            let one: u32 = 1;
+            x = x + one;
+            y = y + x;
+        }
+        return y;
+    }
+    // `y = x` after `x = x + t`: 3 (model was 2).
+    fn seq_assign(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        let mut y: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            let t: i32 = 1;
+            x = x + t;
+            y = x;
+        }
+        return y;
+    }
+    // A `let` after an assignment sees the new value: 60 (model was 30).
+    fn assign_then_let(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        let mut acc: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            x = x + 10;
+            let t: i32 = x;
+            acc = acc + t;
+        }
+        return acc;
+    }
+    // 6 (model was 3).
+    fn use_i_after(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            let t: i32 = i;
+            s = s + t;
+            s = s + i;
+        }
+        return s;
+    }
+    // A then-branch that falls through continues with the rest of the body, including the
+    // for-loop step: 104 (the model looped without progress — model_stuck).
+    fn if_fallthrough(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        for (let mut i: i32 = 0; i < 4; i = i + 1) {
+            let t: i32 = 1;
+            if i == 1 { x = x + 100; }
+            x = x + t;
+        }
+        return x;
+    }
+    // The same, with the step the only statement after the `if`: 10 (model_stuck).
+    fn ifthen(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            if i == 1 {
+                x = x + 10;
+            }
+        }
+        return x;
+    }
+    // An if-else in a loop body, both arms continuing: 1 + 10 + 1 = 12.
+    fn if_else_step(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            let t: i32 = 1;
+            if i == 1 { x = x + 10; } else { x = x + t; }
+        }
+        return x;
+    }
+    // `return x` after `x = x + 7` returns the NEW x: 21 (model was 14).
+    fn ret_after_assign(n: i32) -> i32 {
+        let mut x: i32 = 0;
+        for (let mut i: i32 = 0; i < 5; i = i + 1) {
+            x = x + 7;
+            if i == 2 { return x; }
+        }
+        return 0 - 1;
+    }
+    // ret_pending(7) = 8 (model was 7).
+    fn ret_pending(n: i32) -> i32 {
+        let mut x: i32 = n;
+        for (let mut i: i32 = 0; i < 5; i = i + 1) {
+            x = x + 1;
+            return x;
+        }
+        return 0;
+    }
+    pub fn main() -> i32 { return 0; }
+}

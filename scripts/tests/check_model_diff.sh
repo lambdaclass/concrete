@@ -16,6 +16,8 @@
 #      value — a by-name model reads 0 for `Full { v }`, 100 for `Mk { b, a }` and x for
 #      `Mk { _, a }`, so each pin fails under the old binding. The compiled binary is run too
 #      (exit 22 = 5+5+5+7), so "runtime" is not only the interpreter.
+#   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
+#      agree, each pinned to its runtime value.
 #   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
 #      extracted; a tail match/if whose arms return agrees.
 #
@@ -87,13 +89,32 @@ if "$BIN" "$E" -o "$TMP/e.bin" > /dev/null 2>&1; then
   [ "$rc" -eq 22 ] && ok "E: the compiled binary binds positionally too (exit 22)" \
     || no "E: the compiled binary exits $rc, expected 22 (5+5+5+7)"
 else no "E: the fixture does not compile"; fi
-echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="
+echo "=== S: bug 085 — a loop body's statements run in order ==="
+# Each pin is the RUNTIME value; before the fix the model gave the value in parentheses (or got
+# stuck). `want FN INPUT VALUE` requires the row to read agree with that value on both sides.
 want(){ grep -qP "^agree\tmain\.$2\t[a-z]+\t\($3\)\tmodel=$4\truntime=$4\$" "$1" \
   && ok "$5: $2($3) is $4 in the model and at runtime" \
   || no "$5: $2($3) does not read model=$4 runtime=$4: $(grep -P "\tmain\.$2\t.*\($3\)" "$1" | tr '\t' ' ')"; }
 allagree(){ r="$(grep -P "\tmain\.$2\t" "$1")"
   if [ -n "$r" ] && ! grep -qvE '^(agree|partial)' <<<"$r"; then ok "$3: every input of $2 agrees ($(grep -c . <<<"$r"))"
   else no "$3: $2 has a disagreeing or missing row: $(grep -vE '^(agree|partial)' <<<"$r" | head -1 | tr '\t' ' ')"; fi; }
+S="tests/regressions/bug085_loop_step/repro.con"
+"$BIN" "$S" --report model-diff > "$TMP/s" 2>&1
+want "$TMP/s" twice 7 14 S            # two assigns to one name compose (was 7)
+want "$TMP/s" seq 7 28 S              # a later assign reads the earlier one (was 21)
+want "$TMP/s" seq_assign 0 3 S        # (was 2)
+want "$TMP/s" assign_then_let 0 60 S  # a let after an assign (was 30)
+want "$TMP/s" use_i_after 0 6 S       # (was 3)
+want "$TMP/s" if_fallthrough 0 104 S  # a fall-through then-branch keeps the step (was stuck)
+want "$TMP/s" ifthen 0 10 S           # (was stuck)
+want "$TMP/s" if_else_step 0 12 S
+want "$TMP/s" ret_after_assign 0 21 S # Break reads the new value (was 14)
+want "$TMP/s" ret_pending 7 8 S       # (was 7)
+for fn in twice seq seq_assign assign_then_let use_i_after if_fallthrough ifthen if_else_step \
+          ret_after_assign ret_pending; do allagree "$TMP/s" "$fn" S; done
+
+echo ""
+echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="
 T="tests/regressions/bug086_discarded_tail/repro.con"
 "$BIN" "$T" --report model-diff > "$TMP/t" 2>&1
 # Not modelable exactly (a call the model cannot see; a return out of a non-tail expression):
