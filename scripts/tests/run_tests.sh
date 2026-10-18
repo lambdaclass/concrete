@@ -1470,7 +1470,9 @@ run_err "$TESTDIR/error_borrow_mut_conflict.con" "is frozen by borrow block"
 run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
 # Additional escape analysis errors
 run_err "$TESTDIR/error_escape_return.con"     "may not return a reference"
-run_err "$TESTDIR/error_escape_field.con"      "cannot escape its borrow block"
+# Bug 092: a struct field of reference type is no longer expressible, so the
+# field-path escape is now stopped at the declaration (E0239), before E0234.
+run_err "$TESTDIR/error_escape_field.con"      "E0239"
 # While-as-expression errors
 run_err "$TESTDIR/error_while_expr_removed.con"   "while is a statement, not an expression"
 # Additional break/continue errors
@@ -7125,6 +7127,13 @@ run_err "$TESTDIR/error_088_unhinted_literal_range.con" "out of range for type '
 run_err "$TESTDIR/error_090_guard_moves_linear.con" "E0300"
 run_err "$TESTDIR/error_090_guard_moves_binder.con" "E0300"
 run_ok "$TESTDIR/regress_090_guard_reads.con" 42
+# Bug 092: a reference stored in an aggregate outlived its source (only a bare
+# `let r = &s` froze it). References are never stored in an aggregate (E0239);
+# references flowing down (arguments, bare borrows, fn-pointer fields) stay legal.
+run_err "$TESTDIR/error_092_ref_struct_field.con" "E0239"
+run_err "$TESTDIR/error_092_ref_in_option.con" "E0239"
+run_err "$TESTDIR/error_092_ref_in_array.con" "E0239"
+run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

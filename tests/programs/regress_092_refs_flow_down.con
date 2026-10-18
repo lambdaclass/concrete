@@ -1,0 +1,19 @@
+// Bug 092 positive control: references still flow DOWN — a bare `let r = &h`
+// (it freezes `h` while in scope), reference arguments, and a struct holding a
+// fn pointer whose parameter is a reference (a fn pointer stores no reference).
+struct B { v: Int }
+struct Ops { f: fn(&Heap<B>) -> Int }
+fn read(h: &Heap<B>) -> Int { return h.v; }
+fn both(a: &Heap<B>, b: &Heap<B>) -> Int { return a.v + b.v; }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 20 });
+    let ops: Ops = Ops { f: read };
+    let Ops { f } = ops;
+    let mut out: Int = 0;
+    if true {
+        let r: &Heap<B> = &h;
+        out = both(r, &h) + f(&h) - read(r);
+    }
+    free(h);
+    return out + 2;
+}

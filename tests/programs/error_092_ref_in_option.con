@@ -1,0 +1,12 @@
+// Bug 092: the same hole through a generic enum payload — `Option<&T>` kept
+// the reference past `free(h)`. E0239 at the payload.
+struct B { v: Int }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 5 });
+    let o: Option<&Heap<B>> = Option::Some { value: &h };
+    free(h);
+    match o {
+        Option::Some { value } => { return value.v; },
+        Option::None => { return 0; },
+    }
+}

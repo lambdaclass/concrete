@@ -6227,6 +6227,7 @@ def diagnosticCodesReport : String :=
     entry "E0233" "check" "error" "cannot mutably borrow immutable variable",
     entry "E0234" "check" "error" "reference escapes borrow block",
     entry "E0235" "check" "error" "cannot mutably borrow: already immutably borrowed",
+    entry "E0239" "check" "error" "a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)",
     -- Check: capability (E0240–E0242)
     entry "E0240" "check" "error" "missing capability",
     entry "E0241" "check" "error" "trait bound not satisfied",

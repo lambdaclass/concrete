@@ -68,6 +68,15 @@ Concretely, the following are rejected:
   occurs in the return type (e.g. `wrap<R>(r: R) -> Option<R>` called with
   `R = &V` — the generic backdoor to `Option<&V>`).
 
+**References are not stored in aggregates either (E0239, bug 092).** A struct or
+enum field, an array element, a `Heap` interior or a generic argument may not hold
+a `&T`/`&mut T`: such a declaration, literal (`W { t: &s }`,
+`Option::Some { value: &s }`, `[&a, &b]`), binding or parameter is rejected. Only
+a bare `let r = &s` freezes its source, so a reference parked inside an aggregate
+outlived it (`let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory).
+A function-pointer type whose parameters are references stores no reference and
+stays legal; a raw pointer is the trusted escape.
+
 This is the design that closes H1 (returned-reference provenance) *by
 subtraction* rather than by adding lifetimes, regions, or `from()`. To **observe**
 borrowed data without returning a reference, use a **scoped callback**

@@ -65,6 +65,7 @@ audited assumption**, not silent behavior (see SAFETY.md / FFI.md).
 | use a linear value after passing it by value | use-after-move |
 | read/move a value while it is `&mut`-borrowed | frozen-by-borrow |
 | return a `&T`/`&mut T` (or an aggregate holding one) from a safe fn | references are second-class — cannot escape |
+| store a `&T`/`&mut T` in a struct/enum field, array, `Heap` or generic argument | references are second-class — never stored in an aggregate (E0239) |
 | drop a linear resource without consuming it | unconsumed-linear / would leak |
 | dereference a raw pointer without `Unsafe` | missing capability |
 

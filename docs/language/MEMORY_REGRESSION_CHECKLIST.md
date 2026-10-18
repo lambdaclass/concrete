@@ -20,7 +20,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 - `error_assign_frozen_by_borrow.con` — assign to frozen variable
 - `error_borrow_assign_frozen.con` — assign inside borrow block
 - `error_borrow_frozen.con` — access frozen owner
-- `error_escape_field.con` — field-path escape
+- `error_escape_field.con` — field-path escape (since bug 092 rejected at the ref-field declaration, E0239)
 - `hardening_borrow_edge_cases.con` — mixed borrow patterns
 - **pressure_borrow_then_consume.con** — borrow for inspection then consume after unfreeze
 - **pressure_nested_linear_struct.con** — nested linear struct consumed whole

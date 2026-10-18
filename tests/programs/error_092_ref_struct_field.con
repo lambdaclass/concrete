@@ -1,0 +1,13 @@
+// Bug 092: a reference stored in a struct field did not freeze its source:
+// `w` kept `&h` after `free(h)`, and destructuring `w` read freed memory.
+// References are second-class (never stored in an aggregate): E0239.
+struct B { v: Int }
+struct W { t: &Heap<B> }
+fn read(h: &Heap<B>) -> Int { return h.v; }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 5 });
+    let w: W = W { t: &h };
+    free(h);
+    let W { t } = w;
+    return read(t);
+}

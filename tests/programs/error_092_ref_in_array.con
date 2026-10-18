@@ -1,0 +1,8 @@
+// Bug 092: the same hole through an array of references. E0239.
+struct B { v: Int }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 5 });
+    let a: [&Heap<B>; 1] = [&h];
+    free(h);
+    return a[0].v;
+}

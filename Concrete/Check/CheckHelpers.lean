@@ -110,6 +110,30 @@ partial def tyContainsRef : Ty → Bool
   | .fn_ params _ retTy => params.any tyContainsRef || tyContainsRef retTy
   | _ => false
 
+/-- Bug 092: does a value of this type HOLD a reference — the type is a
+    reference, or an aggregate (array, `Heap`, generic argument) that holds one?
+    Function types do not: a fn pointer taking `&T` stores no reference. Raw
+    pointers are the trusted escape and are not looked through. Named types are
+    not looked through either: a struct/enum field may not hold a reference
+    (rejected at the declaration), so a named type can only hold one through
+    its generic arguments. -/
+partial def tyStoresRef : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | .heap inner | .heapArray inner => tyStoresRef inner
+  | .array elem _ => tyStoresRef elem
+  | .generic _ args _ => args.any tyStoresRef
+  | _ => false
+
+/-- Bug 092: a binding of this type would keep a reference stored INSIDE an
+    aggregate (looking through a bare outer reference: `&[&T; 2]` too). A bare
+    `&T` binding is not an aggregate — its source is frozen by `borrowedFrom`. -/
+partial def tyHoldsRefInAggregate : Ty → Bool
+  | .ref inner | .refMut inner => tyHoldsRefInAggregate inner
+  | .heap inner | .heapArray inner => tyStoresRef inner
+  | .array elem _ => tyStoresRef elem
+  | .generic _ args _ => args.any tyStoresRef
+  | _ => false
+
 /-- Does the named type parameter occur anywhere in this type? -/
 partial def tyParamOccursIn (name : String) : Ty → Bool
   | .typeVar n => n == name
@@ -228,6 +252,10 @@ def lookupVarTy (name : String) : CheckM (Option Ty) := do
   | none => return none
 
 def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option Span := none) : CheckM Unit := do
+  -- Bug 092: no binding (let, parameter, match binder) may hold a reference
+  -- inside an aggregate — nothing would keep the reference's source frozen.
+  if tyHoldsRefInAggregate ty then
+    throwCheck (.refStoredInAggregate s!"binding '{name}'" (tyToString ty)) declSpan
   let env ← getEnv
   let copy ← isCopyType ty
   let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan }

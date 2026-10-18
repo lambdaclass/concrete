@@ -820,6 +820,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             | some t => pure t
             | none => checkExpr expr (some fieldTy)
           expectTy fieldTy exprTy s!"field '{sf.name}' of struct '{name}'" (some e.getSpan)
+          -- Bug 092: a generic field instantiated to a reference (`Box { v: &s }`).
+          if tyStoresRef exprTy then
+            throwCheck (.refStoredInAggregate s!"field '{sf.name}' of struct literal '{name}'" (tyToString exprTy)) (some expr.getSpan)
         | none =>
           -- A missing field is supplied by `..base` if present; otherwise it is a
           -- real omission (unions allow partial initialization).
@@ -923,6 +926,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           | some (_, expr) =>
             let exprTy ← checkExpr expr (some fieldTy)
             expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
+            -- Bug 092: a payload holding a reference (`Option::Some { value: &s }`).
+            if tyStoresRef exprTy then
+              throwCheck (.refStoredInAggregate s!"payload '{sf.name}' of {enumName}::{variant}" (tyToString exprTy)) (some expr.getSpan)
           | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
         for (fn, _) in fields do
           match ev.fields.find? fun sf => sf.name == fn with
@@ -1253,6 +1259,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         | some (.array t _) => some t
         | _ => none
       let firstTy ← checkExpr first elemHint
+      -- Bug 092: an array of references (`[&a, &b]`).
+      if tyStoresRef firstTy then
+        throwCheck (.refStoredInAggregate "array literal" (tyToString firstTy)) (some first.getSpan)
       -- value mode moves each element in (H10) — auto-consumed at checkExpr
       for e in rest do
         let eTy ← checkExpr e (some firstTy)
@@ -1976,6 +1985,9 @@ partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
       match stmt with
       | .letDecl _ name _ ty _ _ =>
         let placeholderTy := ty.getD .placeholder
+        -- A declared type addVar itself rejects (E0239) would throw from the
+        -- recovery path and drop the diagnostics already accumulated.
+        let placeholderTy := if tyHoldsRefInAggregate placeholderTy then .placeholder else placeholderTy
         addVar name placeholderTy false
       | _ => pure ()
   if !accumulated.isEmpty then
@@ -2092,6 +2104,9 @@ def checkFn (f : FnDef) : CheckM Unit := do
   for p in f.params do
     let paramTyRaw := resolveTypeParams p.ty f.typeParams
     let paramTy ← resolveType paramTyRaw
+    -- Bug 092: checked here (not only in addVar) so the error carries the fn span.
+    if tyHoldsRefInAggregate paramTy then
+      throwCheck (.refStoredInAggregate s!"parameter '{p.name}'" (tyToString paramTy)) (some f.span)
     addVar p.name paramTy true  -- params are always mutable for now
     match paramTy with
     | .refMut _ => borrowedParams := borrowedParams ++ [p.name]
@@ -2324,6 +2339,20 @@ def checkModule (m : Module) (summary : FileSummary)
   match reservedNameCheck with
   | .error e => .error e
   | .ok () =>
+  -- Bug 092: references are second-class — a struct or enum field may not hold
+  -- one (VALUE_MODEL.md, BYTE_VIEW.md). Rejected at the declaration so the type
+  -- is not expressible; literals and bindings are checked as well (generic
+  -- instantiations).
+  let refFields : List (String × Ty × Span) :=
+    (m.structs.flatMap fun sd => sd.fields.map fun f => (s!"field '{f.name}' of struct '{sd.name}'", f.ty, sd.span))
+    ++ (m.enums.flatMap fun ed => ed.variants.flatMap fun v =>
+          v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", f.ty, ed.span))
+  match refFields.find? (fun (_, ty, _) => tyStoresRef ty) with
+  | some (desc, ty, sp) =>
+    .error [{ severity := .error, message := CheckError.message (.refStoredInAggregate desc (tyToString ty)),
+              pass := "check", span := some sp, hint := CheckError.hint (.refStoredInAggregate desc (tyToString ty)),
+              code := CheckError.code (.refStoredInAggregate desc (tyToString ty)) }]
+  | none =>
   -- A `spec fn` with a DEFINITIONAL body must have that body checked. The body-less form has
   -- nothing to check, so nothing did -- and when bodies were added, a spec could reference an
   -- undeclared variable or a nonexistent function and be accepted silently. The refinement tier

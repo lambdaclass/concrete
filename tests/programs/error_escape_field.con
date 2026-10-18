@@ -1,4 +1,6 @@
-// Error: storing borrow ref into struct field outside block
+// Error: storing borrow ref into struct field outside block.
+// Since bug 092 a struct field may not hold a reference at all, so this is
+// rejected at the declaration (E0239) before the escape check (E0234).
 struct Holder {
     val: &Int
 }

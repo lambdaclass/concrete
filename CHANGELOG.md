@@ -151,6 +151,18 @@ reads every constant through `IntArith.wrapToType`, folds constant integer casts
 wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
 false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
 [docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
+### References Are Never Stored In An Aggregate (bug 092)
+
+Only a bare `let r = &s` froze `s`; a reference parked in a struct field, enum payload or array did
+not, so `let w = W { t: &s }; s.drop(); let W { t } = w; t.len()` compiled and read freed memory.
+The documented rule (VALUE_MODEL, BYTE_VIEW: references are second-class, never stored in an
+aggregate) is now enforced: a struct/enum field type, struct/enum/array literal, binding or parameter
+that holds a reference inside an array, `Heap`, generic argument or field is rejected with E0239.
+Fn-pointer types with reference parameters, bare borrows and reference arguments stay legal.
+`error_escape_field.con` (which declared a `&Int` field) now stops at the declaration. Fixtures
+`error_092_ref_struct_field.con`, `error_092_ref_in_option.con`, `error_092_ref_in_array.con`,
+positive control `regress_092_refs_flow_down.con`.
+
 ### Match Guards Are Read-Only (bug 090)
 
 A match guard runs before its arm commits, and a false guard falls through to the next arm. The

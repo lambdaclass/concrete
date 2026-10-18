@@ -124,6 +124,7 @@ there or adds one.
 - [101_branch_local_let_captures_continuation.md](101_branch_local_let_captures_continuation.md) — FIXED: a branch-local `let` was nested over the code after its branch (and a loop body's own `let` written back through `Cont`), so `scoped(1)` was 10 in the model vs 1; a block's locals may not be named by its continuation; pinned by `check_model_diff.sh` leg S
 - [088_unchecked_default_literal_and_unnormalized_fold.md](088_unchecked_default_literal_and_unnormalized_fold.md) — FIXED: an unhinted literal defaulted to an `Int` with no range check (`let x = 18446744073709551615` was 2^64-1 interpreted, -1 compiled), a literal at a type variable was never range-checked after Mono, and the SSA folder compared unnormalized constants (`0xFFFFFFFFFFFFFFFF as i64 < 0` folded false); literals now fit their defaulted/instantiated type (E0227, both paths) and the folder normalizes through `IntArith.wrapToType`
 - [090_match_guard_moves_linear.md](090_match_guard_moves_linear.md) — FIXED: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
+- [092_reference_stored_in_aggregate.md](092_reference_stored_in_aggregate.md) — FIXED: a reference stored in a struct field, enum payload or array did not freeze its source, so `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory. References are never stored in an aggregate (E0239)
 
 ## Open Numbered Bugs
 
