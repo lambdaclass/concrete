@@ -22,7 +22,6 @@ only trusted std methods roots and carries trust, and a claim reaching an unprov
 unattested dependency function is still not proved. Carries the cross-package half of the migration's
 S control, deferred at `ab01f856`. Gate legs X1–X5 in `check_identity_separation.sh`; family
 `p1-closure-reads-program` (inventory 131).
-||||||| 01343f6d
 
 ### Sparkle Analysis And Emitted-Code Validation Plan (2026-10-18)
 
