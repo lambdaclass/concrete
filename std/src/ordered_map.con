@@ -263,7 +263,7 @@ mod ordered_map {
 
     // H18: insert/remove destroy displaced/removed keys.
     trusted impl<K: Destroy, V> OrderedMap<K, V> {
-        pub fn remove(&mut self, key: &K) -> Option<V> {
+        pub fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return Option::<V>::None;

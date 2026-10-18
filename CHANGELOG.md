@@ -320,6 +320,29 @@ Evidence binders keep their positions, so no shipped fingerprint moved. The proo
 body's `let`. Regressions: `regress_087_let_block_shadow.con` (interp, binary and model all lexical),
 the `regress_087_borrow_shadow_uaf` project, and a shadowing shape in `fuzz_differential.py`.
 
+### Trait Impl Conformance Closes A Capability-Smuggling Hole (Bug 091, 2026-10-18)
+
+An impl method could declare more capabilities than its trait method. A call through a
+`T: Trait` bound was checked against the trait's signature, then specialized to the impl's body
+without being checked again. So `impl Act for Loud { fn act(&self) with(Std) .. println .. }`
+printed under a chain of functions that declared no capabilities. Three changes close it:
+
+- An impl method's capabilities must be a subset of its trait method's declared set (E0586). This
+  fails closed: a trait method without `with(..)` admits only impls without one. `Destroy` keeps
+  its `Alloc` fence (E0584).
+- The rest of the signature must also conform (E0587): receiver form, parameter types, and no
+  method-level type or capability parameters.
+- A call through a trait bound costs the caller the trait method's capabilities (E0240).
+
+Generic trait methods, whose type parameters were silently dropped, are refused at parse. A new
+post-mono verifier (`verifyCapsPostMono`) re-checks the specialized call graph. With E0586 disabled
+it still refuses the reproducer.
+
+The trait-bound charge found two instances of the same shape in std. `HashMap::remove` and
+`OrderedMap::remove` destroyed the removed key through `K: Destroy` without declaring `Alloc`.
+Both now declare `with(Alloc)`, and so does `OrderedSet::remove`. See
+[docs/bugs/091](docs/bugs/091_trait_impl_capabilities_hidden_by_generic_dispatch.md).
+
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
 A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:

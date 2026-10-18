@@ -1,0 +1,8 @@
+// Bug 091: impl conformance covers the whole signature, not only the return type —
+// receiver form and parameter types must match the trait method.
+trait Act { fn act(&self, n: Int) -> Int; }
+struct Loud { v: Int }
+impl Act for Loud {
+    fn act(&mut self, n: i32) -> Int { return self.v; }
+}
+fn main() -> Int { return 0; }

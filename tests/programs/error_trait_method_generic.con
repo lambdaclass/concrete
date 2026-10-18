@@ -1,0 +1,4 @@
+// Bug 091: generic trait methods were parsed and their type parameters DROPPED, so
+// the trait constrained nothing about them. Now refused at parse.
+trait Act { fn act<U>(&self) -> Int; }
+fn main() -> Int { return 0; }

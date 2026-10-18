@@ -149,6 +149,23 @@ acceptance as a KNOWN HOLE, which is why CI could not tell the difference. Close
 by collecting dependency `implMethodSigs` recursively through `submoduleSummaries`
 and keying them by the mangled `<Type>_<method>` spelling the call site emits.
 
+**Calls through a trait bound bind to the TRAIT's declaration (bug 091, 2026-10-18).**
+Generic code calling `x.act()` with `T: Act` cannot see which impl it will reach, so
+the trait method's `with(..)` is the contract on both sides:
+
+- an impl method may require only capabilities its trait method declares (E0586;
+  fail closed, so a trait method with no `with(..)` admits only impls with none;
+  `Destroy` is bounded by `Alloc`, the H18 v1 fence E0584);
+- the generic caller must hold the trait method's set (E0240, `Unsafe` included,
+  discharged by a `trusted` body);
+- after monomorphization `verifyCapsPostMono` re-checks every specialized direct
+  call. A violation there is an internal error, because the two rules above should
+  already have refused it.
+
+Before this, impl conformance compared only return types and the trait-bound call
+charged nothing, so `impl Act for Loud { fn act(&self) with(Std) .. }` printed under a
+chain that declared no capabilities.
+
 **Superseded 2026-10-01 (R-0484): `trusted` now absorbs an extern call's `Unsafe`**,
 as it already absorbed any other callee's `Unsafe` obligation. It absorbs nothing
 else: every `extern` declares its effects (`extern fn write(..) with(Console)`,

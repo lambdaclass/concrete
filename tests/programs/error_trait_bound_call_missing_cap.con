@@ -1,0 +1,15 @@
+// Bug 091: a call through a trait bound exercises the authority the TRAIT method
+// declares, so the generic caller must hold it (E0240) — even though the call
+// reaches Core as an unresolved `T_act` that the capability check cannot see.
+trait Act { fn act(&self) with(Console) -> Int; }
+struct Loud { v: Int }
+impl Act for Loud {
+    fn act(&self) with(Console) -> Int { print_int(self.v); return self.v; }
+}
+fn run<T: Act>(x: &T) -> Int { return x.act(); }
+fn main() with(Console) -> Int {
+    let l: Loud = Loud { v: 3 };
+    let r: Int = run::<Loud>(&l);
+    let Loud { v } = l;
+    return r;
+}

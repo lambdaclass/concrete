@@ -13,6 +13,7 @@
 #   2. illegal Copy specialization       -> verifyPostMono (verifyCopyFields)   [post-mono boundary]
 #   3. mixed-width binops (E0228/E0715)  -> Check                                [front-end; not re-asserted post-mono]
 #   4. capability misuse                 -> CoreCheck (core-check)               [Core boundary]
+#   4b. caps via trait-bound dispatch    -> CoreCheck E0586 + Check E0240; re-asserted post-mono (verifyCapsPostMono)
 #   5. unsafe op without capability      -> CoreCheck (core-check)               [Core boundary]
 #   6. returning a second-class reference -> Check                               [front-end]
 # Classes 4/5 are enforced at the CoreCheck boundary; 3/6 are caught once in
@@ -53,6 +54,12 @@ rejected "class 5: unsafe raw-ptr deref in a safe fn" unsafeptr
 
 emit capmisuse 'mod m { fn needs() with(File) -> Int { return 0; } fn main() -> Int { return needs(); } }'
 rejected "class 4: calling a File-capability fn from a pure fn" capmisuse
+
+# Bug 091: capability smuggled through generic trait dispatch — an impl method with
+# more authority than its trait method, reached via `T: Act` from a pure chain.
+# Refused at CoreCheck (E0586); verifyCapsPostMono re-asserts it after Mono.
+emit traitcaps 'mod m { trait Act { fn act(&self) -> Int; } struct Loud { v: Int } impl Act for Loud { fn act(&self) with(Console) -> Int { print_int(777); return self.v; } } fn run<T: Act>(x: &T) -> Int { return x.act(); } fn main() -> Int { let l: Loud = Loud { v: 3 }; let r: Int = run::<Loud>(&l); let Loud { v } = l; return r; } }'
+rejected "class 4b: capability smuggled through a trait-bound generic call" traitcaps
 
 emit retref 'mod m { fn bad(x: i32) -> &i32 { return &x; } fn main() -> Int { return 0; } }'
 rejected "class 6: returning a second-class reference" retref

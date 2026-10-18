@@ -1,0 +1,16 @@
+// Bug 091: an impl method declaring MORE capabilities than its trait method was
+// accepted, and generic dispatch through `T: Act` then ran the effect under a
+// caller chain that declares none. The impl must be refused (E0586).
+trait Act { fn act(&self) -> Int; }
+struct Loud { v: Int }
+impl Act for Loud {
+    fn act(&self) with(Std) -> Int { println(777); return self.v; }
+}
+fn run<T: Act>(x: &T) -> Int { return x.act(); }
+fn pure_caller() -> Int {
+    let l: Loud = Loud { v: 3 };
+    let r: Int = run::<Loud>(&l);
+    let Loud { v } = l;
+    return r;
+}
+fn main() -> Int { return pure_caller(); }

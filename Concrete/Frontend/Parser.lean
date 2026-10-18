@@ -1882,7 +1882,13 @@ partial def parseTraitDef : ParseM TraitDef := do
   while tk != .rbrace && tk != .eof do
     expect .fn
     let methodName ← expectIdent
-    let (_methodTypeParams, _methodBounds) ← parseTypeParams
+    let methodTpSp ← peekSpan
+    let (methodTypeParams, _methodBounds) ← parseTypeParams
+    -- Bug 091: `FnSigDef` has nowhere to keep method generics, so they used to be parsed
+    -- and DROPPED — the trait then constrained nothing about them and impl conformance
+    -- could not be checked. Refuse rather than erase.
+    if !methodTypeParams.isEmpty then
+      throwParse s!"generic trait methods are not supported: '{methodName}' declares type parameters ({String.intercalate ", " methodTypeParams})" (span := some methodTpSp)
     expect .lparen
     -- Check for self variants
     let tk2 ← peek

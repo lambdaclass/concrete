@@ -170,6 +170,13 @@ structure CEnumDef where
 structure CTraitMethodSig where
   name : String
   retTy : Ty
+  /-- Bug 091: the rest of the DECLARED signature, so impl conformance can be checked
+      against all of it, not only the return type. Non-self parameter types (aliases
+      resolved, `Self` left symbolic — it is resolved per impl), the receiver form, and
+      the capability set every implementation is bounded by. -/
+  paramTys : List Ty := []
+  selfKind : Option SelfKind := none
+  capSet : CapSet := .empty
 
 structure CTraitDef where
   name : String
@@ -177,11 +184,28 @@ structure CTraitDef where
   builtinId : Option BuiltinTraitId := none
   declSpan : Option Span := none
 
+/-- Bug 091: one impl method's signature as written, normalized the same way as the
+    trait's (`CTraitMethodSig`) so the two compare structurally. -/
+structure CTraitImplMethodSig where
+  name : String
+  /-- Non-self parameter types (aliases resolved, impl type params as `typeVar`). -/
+  paramTys : List Ty
+  /-- The receiver form, read off the leading `self` parameter. -/
+  selfKind : Option SelfKind
+  capSet : CapSet
+  /-- Method-level generics and capability parameters. A trait method signature
+      cannot declare either, so any here is a conformance failure. -/
+  ownTypeParams : List String := []
+  ownCapParams : List String := []
+
 structure CTraitImpl where
   traitName : String
   typeName : String
   methodNames : List String
   methodRetTys : List (String × Ty)
+  /-- The implementing type as `Self` resolves to it (generic impls: `Name<T..>`). -/
+  selfTy : Ty := .unit
+  methodSigs : List CTraitImplMethodSig := []
   builtinTraitId : Option BuiltinTraitId := none
   declSpan : Option Span := none
 

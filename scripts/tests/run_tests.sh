@@ -1421,6 +1421,16 @@ run_err "$TESTDIR/error_cast_invalid.con"        "cannot cast"
 run_err "$TESTDIR/error_unknown_method.con"      "no method"
 run_err "$TESTDIR/error_trait_missing_method.con" "missing method"
 run_err "$TESTDIR/error_trait_wrong_sig.con"     "signature does not match"
+# Bug 091: trait/impl conformance — an impl method may require only the capabilities
+# its trait method declares (E0586), the whole signature must match (E0587), a call
+# through a trait bound costs the trait method's capabilities (E0240), and generic
+# trait methods are refused rather than silently erased.
+run_err "$TESTDIR/error_trait_impl_caps_exceed_generic.con" "(E0586)"
+run_err "$TESTDIR/error_trait_impl_caps_exceed_direct.con"  "(E0586)"
+run_err "$TESTDIR/error_trait_bound_call_missing_cap.con"   "function 'Act::act' requires capability 'Console'"
+run_err "$TESTDIR/error_trait_impl_sig_mismatch.con"        "expected receiver"
+run_err "$TESTDIR/error_trait_method_generic.con"           "generic trait methods are not supported"
+run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
 run_err "$TESTDIR/error_cap_pure.con"            "but caller has"
 run_err "$TESTDIR/error_cap_propagation.con"     "but caller has"
 run_err "$TESTDIR/error_cap_method.con"          "but caller has"

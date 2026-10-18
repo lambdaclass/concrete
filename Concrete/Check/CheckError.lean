@@ -66,6 +66,7 @@ structure TypeEnv where
   constants : List (String × Ty) := []
   currentTypeParams : List String := []  -- active function's type params
   currentCapSet : CapSet := .empty       -- current function's capability set
+  currentFnTrusted : Bool := false       -- current function is `trusted` (discharges callee `Unsafe`)
   currentFnName : String := ""           -- current function name (for error messages)
   allFnSummarys : List (String × FnSummary) := []  -- all function signatures for fnRef resolution
   borrowRefs : List String := []          -- names of refs created by borrow blocks (for escape analysis)

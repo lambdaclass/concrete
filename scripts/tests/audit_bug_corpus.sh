@@ -23,6 +23,7 @@ SKIP=0
 # Explicit mapping: bug number -> regression test file(s) in tests/programs/.
 # Multiple files separated by space.
 declare -A BUG_TEST_MAP=(
+  [091]="error_trait_impl_caps_exceed_generic.con error_trait_impl_caps_exceed_direct.con error_trait_bound_call_missing_cap.con error_trait_impl_sig_mismatch.con error_trait_method_generic.con trait_impl_caps_declared.con"
   [073]="error_type_arg_count_extra.con error_type_arg_count_missing.con type_arg_count_ok.con"
   [001]="bug_cross_module_struct_field.con"
   [002]="bug_i32_literal_type.con"

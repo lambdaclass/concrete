@@ -1,0 +1,20 @@
+// Bug 091 positive control: the trait DECLARES the capability, the impl uses it,
+// and the generic caller holds it. Accepted; an impl declaring fewer is fine too.
+trait Act { fn act(&self) with(Console) -> Int; }
+struct Loud { v: Int }
+struct Quiet { w: Int }
+impl Act for Loud {
+    fn act(&self) with(Console) -> Int { print_int(self.v); print_char(10); return self.v; }
+}
+impl Act for Quiet {
+    fn act(&self) -> Int { return self.w; }
+}
+fn run<T: Act>(x: &T) with(Console) -> Int { return x.act(); }
+fn main() with(Console) -> Int {
+    let l: Loud = Loud { v: 3 };
+    let q: Quiet = Quiet { w: 4 };
+    let r: Int = run::<Loud>(&l) + run::<Quiet>(&q);
+    let Loud { v } = l;
+    let Quiet { w } = q;
+    return r;
+}

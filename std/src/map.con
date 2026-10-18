@@ -444,7 +444,7 @@ mod map {
     // DISPLACED old key (Copy keys elide). V is unconstrained: values move
     // in/out, insert never destroys one (the old value is RETURNED).
     trusted impl<K: Destroy, V> HashMap<K, V> {
-        pub fn remove(&mut self, key: &K) -> Option<V> {
+        pub fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
             match self.find_live(key) {
                 Option::None => { return Option::<V>::None; },
                 Option::Some { value } => {

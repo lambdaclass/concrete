@@ -114,6 +114,8 @@ inductive CoreCheckError where
   | missingTraitMethod (typeName methodName : String)
   | traitMethodRetTyMismatch (methodName expectedRetTy actualRetTy : String)
   | destroyImplCapsBeyondAlloc (typeName : String) (caps : String)
+  | traitImplCapsExceedTrait (traitName typeName methodName implCaps traitCaps : String)
+  | traitMethodSigMismatch (traitName typeName methodName detail : String)
   | recursiveType (typeName : String)
 
 def CoreCheckError.message : CoreCheckError → String
@@ -161,6 +163,10 @@ def CoreCheckError.message : CoreCheckError → String
   | .missingTraitMethod typeName methodName => s!"trait impl for '{typeName}' is missing method '{methodName}'"
   | .traitMethodRetTyMismatch methodName expectedRetTy actualRetTy => s!"method '{methodName}' signature does not match trait definition: expected return type {expectedRetTy}, got {actualRetTy}"
   | .destroyImplCapsBeyondAlloc typeName caps => s!"impl Destroy for '{typeName}' requires capabilities ({caps}) beyond Alloc — v1 drop-glue restriction: destructors are memory-only; fallible or authority-bearing cleanup stays an explicit consuming API (RUNTIME_COLLECTIONS.md drop-glue rule 4)"
+  | .traitImplCapsExceedTrait traitName typeName methodName implCaps traitCaps =>
+    s!"impl {traitName} for '{typeName}': method '{methodName}' requires capabilities ({implCaps}) beyond what trait '{traitName}' declares for it ({traitCaps}) — generic code calling it through a `{traitName}` bound would perform effects its caller never declared"
+  | .traitMethodSigMismatch traitName typeName methodName detail =>
+    s!"impl {traitName} for '{typeName}': method '{methodName}' signature does not match trait definition: {detail}"
   | .recursiveType typeName => s!"recursive type '{typeName}' has infinite size"
 
 private def getEnv : StateM CoreCheckEnv CoreCheckEnv := get
@@ -172,6 +178,9 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .copyDestroyConflict _ => some "remove the Destroy impl or remove #[copy]"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
   | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
+  | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
+    some s!"declare 'with({implCaps})' on '{methodName}' in trait '{traitName}' (every generic caller must then hold it), or remove the effect from the impl"
+  | .traitMethodSigMismatch _ _ _ _ => some "an impl method must have exactly the trait method's receiver, parameters and generics"
   | .insufficientCapabilities _ required _ => some s!"add 'with({required})' to the calling function, or wrap the call in a trusted function"
   | .missingCapability callee cap _ =>
     match callee with
@@ -240,6 +249,8 @@ def CoreCheckError.code : CoreCheckError → String
   | .missingTraitMethod _ _ => "E0581"
   | .traitMethodRetTyMismatch _ _ _ => "E0582"
   | .destroyImplCapsBeyondAlloc _ _ => "E0584"
+  | .traitImplCapsExceedTrait _ _ _ _ _ => "E0586"
+  | .traitMethodSigMismatch _ _ _ _ => "E0587"
   | .recursiveType _ => "E0583"
 
 /-- WHY this is an error (rich diagnostic surface, Phase 4 #11). Capability family
@@ -983,7 +994,7 @@ def ccCheckModuleDecls (m : CModule)
     if isReservedFnName f.name then
       errors := errors ++ [mkDeclDiag (.reservedFnName f.name) f.declSpan]
   -- 8. Trait impl validation
-  let builtinDestroyTrait : CTraitDef := { name := destroyTraitName, methods := [{ name := destroyMethodName, retTy := .unit }], builtinId := some .destroy }
+  let builtinDestroyTrait : CTraitDef := { name := destroyTraitName, methods := [{ name := destroyMethodName, retTy := .unit, selfKind := some .ref, capSet := .concrete ["Alloc"] }], builtinId := some .destroy }
   let allTraits := builtinDestroyTrait :: m.traitDefs
   for ti in m.traitImpls do
     match allTraits.find? fun td => td.name == ti.traitName with
@@ -997,6 +1008,39 @@ def ccCheckModuleDecls (m : CModule)
           let expectedRetTy := resolveSelfTy sig.retTy implTy
           if expectedRetTy != actualRetTy then
             errors := errors ++ [mkDeclDiag (.traitMethodRetTyMismatch sig.name (tyToString expectedRetTy) (tyToString actualRetTy)) ti.declSpan]
+        -- Bug 091: the REST of the signature. Generic code calling a method through a
+        -- trait bound is checked against the TRAIT's signature (Check, type-var receiver)
+        -- and is then specialized to the impl's body with no re-check, so every way the
+        -- impl's signature exceeds the trait's is a way to smuggle something past the
+        -- generic caller. Capabilities are the load-bearing case: an impl method may
+        -- require only what the trait method declares (fail closed — a trait method with
+        -- no `with(..)` admits an impl with none).
+        match ti.methodSigs.find? fun ms => ms.name == sig.name with
+        | none => pure ()
+        | some ms =>
+          let mismatch := fun (detail : String) =>
+            mkDeclDiag (.traitMethodSigMismatch ti.traitName ti.typeName sig.name detail) ti.declSpan
+          if ms.selfKind != sig.selfKind then
+            let showKind : Option SelfKind → String := fun k => match k with
+              | none => "no receiver" | some .value => "`self`"
+              | some .ref => "`&self`" | some .refMut => "`&mut self`"
+            errors := errors ++ [mismatch s!"expected receiver {showKind sig.selfKind}, got {showKind ms.selfKind}"]
+          let expectedParams := sig.paramTys.map (resolveSelfTy · ti.selfTy)
+          if ms.paramTys.length != expectedParams.length then
+            errors := errors ++ [mismatch s!"expected {expectedParams.length} parameter(s) besides the receiver, got {ms.paramTys.length}"]
+          else
+            for (i, (e, a)) in (List.range expectedParams.length).zip (expectedParams.zip ms.paramTys) do
+              if e != a then
+                errors := errors ++ [mismatch s!"parameter {i + 1}: expected {tyToString e}, got {tyToString a}"]
+          if !ms.ownTypeParams.isEmpty then
+            errors := errors ++ [mismatch s!"impl method declares type parameters ({String.intercalate ", " ms.ownTypeParams}) the trait method does not"]
+          if !ms.ownCapParams.isEmpty then
+            errors := errors ++ [mismatch s!"impl method declares capability parameters ({String.intercalate ", " ms.ownCapParams}) the trait method does not"]
+          -- Destroy's capability bound is the H18 fence below (E0584), kept as its own
+          -- diagnostic; every other trait bounds its impls by its own declaration.
+          if ti.traitName != destroyTraitName && !Capabilities.capsContain sig.capSet ms.capSet then
+            errors := errors ++ [mkDeclDiag (.traitImplCapsExceedTrait ti.traitName ti.typeName sig.name
+              (capSetToString ms.capSet) (capSetToString sig.capSet)) ti.declSpan]
       -- H18 v1 capability fence: a Destroy impl's destructor may require at
       -- most Alloc. Rule 3 (glue caps derived+visible) holds degenerately in
       -- v1 BECAUSE this fence guarantees no cap-carrying destructor exists;

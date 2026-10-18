@@ -80,7 +80,7 @@ mod ordered_set {
     // H18: clear/drop delegate to the inner OrderedMap glue (u8 values are
     // Copy — trivially destroyable).
     impl<K: Destroy> OrderedSet<K> {
-        pub fn remove(&mut self, key: &K) -> bool {
+        pub fn remove(&mut self, key: &K) with(Alloc) -> bool {
             let old: Option<u8> = self.inner.remove(key);
             match old {
                 Option::Some { value } => { return true; },

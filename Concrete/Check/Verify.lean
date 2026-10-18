@@ -2,6 +2,8 @@ import Concrete.Elab.Core
 import Concrete.Report.Diagnostic
 import Concrete.Check.Layout
 import Concrete.Semantics.IntArith
+import Concrete.Proof.CallCollect
+import Concrete.Semantics.Capabilities
 
 namespace Concrete
 
@@ -420,6 +422,51 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
     code := "E0239"
   }
 
+/-- **Post-mono capability verifier** (bug 091, defense in depth). Capability
+    discipline is decided before monomorphization: Check decides a call through a trait
+    bound against the TRAIT method's declared set, and CoreCheck bounds every impl
+    method by that set (E0586). Mono then turns `T_method` into a direct call to the
+    impl's body and nothing re-asked the question — which is how an impl's extra
+    `with(Std)` once ran under a caller with none.
+    This re-asks it on the specialized call graph: every direct call in a non-generic
+    function must require only capabilities its caller declares. Deliberately
+    conservative, so it can only ever report a real violation:
+      * `Unsafe` is excluded — its trusted-body discharge is CoreCheck's decision and
+        this pass does not see trust provenance;
+      * a set naming a capability VARIABLE or a capability parameter (any name outside
+        `validCaps`) is skipped, on either side — polymorphic authority is resolved by
+        Check's inference, not by this structural re-check;
+      * a callee is resolved only when every definition with that name, across all
+        modules, declares the same set (no guessing between homonyms).
+    A violation here means a front-end decision was wrong, so it is an internal error. -/
+partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
+  let rec allFns (ms : List CModule) : List CFnDef :=
+    ms.foldl (fun acc m => acc ++ m.functions ++ allFns m.submodules) []
+  let fns := allFns modules
+  -- `none` = not a plain concrete set this pass can decide on.
+  let plainCaps : CapSet → Option (List String) := fun cs =>
+    let (caps, vars) := cs.normalize
+    if !vars.isEmpty || caps.any (fun c => !validCaps.contains c) then none else some caps
+  let required : String → Option (List String) := fun callee =>
+    match fns.filter (·.name == callee) with
+    | [] => none
+    | d :: ds =>
+      if !d.typeParams.isEmpty || ds.any (fun d' => d'.capSet.normalize != d.capSet.normalize) then none
+      else (plainCaps d.capSet).map (·.filter (· != unsafeCapName))
+  let violations := fns.foldl (fun acc f =>
+    if !f.typeParams.isEmpty then acc else
+    match plainCaps f.capSet with
+    | none => acc
+    | some has =>
+      (collectCallsStmts f.body).eraseDups.foldl (fun acc callee =>
+        match required callee with
+        | none => acc
+        | some need =>
+          let missing := need.filter (fun c => !has.contains c)
+          if missing.isEmpty then acc
+          else acc ++ [{ fnName := f.name
+                         message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
+  violationsToDiagnostics "post-mono" violations
 /-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
     fields validate after instantiation, and no SAFE function exposes a
     reference-return type (references are second-class), and every integer
@@ -429,6 +476,7 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
+    ++ verifyCapsPostMono modules
 
 -- ============================================================
 -- Rendering

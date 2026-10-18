@@ -300,6 +300,29 @@ private def substTy (mapping : List (String × Ty)) : Ty → Ty
   | .heapArray inner => .heapArray (substTy mapping inner)
   | ty => ty
 
+/-- Bug 091: normalize a signature type as WRITTEN for trait/impl conformance — type
+    aliases resolved (the map is pre-closed), the impl's type parameters as `typeVar`, and
+    the `Heap`/`HeapArray` spellings canonical. Pure, and applied identically to the trait
+    side and the impl side, so the two compare structurally. `Self` is left symbolic. -/
+partial def sigTyNormalize (aliases : List (String × Ty)) (typeParams : List String) : Ty → Ty
+  | .named n =>
+    if typeParams.contains n then .typeVar n
+    else match aliases.lookup n with
+      | some t => t
+      | none => .named n
+  | .ref t => .ref (sigTyNormalize aliases typeParams t)
+  | .refMut t => .refMut (sigTyNormalize aliases typeParams t)
+  | .ptrMut t => .ptrMut (sigTyNormalize aliases typeParams t)
+  | .ptrConst t => .ptrConst (sigTyNormalize aliases typeParams t)
+  | .generic "Heap" [inner] _ => .heap (sigTyNormalize aliases typeParams inner)
+  | .generic "HeapArray" [inner] _ => .heapArray (sigTyNormalize aliases typeParams inner)
+  | .generic n args caps => .generic n (args.map (sigTyNormalize aliases typeParams)) caps
+  | .array t n => .array (sigTyNormalize aliases typeParams t) n
+  | .fn_ ps cs rt => .fn_ (ps.map (sigTyNormalize aliases typeParams)) cs (sigTyNormalize aliases typeParams rt)
+  | .heap t => .heap (sigTyNormalize aliases typeParams t)
+  | .heapArray t => .heapArray (sigTyNormalize aliases typeParams t)
+  | t => t
+
 private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
   match ty with
   | .named name =>
@@ -2900,16 +2923,34 @@ partial def elabModule (m : Module) (summary : FileSummary)
     traitDefs := m.traits.map fun td =>
       { name := td.name,
         methods := td.methods.map fun sig =>
-          { name := sig.name, retTy := sig.retTy },
+          { name := sig.name, retTy := sig.retTy,
+            paramTys := sig.params.map fun p => sigTyNormalize typeAliasMap [] p.ty,
+            selfKind := sig.selfKind, capSet := sig.capSet },
         builtinId := td.builtinId, declSpan := some td.span : CTraitDef }
     traitImpls := m.traitImpls.map fun tb =>
       let traitBuiltinId := match allTraits.find? fun td => td.name == tb.traitName with
         | some td => td.builtinId
         | none => none
+      -- Same Self type Check uses for the impl's methods (trait impls take no cap params).
+      let selfTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
+                    else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
       { traitName := tb.traitName,
         typeName := tb.typeName,
         methodNames := tb.methods.map (·.name),
         methodRetTys := tb.methods.map fun f => (f.name, f.retTy),
+        selfTy := selfTy,
+        methodSigs := tb.methods.map fun f =>
+          -- The parser prepends the receiver as a `self` parameter; read its form back.
+          let (selfKind, rest) : Option SelfKind × List Param := match f.params with
+            | p :: ps =>
+              if p.name == "self" then
+                (some (match p.ty with
+                  | .ref _ => SelfKind.ref | .refMut _ => SelfKind.refMut | _ => SelfKind.value), ps)
+              else (none, f.params)
+            | [] => (none, [])
+          { name := f.name, selfKind := selfKind, capSet := f.capSet,
+            paramTys := rest.map fun p => sigTyNormalize typeAliasMap tb.typeParams p.ty,
+            ownTypeParams := f.typeParams, ownCapParams := f.capParams },
         builtinTraitId := traitBuiltinId, declSpan := some tb.span : CTraitImpl }
     -- Bug 082: a call re-spelled by `callSpellings` is looked up by CoreCheck under
     -- the NEW spelling, so its requirement is recorded under that spelling too.

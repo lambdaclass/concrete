@@ -48,7 +48,7 @@ when freestanding code needs it, `Thread` with the concurrency model, `Signal`
 deferred — are recorded in `research/language/capability-sandboxing.md` §4a and
 the ROADMAP.)
 
-A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
+A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). A trait impl method may require only the capabilities its trait method declares, and a call through a trait bound (`x.act()` with `T: Act`) costs the trait method's capabilities; the specialized call graph is re-checked after monomorphization (see [CAPABILITY_FACTS.md](CAPABILITY_FACTS.md), bug 091). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
 
 **Capability aliases** reduce signature repetition:
 

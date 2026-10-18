@@ -176,7 +176,7 @@ map	values_for_each	no	borrows	infallible	C	trusted-boundary	gated	<cap C>(&self
 map	keys	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(Alloc) -> Vec<K>	HashMap<K, V>
 map	values	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(Alloc) -> Vec<V>	HashMap<K, V>
 map	get	no	borrows	option	none	trusted-boundary	gated	(&self, key: &K) -> Option<V>	HashMap<K, V>
-map	remove	no	mut	option	none	trusted-boundary	gated	(&mut self, key: &K) -> Option<V>	HashMap<K, V>
+map	remove	yes	mut	option	Alloc	trusted-boundary	gated	(&mut self, key: &K) with(Alloc) -> Option<V>	HashMap<K, V>
 map	insert	yes	mut	option	Alloc	trusted-boundary	gated	(&mut self, key: K, value: V) with(Alloc) -> Option<V>	HashMap<K, V>
 map	clear	yes	mut	infallible	Alloc	trusted-boundary	gated	(&mut self) with(Alloc)	HashMap<K, V>
 map	drop	yes	consumes	infallible	Alloc	trusted-boundary	gated	(self) with(Alloc)	HashMap<K, V>
@@ -289,7 +289,7 @@ ordered_map	for_each	no	borrows	infallible	C	trusted-boundary	gated	<cap C>(&sel
 ordered_map	get	no	borrows	option	none	trusted-boundary	gated	(&self, key: &K) -> Option<V>	OrderedMap<K, V>
 ordered_map	min_key	no	borrows	option	none	trusted-boundary	gated	(&self) -> Option<K>	OrderedMap<K, V>
 ordered_map	max_key	no	borrows	option	none	trusted-boundary	gated	(&self) -> Option<K>	OrderedMap<K, V>
-ordered_map	remove	no	mut	option	none	trusted-boundary	gated	(&mut self, key: &K) -> Option<V>	OrderedMap<K, V>
+ordered_map	remove	yes	mut	option	Alloc	trusted-boundary	gated	(&mut self, key: &K) with(Alloc) -> Option<V>	OrderedMap<K, V>
 ordered_map	insert	yes	mut	option	Alloc	trusted-boundary	gated	(&mut self, key: K, value: V) with(Alloc) -> Option<V>	OrderedMap<K, V>
 ordered_map	clear	yes	mut	infallible	Alloc	trusted-boundary	gated	(&mut self) with(Alloc)	OrderedMap<K, V>
 ordered_map	drop	yes	consumes	infallible	Alloc	trusted-boundary	gated	(self) with(Alloc)	OrderedMap<K, V>
@@ -303,7 +303,7 @@ ordered_set	fold	no	borrows	infallible	C	hosted-effect	gated	<A, cap C>(&self, i
 ordered_set	for_each	no	borrows	infallible	C	hosted-effect	gated	<cap C>(&self, f: fn(&K) with(C)) with(C)	OrderedSet<K>
 ordered_set	min	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>	OrderedSet<K>
 ordered_set	max	no	borrows	option	none	deterministic	gated	(&self) -> Option<K>	OrderedSet<K>
-ordered_set	remove	no	mut	infallible	none	deterministic	gated	(&mut self, key: &K) -> bool	OrderedSet<K>
+ordered_set	remove	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, key: &K) with(Alloc) -> bool	OrderedSet<K>
 ordered_set	insert	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, key: K) with(Alloc) -> bool	OrderedSet<K>
 ordered_set	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)	OrderedSet<K>
 ordered_set	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)	OrderedSet<K>

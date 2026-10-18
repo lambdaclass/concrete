@@ -1,0 +1,14 @@
+// Bug 091 control: the same over-capable impl called DIRECTLY. Was already refused
+// at the call (E0520); the impl itself is now refused too (E0586).
+trait Act { fn act(&self) -> Int; }
+struct Loud { v: Int }
+impl Act for Loud {
+    fn act(&self) with(Std) -> Int { println(777); return self.v; }
+}
+fn pure_caller() -> Int {
+    let l: Loud = Loud { v: 3 };
+    let r: Int = l.act();
+    let Loud { v } = l;
+    return r;
+}
+fn main() -> Int { return pure_caller(); }

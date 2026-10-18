@@ -6374,6 +6374,8 @@ def diagnosticCodesReport : String :=
     entry "E0583" "core-check" "error" "recursive type has infinite size",
     entry "E0584" "core-check" "error" "Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)",
     entry "E0585" "core-check" "error" "repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)",
+    entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
+    entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

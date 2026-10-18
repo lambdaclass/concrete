@@ -152,9 +152,12 @@ partial def canonModule (m : CModule) : CModule :=
     constants := m.constants.map fun (n, t, e) => (n, canonTy t, canonExpr structs e),
     traitDefs := m.traitDefs.map fun td =>
       { td with methods := td.methods.map fun sig =>
-        { sig with retTy := canonTy sig.retTy } },
+        { sig with retTy := canonTy sig.retTy, paramTys := sig.paramTys.map canonTy } },
     traitImpls := m.traitImpls.map fun ti =>
-      { ti with methodRetTys := ti.methodRetTys.map fun (n, t) => (n, canonTy t) },
+      { ti with methodRetTys := ti.methodRetTys.map fun (n, t) => (n, canonTy t),
+                selfTy := canonTy ti.selfTy,
+                methodSigs := ti.methodSigs.map fun ms =>
+                  { ms with paramTys := ms.paramTys.map canonTy } },
     submodules := m.submodules.map canonModule }
 
 def canonicalizeProgram (modules : List CModule) : List CModule :=

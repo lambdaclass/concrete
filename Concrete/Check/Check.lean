@@ -1331,16 +1331,28 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
         -- Find the method in one of the bound traits
         let mut foundSig : Option FnSigDef := none
+        let mut foundTrait : String := ""
         for traitName in bounds do
           match env.traits.find? fun td => td.name == traitName with
           | some td =>
             match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; break
+            | some ms => foundSig := some ms; foundTrait := traitName; break
             | none => pure ()
           | none => pure ()
         match foundSig with
         | none => throwCheck (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
+          -- Bug 091: a call through a trait bound exercises the authority the TRAIT
+          -- method declares — the only set every implementation is bounded by
+          -- (CoreCheck E0586) — so the generic caller must hold it. The call reaches
+          -- Core as an unresolved `T_method` that CoreCheck cannot look up, and Mono
+          -- specializes it without re-checking, so this is the one place the decision
+          -- is made; `Unsafe` included, since nothing downstream would see it. A
+          -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.
+          let envC ← getEnv
+          for cap in Capabilities.missingCaps envC.currentCapSet sig.capSet do
+            if !(cap == unsafeCapName && envC.currentFnTrusted) then
+              throwCheck (.missingCapability s!"{foundTrait}::{methodName}" cap envC.currentFnName) (some e.getSpan)
           -- Replace Self with the type variable in the trait signature
           let selfTy := Ty.typeVar n
           let retTy := substSelf sig.retTy selfTy
@@ -2101,7 +2113,7 @@ def checkFn (f : FnDef) : CheckM Unit := do
   let retTyRaw := resolveTypeParams f.retTy f.typeParams
   -- Set current return type, type params, capability context, and type bounds
   let env1 := { envBefore with currentRetTy := retTyRaw, currentTypeParams := f.typeParams }
-  let env2 := { env1 with currentCapSet := f.capSet }
+  let env2 := { env1 with currentCapSet := f.capSet, currentFnTrusted := f.isTrusted }
   let env3 := { env2 with currentTypeBounds := f.typeBounds }
   setEnv { env3 with currentFnName := f.name }
   -- Resolve Self in return type (needs currentImplType from env)
@@ -2665,7 +2677,11 @@ def checkModule (m : Module) (summary : FileSummary)
   -- Built-in Destroy trait (needed for expression-level trait method resolution)
   let builtinDestroyTrait : TraitDef := {
     name := destroyTraitName
-    methods := [{ name := destroyMethodName, params := [], retTy := .unit, selfKind := some .ref }]
+    methods := [{ name := destroyMethodName, params := [], retTy := .unit, selfKind := some .ref
+                  -- The H18 v1 fence (CoreCheck E0584) bounds every Destroy impl by
+                  -- Alloc, so a destroy() through a `T: Destroy` bound requires Alloc
+                  -- of its caller (bug 091) — the same as a direct call would.
+                  capSet := .concrete ["Alloc"] }]
     builtinId := some .destroy
   }
   let allTraits := builtinDestroyTrait :: m.traits
