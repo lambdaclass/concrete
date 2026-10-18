@@ -2849,8 +2849,8 @@ check_report "$TESTDIR/report_evidence_check_length.con" effects \
 # 3 proved -> 2 proved ON 2026-08-15, and this is the intended consequence of R-0004 package 2's
 # authority transition rather than a regression.
 #
-# `decode_header` calls `parse_byte` and `check_length`, and its (hardcoded, backward-compatibility)
-# proof link names `Concrete.Proof.proofFnsExt` — a table with ZERO canonical entries. A table with
+# `decode_header` calls `parse_byte` and `check_length`, and its in-source proof link (migrated from
+# the deleted hardcoded table by bug 083) names `Concrete.Proof.proofFnsExt` — a table with ZERO canonical entries. A table with
 # no entries can describe no definitions, so it cannot say that the theorem is about THIS program's
 # `parse_byte` rather than another program's function of the same name. Both body edges are therefore
 # unjustified and the verdict is `correspondence_unjustified`, not `proved`.
@@ -3022,6 +3022,25 @@ check_report "$TESTDIR/adversarial_proof_wrong_arity.con" effects \
     "adversarial: wrong-arity parse_byte shows stale warning" \
     "adversarial: wrong-arity should show stale warning"
 
+# --- Bug 083: a function NAME is not a proof claim ---
+# Three functions named (two with the exact bodies) like entries of the deleted name-keyed
+# `Proof.provedFunctions` table, no proof attributes: before the fix all three were `proved`
+# (origin: hardcoded). A claim now requires an in-source #[spec]/#[proof_by]/#[proof_fingerprint].
+check_report "$TESTDIR/regress_083_no_claim_by_name.con" proof-status \
+    "0 proved.*3 unproved" \
+    "bug 083: unannotated name-colliding functions report no claim" \
+    "bug 083: an unannotated function was attached a claim by name"
+
+check_report "$TESTDIR/regress_083_no_claim_by_name.con" proof-status \
+    "origin: hardcoded" \
+    "bug 083: no hardcoded origin on unannotated code" \
+    "bug 083: hardcoded origin resurfaced" "!"
+
+check_report "$TESTDIR/regress_083_no_claim_by_name.con" effects \
+    "0 proved, 4 enforced" \
+    "bug 083: effects evidence has no proved function" \
+    "bug 083: effects evidence still upgrades by name"
+
 # --- Capability: trusted does not bypass callee capability checking ---
 run_err "$TESTDIR/adversarial_trusted_cap_laundering.con" "but caller has"
 
@@ -3184,10 +3203,14 @@ check_report "$TESTDIR/proof_maintenance_decode_header.con" proof-status \
     "proof-status: stale proof detected" \
     "proof-status: stale proof not detected"
 
+# The stored side of the stale comparison. Before bug 083 this file's links came from the deleted
+# name-keyed table, whose stored value was a V1 body STRING printed as "expected fingerprint:" (and one
+# of the two stale entries was a false claim on the new helper check_version). The in-source v2 link
+# stores a digest, and the stale diagnostic names it against the current one.
 check_report "$TESTDIR/proof_maintenance_decode_header.con" proof-status \
-    "expected fingerprint" \
-    "proof-status: expected fingerprint shown" \
-    "proof-status: expected fingerprint missing"
+    "stale fingerprint for 'main.decode_header' (#\[proof_fingerprint\] \"v2:[0-9a-f]*\" ≠ current" \
+    "proof-status: stored v2 pin shown against the current digest" \
+    "proof-status: stored v2 pin missing from the stale diagnostic"
 
 check_report "$TESTDIR/proof_maintenance_decode_header.con" proof-status \
     "current fingerprint" \
@@ -4909,14 +4932,14 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Hardcoded proof still works (backward compatibility)
-hardcoded_proof=$(cached_output "$TESTDIR/proof_decode_header.con" "--report proof-status")
-if grep <<<"$hardcoded_proof" -q "proved"; then
-    echo "  ok  hardcoded proof still works during registry transition"
+# In-source links that replaced the deleted hardcoded table (bug 083) still prove
+linked_proof=$(cached_output "$TESTDIR/proof_decode_header.con" "--report proof-status")
+if grep <<<"$linked_proof" -q "proved" && ! grep <<<"$linked_proof" -q "origin: hardcoded"; then
+    echo "  ok  migrated in-source proof links prove, with no hardcoded origin"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  hardcoded proof should still work"
-    echo "$hardcoded_proof"
+    echo "FAIL  migrated in-source proof links should prove (and never say origin: hardcoded)"
+    echo "$linked_proof"
     FAIL=$((FAIL + 1))
 fi
 
@@ -8554,13 +8577,13 @@ fi
 
 # --- Lean kernel checking (item 7) ---
 
-# 41. check-proofs: hardcoded proofs are kernel-verified
+# 41. check-proofs: in-source linked proofs (formerly the hardcoded table) are kernel-verified
 cp_out=$($COMPILER tests/programs/proof_decode_header.con --report check-proofs 2>&1 || true)
 if grep <<<"$cp_out" -q "Kernel-verified" && grep <<<"$cp_out" -q "parse_byte"; then
-    echo "  ok  check-proofs: hardcoded proofs kernel-verified"
+    echo "  ok  check-proofs: linked proofs kernel-verified"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL check-proofs: hardcoded proofs should be kernel-verified"
+    echo "  FAIL check-proofs: linked proofs should be kernel-verified"
     evidence_fail=$((evidence_fail + 1))
 fi
 

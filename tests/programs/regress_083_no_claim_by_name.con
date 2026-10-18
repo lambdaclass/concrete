@@ -1,0 +1,30 @@
+// Bug 083 regression: a function name is not a proof claim.
+//
+// Every function below has the NAME (and, for parse_byte and check_version, the exact BODY) of an
+// entry in the deleted compiler-side `Proof.provedFunctions` table, and NONE carries a proof
+// attribute. Before the fix, proof-status reported all three `proved` (origin: hardcoded), although
+// this program claims nothing — and compute_tag(16, 16, 1) overflows u8 and aborts the binary,
+// so the "proved" compute_tag was not even the function its theorem is about.
+//
+// Expected: 0 proved, 3 unproved, no origin.
+
+fn compute_tag(key: u8, message: u8, nonce: u8) -> u8 {
+    return key * message + nonce;
+}
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn check_version(ver: Int) -> Int {
+    if ver == 1 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+pub fn main() -> Int {
+    let t: u8 = compute_tag(1, 2, 3);
+    return parse_byte(t as Int, 0) + check_version(1);
+}

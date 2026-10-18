@@ -13,11 +13,19 @@
 // === Provable core (pure, no capabilities) ===
 
 // DRIFTED: changed + to - (breaks tag computation)
+#[spec(Concrete.Proof.computeTagExpr)]
+#[proof_by(Examples.CryptoVerify.Proofs.compute_tag_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("v2:8fd9d38950ec5907778483f166e61e26")]
 fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
     return key * message - nonce;
 }
 
 // Unchanged from original
+#[spec(Concrete.Proof.verifyTagExpr)]
+#[proof_by(Examples.CryptoVerify.Proofs.verify_tag_correct)]
+#[proof_coverage(one_direction)]
+#[proof_fingerprint("v2:e5cc8653ab87df9679ec9a084811d21e")]
 fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
     let computed: Int = compute_tag(key, message, nonce);
     if computed == expected_tag {
@@ -28,6 +36,10 @@ fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
 }
 
 // DRIFTED: accepts nonce == 0 (>= instead of >)
+#[spec(Concrete.Proof.checkNonceExpr)]
+#[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("v2:47ad120ae2795812e4c855ab356556e1")]
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     if nonce >= 0 {
         if nonce <= max_nonce {

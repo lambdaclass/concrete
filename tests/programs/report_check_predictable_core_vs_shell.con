@@ -2,6 +2,9 @@
 // The parsing core should pass. The I/O shell should fail.
 // This is the canonical pattern: separation is compiler-visible.
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(data: Int, offset: Int) -> Int {
     return data + offset;
 }

@@ -54,10 +54,12 @@ fi
 # EXACTLY ONE fingerprint is unreachable by any obligation, and it is the fixture whose entire
 # purpose is an invalid attribute. Pinned by NAME: "one is excluded" would be satisfied by a
 # different one going missing.
-if [ "$CODE" = "44" ] && [ "$ROWS" = "43" ]; then
-  ok "44 stored fingerprints = 43 plan rows + 1 unreachable"
+# 44/43 -> 51/50 on 2026-10-18 (bug 083): the deleted name-keyed `provedFunctions` table's claims moved
+# into source as v2 pins — thesis_demo/src/main.con (2), main_drifted.con (2), crypto_verify_drifted (3).
+if [ "$CODE" = "51" ] && [ "$ROWS" = "50" ]; then
+  ok "51 stored fingerprints = 50 plan rows + 1 unreachable"
 else
-  no "population moved: $CODE stored / $ROWS planned (expected 44 / 43)"
+  no "population moved: $CODE stored / $ROWS planned (expected 51 / 50)"
 fi
 if [ "$(tr -s ' ' '\n' <<<"$UNREACHED" | grep -c . || true)" = "1" ] \
    && grep -q 'contract_negatives/invalid_attribute' <<<"$UNREACHED"; then

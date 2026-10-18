@@ -7,13 +7,20 @@
 //
 // Expected: decode_header drops from "proved" to "enforced (proof stale: body changed)"
 // because the body fingerprint changed even though semantics are preserved.
-// check_version is a new function — no proof registered, stays "enforced".
+// check_version is a new function — no proof link, stays "enforced". (Before bug 083 it was
+// reported STALE: a name-keyed compiler table attached the ELF example's check_version proof to it.)
 // parse_byte and check_length are unchanged — stay "proved".
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(data: Int, offset: Int) -> Int {
     return data + offset;
 }
 
+#[spec(Concrete.Proof.checkLengthExpr)]
+#[proof_by(Concrete.Proof.check_length_rejects_short)]
+#[proof_fingerprint("v2:cc8ef4628dfd8d27e5aaa4fed063919f")]
 fn check_length(len: Int) -> Int {
     if len < 10 { return 1; }
     return 0;
@@ -25,6 +32,9 @@ fn check_version(version: Int) -> Int {
     return 0;
 }
 
+#[spec(Concrete.Proof.decodeHeaderExpr)]
+#[proof_by(Concrete.Proof.decode_header_rejects_short)]
+#[proof_fingerprint("v2:6148e017316e54dc76b959dafa14d732")]
 fn decode_header(data: Int, len: Int) -> Int {
     if check_length(len) != 0 { return 1; }
     let version: Int = parse_byte(data, 0);

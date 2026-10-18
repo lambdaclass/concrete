@@ -139,6 +139,17 @@ and every call of a claimed body must select, by key, an entry attested to that 
 else is `dependency closure unjustified`, naming the call, and issues no receipt. The stale-fingerprint
 warning now prints the `v2:` value to pin (it printed a hash of the V1 fingerprint). Gate legs X in
 `check_subject_binding.sh`, fixture `tests/programs/bug081_alias_key`.
+### A Function's Name Is No Longer A Proof Claim (bug 083)
+
+A program with no proof attributes defining `fn compute_tag(key: u8, message: u8, nonce: u8) -> u8`
+was reported `proved` (origin `hardcoded`) while its binary aborts on `compute_tag(16, 16, 1)`:
+`resolveSpec` fell back to `Proof.provedFunctions`, a compiler-side table keyed by qualified name with
+v1 body-string freshness, so any `main.compute_tag`, `main.parse_byte` or `main.check_version` with a
+matching body string inherited another program's theorem. The table is deleted; a claim now requires
+an in-source `#[spec]` + `#[proof_by]` + `#[proof_fingerprint("v2:…")]`. Every file it served
+(`thesis_demo`, `crypto_verify_drifted`, nine `tests/programs/` fixtures) now links in source, with
+verdicts unchanged except `origin` and one fixture helper (`check_version`) that had been reported stale
+against the ELF example's proof. `regress_083_no_claim_by_name.con` must report no claim.
 
 ### The Proof Model Computes What The Program Computes For Casts (bug 080)
 

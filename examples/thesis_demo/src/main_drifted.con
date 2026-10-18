@@ -14,10 +14,16 @@
 
 // ---- DRIFTED: subtraction instead of addition (breaks proof) ----
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(data: Int, offset: Int) -> Int {
     return data - offset;
 }
 
+#[spec(Concrete.Proof.checkLengthExpr)]
+#[proof_by(Concrete.Proof.check_length_rejects_short)]
+#[proof_fingerprint("v2:cc8ef4628dfd8d27e5aaa4fed063919f")]
 fn check_length(len: Int) -> Int {
     if len < 10 { return 1; }
     return 0;

@@ -80,7 +80,7 @@ current acceptance is revocable policy rather than a timeless receipt fact.
 
 **Trusted for:**
 
-- Correctly binding source functions to specs and theorem identities via in-source proof links or hardcoded `provedFunctions`
+- Correctly binding source functions to specs and theorem identities via in-source proof links (the only binding since bug 083 deleted the name-keyed `provedFunctions` table)
 - Correctly computing body fingerprints from Core IR
 - Correctly detecting stale or mismatched proof attachments
 - Correctly resolving renamed functions by fingerprint matching

@@ -2,6 +2,9 @@
 // Models the bounds guard from decode_header.
 // The Lean proof shows: len < 10 → returns 1, len >= 10 → returns 0.
 
+#[spec(Concrete.Proof.checkLengthExpr)]
+#[proof_by(Concrete.Proof.check_length_rejects_short)]
+#[proof_fingerprint("v2:cc8ef4628dfd8d27e5aaa4fed063919f")]
 fn check_length(len: Int) -> Int {
     if len < 10 { return 1; }
     return 0;

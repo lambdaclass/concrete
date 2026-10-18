@@ -321,7 +321,7 @@ ProofCore is a side-channel extraction — it does not sit in the compilation pi
 **Preconditions:**
 - `ValidatedCore` from CoreCheck (capability discipline, type consistency, declaration legality all hold).
 - Location map from parsed source (for diagnostic source locations).
-- Proof registry (hardcoded proved functions + optional external registry).
+- Proof registry synthesized from in-source proof links (`#[spec]`/`#[proof_by]`/`#[proof_fingerprint]`); there is no name-keyed fallback (bug 083).
 
 **Postconditions:**
 - Every function classified as either entry (eligible) or excluded (ineligible/trusted).

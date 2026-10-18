@@ -1767,7 +1767,8 @@ structure SpecIdentity where
 
 /-- How a spec binding was established. -/
 inductive SpecSource where
-  | hardcoded   -- from Proof.provedFunctions
+  | hardcoded   -- NO LONGER CONSTRUCTED (bug 083 removed Proof.provedFunctions); kept only to
+                --   keep this change small beside concurrent ProofCore edits. Delete with its arms.
   | registry    -- synthesized from in-source proof links
   deriving BEq, Repr
 
@@ -1782,11 +1783,17 @@ structure SpecAttachment where
   expectedHash : Option String := none  -- stored short hash (in-source #[proof_fingerprint]);
                                          -- when set, staleness compares hash(currentFp) against it
 
-/-- Resolve spec attachment for a single function. Checks registry first,
-    then Proof.provedFunctions. Returns none if no spec is attached. -/
+/-- Resolve spec attachment for a single function: ONLY an in-source proof link
+    (`#[spec]`/`#[proof_by]`/`#[proof_fingerprint]`, synthesized into `registry`)
+    attaches a claim. Returns none if the source makes no claim.
+
+    There is deliberately no name-keyed fallback. Bug 083: a compiler-side table
+    keyed by qualified name alone (`Proof.provedFunctions`) attached a claim to ANY
+    program that happened to define `main.compute_tag`, with v1 body-string
+    freshness, so code that claimed nothing was reported `proved`. A claim must be
+    made by the source it is about. -/
 private def resolveSpec (qualName : String)
     (registry : ProofRegistry) : Option SpecAttachment :=
-  -- Check registry first
   match registry.find? fun re => re.function == qualName with
   | some re => some {
       specId := { name := re.spec }
@@ -1794,16 +1801,7 @@ private def resolveSpec (qualName : String)
       source := .registry
       expectedFp := re.bodyFingerprint
       expectedHash := re.expectedHash }
-  | none =>
-    -- Check hardcoded
-    match Proof.provedFunctions.find? fun (name, _, _) => name == qualName with
-    | some (name, efp, theoremName) =>
-      some {
-        specId := { name := name ++ ".spec" }
-        proofName := theoremName
-        source := .hardcoded
-        expectedFp := efp }
-    | none => none
+  | none => none
 
 -- ============================================================
 -- Obligation model
@@ -3358,9 +3356,8 @@ private def deriveObligationStatus
   -- below would then be the current body against itself: not a check, and it
   -- kept such claims `proved` through any edit. With no stored subject there is
   -- nothing to be fresh against, so the claim needs re-verification by
-  -- construction — never `proved`. (`.hardcoded` attachments come from
-  -- Proof.provedFunctions and carry a real expectedFp, so they keep the
-  -- string compare.)
+  -- construction — never `proved`. (`.hardcoded` attachments are no longer
+  -- constructed: bug 083 deleted the name-keyed Proof.provedFunctions table.)
   let isUnbound := fun (a : SpecAttachment) =>
     a.source == .registry && a.expectedHash.isNone
   -- A STORED VALUE WITHOUT THE `v2:` PREFIX IS A V1 VALUE BY CONSTRUCTION, and the prefix is the
@@ -3712,7 +3709,7 @@ private def generateDiagnostics
     is built from the assembled `ProofCore` and the obligations are generated before it exists.
     Inlining a second, lighter correspondence derivation there would be two answers to one question.
 
-    ITS LIVE CASE IS `tests/programs/proof_decode_header.con`, whose hardcoded proof link names
+    ITS LIVE CASE IS `tests/programs/proof_decode_header.con`, whose in-source proof link names
     `proofFnsExt` — a table with ZERO canonical entries. A table with no entries can describe no
     definitions, so nothing states that the theorem is about THAT program's `parse_byte`, and both
     body edges are unjustified. Measured across the fixture corpus: 35 proved, 0 unjustified.

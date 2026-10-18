@@ -2573,51 +2573,12 @@ theorem while_step_exit
 -- the fixedCapacityFns table, and the spec PExprs stay here.
 
 -- ============================================================
--- Proved functions registry
+-- (Removed) proved-functions table
 -- ============================================================
-
-/-- Functions with completed Lean proofs. The effects report upgrades
-    evidence level from "enforced" to "proved" for these functions.
-    Each entry is (qualified function name, expected body fingerprint).
-    The qualified name is `module.fn` (e.g., `main.parse_byte`), so
-    same-named functions in different modules are disambiguated.
-    If the function body changes, the fingerprint will not match and
-    "proved" evidence is revoked — the proof must be updated to match. -/
-def provedFunctions : List (String × String × String) :=
-  [ ("main.parse_byte",
-     "[(ret (binop Concrete.BinOp.add (var data) (var offset)))]",
-     "Concrete.Proof.parse_byte_correct")
-  , ("main.check_length",
-     "[(if (binop Concrete.BinOp.lt (var len) (int 10)) [(ret (int 1))]) (ret (int 0))]",
-     "Concrete.Proof.check_length_rejects_short")
-  , ("main.decode_header",
-     "[(if (binop Concrete.BinOp.neq (call check_length (var len)) (int 0)) [(ret (int 1))]) (let version (call parse_byte (var data) (int 0))) (if (binop Concrete.BinOp.lt (var version) (int 1)) [(ret (int 2))]) (if (binop Concrete.BinOp.gt (var version) (int 2)) [(ret (int 2))]) (let payload_len (call parse_byte (var data) (int 1))) (if (binop Concrete.BinOp.gt (var payload_len) (binop Concrete.BinOp.sub (var len) (int 10))) [(ret (int 3))]) (ret (int 0))]",
-     "Concrete.Proof.decode_header_rejects_short")
-  , ("main.compute_tag",
-     "[(ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var key) (var message)) (var nonce)))]",
-     "Examples.CryptoVerify.Proofs.compute_tag_correct")
-  , ("main.verify_tag",
-     "[(let computed (call compute_tag (var key) (var message) (var nonce))) (if (binop Concrete.BinOp.eq (var computed) (var expected_tag)) [(ret (int 1))] [(ret (int 0))])]",
-     "Examples.CryptoVerify.Proofs.verify_tag_correct")
-  , ("main.check_nonce",
-     "[(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]",
-     "Examples.CryptoVerify.Proofs.check_nonce_correct")
-  , ("main.check_magic",
-     "[(if (binop Concrete.BinOp.eq (var b0) (int 127)) [(if (binop Concrete.BinOp.eq (var b1) (int 69)) [(if (binop Concrete.BinOp.eq (var b2) (int 76)) [(if (binop Concrete.BinOp.eq (var b3) (int 70)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])]",
-     "Examples.ElfHeader.Proofs.check_magic_correct")
-  , ("main.check_class",
-     "[(if (binop Concrete.BinOp.eq (var cls) (int 1)) [(ret (int 1))] [(if (binop Concrete.BinOp.eq (var cls) (int 2)) [(ret (int 1))] [(ret (int 0))])])]",
-     "Examples.ElfHeader.Proofs.check_class_correct")
-  , ("main.check_data",
-     "[(if (binop Concrete.BinOp.eq (var encoding) (int 1)) [(ret (int 1))] [(if (binop Concrete.BinOp.eq (var encoding) (int 2)) [(ret (int 1))] [(ret (int 0))])])]",
-     "Examples.ElfHeader.Proofs.check_data_correct")
-  , ("main.check_version",
-     "[(if (binop Concrete.BinOp.eq (var ver) (int 1)) [(ret (int 1))] [(ret (int 0))])]",
-     "Examples.ElfHeader.Proofs.check_version_correct")
-  , ("main.validate_header",
-     "[(let magic_ok (call check_magic (var b0) (var b1) (var b2) (var b3))) (if (binop Concrete.BinOp.eq (var magic_ok) (int 1)) [(let cls_ok (call check_class (var cls))) (if (binop Concrete.BinOp.eq (var cls_ok) (int 1)) [(let enc_ok (call check_data (var encoding))) (if (binop Concrete.BinOp.eq (var enc_ok) (int 1)) [(let ver_ok (call check_version (var ver))) (if (binop Concrete.BinOp.eq (var ver_ok) (int 1)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])]",
-     "Examples.ElfHeader.Proofs.validate_header_correct")
-  ]
+-- `provedFunctions` — a list of (qualified name, v1 body string, theorem) — used to attach a
+-- claim to ANY program defining a function of that name, with no in-source link. Bug 083
+-- (docs/bugs/083_name_keyed_proof_fallback.md) deleted it: a claim now requires an explicit
+-- `#[spec]` + `#[proof_by]` + `#[proof_fingerprint("v2:…")]` link on the function itself.
 
 -- ============================================================
 -- constant_time_tag — first real-crypto candidate.

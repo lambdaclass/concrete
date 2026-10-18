@@ -1088,7 +1088,8 @@ private partial def collectProofStatus
     let regEntry := registry.find? fun re => re.function == qualName
     let coverage := match regEntry with | some re => re.coverage | none => ""
     -- Registry entries are always synthesized from in-source links now (JSON
-    -- registries were removed); `hardcoded` is a built-in Proof.provedFunctions proof.
+    -- registries were removed). No other origin exists since bug 083 deleted the
+    -- name-keyed Proof.provedFunctions fallback; the `hardcoded` arm is unreachable.
     let origin := match regEntry with
       | some _ => "source_linked"
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
@@ -3995,7 +3996,7 @@ def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
     let status := match obl with | some o => o.status.canonical | none => "missing"
     let origin := match regEntry with
       | some re => if re.sourceLinked then "source_linked" else "hardcoded"
-      | none => "hardcoded"
+      | none => ""  -- no link, no origin (bug 083: there is no name-keyed fallback to name)
     -- proof_link
     let linkJson := match regEntry with
       | some re => String.join [

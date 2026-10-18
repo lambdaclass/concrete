@@ -279,7 +279,7 @@ theorem is absent.
 concrete src/main.con --report proof-status
 ```
 
-Shows all functions with their complete proof state: status, fingerprint, spec, proof name, origin (`source_linked`/`hardcoded`), dependencies, and source location.
+Shows all functions with their complete proof state: status, fingerprint, spec, proof name, origin (`source_linked`; `hardcoded` is no longer produced since bug 083), dependencies, and source location.
 
 ---
 

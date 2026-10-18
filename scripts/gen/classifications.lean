@@ -4,14 +4,12 @@
 -- The compiler imports neither and cannot: `Examples` imports `Concrete`, so importing the
 -- proofs from `Concrete` would be a cycle. The answer is computed here and checked in as data.
 --
--- THE NAME SET IS THE UNION OF BOTH WAYS A PROOF CAN BE ATTACHED, and getting that wrong is
--- how the first version of this table looked complete while missing a third of the corpus:
+-- THE NAME SET IS EVERY WAY A PROOF CAN BE ATTACHED: `#[proof_by(...)]` / `#[ensures_proof(...)]`
+-- in SOURCE, spliced in below by `scripts/gen/refresh_classifications.sh`, which greps them from
+-- examples/, std/src/ and tests/. (It used to be a union with the hardcoded `Proof.provedFunctions`
+-- table; bug 083 deleted that table, so in-source links are now the ONLY way to attach a claim.)
 --
---   * `Proof.provedFunctions` — the hardcoded table;
---   * `#[proof_by(...)]` / `#[ensures_proof(...)]` in SOURCE — spliced in below by
---     `scripts/gen/refresh_classifications.sh`, which greps them from examples/.
---
--- `main.verify_message` was `proved` with a REFUSING dependency root because only the first
+-- `main.verify_message` was `proved` with a REFUSING dependency root because only the hardcoded
 -- set was enumerated. Its theorem classifies as `body` perfectly well; nobody had asked.
 --
 -- Regenerate: bash scripts/gen/refresh_classifications.sh
@@ -21,8 +19,11 @@ open Lean Meta Concrete Concrete.Proof
 
 /-- Source-linked proof names, spliced by the refresh script. -/
 def sourceLinkedThms : List Name :=
-  [ `Concrete.Proof.compute_checksum_correct,
+  [ `Concrete.Proof.check_length_rejects_short,
+    `Concrete.Proof.compute_checksum_correct,
+    `Concrete.Proof.decode_header_rejects_short,
     `Concrete.Proof.drift_test_theorem,
+    `Concrete.Proof.parse_byte_correct,
     `Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct,
     `Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct,
     `Examples.CryptoVerify.Proofs.check_nonce_correct,
@@ -167,8 +168,7 @@ partial def conclusionSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
     | _, _ => return []
 
 #eval show MetaM Unit from do
-  let hardcoded := (Proof.provedFunctions.map (fun t => t.2.2)).map (·.toName)
-  let names := (hardcoded ++ sourceLinkedThms).eraseDups
+  let names := sourceLinkedThms.eraseDups
   let rows ← classifyAll names
   -- Rows whose edge is `unclassified` are OMITTED: `classifiedEdgeOf` already answers
   -- `unclassified` for an absent name, so listing them would state the default twice and grow

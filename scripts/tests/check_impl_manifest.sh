@@ -83,10 +83,13 @@ fi
 # THE MEASURED STATE, asserted as exact values. A ratchet would be wrong here: `rows` rising is
 # good, but `expected` rising while `rows` does not is a new incompleteness, and one number moving
 # in each direction can leave a ratchet green.
-if [ "$TOT_EXPECTED" = "64" ] && [ "$TOT_ROWS" = "63" ] && [ "$TOT_REFUSED" = "1" ]; then
-  ok "corpus accounting is exactly expected=64 rows=63 refused=1"
+# 64/63/1 -> 72/71/1 on 2026-10-18 (bug 083): the deleted name-keyed `provedFunctions` table's claims
+# moved into source, so thesis_demo/src/main.con (3 subjects), main_drifted.con (2) and
+# crypto_verify_drifted (3) joined the stored-link population, each with an extracted body.
+if [ "$TOT_EXPECTED" = "72" ] && [ "$TOT_ROWS" = "71" ] && [ "$TOT_REFUSED" = "1" ]; then
+  ok "corpus accounting is exactly expected=72 rows=71 refused=1"
 else
-  no "corpus accounting moved: expected=$TOT_EXPECTED rows=$TOT_ROWS refused=$TOT_REFUSED (was 64/63/1) — if rows rose because an entry gained an extracted body, update this and say so"
+  no "corpus accounting moved: expected=$TOT_EXPECTED rows=$TOT_ROWS refused=$TOT_REFUSED (was 72/71/1) — if rows rose because an entry gained an extracted body, update this and say so"
 fi
 
 # The refusal must be NAMED, not merely counted. An unnamed refusal is a smaller number wearing a

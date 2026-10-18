@@ -1,9 +1,13 @@
 // Adversarial: parse_byte has DIFFERENT semantics than the proved version.
 // The Lean proof says parse_byte(a, b) = a + b.
-// This version does a * b. The report should still say "proved" because
-// the registry only checks names — this is a known limitation.
-// This test documents the gap so it can be closed later.
+// This version does a * b while carrying the link (and v2 pin) written for
+// a + b, so the stored subject no longer matches: the claim must be stale,
+// never proved. (Before bug 083 the link came from a name-keyed compiler
+// table; it is now in-source like every other claim.)
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(data: Int, offset: Int) -> Int {
     return data * offset;
 }

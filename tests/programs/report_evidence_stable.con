@@ -5,6 +5,9 @@ fn helper(x: Int) -> Int {
     return x * 2;
 }
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(data: Int, offset: Int) -> Int {
     return data + offset;
 }

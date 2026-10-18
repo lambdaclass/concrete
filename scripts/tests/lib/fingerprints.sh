@@ -22,7 +22,11 @@ FP_PATTERN='#\[proof_fingerprint\("(v2:)?[a-f0-9]+"\)\]'
 # The pinned migration population. Keep the value beside the population definition so the V1
 # golden and migration-manifest gates cannot silently certify different denominators.
 # 44 -> 43 on 2026-08-18 when the misattached proof_pressure.validate_header claim was deleted.
-FP_EXPECTED_COUNT=43
+# 43 -> 50 on 2026-10-18 (bug 083): the name-keyed `provedFunctions` table was deleted and the examples
+# it served now store their links in source — thesis_demo/src/main.con (2), main_drifted.con (2),
+# crypto_verify_drifted (3). These are v2 pins written fresh, not V1 values; they join the stored
+# population because they are stored links, the only kind there now is.
+FP_EXPECTED_COUNT=50
 
 # Files under `examples/` containing at least one stored link.
 fp_files() { grep -rlE "$FP_PATTERN" examples/ 2>/dev/null | sort -u; }

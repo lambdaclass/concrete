@@ -4,8 +4,8 @@
 # Concrete.Proof.*), example-CORRECTNESS theorems for the seven flagships live in
 # their per-example module `Examples.<Ex>.Proofs` (namespace
 # `Examples.<Ex>.Proofs`). Concrete.Proof keeps proof INFRASTRUCTURE plus the
-# theorems of the hardcoded `provedFunctions` proof path (see below). The
-# registered spec PExprs, eval scaffolding, `specs`/`provedFunctions` tables, etc.
+# theorems of the parser-core proof path (see below). The registered spec PExprs,
+# eval scaffolding, `specs` tables, etc.
 # are `def`s, not theorems, so they stay freely.
 #
 # `check_proof_namespace.sh` fails if Concrete/Proof/Proof.lean declares a theorem/lemma
@@ -42,14 +42,13 @@ lookupIndex_set_self
 wrapInt_unsigned_of_lt
 wrapInt_bv_toNat
 
-# --- Live: the hardcoded `provedFunctions` proof path. These prove the
-#     parse_byte / check_length / decode_header (+ validate) functions correct
-#     and are consumed via `Concrete.Proof.provedFunctions` by `thesis_demo`,
-#     `packet`, and the proof-evidence test suite under tests/programs/ (e.g.
-#     proof_decode_header, report_evidence_*, the adversarial_proof_* fixtures).
-#     They are NOT example cruft and NOT dead; they are the non-source-linked
-#     evidence path the compiler still supports. (If that path is ever retired,
-#     delete these together with the provedFunctions table.) ---
+# --- Live: the parser-core proof path. These prove the parse_byte /
+#     check_length / decode_header (+ validate) functions correct and are
+#     consumed through IN-SOURCE #[proof_by] links by `thesis_demo` and the
+#     proof-evidence test suite under tests/programs/ (e.g. proof_decode_header,
+#     report_evidence_*, the adversarial_proof_* fixtures). They used to be
+#     reached through the name-keyed `provedFunctions` table, which bug 083
+#     deleted; the links that replaced it name these theorems directly. ---
 parse_byte_10_3
 parse_byte_boundary
 parse_byte_correct

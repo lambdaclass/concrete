@@ -76,10 +76,16 @@ fi
 # (`count_up_loop_preserves` evaluates no specification), `contract_negatives/fabricated_proof`'s `cn.f`
 # and `proof_patterns/repair`'s `needs_proof` (both link theorems that do not exist). The denominator
 # is unchanged: the claims did not leave the eligible set, they stopped counting as proved.
-if [ "$PROVED" = "32" ] && [ "$ELIGIBLE" = "91" ]; then
-  ok "BASELINE: 32 of 91 eligible claims are proved (2026-10-17, exact)"
+# 32 of 91 -> 35 of 99 on 2026-10-18 (bug 083): the name-keyed `provedFunctions` table was deleted, so
+# three files that relied on it now carry in-source links and JOIN this population. Eight eligible
+# functions enter: `thesis_demo/src/main.con` parse_byte + check_length (proved) and validate (no
+# proof); `thesis_demo/src/main_drifted.con` check_length (proved) and parse_byte (stale, its drift);
+# `crypto_verify_drifted` compute_tag + check_nonce (stale, its drift) and verify_tag (deps not
+# current). No existing member moved.
+if [ "$PROVED" = "35" ] && [ "$ELIGIBLE" = "99" ]; then
+  ok "BASELINE: 35 of 99 eligible claims are proved (2026-10-18, exact)"
 else
-  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 32 of 91) — say which claims changed and why"
+  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 35 of 99) — say which claims changed and why"
 fi
 # 31/15 -> 32/14 on 2026-08-18: ONE claim moved from `unbound` to `no-proof`, and the sum is
 # unchanged. `proof_pressure.validate_header` had its misattributed `#[proof_by]` deleted, leaving
@@ -89,9 +95,11 @@ fi
 #
 # Recorded as a transition rather than two independent edits, because that is what makes it
 # checkable: any other movement changes the sum, and this one provably does not.
-if [ "$STALE" = "5" ] && [ "$UNBOUND" = "14" ] && [ "$DEPSNC" = "4" ] && [ "$UNJUST" = "0" ] \
-   && [ "$NOPROOF" = "32" ] && [ "$BLOCKED" = "1" ]; then
-  ok "the unproved dispositions are exactly 32 no-proof / 14 unbound / 5 stale / 4 deps-not-current / 1 blocked / 0 unjustified"
+# 32/14/5/4 -> 33/14/8/5 on 2026-10-18 (bug 083): the five unproved entrants named above — +1 no-proof,
+# +3 stale, +1 deps-not-current.
+if [ "$STALE" = "8" ] && [ "$UNBOUND" = "14" ] && [ "$DEPSNC" = "5" ] && [ "$UNJUST" = "0" ] \
+   && [ "$NOPROOF" = "33" ] && [ "$BLOCKED" = "1" ]; then
+  ok "the unproved dispositions are exactly 33 no-proof / 14 unbound / 8 stale / 5 deps-not-current / 1 blocked / 0 unjustified"
 else
   no "unproved dispositions moved: no-proof=$NOPROOF unbound=$UNBOUND stale=$STALE deps=$DEPSNC blocked=$BLOCKED unjustified=$UNJUST"
 fi

@@ -1,11 +1,14 @@
 // Adversarial: function with same name but different arity should not be proved
 //
-// main.parse_byte has a registered proof for (data: Int, offset: Int) -> Int.
-// This file defines parse_byte with only one parameter. The body fingerprint
-// will differ because the body references different variables.
+// The link (and v2 pin) below were written for parse_byte(data: Int, offset: Int) -> Int.
+// This file defines parse_byte with only one parameter, so the stored subject
+// (signature and body) no longer matches.
 //
 // Expected: parse_byte → enforced (proof stale or just enforced, not proved)
 
+#[spec(Concrete.Proof.parseByteExpr)]
+#[proof_by(Concrete.Proof.parse_byte_correct)]
+#[proof_fingerprint("v2:1c3e21f465653bc6296626b22c6aeedd")]
 fn parse_byte(x: Int) -> Int {
     return x + 1;
 }
