@@ -2,7 +2,7 @@
 
 Status: planned, 2026-10-18. Owners: R-0491 – R-0510 in [ROADMAP.md](../../ROADMAP.md), with
 R-0299, R-0300, R-0353, R-0413 and R-0460 linked where named. The architecture reconciles two
-independent designs (a Claude design agent and Codex) and three Codex reviews of earlier drafts (35
+independent designs (a Claude design agent and Codex) and four Codex reviews of earlier drafts (42
 findings, all applied).
 
 ## Goal
@@ -139,7 +139,7 @@ structure, not to individual functions:
 | **HIR** | resolved surface: scoped `LocalId`/`DefId`, spans | defined by elaboration into Core | AST after Resolve/desugar |
 | **Core** | the language definition: typed operations (checked/wrapping/saturating as distinct op kinds, signedness on the op, pointer arithmetic its own op), places vs operands, copy/move on every operand, borrows, explicit destruction, structured control, scoped `defer`, capability-tagged external operations | structured values, places and allocation identities for safe operations; a specified byte-and-provenance memory component for raw operations and FFI, connected to typed values by a representation relation; ownership instrumentation with a proved erasure theorem | `Elab/Core.lean`; `Interp.lean` becomes this semantics plus an IO driver |
 | **Mono Core** | concrete type/capability substitutions, resolved impls and trait evidence | same semantics, separate artifact `CheckedMonoCore` produced by S8a | `Mono.lean` |
-| **Place MIR** | typed non-SSA CFG: fixed evaluation order, match decision trees, cleanup/`defer` edges on every exit, loan boundaries, explicit runtime checks; symbolic fields, stable storage identities | value semantics over places | the first half of `Lower.lean` (defer ~:1525 – 1554, match, promotion ~:559, bounds ~:171) |
+| **Place MIR** | typed non-SSA CFG: fixed evaluation order, match decision trees, cleanup/`defer` edges on every exit, loan boundaries, explicit runtime checks; symbolic fields, stable storage identities | Core's structured values and byte/provenance memory over stable places, preserving the typed/raw representation relation | the first half of `Lower.lean` (defer ~:1525 – 1554, match, promotion ~:559, bounds ~:171) |
 | **Memory CFG** | layout from the single `Layout` authority, offsets, alignment, loads/stores, allocation/free, scalar representations | CompCert block–offset memory (bytes, pointer fragments, undef, permissions) | the second half of `Lower.lean`, `Layout.lean` |
 | **BIR** | CFG with block arguments (no phi instruction; SSA is a well-formedness property, not semantics), `RegId`/`BlockId`, `add.ovf`-style ops returning (value, flag), `trap` terminator | block memory | `SSA.lean` (which has both `phi` and block params today) |
 | **Machine IR → allocated Machine IR** | AArch64 operations and addressing modes, virtual then physical registers, spills, calling convention, frames | block memory + frame | new |
@@ -295,7 +295,7 @@ paragraph to its semantic clause.
 
 ### Track B — foundation
 
-**S5 Identities and immutable artifacts (R-0492).** `LocalId` for every binder, allocated at
+**S5 Identities and immutable artifacts (R-0492 identities, R-0497 artifacts).** `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration
 handle allocated before body elaboration, preserving callable namespaces, specialization arguments
 and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentity` mapping at evidence
@@ -345,7 +345,7 @@ or executes the bounds trap). A Core checker implementing them runs as a shadow 
 checker with a disagreement gate, then becomes authoritative and emits `CheckedCore` plus its
 derivation; capabilities are re-checked after Mono. A rule-violation fuzzer applies one
 rule-breaking mutation to accepted programs (including destroying a source while an
-aggregate-held reference is live, conflicting borrows, reaching a capability through a pointer or
+permitted local or downward reference is live, conflicting borrows, reaching a capability through a pointer or
 generic, raw dereference outside both `trusted` and `Unsafe`); valid programs that must trap are
 not checker rejections. Positive controls: trusted raw-pointer operations and trusted absorption of
 `Unsafe` accepted; trusted absorption of any other effect rejected. The instrumented semantics is
@@ -376,8 +376,13 @@ Core's semantics on the exact checked term; ProofKit's symbolic-evaluation simp 
 `PExpr` theorems ported (through an explicitly proved bridge where cheaper), keeping weaker coverage
 where that is what was proved; `Proof.eval` and extraction deleted; Core-proved vs
 binary-transported status.
+R-0495 checks coverage relation and domain against the exact generated proposition; author
+annotations confer no authority. Loop claims bind the exact checked Core loop and its
+initialization, preservation and exit obligations; missing binding remains `spec_unbound`.
 **Exit:** every positive claim replays against its generated statement; negative fixtures refuse;
-`PExpr`, its evaluator and the classification theorem scan are deleted.
+`PExpr`, its evaluator and the classification theorem scan are deleted; wrong-coverage,
+narrowed-domain and substituted-loop controls are refused through status, issuance, consumption and
+independent replay.
 
 ### Track C — the lower pipeline
 
@@ -392,8 +397,8 @@ minimum counts; cleanup expansion is proved for one representative function with
 quasi-concrete address exposure; `Layout` as the single proved authority; Memory CFG; BIR with block
 arguments, `.ovf` ops and `trap` terminators, each with a semantics; LLVM printed from BIR; the
 emitter decides no semantics; runtime helpers moved into the `rt` module; the backend contract text
-generated from BIR op semantics. New lowering runs as a shadow path; when outputs agree on the
-corpus the old `Lower` is deleted.
+generated from BIR op semantics. New lowering runs as a shadow path; the old `Lower` is retired
+only after the complete replacement path meets its gates.
 **Exit (R-0502):** Memory CFG has executable semantics and a verifier; `Layout` emits checked
 representation certificates; Place MIR → Memory CFG comparisons cover related values and stores,
 traces, traps, allocation and alignment cases; a representative memory-injection lemma is proved.
@@ -417,12 +422,16 @@ runtime/ABI behaviour remain explicitly trusted for that profile.
 **S12a Stated obligations and totality (R-0506).** Starts with S5 and grows as each boundary lands
 — including S13 and linking — rather than after the lower pipeline: every pass's `Refines` and
 every validator's soundness are type-checked Lean `Prop`s in `PassObligations.lean`, with explicit
-premises and a ledger (stated / differentially tested / proved); `axiom` and `sorry` are refused in
-anything evidence depends on; a totality lint covers semantics, checkers, validators and proved
+premises and a ledger (stated / differentially tested / proved); `sorryAx` and unregistered axioms
+are rejected transitively, kernel-only evidence permits only `propext`, `Classical.choice` and
+`Quot.sound`, and registered native-evaluation and float axioms require separate trust labels; a totality lint covers semantics, checkers, validators and proved
 passes (untrusted search may stay partial).
 **Exit:** every registered boundary, including the native backend and linking, has a type-checked
 obligation with explicit premises and status; evidence dependencies pass the declared axiom policy;
-semantics, checkers, validators and proved passes pass the totality gate.
+semantics, checkers, validators and proved passes pass the totality gate. Before each boundary is frozen, its
+semantic relations and obligations type-check and a representative preservation or
+validator-soundness lemma is proved for its motivating feature, including native encoding and
+linking.
 
 **S13 Native AArch64 backend, linking and image (R-0505; with R-0297).** For the full first profile
 (AArch64, Apple ARM64 ABI, macOS, Mach-O): Machine IR, instruction selection, frame construction,
@@ -460,8 +469,9 @@ independently specified syntax, resolution and elaboration judgments (a relation
 "whatever the elaborator produces" does not count). Prove VC generation against Core (R-0460).
 Each binary-transported claim cites a theorem that its proposition is preserved by the refinement
 relation; receipts record the theorem, profile and compiler build.
-**Exit:** the composed theorem is proved and re-checked by con-leche and nanoda, and states
-explicitly whether it starts from source text, HIR or `CheckedCore`; every binary-transported claim
+**Exit:** the composed source-bytes-and-import-roots-to-native-image theorem, including
+independently specified frontend correspondence, is proved and re-checked by con-leche and nanoda.
+HIR-only and `CheckedCore`-only theorems are intermediate milestones. Every binary-transported claim
 cites its preservation theorem.
 
 **S16 Trusted base and independent evidence check (R-0509; with R-0353, R-0413).** `std`'s trusted
@@ -478,13 +488,15 @@ native-evaluation and float axioms stay separately labelled. R-0413 dogfoods the
 the compiler.
 **Exit:** the inventory names every remaining assumption and owner; R-0353's acceptance criteria
 pass with every 079 – 095 fixture pinning its expected result vector, and no envelope or replay
-success upgrades an unchecked semantic edge.
+success upgrades an unchecked semantic edge. Statement generation, subject/proposition binding, verdict aggregation and
+retained-artifact checking have proved soundness, with transitive assumptions classified by the
+axiom-policy gate.
 
 ## Order
 
 ```
 Track A: S1 ─ S2 ─ S3 ─ S4                                         (now, parallel)
-Track B: S5 ─► S6 ─► S7 ─► S8 ─► S8a ─► S9
+Track B: S5 ─► S6 ─► S7 ─► S8;   S8 ─► S8a;   S2+S7+S8 ─► S9
          S12a starts with S5 and registers each boundary as it lands
 Track C:                     S8a ─► S10 ─► S11 ─► S12 ─► S13
 Part 2:  S7+S8 ─► S14;   all of the above ─► S15;   S16 inventory starts now

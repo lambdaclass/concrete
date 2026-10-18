@@ -32,7 +32,7 @@ the next transition; completed milestones move to the changelog rather than accu
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **Verified-compiler pipeline, foundation (R-0491–R-0494, R-0496–R-0500)** | the prevention harness fails its assigned differential, name-binding, evidence and checker controls at the pre-fix SHAs of 080–095 and passes at their fixes, with pinned minimum completed-comparison counts; one `Verdict` authority renders every surface; every enforcement claim has a gate leg and a killed targeted mutation; disputed language rules are written down; identities replace strings from Resolve on and pipeline artifacts are immutable; integer operations carry kind and width with one `IntArith`; Core has its executable semantics, which the interpreter is; the authoritative checker runs on Core and the source checker holds no ownership, borrow or capability rule. Claims on Core, the lower pipeline, validators, the native backend and the proofs (R-0495, R-0501–R-0510) continue beside rows 3–4. See [the plan](docs/compiler/VERIFIED_PIPELINE.md) |
+| 2 | **Verified-compiler pipeline, foundation (R-0491–R-0494, R-0496–R-0500)** | the prevention harness fails its assigned differential, name-binding, evidence and checker controls at the pre-fix SHAs of 080–095 and passes at their fixes, with pinned minimum completed-comparison counts; one `Verdict` authority renders every surface; every enforcement claim has a gate leg and a killed targeted mutation; disputed language rules are written down; identities replace strings from Resolve on and pipeline artifacts are immutable; integer operations carry kind and width with one `IntArith`; Core has its executable semantics, which the interpreter is; the authoritative checker runs on Core and the source checker holds no ownership, borrow or capability rule. R-0506's obligations, representative proofs, totality gate and axiom-policy gate cover every boundary introduced by this row; coverage extends as later boundaries land. Claims on Core, the lower pipeline, validators, the native backend and the proofs (R-0495, R-0501–R-0510) continue beside rows 3–4. See [the plan](docs/compiler/VERIFIED_PIPELINE.md) |
 | 3 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
 | 4 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
 | 5 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
@@ -76,12 +76,9 @@ remain are recorded here so the queue does not read as if rows 0–1 settle soun
 - **The checker's own rules** — linear ownership, second-class references, capabilities, the Unsafe
   boundary — are enforced and gated but have no soundness proof; R-0499 moves them onto Core as
   declarative rules and R-0507 proves them.
-- **`#[proof_coverage]` is author-declared.** Bug 079 checks which body a theorem is about, not that its
-  statement has the declared shape (`iff`, `one_direction`, …). A checked statement-shape
-  classification belongs with the bug 079 generator.
-- **Loop-invariant claims have no binding.** `loop_invariant.count_up` is `spec_unbound` since bug 079:
-  its theorem is about a loop-assignment list, which nothing ties to the source loop. Binding
-  loop-assignment specifications to extracted loop bodies restores it honestly.
+- **Coverage classification and loop binding:** R-0495 owns checked proposition coverage and exact
+  checked-Core loop binding. Unsupported classification or missing loop binding cannot grant proof
+  authority.
 - **Trusted std boundaries** (`trusted impl Bytes`, IO and others) rest on human audit; claims reaching
   them say "carries trust".
 - **Local validation misses one CI step.** The checker-acceptance step and its frozen claim inventory
@@ -102,9 +99,10 @@ semantics. The [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md) 
 reconciles two independent architecture designs and Codex's reviews into one target: Core as the
 language definition with an executable semantics, the authoritative checker on Core, `PExpr`
 retired in favour of claims on Core, a Place MIR → Memory CFG → BIR lower pipeline each with a
-semantics, LLVM as a thin unverified printer, and a native AArch64 backend designed for proof.
-Part 1 builds that pipeline so every theorem is statable without restructuring; Part 2 proves
-them. Queue row 2 is Part 1's foundation; the rest is a permanent track beside rows 3 – 4. Every
+semantics, LLVM behind a specified, unverified BIR-to-LLVM adapter, and a native AArch64 backend
+designed for proof. Part 1 establishes semantic interfaces, states obligations and proves
+representative cases before dependent implementations freeze; Part 2 completes proofs for the
+admitted profile. Queue row 2 is Part 1's foundation; the rest is a permanent track beside rows 3 – 4. Every
 slice is reviewed by Codex before publication, the proof surface is feature-frozen until the
 verdict authority and claims-on-Core land, and the fixes for 081 – 095 land first (row 0).
 
@@ -15782,7 +15780,7 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts become immutable and payload-bound (`ValidatedCore` is
+explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (`ValidatedCore` is
 publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
 Language: no block `let` shadowing a visible name; colliding import aliases rejected; match binders
 equal or name their field.
@@ -15837,8 +15835,13 @@ Core's semantics on the exact checked term; ProofKit's symbolic-evaluation simp 
 where that is what was proved; `Proof.eval` and extraction deleted; Core-proved vs
 binary-transported status.
 
+R-0495 checks coverage relation and domain against the exact generated proposition; author
+annotations confer no authority. Loop claims bind the exact checked Core loop and its
+initialization, preservation and exit obligations; missing binding remains `spec_unbound`.
 **Exit:** every positive claim replays against its generated statement; negative fixtures refuse;
-`PExpr`, its evaluator and the classification theorem scan are deleted.
+`PExpr`, its evaluator and the classification theorem scan are deleted; wrong-coverage,
+narrowed-domain and substituted-loop controls are refused through status, issuance, consumption and
+independent replay.
 
 ### Task R-0496
 
@@ -15867,7 +15870,7 @@ clauses; the representative lemmas are proved.
 
 **Status (2026-10-18): planned; starts with R-0492.**
 
-Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (`ValidatedCore` is publicly constructible today, `Pipeline.lean` ~:48); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → Mono Core → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
+Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (`ValidatedCore` is publicly constructible today, `Pipeline.lean` ~:48); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
 
 **Exit:** compile-fail controls cover artifact forgery, certificate reuse after mutation and the diagnostic-path bypass; `Pipeline.lean` exposes only typed stages.
 
@@ -15902,7 +15905,7 @@ or executes the bounds trap). A Core checker implementing them runs as a shadow 
 checker with a disagreement gate, then becomes authoritative and emits `CheckedCore` plus its
 derivation; capabilities are re-checked after Mono. A rule-violation fuzzer applies one
 rule-breaking mutation to accepted programs (including destroying a source while an
-aggregate-held reference is live, conflicting borrows, reaching a capability through a pointer or
+permitted local or downward reference is live, conflicting borrows, reaching a capability through a pointer or
 generic, raw dereference outside both `trusted` and `Unsafe`); valid programs that must trap are
 not checker rejections. Positive controls: trusted raw-pointer operations and trusted absorption of
 `Unsafe` accepted; trusted absorption of any other effect rejected. The instrumented semantics is
@@ -15954,12 +15957,7 @@ minimum counts; cleanup expansion is proved for one representative function with
 
 **Status (2026-10-18): planned.**
 
-Block–offset memory with permissions and
-quasi-concrete address exposure; `Layout` as the single proved authority; Memory CFG; BIR with block
-arguments, `.ovf` ops and `trap` terminators, each with a semantics; LLVM printed from BIR; the
-emitter decides no semantics; runtime helpers moved into the `rt` module; the backend contract text
-generated from BIR op semantics. New lowering runs as a shadow path; when outputs agree on the
-corpus the old `Lower` is deleted.
+Owns the shared raw-memory specification with S7, block–offset/provenance memory, `Layout`, representation certificates and Place MIR → Memory CFG lowering.
 
 **Exit:** Memory CFG has executable semantics and a verifier; `Layout` emits checked
 representation certificates; Place MIR → Memory CFG comparisons cover related values and stores,
@@ -15971,12 +15969,7 @@ traces, traps, allocation and alignment cases; a representative memory-injection
 
 **Status (2026-10-18): planned.**
 
-Block–offset memory with permissions and
-quasi-concrete address exposure; `Layout` as the single proved authority; Memory CFG; BIR with block
-arguments, `.ovf` ops and `trap` terminators, each with a semantics; LLVM printed from BIR; the
-emitter decides no semantics; runtime helpers moved into the `rt` module; the backend contract text
-generated from BIR op semantics. New lowering runs as a shadow path; when outputs agree on the
-corpus the old `Lower` is deleted.
+Depends on R-0502. Owns Memory CFG → BIR, BIR semantics and verification, LLVM adapter legalization, the `rt` migration, generated backend contracts and replacement-path qualification.
 
 **Exit (depends on R-0502):** LLVM is emitted only from validated BIR, under the adapter
 contract above; BIR semantics and differential gates run; `EmitBuiltins.lean`'s LLVM-AST helpers
@@ -16034,13 +16027,17 @@ premises.
 Starts with S5 and grows as each boundary lands
 — including S13 and linking — rather than after the lower pipeline: every pass's `Refines` and
 every validator's soundness are type-checked Lean `Prop`s in `PassObligations.lean`, with explicit
-premises and a ledger (stated / differentially tested / proved); `axiom` and `sorry` are refused in
-anything evidence depends on; a totality lint covers semantics, checkers, validators and proved
+premises and a ledger (stated / differentially tested / proved); `sorryAx` and unregistered axioms
+are rejected transitively, kernel-only evidence permits only `propext`, `Classical.choice` and
+`Quot.sound`, and registered native-evaluation and float axioms require separate trust labels; a totality lint covers semantics, checkers, validators and proved
 passes (untrusted search may stay partial).
 
 **Exit:** every registered boundary, including the native backend and linking, has a type-checked
 obligation with explicit premises and status; evidence dependencies pass the declared axiom policy;
-semantics, checkers, validators and proved passes pass the totality gate.
+semantics, checkers, validators and proved passes pass the totality gate. Before each boundary is frozen, its
+semantic relations and obligations type-check and a representative preservation or
+validator-soundness lemma is proved for its motivating feature, including native encoding and
+linking.
 
 ### Task R-0507
 
@@ -16072,8 +16069,9 @@ independently specified syntax, resolution and elaboration judgments (a relation
 Each binary-transported claim cites a theorem that its proposition is preserved by the refinement
 relation; receipts record the theorem, profile and compiler build.
 
-**Exit:** the composed theorem is proved and re-checked by con-leche and nanoda, and states
-explicitly whether it starts from source text, HIR or `CheckedCore`; every binary-transported claim
+**Exit:** the composed source-bytes-and-import-roots-to-native-image theorem, including
+independently specified frontend correspondence, is proved and re-checked by con-leche and nanoda.
+HIR-only and `CheckedCore`-only theorems are intermediate milestones. Every binary-transported claim
 cites its preservation theorem.
 
 ### Task R-0509
@@ -16097,7 +16095,9 @@ the compiler.
 
 **Exit:** the inventory names every remaining assumption and owner; R-0353's acceptance criteria
 pass with every 079 – 095 fixture pinning its expected result vector, and no envelope or replay
-success upgrades an unchecked semantic edge.
+success upgrades an unchecked semantic edge. Statement generation, subject/proposition binding, verdict aggregation and
+retained-artifact checking have proved soundness, with transitive assumptions classified by the
+axiom-policy gate.
 
 ### Task R-0510
 
@@ -16222,7 +16222,7 @@ direct SSA->LLVM path once parity is established.
  justifies another independent path.
 ### Task R-0297
 
-**Objective:** Supply target-specific Machine IR for R-0505's native AArch64 profile. QBE is independent and is not a prerequisite; R-0505 owns scheduling and native proof/validation exits. (Superseded objective, 2026-10-18: Introduce target-specific MIR only for a direct native backend forced after QBE, never as a prerequisite for QBE itself. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. Reuse the Phase)
+**Objective:** Supply target-specific Machine IR for R-0505's native AArch64 profile. QBE is independent and is not a prerequisite; R-0505 owns scheduling and native proof/validation exits. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. Reuse the Phase
 
   7.5 immutable per-function job/deterministic merge contract, but keep MIR
   architecture-specific rather than creating a lowest-common-denominator
@@ -16235,7 +16235,7 @@ implementation with a later Concrete implementation under R-0413; record the
 tradeoffs in [the Sparkle/native-backend analysis](research/compiler/sparkle-emitted-code-validation.md)
 and [QBE implementation research](research/compiler/qbe-in-concrete.md).
 Recommend Lean 4 first so executable target semantics and preservation theorems
-can be developed with the existing compiler. Begin, only when pulled, with one
+can be developed with the existing compiler. Begin under R-0505's schedule, with one
 explicit ISA/ABI/object-format target, integer/boolean functions and simple
 instruction selection with explicit stack locations. A full QBE reimplementation,
 optimizing register allocator and target matrix are not entrance requirements.
