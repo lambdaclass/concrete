@@ -1,0 +1,64 @@
+// Bug 087 regression: a block-scoped `let` that SHADOWS an outer binding
+// (an outer `let`, a parameter, or a binding visible in a loop body) must be
+// invisible once its block closes — lexical scoping. Pre-fix Elab gave the
+// inner and outer binder the same Core name, so the function-flat tables
+// below it disagreed: the interpreter read the outer value in shadow_if and
+// shadow_param while the compiled binary read the inner one, and BOTH
+// runtimes leaked the inner `k` out of the loop in shadow_loop. Each helper
+// returns its lexical answer; main returns 42 only if every one is right.
+mod m {
+    // Inner `x` is visible only inside the `if`; `return x` reads the outer 1.
+    fn shadow_if(a: i32) -> i32 {
+        let x: i32 = 1;
+        if a > 0 { let x: i32 = 100; let y: i32 = x; }
+        return x;
+    }
+    // Shadow inside a loop body; outer `k` (5) survives two iterations.
+    fn shadow_loop(a: i32) -> i32 {
+        let mut s: i32 = 0;
+        let k: i32 = 5;
+        for (let mut i: i32 = 0; i < 2; i = i + 1) {
+            let k: i32 = 1000;
+            s = s + k;
+        }
+        return s + k;
+    }
+    // Shadowing a PARAMETER inside a branch.
+    fn shadow_param(a: i32) -> i32 {
+        if a > 0 { let a: i32 = 7; }
+        return a;
+    }
+    // Same-block rebinding with a DIFFERENT type, then the outer read after
+    // an else-branch shadow; the inner value is used inside its block.
+    fn shadow_else(a: i32) -> i32 {
+        let v: i32 = 3;
+        let mut got: i32 = 0;
+        if a < 0 { got = 1; } else { let v: i64 = 40; got = v as i32; }
+        let v: bool = got == 40;
+        if v { return 9; }
+        return 0;
+    }
+    // Value-if branch and while body shadows.
+    fn shadow_value_if(a: i32) -> i32 {
+        let n: i32 = 2;
+        let r: i32 = if a > 0 { let n: i32 = 50; n + 1 } else { n };
+        let mut c: i32 = 0;
+        while c < 3 { let n: i32 = 1000; c = c + 1; }
+        return r + n;
+    }
+
+    fn main() -> Int {
+        let mut acc: i32 = 0;
+        if shadow_if(5) != 1 { return 1; }
+        acc = acc + 1;                       // 1
+        if shadow_loop(0) != 2005 { return 2; }
+        acc = acc + 2;                       // 3
+        if shadow_param(3) != 3 { return 3; }
+        acc = acc + 3;                       // 6
+        if shadow_else(1) != 9 { return 4; }
+        acc = acc + 9;                       // 15
+        if shadow_value_if(1) != 53 { return 5; }
+        acc = acc + 27;                      // 42
+        return acc as Int;
+    }
+}

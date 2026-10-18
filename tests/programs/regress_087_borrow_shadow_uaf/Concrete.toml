@@ -1,0 +1,3 @@
+[package]
+name = "regress_087_borrow_shadow_uaf"
+version = "0.1.0"

@@ -402,6 +402,68 @@ private def bindArmVar (binding : String) (ty : Ty) : ElabM String := do
     freshBinder := env.freshBinder + 1 }
   return fresh
 
+/-- Bug 087: bind a block-scoped local (`let`, borrow ref). Registers the type
+    under the surface name and returns the Core name to emit. A binding that
+    SHADOWS a visible name (a parameter, an outer `let`, an earlier `let` in the
+    same block, a match binder) is alpha-renamed like a match binder (bug 045),
+    so reads after the inner block closes resolve to the outer binder instead of
+    whichever store ran last. A non-shadowing binding keeps its spelling: Core
+    names of programs that never shadow do not churn, and a sibling scope's
+    reuse of a dead name is harmless because the earlier binder is no longer
+    readable (`exitBlock` removed it). -/
+private def bindLocal (name : String) (ty : Ty) : ElabM String := do
+  addBinder name
+  let env ← getEnv
+  let shadows := (env.vars.lookup name).isSome
+  let core := if shadows then s!"{name}.b{env.freshBinder}" else name
+  setEnv { env with
+    vars := (name, ty) :: env.vars
+    renames := (name, core) :: env.renames
+    freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
+  return core
+
+/-- Bug 087: enter a lexical block (if/else branch, value-if branch, loop body,
+    `for` header, borrow block). Returns the state to hand to `exitBlock`.
+
+    No binder frame is opened: these blocks' binders have always been recorded
+    in the enclosing frame, in source order, and every shipped proof
+    fingerprint is over that encoding. Opening a frame here would move the
+    digest of every body with a `let` inside a branch without changing what any
+    reference resolves to. Scoping is instead enforced at `exitBlock`. -/
+private def enterBlock : ElabM ElabEnv := getEnv
+
+/-- Bug 087: the binder frames after a block closes. Binders the block added
+    keep their POSITION (so later positions — and digests — are unchanged) but
+    become unresolvable: the name is replaced by a tombstone no surface
+    identifier can equal (identifiers cannot contain '.'). Without this, a read
+    of an outer `x` after `if c { let x = .. }` resolved to the inner binder,
+    because within one frame the last same-named binder wins. Frames are
+    innermost-first; a frame materialized inside the block (a pending match-arm
+    frame) is tombstoned whole. -/
+private def tombstoneBlock (saved cur : Proof.BodyScope) : Proof.BodyScope :=
+  let dead := ".out-of-scope"
+  let curOuterFirst := cur.frames.reverse
+  let savedOuterFirst := saved.frames.reverse
+  let fixed := curOuterFirst.zipIdx.map fun (f, i) =>
+    match savedOuterFirst[i]? with
+    | some sf => f.zipIdx.map fun (n, j) => if j < sf.length then n else dead
+    | none    => f.map fun _ => dead
+  { frames := fixed.reverse }
+
+/-- Bug 087: leave a lexical block — restore the lexical state (visible vars,
+    surface→Core renames, ghost names) and retire the block's binders from the
+    frame stack. Everything else the block produced (fresh counter, coverage,
+    recorded uses) is kept. Before this, an inner `let x` stayed visible after
+    its block: Interp and Lower read the inner slot, and evidence resolved the
+    outer `x` to the inner binder. -/
+private def exitBlock (saved : ElabEnv) : ElabM Unit := do
+  let cur ← getEnv
+  setEnv { cur with
+    vars := saved.vars
+    renames := saved.renames
+    bodyScope := tombstoneBlock saved.bodyScope cur.bodyScope
+    ghostVars := saved.ghostVars }
+
 /-- Current Core name for a surface identifier (identity unless an
     enclosing match arm renamed it). -/
 private def coreNameOf (name : String) : ElabM String := do
@@ -610,9 +672,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let cCond := cCondEv.core
     -- Flow the if-expression's own hint into each branch so a flexible
     -- literal/binop trailing value adopts the result width (matches Check).
+    let thenBlk ← enterBlock
     let cThenEv ← elabStmtsEv then_ (valueHint := hint)
+    exitBlock thenBlk
     let cThen := cThenEv.flatMap (·.core)
+    let elseBlk ← enterBlock
     let cElseEv ← elabStmtsEv else_ (valueHint := hint)
+    exitBlock elseBlk
     let cElse := cElseEv.flatMap (·.core)
     -- Result type: an explicit hint wins (the branches were just typed under it);
     -- otherwise infer from a branch's elaborated TRAILING VALUE type. Use the
@@ -1524,7 +1590,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
       let cArg := cArgEv.core
       cArgs := cArgs ++ [cArg]
       argEvs := cArgEv.evidence :: argEvs
-    return ElaboratedExprV2.mk (CExpr.call (.indirect fnName) [] cArgs retTy)
+    return ElaboratedExprV2.mk (CExpr.call (.indirect (← coreNameOf fnName)) [] cArgs retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
@@ -1588,11 +1654,11 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
         | some t => do pure (some (← typeRefOf (← resolveTypeE t)))
         | none => pure none
       return ElaboratedStmtV2.mk [] (Proof.EvidenceStmtV2.letBind true declRef cValEv.evidence)
-    addVar name finalTy
+    let coreName ← bindLocal name finalTy
     let declRef ← match ty with
       | some t => do pure (some (← typeRefOf (← resolveTypeE t)))
       | none => pure none
-    return ElaboratedStmtV2.mk [.letDecl name mutable finalTy cVal]
+    return ElaboratedStmtV2.mk [.letDecl coreName mutable finalTy cVal]
       (Proof.EvidenceStmtV2.letBind false declRef cValEv.evidence)
 
   | .assign _ name value =>
@@ -1700,10 +1766,16 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
   | .ifElse _ cond then_ else_ =>
     let cCondEv ← elabExprEv cond (some .bool)
     let cCond := cCondEv.core
+    let blk ← enterBlock
     let cThenEv ← elabStmtsEv then_
+    exitBlock blk
     let cThen := cThenEv.flatMap (·.core)
     let cElseEv ← match else_ with
-      | some stmts => do let cs ← elabStmtsEv stmts; pure (some cs)
+      | some stmts => do
+        let blk ← enterBlock
+        let cs ← elabStmtsEv stmts
+        exitBlock blk
+        pure (some cs)
       | none => pure none
     let cElse := cElseEv.map (fun l => l.flatMap (·.core))
     return ElaboratedStmtV2.mk [.ifElse cCond cThen cElse]
@@ -1717,7 +1789,9 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- this loop, and pushing before the condition would mis-target it.
     let outer ← getEnv
     setEnv { outer with loopFrames := label :: outer.loopFrames }
+    let blk ← enterBlock
     let cBodyEv ← elabStmtsEv body
+    exitBlock blk
     let cBody := cBodyEv.flatMap (·.core)
     let inner ← getEnv
     setEnv { inner with loopFrames := outer.loopFrames }
@@ -1733,6 +1807,9 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- the step — a body that runs code the evidence does not mention.
     let mut result : List CStmt := []
     let mut initEv : List Proof.EvidenceStmtV2 := []
+    -- Bug 087: the header's binders are scoped to the loop, and the body is a
+    -- nested block inside that scope (the step sees the header, not the body).
+    let headerBlk ← enterBlock
     match init with
     | some initStmt =>
       let cInitEv ← elabStmtEv initStmt
@@ -1748,7 +1825,9 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- discards its subtree.
     let outer ← getEnv
     setEnv { outer with loopFrames := label :: outer.loopFrames }
+    let bodyBlk ← enterBlock
     let cBodyEv ← elabStmtsEv body
+    exitBlock bodyBlk
     let cBody := cBodyEv.flatMap (·.core)
     let stepRes ← match step with
       | some stepStmt => do
@@ -1759,6 +1838,7 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     let stepEv := stepRes.2
     let inner ← getEnv
     setEnv { inner with loopFrames := outer.loopFrames }
+    exitBlock headerBlk
     let whileBody := cBody ++ cStep
     result := result ++ [.while_ cCond whileBody label cStep]
     return ElaboratedStmtV2.mk result
@@ -1874,10 +1954,13 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
       | some ty => pure ty
       | none => throwElab (.borrowUndeclaredVariable var) (some stmt.getSpan)
     let refTy := if isMut then Ty.refMut varTy else Ty.ref varTy
-    addVar ref refTy
+    let coreVar ← coreNameOf var
+    let blk ← enterBlock
+    let coreRef ← bindLocal ref refTy
     let cBodyEv ← elabStmtsEv body
+    exitBlock blk
     let cBody := cBodyEv.flatMap (·.core)
-    return ElaboratedStmtV2.mk [.borrowIn var ref region isMut refTy cBody]
+    return ElaboratedStmtV2.mk [.borrowIn coreVar coreRef region isMut refTy cBody]
       (Proof.EvidenceStmtV2.block (cBodyEv.map (·.evidence)))
 
 
@@ -2018,7 +2101,7 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   --
   -- Reset here rather than at the end of the previous function: an early return or an error path
   -- would skip a teardown, and the whole class of defect is a frame that outlives its owner.
-  setEnv { env with bodyScope := {}, pendingFrame := false }
+  setEnv { env with bodyScope := {}, pendingFrame := false, renames := [] }
   let env ← getEnv
   -- Set up type params and return type
   let allTypeParams := f.typeParams

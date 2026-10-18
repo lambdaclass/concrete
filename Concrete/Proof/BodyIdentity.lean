@@ -113,17 +113,13 @@ private def isCommutative : Proof.PBinOp → Bool
     3. Boolean short-circuit: if true then a else b → a, if false … → b
     4. Let flattening:        let x = (let y=v; e); body → let y=v; let x=e; body
     5. Commutative ordering:  add/mul/eq/ne operands sorted by (kind, name/value) -/
-partial def normalizePExpr : Proof.PExpr → Proof.PExpr
+private partial def normalizeCanon : Proof.PExpr → Proof.PExpr
   | .lit v => .lit v
-  -- Bug 045: comparison is ALPHA-INVARIANT — Elab renames match binders
-  -- (`value` → `value.b7`); committed specs/theorems use surface names.
-  -- The kernel-facing extraction stays verbatim (R-03 pins it); only this
-  -- normalizer, which both sides of the drift comparison run through,
-  -- strips the suffix. Surface names cannot contain '.'.
-  | .var n => .var (stripAlpha n)
+  -- Alpha-canonical names were already chosen by `alphaCanon` (bugs 045/087).
+  | .var n => .var n
   | .binOp op lhs rhs =>
-    let l := normalizePExpr lhs
-    let r := normalizePExpr rhs
+    let l := normalizeCanon lhs
+    let r := normalizeCanon rhs
     -- Algebraic identities
     match op, l, r with
     | .add, .lit (.int 0), x | .add, x, .lit (.int 0) => x
@@ -140,61 +136,153 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
         else .binOp op l r
       else .binOp op l r
   | .letIn name val body =>
-    let v := normalizePExpr val
-    let b := normalizePExpr body
+    let v := normalizeCanon val
+    let b := normalizeCanon body
     -- Dead let elimination
     if !pexprFreeIn name b then b
     -- Let flattening: let x = (let y = v'; e); body → let y = v'; let x = e; body
     else match v with
     | .letIn innerName innerVal innerBody =>
-      normalizePExpr (.letIn innerName innerVal (.letIn name innerBody b))
+      normalizeCanon (.letIn innerName innerVal (.letIn name innerBody b))
     | _ => .letIn name v b
   | .ifThenElse cond thenBr elseBr =>
-    let c := normalizePExpr cond
-    let t := normalizePExpr thenBr
-    let e := normalizePExpr elseBr
+    let c := normalizeCanon cond
+    let t := normalizeCanon thenBr
+    let e := normalizeCanon elseBr
     -- Boolean short-circuit
     match c with
     | .lit (.bool true) => t
     | .lit (.bool false) => e
     | _ => .ifThenElse c t e
   | .call fn args =>
-    .call fn (args.map normalizePExpr)
-  -- Alpha-stripped like `.var`: the binding is a LOCAL name, so Elab's
-  -- `f` → `f.bN` renaming reaches it exactly as it reaches a variable
-  -- occurrence. A `.call` name is a definition and must stay verbatim.
+    .call fn (args.map normalizeCanon)
+  -- The binding's alpha-canonical name was chosen by `alphaCanon`. A `.call`
+  -- name is a definition and is never renamed.
   | .applyVar binding args =>
-    .applyVar (stripAlpha binding) (args.map normalizePExpr)
+    .applyVar binding (args.map normalizeCanon)
   | .structLit name fields =>
-    .structLit name (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
+    .structLit name (fields.map fun (fname, fexpr) => (fname, normalizeCanon fexpr))
   | .enumLit enumName variant fields =>
-    .enumLit enumName variant (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
+    .enumLit enumName variant (fields.map fun (fname, fexpr) => (fname, normalizeCanon fexpr))
   | .fieldAccess obj field =>
-    .fieldAccess (normalizePExpr obj) field
+    .fieldAccess (normalizeCanon obj) field
   | .arrayIndex arr idx =>
-    .arrayIndex (normalizePExpr arr) (normalizePExpr idx)
+    .arrayIndex (normalizeCanon arr) (normalizeCanon idx)
   | .match_ scrutinee arms =>
-    .match_ (normalizePExpr scrutinee)
-      (arms.map fun (pat, body) =>
-        let pat' := match pat with
-          | .enumPat en v binds => .enumPat en v (binds.map stripAlpha)
-          | .varPat b => .varPat (stripAlpha b)
-          | other => other
-        (pat', normalizePExpr body))
-  | .cast inner => .cast (normalizePExpr inner)
-  | .wrapCast w sg inner => .wrapCast w sg (normalizePExpr inner)
-  | .arrayLit elems => .arrayLit (elems.map normalizePExpr)
+    .match_ (normalizeCanon scrutinee)
+      (arms.map fun (pat, body) => (pat, normalizeCanon body))
+  | .cast inner => .cast (normalizeCanon inner)
+  | .wrapCast w sg inner => .wrapCast w sg (normalizeCanon inner)
+  | .arrayLit elems => .arrayLit (elems.map normalizeCanon)
   | .arraySet arr idx val =>
-    .arraySet (normalizePExpr arr) (normalizePExpr idx) (normalizePExpr val)
+    .arraySet (normalizeCanon arr) (normalizeCanon idx) (normalizeCanon val)
   | .while_ cond assigns cont =>
-    .while_ (normalizePExpr cond)
-      (assigns.map fun (n, e) => (n, normalizePExpr e))
-      (normalizePExpr cont)
+    .while_ (normalizeCanon cond)
+      (assigns.map fun (n, e) => (n, normalizeCanon e))
+      (normalizeCanon cont)
   | .while_step cond carried step cont =>
-    .while_step (normalizePExpr cond) carried
-      (normalizePExpr step)
-      (normalizePExpr cont)
+    .while_step (normalizeCanon cond) carried
+      (normalizeCanon step)
+      (normalizeCanon cont)
 
+
+/-- Every LOCAL name a PExpr mentions, in binder or reference position: variables,
+    `let` binders, pattern bindings, applied bindings, loop-carried names, assigned
+    names, and literal field labels (a `LoopStep::Cont` payload labels its fields with
+    carried locals; a real field name never contains '.', so including field labels
+    can only add names `alphaCanon` leaves alone). Definition names (`.call`) and
+    projected fields are not locals and are excluded. -/
+private partial def pexprLocalNames : Proof.PExpr → List String
+  | .lit _ => []
+  | .var n => [n]
+  | .binOp _ l r => pexprLocalNames l ++ pexprLocalNames r
+  | .letIn n v b => n :: (pexprLocalNames v ++ pexprLocalNames b)
+  | .ifThenElse c t e => pexprLocalNames c ++ pexprLocalNames t ++ pexprLocalNames e
+  | .call _ args => args.flatMap pexprLocalNames
+  | .applyVar binding args => binding :: args.flatMap pexprLocalNames
+  | .structLit _ fields => fields.flatMap fun (f, e) => f :: pexprLocalNames e
+  | .enumLit _ _ fields => fields.flatMap fun (f, e) => f :: pexprLocalNames e
+  | .fieldAccess obj _ => pexprLocalNames obj
+  | .arrayIndex arr idx => pexprLocalNames arr ++ pexprLocalNames idx
+  | .match_ scrutinee arms =>
+    pexprLocalNames scrutinee ++ arms.flatMap fun (pat, body) =>
+      (match pat with
+        | .enumPat _ _ binds => binds
+        | .varPat b => [b]
+        | .litPat _ => []) ++ pexprLocalNames body
+  | .cast inner => pexprLocalNames inner
+  | .wrapCast _ _ inner => pexprLocalNames inner
+  | .arrayLit elems => elems.flatMap pexprLocalNames
+  | .arraySet arr idx val => pexprLocalNames arr ++ pexprLocalNames idx ++ pexprLocalNames val
+  | .while_ cond assigns cont =>
+    pexprLocalNames cond ++ assigns.flatMap (fun (n, e) => n :: pexprLocalNames e) ++
+      pexprLocalNames cont
+  | .while_step cond carried step cont =>
+    pexprLocalNames cond ++ carried ++ pexprLocalNames step ++ pexprLocalNames cont
+
+/-- Apply a renaming to every local-name position `pexprLocalNames` enumerates. -/
+private partial def pexprRenameLocals (f : String → String) : Proof.PExpr → Proof.PExpr
+  | .lit v => .lit v
+  | .var n => .var (f n)
+  | .binOp op l r => .binOp op (pexprRenameLocals f l) (pexprRenameLocals f r)
+  | .letIn n v b => .letIn (f n) (pexprRenameLocals f v) (pexprRenameLocals f b)
+  | .ifThenElse c t e =>
+    .ifThenElse (pexprRenameLocals f c) (pexprRenameLocals f t) (pexprRenameLocals f e)
+  | .call fn args => .call fn (args.map (pexprRenameLocals f))
+  | .applyVar binding args => .applyVar (f binding) (args.map (pexprRenameLocals f))
+  | .structLit name fields => .structLit name (fields.map fun (k, e) => (f k, pexprRenameLocals f e))
+  | .enumLit en v fields => .enumLit en v (fields.map fun (k, e) => (f k, pexprRenameLocals f e))
+  | .fieldAccess obj field => .fieldAccess (pexprRenameLocals f obj) field
+  | .arrayIndex arr idx => .arrayIndex (pexprRenameLocals f arr) (pexprRenameLocals f idx)
+  | .match_ scrutinee arms =>
+    .match_ (pexprRenameLocals f scrutinee) (arms.map fun (pat, body) =>
+      let pat' := match pat with
+        | .enumPat en v binds => .enumPat en v (binds.map f)
+        | .varPat b => .varPat (f b)
+        | other => other
+      (pat', pexprRenameLocals f body))
+  | .cast inner => .cast (pexprRenameLocals f inner)
+  | .wrapCast w sg inner => .wrapCast w sg (pexprRenameLocals f inner)
+  | .arrayLit elems => .arrayLit (elems.map (pexprRenameLocals f))
+  | .arraySet arr idx val =>
+    .arraySet (pexprRenameLocals f arr) (pexprRenameLocals f idx) (pexprRenameLocals f val)
+  | .while_ cond assigns cont =>
+    .while_ (pexprRenameLocals f cond) (assigns.map fun (n, e) => (f n, pexprRenameLocals f e))
+      (pexprRenameLocals f cont)
+  | .while_step cond carried step cont =>
+    .while_step (pexprRenameLocals f cond) (carried.map f) (pexprRenameLocals f step)
+      (pexprRenameLocals f cont)
+
+/-- Bugs 045/087: the ALPHA-CANONICAL form of an extracted body.
+
+    Elab gives a shadowing binder a fresh Core name (`x` → `x.b3`); committed specs use
+    surface names, and the `.bN` index moves when an unrelated earlier binder is added, so
+    comparison must not see the suffix. But stripping it is a RENAMING, and a renaming is
+    sound only if it is injective on the names in play. The extraction duplicates a
+    statement's continuation into each branch (`if c { let x = 100; } return x` becomes
+    `if c then (let x.b0 = 100; x) else x`), so a stripped inner binder CAPTURES the outer
+    read: blind stripping turned that body back into `let x = 100; x` — the very wrong
+    value bug 087 removed from both runtimes — and, worse, the dead-let pass then saw
+    `x.b0` unused and deleted a loop body's `let k.b1 = 1000`, rebinding its reads to the
+    outer `k`. A model that differs from the program is a false proof.
+
+    So a suffix is stripped only when no OTHER local in the body shares its base name:
+    then `x.bN` ↦ `x` is injective and capture-free. Otherwise every same-based name stays
+    verbatim, which is still deterministic, and is exactly as alpha-sensitive as the
+    program's own shadowing. Surface identifiers cannot contain '.', so names without a
+    suffix are never touched. -/
+def alphaCanon (e : Proof.PExpr) : Proof.PExpr :=
+  let names := (pexprLocalNames e).eraseDups
+  let ren := fun (n : String) =>
+    let base := stripAlpha n
+    if base == n then n
+    else if names.any (fun m => m != n && stripAlpha m == base) then n
+    else base
+  pexprRenameLocals ren e
+
+/-- Normalize a PExpr to canonical form for stable proof attachment: alpha-canonical
+    names (`alphaCanon`), then the structural rewrites of `normalizeCanon`. -/
+def normalizePExpr (e : Proof.PExpr) : Proof.PExpr := normalizeCanon (alphaCanon e)
 
 /-- THE canonical V1 source-body digest. One producer, and that is the point.
 

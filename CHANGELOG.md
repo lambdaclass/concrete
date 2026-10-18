@@ -307,6 +307,19 @@ project's aliased import from a sibling submodule now builds (bug 055).
 Regression: `tests/codegen/import_alias_binding.con` (differential, pinned 77324; previous compiler
 12814), the project test `regress_082_project_alias_binding`, and two `run_err E0299` fixtures. See [docs/bugs/082](docs/bugs/082_import_alias_loses_to_same_named_definition.md).
 
+### Block-Scoped `let` Shadowing Is Lexical (bug 087)
+
+A `let` inside an `if`/`else`, value-`if`, loop body, `for` header or borrow block that shadowed an
+outer name used to share that name in Core. Lower read the inner slot after the block closed, the
+interpreter leaked loop-body bindings, and the extracted proof model let a branch binding scope over the
+rest of the function. As a result, `shadow_if` returned 1 in the interpreter and 100 in the binary, and
+a borrow-block shadow read a dropped `String`, which is a heap use-after-free. Elab now alpha-renames
+shadowing block binders (`x` → `x.bN`, as bug 045 did for match binders) and closes every block.
+Evidence binders keep their positions, so no shipped fingerprint moved. The proof normalizer strips
+`.bN` only where the result is injective, which removes a capture that had dead-let-eliminated a loop
+body's `let`. Regressions: `regress_087_let_block_shadow.con` (interp, binary and model all lexical),
+the `regress_087_borrow_shadow_uaf` project, and a shadowing shape in `fuzz_differential.py`.
+
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
 A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:

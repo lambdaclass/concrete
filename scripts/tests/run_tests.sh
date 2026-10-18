@@ -7135,6 +7135,28 @@ run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
+# Bug 087: a block-scoped `let` shadowing an outer let/param (if, else,
+# value-if, while, for bodies) must vanish when its block closes. Pre-fix the
+# interpreter and binary disagreed (1 vs 100, 3 vs 7) and both leaked a loop
+# body's shadow; Elab now alpha-renames shadowing lets (x -> x.bN).
+run_ok "$TESTDIR/regress_087_let_block_shadow.con" 42
+# Same fixture, the other two consumers: the interpreter must agree with the
+# binary (pre-fix it returned 2), and the extracted proof model must be the
+# lexical one — no branch `let` leaking into the continuation (pre-fix
+# `then let x = 100; x`), and the loop body's `let k` kept, not dead-let
+# eliminated into a read of the outer `k` (the alpha-strip capture).
+r087_interp=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --interp 2>&1 || true)
+r087_ext=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --report extraction 2>&1 || true)
+if [ "$r087_interp" = "42" ] \
+   && grep -qF 'ProofCore: let x = 1; if (a > 0) then x else x' <<<"$r087_ext" \
+   && grep -qF 'ProofCore: if (a > 0) then a else a' <<<"$r087_ext" \
+   && grep -E 'ProofCore: let s = 0; let k = 5;.*\{ let k[.a-z0-9]* = 1000; LoopStep::Cont \{ s: \(k[.a-z0-9]* \+ s\)' <<<"$r087_ext" | grep -qvE 's: \(k \+ s\)'; then
+    echo "  ok  bug 087: interp == binary == lexical model (shadow_if/param/loop)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 087: interp ($r087_interp) or extracted model is not lexical"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.
@@ -11130,6 +11152,9 @@ fi
 #     VALUE must arrive whole: hash_fn for get (SIGSEGV pre-fix), cap for drop)
 #   regress_082_project_alias_binding/src/main.con  (bugs 082+055 — a sibling
 #     submodule alias builds, and std.math.abs is not hijacked by a sibling's abs)
+#   regress_087_borrow_shadow_uaf/src/main.con  (bug 087 — an `if` body's
+#     `let r` shadowing a borrow-block ref must not outlive the `if`; pre-fix
+#     the later `r` read the inner, dropped String: a heap use-after-free)
 # `timeout` is coreutils; present in the devshell and on CI. Degrade to running
 # without a watchdog rather than skipping the fixtures entirely, but say so, so
 # a hang on such a machine is at least explicable.

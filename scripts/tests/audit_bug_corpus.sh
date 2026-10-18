@@ -47,6 +47,7 @@ declare -A BUG_TEST_MAP=(
   # R-0002: a callee VALUE is never resolved by global name. Single-file witness
   # (42, was 21) + the std.io collision variant as a project fixture.
   [050]="regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con"
+  [087]="regress_087_let_block_shadow.con regress_087_borrow_shadow_uaf/src/main.con"
   # R-0003: one probe/occupancy slice — overwrite-past-tombstone (047) and the
   # zero-empty-slot missing lookup (048) share the same fixture.
   [047]="regress_047_048_hashmap_probe/src/main.con"

@@ -1,0 +1,36 @@
+// Bug 087 memory-safety regression (checker hunt p17). Inside a borrow block
+// `borrow base as r in R`, an `if` body shadows `r` with `&s`. The checker
+// (and lexical scoping) say the later `r` is the borrow of `base`; pre-fix the
+// compiled code read the INNER `r` — a dangling reference to `s`, which is then
+// dropped and its buffer reused by `t` (printed ZZZZ... or garbage: a heap
+// use-after-free). Elab now alpha-renames the inner `r` (r -> r.bN), so the
+// outer read is the borrow of `base`. Exit 0 = the outer `r` is "outer".
+mod main {
+    fn is_outer(r: &String) -> bool {
+        if r.len() != 5 { return false; }
+        if r.get_unchecked(0) != 111 { return false; }   // 'o'
+        if r.get_unchecked(4) != 114 { return false; }   // 'r'
+        return true;
+    }
+    fn main() with(Std) -> i32 {
+        let base: String = "outer";
+        let mut s: String = "";
+        let mut k: Int = 0;
+        while k < 40 { s.push_char('A'); k = k + 1; }
+        let mut rc: i32 = 0;
+        borrow base as r in R {
+            if true {
+                let r: &String = &s;
+                if r.len() != 40 { rc = 1; }
+            }
+            s.drop();
+            let mut t: String = "";
+            let mut j: Int = 0;
+            while j < 40 { t.push_char('Z'); j = j + 1; }
+            if !is_outer(r) { rc = 2; }
+            t.drop();
+        }
+        base.drop();
+        return rc;
+    }
+}

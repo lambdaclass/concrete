@@ -151,7 +151,7 @@ class Gen:
 
     def stmt(self, d):
         r = self.rng
-        k = r.randint(0, 10)
+        k = r.randint(0, 11)
         if k == 4 and not self.loops:
             k = 3  # loops disabled → fall back to a &mut mutation
         if k == 7 and not self.defers:
@@ -197,6 +197,23 @@ class Gen:
             # of a branch (was missing from the grammar when 031 shipped)
             return (f"if {self.bexpr(d)} {{ s0.bump({self.lit()}); }} "
                     f"else {{ s0.bump({self.lit()}); }}")
+        if k == 11:  # bug 087: a block-scoped `let` SHADOWS an outer var (RHS
+            # may read the outer one), is read inside its block, and must be
+            # gone after it — the digest reads the OUTER var. Pre-fix interp and
+            # compiled disagreed (if/else shadow) or both leaked (loop shadow).
+            v = r.choice(self.ivars)
+            ty = self.varty[v]
+            a = r.choice(self.arrs)
+            j = r.randint(0, 3)
+            inner = (f"let {v}: {ty} = {self.simple(max(0, d-1), ty)}; "
+                     f"{a}[{j}] = (({a}[{j}] + {self.rd(ty, v, 'i32')}) % {BOUND['i32']});")
+            if self.loops and r.random() < 0.4:
+                self.ctr += 1
+                kv = f"k{self.ctr}"
+                return f"let mut {kv}: i32 = 0; while {kv} < 2 {{ {inner} {kv} = {kv} + 1; }}"
+            if r.random() < 0.5:
+                return f"if {self.bexpr(d)} {{ {inner} }} else {{ {self.stmt(max(0,d-1))} }}"
+            return f"if {self.bexpr(d)} {{ {self.stmt(max(0,d-1))} }} else {{ {inner} }}"
         if k == 10:  # aggregate-typed value-if (bugs 029/033 merge shapes)
             if r.random() < 0.5:
                 return (f"s0 = if {self.bexpr(d)} {{ s0 }} "
