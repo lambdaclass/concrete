@@ -70,6 +70,16 @@ These are design choices inspired by those systems, not promises to reproduce
 their full semantics. Elm, uv, Bazel and Buck2 remain secondary references for
 compatibility discipline, workspace UX and graph/cache correctness.
 
+Foreign-import design also draws on Swift's Clang importer/safety annotations,
+D ImportC, CXX and UniFFI's typed boundary generation, and bindgen's selected API
+generation. The [interop decision](../../docs/platform/FFI_GLUE.md#reusing-annotations-and-external-metadata)
+owns their application: reuse supported upstream annotations, maintain missing
+facts externally without forking, generate wrappers/docs/checks from one boundary
+description, and ask only precise maintainer questions. Annotation and metadata
+inputs participate in the same lock/invalidation graph and retain their trust
+provenance. Implement the subset exercised by the first RocksDB consumer, then
+expand from measured feedback rather than introducing a separate design phase.
+
 The first local-package acceptance workload covers a workspace diamond graph,
 explicit upgrade, locked and offline rebuilds, and C/Rust/Zig wrapper dependencies.
 Resolve build tools for the host separately from libraries for the target.

@@ -1,6 +1,6 @@
 # C, Rust and Zig Package Interop — Design Decision
 
-Status: direction decided; implementation pending. Updated 2026-10-17 under
+Status: direction decided; implementation pending. Updated 2026-10-18 under
 [R-0285](../../ROADMAP.md#task-r-0285), with ABI validation under
 [R-0283](../../ROADMAP.md#task-r-0283)/[R-0287](../../ROADMAP.md#task-r-0287)
 and exports under [R-0286](../../ROADMAP.md#task-r-0286).
@@ -97,6 +97,43 @@ reviewed as an assumption. Signature extraction, tests and a maintainer assertio
 different evidence. A name such as `free` cannot establish ownership; an AI-generated
 draft cannot approve a safety assertion. Missing facts block only the affected safe API
 and produce a precise maintainer diagnostic, not a silently unsafe substitute.
+
+## Reusing annotations and external metadata
+
+Reuse supported upstream annotations before requesting new facts: nullability,
+`__counted_by`/`__sized_by` bounds, no-escape and lifetime relationships are useful
+inputs where the pinned frontend exposes them. Specify each supported annotation's
+meaning and mapping to Concrete. Bounds alone do not establish lifetime or no-retention;
+a view is safe only when its owner relationship is expressible and enforced in Concrete.
+An upstream annotation remains an attributed assertion about foreign behavior unless
+a separate check establishes the relevant claim.
+
+Missing facts live in external metadata maintained by the reusable binding package.
+The upstream library need not be edited or forked. This metadata feeds the existing
+boundary description; it is not another package registry or proof/evidence schema.
+Bind entries to selected declaration identities/signatures, source revision, target,
+feature configuration and relevant input hashes. Do not match ownership facts by a
+bare function name or silently carry them to another overload or instantiation.
+Conflicting upstream and maintained facts produce a maintainer diagnostic and require
+an explicit reviewed resolution, rather than silently selecting a convenient answer.
+
+Select a public API and generate its required type/header closure. Avoid translating
+every dependency internal to obtain a few operations; include the actual transitive
+header and generated-input closure in invalidation. The same typed description drives
+native adapters, Concrete wrappers, documentation and conformance harnesses, so a field
+cannot have one interpretation in generated code and another in its report.
+
+When information is missing, name the declaration, missing fact, affected safe API and
+valid remedy. For example: "does this call retain argument 2?" or "which operation
+releases this returned buffer?" The maintainer's reviewed answer is saved once; a normal
+application build is noninteractive. On an upgrade, show which facts remain applicable
+and which need review. A source/body change can invalidate a semantic assumption even
+with an unchanged signature; ABI compatibility does not establish behavioral compatibility.
+
+Start with the metadata needed by the RocksDB slice, including output lengths and
+matching library cleanup. Add annotation forms as actual APIs exercise them. Full API
+Notes compatibility, a general annotation language and support for every foreign
+lifetime shape are not prerequisites for the first executable slice.
 
 ## One boundary representation, three front ends
 
@@ -248,6 +285,15 @@ scripts or manual compiler/linker flags, and zero edits to generated files**. Co
 maintained adapter code in its reusable binding package and the client port inventory.
 Record setup steps, build/cache cost, copy/allocation cost and diagnostic quality.
 
+For annotation/metadata support, retain an upstream-annotated case, a metadata-only
+case with unchanged upstream sources, a conflicting-facts refusal, bounds without
+lifetime information, and a changed-declaration/stale-metadata refusal. A supported
+unchanged input regenerates deterministically and needs no repeated maintainer review.
+Generate native size/alignment/offset and call/return probes and compare them against
+Concrete on the actual target; independent behavior/error fixtures and ownership
+rejection cases remain necessary. Passing generated probes does not validate every
+semantic assertion used to generate the wrapper.
+
 Retain positive round trips and negative controls for ownership transfer, wrong deallocator,
 use after consuming close, escaping/retained borrows, missing capabilities, malformed data,
 unsupported ABI/target, native build failure, stale cache reuse and incompatible upgrades.
@@ -266,9 +312,13 @@ Keep explicit native adapters available without making every application author 
 See [ABI.md](ABI.md) for current layout limits and
 [SAFETY.md](../language/SAFETY.md) for the trust-boundary model.
 
-Primary references informing this direction, checked 2026-10-17:
+Primary references informing this direction, checked 2026-10-17/18:
 
 - [Clang LibTooling](https://clang.llvm.org/docs/LibTooling.html) for tooling over real C declarations.
+- [Swift safe interoperability](https://www.swift.org/documentation/cxx-interop/safe-interop/) for bounds/lifetime annotation reuse, external API Notes and generated checked overloads; Concrete must use its own admitted ownership model.
+- [Swift module maps](https://docs.swift.org/main/documentation/packagemanagerdocs/modulemaps/) and [D ImportC](https://dlang.org/spec/importc) for compiler-integrated foreign imports; they are precedents, not implementations of Concrete's boundary checks.
 - [CXX's boundary concepts](https://cxx.rs/concepts.html) for a selected shared interface and opaque language-owned objects; its generator is not a Concrete implementation.
+- [UniFFI's interface-driven generation](https://mozilla.github.io/uniffi-rs/latest/) for deriving both native scaffolding and foreign bindings from one declared interface.
+- [bindgen allowlisting](https://rust-lang.github.io/rust-bindgen/allowlisting.html) for limiting generation to the selected API and required types.
 - [Rust ABI rules](https://doc.rust-lang.org/reference/items/external-blocks.html#abi) and [FFI unwinding rules](https://doc.rust-lang.org/nomicon/ffi.html#ffi-and-unwinding).
 - [Zig C-library exports](https://ziglang.org/documentation/0.17.0/#Exporting-a-C-Library), [C-compatible structs](https://ziglang.org/documentation/0.17.0/#extern-struct), and the [Zig build system](https://ziglang.org/learn/build-system/). Implementation must pin the version it supports rather than follow a moving documentation branch.

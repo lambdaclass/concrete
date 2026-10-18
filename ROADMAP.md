@@ -15395,6 +15395,35 @@ Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
 
+**Annotation reuse and generated checks (2026-10-18; planned):**
+
+- Reuse supported upstream bounds, nullability, no-escape and lifetime annotations
+  before requesting new maintainer facts. Keep bounds and lifetime facts separate;
+  map them only to relationships Concrete can express and check today. Upstream
+  assertions retain their source and assumption status rather than becoming proofs.
+- Store missing facts in the reusable binding package's external metadata, without
+  editing upstream sources. Bind each reviewed fact to its selected declaration,
+  signature, source revision, target/configuration and relevant input hashes.
+  Conflicting annotations or overlays require an explicit maintainer resolution;
+  a declaration name alone never identifies a reusable ownership contract.
+- Generate only the selected public API and its required type/header closure.
+  Feed extracted annotations and reviewed facts into the existing shared boundary
+  description; derive native adapters, Concrete wrappers, docs and conformance
+  harnesses together. Avoid importing an entire dependency's unsupported internals.
+- Validate generated ABI claims against the actual foreign compiler and native
+  calls, alongside Concrete callers. Retain independent behavior/error vectors and
+  ownership rejection cases; generated tests do not prove the metadata they consume.
+- Diagnostics identify the exact missing fact, such as whether an argument is
+  retained or which function releases a returned buffer. Save the reviewed answer;
+  ordinary application builds remain noninteractive. An upgrade requests review
+  for affected facts and reports API/ownership/effect changes, while a stable
+  signature alone does not establish unchanged foreign behavior.
+
+Implement the metadata subset needed by the first RocksDB slice, then expand it
+using that slice's feedback. A complete foreign-annotation vocabulary is not an
+entrance gate. [FFI_GLUE.md](docs/platform/FFI_GLUE.md) records the Swift/D importer,
+CXX/UniFFI generation and bindgen API-selection precedents and acceptance controls.
+
 **Ease-of-use acceptance:** the application workflow is dependency -> ordinary import -> build.
 Prefer a reviewed binding package automatically when one is available. For an uncovered library,
 discover its C headers, supported Rust package/API metadata or selected Zig module metadata and
