@@ -30,9 +30,9 @@ the next transition; completed milestones move to the changelog rather than accu
 
 | order | work | exit before advancing |
 |---|---|---|
-| 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 089 repairs, each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
+| 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **Structural soundness refactor S1–S4, S8 (R-0491–R-0494, R-0498)** | the three-way fuzzer (model/interpreter/binary over generated programs) reproduces 084–088 from their pre-fix commits; no `String` binder, callee or field key remains in Core, SSA or `PExpr` and `ElabVerify` runs in every pipeline; every integer op and literal carries its type with one `IntArith`; one `Verdict` authority renders every evidence surface; every enforcement claim cites a gate leg. S5–S7 (R-0495–R-0497) continue beside rows 3–4. See [the refactor plan](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) |
+| 2 | **Structural soundness refactor S1–S4, S8–S10 (R-0491–R-0494, R-0498–R-0500)** | the three-way fuzzer (model/interpreter/binary over generated programs, counting completed comparisons) fails at the pre-fix SHAs of 080–089 and passes at their fixes; no `String` binder, callee, field key, register or block reference remains in Core, SSA or `PExpr` and `ElabVerify` runs in every pipeline; every integer op and literal carries its type with one `IntArith`; one `Verdict` authority, fed by evidence binding the exact proposition, renders every surface; checker rules are specified and fuzzed; disputed language rules are written down; every enforcement claim has a gate leg and a killed targeted mutation. S5–S7 and S11–S12 (R-0495–R-0497, R-0299/R-0300, R-0353) continue beside rows 3–4. See [the refactor plan](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) |
 | 3 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
 | 4 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
 | 5 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
@@ -99,11 +99,18 @@ discharging a postcondition by theorem name alone (089). They share four structu
 language's meaning is implemented four times, evidence is joined by name, names are not unique
 after resolution, and prose claims enforcement nothing performs — so point fixes alone will keep
 finding more. Row 2 removes those causes before interop: the
-[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) (R-0491 – R-0498)
+[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md) (R-0491 – R-0500)
 makes each class unrepresentable in the IR types or mechanically caught, stage by stage, every
-slice reviewed by Codex before publication. Its S5 – S7 stages (generated claim statements, one
-total Core semantics, typed pass contracts) are the end state and continue beside rows 3 – 4.
-The fixes for 081 – 089 land first as ordinary soundness repairs (row 0).
+slice reviewed by Codex before publication. It also covers what the hunts did not: the checker's
+own rules are specified and fuzzed (R-0499), disputed language rules are written down (R-0500),
+emitted-code validation (R-0299/R-0300) moves forward from Phase 15, and R-0353's independent
+verifier becomes the second reader of every verdict. Its S5 – S7 and S11 – S12 stages (generated
+claim statements, one total Core semantics, typed pass contracts, emitted-code validation,
+independent evidence check) are the end state and continue beside rows 3 – 4. While it runs, the
+proof surface is feature-frozen (no new claim kinds, attributes, coverage labels or statuses until
+R-0492 and R-0494 land), no slice stays unpublished under later work, and a stage closes only when
+its re-run hunt finds nothing of its class. The fixes for 081 – 089 land first as ordinary
+soundness repairs (row 0).
 
 **Implementation and feedback decision, 2026-10-17:** once queue rows 0–2 meet
 their recorded exits, start R-0285 with a working RocksDB C-API consumer and the
@@ -15746,168 +15753,200 @@ architecture does not expand this task's exit.
 
 ### Task R-0491
 
-**Objective:** Catch model/interpreter/binary disagreement on generated programs, not only on the
-corpus, while the structural stages remove its causes. Stage S1 of the
-[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md).
+**Objective:** Catch model/interpreter/binary disagreement on generated programs while the
+structural stages remove its causes. Stage S1 of the
+[structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md), which holds the
+full design.
 
-**Status (2026-10-18): planned; starts now.** `--report model-diff` (bug 080) compares the
-extracted model with the interpreter on boundary inputs of the corpus's own scalar functions; the
-2026-10-18 hunts found five model/runtime defects (084 – 088) in shapes the corpus never uses.
+**Status (2026-10-18): planned; starts when bug 080 lands** (`--report model-diff` and
+`check_model_diff.sh` are on its branch). The hunts found five model/runtime defects (084 – 088) in
+shapes the corpus never uses; the existing fuzzer skips rejections and timeouts and still passes.
 
-1. Extend `scripts/tests/fuzz_differential.py` with the extracted model as a third side. Its
-   generator must produce: sequential assignments in loop bodies, `let` after assignment,
-   `return` inside loops, if-without-else fall-through inside loops, discarded `expr;` inside
-   branches, block `let` shadowing, positional match bindings with renamed binders, unhinted
-   literals at and beyond 2^63 and 2^64, and casts across every width pair.
-2. model-diff: zero-argument functions, `bool` parameters as booleans, non-scalar signatures
-   (structs in declaration order, enums by variant index, arrays, newtypes resolved), a
-   compiled-binary leg through an injected test driver, and both-sides-fail reported as an error.
-3. The four 2026-10-18 hunts (model vs runtime, name-keyed evidence, stated-but-unenforced
-   invariants, adversarial false proof) run before every release candidate; each reproducer is
-   kept as a fixture.
-4. `check_gate_negative_controls.sh`: every registered gate leg names the fixture or mutation it
-   must reject.
+Work: the extracted model as a third fuzzer side over a grammar covering every shape that broke;
+outcome classes (value, trap, rejection, unsupported extraction, fuel exhaustion, crash) instead of
+skips; model-diff for zero-argument, `bool`, struct/enum/array/newtype signatures plus a
+compiled-binary leg, with a pinned claimed-function inventory; the four hunts and R-0499's checker
+hunt before every release candidate.
 
-**Exit:** from the pre-fix commits of 084, 085, 086, 087 and 088 the fuzzer's CI seed set fails;
-from their fixed commits it passes; model-diff covers every claimed function with a supported
-signature (≥ 53) and its binary leg agrees on all of them; the negative-control lint passes with
-zero exemptions.
+**Exit:** each of 080 – 089 has a checked-in bug record, reproducer, expected outcome, pre-fix and
+fixed SHA and deterministic seed; the fuzzer fails at each pre-fix SHA and passes at the fix; each
+generated feature has a minimum count of completed comparisons per run and the gate fails below it
+or on a missing inventory entry; model-diff's binary leg agrees on every claimed function with a
+supported signature.
 
 ### Task R-0492
 
-**Objective:** No IR, table or evidence record joins on a `String` after Resolve. Stage S2.
+**Objective:** No IR, table or evidence record joins on a `String` after resolution. Stage S2.
 
-**Status (2026-10-18): planned; starts now.** Today `CExpr.ident`, `CStmt.letDecl`/`assign`,
-`CMatchArm.enumArm` bindings, `structLit`/`enumLit` field keys, `fnRef`, `Callee.direct` and every
-`PExpr` binder and call are `String`; Elab alpha-renames only match payloads (bug 045). Bugs
-039 – 045, 081, 082, 083 and 087 are this class.
+**Status (2026-10-18): planned; starts now.** Core binders, field keys, `fnRef`, both `Callee`
+forms, SSA registers/blocks/phi predecessors and `PExpr` binders and calls are `String`; Elab
+alpha-renames only match payloads. Addresses the name-collision mechanisms of 039 – 041,
+044 – 045, 081, 082 and 087; not 042 (resolver exhaustiveness), 043 (FFI representation) or 083
+(owned by R-0494).
 
-1. Identity types `LocalId` (function-unique), `DefId` (wrapping `DefinitionIdentity`), `FieldIdx`,
-   `VariantIdx`; source spellings move to a display side table.
-2. Elab assigns a `LocalId` to every binder (block `let`, loop, match arm, parameter); Interp,
-   Lower, extraction and the checker consume it. Struct/enum fields are keyed by declaration index.
-3. `ElabVerify` after Elab: each `LocalId` bound once and used in scope, each `DefId` exists, each
-   match binding is a field of its variant.
-4. `PExpr` binders and calls use `LocalId`/`DefId`; `FnTable` is keyed by `DefId`.
-5. Language: a block `let` may not shadow a visible name; an import alias colliding with a name in
-   scope is an error; a match binding equals its field name or names it (`Full { value: v }`).
-6. Migration by `Coe` from the old string fields (the R-0002 technique), one consumer at a time,
-   then delete the coercions; name-churn consumers normalize at comparison.
+Work: `LocalId` for every binder; `DefId` as a compilation-scoped declaration handle allocated
+before body elaboration, preserving callable namespaces, specialization arguments and
+extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentity` mapping built after
+checking for evidence boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId`/`LoopId`
+in SSA; `ElabVerify`; `FnTable` keyed by `DefId`; language rules forbidding block `let` shadowing of
+a visible name, colliding import aliases, and match binders that neither equal nor name their field.
+Migration through scope-aware environments and checked adapters, never `String → identity`
+coercions; capture-preserving alpha-canonicalization before hashing, with frozen identity bytes
+preserved or explicitly versioned and invalidated.
 
-**Exit:** `check_ir_no_string_identity.sh` finds no `String` binder, callee or field key in
-`Elab/Core.lean`, `IR/*.lean` or `Proof/Proof.lean` outside display tables; `ElabVerify` runs in
-every pipeline; the 081, 082 and 087 reproducers are diagnostics or bind correctly; mutation
-families prove `ElabVerify` and the theorem-table key check load-bearing.
+**Exit:** `check_ir_no_string_identity.sh` finds no `String` binder, callee, field key, register
+or block reference in `Elab/Core.lean`, `IR/*.lean` or `Proof/Proof.lean` outside display tables;
+`ElabVerify` runs in every pipeline; 081, 082 and 087's reproducers are diagnostics or bind
+correctly; mutation families prove `ElabVerify` and the theorem-table key check load-bearing.
 
 ### Task R-0493
 
 **Objective:** Every integer operation, literal and cast carries its type, and one module
-implements integer meaning. Stage S3; depends on R-0492's identity types.
+implements integer meaning. Stage S3; depends on R-0492.
 
-**Status (2026-10-18): planned.** Bugs 080 and 088 are this class; `IntArith` exists but the SSA
-folder, the interpreter and `Proof.eval` each compute wraps and ranges themselves.
+**Status (2026-10-18): planned.** The interpreter and SSA folder already delegate checked
+arithmetic to `IntArith`; `Proof.eval` keeps separate integer semantics and the folder's cast and
+comparison paths use unnormalized constants (088). S3 completes and enforces the sharing.
 
-1. `BinOp`/`UnaryOp` carry their operand `IntTy`, filled by the checker.
-2. `intLit` is built only by `CExpr.mkIntLit : Int → IntTy → Except Diag CExpr`; an unhinted
-   literal takes its type from context or is an error.
-3. `cast` carries source and target types.
-4. `IntArith` is the only implementation of wrap, range, overflow, division, shift and cast;
-   `check_single_arithmetic.sh` refuses integer wrapping arithmetic outside it.
-5. `PVal.int` carries its `IntTy`; overflowable arithmetic yields an explicit no-overflow
-   obligation, so an unbounded-`Int` theorem cannot bind to an `i8` body (red-team `rt_ovf`).
-6. `Backend.lean`'s contract text is generated from the trap helpers actually emitted.
+Work: integer operation nodes typed by `IntTy` (boolean, float and pointer operations stay
+distinct); signed literals canonicalized before range checking, preserving every signed minimum;
+contextual literal types resolved before construction through a range-checking smart constructor,
+re-validated after Mono; typed casts; `check_single_arithmetic.sh`; width-aware `PVal.int` with
+explicit no-overflow obligations; generated backend contract text.
 
-**Exit:** `intLit`'s constructor is private; every op in Core, SSA and `PExpr` carries a width;
-the arithmetic lint passes; 088's C1/C2 reproducers agree on model, interpreter and binary; the
-`rt_ovf` binding is refused.
+**Exit:** `intLit`'s constructor is private; every integer op in Core, SSA and `PExpr` carries a
+width; the arithmetic lint passes; signed-minimum fixtures pass; 088's C1/C2 reproducers agree on
+model, interpreter and binary; red-team `rt_ovf` (an `i8` body binding an unbounded-`Int` theorem)
+is refused.
 
 ### Task R-0494
 
-**Objective:** One authority decides every evidence verdict; every surface renders it. Stage S4.
+**Objective:** One authority decides every evidence verdict from evidence binding the exact
+proposition. Stage S4.
 
-**Status (2026-10-18): planned; starts now.** 35 `"proved"` literals and 58 `proved_by_lean`
-sites across `Report.lean`, `ReportObligations.lean` and `Main.lean`; contracts, vcs,
-obligation-ledger, audit, check-proofs and receipts each compute a status. Bugs 079, 083 and
-089 are this class.
+**Status (2026-10-18): planned; starts now.** Contracts, vcs, obligation-ledger, audit,
+check-proofs, proof-status and receipts compute status separately; 079, 083 and 089 are this class.
 
-1. `Concrete/Proof/Verdict.lean`: `Verdict` with a private constructor for discharging cases,
-   produced only by `Verdict.decide` from kernel replay, subject binding and dependency closure.
-2. One `ClaimJudgment` per claim and per contract clause, computed once per compilation; every
-   surface, receipt issuance and receipt consumption renders it.
-3. Delete `Proof.provedFunctions` and name-substring replay checks.
-4. `check_single_verdict_authority.sh` refuses status literals outside `Verdict.lean` and its
-   renderers.
-5. Split `Report.lean` and `Main.lean` by surface; surface modules import `Verdict` and not the
-   checker internals.
+Work: `Verdict` with a private discharging constructor; `Verdict.decide` consumes checked evidence
+binding proposition, clause, subject, coverage, dependency closure and environment; one
+`ClaimJudgment` per claim and contract clause; receipt decoding and currency checks feed the
+authority; surfaces are pure renderers; `Proof.provedFunctions` and name-substring replay checks
+deleted; `check_single_verdict_authority.sh`; `Report.lean` and `Main.lean` split by surface.
 
-**Exit:** status literals appear only in the renderer table; 089's four reproducers read
-not-proved on every surface; a cross-surface gate asserts identical verdicts for every claim in
-the corpus.
+**Exit:** status spellings appear only in the renderer table; 089's four reproducers read
+not-proved on every surface; a cross-surface gate pins the expected positive and negative judgment
+for every claim and clause in the corpus, not only agreement.
 
 ### Task R-0495
 
-**Objective:** The compiler generates each claim's Lean statement; the author supplies only the
-proof. Stage S5; depends on R-0492 and R-0494.
+**Objective:** The compiler generates each claim's Lean statement from a typed claim specification;
+the author supplies the proof. Stage S5; depends on R-0492, R-0493 and R-0494.
 
-**Status (2026-10-18): planned.**
+**Status (2026-10-18): planned.** `#[spec]` names a `PExpr` and the property lives only in the
+theorem; the existing statement generator emits `sorry`; point and invariant theorems cannot imply
+a universal equation.
 
-1. Emit, per claim, the spec equation with the extracted body inserted by value and callees by
-   `DefId`, and per `#[ensures]` clause its exact proposition.
-2. Derive coverage (`iff`, `one_direction`, `point`, …) from the statement's shape;
-   `#[proof_coverage]` becomes a checked assertion.
-3. Migrate: emit statements beside existing theorems, prove each old theorem implies its
-   generated statement, switch the authority, delete the classification scan and subject-binding
-   table generator.
+Work: a typed `ClaimSpec` (input domain, assumptions, conclusion, coverage form including point
+inputs and loop invariants); statements generated from `ClaimSpec` and extracted code; coverage
+derived from the form, `#[proof_coverage]` checked; existing theorems adapted or reproved, keeping
+weaker coverage where that is what was proved; then the classification theorem scan and
+subject-binding table generator are deleted.
 
-**Exit:** every claim in `examples/`, `std/` and `tests/` replays against a generated statement;
-`scripts/gen/classifications.lean`'s theorem scan is deleted; coverage labels are checked.
+**Exit:** every positive claim in `examples/`, `std/` and `tests/` replays against its generated
+statement; intentional negative fixtures are refused; the scan is deleted; coverage labels are
+checked.
 
 ### Task R-0496
 
-**Objective:** One total semantics for Core, used by the interpreter and by proofs. Stage S6;
-depends on R-0492 and R-0493. Closes the lowering half of H19 with R-0460.
+**Objective:** One total, fuel-indexed semantics for Core, used by the interpreter and by proofs.
+Stage S6; depends on R-0492 and R-0493; may develop beside R-0495.
 
 **Status (2026-10-18): planned.**
 
-1. `Concrete/Semantics/CoreEval.lean`: total fuel-based big-step evaluator over post-S3 Core with
-   `IntArith` arithmetic.
-2. The interpreter becomes `CoreEval` plus I/O; its `partial def`s go away.
-3. Proofs are about Core under `CoreEval`; `PExpr` is retired, or kept with a Lean proof
-   `extract_sound` relating `CoreEval f` and `Proof.eval (extract f)` on the eligible subset.
+Work: `CoreEval` distinguishing returned value, trap and fuel exhaustion (exhaustion is neither
+failure nor termination evidence); the interpreter becomes `CoreEval` plus I/O; if `PExpr` stays,
+prove fuel monotonicity, extraction definedness on admitted programs, and correspondence under
+related environments/values with explicit fuel transport or existential sufficient fuel.
+Scope: Core/`PExpr` correspondence only. R-0460 separately proves each Core → VC rule including
+hypothesis soundness; Core → SSA → LLVM stays trusted until R-0299/R-0300 (stage S11).
 
-**Exit:** no `partial def` in the interpreter or `CoreEval`; every claim is about `CoreEval` or
-transported by `extract_sound`; `VC_BRIDGE_REGISTER.md` lowering rows discharged by name.
+**Exit:** no `partial def` in the interpreter or `CoreEval`; the correspondence lemmas are proved
+(or `PExpr` is retired); every claim is about `CoreEval` or transported by them.
 
 ### Task R-0497
 
-**Objective:** The pipeline is a typed stage sequence in which skipping a verifier fails to
-compile. Stage S7; after R-0493.
+**Objective:** A typed stage sequence in which a verifier cannot be skipped or its certificate
+reused. Stage S7; depends on R-0493.
 
 **Status (2026-10-18): planned.**
 
-1. `Parse → Resolve → Elab+ElabVerify → Check → Mono+MonoVerify → Lower → SSAVerify →
-   Fold+FoldVerify → Emit`, each output a structure carrying its invariant or the token only its
-   verifier returns.
-2. New `FoldVerify` (constants normalized to their type) and `LowerVerify` (Core types preserved).
-3. One mutation family per verifier; per-stage timing and IR size reported.
+Work: `Parse → Resolve → SourceCheck → Elab → ElabVerify → CoreCheck → Mono → MonoVerify → Lower →
+LowerVerify → SSAVerify → Fold → FoldVerify → SSAVerify → Emit`; verified artifacts with private
+constructors and payload-bound certificates; mutation returns an unverified artifact; diagnostic
+artifacts (including `lowerUnverified`) typed separately and rejected by Emit and evidence APIs.
+`FoldVerify`/`LowerVerify` start as structural/type checks and do not retire semantic
+miscompilation; their semantic versions (rewrite certificates, Core/SSA simulation) belong to
+stage S11.
 
-**Exit:** `Pipeline.lean` exposes only the typed sequence; every verifier's mutation family is
-killed in a qualified campaign.
+**Exit:** `Pipeline.lean` exposes only the typed sequence; compile-fail controls cover constructor
+forgery, certificate reuse after mutation and the diagnostic-path bypass; every verifier's
+mutation family is killed in a qualified campaign.
 
 ### Task R-0498
 
-**Objective:** Every enforcement claim in docs and proof/checker/backend comments cites the gate
-leg that enforces it. Stage S8.
+**Objective:** Every enforcement claim is demonstrated by a gate leg and a targeted mutation, not
+merely cited. Stage S8.
 
-**Status (2026-10-18): planned; starts now.** Bug 080's comment, the backend contract text and
-register rows R-18 – R-20 claimed enforcement nothing performed.
+**Status (2026-10-18): planned; starts now.** Bug 080's comment, `Backend.lean`'s contract strings
+and register rows R-18 – R-20 claimed enforcement nothing performed.
 
-1. `check_enforcement_citations.sh` over `docs/verification`, `docs/language` and doc comments in
-   `Concrete/Proof`, `Concrete/Check`, `Concrete/Backend`: enforcement phrases require an existing
-   `[gate: <script>#<leg>]` or `[test: <path>]` citation.
-2. Relabel R-18 – R-20 as shape-only until R-0496 discharges them.
+Work: a claim → gate-leg → targeted-mutation manifest over verification and language docs, doc and
+enforcement-bearing ordinary comments in `Concrete/Proof`, `Concrete/Check`, `Concrete/Backend`,
+and emitted contract text; R-18 – R-20 relabelled shape-only until R-0496.
 
-**Exit:** zero uncited enforcement phrases; every cited leg exists and has a negative control.
+**Exit:** every in-scope enforcement phrase has a manifest row, and each row's targeted mutation is
+killed by its leg in a qualified campaign.
+
+### Task R-0499
+
+**Objective:** Specify the checker's safety rules over Core and attack them mechanically. Stage S9.
+
+**Status (2026-10-18): planned; starts now.** Ownership, reference, capability, `Unsafe` and
+bounds guarantees are enforced and gated but were not hunted on 2026-10-18; 082 and 087 are levers
+against them. The first checker hunt reproduced 090 – 095 (guard double free, impl capability
+bypass through generic dispatch, struct-field reference not freezing its source, two name-keyed
+leaks, a stale struct-literal address); four are the name-keyed mechanism R-0492 removes, so R-0492's
+identities are allocated at Resolve and reach source checking, which runs before Elab.
+
+Work: `docs/language/CHECKER_RULES.md` (use-once, every path consumes or destroys, no returned or
+escaping reference, required ⊆ declared capabilities through pointers, generics, trusted bodies
+and FFI-declared effects, raw dereference only under `Unsafe`), each rule with an R-0498 manifest
+row; a rule-violation fuzzer applying one rule-breaking mutation to accepted programs, plus
+acceptance of generated well-formed programs; an instrumented interpreter mode witnessing use after
+move, double destroy, leaks, escaped references and undeclared capability use; the checker hunt
+joins the scheduled hunts.
+
+**Exit:** every rule has an enforcing site, manifest row and mutation class; the fuzzer's CI seed
+set rejects every mutant and accepts every well-formed program, with minimum completed counts per
+rule; the instrumented interpreter runs the corpus and every fuzzer program with zero violations;
+each reproduced checker defect is a permanent fixture.
+
+### Task R-0500
+
+**Objective:** Write down each language rule whose implementations disagreed, as the specification
+until R-0496's evaluator becomes executable specification. Stage S10.
+
+**Status (2026-10-18): planned; starts now.**
+
+Work: normative paragraphs in `docs/language/` for block scoping and shadowing, match-binding
+positions and names, statement vs value position in branches and loops, sequential assignment
+within a loop iteration, literal typing and range including signed minima, cast semantics per width
+pair, evaluation order of arguments and fields, and short-circuit evaluation; each with accepted
+and rejected examples and a model/interpreter/binary fixture; linked to `CoreEval` clauses when
+R-0496 lands.
+
+**Exit:** every listed rule has a normative paragraph with cited fixtures; R-0491's generator
+covers each rule's shapes; `CoreEval` clauses link back.
 
 ### Task R-0286
 
@@ -16045,6 +16084,8 @@ itself, and this investigation does not block R-0299/R-0300 or interop delivery.
 
 ### Task R-0299
 
+**Pulled forward 2026-10-18:** this task is stage S11 of the [structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md); its first subset and ordering there take precedence over the Phase 15 placement below.
+
 **Objective:** Add translation validation for codegen as the path out of a fully trusted backend. V1 should validate a narrow `ValidatedSSA -> BackendIR -> ValidatedBackendIR` subset per compile:
 
  integer arithmetic, fixed arrays, structs, direct calls, branches, bounded
@@ -16093,6 +16134,8 @@ the full BackendIR migration is not a prerequisite for learning from it.
 LLVM optimization and LLVM-to-machine-code correctness are separate edges.
 
 ### Task R-0300
+
+**Pulled forward 2026-10-18:** this task is stage S11 of the [structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md); its first subset and ordering there take precedence over the Phase 15 placement below.
 
 **Objective:** Make the Phase 15 translation-validation slice independently replayable.
 
@@ -16936,6 +16979,8 @@ flagships.
 **Objective:** Add release/install distribution matrix: host triples, checksums/signing, install paths, supported/deferred channels.
 
 ### Task R-0353
+
+**Linked 2026-10-18:** this task is stage S12 of the [structural soundness refactor](docs/compiler/STRUCTURAL_SOUNDNESS_REFACTOR.md): the verifier consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements, and its conformance fixtures include every 079 – 089 reproducer.
 
 **Objective:** Define the canonical release-evidence DAG and offline independent bundle verifier before packaging or benchmarking it.
 
