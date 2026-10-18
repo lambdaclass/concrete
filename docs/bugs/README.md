@@ -123,6 +123,7 @@ there or adds one.
 - [086_discarded_statement_modeled_as_value.md](086_discarded_statement_modeled_as_value.md) — FIXED: a discarded `id(x);` was modeled as its block's value (`g(5)` 5 vs 7) and a `return` inside a `let` initializer as a value (11 vs 1); only `isValue` trailing expressions are values and non-tail expressions must not escape; pinned by `check_model_diff.sh` leg T
 - [101_branch_local_let_captures_continuation.md](101_branch_local_let_captures_continuation.md) — FIXED: a branch-local `let` was nested over the code after its branch (and a loop body's own `let` written back through `Cont`), so `scoped(1)` was 10 in the model vs 1; a block's locals may not be named by its continuation; pinned by `check_model_diff.sh` leg S
 - [088_unchecked_default_literal_and_unnormalized_fold.md](088_unchecked_default_literal_and_unnormalized_fold.md) — FIXED: an unhinted literal defaulted to an `Int` with no range check (`let x = 18446744073709551615` was 2^64-1 interpreted, -1 compiled), a literal at a type variable was never range-checked after Mono, and the SSA folder compared unnormalized constants (`0xFFFFFFFFFFFFFFFF as i64 < 0` folded false); literals now fit their defaulted/instantiated type (E0227, both paths) and the folder normalizes through `IntArith.wrapToType`
+- [090_match_guard_moves_linear.md](090_match_guard_moves_linear.md) — FIXED: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
 
 ## Open Numbered Bugs
 

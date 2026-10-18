@@ -1,0 +1,13 @@
+// Bug 090: a match guard moved a linear value; the guard is false, so the
+// fall-through arm moved it again (double free). Guards are read-only: E0300.
+struct B { v: Int }
+fn take(h: Heap<B>) with(Std) -> Int { let v: Int = h.v; free(h); return v; }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 5 });
+    let k: Int = 1;
+    match k {
+        1 if take(h) == 99 => { println(1); },
+        _ => { println(take(h)); },
+    }
+    return 0;
+}

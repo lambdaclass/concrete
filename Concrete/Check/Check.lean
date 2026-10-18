@@ -978,10 +978,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               -- exactly once (destructure it, don't drop it).
               else if !isRefScrutinee && !(← isCopyType fieldTy) then
                 throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
-            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+            checkGuard guard
             pure body
           | .litArm _ _val guard body => do
-            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+            checkGuard guard
             pure body
           | .varArm _ binding guard body => do
             if binding != "_" then addVar binding innerTyR
@@ -990,12 +990,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
             else if !(← isCopyType innerTyR) then
               throwCheck (.wildcardDiscardsNonCopy (tyToString innerTyR)) (some e.getSpan)
-            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+            checkGuard guard
             pure body
           | .rangeArm _ lo hi _ guard body => do
             let _ ← checkExpr lo
             let _ ← checkExpr hi
-            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+            checkGuard guard
             pure body
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
@@ -1093,7 +1093,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         setEnv envBefore
         let body ← match arm with
         | .litArm _ _val guard body => do
-          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          checkGuard guard
           pure body
         | .varArm _ binding guard body => do
           -- Value-pattern match auto-derefs the scrutinee (see innerTy above),
@@ -1114,15 +1114,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             addVar binding bindTy
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
-          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          checkGuard guard
           pure body
         | .rangeArm _ lo hi _ guard body => do
           let _ ← checkExpr lo
           let _ ← checkExpr hi
-          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          checkGuard guard
           pure body
         | .mk _ _ _ _ guard body => do
-          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
         if blockExitsFunction body then
@@ -1446,6 +1446,21 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       let paramTys := sig.params.map Prod.snd
       return .fn_ paramTys sig.capSet sig.retTy
     | none => throwCheck (.unknownFunctionRef fnName) (some e.getSpan)
+
+/-- A match guard is READ-ONLY (bug 090): it is checked as a bool expression,
+    and moving a non-Copy value in it is E0300. A false guard falls through to
+    the next arm, which is checked from the same pre-arm env and may move the
+    same value — the guard's move would then be a second one at run time. -/
+partial def checkGuard (guard : Option Expr) : CheckM Unit := do
+  match guard with
+  | none => pure ()
+  | some g =>
+    let before ← getEnv
+    discard (checkExpr g (some .bool))
+    let after ← getEnv
+    match guardMovedName? before.vars after.vars with
+    | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
+    | none => pure ()
 
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with

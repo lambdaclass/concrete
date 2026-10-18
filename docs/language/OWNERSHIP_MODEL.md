@@ -76,6 +76,11 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
   `let f = mk(); let f = mk();` would silently drop the first value (scope exit
   resolves names). `let s = transform(s);` stays legal — the RHS consumed the
   old value before the new binding lands.
+- **Match guards are read-only (E0300, bug 090):** a guard runs before its arm
+  commits, and a false guard falls through to the next arm. Moving a non-Copy value
+  in a guard (`1 if take(h) == 0 => …, _ => take(h)`) — an outer binding or the
+  arm's own payload binder — would move it on a path where a later arm moves it
+  again. Read through a borrow instead (`peek(&h)`) and move inside the arm body.
 - **Exemption:** a block whose textual end is unreachable — a non-terminating
   `while true {}` (no break) or `abort()` — need not consume its locals (a server's
   accept loop legitimately holds a resource live forever). `return`/`break`/`continue`

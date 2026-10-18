@@ -151,6 +151,14 @@ reads every constant through `IntArith.wrapToType`, folds constant integer casts
 wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
 false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
 [docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
+### Match Guards Are Read-Only (bug 090)
+
+A match guard runs before its arm commits, and a false guard falls through to the next arm. The
+checker recorded a move inside a guard as that arm's move, so `1 if take(h) == 99 => …,
+_ => take(h)` compiled and freed `h` twice (the probe binary printed a freed allocation). A guard
+that moves a non-Copy value, an outer binding or the arm's own payload binder, is now rejected with
+E0300; reading through a borrow stays legal. Fixtures `error_090_guard_moves_linear.con`,
+`error_090_guard_moves_binder.con`, positive control `regress_090_guard_reads.con`.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

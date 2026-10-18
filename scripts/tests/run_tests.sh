@@ -7119,6 +7119,12 @@ run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
 run_ok "$TESTDIR/regress_088_const_fold_casts.con" "1048575"
 run_err "$TESTDIR/error_088_unhinted_literal_range.con" "out of range for type 'Int'"
+# Bug 090: a match guard moved a linear value; a false guard fell through to an
+# arm that moved it again (double free). Guards are read-only (E0300); reading
+# through a borrow in a guard stays legal.
+run_err "$TESTDIR/error_090_guard_moves_linear.con" "E0300"
+run_err "$TESTDIR/error_090_guard_moves_binder.con" "E0300"
+run_ok "$TESTDIR/regress_090_guard_reads.con" 42
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

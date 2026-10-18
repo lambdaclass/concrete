@@ -56,7 +56,7 @@ params are borrows (exempt); `&T` params are Copy. See
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `mk` (enum arm) | bindings OWN the payloads of an owned scrutinee (must be consumed; E0208) and BORROW them through a reference scrutinee; `_` payload may ignore only Copy (**E0288**); guards run before the arm commits (a guard consume is a consume) | discard + scope |
+| `mk` (enum arm) | bindings OWN the payloads of an owned scrutinee (must be consumed; E0208) and BORROW them through a reference scrutinee; `_` payload may ignore only Copy (**E0288**); guards run before the arm commits and are READ-ONLY: a guard that moves a non-Copy value **rejects** (**E0300**, bug 090 — a false guard falls through to an arm that may move it again) | discard + scope |
 | `litArm` | no bindings; literal compare on Copy scrutinee | — |
 | `varArm` | the binding OWNS the whole scrutinee value (**moves** it; must be consumed) | discard (E0205/E0208 rows) |
 | `rangeArm` | Copy numeric compare; no bindings | — |

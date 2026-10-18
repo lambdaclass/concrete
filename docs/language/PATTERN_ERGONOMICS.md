@@ -95,6 +95,9 @@ match opt {
 - Guards work on every arm shape (enum / literal / range / variable) and in
   value-position matches.
 - The guard sees the arm's pattern bindings (e.g. `value` above).
+- **Guards are read-only.** A guard may read and borrow, but moving a non-Copy
+  value in it is rejected (E0300, bug 090): if the guard is false, matching falls
+  through to a later arm that may move the same value again.
 - **Exhaustiveness:** a guarded arm is *not* a catch-all — it can fall through.
   A guarded var arm does not make a match exhaustive, and a guarded enum arm does
   not cover its variant; both still require a fallback (E0534 / missing-variant

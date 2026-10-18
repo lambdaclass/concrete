@@ -542,6 +542,16 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     if afterState != .consumed && afterState != .reserved then
       throwCheck (.linearVariableNeverConsumed name) span
 
+/-- Bug 090: the first non-Copy binding a match GUARD moved — live in `before`
+    (the env just ahead of the guard), consumed in `after`. A guard runs before
+    its arm commits and a false guard falls through to the next arm, so any move
+    there happens on a path where a later arm can move the same value again.
+    The guard is an expression: it adds no bindings, so the two lists hold the
+    same entries in the same order and are compared position by position. -/
+def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
+  (before.zip after).findSome? fun ((n, vb), (_, va)) =>
+    if !vb.isCopy && vb.state != .consumed && va.state == .consumed then some n else none
+
 /-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
     `after`, absent from `before` — must be consumed before the block exits. Skipped
     when the block diverges (its textual end is unreachable). This is what the

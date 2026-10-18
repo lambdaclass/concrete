@@ -54,6 +54,8 @@ declare -A BUG_TEST_MAP=(
   [051]="regress_generic_enum_051.con adversarial_mono_generic_enum.con"
   # Bug 057: a by-value HashMap must arrive whole (hash_fn for get, cap for drop).
   [057]="regress_057_hashmap_by_value/src/main.con"
+  # Bug 090: a match guard moved a linear value a later arm moved again (E0300).
+  [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con regress_090_guard_reads.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).

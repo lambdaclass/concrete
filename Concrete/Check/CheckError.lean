@@ -240,6 +240,11 @@ inductive CheckError where
   -- a non-Copy (linear) value is a resource that must be consumed or `destroy()`d
   -- (dropping it via `discard` would leak it).
   | discardNonCopy (tyName : String)
+  -- Bug 090: a match guard is evaluated BEFORE its arm commits, and a false
+  -- guard falls through to a later arm. A guard that moved a non-Copy value
+  -- (`1 if take(h) == 99 => …, _ => take(h)`) would move it on a path where a
+  -- later arm moves it again — a double free. Guards are read-only.
+  | guardMovesLinear (name : String)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -331,6 +336,7 @@ def CheckError.message : CheckError → String
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
+  | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .conflictingCallBorrows name => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
@@ -339,6 +345,7 @@ def CheckError.hint : CheckError → Option String
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
+  | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
   | .conflictingCallBorrows _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
@@ -467,6 +474,7 @@ def CheckError.code : CheckError → String
   | .newtypeConstructPrivate _ => "E0296"
   | .structLiteralPrivateField _ _ => "E0297"
   | .fieldAccessPrivate _ _ => "E0298"
+  | .guardMovesLinear _ => "E0300"
 
 def throwCheck (e : CheckError) (span : Option Span := none)
     (related : List (Span × String) := []) : CheckM α :=

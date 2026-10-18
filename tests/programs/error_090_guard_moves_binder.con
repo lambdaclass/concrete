@@ -1,0 +1,12 @@
+// Bug 090: a guard that moves the arm's own payload binder. A false guard falls
+// through and the next arm binds the same payload again — moved twice. E0300.
+fn mk(k: Int) with(Alloc) -> Option<Heap<Int>> { return Option::Some { value: alloc(k) }; }
+fn eat(h: Heap<Int>) with(Alloc) -> Int { let v: Int = *h; return v; }
+fn main() with(Std) -> Int {
+    match mk(3) {
+        Option::Some { value } if eat(value) == 99 => { return 1; },
+        Option::Some { value } => { free(value); },
+        Option::None => { },
+    }
+    return 0;
+}
