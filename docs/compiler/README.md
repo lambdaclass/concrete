@@ -10,6 +10,6 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md), [PASSES.md](PASSES.md), and
 [`../language/`](../language/); proof and evidence architecture belongs in
 [`../verification/`](../verification/).
 
-The planned structural refactor that retires the 2026-10-18 defect classes (duplicated semantics,
-name-joined evidence, non-unique names, uncited enforcement claims) is
-[STRUCTURAL_SOUNDNESS_REFACTOR.md](STRUCTURAL_SOUNDNESS_REFACTOR.md).
+The plan for an end-to-end verified compiler — the target IR chain, semantics contract, checks
+on Core, owned backend, and the staged migration that retires the 2026-10-18 defect classes — is
+[VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md).
