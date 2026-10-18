@@ -2,6 +2,9 @@
 
 Status: research
 
+The original Concrete implementation proposal below is complemented by the
+[2026-10-18 Lean 4 comparison](#lean-4-alternative-and-generated-runtime-2026-10-18).
+
 This note covers the larger and much more speculative of the two QBE-related ideas:
 
 - implement QBE itself in Concrete
@@ -146,3 +149,60 @@ It should remain out of the active roadmap until the smaller QBE backend path pr
 Implementing QBE in Concrete is interesting because it could become a compact, auditable, self-hosting-adjacent backend story.
 
 But it is a much larger bet than "add a QBE backend," and it should stay clearly separated from that smaller, more realistic experiment.
+
+## Lean 4 Alternative And Generated Runtime (2026-10-18)
+
+The [Sparkle/emitted-code analysis](sparkle-emitted-code-validation.md) adds a
+second host-language option: implement a small QBE-inspired native backend in
+Lean 4, then evaluate whether a later Concrete implementation buys useful
+independence or dogfooding. R-0297 owns target-backend scope and R-0413 owns the
+Concrete implementation comparison. The ordinary external-QBE integration
+remains a separate project.
+
+Lean 4 is the recommended first host for the correctness experiment because the
+compiler already uses it, and instruction semantics, executable passes and
+preservation theorems can share an environment. The required proofs still need
+to be written. A Concrete port would additionally depend on establishing the
+meaning of the Concrete program implementing that port.
+
+### Compiler Memory Management Versus Generated Programs
+
+[Lean uses reference counting](https://lean-lang.org/doc/reference/latest/Run-Time-Code/Reference-Counting/).
+Its [runtime](https://lean-lang.org/doc/reference/latest/Run-Time-Code/) supports
+the executable built from Lean code. Building a backend with Lean's C compilation
+path therefore produces a compiler executable that uses Lean's runtime. That does
+not put Lean runtime calls into assembly or machine code that this compiler emits.
+
+```text
+Build the compiler:
+  Lean implementation -> generated C + Lean runtime -> backend executable
+
+Compile a program:
+  QBE-style/Concrete backend input -> backend executable -> target assembly/object
+                                  -> assembler/linker -> native program
+```
+
+The native program needs only the runtime required by its own language and
+explicit calls. Concrete's no-GC target model can remain unchanged. Compiler
+allocation/reference-count overhead affects compilation performance and memory
+use and should be measured independently. Lean compiler/runtime correctness
+remains toolchain trust until the applicable artifact checks/proofs cover it.
+Using this backend to compile Lean programs themselves would be a separate
+problem with Lean's own runtime requirements.
+
+### Small First Scope
+
+Choose one target, pin its ISA/ABI/object format and begin with integer/boolean
+functions, branches and simple stack-based allocation. Keep unsupported operations
+explicit. Prove the lowering relative to target instruction semantics or validate
+each emitted artifact; preserve required traps, values and calling conventions.
+Add register allocation and optimization only after the simple path has useful
+evidence. A full QBE parser/optimizer/target matrix is not required to establish
+the first relation.
+
+Assembly emission leaves the assembler trusted. Actual object-code assurance
+needs encoding/decoding and relocation checks as well, followed separately by
+linker/loader/runtime accounting. Compare against LLVM, external QBE and an
+independent oracle; sampled agreement remains testing. This larger project must
+not become a prerequisite for checking today's LLVM output or for Concrete's
+first executable dependency integration.

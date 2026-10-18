@@ -10,6 +10,23 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Sparkle Analysis And Emitted-Code Validation Plan (2026-10-18)
+
+Added a [source-based analysis](research/compiler/sparkle-emitted-code-validation.md)
+of Sparkle at `1614cee`, compared with Concrete at `f5b201af`. It records emitted
+output validation, exact refactor/replacement claims, proof dependency separation,
+fresh downstream CI and counterexample-first proof work, with remaining trust
+boundaries and source references.
+
+R-0299/R-0300 now explicitly plan a separate relation from checked SSA or validated
+BackendIR to the actual emitted LLVM text, starting with `u8` checked increment,
+its real overflow helper and rejecting mutations. Their existing BackendIR V1
+scope stays separate. R-0297/R-0413 retain a bounded comparison of Lean 4 and
+Concrete implementations of a possible small native backend, including ISA/ABI,
+encoding and assembler/linker trust. This is a completed documentation/planning
+milestone; no semantic checker, native backend or machine-code proof shipped here,
+and the current implementation queue is unchanged.
+
 ### A Claim Is Proved Only When Its Body Is What Its Theorem Is About (bug 079)
 
 On `b87152ba`, `fn always_seven(x: Int) -> Int { return 7; }` linked to `check_nonce_correct` was

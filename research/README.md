@@ -163,6 +163,7 @@ If you want the highest-leverage current research first:
 
 - [compiler/artifact-driven-compiler.md](compiler/artifact-driven-compiler.md) — operationalizing named compiler artifacts (`P0`, `Open`)
 - [compiler/backend-traceability.md](compiler/backend-traceability.md) — source/Core/SSA/LLVM/machine behavior traceability (`P1`, `Open`)
+- [compiler/sparkle-emitted-code-validation.md](compiler/sparkle-emitted-code-validation.md) — dated Sparkle source analysis, emitted-LLVM validation experiment and Lean 4/Concrete native-backend options; R-0299/R-0300 own acceptance (`P1`, `Open`)
 - [compiler/compiler-dataflow-ideas.md](compiler/compiler-dataflow-ideas.md) — dataflow/query-inspired artifact and inspection ideas (`P1`, `Open`)
 - [compiler/diagnostic-ux.md](compiler/diagnostic-ux.md) — Elm-clear diagnostic goals for proof, report, predictable-profile, capability, and trust errors (`P0`, `Open`)
 - [compiler/external-ll1-checker.md](compiler/external-ll1-checker.md) — external grammar + LL(1) checker (`P1`, `Open`)

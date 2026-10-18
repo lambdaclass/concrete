@@ -82,6 +82,17 @@ composition follow the queued typed-contract and evidence prerequisites. These
 increments do not expand rows 0–1's recorded exits; newly reproduced false
 guarantees still enter through the existing soundness-repair rule.
 
+**Emitted-code validation analysis, 2026-10-18 (planned):** the
+[Sparkle review](research/compiler/sparkle-emitted-code-validation.md) records
+the existing SSA/LLVM foundations and a bounded check of actual emitted LLVM,
+beyond optional `llvm-as` well-formedness checks. R-0299/R-0300 own that additional
+semantic edge and its independent replay; their existing BackendIR V1 relation
+keeps its scope. R-0297/R-0413 compare a possible small native backend in Lean 4
+with a later Concrete implementation. Lean 4 is the recommended first host for
+the assurance experiment; implementation language alone supplies no correctness
+guarantee. Fresh-consumer checks join R-0285; deeper backend research does not
+reorder the queue or delay its first executable dependency slice.
+
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
 (closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
@@ -13432,6 +13443,14 @@ case remains accepted. Dropping a relevant fact or dependency edge must yield a
 detected failure or incomplete coverage, never an unchanged/clean verdict. Keep the
 later allocation, runtime and stdlib dimensions behind their existing fact producers.
 
+**Selected-function equivalence follow-on (planned 2026-10-18):** use the
+[Sparkle analysis](research/compiler/sparkle-emitted-code-validation.md) as a
+reference for refactor checks. State the exact old/new relation, domain, failures
+and assumptions, retaining each revision's own dependency and target context.
+Re-elaborating an old body against current imports cannot establish equivalence
+to the old program. Keep this behind the typed contract/model and R-0482 identity
+prerequisites; a model-level proof does not supply an unchecked codegen edge.
+
 ### Task R-0184
 
 **Objective:** Add early **capability budget files** before full package facts exist.
@@ -15473,6 +15492,14 @@ required: local binding packages with pinned dependencies establish the first wo
    implementation before adding Rust crypto, the selected upstream Zig operation
    and the bounded libp2p runtime adapter. Retain the same feedback for each slice.
 
+Automate a fresh-consumer CI case outside the compiler checkout as soon as the
+first slice runs. Fetch the exact candidate origin/revision and toolchain,
+including fork-PR origins; use only declared dependencies and the installed
+workflow. Compare actual results and expected failures, including resource
+cleanup, rather than accepting a build or output marker alone. Record setup,
+build and run timings on each claimed platform, with clean/warm/offline checks
+as applicable. R-0352/R-0354 reuse this consumer for distribution acceptance.
+
 Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
@@ -15782,6 +15809,24 @@ direct SSA->LLVM path once parity is established.
   universal machine IR. Require behavior coverage and target/ABI matrices
   comparable to the LLVM/QBE gates before any native backend becomes a
   default for any build mode.
+
+**Small owned backend investigation (planned 2026-10-18):** compare a Lean 4
+implementation with a later Concrete implementation under R-0413; record the
+tradeoffs in [the Sparkle/native-backend analysis](research/compiler/sparkle-emitted-code-validation.md)
+and [QBE implementation research](research/compiler/qbe-in-concrete.md).
+Recommend Lean 4 first so executable target semantics and preservation theorems
+can be developed with the existing compiler. Begin, only when pulled, with one
+explicit ISA/ABI/object-format target, integer/boolean functions and simple
+instruction selection with explicit stack locations. A full QBE reimplementation,
+optimizing register allocator and target matrix are not entrance requirements.
+State which lowering edges are proved, checked or trusted; include the actual
+assembly/object encoding and remaining assembler/linker/runtime assumptions.
+Compare against external QBE/LLVM and an independent semantic oracle. Agreement
+is testing, not a preservation theorem. Keep the existing workload gate and
+record the new independent bug detection or reduced trust that justifies a third
+backend's maintenance cost. Neither host language makes the output correct by
+itself, and this investigation does not block R-0299/R-0300 or interop delivery.
+
 ### Task R-0298
 
 **Objective:** Define backend-default policy explicitly if multiple production backends graduate: defaults are a versioned `(target, build_mode) -> backend` table, visible in help/audit/build receipts and overridable by an explicit flag. Changing a default requires clean-build/incremental equivalence, behavior and optimization matrices, performance data, a rollback switch, and release notes. Backend availability must never change source-language semantics, proof status, diagnostics before codegen, or package resolution.
@@ -15812,6 +15857,29 @@ direct SSA->LLVM path once parity is established.
  Lean-proved/Core-level claim cannot be presented as native-code evidence
  unless the backend artifact is either translation-validated or explicitly
  backend-trusted in the audit bundle.
+
+**Actual emitted LLVM increment (planned 2026-10-18):** extend validation beyond
+the existing `ValidatedBackendIR` boundary with a separate, explicitly scoped
+relation to the emitted `.ll` bytes. Follow the
+[analysis and acceptance experiment](research/compiler/sparkle-emitted-code-validation.md#bounded-emitted-llvm-experiment):
+retain checked SSA, generate LLVM normally, parse the actual output with a
+separate reader and compare independent source/LLVM semantics for every input
+in the admitted domain. The first case is checked `u8` increment: `10 -> 11`,
+`254 -> 255`, and `255 -> required overflow failure`. A silent wrap to zero must
+refuse. Start with integer/boolean functions and acyclic branches, and include
+the real checked-arithmetic helper bodies and their required call closure;
+checking helper names or the producer's pre-render AST alone is insufficient.
+
+Retain controls for a corrupted helper, wrong width/signedness, changed branch
+or return, missing failure edge, new LLVM poison/undefined behavior, malformed
+output and unsupported instructions. Unsupported shapes, timeout and checker
+errors remain distinct incomplete results and cannot grant a validated verdict.
+Keep finite-domain checking, solver trust and kernel-checked proof separate.
+Parser/reflection soundness and model-to-source correspondence remain explicit
+assurance obligations. A direct probe of the current SSA emitter is permitted;
+the full BackendIR migration is not a prerequisite for learning from it.
+LLVM optimization and LLVM-to-machine-code correctness are separate edges.
+
 ### Task R-0300
 
 **Objective:** Make the Phase 15 translation-validation slice independently replayable.
@@ -15858,12 +15926,37 @@ direct SSA->LLVM path once parity is established.
  the absence of an externally expected root the checker must report an
  unvalidated backend edge, not claim semantic mismatch detection. Wire
  `scripts/tests/check_backend_translation_certificates.sh`.
+
+**Emitted-LLVM replay increment (planned 2026-10-18):** R-0299's emitted-text
+relation is distinct from the V1 relation above and must not reinterpret an old
+certificate as covering output it never checked. Use the existing canonical
+task/evidence objects with a separately versioned relation/profile. Bind the
+exact checked input, emitted bytes, selected function and actual helper/callee
+closure, target/arithmetic semantics, domain, checker/rules, proof artifacts and
+assumptions. Independent replay parses the retained output and checks the
+relation without calling producer Emit/Lower helpers. Gate a valid bundle,
+wrong/stale output, wrong target/profile, a modified helper and a consistently
+rehashed but semantically wrong bundle. Incomplete parsing or checking cannot
+be hidden by a matching hash or a partial set of obligations.
+
+Report the independently checked edge precisely: checked SSA/BackendIR to
+emitted LLVM, followed separately by LLVM optimization, machine-code emission,
+object/linking and runtime/ABI boundaries. LLVM transformation checking such as
+Alive2 keeps its supported scope and solver trust; it does not become a Lean
+proof or a Concrete-to-LLVM proof by relabeling. Object/binary identities remain
+identity-only until their own semantic edge is checked. Extend hostile schema
+fixtures and the R-0353 consumer when this profile graduates; do not freeze
+producer-only bytes or mint stronger receipts during the development probe.
+
 ### Task R-0301
 
 **Objective:** Add the Phase 15 validation artifact: a backend/std-lib contract project with ABI/layout C round trips, C/ABI glue generation/import checks, the C ABI classification matrix, alignment-fact fixtures if Task R-0284 is pulled into implementation, backend-IR emission/verifier checks, producer translation-validation checks, independent `BackendTranslationCertificateV1` replay and mutations, sanitizer runs, compiled-oracle differential tests, native debug/source-map smoke tests, clean-vs-incremental fact equivalence, cached-object substitution negatives, and stdlib
 
  authority/allocation/evidence gates. The artifact must show the exact point
  at which independent checking stops and backend/toolchain trust begins.
+ Include R-0299/R-0300's actual emitted-LLVM fixture and independent replay once
+ that profile graduates, with overflow-helper and output-substitution negatives;
+ keep its coverage separate from the BackendIR V1 and native-code edges.
 ### Task R-0302
 
 **Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/language/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/compiler/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
@@ -17151,6 +17244,16 @@ distinct; build tools target the host while linked libraries target the program.
 Build-time tool authority and linked-library runtime authority are separate facts.
 Imports resolve only declared dependencies against this same graph.
 
+**Proof-authoring edges (planned 2026-10-18):** record heavy proof/tactic
+dependencies separately from runtime, host build-tool and test edges within this
+same model, following the [Sparkle sidecar lesson](research/compiler/sparkle-emitted-code-validation.md#additional-workflow-lessons).
+Ordinary builds need not fetch or build unused proof-authoring packages. A build
+requiring evidence must still validate its retained bundle or replay with the
+required dependencies; absence cannot excuse missing/stale proof evidence.
+Keep proof dependencies/toolchains in evidence roots even when they do not enter
+the executable link graph. Implement this schema increment when a proof-bearing
+package needs it; it does not delay the first exact-pin native dependency slice.
+
 R-0285's first slice supplies exact application/binding manifest examples and
 expected lock output; include workspace and C/Rust/Zig package cases. Label draft
 fields until implemented, then keep the examples in executable fixtures so docs
@@ -17691,6 +17794,18 @@ must not silently reinterpret or overwrite their source scope.
  decision record states whether the approach actually shrinks the TCB, merely
  duplicates it, or creates a second source of truth. Pull forward only if a
  real pass can be checked without weakening the no-second-truth-source rule.
+
+**Native backend comparison (planned 2026-10-18):** R-0297 owns the possible
+target-specific backend; this task owns evaluating a Concrete implementation
+alongside a Lean 4 reference. Recommend Lean 4 for the first assurance prototype,
+with explicit instruction semantics and preservation/validation obligations.
+Writing the generator in Lean does not prove it correct; writing it in Concrete
+also requires accounting for how Concrete compiled the generator. Keep bootstrap,
+host-runtime and target-runtime trust distinct. The compiler's Lean runtime and
+reference counting are not automatically linked into programs whose machine code
+it emits. Compare maintained code, proof/annotation burden, independent bug
+detection, reproducibility and actual TCB reduction. See
+[QBE/native-backend research](research/compiler/qbe-in-concrete.md#lean-4-alternative-and-generated-runtime-2026-10-18).
 ### Task R-0414
 
 **Objective:** Research a Datalog-style / stratified relational **rule layer** only when the shipped Phase 8.5 `CompilerDB` has real relational consumers that typed queries/maps cannot express cleanly.
