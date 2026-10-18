@@ -151,6 +151,16 @@ reads every constant through `IntArith.wrapToType`, folds constant integer casts
 wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
 false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
 [docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
+### Checker Bindings Have An Identity, Not Just A Name (bug 093)
+
+The scope-exit check for a block or match arm treated any binding whose NAME existed before the block
+as pre-existing, so `free(r); if c { let r = alloc(..); }` or a match binder `value` over a consumed
+outer `value` leaked silently (20000 iterations of a 32 KiB allocation in the probe). Every checker
+binding now carries a `uid`; block-local, return-path, branch/arm merge and function scope-exit
+checks match bindings by it. Fixtures `error_093_shadowing_block_local_leak.con`,
+`error_093_shadowing_match_binder_leak.con`, positive control
+`regress_093_shadowing_locals_consumed.con`.
+
 ### References Are Never Stored In An Aggregate (bug 092)
 
 Only a bare `let r = &s` froze `s`; a reference parked in a struct field, enum payload or array did

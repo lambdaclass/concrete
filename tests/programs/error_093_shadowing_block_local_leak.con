@@ -1,0 +1,17 @@
+// Bug 093: a block-local that shadows a (consumed) outer name escaped the
+// never-consumed check, because block locals were found by NAME and `r`
+// existed before the block. The inner heap allocation leaked. E0208.
+struct B { v: Int }
+fn work(k: Int) with(Alloc) -> Int {
+    let r: Heap<B> = alloc(B { v: k });
+    free(r);
+    let mut out: Int = 0;
+    if k >= 0 {
+        let r: Heap<B> = alloc(B { v: k });
+        out = r.v;
+    }
+    return out;
+}
+fn main() with(Std) -> Int {
+    return work(3);
+}

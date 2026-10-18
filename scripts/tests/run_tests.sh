@@ -7134,6 +7134,12 @@ run_err "$TESTDIR/error_092_ref_struct_field.con" "E0239"
 run_err "$TESTDIR/error_092_ref_in_option.con" "E0239"
 run_err "$TESTDIR/error_092_ref_in_array.con" "E0239"
 run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
+# Bug 093: a block local or match binder that shadows an outer name escaped the
+# never-consumed check (block locals were found by NAME). Bindings now carry an
+# identity; the shadowing local must itself be consumed.
+run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "E0208"
+run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "E0208"
+run_ok "$TESTDIR/regress_093_shadowing_locals_consumed.con" 42
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

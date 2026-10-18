@@ -1,0 +1,14 @@
+// Bug 093: a match payload binder named like a consumed outer binding escaped
+// the never-consumed check; the payload `Heap<Int>` leaked. E0208.
+struct R { v: Int }
+fn eat(r: R) -> Int { let R { v } = r; return v; }
+fn mk(k: Int) with(Alloc) -> Option<Heap<Int>> { return Option::Some { value: alloc(k) }; }
+fn main() with(Std) -> Int {
+    let value: R = R { v: 7 };
+    let a: Int = eat(value);
+    match mk(3) {
+        Option::Some { value } => { println(1); },
+        Option::None => { println(2); },
+    }
+    return a;
+}

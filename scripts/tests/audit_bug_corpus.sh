@@ -55,6 +55,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 057: a by-value HashMap must arrive whole (hash_fn for get, cap for drop).
   [057]="regress_057_hashmap_by_value/src/main.con"
   # Bug 090: a match guard moved a linear value a later arm moved again (E0300).
+  # Bug 093: a shadowing block local / match binder escaped E0208 (name-keyed scope check).
+  [093]="error_093_shadowing_block_local_leak.con error_093_shadowing_match_binder_leak.con regress_093_shadowing_locals_consumed.con"
   # Bug 092: a reference stored in an aggregate outlived its source (E0239).
   [092]="error_092_ref_struct_field.con error_092_ref_in_option.con error_092_ref_in_array.con regress_092_refs_flow_down.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con regress_090_guard_reads.con"

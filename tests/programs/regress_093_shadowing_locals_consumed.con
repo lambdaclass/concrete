@@ -1,0 +1,21 @@
+// Bug 093 positive control: block locals and match binders that shadow a
+// consumed outer name are fine when they are themselves consumed.
+struct B { v: Int }
+fn mk(k: Int) with(Alloc) -> Option<Heap<Int>> { return Option::Some { value: alloc(k) }; }
+fn main() with(Std) -> Int {
+    let r: Heap<B> = alloc(B { v: 10 });
+    let mut out: Int = r.v;
+    free(r);
+    if out > 0 {
+        let r: Heap<B> = alloc(B { v: 20 });
+        out = out + r.v;
+        free(r);
+    }
+    let value: Heap<Int> = alloc(5);
+    free(value);
+    match mk(7) {
+        Option::Some { value } => { out = out + *value; },
+        Option::None => { },
+    }
+    return out + 5;
+}

@@ -125,6 +125,7 @@ there or adds one.
 - [088_unchecked_default_literal_and_unnormalized_fold.md](088_unchecked_default_literal_and_unnormalized_fold.md) — FIXED: an unhinted literal defaulted to an `Int` with no range check (`let x = 18446744073709551615` was 2^64-1 interpreted, -1 compiled), a literal at a type variable was never range-checked after Mono, and the SSA folder compared unnormalized constants (`0xFFFFFFFFFFFFFFFF as i64 < 0` folded false); literals now fit their defaulted/instantiated type (E0227, both paths) and the folder normalizes through `IntArith.wrapToType`
 - [090_match_guard_moves_linear.md](090_match_guard_moves_linear.md) — FIXED: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
 - [092_reference_stored_in_aggregate.md](092_reference_stored_in_aggregate.md) — FIXED: a reference stored in a struct field, enum payload or array did not freeze its source, so `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory. References are never stored in an aggregate (E0239)
+- [093_shadowing_local_escapes_scope_check.md](093_shadowing_local_escapes_scope_check.md) — FIXED: a block local or match binder that shadowed an outer name was skipped by the never-consumed check (E0208), so it leaked; checker bindings now carry an identity and scope/merge checks match by it, not by name
 
 ## Open Numbered Bugs
 

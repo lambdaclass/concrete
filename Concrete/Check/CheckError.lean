@@ -47,6 +47,11 @@ structure VarInfo where
   mutable : Bool := true  -- whether the variable was declared with mut
   movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
   declSpan : Option Span := none  -- where it was declared (locates unconsumed-linear E0208)
+  -- Identity of this binding (bugs 093/094). Two bindings may share a NAME
+  -- (shadowing, arm binders, block locals); ownership state is matched across
+  -- env snapshots by this id, never by name. Assigned by `addVar` from
+  -- `TypeEnv.nextVarUid`.
+  uid : Nat := 0
   deriving Repr
 
 structure TypeEnv where
@@ -82,6 +87,10 @@ structure TypeEnv where
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
+  -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
+  -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
+  -- an id a sibling branch already used.
+  nextVarUid : Nat := 1
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds

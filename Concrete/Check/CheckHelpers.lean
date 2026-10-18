@@ -146,7 +146,8 @@ partial def tyParamOccursIn (name : String) : Ty → Bool
   | _ => false
 
 def getEnv : CheckM TypeEnv := get
-def setEnv (env : TypeEnv) : CheckM Unit := set env
+def setEnv (env : TypeEnv) : CheckM Unit :=
+  modify fun cur => { env with nextVarUid := max cur.nextVarUid env.nextVarUid }
 
 /-- Resolve type aliases. -/
 def resolveType (ty : Ty) : CheckM Ty := do
@@ -256,18 +257,19 @@ def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option
   -- inside an aggregate — nothing would keep the reference's source frozen.
   if tyHoldsRefInAggregate ty then
     throwCheck (.refStoredInAggregate s!"binding '{name}'" (tyToString ty)) declSpan
-  let env ← getEnv
   let copy ← isCopyType ty
-  let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan }
   let env ← getEnv
-  setEnv { env with vars := (name, info) :: env.vars }
+  let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan,
+                          uid := env.nextVarUid }
+  setEnv { env with vars := (name, info) :: env.vars, nextVarUid := env.nextVarUid + 1 }
 
-/-- Look up the LAST (outermost) binding with this name. Branch/arm envs
-    PREPEND their locals, so a shadowing local — e.g. a nested match's
-    field-named `value` binding over an outer `value` — must not be mistaken
-    for the pre-existing variable during consumption merges. -/
-def lookupOutermost (vars : List (String × VarInfo)) (name : String) : Option VarInfo :=
-  vars.foldl (fun acc (n, vi) => if n == name then some vi else acc) none
+/-- The entry for binding `uid` (bugs 093/094: identity, not name). -/
+def lookupByUid (vars : List (String × VarInfo)) (uid : Nat) : Option VarInfo :=
+  (vars.find? fun (_, vi) => vi.uid == uid).map Prod.snd
+
+/-- Is binding `uid` present in `vars`? -/
+def hasUid (vars : List (String × VarInfo)) (uid : Nat) : Bool :=
+  vars.any fun (_, vi) => vi.uid == uid
 
 def activeBorrowRefs (env : TypeEnv) (varName : String) : List VarInfo :=
   env.vars.foldl (fun acc (_, info) =>
@@ -422,12 +424,14 @@ def consumeVarIfExists (name : String) (span : Option Span := none) (breakDepthE
   | some _ => consumeVar name span breakDepthExempt
   | none => pure ()  -- function reference, not a variable
 
-/-- Check that all tracked linear variables in the given name list are consumed.
-    `reserved` is allowed because the deferred destroy will run at scope exit. -/
-def checkScopeExit (varNames : List String) (span : Option Span := none) : CheckM Unit := do
+/-- Check that every binding in `entries` is consumed at scope exit.
+    `reserved` is allowed because the deferred destroy will run at scope exit.
+    Each binding is looked up by IDENTITY (bug 093): a shadowed entry is
+    checked as itself, not through the innermost binding sharing its name. -/
+def checkScopeExit (entries : List (String × VarInfo)) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
-  for name in varNames do
-    match env.vars.lookup name with
+  for (name, entry) in entries do
+    match lookupByUid env.vars entry.uid with
     | some info =>
       if !info.isCopy && info.state != .consumed && info.state != .reserved then
         -- Point at the variable's declaration when we have it (E0208 used to be
@@ -562,7 +566,7 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     | .ref _ | .refMut _ => continue
     | _ => pure ()
     if infoBefore.state == .consumed || infoBefore.state == .reserved then continue
-    let afterState := match lookupOutermost after name with
+    let afterState := match lookupByUid after infoBefore.uid with
       | some info => info.state
       | none => infoBefore.state
     -- `.consumed` = moved on this path; `.reserved` = a pending `defer` will
@@ -591,7 +595,11 @@ def checkBlockLocalsConsumed
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
   for (name, info) in after do
-    if before.any (fun (n, _) => n == name) then continue  -- pre-existing, not block-local
+    -- Pre-existing, not block-local. By IDENTITY (bug 093): a block-local that
+    -- shadows an outer name (`let r = …` over a consumed outer `r`, a match
+    -- binder `value` over an outer `value`) is a different binding and must
+    -- itself be consumed.
+    if hasUid before info.uid then continue
     if info.isCopy then continue
     if info.state == .consumed || info.state == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))

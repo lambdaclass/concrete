@@ -277,7 +277,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       (blockDiverges then_) (blockDiverges else_) (some e.getSpan)
     -- Drop branch-locals; restore the exit flag.
     let envM ← getEnv
-    setEnv { envM with vars := envM.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n),
+    setEnv { envM with vars := envM.vars.filter fun (_, vi) => hasUid envBefore.vars vi.uid,
                        inFnExitingBranch := envBefore.inFnExitingBranch }
     -- Both branches must agree on type
     if thenTy != elseTy && thenTy != .never && elseTy != .never then
@@ -1055,10 +1055,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               -- Check agreement on pre-existing variables
               for (name, infoBefore) in envBefore.vars do
                 if infoBefore.isCopy then continue
-                let state1 := match lookupOutermost firstVars name with
+                let state1 := match lookupByUid firstVars infoBefore.uid with
                   | some info => info.state
                   | none => infoBefore.state
-                let state2 := match lookupOutermost envAfterArm.vars name with
+                let state2 := match lookupByUid envAfterArm.vars infoBefore.uid with
                   | some info => info.state
                   | none => infoBefore.state
                 let consumed1 := state1 == .consumed
@@ -1078,7 +1078,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         match firstArmVars.orElse (fun () => divergingArmVars) with
         | some vars =>
           let vars' := envBefore.vars.map fun (n, vi) =>
-            match lookupOutermost vars n with
+            match lookupByUid vars vi.uid with
             | some info => (n, { vi with state := info.state })
             | none => (n, vi)
           setEnv { envBefore with vars := vars' }
@@ -1173,10 +1173,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- Check agreement on pre-existing variables
             for (name, infoBefore) in envBefore.vars do
               if infoBefore.isCopy then continue
-              let state1 := match lookupOutermost firstVars name with
+              let state1 := match lookupByUid firstVars infoBefore.uid with
                 | some info => info.state
                 | none => infoBefore.state
-              let state2 := match lookupOutermost envAfterArm.vars name with
+              let state2 := match lookupByUid envAfterArm.vars infoBefore.uid with
                 | some info => info.state
                 | none => infoBefore.state
               let consumed1 := state1 == .consumed
@@ -1193,7 +1193,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       match firstArmVars.orElse (fun () => divergingArmVars) with
       | some vars =>
         let vars' := envBefore.vars.map fun (n, vi) =>
-          match lookupOutermost vars n with
+          match lookupByUid vars vi.uid with
           | some info => (n, { vi with state := info.state })
           | none => (n, vi)
         setEnv { envBefore with vars := vars' }
@@ -1654,7 +1654,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- this, else-branch locals leaked into the outer env (the accidental, lopsided
       -- way they used to be caught at function scope).
       let env ← getEnv
-      setEnv { env with vars := env.vars.filter fun (n, _) => envBefore.vars.any (fun (bn, _) => bn == n),
+      setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid envBefore.vars vi.uid,
                         inFnExitingBranch := envBefore.inFnExitingBranch }
     | none =>
       -- No else branch: then branch must not consume any linear var
@@ -2007,10 +2007,10 @@ partial def mergeVarStates
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do
     if infoBefore.isCopy then continue
-    let thenState := match lookupOutermost afterThen name with
+    let thenState := match lookupByUid afterThen infoBefore.uid with
       | some info => info.state
       | none => infoBefore.state
-    let elseState := match lookupOutermost afterElse name with
+    let elseState := match lookupByUid afterElse infoBefore.uid with
       | some info => info.state
       | none => infoBefore.state
     -- Both consumed or both not-consumed (used/unconsumed are equivalent here)
@@ -2030,7 +2030,7 @@ partial def mergeVarStates
     if mergedState != infoBefore.state then
       let env ← getEnv
       let vars' := env.vars.map fun (n, vi) =>
-        if n == name then (n, { vi with state := mergedState })
+        if vi.uid == infoBefore.uid then (n, { vi with state := mergedState })
         else (n, vi)
       setEnv { env with vars := vars' }
 
@@ -2044,7 +2044,7 @@ partial def checkNoBranchConsumption
   for (name, infoBefore) in before do
     if infoBefore.isCopy then continue
     if infoBefore.state == .consumed then continue
-    let thenState := match afterThen.lookup name with
+    let thenState := match lookupByUid afterThen infoBefore.uid with
       | some info => info.state
       | none => infoBefore.state
     if thenState == .consumed then
@@ -2115,15 +2115,14 @@ def checkFn (f : FnDef) : CheckM Unit := do
   checkStmts f.body retTy
   -- Check local bindings AND owned params for the consume obligation.
   let envAfter ← getEnv
-  let localVars := envAfter.vars.filter fun (name, _) =>
-    (envBefore.vars.lookup name).isNone && !borrowedParams.contains name
-  let localNames := localVars.map fun (name, _) => name
+  let localVars := envAfter.vars.filter fun (name, vi) =>
+    !hasUid envBefore.vars vi.uid && !borrowedParams.contains name
   -- H9: if the body never terminates (a server's `while true {…}` accept loop, an
   -- unconditional abort), its textual end is unreachable, so a still-live linear
   -- local there is not a leak. `return`/`break` do NOT exempt — those exit the
   -- function and a resource owned at that point genuinely leaks.
   if !(blockNonTerminating f.body) then
-    checkScopeExit localNames
+    checkScopeExit localVars
   -- Restore env (remove this function's locals)
   setEnv envBefore
 
