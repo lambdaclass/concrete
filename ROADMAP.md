@@ -15904,7 +15904,7 @@ of the caller's declared set, through pointers, generics and FFI), raw dereferen
 or executes the bounds trap). A Core checker implementing them runs as a shadow beside the source
 checker with a disagreement gate, then becomes authoritative and emits `CheckedCore` plus its
 derivation; capabilities are re-checked after Mono. A rule-violation fuzzer applies one
-rule-breaking mutation to accepted programs (including destroying a source while an
+rule-breaking mutation to accepted programs (including destroying a source while a
 permitted local or downward reference is live, conflicting borrows, reaching a capability through a pointer or
 generic, raw dereference outside both `trusted` and `Unsafe`); valid programs that must trap are
 not checker rejections. Positive controls: trusted raw-pointer operations and trusted absorption of
