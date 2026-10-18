@@ -210,5 +210,26 @@ grep -q "^-- spec not bound to body" <<<"$B" \
   || no "N: count_up is not refused for an unbound specification: $(head -1 <<<"$B")"
 
 echo ""
+echo "=== H: a specification mentioned only in a HYPOTHESIS binds nothing ==="
+# Examples.TestFixtures.Proofs.spec_in_hypothesis_only assumes add_commutativity evaluates to none and
+# concludes True. The generator read spec terms from the whole type, so it bound — and the claim's body
+# IS add_commutativity, so it read proved on a theorem that proves True. Bindings come from conclusions.
+TBL=Concrete/Proof/ClassificationTable.lean
+if grep -q '^  ("Examples.TestFixtures.Proofs.spec_in_hypothesis_only", "body"' "$TBL"; then
+  ok "H: the theorem was processed (it has a classification row)"
+else
+  no "H: the hypothesis-only theorem has no classification row, so the leg below would be vacuous"
+fi
+if grep -qE '^  \("Examples.TestFixtures.Proofs.spec_in_hypothesis_only", "add_commutativity"' "$TBL"; then
+  no "H: a binding row exists for a spec that appears only in a hypothesis"
+else
+  ok "H: no binding row — the spec appears only in a hypothesis"
+fi
+B="$(block "$(status tests/programs/spec_in_hypothesis_only/test_spec_hyp.con)" main.add)"
+grep -q "^-- spec not bound to body" <<<"$B" && grep -q "spec_in_hypothesis_only' evaluates no specification" <<<"$B" \
+  && ok "H: the claim is not proved — its theorem's conclusion evaluates no specification" \
+  || no "H: the hypothesis-only claim is not refused: $(head -1 <<<"$B")"
+
+echo ""
 echo "SUBJECT-BINDING: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

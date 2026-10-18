@@ -79,6 +79,7 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.pure_mul_correct,
     `Examples.TestFixtures.Proofs.pure_sub_correct,
     `Examples.TestFixtures.Proofs.right_add_correct,
+    `Examples.TestFixtures.Proofs.spec_in_hypothesis_only,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
   ]
@@ -242,7 +243,10 @@ partial def closedSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
   let mut blits : List String := []
   for n in names do
     let some ci := env.find? n | continue
-    let terms ← closedSpecTerms ci.type
+    -- THE CONCLUSION ONLY. A specification mentioned in a HYPOTHESIS is something the theorem
+    -- assumes, not something it shows: "if addThreeExpr evaluates to none then True" mentions the
+    -- spec and says nothing about any body. Collecting from the whole type bound such a theorem.
+    let terms ← forallTelescope ci.type fun _ body => closedSpecTerms body
     let mut seen : List (String × String) := []
     for t in terms do
       let some head := t.getAppFn.constName? | continue

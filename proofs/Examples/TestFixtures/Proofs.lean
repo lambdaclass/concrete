@@ -74,4 +74,9 @@ theorem right_add_correct (a b : Int) (fuel : Nat) :
       = some (.int (a + b)) := by
   simp [right_add_spec, eval, Env.bind, evalBinOp]
 
+/-- A theorem that MENTIONS a specification only in a hypothesis and concludes nothing about it.
+    It must not bind any claim: the binding reads the conclusion (check_subject_binding.sh). -/
+theorem spec_in_hypothesis_only
+    (_h : eval FnTable.empty Env.empty 1 add_commutativity = none) : True := trivial
+
 end Examples.TestFixtures.Proofs

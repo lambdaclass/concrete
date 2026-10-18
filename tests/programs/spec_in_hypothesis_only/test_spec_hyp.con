@@ -1,0 +1,15 @@
+// A theorem that mentions the specification only in a HYPOTHESIS cannot be what this claim is about.
+// Examples.TestFixtures.Proofs.spec_in_hypothesis_only assumes add_commutativity evaluates to none and
+// concludes True; the subject binding reads conclusions, so this claim is spec_unbound, never proved.
+// Checked by check_subject_binding.sh (leg H).
+
+#[spec(add_commutativity)]
+#[proof_by(Examples.TestFixtures.Proofs.spec_in_hypothesis_only)]
+#[proof_fingerprint("v2:7bd7ae4e79b8542ec15512b64e4242ad")]
+fn add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn main() -> i64 {
+    return add(1, 2);
+}
