@@ -1,0 +1,9 @@
+fn same(b: bool) -> bool { return b as bool; }
+fn main() -> i64 {
+    let t: bool = true as bool;
+    if t {
+        if same(false) { return 2; }
+        return 7;
+    }
+    return 3;
+}

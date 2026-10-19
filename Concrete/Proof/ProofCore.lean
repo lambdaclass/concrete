@@ -709,7 +709,17 @@ def castToPExpr (src tgt : Ty) (pi : Proof.PExpr) : Option Proof.PExpr :=
   match IntArith.intRange src, IntArith.intRange tgt, IntArith.intBitWidth tgt with
   | some (slo, shi), some (tlo, thi), some (w, sg) =>
     if tlo ≤ slo && shi ≤ thi then some (.cast pi) else some (.wrapCast w sg pi)
-  | none, none, _ => if src == tgt then some (.cast pi) else none
+  -- Neither side integer: the same type is the identity. Between two DISTINCT named types the one
+  -- cast CoreCheck admits is a one-step newtype rebrand (`Inner → Outer` where `Outer` wraps
+  -- `Inner`, or back; tests/programs/adversarial/newtype/chained.con) — the representation does not
+  -- change. Elab spells type parameters `.typeVar`, which never matches here. Every other
+  -- non-integer pair (`char`, `bool`, floats, pointers, …) keeps refusing.
+  | none, none, _ =>
+    if src == tgt then some (.cast pi) else
+    match src, tgt with
+    | .named _, .named _ | .named _, .generic _ _ _
+    | .generic _ _ _, .named _ | .generic _ _ _, .generic _ _ _ => some (.cast pi)
+    | _, _ => none
   -- A NEWTYPE WRAP OR UNWRAP is the identity: CoreCheck admits a cast with a named type on one side
   -- only when the other side is that newtype's one-step inner type (CoreCheck.lean, "Newtype
   -- wrap/unwrap"), and the representation does not change. Only `.named`/`.generic` qualify — `char`,

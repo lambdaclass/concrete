@@ -292,8 +292,9 @@ def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   -- arithmetic computed on the wrong value (spurious checked-add traps,
   -- wrong `%` results) and diverged from the compiled binary.
   | .int n _ => .ok (.int (IntArith.wrapToType targetTy n) targetTy)
-  | .bool true => .ok (.int 1 targetTy)
-  | .bool false => .ok (.int 0 targetTy)
+  -- `b as bool` is the identity (the compiled code aliases the i1). Converting it to `.int 1 bool`
+  -- made `true as bool` an integer the proof model (`.bool true`) and a later condition disagreed on.
+  | .bool b => if targetTy == .bool then .ok (.bool b) else .ok (.int (if b then 1 else 0) targetTy)
   | _ => .error "interp: unsupported cast"
 
 -- ============================================================
