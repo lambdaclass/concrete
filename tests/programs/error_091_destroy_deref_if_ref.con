@@ -1,0 +1,14 @@
+// Bug 091 round 3 (Codex review): a receiver dereferencing an `if` expression that
+// evaluates to `&r` escaped the place walk; the destructor ran through the borrow and
+// `destroy(r)` ran it again. A place reached through an expression Check cannot
+// classify fails closed. Expected: E0290.
+mod m {
+ struct R { n: i64 }
+ impl Destroy for R { fn destroy(&self) with(Std) { print_int(self.n); } }
+ fn main() with(Std) -> Int {
+  let r: R = R { n: 7 };
+  (*(if true { &r } else { &r })).destroy();
+  destroy(r);
+  return 0;
+ }
+}

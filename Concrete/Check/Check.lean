@@ -120,7 +120,14 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
     | .ref _ => return .shared "the place is reached through a cast to `&`"
     | .refMut _ | .ptrMut _ | .ptrConst _ => return .exclusive
     | _ => return .temp
-  | _ => return .temp
+  -- Owned temporaries: no code returns a reference (VALUE_MODEL), so a call's result is a
+  -- value, as is a literal.
+  | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
+  | .arrayLit .. | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. =>
+    return .temp
+  -- Anything else (`if`/`match` expressions, ...) may evaluate to a reference this walk
+  -- cannot see (`*(if c { &r } else { &r })`): fail closed (Codex review of round 3).
+  | _ => return .shared "the place is reached through an expression that may be a `&` reference; bind it to a name first"
 
 /-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed
     by a trait-bounded type parameter (Codex round 2 of bug 091: the bound path never applied

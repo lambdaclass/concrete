@@ -1,0 +1,13 @@
+// Bug 091 round 3 (Codex review): `(*(if c { &p } else { &p })).bump()` mutated an
+// immutable owner through a `&` borrow the place walk could not see. Fails closed:
+// E0237.
+mod m {
+ struct P { n: i64 }
+ impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+ fn main() with(Std) -> Int {
+  let p: P = P { n: 1 };
+  (*(if true { &p } else { &p })).bump();
+  let P { n } = p;
+  return n;
+ }
+}

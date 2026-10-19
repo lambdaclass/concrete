@@ -237,4 +237,9 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `(*(&r)).take()`) is the reference the place is reached through, not a temporary:
   `error_091_mut_receiver_deref_borrow.con` (E0237), `error_091_receiver_deref_borrow_moved.con`
   (E0290).
+  The place walk fails closed: a place reached through an expression it does not classify
+  (an `if`/`match` that may evaluate to `&r`) counts as reached through a shared reference;
+  only bindings, projections, dereferences, borrows, casts and owned temporaries (calls,
+  literals) are classified. `error_091_destroy_deref_if_ref.con` (E0290),
+  `error_091_mut_receiver_deref_if_ref.con` (E0237).
 
