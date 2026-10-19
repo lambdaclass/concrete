@@ -5,10 +5,11 @@ Status: archive — the bodies of done, superseded, merged, retired and delegate
 Source: `ROADMAP.md` at commit `a159c489` (2026-10-19), moved verbatim; only heading levels and relative
 links were adjusted for this location.
 
-Each task keeps a stub in the roadmap — its `### Task R-NNNN` heading, **Phase:** (called **Stage:**
+Each task keeps a stub in the roadmap (ROADMAP.md, or since 2026-10-19 the
+[roadmap backlog](../project/ROADMAP_BACKLOG.md) when its phase is not active or next) — its `### Task R-NNNN` heading, **Phase:** (called **Stage:**
 when these bodies were moved), **Disposition:**
 and **Objective:** lines, and a link here. This file declares no task: each section below is headed
-by the bare task ID, so every ID is still declared exactly once, in the roadmap.
+by the bare task ID, so every ID is still declared exactly once, in the roadmap or its backlog.
 `scripts/tests/check_roadmap_coverage.sh` checks that every section here has its stub and every stub
 links to its section. The [reconciliation record](../project/ROADMAP_RECONCILIATION.md) names each
 task's owner; each owner lists what it inherited under **Inherited obligations**. Nothing here
@@ -1604,7 +1605,7 @@ reporting whether membership changed.
 
 ## R-0029
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0029) · disposition: merged · owner(s): R-0065_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0029) · disposition: merged · owner(s): R-0065_
 
 The comparison-language bias for remaining breadth is deliberate: copy module
 categories from Hare/Zig/Odin/Go, not their API volume. The near-term systems
@@ -2398,7 +2399,7 @@ schema or claiming unrestricted least-authority enforcement.
 
 ## R-0072
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0072) · disposition: retired · owner(s): R-0517_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0072) · disposition: retired · owner(s): R-0517_
 
 CI must cover a clean checkout and reject an unsupported QBE version with a
 clear diagnostic; updating the pin requires the quick matrix plus scheduled
@@ -2456,7 +2457,7 @@ ABI spelling, wrappers, globals, and runtime-helper emission independent.
 
 ## R-0083
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0083) · disposition: retired · owner(s): R-0511, R-0517_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0083) · disposition: retired · owner(s): R-0511, R-0517_
 
 `--backend llvm|qbe`, `--emit-qbe`, and the corresponding project-build
 setting. LLVM remains the default throughout Phase 7.5. Reject an unknown or
@@ -2472,7 +2473,7 @@ and exit-code edge cases rather than accepting scalar happy paths alone.
 
 ## R-0087
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0087) · disposition: superseded · owner(s): R-0512_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0087) · disposition: superseded · owner(s): R-0512_
 
  Concrete's finite/range/trap policy must be emitted as explicit guards and
  runtime trap edges before QBE conversion instructions—raw QBE `stosi`,
@@ -2482,7 +2483,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0087) · disposition: superseded · 
 
 ## R-0089
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0089) · disposition: superseded · owner(s): R-0505, R-0517_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0089) · disposition: superseded · owner(s): R-0505, R-0517_
 
 The ABI matrix must cover 1–8-byte and 9–16-byte aggregates, mixed
 integer/float classes, register exhaustion with stack fallback, aggregates
@@ -2534,14 +2535,14 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0098) · disposition: merged · owne
 
 ## R-0099
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0099) · disposition: retired · owner(s): R-0517, R-0505_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0099) · disposition: retired · owner(s): R-0517, R-0505_
 
  Until then `--backend qbe` is explicitly experimental and its native result
  remains backend-trusted/test evidence.
 
 ## R-0100
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0100) · disposition: superseded · owner(s): R-0305_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0100) · disposition: superseded · owner(s): R-0305_
 
  This is not an implementation commitment until those criteria pass.
  Cranelift remains the alternative if a forcing workload instead requires
@@ -2552,7 +2553,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0100) · disposition: superseded · 
 
 ## R-0101
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0101) · disposition: delegated · owner(s): R-0517_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0101) · disposition: delegated · owner(s): R-0517_
 
  a compiler-owned invalid artifact.
 
@@ -2659,7 +2660,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0171) · disposition: superseded · 
 
 ## R-0176
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0176) · disposition: superseded · owner(s): R-0495, R-0512_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0176) · disposition: superseded · owner(s): R-0495, R-0512_
 
 `Concrete.Proof` becomes the generic proof-theorem / compatibility umbrella.
 Only after this split should registered example SPEC PExprs move from
@@ -2877,7 +2878,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0228) · disposition: superseded · 
 
 ## R-0234
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0234) · disposition: superseded · owner(s): R-0496_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0234) · disposition: superseded · owner(s): R-0496_
 
  IEEE-754 binary32/binary64, round-to-nearest-even, no fast-math, no
  reassociation, no implicit FMA contraction, no ambient rounding-mode
@@ -2885,7 +2886,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0234) · disposition: superseded · 
 
 ## R-0235
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0235) · disposition: superseded · owner(s): R-0496, R-0495_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0235) · disposition: superseded · owner(s): R-0496, R-0495_
 
  `PVal.float32/64`, float `PBinOp` cases carrying width and rounding
  (`fadd`/`fsub`/`fmul`/`fdiv`/`feq`/`flt`/`fle`), interpreter agreement,
@@ -3045,7 +3046,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0260) · disposition: superseded · 
 
 ## R-0262
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0262) · disposition: superseded · owner(s): R-0495, R-0512_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0262) · disposition: superseded · owner(s): R-0495, R-0512_
 
 source Core evaluation, extracted PExpr evaluation, and extraction theorem
 agree.
@@ -3063,7 +3064,7 @@ record must name them so a proof's replay surface stays reproducible.
 
 ## R-0271
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0271) · disposition: superseded · owner(s): R-0510_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0271) · disposition: superseded · owner(s): R-0510_
 
 **Behavioral-law acceptance (planned 2026-10-18):** use R-0031's equality/hash
 pilot to show that a generic proof imports explicit semantic laws as well as
@@ -3181,7 +3182,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0276) · disposition: superseded · 
 
 ## R-0456
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0456) · disposition: superseded · owner(s): R-0496_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0456) · disposition: superseded · owner(s): R-0496_
 
 The honest constraint, and it is permanent: **no single kernel can bridge two kernels** —
 no checker sees both. So relating Lean's `eval` to another host's cannot be a proof. It
@@ -3234,7 +3235,7 @@ direct SSA->LLVM path once parity is established.
 
 ## R-0296
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0296) · disposition: retired · owner(s): R-0517, R-0505_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0296) · disposition: retired · owner(s): R-0517, R-0505_
 
  Production QBE support must consume `ValidatedBackendIR`, emit the same source maps and
  target assumptions as other supported backends, pass the full C ABI and
@@ -3246,7 +3247,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0296) · disposition: retired · own
 
 ## R-0297
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0297) · disposition: delegated · owner(s): R-0517, R-0505_
+_Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0297) · disposition: delegated · owner(s): R-0517, R-0505_
 
   7.5 immutable per-function job/deterministic merge contract, but keep MIR
   architecture-specific rather than creating a lowest-common-denominator

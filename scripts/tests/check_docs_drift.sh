@@ -15,7 +15,8 @@
 #      Phase 3 audit made.)
 #   2. Every `--report <kind>` names a real report kind (extracted from the CLI
 #      dispatch in Main.lean, so the check tracks the source of truth).
-#   3. ROADMAP has one stable-ID Task sequence, no dangling/duplicate IDs, and
+#   3. ROADMAP (with its backlog, docs/project/ROADMAP_BACKLOG.md) has one
+#      stable-ID Task sequence, no dangling/duplicate IDs, and
 #      no parallel queue/task headings.
 #   4. Every ROADMAP task has a phase or a recorded disposition, the
 #      reconciliation ledger and queue rows name real tasks in consistent phases,

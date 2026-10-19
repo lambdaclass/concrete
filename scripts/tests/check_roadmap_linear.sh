@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Fail-closed structural gate for ROADMAP.md's single stable-ID task sequence.
+# Since the 2026-10-19 backlog split the sequence spans ROADMAP.md and docs/project/ROADMAP_BACKLOG.md:
+# every task is declared once across both (and CHANGELOG's Completed Tasks), and both obey the rules below.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -12,6 +14,16 @@ all_ids_file="$(mktemp)"
 trap 'rm -f "$active_file" "$retired_file" "$all_ids_file"' EXIT
 # The 2026-10-19 reconciliation record (moved out of ROADMAP.md) cites task IDs but declares none.
 RECORD="docs/project/ROADMAP_RECONCILIATION.md"
+BACKLOG="docs/project/ROADMAP_BACKLOG.md"
+if [ ! -f "$BACKLOG" ]; then
+  echo "FAIL $BACKLOG is missing; ROADMAP.md links it as the home of unscheduled tasks"
+  fail=$((fail + 1))
+  BACKLOG=""
+elif grep -nE '^#+ Completed Task R-[0-9]{4}' "$BACKLOG"; then
+  echo "FAIL $BACKLOG declares completed tasks; those belong to CHANGELOG.md"
+  fail=$((fail + 1))
+fi
+TASK_FILES="ROADMAP.md${BACKLOG:+ $BACKLOG}"
 if [ ! -f "$RECORD" ]; then
   echo "FAIL $RECORD is missing; ROADMAP.md's Reconciliation record links it"
   fail=$((fail + 1))
@@ -33,13 +45,14 @@ for a in $ARCHIVES; do
   fi
 done
 
-grep -oE '^### Task R-[0-9]{4}$' ROADMAP.md | awk '{print $3}' > "$active_file" || true
+# shellcheck disable=SC2086
+cat $TASK_FILES | grep -oE '^### Task R-[0-9]{4}$' | awk '{print $3}' > "$active_file" || true
 grep -oE '^### Completed Task R-[0-9]{4}$' CHANGELOG.md | awk '{print $4}' > "$retired_file" || true
 cat "$active_file" "$retired_file" > "$all_ids_file"
 count="$(wc -l < "$active_file" | tr -d ' ')"
 
 if [ "$count" -eq 0 ]; then
-  echo "FAIL ROADMAP.md has no stable task IDs"
+  echo "FAIL ROADMAP.md and its backlog have no stable task IDs"
   fail=$((fail + 1))
 fi
 
@@ -57,21 +70,24 @@ while IFS=: read -r file line ref; do
   fi
 done < <(
   # shellcheck disable=SC2086
-  grep -nHoE 'R-[0-9]{4}' ROADMAP.md CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD") \
+  grep -nHoE 'R-[0-9]{4}' $TASK_FILES CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD") \
     $(for a in $ARCHIVES; do [ -f "$a" ] && echo "$a"; done)
 )
 
-if grep -nE '^(##|###) (Current Frontier|.*Queue|Phase .* Tasks)$' ROADMAP.md; then
-  echo "FAIL ROADMAP.md reintroduced a parallel queue or phase-local task list"
+# shellcheck disable=SC2086
+if grep -nE '^(##|###) (Current Frontier|.*Queue|Phase .* Tasks)$' $TASK_FILES; then
+  echo "FAIL ROADMAP.md or its backlog reintroduced a parallel queue or phase-local task list"
   fail=$((fail + 1))
 fi
 
-if grep -nE '^### Task (R-[0-9]{1,3}|[0-9]+)([^0-9]|$)' ROADMAP.md; then
+# shellcheck disable=SC2086
+if grep -nE '^### Task (R-[0-9]{1,3}|[0-9]+)([^0-9]|$)' $TASK_FILES; then
   echo "FAIL malformed or legacy positional task heading"
   fail=$((fail + 1))
 fi
 
-if grep -nE '\bTasks? [0-9]+\b' ROADMAP.md; then
+# shellcheck disable=SC2086
+if grep -nE '\bTasks? [0-9]+\b' $TASK_FILES; then
   echo "FAIL legacy positional task reference; use stable R-NNNN identity"
   fail=$((fail + 1))
 fi
