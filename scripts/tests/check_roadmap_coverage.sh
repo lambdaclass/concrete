@@ -8,15 +8,18 @@
 #
 #   1. every task has a **Stage:** line naming a stage (1-7 or after-1.0/research), or a ledger row,
 #      or a **Disposition** line giving its retirement/merge reason;
-#   2. every ledger row names an existing task (ROADMAP heading or CHANGELOG `Completed Task`), and
-#      every owner it names exists;
-#   3. every task a queue row names exists, ranges such as `R-0491–R-0510` included;
+#   2. every row of the task-disposition table in docs/project/ROADMAP_RECONCILIATION.md (the moved
+#      ledger, linked from ROADMAP's "Reconciliation record") names an existing task (ROADMAP heading
+#      or CHANGELOG `Completed Task`), and every owner it names exists;
+#   3. every queue row names at least one owning task, and every task it names exists, ranges such
+#      as `R-0491–R-0510` included;
 #   4. a task named by a queue row lists that row's stage (from "Roadmap at a glance") in its Stage
 #      line — a task cannot be scheduled by the queue in a stage its own record contradicts.
 #
-# Run with no argument it checks ROADMAP.md and then runs its negative controls against temporary
-# copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, and a
-# stage that contradicts its queue row must each fail; a crashed or silent checker must fail too. With an argument it checks that file only.
+# Run with no argument it checks ROADMAP.md with the reconciliation record and then runs its negative
+# controls against temporary copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, and a
+# stage that contradicts its queue row must each fail; a crashed or silent checker must fail too.
+# With arguments `ROADMAP [LEDGER]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -25,14 +28,17 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 TARGET="${1:-ROADMAP.md}"
+LEDGER="${2:-docs/project/ROADMAP_RECONCILIATION.md}"
 CHANGELOG="CHANGELOG.md"
 [ -f "$TARGET" ] || { echo "FATAL: $TARGET missing" >&2; exit 2; }
+[ -f "$LEDGER" ] || { echo "FATAL: $LEDGER missing" >&2; exit 2; }
 
-check_file() { # path -> prints "OK <msg>" / "FAIL <msg>" lines
-  python3 - "$1" "$CHANGELOG" <<'PY'
+check_file() { # roadmap ledger -> prints "OK <msg>" / "FAIL <msg>" lines
+  python3 - "$1" "$CHANGELOG" "$2" <<'PY'
 import re, sys
 road = open(sys.argv[1], encoding='utf-8').read()
 chg = open(sys.argv[2], encoding='utf-8').read()
+rec = open(sys.argv[3], encoding='utf-8').read()
 out = []
 def ok(m): out.append('OK ' + m)
 def no(m): out.append('FAIL ' + m)
@@ -63,20 +69,19 @@ def stages_of(body):
     research = 'research' in head
     return st, research
 
-# --- ledger
-lm = re.search(r'^## Reconciliation ledger$', road, re.M)
+# --- ledger (moved out of ROADMAP into the reconciliation record)
 ledger = {}
-if not lm:
-    no('no "## Reconciliation ledger" section')
-else:
-    end = re.compile(r'^## ', re.M).search(road, lm.end())
-    sec = road[lm.end():(end.start() if end else len(road))]
-    tm = re.search(r'^### Task dispositions$', sec, re.M)
+if not re.search(r'^## Reconciliation record$', road, re.M) or 'docs/project/ROADMAP_RECONCILIATION.md' not in road:
+    no('ROADMAP has no "## Reconciliation record" section linking docs/project/ROADMAP_RECONCILIATION.md')
+if re.search(r'^#+ Task R-\d{4}$', rec, re.M):
+    no('the reconciliation record declares task headings; task IDs belong to ROADMAP/CHANGELOG only')
+if True:
+    tm = re.search(r'^## Task dispositions$', rec, re.M)
     if not tm:
-        no('ledger has no "### Task dispositions" table')
+        no('reconciliation record has no "## Task dispositions" table')
     else:
-        nxt = re.compile(r'^### ', re.M).search(sec, tm.end())
-        for line in sec[tm.end():(nxt.start() if nxt else len(sec))].splitlines():
+        nxt = re.compile(r'^## ', re.M).search(rec, tm.end())
+        for line in rec[tm.end():(nxt.start() if nxt else len(rec))].splitlines():
             cells = [c.strip() for c in line.strip().strip('|').split('|')]
             if len(cells) >= 4 and re.fullmatch(r'R-\d{4}', cells[0]):
                 ledger[cells[0]] = cells
@@ -145,8 +150,8 @@ print('\n'.join(out))
 PY
 }
 
-run_on() { # path -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
-  if ! RESULT="$(check_file "$1")"; then
+run_on() { # roadmap [ledger] -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
+  if ! RESULT="$(check_file "$1" "${2:-$LEDGER}")"; then
     RESULT="FAIL checker execution failed for $1"
     return 1
   fi
@@ -169,16 +174,18 @@ done <<< "$RESULT"
 if [ $# -eq 0 ]; then
   echo "=== 2. negative controls ==="
   TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
-  neg() { # name, python-edit, expected-substring
-    local f="$TMPD/$1.md"
-    python3 - "$TARGET" "$f" "$2" <<'PY'
+  neg() { # name, python-edit, expected-substring[, "ledger" to mutate the reconciliation record]
+    local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" src="$TARGET" dst
+    cp "$TARGET" "$f"; cp "$LEDGER" "$l"
+    if [ "${4:-}" = ledger ]; then src="$LEDGER"; dst="$l"; else dst="$f"; fi
+    python3 - "$src" "$dst" "$2" <<'PY'
 import sys, re
 s = open(sys.argv[1], encoding='utf-8').read()
 exec(sys.argv[3])
 open(sys.argv[2], 'w', encoding='utf-8').write(s)
 PY
     if [ "$?" -ne 0 ]; then no "control $1: could not build its mutated copy"; return; fi
-    if run_on "$f"; then
+    if run_on "$f" "$l"; then
       no "control $1: the mutated roadmap passed"
     elif printf '%s\n' "$RESULT" | grep -q -- "$3"; then
       ok "control $1 is rejected ($3)"
@@ -194,7 +201,7 @@ PY
     "R-0522 has no stage assignment"
   neg bogus_ledger_id \
     "h='|---|---|---|---|\n| R-'; i=s.index(h)+len('|---|---|---|---|\n'); s=s[:i]+'| R-9999 | merged | R-0494 | control |\n'+s[i:]" \
-    "ledger row names missing task R-9999"
+    "ledger row names missing task R-9999" ledger
   neg queue_missing_task \
     "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-9998)** |')" \
     "names nonexistent task R-9998"

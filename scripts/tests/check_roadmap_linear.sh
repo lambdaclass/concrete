@@ -10,6 +10,15 @@ active_file="$(mktemp)"
 retired_file="$(mktemp)"
 all_ids_file="$(mktemp)"
 trap 'rm -f "$active_file" "$retired_file" "$all_ids_file"' EXIT
+# The 2026-10-19 reconciliation record (moved out of ROADMAP.md) cites task IDs but declares none.
+RECORD="docs/project/ROADMAP_RECONCILIATION.md"
+if [ ! -f "$RECORD" ]; then
+  echo "FAIL $RECORD is missing; ROADMAP.md's Reconciliation record links it"
+  fail=$((fail + 1))
+elif grep -nE '^#+ (Completed )?Task R-[0-9]{4}' "$RECORD"; then
+  echo "FAIL $RECORD declares task headings; task IDs are declared only in ROADMAP.md and CHANGELOG.md"
+  fail=$((fail + 1))
+fi
 
 grep -oE '^### Task R-[0-9]{4}$' ROADMAP.md | awk '{print $3}' > "$active_file" || true
 grep -oE '^### Completed Task R-[0-9]{4}$' CHANGELOG.md | awk '{print $4}' > "$retired_file" || true
@@ -34,7 +43,7 @@ while IFS=: read -r file line ref; do
     fail=$((fail + 1))
   fi
 done < <(
-  grep -nHoE 'R-[0-9]{4}' ROADMAP.md CHANGELOG.md
+  grep -nHoE 'R-[0-9]{4}' ROADMAP.md CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD")
 )
 
 if grep -nE '^(##|###) (Current Frontier|.*Queue|Phase .* Tasks)$' ROADMAP.md; then
