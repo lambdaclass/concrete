@@ -41,6 +41,36 @@ development. All checkpoints share the capacity rule. New soundness defects take
 The [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) holds stages 2 and 4 in detail; the
 task sections below hold every row's exit.
 
+### Where every phase fits
+
+The queue rows above name the work whose order is decided. The task catalog below is organised by phase;
+every phase belongs to a stage, and the phases marked **reconcile** overlap the verified-compiler plan and
+must have each task mapped onto it, merged into a plan task, or retired with a reason.
+
+| phase (tasks) | stage | how it fits |
+|---|---|---|
+| 7 Standard library and core APIs (97) | 3, then 4 | `std` breadth and stability ship in the release trains (R-0515's coverage inventory, R-0358); `std` is verified against its contracts in V7 and the trusted remainder is listed (S16) |
+| 7.5 QBE backend and independent validation (42) | 3 — **reconcile** | The plan's backends are LLVM (unverified, fast) and an owned native AArch64 backend (verified). QBE is kept, merged into the native-backend work, or retired, task by task |
+| 8 Flagship depth and examples (25) | 3, then 7 | Flagships are workloads during stage 3 and graduate (three public flagships) in stage 7 |
+| 8.5 Incremental compiler driver (12) | 3 | Prerequisite for the editor (R-0385) and the compile-time budgets |
+| 9 Proof authoring and automation (28) | 2, 4 | Retargeted at claims on Core (R-0495) and the plan's proof-engineering libraries |
+| 10 Audit commands and review artifacts (25) | 5 | Evidence as a product; review surfaces read the single verdict authority (R-0494) |
+| 11 Proof status and trust gates (20) | 1, 5 — **reconcile** | Overlaps the single verdict authority and axiom policy (R-0494, R-0506) |
+| 12 Provable and predictable subsets (22) | 2, 4 — **reconcile** | The verified slices define the admitted subsets from now on |
+| 13 Runtime safety obligations (28) | 2, 4 — **reconcile** | Traps, bounds and overflow are Core semantics in the plan; obligations move into the slices |
+| 14 Compiler soundness bridge (22) | 2, 4 — **reconcile** | Superseded in part by the plan's refinement theorems; R-0460's Core → VC rows remain |
+| 15 Backend, target and stdlib contracts (54) | 4 — **reconcile** | Overlaps the lower pipeline, `rt`, external-call contracts and linking (S10 – S13, R-0299/R-0300) |
+| 15.25 WebAssembly (7) | after 1.0 | A later target profile; research-gated |
+| 15.5 Unsafe Concrete and trusted systems profile (10) | 4 | V6 (raw pointers, `Unsafe`, FFI) and the trusted-base inventory |
+| 15.75 Performance and optimization evidence (8) | 3, then 1.x | Budgets in R-0515/R-0355; optimization certificates in S12 |
+| 16 Freestanding and embedded target (12) | after 1.0 | A later target profile |
+| 17 Public release bar (31) | 7 and every milestone | The release map's scopes draw their acceptance from here |
+| 17.5 Post-release operations (8) | from 0.1 | Security response, support and patch procedure start with the first release |
+| 18 Packages and dependency evidence (21) | 3, then 7 | Local packages with interop (stage 3); package evidence and policy (R-0440) in stage 7 |
+| 19 Editor and human tooling (15) | 3 | R-0515's V1 tooling checkpoints advance these tasks |
+| 20 Concurrency and research-gated extensions (20) | research | A dated design decision under R-0515; outside the first verified profiles |
+
+
 ## The current execution queue
 
 This is the only current queue. It is intentionally not padded to a fixed number: rows exist only
