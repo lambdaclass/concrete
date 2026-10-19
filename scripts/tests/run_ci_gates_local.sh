@@ -123,7 +123,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
 # 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
 #   scripts/tools/checker_acceptance_evidence.sh (R-0208) is excluded too: it PRODUCES evidence for a
-#   CI-measured checker build (an artifact), judges nothing locally, and needs $RUNNER_TEMP.
+#   CI-measured checker build (an artifact) and needs $RUNNER_TEMP. Its one judgement, the claim
+#   inventory replay, runs locally as check_claim_inventory.sh.
 #   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
 # 240 -> 241: check_prepush_record.sh (the pre-push validation-record bindings), pinned in the same commit.
@@ -136,7 +137,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 249 -> 250: check_model_diff.sh (bug 080 model vs runtime), pinned in the same commit.
 # 250 (unchanged): check_roadmap_coverage.sh (2026-10-19 roadmap reconciliation) runs inside
 #   check_docs_drift.sh, exactly as check_roadmap_linear.sh does, so it adds no workflow command.
-EXPECTED_GATE_COMMANDS=250
+# 250 -> 251: check_claim_inventory.sh (R-0208 claim inventory, the local twin of the acceptance step), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=251
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

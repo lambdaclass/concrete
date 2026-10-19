@@ -873,6 +873,9 @@ jobs:
       - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
         run: bash scripts/tests/check_lean14576_reproducer.sh
 
+      - name: "Claim inventory (R-0208 — the frozen claim inventory replays row by row; the local twin of the acceptance step's judgement)"
+        run: bash scripts/tests/check_claim_inventory.sh
+
       # The evidence a measured checker build needs before its digest may be registered (R-0208),
       # SELF-CONTAINED: the identity, the hostile controls re-run with their logs (and tied to that
       # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.

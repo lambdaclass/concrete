@@ -10,6 +10,16 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Claim Inventory Replays Locally (R-0208)
+
+The frozen claim inventory was judged only by CI's checker-acceptance step, which the local gate
+runner skips because it writes a measured-build artifact. Two locally green pushes failed there: bug
+079's first CI run, and 78e6af25, whose bug 079 follow-up fixtures added five claims the reference did
+not list. The reference now lists them: they are negative fixtures, refinement-checked with every
+receipt withheld. `check_claim_inventory.sh` replays the inventory row by row against the reference
+on any platform, rejects a broken checker environment instead of reading it as a verdict, and proves
+that a dropped claim and a flipped receipt are both caught.
+
 ### The Proof Model Binds Match Arms As The Program Does (bug 084)
 
 `match b { Box::Full { v } => { return v; } ... }` was 0 in the proof model and `x` in the binary: the

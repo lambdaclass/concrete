@@ -170,10 +170,6 @@ remain are recorded here so the queue does not read as if rows 0–1 settle soun
   authority.
 - **Trusted std boundaries** (`trusted impl Bytes`, IO and others) rest on human audit; claims reaching
   them say "carries trust".
-- **Local validation misses one CI step.** The checker-acceptance step and its frozen claim inventory
-  (`scripts/tools/claim_inventory.sh` against `docs/verification/claim-inventory-v4.34.1.tsv`) run only
-  on Linux CI, so a local green run did not predict bug 079's first CI result. It belongs in the local
-  gate set.
 - **The bug ledger's open list** has entries later work appears to have closed (R-0010 owns
   mechanically checked per-bug states).
 
