@@ -1,0 +1,17 @@
+// Bug 052, Codex review: the interpreter models `&x as *mut T` by keeping the
+// reference's path, which is only sound when the pointee representation is
+// unchanged. `&mut n as *mut u8` over a u64 would let a one-byte store replace
+// the WHOLE interpreted value (258 -> 3) where the compiled binary changes one
+// byte (258 -> 259 on little-endian). The interpreter must REFUSE that cast with
+// a clear error, never diverge silently. Compiled output: 259.
+mod recast {
+    trusted fn poke(p: *mut u8) { *p = 3; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut n: u64 = 258;
+        let p: *mut u8 = &mut n as *mut u8;
+        poke(p);
+        print_int(n as i64);
+        print_char(10);
+        return 0;
+    }
+}

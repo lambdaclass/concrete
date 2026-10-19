@@ -102,3 +102,36 @@ bug 052 legs):
   control; pre-fix it compiled to a no-op).
 
 All six legs fail against the pre-fix compiler.
+
+## Follow-up: Codex review of e097c7dd
+
+* **Destructor identity was a string.** Elab spelled `x.destroy()` on a `T: Destroy`
+  receiver `T_destroy`, the ordinary mangled-method spelling, so a user function literally
+  named `T_destroy(x: &[Tracked; 2])` was found by Mono's (and the interpreter's) ordinary
+  lookup before any synthesis ran, and the array's element destructors were silently
+  skipped. Trait-method calls on a type parameter are now spelled `T$m`
+  (`traitParamCallee`; `$` is not an identifier character). Mono rewrites `T$destroy` per
+  instantiation to the reserved typed dispatch `$destroy`, decided from the argument type:
+  the type's `Destroy` impl method, element-wise array glue, or a Copy no-op; anything else
+  is E0814. Synthesized glue is named `$destroy$<type>`, which no definition can spell. The
+  old `T_` prefix rewrite (which also renamed a user's own `T_helper` call inside a generic
+  body) is gone. The interpreter dispatches on the reserved spelling, never a `_destroy`
+  suffix. Array glue carries `Alloc`, the builtin `Destroy` bound (bug 091).
+* **Nested explicit type arguments.** `checkTraitBounds` normalized only a top-level
+  `.named "T"`, so `kill::<[T; 2]>(x)` inside `outer<T: Destroy>` was E0241. The supplied
+  type is now normalized recursively.
+* **Copy newtypes.** Mono's Copy judgment had no newtypes, while function-body types keep
+  newtype names, so `kill::<Meters>(&m)` with `newtype Meters = Int` hit E0814. Mono now
+  feeds newtypes into the shared judgment (a newtype is Copy iff its inner type is, generic
+  newtypes substituted like any aggregate).
+* **Reinterpreting pointer casts in the interpreter.** A reference-to-pointer cast kept the
+  reference's path regardless of pointee type, so `&mut n as *mut u8` over a `u64` and a
+  store of `3` replaced the whole interpreted value (3) where compiled code changed one byte
+  (259). The interpreter now refuses a pointer cast whose pointee type changes, with a clear
+  runtime error.
+
+Fixtures: `review_forms.con` (compiled and `--interp`: `2 4 4 0 6`; previous compiler
+E0241, and 0 destructions with the user `T_destroy`) and `reinterpret_cast.con` (compiled
+259; `--interp` refuses; previous interpreter printed 3), both in
+`check_collections_copy_only.sh`. `single.con`/`refuse_unresolved.con` now declare
+`with(Alloc)` on `kill`, as bug 091 requires.

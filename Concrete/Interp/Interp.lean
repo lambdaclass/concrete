@@ -1,5 +1,6 @@
 import Concrete.Elab.Core
 import Concrete.Semantics.IntArith
+import Concrete.Resolve.Shared
 
 namespace Concrete.Interp
 
@@ -283,7 +284,7 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
 -- Type coercion (integer type conversions only)
 -- ============================================================
 
-def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
+def evalCast (v : IVal) (targetTy : Ty) (srcTy : Option Ty := none) : Except String IVal :=
   match v with
   -- `as` keeps the low bits (ARITHMETIC_POLICY: silent truncation /
   -- bit-pattern reinterpretation), so the value must be NORMALIZED into the
@@ -299,9 +300,24 @@ def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   -- the heapless model has no addresses, and a deref through the pointer
   -- reads/writes the same place the reference names. Pointer arithmetic on
   -- such a value stays unsupported.
-  | .ref p => match targetTy with
-    | .ptrMut _ | .ptrConst _ | .ref _ | .refMut _ => .ok (.ref p)
-    | _ => .error "interp: unsupported cast"
+  --
+  -- ONLY WHEN THE POINTEE REPRESENTATION IS UNCHANGED. The model stores whole typed values,
+  -- not bytes, so `&mut n as *mut u8` over a `u64` would let a store of `3` replace the
+  -- whole `n` where compiled code changes one byte (258 -> 3 interpreted, 259 compiled).
+  -- A reinterpreting cast is refused with a clear runtime error instead of diverging
+  -- silently (Codex review of bug 052).
+  | .ref p =>
+    let pointee : Ty → Option Ty
+      | .ptrMut t | .ptrConst t | .ref t | .refMut t => some t
+      | _ => none
+    match pointee targetTy with
+    | some dst =>
+      match srcTy.bind pointee with
+      | some src =>
+        if src == dst then .ok (.ref p)
+        else .error s!"interp: reinterpreting pointer cast from pointee '{tyName src}' to '{tyName dst}' is not modelled (the interpreter stores typed values, not bytes); run the compiled binary"
+      | none => .error "interp: pointer cast from an untyped source is not modelled"
+    | none => .error "interp: unsupported cast"
   | _ => .error "interp: unsupported cast"
 
 -- ============================================================
@@ -701,12 +717,15 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         -- a desugar gap, so stay loud instead of guessing a format.
         .error s!"interp: print/IO intrinsic '{fnName}' not yet supported"
       | _, [arg] =>
-        -- H18 drop-glue: a symbolic `T_destroy(&elem)` (Elab's trait-method
-        -- call on a `Destroy`-bounded type param) reaches the PRE-mono
-        -- interpreter unresolved. Dispatch on the RUNTIME value's type (see
+        -- H18 drop-glue: a symbolic `T$destroy(&elem)` (Elab's trait-method
+        -- call on a `Destroy`-bounded type param, `traitParamCallee`) reaches
+        -- the PRE-mono interpreter unresolved. The reserved spelling is what is
+        -- matched, never a `_destroy` suffix, so a user function named
+        -- `T_destroy` is never mistaken for (or chosen over) the dispatch.
+        -- Dispatch on the RUNTIME value's type (see
         -- `destroyValue`): user destructor side effects must match the
         -- compiled binary, including per-element glue for arrays (bug 052).
-        if fnName.endsWith "_destroy" then
+        if (splitTraitParamCallee fnName).any (·.2 == destroyMethodName) then
           let env' ← destroyValue fns enums env arg
           return (env', .val .unit)
         else .error s!"interp: undefined function '{fnName}'"
@@ -765,7 +784,7 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
   | .cast inner targetTy => do
     let (env, v) ← evalExprVal fns enums env inner
-    let result ← evalCast v targetTy
+    let result ← evalCast v targetTy (some inner.ty)
     return (env, .val result)
 
   | .ifExpr cond thenStmts elseStmts _ => do

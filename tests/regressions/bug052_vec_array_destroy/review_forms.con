@@ -1,0 +1,66 @@
+// Bug 052, Codex review follow-ups (single-file, compiled AND --interp):
+//   * a user function literally named `T_destroy` must NOT replace the
+//     per-element destructor of `x.destroy()` on `T = [Tracked; 2]` (the trait
+//     call is spelled `T$destroy` in Core; synthesized glue is `$destroy$...`);
+//   * an explicit nested type argument `kill::<[T; 2]>` inside a
+//     `T: Destroy` generic satisfies the bound (was E0241);
+//   * a Copy newtype (`newtype Meters = Int`) and an array of it get trivial
+//     destruction (was E0814).
+// Expected output: 2, 4, 4, 0 (the user's T_destroy is a plain function and
+// touches nothing), 6, then main's exit 0.
+mod review {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    newtype Meters = Int;
+    fn T_destroy(x: &[Tracked; 2]) -> u64 {
+        return 0;
+    }
+    fn kill<T: Destroy>(x: &T) with(Alloc) {
+        x.destroy();
+    }
+    fn outer<T: Destroy>(x: &[T; 2]) with(Alloc) {
+        kill::<[T; 2]>(x);
+    }
+    struct Pair { items: [Tracked; 2] }
+    impl Destroy for Pair {
+        pub fn destroy(&self) with(Alloc) {
+            kill::<[Tracked; 2]>(&self.items);
+        }
+    }
+    struct Twin { items: [Tracked; 2] }
+    impl Destroy for Twin {
+        pub fn destroy(&self) with(Alloc) {
+            outer::<Tracked>(&self.items);
+        }
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let p: Pair = Pair { items: [Tracked { cell: cell }, Tracked { cell: cell }] };
+        destroy(p);
+        print_int(count(cell) as i64);
+        print_char(10);
+        let t: Twin = Twin { items: [Tracked { cell: cell }, Tracked { cell: cell }] };
+        destroy(t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        let m: Meters = Meters(5);
+        kill::<Meters>(&m);
+        let ms: [Meters; 2] = [Meters(1), Meters(2)];
+        kill::<[Meters; 2]>(&ms);
+        print_int(count(cell) as i64);
+        print_char(10);
+        let q: Pair = Pair { items: [Tracked { cell: cell }, Tracked { cell: cell }] };
+        print_int(T_destroy(&q.items) as i64);
+        print_char(10);
+        destroy(q);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

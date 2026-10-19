@@ -171,9 +171,11 @@ if (cd "$TMP/b52p" && "$C" build >"$TMP/b52p.out" 2>&1); then
   [ "$got" = "4 8 14 17 21 " ] && ok "Vec/Deque<[T;N]> drop/clear, nested arrays, [Vec<T>;N]: every leaf destroyed once (4 8 14 17 21)" \
     || no "array-element destruction counts wrong: got '$got', want '4 8 14 17 21 '"
   (cd "$TMP/b52p" && "$C" build --emit-llvm >"$TMP/b52p.ll" 2>&1)
-  glue="$(awk '/^define void @Ref_T_Arr2_T_Tracked_E_E_destroy/,/^}/' "$TMP/b52p.ll")"
+  # Synthesized glue is spelled `$destroy$<type>` -- `$` is not an identifier character,
+  # so no user definition can be selected in its place (Codex review of bug 052).
+  glue="$(awk '/^define void @\$destroy\$Ref_T_Arr2_T_Tracked_E_E\(/,/^}/' "$TMP/b52p.ll")"
   if printf '%s' "$glue" | grep -q "call void @Tracked_destroy" \
-     && ! grep -q "^define void @T_destroy" "$TMP/b52p.ll"; then
+     && ! grep -qE "^define void @(T_destroy|T\\\$destroy)" "$TMP/b52p.ll"; then
     ok "array glue calls @Tracked_destroy per element; no literal @T_destroy is synthesized"
   else
     no "array glue does not call @Tracked_destroy (or a literal @T_destroy no-op is back)"
@@ -191,6 +193,33 @@ if "$C" "$B52/single.con" -o "$TMP/b52s" >"$TMP/b52s.out" 2>&1; then
     || no "single-file array glue --interp output '$igot', want '2 8 9 0 '"
 else
   no "bug 052 single-file fixture failed to compile"; sed 's/^/        /' "$TMP/b52s.out" | head -5
+fi
+# Codex review of bug 052: a user fn named `T_destroy` never replaces the trait dispatch; an
+# explicit nested `kill::<[T; 2]>` in a `T: Destroy` generic satisfies the bound (was E0241);
+# a Copy newtype and an array of it get trivial destruction (was E0814). Previous compiler:
+# E0241, and with the nested leg removed, 0 destructions (the user's T_destroy won).
+if "$C" "$B52/review_forms.con" -o "$TMP/b52r" >"$TMP/b52r.out" 2>&1; then
+  cgot="$( { "$TMP/b52r" 2>&1; echo "$?"; } | tr '\n' ' ')"
+  igot="$("$C" "$B52/review_forms.con" --interp 2>&1 | tr '\n' ' ')"
+  [ "$cgot" = "2 4 4 0 6 0 " ] && ok "review forms compiled: user T_destroy ignored, nested [T;2], Copy newtype (2 4 4 0 6)" \
+    || no "review forms compiled output '$cgot', want '2 4 4 0 6 0 '"
+  [ "$igot" = "2 4 4 0 6 0 " ] && ok "review forms --interp agrees: 2 4 4 0 6 0" \
+    || no "review forms --interp output '$igot', want '2 4 4 0 6 0 '"
+else
+  no "bug 052 review-forms fixture failed to compile"; sed 's/^/        /' "$TMP/b52r.out" | head -5
+fi
+# Interp-vs-compiled control: a reinterpreting pointer cast (`&mut u64 as *mut u8`) is refused
+# by the interpreter with a clear error (it stores typed values, not bytes) instead of
+# overwriting the whole value (old interp: 3; compiled: 259).
+if "$C" "$B52/reinterpret_cast.con" -o "$TMP/b52c" >"$TMP/b52c.out" 2>&1; then
+  cgot="$("$TMP/b52c" 2>&1 | tr '\n' ' ')"
+  iout="$("$C" "$B52/reinterpret_cast.con" --interp 2>&1)"; irc=$?
+  [ "$cgot" = "259 " ] && ok "reinterpret cast compiled: one byte stored (259)" || no "reinterpret cast compiled output '$cgot', want '259 '"
+  [ "$irc" -ne 0 ] && grep -q "reinterpreting pointer cast" <<<"$iout" \
+    && ok "--interp refuses the reinterpreting cast (rc $irc), never a silent 3" \
+    || no "--interp did not refuse the reinterpreting cast (rc $irc): $iout"
+else
+  no "bug 052 reinterpret-cast fixture failed to compile"; sed 's/^/        /' "$TMP/b52c.out" | head -5
 fi
 # negative control 1: an array of a non-destroyable element is not destroyable
 cp -R "$B52/refuse_nondestroy" "$TMP/b52n"

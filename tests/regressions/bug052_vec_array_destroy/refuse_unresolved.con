@@ -9,18 +9,18 @@ mod single {
             *self.cell = *self.cell + 1;
         }
     }
-    fn kill<T: Destroy>(x: &T) {
+    fn kill<T: Destroy>(x: &T) with(Alloc) {
         x.destroy();
     }
     struct Pair { items: [Tracked; 2] }
     impl Destroy for Pair {
-        pub fn destroy(&self) {
+        pub fn destroy(&self) with(Alloc) {
             kill(&self.items);
         }
     }
     struct Grid { rows: [[Tracked; 2]; 3] }
     impl Destroy for Grid {
-        pub fn destroy(&self) {
+        pub fn destroy(&self) with(Alloc) {
             kill(&self.rows);
         }
     }

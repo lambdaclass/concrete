@@ -1197,18 +1197,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let retTy := substSelf sig.retTy selfTy
           let params := sig.params.map fun p => { p with ty := substSelf p.ty selfTy }
           let mut cArgs : List CExpr := [cObj]
-          -- Accumulated by PREPEND and reversed at the consumer, so the receiver seed goes
-          -- in last to land first. Appending in a loop is quadratic; the ratchet caught it.
-          let mut argEvs : List Proof.EvidenceExprV2 := [cObjEv.evidence]
           for (arg, p) in args.zip params do
             let cArgEv ← elabExprEv arg (some p.ty)
-            let cArg := cArgEv.core
-            cArgs := cArgs ++ [cArg]
-            argEvs := cArgEv.evidence :: argEvs
-          return ElaboratedExprV2.mk (CExpr.call (mangledMethodName n methodName) typeArgs cArgs retTy)
-            (match env.resolveCallee (n ++ "_" ++ methodName) with
-             | some id => Proof.evCall id argEvs.reverse
-             | none    => Proof.evTraitMethodOnTypeParam)
+            cArgs := cArgs ++ [cArgEv.core]
+          -- Reserved spelling (see `traitParamCallee`): a user function named `T_m` is a
+          -- different callable and must not be selected, so the evidence does not resolve
+          -- the call by that string either.
+          return ElaboratedExprV2.mk (CExpr.call (traitParamCallee n methodName) typeArgs cArgs retTy)
+            Proof.evTraitMethodOnTypeParam
       | _ => throwElab .methodCallOnNonNamedType (some e.getSpan)
     else
       let mangledName := mangledMethodName typeName methodName

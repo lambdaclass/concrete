@@ -115,12 +115,23 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
     -- exists because Elab spells trait-method calls on a type parameter that
     -- way, and those are always global definitions. An indirect callee names a
     -- local binding, which no substitution may rename.
+    --
+    -- Only the RESERVED spelling `T$m` (`traitParamCallee`) is rewritten, never a name that
+    -- merely starts with `T_`: that prefix rewrite also renamed a user's own `T_helper` call.
+    -- `T$destroy` becomes the typed destructor dispatch (`destroyDispatchCallee`), resolved
+    -- from the argument type by `monoDestroyDispatch` — so a user `T_destroy`, or a free
+    -- function spelled like a type's destructor, can never stand in for it (bug 052 review).
+    -- A nameless concrete type (`concreteName == ""`, e.g. an array) keeps any other `T$m`:
+    -- it has no impl to name, and the unresolved callee fails loudly downstream.
     let callee' := match callee with
       | .indirect binding => Callee.indirect binding
-      | .direct name => Callee.direct (nameMap.foldl (fun acc (paramName, concreteName) =>
-          let pfx := paramName ++ "_"
-          if acc.startsWith pfx then concreteName ++ "_" ++ acc.drop pfx.length
-          else acc) name)
+      | .direct name => Callee.direct (match splitTraitParamCallee name with
+          | some (p, m) => match nameMap.lookup p with
+            | some c =>
+              if m == destroyMethodName then destroyDispatchCallee
+              else if c.isEmpty then name else mangledMethodName c m
+            | none => name
+          | none => name)
     .call callee' targs (args.map (rewriteCallNames nameMap)) ty
   | .binOp op l r ty => .binOp op (rewriteCallNames nameMap l) (rewriteCallNames nameMap r) ty
   | .unaryOp op e ty => .unaryOp op (rewriteCallNames nameMap e) ty
@@ -369,8 +380,37 @@ structure MonoState where
       `_destroy` call with no definition may be a no-op (bug 052). -/
   structs : List CStructDef := []
   enums : List CEnumDef := []
+  /-- Newtypes, for the same Copy judgment: function-body types keep newtype names, so a
+      `newtype Meters = Int` must read as Copy here as it does in Check (bug 052 review). -/
+  newtypes : List NewtypeDef := []
+  /-- Type names with a `Destroy` trait impl: the typed destructor dispatch calls exactly
+      these impls' methods (`monoDestroyDispatch`). -/
+  destroyImpls : List String := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
+
+/-- E0814: a destructor call Mono cannot answer without a silent no-op (bug 052). -/
+private def refuseDestroy (msg hint : String) : MonoM CExpr :=
+  throw [{ severity := .error, message := msg, pass := "mono", span := none
+           hint := some s!"{hint} Tracking: docs/bugs/052_array_element_destroy_noop.md"
+           code := "E0814" }]
+
+/-- Mono's Copy judgment: the shared one over Core structs/enums PLUS newtypes. A newtype is
+    fed as a declared-Copy aggregate with its one wrapped type as the field, so it is Copy
+    exactly when the inner type is, with generic newtypes substituted like any aggregate. -/
+private def monoIsCopy (st : MonoState) (ty : Ty) : Bool :=
+  Layout.isCopyTyGeneric
+    (fun name =>
+      match st.structs.find? fun sd => sd.name == name with
+      | some sd => some (sd.isCopy, sd.typeParams, sd.fields.map Prod.snd)
+      | none => match st.enums.find? fun ed => ed.name == name with
+        | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap fun v => v.2.map Prod.snd)
+        | none => match st.newtypes.find? fun nt => nt.name == name with
+          | some nt => some (true, nt.typeParams, [nt.innerTy])
+          | none => none)
+    (fun _ => none)
+    (fun _ => false)
+    ty
 
 private def lookupFn (name : String) : MonoM (Option CFnDef) := do
   let st ← get
@@ -431,6 +471,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
     let args' ← args.mapM monoExpr
     return .call (.indirect binding) typeArgs args' ty
   | .call (.direct fn) typeArgs args ty =>
+    if fn == destroyDispatchCallee then return ← monoDestroyDispatch args ty
     let args' ← args.mapM monoExpr
     if typeArgs.isEmpty then
       -- Even with no explicit typeArgs, the callee might be generic.
@@ -455,9 +496,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             let name := monoNameFor fnDef.name inferredArgs
             let mapping := fnDef.typeParams.zip inferredArgs
             let sub := substTy fnDef.typeParams mapping
-            let callNameMap := mapping.filterMap fun (paramName, ty) =>
-              let concreteName := tyName ty
-              if concreteName == "" then none else some (paramName, concreteName)
+            let callNameMap := mapping.map fun (paramName, ty) => (paramName, tyName ty)
             -- Inject type args into calls to sibling generic functions before type subst
             let bodyWithTypeArgs := injectTypeArgsStmts genericNames inferredArgs fnDef.body
             let monoFn : CFnDef := {
@@ -473,97 +512,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             }
             enqueueMono name monoFn
             return .call name [] args' (sub ty)
-      | none =>
-        -- H18 drop-glue: `T_destroy(&elem)` in a `Destroy`-bounded generic
-        -- body gets rewritten per instantiation to `{Concrete}_destroy`
-        -- (typeArgs are empty — the rewrite is name-only). When no such fn
-        -- exists, the destructor is decided from the ARGUMENT TYPE, never
-        -- from the name (bug 052: `tyName` is "" for arrays, so the call kept
-        -- the literal `T_destroy` and was answered with an empty body):
-        --   * Copy element: destruction is trivial — synthesize an empty no-op
-        --     so the call links;
-        --   * array `[E; N]` of a non-Copy E: synthesize glue that destroys
-        --     each of the N elements once, in index order, with E's destroy
-        --     (nested arrays recurse through this same branch);
-        --   * anything else is a non-Copy value with no destructor: refuse
-        --     (E0814). Check's `Destroy` bound should have rejected it first;
-        --     this is the containment, never a silent no-op.
-        -- Never collides with a user fn: no extern or builtin ends in
-        -- `_destroy`, and a direct user call to a nonexistent `X_destroy` is
-        -- an E0101 at Resolve.
-        if fn.endsWith "_destroy" then
-          match args' with
-          | [a] =>
-            let argTy := cexprTy a
-            let target := match argTy with
-              | .ref t | .refMut t => t
-              | t => t
-            let st ← get
-            -- Glue for a type `tyName` cannot spell is named by the full
-            -- argument type (by-ref and by-value calls get distinct glue).
-            let glueName := if tyName target == "" then tyToSuffix argTy ++ "_destroy" else fn
-            -- An unresolved type (`.placeholder`/`.typeVar`) is judged Copy by the
-            -- shared judgment (error-recovery policy), so it would get the no-op.
-            -- It reaches here when Elab's shallow argument-type peek could not
-            -- type an argument (e.g. `kill(&self.items)` infers T = Placeholder).
-            -- Refuse rather than guess the destructor away.
-            if tyUnresolved target then throw [{
-                severity := .error
-                message := s!"destructor call '{fn}' on an unresolved type '{tyToSuffix target}': the element's destructor cannot be determined (bug 052)"
-                pass := "mono"
-                span := none
-                hint := some "name the type argument explicitly (turbofish, e.g. `f::<[T; 2]>(&x.field)`) so the destructor is resolved. Tracking: docs/bugs/052_array_element_destroy_noop.md"
-                code := "E0814" }]
-            if Layout.isCopyTyCore st.structs st.enums (typeVarIsCopy := false) target then
-              let noopFn : CFnDef := {
-                name := glueName
-                typeParams := []
-                params := [("x0", argTy)]
-                retTy := .unit
-                body := []
-                isPublic := false
-                isTest := false
-              }
-              enqueueMono glueName noopFn
-              return .call glueName [] args' ty
-            else match target with
-              | .array elem size =>
-                let elemRefTy : Ty := .ref elem
-                let elemDestroy := if tyName elem == "" then tyToSuffix elemRefTy ++ "_destroy"
-                  else tyName elem ++ "_destroy"
-                let idx : CExpr := .ident "i" .uint
-                let elemRef : CExpr := .borrow (.arrayIndex (.ident "x0" argTy) idx elem) elemRefTy
-                let glueFn : CFnDef := {
-                  name := glueName
-                  typeParams := []
-                  params := [("x0", argTy)]
-                  retTy := .unit
-                  body := [
-                    .letDecl "i" true .uint (.intLit 0 .uint),
-                    .while_ (.binOp .lt idx (.intLit size .uint) .bool)
-                      [ .expr (.call elemDestroy [] [elemRef] .unit) false,
-                        .assign "i" (.binOp .add idx (.intLit 1 .uint) .uint) ]
-                      none [] ]
-                  isPublic := false
-                  isTest := false
-                }
-                enqueueMono glueName glueFn
-                return .call glueName [] args' ty
-              | _ => throw [{
-                  severity := .error
-                  message := s!"no destructor for non-Copy type '{tyToSuffix target}': '{fn}' would be a silent no-op and leak the value (bug 052)"
-                  pass := "mono"
-                  span := none
-                  hint := some "a `Destroy` bound accepted a type with no destructor; destroy or drain it explicitly. Tracking: docs/bugs/052_array_element_destroy_noop.md"
-                  code := "E0814" }]
-          | _ => throw [{
-              severity := .error
-              message := s!"destructor call '{fn}' has {args'.length} arguments, expected 1 (bug 052)"
-              pass := "mono"
-              span := none
-              hint := some "this is a compiler containment failure, not a program error. Tracking: docs/bugs/052_array_element_destroy_noop.md"
-              code := "E0814" }]
-        return .call fn [] args' ty
+      | none => return .call fn [] args' ty
     -- Look up the generic function
     let fnDef? ← lookupFn fn
     match fnDef? with
@@ -577,9 +526,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
       let mapping := fnDef.typeParams.zip typeArgs
       let sub := substTy fnDef.typeParams mapping
       -- Build a name map for rewriting trait method calls like T_describe → Point_describe
-      let callNameMap := mapping.filterMap fun (paramName, ty) =>
-        let concreteName := tyName ty
-        if concreteName == "" then none else some (paramName, concreteName)
+      let callNameMap := mapping.map fun (paramName, ty) => (paramName, tyName ty)
       -- Inject type args into calls to sibling generic functions before type subst
       let bodyWithTypeArgs := injectTypeArgsStmts genericNames typeArgs fnDef.body
       let monoFn : CFnDef := {
@@ -629,6 +576,71 @@ partial def monoArm (arm : CMatchArm) : MonoM CMatchArm := do
   | .litArm val guard body => return .litArm (← monoExpr val) (← guard.mapM monoExpr) (← monoStmts body)
   | .varArm b ty guard body => return .varArm b ty (← guard.mapM monoExpr) (← monoStmts body)
   | .rangeArm lo hi incl guard body => return .rangeArm (← monoExpr lo) (← monoExpr hi) incl (← guard.mapM monoExpr) (← monoStmts body)
+
+/-- H18 drop-glue: TYPED destructor dispatch for `T$destroy` (`x.destroy()` on a
+    `Destroy`-bounded type parameter), rewritten per instantiation to
+    `destroyDispatchCallee`. The destructor is decided from the ARGUMENT TYPE, never from a
+    name lookup (bug 052: an array has no `tyName`, so the call kept the literal `T_destroy`
+    and was answered with an empty body — or, per the Codex review, by a user function that
+    happened to be spelled `T_destroy`):
+      * a type with a `Destroy` trait impl: that impl's method (`Name_destroy`, which a
+        generic impl then specializes through the ordinary call path);
+      * a Copy type (newtypes included): trivial — an empty no-op glue;
+      * an array `[E; N]` of a non-Copy E: glue destroying each of the N elements once, in
+        index order, by dispatching E the same way (nested arrays recurse);
+      * anything else is a non-Copy value with no destructor: refused (E0814). Check's
+        `Destroy` bound should have rejected it first; this is the containment.
+    Synthesized glue is named by `destroyGlueName`, which no source identifier can spell,
+    so no user definition can be selected in its place. -/
+partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := do
+  match args with
+  | [a0] =>
+    let a ← monoExpr a0
+    let argTy := cexprTy a
+    let target := match argTy with
+      | .ref t | .refMut t => t
+      | t => t
+    let st ← get
+    -- An unresolved type (`.placeholder`/`.typeVar`) is judged Copy by the shared judgment
+    -- (error-recovery policy), so it would get the no-op. It reaches here when Elab's
+    -- shallow argument-type peek could not type an argument (e.g. `kill(&self.items)` infers
+    -- T = Placeholder). Refuse rather than guess the destructor away.
+    if tyUnresolved target then
+      return ← refuseDestroy s!"destructor call on an unresolved type '{tyToSuffix target}': the element's destructor cannot be determined (bug 052)"
+        "name the type argument explicitly (turbofish, e.g. `f::<[T; 2]>(&x.field)`) so the destructor is resolved."
+    let tn := tyName target
+    if !tn.isEmpty && st.destroyImpls.contains tn then
+      -- The impl's own method. Re-enter the ordinary call path with the ORIGINAL argument so
+      -- a generic impl (`impl<T: Destroy> Destroy for Vec<T>`) is specialized as usual.
+      return ← monoExpr (.call (.direct (destroyFnNameFor tn)) [] [a0] ty)
+    let glueName := destroyGlueName (tyToSuffix argTy)
+    if monoIsCopy st target then
+      enqueueMono glueName {
+        name := glueName, typeParams := [], params := [("x0", argTy)], retTy := .unit
+        body := [], isPublic := false, isTest := false }
+      return .call glueName [] [a] ty
+    match target with
+    | .array elem size =>
+      let elemRefTy : Ty := .ref elem
+      let idx : CExpr := .ident "i" .uint
+      let elemRef : CExpr := .borrow (.arrayIndex (.ident "x0" argTy) idx elem) elemRefTy
+      enqueueMono glueName {
+        name := glueName, typeParams := [], params := [("x0", argTy)], retTy := .unit
+        body := [
+          .letDecl "i" true .uint (.intLit 0 .uint),
+          .while_ (.binOp .lt idx (.intLit size .uint) .bool)
+            [ .expr (.call (.direct destroyDispatchCallee) [] [elemRef] .unit) false,
+              .assign "i" (.binOp .add idx (.intLit 1 .uint) .uint) ]
+            none [] ]
+        isPublic := false, isTest := false
+        -- The builtin `Destroy::destroy` is bounded by `Alloc` (bug 091, H18 v1 fence), and
+        -- the glue runs element destructors, so it carries exactly that bound: its callers
+        -- were already charged `Alloc` at the `T: Destroy` call, and verifyCapsPostMono
+        -- re-checks the element calls against it.
+        capSet := .concrete ["Alloc"] }
+      return .call glueName [] [a] ty
+    | _ => refuseDestroy s!"no destructor for non-Copy type '{tyToSuffix target}': destroying it would be a silent no-op and leak the value (bug 052)" "a `Destroy` bound accepted a type with no destructor; destroy or drain it explicitly."
+  | _ => refuseDestroy s!"destructor dispatch has {args.length} arguments, expected 1 (bug 052)" "this is a compiler containment failure, not a program error."
 
 partial def monoStmt (s : CStmt) : MonoM CStmt := do
   match s with
@@ -996,6 +1008,12 @@ private partial def collectAllModuleStructs (m : CModule) : List CStructDef :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllModuleStructs s) []
   own ++ sub
 
+private partial def collectAllModuleNewtypes (m : CModule) : List NewtypeDef :=
+  m.newtypes ++ m.submodules.foldl (fun acc s => acc ++ collectAllModuleNewtypes s) []
+
+private partial def collectAllModuleTraitImpls (m : CModule) : List CTraitImpl :=
+  m.traitImpls ++ m.submodules.foldl (fun acc s => acc ++ collectAllModuleTraitImpls s) []
+
 /-- Recursively collect all enum defs from a module and its submodules. -/
 private partial def collectAllModuleEnums (m : CModule) : List CEnumDef :=
   let own := m.enums
@@ -1261,8 +1279,12 @@ def monoProgram (modules : List CModule)
     allFns.foldl (fun m f => if m.contains f.name then m else m.insert f.name f) ∅
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllModuleStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllModuleNewtypes m) []
+  let destroyImpls := (modules.foldl (fun acc m => acc ++ collectAllModuleTraitImpls m) []).filterMap
+    fun ti => if ti.traitName == destroyTraitName then some ti.typeName else none
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap,
-                                 structs := allStructs, enums := allEnums }
+                                 structs := allStructs, enums := allEnums,
+                                 newtypes := allNewtypes, destroyImpls := destroyImpls }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms0 =>

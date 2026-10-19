@@ -321,6 +321,35 @@ def destroyFnNameFor (typeName : String) : String :=
 def mangledMethodName (typeName : String) (method : String) : String :=
   typeName ++ "_" ++ method
 
+/-- The Core callee of a trait-method call on a TYPE PARAMETER receiver (`x.m()` with
+    `x : &T`, `T: Trait`): `T$m`. `$` cannot occur in a source identifier (the lexer
+    admits only alphanumerics and `_`), so this spelling never names a user definition.
+
+    It used to be `T_m` — the ordinary mangled-method spelling — so the trait call and a
+    user function literally named `T_m` were ONE name in Core: Mono and the interpreter
+    resolved the call to that function before any trait dispatch ran (Codex review of
+    bug 052: a user `T_destroy(x: &[Tracked; 2])` silently replaced the array's
+    per-element destructor), and Mono's prefix rewrite renamed a user call to `T_helper`
+    inside a generic body to `Point_helper`. Mono rewrites `T$m` per instantiation. -/
+def traitParamCallee (typeParam : String) (method : String) : String :=
+  typeParam ++ "$" ++ method
+
+/-- Inverse of `traitParamCallee`: `T$m` ↦ `(T, m)`. -/
+def splitTraitParamCallee (name : String) : Option (String × String) :=
+  match name.splitOn "$" with
+  | [p, m] => if p.isEmpty || m.isEmpty then none else some (p, m)
+  | _ => none
+
+/-- Reserved Core callee for TYPED destructor dispatch: Mono rewrites `T$destroy` to this
+    and resolves it from the argument's type (a `Destroy` impl's method, element-wise array
+    glue, or a Copy no-op), never by looking a name up. Not a source identifier. -/
+def destroyDispatchCallee : String := "$destroy"
+
+/-- Name of compiler-synthesized destructor glue for a type spelled `suffix`. Reserved
+    (contains `$`), so a user definition can never be selected in its place. -/
+def destroyGlueName (suffix : String) : String :=
+  "$destroy$" ++ suffix
+
 /-- Suffix for compiler-generated sizeof functions. -/
 def sizeofSuffix : String := "_sizeof"
 

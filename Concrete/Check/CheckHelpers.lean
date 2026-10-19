@@ -799,9 +799,23 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
       -- A turbofish arg naming one of the CALLER's own type params arrives as
       -- `.named "T"` — normalize to `.typeVar` so the caller's bounds are
       -- consulted (`fib::<T>(n - 1)` inside `fn fib<T: Copy>` satisfies Copy).
-      let concreteType := match concreteType0 with
-        | .named n => if env.currentTypeParams.contains n then .typeVar n else concreteType0
+      -- RECURSIVELY: `kill::<[T; 2]>(x)` inside `outer<T: Destroy>` supplies an array whose
+      -- ELEMENT is the caller's `T`; normalizing only the top level read that element as a
+      -- concrete named type `T` with no impl and refused the bound (Codex review of bug 052).
+      let tps := env.currentTypeParams
+      let rec norm : Ty → Ty
+        | .named n => if tps.contains n then .typeVar n else .named n
+        | .ref t => .ref (norm t)
+        | .refMut t => .refMut (norm t)
+        | .heap t => .heap (norm t)
+        | .heapArray t => .heapArray (norm t)
+        | .array t k => .array (norm t) k
+        | .ptrMut t => .ptrMut (norm t)
+        | .ptrConst t => .ptrConst (norm t)
+        | .generic n args caps => .generic n (args.map norm) caps
+        | .fn_ ps cs r => .fn_ (ps.map norm) cs (norm r)
         | t => t
+      let concreteType := norm concreteType0
       for traitName in requiredTraits do
         if traitName == "Copy" then
           if !(← isCopyType concreteType) then
