@@ -636,7 +636,7 @@ S10 consumes `CheckedMonoCore` after S8a. S12a starts with S5; validator impleme
 their IRs. S14 begins after S7/S8. S15 composes the frontend, checker/specialization,
 pass/validator, linking and claim-transport obligations. The trusted-base inventory starts
 immediately. A minimal canonical task identity and an independent retained-artifact consumer are
-required for each publicly authoritative slice claim from V1 onward; rows 8 – 10 complete cross-profile
+required for each publicly authoritative slice claim from V1 onward; rows 9 – 11 complete cross-profile
 interoperability and schema stabilization and do not defer subject/proposition binding, provenance or
 independent replay for claims already issued.
 

@@ -8,7 +8,7 @@ their links and rationale have not yet been physically compacted; they never ove
 state or queue.
 
 > **Start here for what happens next:** [The current execution queue](#the-current-execution-queue),
-> the first section below — the only ordering in this file.
+> the authoritative scheduling section below.
 > **Start here for releases:** [Release map](#release-map) — bounded deliverables,
 > candidate acceptance and compatibility; not another execution queue.
 > **Start here for direction:** [Capability unlocks](#capability-unlocks--the-stable-product-map)
@@ -43,32 +43,41 @@ task sections below hold every row's exit.
 
 ### Where every phase fits
 
-The queue rows above name the work whose order is decided. The task catalog below is organised by phase;
-every phase belongs to a stage, and the phases marked **reconcile** overlap the verified-compiler plan and
-must have each task mapped onto it, merged into a plan task, or retired with a reason.
+Phase headings are topical filing locations, not scheduling units. Counts include retained
+completed and historical task bodies; they are not counts of unfinished work. Each task
+increment follows its explicit queue assignment or the reconciliation ledger below.
+Unscheduled work remains pull-gated or deferred with a recorded trigger. A phase-level
+assignment does not override an individual task's prerequisites.
 
 | phase (tasks) | stage | how it fits |
 |---|---|---|
-| 7 Standard library and core APIs (97) | 3, then 4 | `std` breadth and stability ship in the release trains (R-0515's coverage inventory, R-0358); `std` is verified against its contracts in V7 and the trusted remainder is listed (S16) |
+| 7 Standard library and core APIs (97) | 1, 3–7 — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
 | 7.5 QBE backend and independent validation (42) | 3 — **reconcile** | The plan's backends are LLVM (unverified, fast) and an owned native AArch64 backend (verified). QBE is kept, merged into the native-backend work, or retired, task by task |
-| 8 Flagship depth and examples (25) | 3, then 7 | Flagships are workloads during stage 3 and graduate (three public flagships) in stage 7 |
+| 8 Flagship depth and examples (25) | 1–4, then 7 — **reconcile** | R-0114–R-0118 supply shared compiler foundations; workloads run in stage 3; the three public flagships graduate in stage 7 |
 | 8.5 Incremental compiler driver (12) | 3 | Prerequisite for the editor (R-0385) and the compile-time budgets |
-| 9 Proof authoring and automation (28) | 2, 4 | Retargeted at claims on Core (R-0495) and the plan's proof-engineering libraries |
-| 10 Audit commands and review artifacts (25) | 5 | Evidence as a product; review surfaces read the single verdict authority (R-0494) |
+| 9 Proof authoring and automation (28) | 2, 4, 6 — **reconcile** | Core proof authoring grows with slices; specification libraries, quantified contracts and frame work follow their stage-6 prerequisites; legacy PExpr/FnTable objectives require explicit disposition |
+| 10 Audit commands and review artifacts (25) | 2–5, then 7 | Minimal profile, provenance and replay surfaces accompany public slices; the complete evidence product follows stage 5; package consumers follow stage 7 |
 | 11 Proof status and trust gates (20) | 1, 5 — **reconcile** | Overlaps the single verdict authority and axiom policy (R-0494, R-0506) |
 | 12 Provable and predictable subsets (22) | 2, 4 — **reconcile** | The verified slices define the admitted subsets from now on |
-| 13 Runtime safety obligations (28) | 2, 4 — **reconcile** | Traps, bounds and overflow are Core semantics in the plan; obligations move into the slices |
-| 14 Compiler soundness bridge (22) | 2, 4 — **reconcile** | Superseded in part by the plan's refinement theorems; R-0460's Core → VC rows remain |
-| 15 Backend, target and stdlib contracts (54) | 4 — **reconcile** | Overlaps the lower pipeline, `rt`, external-call contracts and linking (S10 – S13, R-0299/R-0300) |
+| 13 Runtime safety obligations (28) | 1, 2, 4, 6 — **reconcile** | Immediate soundness repairs precede release; R-0460 proves Core-to-VC rules; contract-dependent obligations follow stage 6 |
+| 14 Compiler soundness bridge (22) | 2, 4–6 — **reconcile** | Refinement and evidence soundness follow the verified plan; spec/ghost totality follows its contract prerequisites; R-0460, filed in Phase 13, remains the Core-to-VC owner |
+| 15 Backend, target and stdlib contracts (54) | 1–5 and every release — **reconcile** | R-0491–R-0514 follow their explicit queue/slice assignments; interop, applications and usability follow stage 3; R-0516 supplies release automation before automated publication |
 | 15.25 WebAssembly (7) | after 1.0 | A later target profile; research-gated |
 | 15.5 Unsafe Concrete and trusted systems profile (10) | 4 | V6 (raw pointers, `Unsafe`, FFI) and the trusted-base inventory |
-| 15.75 Performance and optimization evidence (8) | 3, then 1.x | Budgets in R-0515/R-0355; optimization certificates in S12 |
+| 15.75 Performance and optimization evidence (8) | 3–4 and every release | R-0416–R-0424 provide the shared measurements consumed by R-0355/R-0515; optimization work is measurement-pulled and its certificates follow S12 |
 | 16 Freestanding and embedded target (12) | after 1.0 | A later target profile |
 | 17 Public release bar (31) | 7 and every milestone | The release map's scopes draw their acceptance from here |
 | 17.5 Post-release operations (8) | from 0.1 | Security response, support and patch procedure start with the first release |
 | 18 Packages and dependency evidence (21) | 3, then 7 | Local packages with interop (stage 3); package evidence and policy (R-0440) in stage 7 |
-| 19 Editor and human tooling (15) | 3 | R-0515's V1 tooling checkpoints advance these tasks |
-| 20 Concurrency and research-gated extensions (20) | research | A dated design decision under R-0515; outside the first verified profiles |
+| 19 Editor and human tooling (15) | 3, then 6–7 and later | R-0385–R-0388 provide the V1 checkpoint subject to Phase 8.5; richer-contract and dependency views follow their facts; advanced tooling remains pull-gated |
+| 20 Concurrency and research-gated extensions (20) | research, with operational exceptions — **reconcile** | Concurrency and other research retain their triggers; R-0446 joins the prevention/typed-operation inventory; R-0487 joins staged authority reporting; R-0413 remains gated compiler-TCB research |
+
+R-0113 owns the QBE reconciliation decision before a QBE implementation checkpoint is
+activated. The decision records keep, merge or retire for R-0072–R-0113 and updates
+R-0296, R-0305–R-0311, R-0331 and R-0424 plus the Wasm entrance criteria and all
+mandatory QBE comparisons. Useful ABI, differential, legality and reproducibility
+controls transfer to named owners even if QBE is retired. QBE is not a prerequisite
+for R-0505's native backend. Any retained backend has an explicit maintenance budget.
 
 
 ## The current execution queue
@@ -162,7 +171,7 @@ verdict authority and claims-on-Core land, and the fixes for 081 – 101 land fi
 **Usability decision, 2026-10-19:** a great language needs real users, good errors, tooling, a
 reliable `std` and published performance, not only a sound compiler. Usability moves from the end of
 the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule; the external
-user pilot that row 16 required at the end now starts with the immediate protections.
+user pilot that row 16 required at the end now starts after rows 0–2 qualify and the onboarding path is ready.
 
 **Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
 through the whole compiler, with explicit intermediate and source-to-native theorem boundaries, rather
@@ -222,7 +231,7 @@ is not part of this strict queue. Why3 remains comparative prior art, never a ba
 
 ## Release map
 
-Release labels below are provisional scopes, not version numbers, dates or claims
+Release scopes and illustrative version labels below are provisional, not dates or claims
 that a release is ready. The execution queue above remains the sole scheduling
 authority. Phase numbers group subjects; they are not release numbers. R-0333 owns
 this map and each candidate checklist; Phase 17 retains the detailed release bars.
@@ -232,33 +241,41 @@ No release requires finishing the entire task catalog.
 
 Three layers, so users and pilots get something regularly without weakening any release bar:
 
-- **Nightly builds:** every main commit whose qualification passed becomes a downloadable build with its
-  candidate record. No support promise.
-- **A release train every 4 – 6 weeks (`0.x.y`), starting after the systems preview:** each train ships
-  whatever is qualified on main at that point — fixes, diagnostics, `std` additions, tooling, performance.
-  Nothing waits for a train if it is ready; nothing ships in one that is not qualified.
-- **Milestone releases (`0.n`):** the train that carries something new in kind. Each maps to a stage of
-  the [roadmap at a glance](#roadmap-at-a-glance):
+- **Nightlies:** publish the newest fully qualified main commit once per scheduled
+  nightly run; retain the exact qualification and candidate record. No support promise.
+- **Release trains:** target a release every 4–6 weeks after the systems preview,
+  provided the applicable candidate acceptance passes. Security/soundness fixes may
+  ship out of band. A train may be skipped with a recorded reason.
+- **Milestones:** preview, verified preview, verified-subset growth, component alpha,
+  project beta and stable are acceptance scopes, not a fixed allocation of version
+  numbers. A slice may span multiple releases and a release may carry several qualified
+  increments. R-0333 records compatibility and numbering policy for each release.
+
+The table below is an **illustrative sequence**, not a commitment; each label maps to the stages of
+the [roadmap at a glance](#roadmap-at-a-glance) whose acceptance it needs:
 
 | label | scope (table below) | stage that produces it |
 |---|---|---|
 | 0.1 | Experimental systems preview | 1. Stabilize, with the usability onboarding path and first pilot |
-| Verified preview | Compile the V1 subset through the `verified` profile and obtain a native image covered by the compiler-correctness theorem; the authoritative checker on Core guards every program. | R-0511's V1a/V1b exits; R-0514's whole-language checker; R-0515's V1 editor and debugging checkpoints; candidate record under R-0333 stating the theorem boundary (`CheckedCore` or source). | Everything outside V1; claims beyond the transported example. |
-| Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | R-0511's slice exits as extended in the plan; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
-| 0.2 | Verified preview | 2. Verified foundation (V1a, V1b; the whole-language Core checker) |
-| 0.3 – 0.8 | Verified-subset milestones | 4. Verified growth, one per slice V2 – V6 plus V7, interleaved with stage 3's interop and usability work |
-| 0.9 | Verified-component alpha | 4 complete for the alpha's components, with 5. Evidence as a product |
-| 0.10 | Project beta | 7. Release and ecosystem (local packages and policy) |
-| 1.0 | Stable supported subset | V7 complete with source correspondence, 5 complete, and 7's stability commitments |
-| 1.x | feature releases | 6. Richer verification and the rest of 7 |
+| 0.2 | Verified preview | Stage 2's V1a/V1b and whole-language checker, plus stage 3's R-0515 tooling checkpoints and their Phase 8.5 prerequisites; the candidate states whether the theorem begins at CheckedCore or source |
+| 0.3 – 0.8 | Verified-subset milestones | 4. Verified growth, V2 – V7 cumulative slices (a slice may need several releases), interleaved with stage 3's interop and usability work |
+| 0.9 | Verified-component alpha | Stages 4 and 5 for the admitted component, plus stage 6's typed-contract, two-state and required totality increments; R-0486's non-author change-and-repair exit |
+| 0.10 | Project beta | Alpha acceptance plus stage 7's bounded local-package, policy and external-user workflow increments; stage 3's minimal editor path |
+| 1.0 | Stable supported subset | V7 with source correspondence for the published subset; stages 5–7's applicable acceptance; Phase 17 compatibility/distribution and Phase 17.5 maintenance readiness |
+| 1.x | Feature releases | Remaining or extended verification, library, tooling and ecosystem work outside the 1.0 subset, admitted through the same evidence and compatibility gates |
+
+Allowing alpha before V7 would require an explicit queue amendment pulling its bounded
+evidence/contract prerequisites alongside slice growth; this map cannot silently authorize that.
 
 Labels stay provisional (the paragraph above): a milestone ships when its scope's acceptance holds, not
-on a date. Release automation (R-0516) is a prerequisite for the train: without it, frequent releases
+on a date. Release automation (R-0516) is a prerequisite for automated trains and nightlies: without it, frequent releases
 would consume the capacity the proof track needs.
 
 | release scope | user-visible outcome | required increments / owners | explicitly deferred |
 |---|---|---|---|
-| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | R-0484 and R-0483 are closed; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Rows 0–2 qualified for the advertised scope; R-0333's exact candidate/subset record; R-0335/R-0336/R-0337 reference and honest claims; bounded R-0334/R-0346/R-0352/R-0354 installation/tutorial/distribution acceptance; R-0515 onboarding, first pilot and before-public-release checkpoint; R-0343/R-0345 security and threat disclosures; R-0357 supply-chain lock/license inventory; R-0358 compatibility/deprecation policy; preview-scoped R-0426/R-0427/R-0428 support, repair and response readiness. The preview checklist explicitly states which evidence-verifier/replay artifacts ship; unsupported proof replay cannot satisfy or advertise a verification release claim. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Verified preview | Compile the V1 subset through the `verified` profile and obtain a native image covered by the compiler-correctness theorem; the authoritative checker on Core guards every program. | R-0511's V1a/V1b exits; R-0514's whole-language checker; R-0515's V1 editor and debugging checkpoints; candidate record under R-0333 stating the theorem boundary (`CheckedCore` or source). | Everything outside V1; claims beyond the transported example. |
+| Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | The verified-pipeline plan's cumulative V2–V7 exits, delivered by R-0491–R-0510 as coordinated under queue row 6; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
 | Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing Phase 17 alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
 | Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing Phase 17 beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
 | Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
@@ -287,6 +304,14 @@ packaging ahead of current queue work or mark any in-flight branch as complete.
   that subset; examples and migration guidance are checked against the candidate.
 - [ ] R-0334/R-0346/R-0352/R-0354 demonstrate clean installation, build/run/test and
   the tutorial on every claimed platform. Record external-user failures and fixes.
+- [ ] R-0515's onboarding path, first pilot and before-public-release checkpoint
+  (published inventory, named reviewers) are complete for the preview scope; the first
+  pilot does not wait for R-0515's two-quarter continuing-feedback checkpoint.
+- [ ] R-0343/R-0345 publish the security disclosure policy and threat model; R-0357
+  locks the toolchain/dependencies and publishes the license inventory; R-0358 publishes
+  the compatibility/deprecation policy; R-0426/R-0427/R-0428 are ready at preview scope.
+- [ ] The preview checklist states exactly which evidence-verifier/replay artifacts ship
+  (bounded R-0354 distribution); unsupported replay advertises no verification claim.
 - [ ] R-0333 records a reproducible candidate and its validation result using the
   common candidate record below. Unresolved queue prerequisites remain blockers
   unless an explicit, scoped release disposition permits a narrower claim.
@@ -3448,14 +3473,16 @@ changelog does not erase a still-relevant condition:
 
 ### Global Sequence And Evidence Discipline
 
-The roadmap has one authoritative sequence: headings named `Task R-NNNN`, read
-in file order without restarting at phase boundaries. Stable IDs identify work;
-they do not encode position. Phase headings are milestone labels, while
-specifications, contracts, and decision indexes are non-executable context.
-There are no parallel tracks. Completed work moves to
-[CHANGELOG.md](CHANGELOG.md) under a `### Completed Task R-NNNN` heading so the
-gate reserves that identity permanently; conditional work occupies the file
-position where its trigger can first make it executable.
+The current execution queue is the sole scheduling authority. Task IDs identify
+obligations; file order and phase numbers do not schedule them. Stages summarize
+dependencies and permitted overlap, not additional integration capacity. For the
+one-maintainer team, at most one shared-compiler migration checkpoint and one bounded
+proof checkpoint are active for integration at a time. Usability, interop, application,
+incremental-driver and release work use that same limit; proof progress remains reserved.
+Every activated checkpoint records its accountable maintainer, required reviewer and exit.
+
+Completed work moves to [CHANGELOG.md](CHANGELOG.md) under a `### Completed Task R-NNNN`
+heading so the gate reserves that identity permanently.
 
 Every user-facing claim should have a replay command, checked report, gate, or
 proof. Unsupported cases must fail closed and loud. A feature that passes only
@@ -10883,7 +10910,9 @@ the library and is not a fourth public flagship.
 
 ### Task R-0071
 
-**Objective:** Close Phase 7 against the Phase 7 Completion Contract, move every fully completed task body to CHANGELOG, leave only future-relevant invariants in this document, and then continue directly with Task R-0072.
+**Objective:** Close Phase 7 against its Completion Contract, archive completed work
+while preserving future-relevant invariants, and select the next checkpoint from the
+current execution queue. Phase closure does not automatically activate QBE.
 
 
 ### Task R-0483
@@ -12727,12 +12756,10 @@ reason to build caching ahead of demand. Without the measured workload and GO
 record above, the pull-gated doctrine requires an explicit defer/reject decision
 rather than speculative implementation.
 
-**Conditional phase rule.** The roadmap remains linear. After Phase 8, a GO
-verdict executes this phase before Phase 9. A NO verdict must produce the
-required decision record and mark Phase 8.5 explicitly
-`rejected-by-validation` or `deferred-by-decision` before Phase 9 proceeds; this
-slot may not remain silently blocked while later work advances. A later reversal
-requires a new forcing workload and recorded decision.
+**Conditional phase rule.** Phase 8.5 retains its measured-workload and external-validation
+GO prerequisites. A NO verdict records rejection or deferral and its effect on dependent
+editor/package releases. Independent proof work may proceed under the current queue;
+no dependent editor or package checkpoint bypasses the required architecture.
 
 Prerequisites: Phase 6B determinism, one composed pipeline, stable fact IDs,
 dependency graph, pass locality/invalidation, and validation-record contract;
@@ -16354,8 +16381,10 @@ recovery dates are recorded rather than counted as completed.
 
 R-0515 owns pilot coordination and acceptance evidence. R-0485/R-0488 retain ownership of ergonomics
 changes and their prerequisites; row 7 supplies application workloads; row 16 retains
-dependency-upgrade/replay acceptance and flagship graduation; R-0385 – R-0388 own the editor, R-0355
-performance, R-0358 stability and deprecation, R-0346/R-0347 onboarding, R-0359 contribution and
+dependency-upgrade/replay acceptance and flagship graduation. R-0385–R-0388 own editor implementation,
+R-0281 owns native debugging, and R-0416–R-0424 own generated-code performance evidence. R-0355 consumes
+that evidence and owns release budgets. R-0515 coordinates their bounded user-facing checkpoints; it
+creates no separate debugger or benchmark infrastructure. R-0358 owns stability and deprecation, R-0346/R-0347 onboarding, R-0359 contribution and
 governance, R-0399 – R-0401 concurrency. A shared workload may supply evidence to several tasks, but does
 not close their distinct exits.
 
@@ -16414,7 +16443,9 @@ published.
 **Objective:** Release automation, so that nightly builds, the release train and milestone releases cost
 minutes of attention instead of days.
 
-**Status (2026-10-19): planned; prerequisite for the release train after the systems preview.**
+**Status:** planned; stage-3 release-preparation checkpoint coordinated by R-0333/R-0515
+within the existing capacity limit. Its nightly-publication subset precedes the first
+automated nightly; its complete exit precedes the first automated train or milestone.
 
 Work: one command produces, from an exact main commit whose full tier passed (R-0513), the R-0333
 candidate record (source and toolchain identities, artifact identities, supported subset and profiles,
@@ -16423,9 +16454,16 @@ artifacts for every declared platform, a changelog section and migration notes d
 changes, and the claims matrix for the release. Nightly builds publish automatically with their records;
 train and milestone releases add the human review of notes and claims.
 
-**Exit:** a dry-run release of the current main produces a complete candidate record and artifacts with
-no hand-edited fields; a deliberately failing qualification prevents publication; two consecutive
-nightly builds publish unattended.
+**Exit:** from immutable source, toolchain, policy and reviewed release-input records,
+produce the candidate record and packaged artifacts without manual edits to generated
+outputs. Full qualification must match the exact source/toolchain identities, and
+candidate installation, claims and artifact checks run against the artifacts to be
+published. Demonstrate rejection of failed, missing or wrong-commit qualification,
+artifact substitution and unapproved milestone publication. Demonstrate one reviewed
+train/milestone publication rehearsal, retry after partial failure without replacing
+an existing release identity, and the applicable R-0427 rollback procedure. Two
+successive scheduled nightlies publish unattended with retained records. Semantic,
+compatibility and limitation decisions remain explicit reviewed inputs.
 
 ### Task R-0286
 
@@ -18301,6 +18339,12 @@ proof language exclusively through batch reports, but release is not blocked on 
 
 **Objective:** Add compiler-as-service / LSP entrypoints after diagnostics and facts are structured. The service must host the Phase 8.5 `CompilerSession`; it may not wrap batch `runFrontend` as its normal edit path.
 
+The basic editor checkpoint also provides scope/type-aware name and member completion,
+call signature help, and find-references for resolved symbols. These operations consume
+the shared compiler session and respect visibility and current project revision.
+Scripted incomplete-source and edit/repair cases verify useful results without stale
+facts or changes to proof authority.
+
 ### Task R-0386
 
 **Objective:** Reuse the incremental query/certificate graph as the only editor fact engine.
@@ -18590,8 +18634,9 @@ hand-maintaining it, and extend its consumer set.
 R-0005 removed the recurrence mechanism for bug 053: `IntArith` now answers
 whether and how an operation traps, for the unary family as it already did for
 the binary one, and folding, DCE, the interpreter and EmitSSA read that one
-answer (`scripts/tests/check_trap_inventory.sh`, mutations #25-#27). QBE
-reaches the same checked helpers through EmitSSA.
+answer (`scripts/tests/check_trap_inventory.sh`, mutations #25-#27). Any retained
+backend consumes the shared semantic inventory through backend-neutral
+interfaces; its emitter-independence requirements remain in force.
 
 What R-0005 asked for and did not build is the *generated* form. Two consumers
 remain outside the inventory entirely: **fuzz generation**, which would emit
