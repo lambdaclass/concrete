@@ -1,6 +1,6 @@
 # Verified-compiler pipeline
 
-Status: planned, 2026-10-18. Owners: R-0491 – R-0513 in [ROADMAP.md](../../ROADMAP.md), with
+Status: planned, 2026-10-18. Owners: R-0491 – R-0514 in [ROADMAP.md](../../ROADMAP.md), with
 R-0299, R-0300, R-0353, R-0413 and R-0460 linked where named. The architecture reconciles two
 independent designs (a Claude design agent and Codex) and four Codex reviews of earlier drafts (42
 findings, all applied).
@@ -282,7 +282,7 @@ every slice program from the day the profile exists.
   artifact it starts from.
 - *Review:* an outside expert reviews Core's V1 semantics before it freezes.
 
-**Later slices (queue row 5).** Each adds its constructs to every stage and extends the theorem:
+**Later slices (queue row 6).** Each adds its constructs to every stage and extends the theorem:
 V2 structs, enums, `match` and fixed arrays with bounds traps (value semantics, stack memory);
 V3 heap and linear resources (`rt` allocation, destroy, `defer`, out-of-memory behaviour) with
 ownership soundness (S14) for the covered subset; V4 second-class references and borrows (borrow
@@ -296,6 +296,11 @@ name tables, the theorem-type classification generator, the frozen identity rows
 amendments, attestations and per-surface status logic — receives soundness fixes only. As a slice
 lands, every existing claim on functions within it moves to a compiler-generated Core statement; when
 the last claim has moved, the layer and the gates that guard it are deleted.
+
+**The shared front end is whole-language early (queue row 4, R-0514).** Core, its identities and its
+checker are shared by both profiles; only lowering differs. So the authoritative checker on Core is
+built for the whole language right after V1 — closing the checked-is-not-compiled gap (087, 090,
+092 – 094) for every user — while the slices prove its rules as they reach them.
 
 **Protections in the meantime (queue row 2).** S1 (prevention harness), S2 (one verdict authority),
 S3 (demonstrated enforcement) and S4 (written language rules) protect users of the existing compiler
@@ -540,7 +545,7 @@ published trusted-base inventory. R-0353 independently checks retained evidence 
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
 correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may
-proceed beside queue rows 3 – 6; authoritative use stays queue row 8, after row 7 and R-0004's
+proceed beside queue rows 3 – 7; authoritative use stays queue row 9, after row 8 and R-0004's
 prerequisites. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while
@@ -566,11 +571,12 @@ S4 fixes the relevant language rules before S7 freezes their semantics. S9 depen
 S10 consumes `CheckedMonoCore` after S8a. S12a starts with S5; validator implementations follow
 their IRs. S14 begins after S7/S8. S15 composes the frontend, checker/specialization,
 pass/validator, linking and claim-transport obligations. The trusted-base inventory starts
-immediately; R-0353's authoritative use keeps queue row 8.
+immediately; R-0353's authoritative use keeps queue row 9.
 
 Stage order above is the dependency order *within* each slice. Queue row 2 delivers Track A's
-protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 5
-grows the slices and retires the legacy evidence layer. New soundness defects still enter at row 0, and each fix names the stage that would have
+protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 4
+makes the shared front end (identities, the authoritative checker on Core) sound for the whole language;
+row 6 grows the slices and retires the legacy evidence layer. New soundness defects still enter at row 0, and each fix names the stage that would have
 prevented it; if none would, the plan gains one.
 
 ## Discipline
