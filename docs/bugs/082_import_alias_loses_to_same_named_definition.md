@@ -113,3 +113,15 @@ The same flat lookup misrouted two unaliased shapes:
   `tests/programs/error_082_import_alias_shadows_method.con`.
 * The interpreter finding (module-local calls inside qualified entries) is tracked as
   bug 097.
+
+## Codex round 2
+
+* **E0299 accepted a module whose path merely ENDS with the import's name (P1).** The
+  collision check treated `path.endsWith ("." ++ imp.moduleName)` as the import's own target.
+  Top-level `a.f` and nested `z.a.f` are both Core `a_f` (a top-level module's submodule is
+  prefixed by its own name only), so `import a.{ f as g }` was exempted from the collision
+  with `z.a.f` and called it: the fixture returned 55 instead of 15, compiled and --interp.
+  The import's module is now resolved to a fully qualified path first (`importModulePath`:
+  own submodule, sibling submodule, relative dotted path, else absolute), and only a
+  definition at exactly that path is the target. Fixture
+  `tests/programs/error_082_import_suffix_collision.con` (E0299).

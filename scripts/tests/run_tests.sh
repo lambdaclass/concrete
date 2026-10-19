@@ -7265,6 +7265,9 @@ run_err "$TESTDIR/error_082_import_duplicate_binding.con" "E0299"
 # definition, or the backends would call that one.
 run_err "$TESTDIR/error_082_import_alias_shadows_method.con" "E0299"
 run_err "$TESTDIR/error_082_import_spelling_collision.con" "E0299"
+# Codex round 2: the import's target is its fully qualified module, not any path ending in
+# its name (top-level a.f vs nested z.a.f, both Core `a_f`; was 55, should be refused).
+run_err "$TESTDIR/error_082_import_suffix_collision.con" "E0299"
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

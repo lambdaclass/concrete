@@ -1,0 +1,20 @@
+// Bug 082, Codex round 2: E0299 compared module paths by SUFFIX. Top-level
+// `a.f` and nested `z.a.f` are both Core `a_f`; `import a.{ f as g }` is spelled
+// `a_f`, and `"z.a".endsWith(".a")` exempted `z.a.f` as the import's own target,
+// so `g` called z.a.f: the program returned 55 (5*10 + 5) instead of 15.
+// The import's module is now resolved to a fully qualified path. Expected: E0299.
+mod a { pub fn f(c: Int) -> Int { return 1; } }
+mod z {
+    mod a { pub fn f(c: Int) -> Int { return 5; } }
+    import a.{ f };
+    pub fn zf(c: Int) -> Int { return f(c); }
+}
+mod b {
+    import a.{ f as g };
+    pub fn probe(c: Int) -> Int { return g(c); }
+}
+mod main {
+    import b.{ probe };
+    import z.{ zf };
+    fn main() -> Int { return probe(2) * 10 + zf(0); }
+}

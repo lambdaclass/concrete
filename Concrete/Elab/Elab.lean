@@ -2424,6 +2424,20 @@ def importCallSpellingsFor (m : Module) (summary : FileSummary)
               then some (localName, imp.moduleName ++ "_" ++ orig) else none
           | none => none
 
+/-- The fully qualified module path an import names, resolved the way
+    `importCallSpellingsFor` resolves its spelling: a submodule of this module
+    (`thisPath.sub`), a sibling submodule (`parent.sib`), a dotted path that starts at one of
+    this module's submodules (relative), or else an absolute path from the top level. -/
+def importModulePath (moduleName : String) (summary : FileSummary)
+    (siblingSubs : List (String × FileSummary)) (thisPath : String) : String :=
+  let parentPath := match thisPath.splitOn "." with
+    | [] | [_] => ""
+    | parts => ".".intercalate parts.dropLast
+  let head := (moduleName.splitOn ".").headD ""
+  if summary.submoduleSummaries.any (·.1 == head) then thisPath ++ "." ++ moduleName
+  else if !parentPath.isEmpty && siblingSubs.any (·.1 == head) then parentPath ++ "." ++ moduleName
+  else moduleName
+
 /-- Every Core function name a program's top-level modules define, with the definition it
     belongs to: `(coreName, modulePath, definitionName)`. Top-level definitions keep bare
     names; submodule definitions (and impl methods, `Type_method`) are prefixed by the
@@ -2441,18 +2455,21 @@ private partial def coreDefinitionSpellings (pfx path : String) (ts : FileSummar
     unrelated module defines `fn a_f`, every Core consumer resolves the exact definition
     first, so the alias silently calls that function while the elaboration evidence still
     names `a.f`. Refused here, before any Core is emitted. A definer is the import's own
-    target when its definition name is the imported one and its module path is the import's
-    module path (or ends with it, for a relative submodule import). -/
+    target when its definition name is the imported one and its module path IS the import's
+    module, resolved to a fully qualified path (`importModulePath`). A suffix match is not
+    identity: top-level `a.f` and nested `z.a.f` are both Core `a_f`, and `path.endsWith ".a"`
+    exempted `z.a.f`, so `import a.{f as g}` called it (Codex round 2). -/
 def importSpellingCollisions (m : Module) (spellings : List (String × String))
-    (topLevel : List (String × FileSummary)) : Diagnostics :=
+    (topLevel : List (String × FileSummary)) (summary : FileSummary)
+    (siblingSubs : List (String × FileSummary)) (thisPath : String) : Diagnostics :=
   let defs := topLevel.flatMap fun (n, ts) => coreDefinitionSpellings "" n ts
   m.imports.flatMap fun imp =>
+    let target := importModulePath imp.moduleName summary siblingSubs thisPath
     imp.symbols.filterMap fun sym =>
       match spellings.lookup sym.effectiveName with
       | none => none
       | some spelling =>
-        let isTarget := fun (path defName : String) =>
-          defName == sym.name && (path == imp.moduleName || path.endsWith ("." ++ imp.moduleName))
+        let isTarget := fun (path defName : String) => defName == sym.name && path == target
         match defs.find? fun (c, path, dn) => c == spelling && !isTarget path dn with
         | none => none
         | some (_, path, dn) =>
@@ -2621,7 +2638,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- Functions, externs and impl methods all, because the hole was never specific
   -- to one of them: four of the six measured escapes were free functions.
   let callSpellings := importCallSpellingsFor m summary summaryTable topLevel siblingSubs
-  let spellingCollisions := importSpellingCollisions m callSpellings topLevel
+  let spellingCollisions := importSpellingCollisions m callSpellings topLevel summary siblingSubs
+    thisProofPath
   if !spellingCollisions.isEmpty then .error spellingCollisions else
   let importedFnCaps : List (String × CapSet) := m.imports.flatMap fun imp =>
     let summary? := match summary.submoduleSummaries.find? fun (n, _) => n == imp.moduleName with
