@@ -17,6 +17,9 @@
 #      dispatch in Main.lean, so the check tracks the source of truth).
 #   3. ROADMAP has one stable-ID Task sequence, no dangling/duplicate IDs, and
 #      no parallel queue/task headings.
+#   4. Every ROADMAP task has a stage or a recorded disposition, and the
+#      reconciliation ledger and queue rows name real tasks in consistent stages
+#      (check_roadmap_coverage.sh, with its own negative controls).
 #
 # DELIBERATELY NOT attempted (these are not mechanically robust and would make the
 # gate a false-positive generator — verified during design):
@@ -105,6 +108,13 @@ if bash scripts/tests/check_roadmap_linear.sh; then
   ok "ROADMAP task IDs are stable, unique, reference-safe, and queue-free"
 else
   no "ROADMAP linear-task structure"
+fi
+
+echo "=== 4. every roadmap task has a stage or disposition, and the queue agrees ==="
+if bash scripts/tests/check_roadmap_coverage.sh; then
+  ok "ROADMAP tasks are staged or dispositioned; ledger and queue rows name real tasks"
+else
+  no "ROADMAP task coverage (check_roadmap_coverage.sh)"
 fi
 
 echo ""

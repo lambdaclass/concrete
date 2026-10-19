@@ -134,6 +134,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 245 -> 246: check_identity_rows.sh (R-0482 frozen identity rows), pinned in the same commit.
 # 248 -> 249: check_subject_binding.sh (bug 079 subject binding), pinned in the same commit.
 # 249 -> 250: check_model_diff.sh (bug 080 model vs runtime), pinned in the same commit.
+# 250 (unchanged): check_roadmap_coverage.sh (2026-10-19 roadmap reconciliation) runs inside
+#   check_docs_drift.sh, exactly as check_roadmap_linear.sh does, so it adds no workflow command.
 EXPECTED_GATE_COMMANDS=250
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
