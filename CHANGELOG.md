@@ -1260,6 +1260,76 @@ stored/derived callback inference in R-0016. The unmerged H18 worktree and
 `.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
 of being treated as ambient backlog.
 
+### Completed Task R-0470
+
+_Capability inference for derived function-pointer arguments (bug 063). Closed 2026-09-20._
+
+**Status (2026-09-20): DONE — both sites fixed and gated.**
+`check_cap_inference.sh` 10/0. The first fix (2026-09-19) closed only
+`Check.lean`'s function-call path; `CheckHelpers.lean`'s method-call path carried
+a byte-identical copy and was found by the sweep that became
+`docs/project/ABSENCE_IS_NOT_A_FACT.md`. The method path is the one real callers
+reach, because std's capability-polymorphic combinators (`Set::fold`,
+`for_each`, `with_value`) are METHODS. Fixtures exist for both — the four derived
+argument forms and a generic-return E0242 control, per path — which retires the
+"no fixture yet" note below.
+
+**Objective:** Fix bug 063 — capability-variable inference reads "unknown
+argument type" as "no capabilities", so a stored or derived function pointer
+cannot reach a `cap C` parameter.
+
+Filed 2026-07-27 and reproduced on four derived argument forms; it had no roadmap
+owner until now, which is why it is here rather than later. A
+capability-polymorphic combinator accepts a function pointer written as a bare
+name or an annotated local, but rejects `apply(ops.op, 4)` — a fn pointer read
+from a struct field, a call result, or an array element — as an E0220 type
+mismatch against a `with()` the program never wrote.
+
+This is a rejected-valid-program defect today, not wrong code. It is scheduled
+early anyway because of what the repro shows about the mechanism: the authority
+check already passes on the fabricated empty capability set, and only `expectTy`
+stops the program. Authority visibility in the signature is a load-bearing pillar
+claim, so an inference path that silently manufactures an empty capset is worth
+closing while it is still merely a false rejection. See the repro table in
+[the bug](docs/bugs/063_cap_inference_defaults_derived_fnptr_to_empty.md). The
+four derived forms were the negative corpus; they are now positive fixtures on
+both paths (`tests/regressions/cap_inference/`), asserting E0242 and the ABSENCE
+of E0220 — a gate that only checked "does it fail" would pass either way, and
+would keep passing after fn-type comparison is relaxed to subsetting.
+
+### Completed Task R-0467
+
+_The multi-kernel evidence job runs on merges to `main`. Moved 2026-10-19._
+
+**Objective:** Run the multi-kernel evidence job on merges to `main`, not only on
+dispatch, schedule, or a PR label.
+
+`.github/workflows/lean_action_ci.yml`'s `multi-kernel` job is gated on
+`workflow_dispatch || schedule || contains(labels, 'multi-kernel')`. Everything the
+multi-kernel arc built — the badge classes, lowering agreement, certificate replay, the
+release-gate composition, `kernel_disagreement` — is therefore unverified on the commit
+that actually lands. A regression merges green and is discovered whenever someone next
+remembers to dispatch the job.
+
+This is the pinning that let H22 survive: `check_gate_mutation_coverage.sh` was
+nightly-only, so a gate that could not detect removal of the property it guarded stayed
+green for months. Same shape, newer subsystem.
+
+The cost is real and is why this is a task rather than a one-line edit: the job installs a
+multi-gigabyte Isabelle closure and cold proof runs cost roughly 30s per goal, with a
+90-minute timeout. Options, cheapest first:
+
+1. `push: branches: [main]` only — pays the cost once per merge, not per PR push. The
+   recommended default; merges are rare relative to pushes.
+2. Split the job — the Rocq half (`coqc` is a small closure) on every PR, the Isabelle
+   half on merge. Most of the evidence surface at a fraction of the cost.
+3. Keep opt-in but make the label mandatory for PRs touching
+   `Concrete/Report/Evidence.lean`, `ReportObligations.lean` or the multi-kernel gate —
+   enforceable with a path filter, and it fails closed rather than relying on memory.
+
+Whichever is chosen, record it: an evidence gate that does not run on the merge commit
+should say so where readers of the evidence will see it, not only in the workflow file.
+
 ### Completed Task R-0442
 
 _Bug 061 — the proof model spelled a parameter application and a definition call

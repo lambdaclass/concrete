@@ -51,7 +51,7 @@ assignment does not override an individual task's prerequisites.
 
 | phase (tasks) | stage | how it fits |
 |---|---|---|
-| 7 Standard library and core APIs (97) | 1, 3–7 — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
+| 7 Standard library and core APIs (96) | 1, 3–7 — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
 | 7.5 QBE backend and independent validation (42) | 2–4 — **reconciled 2026-10-19** | R-0113's decision: the Lean Compiler Backend (R-0517) is the QBE path; Concrete builds no QBE backend. Each task is kept, merged or retired with its controls transferred (reconciliation ledger) |
 | 8 Flagship depth and examples (25) | 1–4, then 7 — **reconcile** | R-0114–R-0118 supply shared compiler foundations; workloads run in stage 3; the three public flagships graduate in stage 7 |
 | 8.5 Incremental compiler driver (12) | 3 | Prerequisite for the editor (R-0385) and the compile-time budgets |
@@ -59,9 +59,9 @@ assignment does not override an individual task's prerequisites.
 | 10 Audit commands and review artifacts (25) | 2–5, then 7 | Minimal profile, provenance and replay surfaces accompany public slices; the complete evidence product follows stage 5; package consumers follow stage 7 |
 | 11 Proof status and trust gates (20) | 1, 5 — **reconcile** | Overlaps the single verdict authority and axiom policy (R-0494, R-0506) |
 | 12 Provable and predictable subsets (22) | 2, 4 — **reconcile** | The verified slices define the admitted subsets from now on |
-| 13 Runtime safety obligations (28) | 1, 2, 4, 6 — **reconcile** | Immediate soundness repairs precede release; R-0460 proves Core-to-VC rules; contract-dependent obligations follow stage 6 |
+| 13 Runtime safety obligations (27) | 1, 2, 4, 6 — **reconcile** | Immediate soundness repairs precede release; R-0460 proves Core-to-VC rules; contract-dependent obligations follow stage 6 |
 | 14 Compiler soundness bridge (22) | 2, 4–6 — **reconcile** | Refinement and evidence soundness follow the verified plan; spec/ghost totality follows its contract prerequisites; R-0460, filed in Phase 13, remains the Core-to-VC owner |
-| Verified-compiler pipeline, stabilization and usability (26) | 1–5 and every release | R-0491–R-0514 follow their explicit queue/slice assignments (rows 2, 3, 4, 6); R-0515 is the stage-3 usability track; R-0516 supplies release automation before automated publication |
+| Verified-compiler pipeline, stabilization and usability (48) | 1–5 and every release | R-0491–R-0514 follow their explicit queue/slice assignments (rows 2, 3, 4, 6); R-0515 is the stage-3 usability track; R-0516 supplies release automation before automated publication |
 | 15 Backend, target and stdlib contracts (28) | 2–4 and every release — **reconcile** | Backend/target contracts reconcile with S10 – S13; interop (R-0285, ABI/export tasks) and applications (R-0490) follow stage 3; QBE-derived tasks follow R-0113's decision |
 | 15.25 WebAssembly (7) | after 1.0 | A later target profile; research-gated |
 | 15.5 Unsafe Concrete and trusted systems profile (10) | 4 | V6 (raw pointers, `Unsafe`, FFI) and the trusted-base inventory |
@@ -100,14 +100,14 @@ the next transition; completed milestones move to the changelog rather than accu
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
 | 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
-| 9 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 9 | **Compiler provenance and canonical `VerificationTask` (R-0521)** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 10 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
 | 11 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
 | 12 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 13 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 14 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 15 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 16 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 13 | **Two-state mutation contracts (R-0524)** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 14 | **Ninth-table conversion (R-0525)** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 15 | **Totality and specification library (R-0526, R-0270, R-0060)** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 16 | **External-user workflow and productization (R-0486, R-0119)** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
 | 17 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below)**:** comfortable C/Rust/Zig interop is the next delivery investment
@@ -983,6 +983,9 @@ preserved historical artifact is not rewritten to use the schema shipped later a
 
 ### R-0004 evidence producer — landed state (2026-08-05)
 
+> **[historical] Reconciled 2026-10-19:** R-0004 closed 2026-08-20; this is its implementation record. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Canonical inventory of what exists, so the next session does not re-derive it. The
 constructor-by-constructor classification lives in `docs/verification/EVIDENCE_PRODUCER_MATRIX.md`
 (gated against the AST, so it cannot silently omit a form).
@@ -1308,6 +1311,9 @@ something into versioned bytes or leaves a construct undescribable.
 
 ### R-0004 state as of 2026-08-07 (`d156a7f6`, CI green)
 
+> **[historical] Reconciled 2026-10-19:** a dated R-0004 snapshot superseded by its closure. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Written for someone picking this up cold. `d156a7f6` is the first complete CI verdict since
 `b133b04c`; everything between was cancelled by superseding pushes, so this is the point to
 trust.
@@ -1599,6 +1605,9 @@ beside prose would add no guarantee.
 
 ### Multi-prover merge: what it took, and what it left open (2026-08-05)
 
+> **[historical] Reconciled 2026-10-19:** a dated merge record. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Merged the spike pinned at `80be5368` into main after the quarantine review. The merge
 itself was textually CLEAN — zero conflicts across a 105-commit divergence — but five
 distinct problems had to be fixed first, none of them visible from the conflict count.
@@ -1629,6 +1638,9 @@ machine-checked tracking this merge was conditioned on.
 
 ### Merge blocker RESOLVED: the spike fixed a fail-open, the test asserted the defect
 
+> **[historical] Reconciled 2026-10-19:** a resolved merge blocker. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 The pin `80be5368` failed one trust-gate case on its own (1500/1), identically on the
 quarantine merge:
 
@@ -1648,6 +1660,9 @@ Worth stating plainly: main has been fail-open on transitive stack depth, and me
 spike fixes that.
 
 ### Multi-prover work that remains AFTER R-0004
+
+> **[historical] Reconciled 2026-10-19:** a dated list; `solver_error` is R-0520, kernel-set binding is R-0440, proposition identity is R-0454. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
 
 Recorded so the dependency is explicit rather than discovered later. The spike's own comment
 in `ObligationCore.lean` states that `proved_by_two_kernels` / `proved_by_multi_kernel`
@@ -2708,6 +2723,9 @@ multi-kernel theory coverage, not a second priority list.
 
 ## Branch `spike/non-arithmetic-multi-kernel` (depends on `spike/multi-prover-evidence`)
 
+> **[historical] Reconciled 2026-10-19:** a merged spike's record. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 ### Landed: rung 2 — boolean postconditions in all three kernels
 
 `--report bool-kernel`, gate `check_bool_kernel.sh` (14/0/0 with real provers). Obligations from
@@ -3066,6 +3084,9 @@ figure becomes conditional — worth care, since a false byte count was removed 
 
 ## PRE-MERGE STATE of `spike/multi-prover-evidence` (recorded 2026-08-05)
 
+> **[historical] Reconciled 2026-10-19:** a pre-merge snapshot. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Written for a merge performed on a different machine. Everything below is either a
 **behaviour change a reviewer should expect**, or **work not done**.
 
@@ -3216,6 +3237,9 @@ is consistent enough to be a rule rather than an anecdote.
   too large to land at once, those are separable and carry the unsoundness fixes.
 
 ## Outstanding work recorded 2026-08-04
+
+> **[historical] Reconciled 2026-10-19:** a dated backlog whose items were completed, merged into owners, or promoted to tasks. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
 
 Everything below was found or deferred during the R-0460..R-0465 arc and is filed here so it
 is not carried in someone's head. Each entry says what is *measured* rather than what is
@@ -3528,6 +3552,9 @@ references stays deeply deferred and evidence-gated; raw pointers are the
 trusted/Unsafe escape hatch when low-level code must return an address.
 
 ### Compiler Pipeline Spine
+
+> **[historical] Reconciled 2026-10-19:** its QBE-first ordering is superseded by the current queue, R-0511/R-0514/R-0515 and R-0517 (the Lean Compiler Backend is the QBE path). Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
 
 Phase 6B established semantic truth and validation records; Phase 6C made the
 pipeline observable/replayable; Phase 7.5 adds a real user-selectable QBE
@@ -3996,6 +4023,9 @@ and hardware remain trusted until separately checked.
 
 ### External-Validation Gate
 
+> **[historical] Reconciled 2026-10-19:** as a global blocker this is superseded by R-0515's continuing pilots; measured product decisions remain. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 The back half of the roadmap depends on the bet that evidence-carrying source is
 worth the discipline. Phase 8 supplies the first serious external-facing
 workloads; the external-validation gate decides whether the project proceeds
@@ -4034,6 +4064,9 @@ in-source conditionals. If narrow `cfg` attributes are ever admitted, they must
 be audit-visible target/profile facts, not hidden preprocessor state.
 
 ### Native Debug Info
+
+> **[historical] Reconciled 2026-10-19:** the "Phase 15+ only" delay is superseded by R-0515's V1b checkpoint and R-0281. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
 
 DWARF/source-mapped crash traces matter once Concrete emits real binaries. This
 is backend/tooling work owned by Phase 15+, not Phase 7 stdlib work.
@@ -4191,6 +4224,1055 @@ Existing regression cases and acceptance obligations survive unless explicitly r
 R-0460, R-0299/R-0300 and R-0353 are not redundant with compiler correctness: VC soundness,
 LLVM-profile validation and independent evidence consumption retain distinct obligations.
 
+### Task dispositions
+
+Every task that is not simply live: its disposition, the owner(s) that replace it, and the reason.
+Live tasks carry only their **Stage:** line (and a **Reconciliation** note where the audit changed
+their scope).
+
+| task | disposition | owner(s) | reason |
+|---|---|---|---|
+| R-0004 | done | — | done — closed 2026-08-20; the body is retained for its explicit follow-ups and historical boundary; physical move to the archive under R-0481. |
+| R-0007 | superseded | R-0492, R-0510 | superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls. |
+| R-0008 | superseded | R-0492 | superseded by R-0492: merge reproducer and alias permutations into identity migration. |
+| R-0019 | merged | R-0031 | duplicate of R-0031: merge with explicit pull counts and safety requirements. |
+| R-0025 | merged | R-0047, R-0020 | duplicate of R-0047/R-0020: merge; no separate umbrella implementation task. |
+| R-0027 | merged | R-0061 | duplicate of R-0061: merge. |
+| R-0028 | merged | R-0060 | duplicate of R-0060: merge. |
+| R-0029 | merged | R-0065 | duplicate of R-0065: merge deferral policy; retain narrow stage-3 module owners. |
+| R-0051 | merged | R-0014 | duplicate of R-0014: merge wrappers, documentation and boundary fixtures. |
+| R-0059 | merged | R-0021, R-0440 | duplicate of R-0021/R-0440: merge; replace single-class taxonomy with orthogonal facts. |
+| R-0062 | merged | R-0021, R-0056 | duplicate of R-0021/R-0056: merge behavioral regression gates. |
+| R-0072 | retired | R-0517 | retired — LCB pins QBE 1.3 in its own upstream lock; Concrete pins the LCB version under R-0517. |
+| R-0073 | superseded | R-0497, R-0503 | superseded by R-0497/R-0503: merge into payload-bound validated BIR artifacts. |
+| R-0074 | superseded | R-0503, R-0517 | superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles. |
+| R-0076 | superseded | R-0502 | superseded by R-0502: merge into single proved Layout authority. |
+| R-0077 | superseded | R-0503, R-0509 | superseded by R-0503/R-0509: merge with `rt` contracts, support inventory and trust accounting. |
+| R-0079 | superseded | R-0493, R-0501, R-0503 | superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. |
+| R-0080 | merged | R-0118 | duplicate of R-0118: merge backend/profile dimensions into one inventory. |
+| R-0081 | merged | R-0505, R-0517 | merged — emitter independence between the LLVM adapter and the LCB adapter, and shared-helper disclosure, move to R-0505/R-0517. |
+| R-0082 | superseded | R-0497, R-0501, R-0503 | superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. |
+| R-0083 | retired | R-0511, R-0517 | retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517. |
+| R-0084 | delegated | R-0517 | delegated — a typed QBE-style IR and printer are LCB's input layer; Concrete's adapter constructs LCB-IR under R-0517. |
+| R-0085 | merged | R-0076 | duplicate of R-0076: merge through R-0076 into R-0502. |
+| R-0086 | superseded | R-0511, R-0517 | superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices. |
+| R-0087 | superseded | R-0512 | superseded by VP V7/R-0512: merge with total float model and profile-specific trust labels. |
+| R-0088 | superseded | R-0502, R-0505, R-0517 | superseded — aggregate/memory ABI realization moves to R-0502 (layout) and the adapter boundary (R-0505/R-0517) across V2–V6. |
+| R-0089 | superseded | R-0505, R-0517 | superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency. |
+| R-0090 | superseded | R-0503 | superseded by R-0503: retire preferred-C-runtime prescription; implement Concrete `rt`, named libc FFI. |
+| R-0091 | merged | R-0075, R-0517 | merged — native test-mode entry generation joins R-0075's driver and the LCB-native profile (R-0517). |
+| R-0092 | superseded | R-0491 | superseded — the three-way differential is Core semantics / LLVM profile / LCB-native under R-0491. |
+| R-0093 | merged | R-0092 | duplicate of R-0092: merge; labels are hypotheses, not proof of faulty component. |
+| R-0094 | superseded | R-0491 | superseded by R-0491: merge; retain hand/reference/metamorphic controls. |
+| R-0095 | superseded | R-0491, R-0118 | superseded by R-0491/R-0118: merge manifests and minimum completed comparisons. |
+| R-0096 | superseded | R-0513, R-0491 | superseded by R-0513/R-0491: merge; remove mandatory QBE availability. |
+| R-0097 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge profile admission; retain no silent fallback. |
+| R-0098 | merged | R-0137 | duplicate of R-0137: merge profile-aware workload matrix and owned exclusions. |
+| R-0099 | retired | R-0517, R-0505 | retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists. |
+| R-0100 | superseded | R-0305 | superseded — Wasm/Cranelift no longer wait for QBE; the Phase 15.25 entrance criteria (R-0305) consume validated BIR. |
+| R-0101 | delegated | R-0517 | delegated — legality verification of the QBE-style IR is LCB's (its F04/V02); Concrete validates adapter output under R-0517. |
+| R-0102 | superseded | R-0506, R-0517 | superseded — the operation gap ledger becomes typed pass obligations (R-0506) and the adapter's obligations (R-0517). |
+| R-0103 | superseded | R-0492, R-0505 | superseded by R-0492/R-0505: merge; general separate compilation arrives in V6. |
+| R-0104 | merged | R-0146, R-0517 | merged — deterministic emission and toolchain identity join R-0146; the LCB version and upstream lock are pinned by R-0517. |
+| R-0105 | superseded | R-0491, R-0504 | superseded by R-0491/R-0504: merge debug/release and sanitizer controls. |
+| R-0106 | merged | R-0009, R-0491 | duplicate of R-0009/R-0491: merge new backend predicates into shared reducer/harness. |
+| R-0107 | merged | R-0075 | duplicate of R-0075: merge bounded external-tool execution contract. |
+| R-0108 | merged | R-0416, R-0515 | duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. |
+| R-0109 | superseded | R-0503, R-0146 | superseded by R-0503/R-0146: merge; remove assumption helpers must be C. |
+| R-0110 | merged | R-0075, R-0333 | merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. |
+| R-0111 | superseded | R-0511, R-0137 | superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. |
+| R-0112 | superseded | R-0512 | superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone. |
+| R-0114 | superseded | R-0492 | superseded by R-0492: merge; distinguish compilation-local IDs from persistent evidence identity. |
+| R-0116 | superseded | R-0497, R-0510, R-0514 | superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. |
+| R-0123 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire new legacy-model semantics; add admitted Core features/proof lemmas instead. |
+| R-0131 | merged | R-0119 | duplicate of R-0119: merge as portfolio acceptance criterion. |
+| R-0171 | superseded | R-0494 | superseded by R-0494: merge into R-0494; preserve route-specific attacks. |
+| R-0176 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151. |
+| R-0185 | merged | R-0179 | duplicate of R-0179: merge into R-0179. |
+| R-0194 | merged | R-0209 | duplicate of R-0209: merge into R-0209. |
+| R-0198 | merged | R-0178 | duplicate of R-0178: merge schema work into R-0178; verdict enforcement into R-0494. |
+| R-0202 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: merge dependency-closure requirement into Core migration; maintain legacy checks until retirement. |
+| R-0204 | superseded | R-0494 | superseded by R-0494: merge into R-0494. |
+| R-0205 | superseded | R-0494 | superseded by R-0494: merge into R-0494’s evidence-class controls. |
+| R-0206 | merged | R-0166 | duplicate of R-0166: merge into R-0166. |
+| R-0208 | done | — | done — closed 2026-10-13 at `2b570c5a`; the body is retained for its accepted limits, now owned by R-0532. |
+| R-0209 | superseded | R-0494 | superseded by R-0494: merge into R-0494; retain audit/diff tests. |
+| R-0211 | superseded | R-0509 | superseded by R-0509/S16: merge into R-0509; retain audit command acceptance. |
+| R-0218 | superseded | R-0494 | superseded by R-0494: merge into R-0494. |
+| R-0221 | superseded | R-0493 | superseded by R-0493/S6: merge semantic ownership into R-0493. |
+| R-0223 | superseded | R-0496 | superseded by R-0496/S7: merge into R-0496’s semantic contract. |
+| R-0227 | superseded | R-0499, R-0507 | superseded by R-0499/R-0507: merge into checker rules and soundness. |
+| R-0228 | superseded | R-0499 | superseded by R-0499/S8 and V6: merge enforcement into R-0499; raw-operation extensions into V6. |
+| R-0229 | superseded | R-0495 | superseded by R-0495 and V2–V4: merge into slice admission/claim coverage. |
+| R-0230 | superseded | R-0509 | superseded by R-0509/S16: merge into R-0509 and slice profiles. |
+| R-0231 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into each slice’s admission controls. |
+| R-0233 | done | — | done — the unprofiled-float exclusion shipped (`ProofCore.lean`, `Report.lean`); profiled floats remain V7 (R-0496/R-0495). |
+| R-0234 | superseded | R-0496 | superseded by R-0496/S7, V7: merge into V7 float-profile work. |
+| R-0235 | superseded | R-0496, R-0495 | superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics. |
+| R-0236 | superseded | R-0506, R-0509 | superseded by R-0506/R-0509: merge axiom classification and inventory. |
+| R-0238 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into cumulative slice matrices; retain orthogonal policies. |
+| R-0241 | merged | R-0155, R-0178 | duplicate of R-0155/R-0178: merge obligation payload into those canonical schemas. |
+| R-0249 | merged | R-0178, R-0179 | duplicate of R-0178/R-0179: merge into R-0178/R-0179. |
+| R-0250 | merged | R-0186 | duplicate of R-0186: merge into R-0186. |
+| R-0253 | merged | R-0166 | duplicate of R-0166: merge into R-0166. |
+| R-0255 | merged | R-0460 | duplicate of R-0460: merge into R-0460. |
+| R-0260 | superseded | R-0506 | superseded by R-0506/S12a: merge into pass/validator obligation ledger; preserve legacy historical view. |
+| R-0261 | merged | R-0496, R-0460 | duplicate of R-0496/R-0460: merge; already explicitly reconciled. |
+| R-0262 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. |
+| R-0263 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into V1–V7 slice ordering. |
+| R-0264 | superseded | R-0494, R-0509 | superseded by R-0494/R-0509: merge implementation into R-0494, soundness proof into S16. |
+| R-0265 | superseded | R-0495, R-0509 | superseded by R-0495/R-0509: merge into statement/binding/aggregation soundness. |
+| R-0266 | superseded | R-0509 | superseded by R-0509/S16: merge; distinguish trusted assumptions from ordinary proof dependencies. |
+| R-0267 | superseded | R-0499, R-0507, R-0495 | superseded by R-0499/R-0507/R-0495: merge; capabilities and purity remain distinct. |
+| R-0268 | superseded | R-0496 | superseded by S5–S8: retire undecided architecture question; plan has chosen the chain. |
+| R-0269 | superseded | R-0495 | superseded by R-0495: merge composition needs into R-0164; retire PExpr table architecture. |
+| R-0271 | superseded | R-0510 | superseded by R-0510/S8a, V5: merge into R-0510, retaining explicit law-evidence acceptance. |
+| R-0273 | superseded | R-0491, R-0498 | superseded by R-0491/R-0498: merge; map every listed family to a retained control. |
+| R-0274 | superseded | R-0499, R-0514 | superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. |
+| R-0276 | superseded | R-0506, R-0496 | superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. |
+| R-0277 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into each slice’s cumulative acceptance. |
+| R-0278 | superseded | R-0503 | Superseded by R-0503/S11: merge into R-0503; BIR replaces this architecture. |
+| R-0280 | merged | R-0421 | Duplicate of R-0421: merge into R-0421; connect certificate obligations to R-0504. |
+| R-0288 | superseded | R-0503 | Superseded by R-0503/S11: merge inspection, verification and parity requirements into R-0503. |
+| R-0290 | merged | R-0491 | Duplicate of R-0491: merge into R-0491, retaining backend/profile matrix. |
+| R-0295 | superseded | R-0501 | Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision. |
+| R-0296 | retired | R-0517, R-0505 | retired — see the disposition in the task body. |
+| R-0297 | delegated | R-0517, R-0505 | delegated — see the disposition in the task body. |
+| R-0348 | merged | R-0349 | merged — the formatting decision is settled; residual documentation cleanup moves to R-0349. |
+| R-0378 | merged | R-0377 | Duplicate of R-0377 in export scope: merge export requirements into R-0377; retain hosting as deferred increment. |
+| R-0391 | merged | R-0429 | Duplicate of R-0429: merge into R-0429; intake through R-0431. |
+| R-0408 | superseded | R-0496 | Superseded in core scope by R-0496/S7: merge required instrumentation into R-0496; separately specify any extra research. |
+| R-0409 | superseded | R-0496, R-0512 | Superseded by R-0496/R-0512: retire legacy redesign; carry demonstrated proof debt into Core proof engineering. |
+| R-0434 | superseded | R-0502 | superseded by R-0502: merge into layout certificates and Memory CFG verification. |
+| R-0435 | superseded | R-0500 | superseded by R-0500: merge migration, renamed-pattern syntax and controls. |
+| R-0437 | superseded | R-0514, R-0510 | superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics. |
+| R-0447 | merged | R-0481 | duplicate of R-0481: merge unique operational controls; retire conflicting directory blueprint. |
+| R-0456 | superseded | R-0496 | superseded by R-0496 for proposed PExpr port: retire PExpr-port design; reconsider only a measured Core-metatheory proposal. |
+| R-0464 | superseded | R-0493, R-0495, R-0460 | superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. |
+| R-0465 | done | — | done for its enumerated wiring; the remaining universal-verdict-authority requirement merges into R-0494. |
+| R-0478 | merged | R-0481, R-0474 | duplicate of R-0481 / R-0474: merge each half into its actual owner. |
+| R-0483 | done | — | done — closed 2026-10-09 at `4f005715`; the body is retained for its accepted coordinate/provenance limit. |
+| R-0484 | done | — | done — closed 2026-10-08 at `245cd51c`; the body is retained for its accepted limits; the typed-descriptor second step is R-0530. |
+| R-0467 | done | — | done — moved to CHANGELOG.md 2026-10-19: the multi-kernel job runs on pushes to `main` (`lean_action_ci.yml`, `multi-kernel` job). |
+| R-0470 | done | — | done — moved to CHANGELOG.md 2026-10-19: both capability-inference sites fixed and gated (`check_cap_inference.sh`). |
+
+### Prose open-work dispositions
+
+Every open-work prose item the four slice audits found (line numbers refer to commit `7b134645`; A =
+non-phase sections, B = Phases 7 – 8.5, C = Phases 9 – 14, D = Phases 15 – 20). *live* items keep
+their owner or become the named new task; *duplicate* and *superseded* items name the owner that
+now carries the requirement; *done* items are closure records; *historical* items schedule nothing.
+
+| slice | item | status | stage | disposition |
+|---|---|---|---|---|
+| A | “Trustworthy `proved`” 354 | done-but-not-moved for R-0004’s recorded scope | 1 | Retire closure prose to changelog; retain current repairs under R-0494/R-0495 |
+| A | “Typed evidence and revocable policy” 355 | duplicate of R-0440 | 5, 7 | Merge into R-0440 |
+| A | “Typed compositional contracts” 356 | duplicate of R-0473/R-0474 | 6 | Merge into those owners |
+| A | “Total contract language” 357 | live | 6 | **R-0526** (owner) — Turn prose into a bounded task under the totality owner |
+| A | “One faithful verification pipeline” 358 | duplicate of R-0450/R-0460 | 2, 4 | Merge into those owners; retain H19 separately |
+| A | “Portable multi-kernel evidence” 359 | duplicate of R-0448/R-0454 | 5 | Merge into those owners |
+| A | “Practical proof authoring” 360 | live | 2, 4 | Keep; attach bounded increments to Core proof engineering |
+| A | “Auditable safety and resource guarantees” 361 | duplicate of R-0445 | 4, 7 | Merge into R-0445 |
+| A | “Independently checkable compiler/evidence artifacts” 362 | duplicate of R-0275/R-0353 | 2, 5 | Merge; distinguish V1 consumer from complete cross-profile consumer |
+| A | “Non-vacuous assurance operations” 363 | duplicate of R-0513/R-0476 | 1 | Merge into those owners |
+| A | “Usable systems platform” 364 | live | 3; after-1.0/research | Keep, but split freestanding from the near-term platform exit |
+| A | “Proof-aware local packages” 365 | duplicate of R-0285/R-0440 | 3, 7 | Merge bounded local packaging and later evidence separately |
+| A | “Narrow defensible release” 366 | duplicate of R-0333 | 7 | Merge; distinguish preview from verification-alpha requirements |
+| A | “Ecosystem packages and editor experience” 367 | live | 3, 7 | Split editor checkpoints from later ecosystem work |
+| A | “Relational/concurrent/research extensions” 368 | live | after-1.0/research | Keep |
+| A | Dependency-chain item 1, 383–384 | done-but-not-moved for `670ec85a` | 1 | Retire that checkpoint; retain exact-candidate requalification |
+| A | Dependency-chain item 2, 385 | done-but-not-moved | 1 | Retire; closure explicitly recorded at 478–480 |
+| A | Lifecycle separation, 386–388, 408–414 | duplicate of R-0482/R-0440 | 1, 5, 7 | Merge into their canonical status blocks |
+| A | Canonical task/VIR freeze, 389–392, 421–425 | duplicate of R-0450/R-0454 | 5 | Merge; preserve independent-consumer-before-freeze condition |
+| A | Typed contracts, 393–394 | duplicate of R-0473/R-0474 | 6 | Merge |
+| A | Two-state records/arrays and frames, 394–395 | live | 6 | **R-0524** (owner) — Turn prose into an explicitly owned task |
+| A | Ghost locals/parameters, 395 | live | 6 | **R-0524** (owner) — Turn prose into a task with erasure/admissibility exits |
+| A | Decreases and total functions, 395–396 | live | 6 | **R-0526** (owner) — Turn prose into a task |
+| A | Specification library, 396 | live | 6 | **R-0060** (owner) — Turn prose into a task |
+| A | Declaration-isolated measurement, 397 | duplicate of R-0473 | 3, 6 | Merge |
+| A | Shared assertion library, 397, 504–509 | duplicate of R-0481/R-0513 | 1 | Merge with a checked migration inventory |
+| A | R-0353 Layer 0, 398 | duplicate of R-0353 | 2, 5 | Merge; separate minimal V1 scope |
+| A | Shadow comparison and hostile review, 399–400 | duplicate of R-0353 | 5 | Merge |
+| A | Proof-aware interfaces, 399 | duplicate of R-0440/R-0482 | 5, 7 | Merge |
+| A | Heap/resource/relational growth, 401 | superseded by V2–V7 for compiler semantics | 4; after-1.0/research | Split compiler support from richer user verification |
+| A | Receipt transport, 426–430 | duplicate of R-0440 | 5, 7 | Merge; keep signing distinct from replay validity |
+| A | Architecture preparation 1, 437–444 | duplicate of R-0480/R-0481 | 1, 5 | Merge as a decision inventory |
+| A | Architecture preparation 2, 445–447 | live | 1 | Merge into R-0480 |
+| A | Architecture preparation 3, 448–453 | duplicate of R-0480 | 1 | Merge |
+| A | Architecture preparation 4, 454–460 | duplicate of R-0481 | 1, 5 | Merge |
+| A | Architecture preparation 5, 461–465 | live | 2, 5 | Merge into R-0481; require named reviewer and commit |
+| A | Architecture preparation 6, 466–468 | live | 1, 5 | Keep as acceptance, not a separate implementation |
+| A | Bounded migration sequence, 470–476 | superseded by current queue and R-0512 | 1, 2, 3, 4, 5, 6 | Retire ordering; preserve per-consumer migration controls |
+| A | “native-trust receipts stay withheld,” 480 | live | 5 | **R-0532** (owner) — Merge into R-0506/R-0440 with explicit trust labels |
+| A | Graduation contract, 487–502 | live | 1, 2, 3, 4, 5, 6, 7 | Keep as standing acceptance requirements |
+| A | Cross-phase forcing artifact, 574–579, 587–589 | duplicate of R-0486/R-0119 | 3, 7 | Merge into selected flagships; avoid a fourth flagship |
+| A | Constant-time boundary, 581–585 | live | after-1.0/research | Keep |
+| A | Historical compaction, 593–607 | duplicate of R-0480/R-0481 | 1 | Merge; apply to this slice |
+| A | Schema ownership, 610–614 | live | 1, 2, 3, 4, 5, 6, 7 | Keep as acceptance |
+| A | Evidence debt / first Register A row, 640–658 | live | 2, 4 | Keep, with explicit allowances for required V1 evidence delivery |
+| A | Cross-document consistency trigger, 669–686 | duplicate of R-0480/R-0481 | 1 | Merge; trigger has plainly fired |
+| A | Claims vocabulary consistency, 683–684 | live | 1 | Merge into R-0481 |
+| A | Register versus generator meaning, 684–686 | duplicate of R-0460/R-0498 | 1, 4 | Merge |
+| A | Spike/kill criteria, 696–705 | live | 1, 2, 3, 4, 5, 6, 7 | Keep as process requirement |
+| A | “Re-qualification for the next integration,” 734–741 | live | 1 | Merge into R-0482/R-0513; remove obsolete fixed count |
+| A | “Shard balancing,” 741–742 | live | 1 | **R-0519** (owner) — Turn prose into a performance-pulled task |
+| A | Six invalid experiments, 767–772 | done-but-not-moved | 1 | Retire; later run records all six killed |
+| A | Two campaign survivors, 764–773 | done-but-not-moved | 1 | Retire; closure at `964073e7` recorded |
+| A | Reconciliation matrix, 787–790 | live | 1 | Merge into R-0513; require explicit closure evidence |
+| A | Campaign timing, 792–794 | live | 1 | Merge into R-0513 |
+| A | Content-bound snapshots, 794–796 | live | 1 | Merge into R-0513 |
+| A | Isolated workers, 796–798 | live | 1 | Merge into R-0513 |
+| A | Old 95-family exit, 800–811 | done-but-not-moved | 1 | Retire historical exit; current queue owns next qualification |
+| A | Harness checkpoint headline, 814–819 | historical | 1 | Retire to archive; not current status |
+| A | H-1, 834 | live | 1 | **R-0518** (owner) — Turn prose into a harness task under R-0513 |
+| A | H-2, 835 | live | 1 | Merge into R-0513; verify supervisor path, not just driver exit |
+| A | H-3, 836 | done-but-not-moved | 1 | Retire closure text |
+| A | H-4, 837 | live | 1 | **R-0518** (owner) — Turn prose into a task |
+| A | H-5, 838 | done-but-not-moved | 1 | Retire closure text |
+| A | H-6, 839 | live | 1 | Merge into R-0513 |
+| A | H-7, 840 | live | 1 | **R-0518** (owner) — Turn prose into a task; reconcile missed pre-qualification deadline |
+| A | H-9, 841 | live | 1 | **R-0518** (owner) — Turn prose into a task |
+| A | Ten V1 links / intrinsic casts, 878–881 | superseded by R-0495/R-0512 migration | 4 | Merge into claim inventory; maintain current fail-closed behavior |
+| A | Package identity overbinding, 908–926 | duplicate of R-0482 | 1 | Merge into R-0482’s current state |
+| A | Executable-byte provenance, 928–933 | live | 2, 5 | **R-0521** (owner) — Turn prose into a task; minimal V1 provenance cannot wait for full stage 5 |
+| A | “No qualifying current-inventory result,” 948–954 | historical | 1 | Retire; contradicted by 723–732 |
+| A | Delete `bodyIdentityUses`, 990–1007; 1670–1671 | done-but-not-moved | 1 | Retire |
+| A | Producer-refusal table: for-loop, 1024, 1040–1055 | done-but-not-moved | 1 | Retire |
+| A | Producer-refusal table: array literal and cast types, 1025, 1028, 1057–1082 | done-but-not-moved for recorded slice | 1 | Retire; keep later intrinsic-cast gap separately |
+| A | Producer-refusal table: assert/assume, 1026, 1029, 1103–1121 | done-but-not-moved | 1 | Retire |
+| A | Producer-refusal table: imported callee identity, 1027, 1123–1131 | done-but-not-moved for 18 recorded cases | 1 | Retire |
+| A | Producer-refusal table: self/if/discard/field place, 1030–1033, 1084–1095 | done-but-not-moved | 1 | Retire |
+| A | Function-type capability identity, 1073–1075, 1276–1279 | superseded by S5/S8a and R-0495 | 2, 4 | Merge; require V5 coverage |
+| A | Five incomplete generic callees, 1136–1138, 1306–1309 | superseded by R-0492/R-0510 | 2, 4 | Merge |
+| A | Four unresolved mangled methods, 1139, 1306–1309 | superseded by R-0492 | 2 | Merge |
+| A | Two trait-method refusals / `TraitId`, 1140–1144, 1273–1275, 1306–1309, 1344 | superseded by R-0492/R-0510 | 2, 4 | Merge |
+| A | `alloc/free` argument omission, 1149–1152, 1486–1489 | superseded by R-0495/R-0512 | 4 | Merge as a mandatory V3 negative control |
+| A | Dependency graph/root, 1182–1196 | done-but-not-moved for R-0004 scope | 1 | Retire; 860–864 records completed closure |
+| A | Edge kinds and assumption propagation, 1213–1216 | done-but-not-moved for R-0004 scope | 1 | Retire |
+| A | Whole-table reachability/content, 1215–1257 | done-but-not-moved | 1 | Retire stale “missing” text; 1225–1244 records landing |
+| A | Freshness, 1258 | done-but-not-moved | 1 | Retire; 883–889 records closure |
+| A | Fingerprint migration, 1259–1260 | done-but-not-moved for completed population | 1 | Retire; retain explicit unsupported-link inventory |
+| A | Receipts, 1261 | done-but-not-moved | 1 | Retire |
+| A | Ninth proof table, 1262, 1328–1342 | live | 6 | Keep as queue row 14; remove obsolete R-0004 blocker |
+| A | Struct initializer evaluation order, 1267–1272, 1313–1326, 1337–1340 | done-but-not-moved as decision | 1 | Retire old blocker; R-0500 retains semantic enforcement |
+| A | Elaborated-theorem edge classification, 1346–1351 | historical | 5 | Keep only as a constraint in dependency/evidence owner |
+| A | Structured subject-facts emission, 1376–1385 | live | 1, 5 | Merge into R-0494/R-0481 |
+| A | Branch-health first exercise, 1426–1427 | historical | 1 | Retire dated assertion; require current workflow qualification |
+| A | Property rather than count gates, 1429–1439 | duplicate of R-0513 | 1 | Merge |
+| A | Pre-push runtime, 1449–1455 | duplicate of R-0513 | 1 | Merge |
+| A | Mutation anchor/error handling, 1457–1474 | done-but-not-moved | 1 | Retire |
+| A | Cancelled CI reported red, 1476–1481 | done-but-not-moved | 1 | Retire; 1387–1391 records fix |
+| A | Aliased imported method E0264, 1128–1129, 1490–1493 | live | 3 | Merge into R-0008 with an exact alias-method fixture |
+| A | Raw `lookupVar` binder positions, 1495–1497 | superseded by R-0492 | 2 | Retire alternative representation; retain prohibition |
+| A | Invalid versus infrastructure scoring, 1502–1523 | done-but-not-moved | 1 | Retire |
+| A | Divergence-detection invalid, 1523–1526, 1542–1545 | done-but-not-moved | 1 | Retire; later result records kill |
+| A | Six-hour campaign limit, 1526–1528, 1536, 1543–1545 | done-but-not-moved | 1 | Retire; sharded completion recorded |
+| A | Mutation 52 survives, 1539–1541 | live | 1 | **R-0519** (owner) — Turn prose into a task; do not infer closure from a different campaign |
+| A | Full mutation-harness worktree support, 1546–1554 | live | 1 | **R-0519** (owner) — Turn prose into a task; early refusal is not support |
+| A | Content-based CI gate inventory, 1555–1558 | duplicate of R-0513 | 1 | Merge |
+| A | Safe std identity refresh, 1559–1564 | live | 1, 5 | Merge into R-0482 |
+| A | Branch full-CI dispatch/watch, 1566–1568 | live | 1 | Merge into R-0513 |
+| A | `knownEffectfulForeignSymbols`, 1568–1570 | live | 1, 4 | Merge into R-0498; connect to external-call contracts |
+| A | Cross-kernel proposition check, 1630–1632 | duplicate of R-0454 | 5 | Merge; subject digest alone is insufficient |
+| A | Multi-kernel status graduation, 1633–1636 | duplicate of R-0448 | 5 | Merge |
+| A | Stale `kernel_disagreement`, 1637–1639 | live | 5 | Merge into R-0494/R-0440 |
+| A | Kernel-set receipt binding, 1640–1642 | duplicate of R-0440 | 5 | Merge |
+| A | Missing `solver_error`, 1643–1646; 1582 | live | 3, 5 | **R-0520** (owner) — Turn prose into a task; restore the three strict assertions |
+| A | Pinned spike epochs, 1647–1648 | historical | 1 | Retire merge-specific instruction |
+| A | Stale R-0004 “still open” list, 1670–1673 | historical | 1 | Retire; individual surviving gaps are listed above |
+| A | Call/package-closed reasoning, 1698–1703 | duplicate of R-0473/R-0474/R-0440 | 6, 7 | Merge |
+| A | Wider state, termination and resources, 1701–1703 | live | 4, 6 | Keep as coverage map; separate compiler semantics from user contracts |
+| A | Relational contracts, 1702–1703 | live | after-1.0/research | Keep |
+| A | Portable artifacts/publishing, 1704–1707 | duplicate of R-0353/R-0440 | 5, 7 | Merge |
+| A | Graduated family faithfulness, 1708–1712 | duplicate of R-0460/R-0512 | 2, 4 | Merge |
+| A | Module/property policy and hole budgets, 1716–1719 | duplicate of R-0440 | 7 | Merge |
+| A | Charter order: fail-visible accounting, 1726 | duplicate of R-0491/R-0498 | 1 | Merge |
+| A | Charter order: typed IR, 1727–1729 | duplicate of R-0450/R-0460 | 2, 4 | Merge |
+| A | Charter order: composition/state, 1730–1731 | duplicate of R-0473/R-0474 | 6 | Merge |
+| A | Charter order: loop preservation/totality, 1732–1734 | live | 4, 6 | Merge Core loop binding into R-0495; retain totality task |
+| A | Charter order: enums/state/memory, 1735 | superseded by V2–V7 for runtime semantics | 4, 6 | Split runtime support and specification-language extension |
+| A | Charter order: resource/release policy, 1736 | duplicate of R-0445/R-0440 | 4, 7 | Merge |
+| A | Charter order: paired execution, 1737 | live | after-1.0/research | Keep |
+| A | Charter order: package/replay last, 1738 | superseded by V1 evidence delivery | 2, 5, 7 | Retire “last” dependency; preserve later package scope |
+| A | Useful-change workload, 1745–1751 | duplicate of R-0486 | 3, 6, 7 | Merge |
+| A | One-module adoption, 1755–1756 | duplicate of R-0285/R-0287 | 3 | Merge |
+| A | One forcing domain, 1757–1759 | duplicate of R-0136 | 3; after-1.0/research | Merge source-flow work; keep relational proof research-gated |
+| A | One feedback surface, 1760–1761 | duplicate of R-0494/R-0515 | 3 | Merge |
+| A | Package completion test, 1763–1766 | duplicate of R-0353/R-0440 | 7 | Merge |
+| A | Docs convergence 1, 1779–1780 | duplicate of R-0480 | 1 | Merge |
+| A | Docs convergence 2, 1781 | duplicate of R-0480 | 1 | Merge |
+| A | Docs convergence 3, 1782–1783 | duplicate of R-0481 | 1, 5 | Merge |
+| A | Docs convergence 4, 1784–1785 | duplicate of R-0480 | 1 | Merge |
+| A | Docs convergence 5, 1786–1788 | duplicate of R-0481 | 5 | Merge |
+| A | Docs convergence 6, 1789–1791 | duplicate of R-0477/R-0480 | 1, 4 | Merge; retire obsolete branch-specific dates |
+| A | Manual graduation review, 1793–1795 | live | 1, 2, 3, 4, 5, 6, 7 | Keep |
+| A | Safe library abstractions, 1817 | done-but-not-moved for R-0483 | 3 | Retire completed scope; keep R-0485 review clarity separately |
+| A | Authority/effects, 1818 | done-but-not-moved for R-0484 | 1 | Retire completed scope; checker proof still belongs to S8/S14 |
+| A | Compositional semantics, 1819 | duplicate of R-0473/R-0474/R-0477 | 6 | Merge |
+| A | Tuples/destructuring decision, 1820 | duplicate of R-0515 | 3 | Keep decision checkpoint |
+| A | Bounded milestone: admitted subset/purity, 1827–1831 | duplicate of R-0473 | 6 | Merge |
+| A | Bounded milestone: call composition/frame, 1832–1833 | duplicate of R-0474 | 6 | Merge with two-state owner |
+| A | Bounded milestone: explicit evidence/gaps, 1834–1836 | duplicate of R-0495/R-0460 | 4, 6 | Merge |
+| A | Bounded milestone: interface stability, 1837–1839 | duplicate of R-0482/R-0440 | 5, 6 | Merge |
+| A | Bounded milestone: costs/controls, 1840–1841 | duplicate of R-0150/R-0486 | 3, 6 | Merge |
+| A | Bounded milestone: non-author repair/replay, 1842–1847 | duplicate of R-0486 | 6, 7 | Merge |
+| A | Actionable failure feedback, 1849–1852 | duplicate of R-0137/R-0466/R-0515 | 3 | Merge |
+| A | General heap/concurrency/relational/resource proofs, 1854–1858 | live | after-1.0/research | Keep; compiler heap safety still belongs to stage 4 |
+| A | Attestation migration question, 1868–1869 | duplicate of R-0482 | 1, 5 | Merge |
+| A | Writer proof/report eligibility, 1869–1871 | live | 1, 4 | Merge into R-0494/R-0495; do not inherit blanket R-0484 closure |
+| A | Explicit-error diagnostics/defer/API improvements, 1873–1875 | duplicate of R-0485/R-0515 | 3 | Merge |
+| A | Semantic correspondence before backend breadth, 1876–1881 | live | 2, 4, 6 | Keep; native verified backend is required foundation, not optional breadth |
+| A | Audit-tool outputs, 1882–1885 | duplicate of R-0494/R-0440 | 3, 5 | Merge |
+| A | Function-plus-context workload evaluation, 1886–1892 | duplicate of R-0285/R-0490 | 3 | Merge |
+| A | Canonical attestation ordering, 1901, 2271–2278 | done-but-not-moved | 1 | Retire; generator now sorts under `LC_ALL=C` and names order gate |
+| A | Diff-to-gate mapping, 1902, 2285–2288 | done-but-not-moved | 1 | Retire old absence claim; R-0513 owns trustworthy tiering |
+| A | Linux TCP fixtures / false flaky label, 1903–1907 | done-but-not-moved | 3 | Retire |
+| A | Regenerate all derived artifacts after identity change, 2279–2284 | live | 1 | Merge into safe identity-refresh task |
+| A | Clean-tree campaign golden, 2289–2292 | live | 1 | Merge into R-0513 acceptance |
+| A | H24, 1913, 2080–2097, 2162–2169, 2183–2194 | done-but-not-moved | 1 | Retire “open” text; closure explicitly stated at 1918 |
+| A | H19/Register A, 1914, 1923–1929, 2131–2132, 2209–2210, 2225–2226, 2448–2451, 3075–3079, 3108–3109, 3124–3125, 3384–3392 | duplicate of R-0460 | 2, 4 | Merge all current status into R-0460 |
+| A | H20, 1915, 2211–2212, 2782, 2790, 2902–2903, 3110–3111 | live | 1; after-1.0/research | **R-0538** (owner) — Merge immediate classification into R-0506; task the trust-reduction research |
+| A | H21, 1916, 2213–2215, 2775–2776, 3112–3114 | duplicate of R-0451 | after-1.0/research | Keep upstream-gated; preserve honest trust class |
+| A | Lean renderer agreement, 1931–1939, 2120–2123 | duplicate of R-0450 | 4 | Merge |
+| A | SMT renderer agreement, 2120–2123, 3340–3342 | done-but-not-moved for recorded arithmetic fragment | 4 | Retire completed fragment; retain explicit scope |
+| A | Every-surface assumption enforcement, 1945–1951 | duplicate of R-0494 | 1 | Merge; retain R-0461 regressions |
+| A | Missing-family inventory, 1965 | duplicate of R-0498/R-0118 | 1, 4 | Merge |
+| A | Repository nightly reachability, 1969–1974, 2113–2119 | duplicate of R-0468 | 1 | Merge; distinguish dispatch success from scheduled reachability |
+| A | Multi-kernel composition opt-in, 1964, 2237–2242, 3136–3141 | duplicate of R-0467 | 1, 5 | Merge into qualification tier |
+| A | Signal/cleanup operational warning, 2002–2005 | duplicate of R-0513 | 1 | Merge into harness lifecycle tests |
+| A | R-0004 remaining slices, 2041–2045 | historical | 1 | Retire |
+| A | Two “counts as proved” predicates, 2056–2065 | duplicate of R-0494 | 1 | Merge |
+| A | R-0461/H23, 2067–2078 | done-but-not-moved | 1 | Retire closure text; keep fixtures |
+| A | Conditional evidence vocabulary, 2099–2105 | duplicate of R-0458/R-0440 | 5 | Merge |
+| A | Neutral obligation identity, 2106–2112 | duplicate of R-0454 | 5 | Merge; retire “no subjectDigest exists” |
+| A | Binary claim fuzzing, 2124–2128 | duplicate of R-0491/R-0462 | 1, 4 | Merge into prevention harness |
+| A | IR absorbs four drivers, 2129–2130, 3336–3339 | duplicate of R-0450/R-0455 | 4 | Merge |
+| A | Non-arithmetic meaningful claims, 2133–2135 | duplicate of R-0459 | 4, 7 | Merge; obey Core-claim migration |
+| A | Farkas/certificate probe, 2136–2140 | duplicate of R-0463 | 5 | Keep timeboxed |
+| A | Multi-kernel graduation, 2141–2142 | duplicate of R-0448 | 5 | Merge |
+| A | Second-host metatheory, 2143–2144 | duplicate of R-0456 | after-1.0/research | Keep pull-gated |
+| A | Realizations, 2143–2144, 2306, 2514, 2577 | duplicate of R-0449 | after-1.0/research | Keep; do not equate this with all of H19 |
+| A | Diagnostics measurement and repairs, 2153–2174 | duplicate of R-0466/R-0471 | 3 | Merge into R-0515 checkpoints |
+| A | Capability inference, 2174–2176 | done-but-not-moved | 1 | Retire; R-0470 records both sites done |
+| A | Recursive stack budget honesty, 2177–2192 | duplicate of R-0469 | 4 | Merge |
+| A | SMT datatype certificate ceiling, 2217–2221, 3084–3086, 3116–3120 | live | after-1.0/research | Keep named unsupported certificate profile |
+| A | Register B remaining rows, 2227, 2498, 3080–3081, 3126 | duplicate of R-0455 | 4 | Merge |
+| A | Register C “no tracking” residue, 2228–2232, 3127–3131 | historical | 1 | Retire stale sentence |
+| A | Discovery completeness, 2233–2235, 3273–3280 | done-but-not-moved for narrow predicates | 4 | Retire completion text; preserve stated antecedents |
+| A | Core WP generator, 2332–2344, 2430–2432, 2496, 2566 | duplicate of R-0477/R-0460 | 4, 6 | Merge; require theorem, not “Core implies sound” |
+| A | H27 typed contracts, 2382–2389, 2416–2422 | duplicate of R-0473 | 6 | Merge |
+| A | H25 capture-safe substitution, 2390–2395 | duplicate of R-0474 | 2, 6 | Merge IDs early; contract substitution proof in stage 6 |
+| A | Fixture/std coupling, 2404–2408 | duplicate of R-0475 | 1, 3 | Merge; snapshot refresh did not fix coupling |
+| A | 285 unmeasured contract files, 2409–2412 | duplicate of R-0473 | 3, 6 | Merge; recompute denominator |
+| A | Remaining negative-control sweep, 2423–2426, 2438–2441, 3071–3074, 3394–3405 | duplicate of R-0513/R-0498 | 1 | Merge into one current inventory; preserve migration-gate deprioritization |
+| A | `old`/two-state postconditions, 2433–2437, 2502, 2507, 2517–2529, 2567–2568 | live | 6 | **R-0524** (owner) — Turn prose into one owned task |
+| A | Bitwise tier, 2442–2444, 2708, 2854–2856 | live | 4 | Merge into R-0459/R-0495 after Core statement readiness |
+| A | Decreases/recursion, 2445–2447, 2500, 2573, 2618, 2631, 2712 | live | 6 | **R-0526** (owner) — Turn prose into a task |
+| A | MIN negation trap VC, 2455–2456, 3090 | duplicate of R-0460/R-0493 | 1, 4 | Merge semantics and VC obligations separately |
+| A | Float→int trap VC, 2455–2456, 3090 | duplicate of R-0460/R-0493 | 1, 4 | Merge |
+| A | Real non-arithmetic corpus coverage, 2457–2458, 2905–2992 | duplicate of R-0459/R-0486 | 4, 7 | Merge; retain anti-tautology controls |
+| A | Nonlinear tier/Mathlib decision, 2459–2460, 2707, 2763–2776, 2894–2898 | live | after-1.0/research | Keep workload-gated; retire “two kernels is inherently misleading” |
+| A | Unannotated-let types, 2461, 3091–3093, 3306–3308 | superseded by R-0495 Core claims | 4 | Merge with exact coverage controls |
+| A | Bare-name FFI closure, 2462–2463, 3094–3097 | superseded by R-0492/R-0514 | 2 | Merge |
+| A | Stack report versus enforcement, 2464, 2635, 3100 | duplicate of R-0445/R-0469 | 4, 7 | Merge |
+| A | Report-layer partial definitions, 2465, 3101, 3261–3272, 3369–3371 | superseded by R-0506/S12a | 2, 4 | Merge; discard stale 17/6/5 counts |
+| A | Isabelle builder batch/single split, 2466, 3102 | live | 5 | **R-0522** (owner) — Turn prose into a bounded task |
+| A | Loop invariants listed absent, 2501, 2574–2575 | historical | 6 | Retire “absent”; keep typed resolution/consumption below |
+| A | Ghost variables/state, 2503 | live | 6 | **R-0524** (owner) — Merge into explicit ghost-state task |
+| A | Spec enums, 2504, 2576, 2616 | live | 4, 6 | Merge into typed specification/Core claim growth |
+| A | Spec pattern matching, 2505, 2576 | live | 6 | Merge with spec-enum task |
+| A | Result/error-path contracts, 2506 | live | 6 | Merge into R-0473/R-0488 |
+| A | Theory modules/refinement, 2508 | live | 6 | Merge into specification-library task |
+| A | int/list/map/set/bitvector library, 2509, 2569–2572 | live | 6 | **R-0060** (owner) — Turn prose into one library task with scoped modules |
+| A | Typed theorem-replay producer, 2511 | superseded by R-0494/S16 | 1, 5 | Merge |
+| A | “No production receipts,” 2512 | historical | 1 | Retire; contradicted by R-0004 closure |
+| A | Proof-session history, 2513 | live | 5 | Merge into R-0440; distinct from receipts/cache |
+| A | Discovery register demotion, 2558–2562 | live | 4 | Merge into R-0460 retirement criteria; retain completeness obligation |
+| A | Heap/separation logic, 2578, 2619 | live | after-1.0/research | Keep; V3 heap safety is not deferred |
+| A | Typed loops/loop state, 2617 | duplicate of R-0495/R-0474 | 4, 6 | Merge |
+| A | Generic proof scope, 2620 | duplicate of R-0271 | 4, 6 | Merge |
+| A | Function pointers, 2621 | superseded by V6/V7 and S8 | 4 | Merge |
+| A | Closures, 2621 | superseded by plan’s explicit closure exclusion | after-1.0/research | Retire as committed work |
+| A | Capability “sound by construction,” 2622 | superseded by R-0499/R-0507 | 2, 4 | Replace with staged implementation/proof status |
+| A | General liveness, 2632 | live | after-1.0/research | Keep |
+| A | Single-return functional-correctness ceiling, 2633 | superseded by R-0495/R-0496 | 2, 4 | Merge |
+| A | Relational/hyperproperties, 2634 | live | after-1.0/research | Keep |
+| A | Time/resource bounds, 2635 | live | 4; after-1.0/research | Split required resource premises from richer cost proofs |
+| A | Evidence vector, 2639–2643 | duplicate of R-0458/R-0440 | 5 | Merge |
+| A | Formal target-printer correspondence, 2660–2663 | live | after-1.0/research | Keep optional proof-backend strengthening |
+| A | “Next rungs 6+7,” 2751–2756; original assessment 2881–2889 | done-but-not-moved for recorded struct/array scope | 4 | Retire; enum support remains separately open |
+| A | Isabelle bitwise syntax/type blocker, 2778–2790, 2813–2826, 2899–2903, 2978–2982 | done-but-not-moved | 4 | Retire blocker; solved at 2828–2852 |
+| A | Recursive syntax, 3020 | live | 6 | **R-0526** (owner) — Merge into termination task |
+| A | Recursive VC family, 3012–3018, 3020 | live | 6 | **R-0526** (owner) — Merge into termination task |
+| A | Recursive extraction, 3020–3021 | live | 6 | **R-0526** (owner) — Merge into Core proof-authoring growth |
+| A | Induction scripts, 3021–3022 | live | 6 | **R-0526** (owner) — Merge into proof-authoring owner |
+| A | Mutual-recursion measure, 3034–3035 | live | 6 | **R-0526** (owner) — Merge into termination task |
+| A | Symbolic stack bounds, 3035–3037 | live | 6; after-1.0/research | Merge into resource-contract owner |
+| A | Div/shift/overflow gap reporting, 3066–3070 | duplicate of R-0495/R-0472 | 1, 4 | Merge; maintain fail-visible reporting during migration |
+| A | Non-arithmetic demo, 3082–3086 | done-but-not-moved | 4 | Retire demo request; meaningful corpus coverage remains |
+| A | Direct extraction eligibility, 3098–3099, 3243–3244 | superseded by R-0495/R-0512 | 4 | Merge into complete claim-dependency admission |
+| A | Unclassified `fixed_capacity` drop, 3104, 3350 | live | 1, 4 | **R-0523** (owner) — Turn prose into a diagnostic/coverage task |
+| A | Predictable-loop/indirect-call/stack/FFI fixes, 3203–3225 | done-but-not-moved | 1 | Retire historical fix descriptions |
+| A | Transitive recursion admission, 3232–3250 | done-but-not-moved | 1 | Retire superseded direct-admission proposal |
+| A | Register B row 2, 3254–3260 | duplicate of R-0455 | 4 | Merge; retain precise mathematical obligation |
+| A | Discovery antecedent gap, 3273–3277 | live | 4 | Merge into R-0460/R-0118 |
+| A | Parenthesized/field/nested bounds, 3281–3294 | done-but-not-moved | 1 | Retire; retain regressions |
+| A | Scoped shift/overflow types, 3295–3305 | done-but-not-moved | 1 | Retire |
+| A | Scoped bounds and for-init, 3309–3324 | done-but-not-moved | 1 | Retire |
+| A | Unannotated/nested arrays and bounds gap reporting, 3325–3332 | done-but-not-moved | 1 | Retire |
+| A | Register B row 3, 3333–3335 | duplicate of R-0455 | 4 | Merge |
+| A | Collapse printers, 3340–3342 | duplicate of R-0450/R-0455 | 4 | Merge; do not erase independent target obligations |
+| A | Model casts, 3343–3349 | done-but-not-moved for recorded model | 1 | Retire historical completion; R-0493 handles current width-pair semantics |
+| A | Printer/evaluator totalization, 3351–3368 | done-but-not-moved | 2 | Retire |
+| A | Binary fuzz widening, 3375–3378; 3103 | duplicate of R-0491/R-0462 | 1, 4 | Merge |
+| A | Zero claimed-function fuzz population, 3379–3382 | duplicate of R-0491/R-0513 | 1 | Merge; require positive inventory and completed minima |
+| A | Call-site substitution theorem, 3386–3389 | duplicate of R-0460/R-0474 | 4, 6 | Merge |
+| A | Totality gate divergence fixture, 3406–3409 | live | 1 | Merge into R-0498/R-0513 |
+| A | LLVM JIT fallback, 3183–3185, 3417–3421 | done-but-not-moved | 3 | Retire environmental history |
+| A | 6C telemetry, 3429–3430 | live | 3 | Merge into incremental-driver owners |
+| A | ProofCore partial reduction, 3431–3432 | superseded by R-0506/S12a | 2, 4 | Merge |
+| A | CompilerDB/interned facts, 3433–3434 | duplicate of R-0139 | 3 | Merge |
+| A | Consume-then-break exemption, 3435–3437 | live | after-1.0/research | Keep workload-gated; require S8 rule/proof impact |
+| A | Qualified names/import aliases, 3438 | duplicate of R-0008/R-0492 | 2, 3 | Merge |
+| A | FFI surface, 3438 | duplicate of R-0285 | 3 | Merge |
+| A | Target roots/constants, 3438–3441 | live | 3, 4 | Merge into target/profile owner |
+| A | lint/vet/doc/bench, 3439–3441 | duplicate of R-0515 | 3 | Merge bounded checkpoints |
+| A | trace/debug/eval/inspect/LSP, 3439–3441 | duplicate of R-0515 | 3 | Merge |
+| A | Build-output root, 3442–3445 | duplicate of R-0447 | 3 | Merge |
+| A | “File order…no parallel tracks,” 3451–3458 | superseded by seven-stage queue | 1 | Retire |
+| A | Allocator-specific APIs, 3481–3484 | live | 3 | Keep |
+| A | Returning/storing safe references, 3488–3498 | superseded by R-0500’s strict rule | 1; after-1.0/research | Keep prohibition; record reopening only as research |
+| A | QBE-first pipeline spine, 3502–3514 | superseded by R-0511/R-0514/R-0515 | 2, 3 | Retire sequencing |
+| A | Refactor A: typed boundaries, 3526–3578 | superseded by R-0497/S5/S8a | 2 | Merge; replace checked-source ladder with payload-bound Core chain |
+| A | Refactor B: observable pass envelope, 3580–3623 | duplicate of R-0115 | 2, 3 | Merge; align with formal pass obligations |
+| A | Refactor C: stable indexed facts, 3625–3665 | duplicate of R-0115/R-0492 | 2, 3 | Merge |
+| A | Refactor D: transform once/render many, 3667–3698 | duplicate of R-0494/R-0115 | 1, 3 | Merge |
+| A | Refactor E: legalization ownership, 3700–3727 | duplicate of R-0493/R-0498/R-0503 | 1, 4 | Merge; generate from current IR semantics |
+| A | Refactor F: resolver panics, 3739 | duplicate of R-0024 | 3 | Merge |
+| A | Refactor F: specialization panics, 3740 | duplicate of R-0510 | 2, 4 | Merge |
+| A | Refactor F: Core lookup panics, 3741 | duplicate of R-0497/R-0499 | 2 | Merge |
+| A | Refactor F: lowering panics, 3742 | duplicate of R-0501 | 2, 4 | Merge |
+| A | Refactor F: SSA/cleanup assumptions, 3743 | duplicate of R-0503/R-0504 | 2, 4 | Merge |
+| A | Refactor F: layout panics, 3731–3734, 3744 | duplicate of R-0502/R-0024 | 2, 4 | Merge; remove QBE prerequisite |
+| A | Refactor F: emitter/runtime panics, 3745 | duplicate of R-0503/R-0505 | 2, 4 | Merge |
+| A | Refactor F: report unknown constructors, 3746 | duplicate of R-0118/R-0494 | 1, 3 | Merge |
+| A | Refactor F controls, 3759–3766 | live | 2, 3 | Merge into R-0024/R-0498 |
+| A | Refactor G: cleanup rule registry, 3768–3789 | superseded by R-0504/S12 | 2, 4 | Merge; require semantic certificates/validator obligations |
+| A | Refactor G controls, 3791–3802 | duplicate of R-0504 | 2, 4 | Merge; byte parity alone is insufficient |
+| A | Refactor H: unified driver, 3804–3846 | duplicate of R-0139/R-0497 | 2, 3 | Merge; update backend and checked-artifact chain |
+| A | Refactor I: transformation origins, 3848–3878 | duplicate of R-0114/R-0515 | 2, 3 | Merge |
+| A | Refactor J: constructor matrix, 3880–3903 | duplicate of R-0118 | 1, 4 | Merge; include new IRs and native backend |
+| A | Phase 7.5 scheduling, 3911–3917 | superseded by S10–S13/V1 | 2, 4 | Retire compulsory chain; reconcile QBE tasks individually |
+| A | Phase 8 scheduling, 3918–3924 | superseded by R-0492/R-0497/R-0514 | 2 | Merge remaining interface/matrix work into R-0117/R-0118 |
+| A | Incremental consumers, 3925–3928 | duplicate of preceding refactor rows | 3 | Retire duplicate list after merging |
+| A | Native backend only after QBE/validation, 3929–3930 | superseded by R-0505/R-0511 | 2 | Retire |
+| A | Refactor acceptance, 3932–3950 | live | 2, 3, 4 | Keep after replacing QBE-specific completion condition |
+| A | No MIR/allocator/object writer without forcing case, 3952–3956 | superseded by R-0511 | 2 | Retire; verified-native V1 is the forcing case |
+| A | Incremental/certificate trust split, 3958–3965 | live | 2, 3, 5 | Keep invariant; update obsolete phase sequencing |
+| A | External-validation stop/go gate, 3967–3973 | superseded by R-0515’s continuing pilots | 3 | Retire as global blocker; keep measured product decisions |
+| A | Early probe: authority diff, 3979–3980 | duplicate of R-0182/R-0183 | 3, 5 | Merge |
+| A | Early probe: proof cost, 3981 | duplicate of R-0150 | 2, 3 | Merge |
+| A | Early probe: translation validation, 3982–3983 | duplicate of R-0299/R-0300 | 4 | Merge |
+| A | Early probe: invalidation scale, 3984–3985 | duplicate of R-0137 | 3 | Merge |
+| A | Float profile, 3987–3991 | superseded by V7/S7 profile requirements | 4 | Merge; no silent unproved float admission |
+| A | Freestanding/MMIO/asm, 3993–3998 | live | after-1.0/research | Keep |
+| A | Target-selected roots / possible cfg, 4000–4004 | live | 3, 4 | Keep; task any admitted cfg extension |
+| A | Native debug info, 4006–4009 | superseded by R-0515 V1 checkpoints | 3 | Merge; remove “Phase 15+ only” delay |
+| A | Contract/spec trust, 4011–4016 | duplicate of R-0473/R-0271/R-0506 | 1, 6 | Merge |
+| A | Small workload-driven std, 4018–4024 | duplicate of R-0515/R-0488 | 3 | Keep direction; use std coverage inventory |
+| A | Enum construction rights, 4038–4043 | duplicate of R-0011 | 3, 4 | Merge |
+| A | `BytesRaw` ownership split, 4044–4047 | duplicate of R-0018 | 3 | Merge; reconcile borrowed representation with second-class references |
+| A | One Reader/Writer spine, 4048–4050 | duplicate of R-0015 | 3 | Merge |
+| A | UTF-8 boundary validation, 4051–4053 | duplicate of R-0013 | 3 | Merge |
+| A | Checked C-string conversion, 4054–4058 | duplicate of R-0013 | 3 | Merge |
+| A | Hosted adapters absorb Unsafe, 4059–4062 | duplicate of R-0014 | 1, 3 | Merge; preserve only-Unsafe absorption |
+| A | Linear-conservation assertion fixture, 4065–4068 | duplicate of R-0012/R-0499 | 2, 3 | Merge |
+| A | Trusted raw dereference duplication, 4069–4074 | duplicate of R-0014 | 1, 4 | Merge; current safety repair precedes V6 proof |
+| A | Backend-neutral LayoutFacts, 4077–4078 | superseded by R-0502 | 2, 4 | Merge |
+| A | Typed emitter fragments / bug 027, 4079–4082 | live | 3, 4 | Merge semantic emission into R-0503; retain profiling-triggered optimization |
+| A | Layout diagnostics sequence, 4083–4086 | superseded by R-0502/R-0503 | 2, 4 | Retire ordering |
+| A | Stable semantic IDs / bug 054, 4092–4100 | duplicate of R-0492/R-0007 | 1, 2 | Merge |
+| A | Compiler-derived interfaces, 4101–4103 | duplicate of R-0117 | 3 | Merge |
+| A | Typed pass boundaries, 4104 | superseded by R-0497/R-0510 | 2 | Merge |
+| A | Immutable indexed facts, 4105–4106 | duplicate of R-0115 | 2, 3 | Merge |
+| A | Generated coverage matrix, 4107 | duplicate of R-0118 | 1, 4 | Merge |
+| A | R-0114–R-0118 exclusive order, 4109–4111 | superseded by current queue | 2, 3 | Retire |
+| A | Safe slice I/O, 4113–4116 | duplicate of R-0016 | 3 | Merge; preserve owner/provenance and non-escape rules |
+| A | “Corresponding local/CI gate work,” 4119–4120 | live | 1, 3 | Replace with explicit task IDs and acceptance links |
+| B | “Capability-complete” · 4138 | duplicate of R-0021/R-0484 | 1, 3 | Merge; correct obsolete trusted-extern semantics |
+| B | “One IO spine” · 4145 | duplicate of R-0015/R-0033 | 3 | Merge; replace acquisition-only authority with handle-use requirements |
+| B | “Linearity-real” · 4149 | duplicate of R-0031/R-0006 | 1, 3 | Merge; preserve returned ownership on removal |
+| B | “Self-enforcing + selectively proven” · 4154 | duplicate of R-0021/R-0057/R-0061 | 3, 4 | Merge as release-scoped std acceptance |
+| B | Three layers/internal iteration/breadth hold · 4165 | duplicate of R-0064/R-0032/R-0065 | 3; after-1.0/research | Merge as policy, not separate queue |
+| B | Phase 7A correction rule · 4174–4195 | live | 1, 3 | Keep; no symmetry-driven redesign |
+| B | “Global Task Sequence” steps 1–7 · 4206–4223 | superseded by top queue | 1, 2, 3, 4, 5, 6, 7 | Retire sequence; task obligations remain inventoried above |
+| B | Historical trust-boundary table · 4255–4281 | historical | 1 | Archive under R-0004’s explicit historical boundary |
+| B | Pending conversions/no-manifest tables · 4354–4409 | historical | 1 | Archive; preserve no-authority exclusions in replay documentation |
+| B | “WHAT IS STILL OPEN” · 4429 | historical | 1, 6 | Archive completed parts; ninth table remains explicit stage-6 follow-up |
+| B | Atomic-transition entrance conditions · 4463–4473 | historical | 1 | Archive as closure evidence; transfer applicable controls under R-0512 |
+| B | “REMAINING for the atomic join transition” · 4515 | historical | 1 | Retire stale open wording |
+| B | Missing dispatch misroute mutation · 4531 | historical | 1 | Archive dated gap; replacement controls belong to R-0491/R-0512 |
+| B | “ninth proof table” · 4536 | live | 6 | **R-0525** (owner) — Merge with explicit ninth-table checkpoint at 5134–5136 |
+| B | “Open boundary: report and process disposition” · 4544 | historical | 1 | Archive; current cross-surface authority belongs to R-0494 |
+| B | “Open boundary: exact refusal-path controls” · 4571 | historical | 1 | Archive; preserve attack classes during migration |
+| B | Closed manifest provenance/completeness · 4587, 4615 | done (not yet moved) | 1 | Move to closure history |
+| B | “Open boundary: theorem-to-call-edge correspondence” · 4636 | historical | 1 | Archive under R-0004 closure; contract precision remains R-0473/74 |
+| B | Package-2 caveats / “what that leaves” · 4794–4809 | historical | 1, 6 | Archive measurements; merge live contract/table follow-ups |
+| B | “Cache legs remain deferred” · 4830 | duplicate of R-0145/R-0155 | 3, 4, 5 | Merge; never fabricate a test for a nonexistent cache |
+| B | Receipt `importsId` limitation · 4955 | live | 2, 5 | **R-0521** (owner) — Merge into canonical task and VP S16 retained-artifact binding |
+| B | Proof-library/workspace binding · 4959 | live | 2, 5 | **R-0521** (owner) — Merge into canonical task/R-0353; retain exact dependency controls |
+| B | Cache-disabled/corrupted bullet · 4968 | duplicate of R-0145 | 3 | Merge with cache authority parity |
+| B | Library package cannot carry evidence · 4972 | historical | 1 | Archive dated diagnosis; current cross-package remainder is R-0482 P1 |
+| B | Package-3 eight-step sequence · 4993–5047 | historical | 1 | Archive shipped steps; retain contract/table/cache exceptions at current owners |
+| B | Five-way migration · 5085 | duplicate of R-0482 | 1 | Merge qualification remainder; migration itself recorded landed |
+| B | “Compiler provenance hardening” · 5093 | live | 2, 5 | **R-0521** (owner) — Turn prose into a bounded task; minimal V1 binding cannot wait for stage 5 |
+| B | “Canonical production VerificationTask” · 5097 | live | 2, 5 | **R-0521** (owner) — Turn prose into a task with V1 and cross-profile exits |
+| B | “R-0353/schema conformance” · 5100 | duplicate of R-0353 | 2, 5 | Merge minimal V1 consumer versus full stage-5 product distinction |
+| B | “Model-faithfulness evidence” · 5104 | superseded by R-0495/R-0508 | 2, 3, 4 | Retire generic legacy-model expansion; preserve explicit abstraction relations where needed |
+| B | “Package-level evidence composition” · 5106 | duplicate of R-0482/R-0440 | 7 | Merge |
+| B | “Typed PolicyDecision” · 5108 | duplicate of R-0440 | 7 | Merge |
+| B | “Axiom and assumption inventories” · 5110 | duplicate of R-0506/R-0509 | 1, 2, 3, 4 | Merge; immediate axiom policy precedes productization |
+| B | “Evidence revocation and rollback” · 5112 | duplicate of R-0343/R-0430 | 5, 7 | Merge; retain receipt-store rollback explicitly |
+| B | “Signed transport without authority inflation” · 5114 | live | 5, 7 | Merge into R-0353/package transport |
+| B | “Schema lifecycle and migration” · 5116 | duplicate of R-0338/R-0361 | 5, 7 | Merge |
+| B | “Source-to-VIR bridge audit” · 5120 | superseded by R-0460/R-0495/VP S15 | 2, 3, 4 | Merge distinct source→Core and Core→VC obligations |
+| B | “Toolchain-upgrade migration” · 5122 | duplicate of R-0208/R-0429 | 1, 7 | Merge continuing upgrade procedure; do not reopen closed drill |
+| B | “Reproducible release artifacts” · 5124 | duplicate of R-0356/R-0357 | 2, 7 | Merge minimal slice retention and release packaging |
+| B | “FFI, Unsafe, runtime, backend boundaries” · 5126 | duplicate of R-0505/R-0509 | 2, 3, 4 | Merge |
+| B | “Platform qualification” · 5128 | live | 5, 7 | Merge into R-0353/R-0333 acceptance |
+| B | “Exact contract witnesses” · 5132 | duplicate of R-0473/R-0474 | 6 | Merge |
+| B | “Narrow two-state mutation” · 5134 | live | 6 | **R-0524** (owner) — Turn prose into a bounded task linked to R-0473/74/R-0175 |
+| B | “Only afterward … ninth table” · 5135 | live | 6 | **R-0525** (owner) — Turn prose into a task; retarget to Core migration, preserving no-authority controls |
+| B | “Checked total functions / decreases” · 5137 | live | 6 | **R-0526** (owner) — Turn prose checkpoint into explicit owned exit; link R-0060 |
+| B | “Specification adequacy and vacuity” · 5139 | duplicate of R-0212/R-0213 | 5, 6 | Merge without implying general decidability |
+| B | “Relational properties” · 5141 | live | after-1.0/research | **R-0527** (owner) — Turn into scoped research task; separate ordinary refinement already required by VP |
+| B | “Closed-world library evolution” · 5142 | live | 4, 7 | **R-0537** (owner) — Turn prose into owned compatibility increment; respect open imported callbacks |
+| B | “Parser and decoder fuzzing” · 5145 | live | 3, 5, 7 | Merge per-format coverage into R-0143/R-0353/package codecs |
+| B | “Resource limits and denial-of-service” · 5146 | live | 3, 5 | **R-0528** (owner) — Turn prose into cross-command limits task with explicit owners |
+| B | “Atomic evidence persistence” · 5148 | live | 5 | **R-0529** (owner) — Turn prose into evidence-store task; do not conflate with R-0144’s cache |
+| B | “Gate ownership and reachability” · 5150 | duplicate of R-0481/R-0513 | 1 | Merge |
+| B | “Long-running stability and nondeterminism” · 5152 | live | 3, 7 | Merge into R-0149 and release qualification |
+| B | “Performance baselines” · 5154 | duplicate of R-0416/R-0515 | 3, 5 | Merge; include proof-engineering budgets from VP |
+| B | “ProofCache” · 5156 | duplicate of R-0145/R-0155 | 3, 4, 5 | Merge |
+| B | “External-user dependency-upgrade workflow” · 5161 | duplicate of R-0486 | 7 | Merge shared scenario |
+| B | “IDE/CI evidence lenses … ergonomics” · 5164 | duplicate of R-0515/R-0119 | 3, 7 | Merge; do not defer basic editor to schema freeze |
+| B | “Human-readable evidence explanations” · 5169 | duplicate of R-0182/R-0183 | 5 | Merge |
+| B | “Evidence-diff format” · 5171 | duplicate of R-0182/R-0183 | 5 | Merge |
+| B | “Independent implementation and security review” · 5173 | duplicate of R-0353/VP S16 | 2, 5 | Merge explicit reviewer and qualification exits |
+| B | “Release assurance bundles” · 5174 | duplicate of R-0188/R-0333 | 5, 7 | Merge |
+| B | “Privacy and disclosure policy” · 5176 | live | 5, 7 | Merge into R-0361 with concrete export/redaction controls |
+| B | “Ecosystem compatibility policy” · 5178 | duplicate of R-0440/R-0429 | 7 | Merge |
+| B | “Second proof-producing kernel” · 5181 | duplicate of R-0448 | after-1.0/research | Keep research gate; distinct from con-leche/nanoda rechecking Lean |
+| B | “Verified … compiler bridges” · 5183 | superseded by R-0511/R-0512 | 2, 3, 4 | Remove research-only classification |
+| B | “Certificate-producing automation” · 5184 | live | 6; after-1.0/research | Merge into existing automation/VIR certificate owners |
+| B | H19 · 5192 | duplicate of R-0460 | 2, 3, 4 | Keep explicit semantic-edge obligation |
+| B | H20 · 5194 | live | 1, 2, 3, 4, 5 | **R-0538** (owner) — Merge axiom/execution accounting into R-0506/R-0509 |
+| B | H21 · 5196 | live | after-1.0/research | Keep trusted label; not a universal blocker for bounded verified slices |
+| B | “Philosophical-core gaps” · 5201 | superseded by VP S9/S15/S16 | 2, 3, 4 | Replace blanket verification prohibition with profile/theorem-boundary labels |
+| B | “Scheduled critical-path work” · 5206 | historical | 3, 7 | Retire obsolete tooling-after-schema sequence |
+| B | “Typestate” · 5210 | live | after-1.0/research | Keep forcing-workload gate |
+| B | “Strict post-R-0004 critical path” · 5222–5241 | superseded by top queue | 1, 2, 3, 4, 5, 6, 7 | Retire competing order; preserve compatibility obligations |
+| B | Historical “remaining work” · 5311–5408 | historical | 1, 6 | Archive; live table/cache/contract items already separately listed |
+| B | Historical slices table · 5440–5465 | historical | 1 | Archive; keep closure record only |
+| B | Binder-frame remainder · 5467–5498 | historical | 1 | Archive; transfer invariants to R-0492/R-0495 |
+| B | Generator residual lists · 5732–5737, 5797–5809 | historical | 1, 4 | Archive; unsupported specializations stay explicit in migration inventory |
+| B | “Positive specialization … blocked” · 5848, 5893 | superseded by R-0510/R-0495 | 4 | Merge admitted-instance proof coverage; no new PExpr expansion |
+| B | Classification/receipt “open design question” · 5922–6009 | historical | 1 | Archive R-0004 snapshot |
+| B | “What remains … sequencing decision” · 6050 | historical | 1 | Retire stale blocker |
+| B | Identity spikes and unmeasured use sites · 6090–6277 | historical | 1 | Archive; current architecture is Resolve identities, not parallel identity experiments |
+| B | General binder stack / ConstId remainder · 6404–6411 | historical | 1, 2 | Archive dated snapshot; merge live class controls into R-0492/R-0495 |
+| B | Historical closure list/snapshot · 6545–6610 | historical | 1 | Archive; do not reopen from obsolete “NOT STARTED” |
+| B | Multi-kernel H25 · 6644 | duplicate of R-0474 | 6 | Merge |
+| B | Multi-kernel `old` ceiling · 6648 | duplicate of two-state checkpoint | 6 | **R-0524** (owner) — Merge |
+| B | Nonlinear rung 3 · 6652 | duplicate of H21/R-0448 | after-1.0/research | Merge |
+| B | Bitvector rung 4 · 6654 | duplicate of H20/R-0506 | 1, 5 | Merge |
+| B | Induction/decreases rung 8 · 6655 | duplicate of totality checkpoint | 6 | **R-0526** (owner) — Merge |
+| B | Full correctness rung 9 · 6657 | live | after-1.0/research | Retire as a schedulable task; replace only with bounded properties/workloads |
+| B | Register A/B remainder · 6674 | duplicate of R-0460 / VP obligations | 2, 3, 4 | Keep exact registers, not aggregate “ladder” progress |
+| B | Malformed/unterminated block helper · 6702 | live | 1 | Keep named limitation in R-0476; implement only with a reproducer |
+| B | Contract-call logical admission · 6721–6729 | duplicate of R-0473 | 6 | Merge; soundness containment before affected releases |
+| B | R-0480 Phase A · 6782–6791 | live | 1 | Keep all four requirements under R-0480 |
+| B | R-0480 Phase B · 6793–6802 | live | 1 | Keep; link checking alone does not close authority audit |
+| B | R-0480 Phase C · 6804–6814 | done (not yet moved) | 1 | Archive completed move; retain transaction rule |
+| B | R-0481 journal · 6932–6948 | live | 3 | Keep one pilot and temporal-authority gates |
+| B | R-0481 generated artifacts · 6955–6965 | live | 1, 2, 3, 4, 5 | Keep five artifact families under one producer map |
+| B | R-0481 shared assertions · 6982–7001 | duplicate of R-0476/R-0478 | 1 | Merge into R-0481/R-0513 implementation |
+| B | R-0481 mutation registry · 7003 | live | 1 | Keep; never count registered-only controls as executed |
+| B | R-0481 corpus manifest · 7009–7032 | live | 3 | Keep one denominator and stable IDs |
+| B | R-0481 layer firewall · 7034–7074 | superseded by R-0494/VP S9/S16 | 1, 2, 3, 4, 5 | Merge rules; correct Check-before-Core diagram |
+| B | R-0481 Evidence ownership · 7076–7095 | live | 2, 3, 4, 5 | Keep incremental moves only after semantic ownership |
+| B | R-0481 VIR promotion · 7097–7106 | duplicate of R-0450 | 2, 3, 4, 5 | Merge |
+| B | R-0481 sequencing step 5 · 7120 | historical | 1 | Retire completed prerequisite; current owner is R-0482 qualification |
+| B | R-0481 standalone consumer · 7128 | duplicate of R-0353 | 2, 5 | Merge |
+| B | R-0481 roadmap compaction · 7131 | live | 1 | Keep; this audit supplies concrete input |
+| B | R-0482 remaining P1 · 7212 | live | 1 | Keep current queue owner |
+| B | R-0482 exact property acceptance · 7293–7314 | superseded by R-0495 | 1, 2 | Merge controls through status/issuance/consumption/replay |
+| B | R-0482 total-model admission · 7316 | live | 6 | Merge into R-0473/totality; distinguish behavior models from total contract functions |
+| B | R-0482 relation algebra/cardinality · 7277–7291, 7341–7360 | live | 2, 3, 4, 5, 6 | Merge Core ClaimSpec relation checking; retire legacy-only attachment expansion |
+| B | R-0482 authoring modes · 7362–7385 | live | 5, 6 | Keep behind S2/S9 proof-surface freeze |
+| B | R-0482 differential PFnDef correspondence · 7407 | superseded by R-0491/R-0495 | 1, 2, 3, 4 | Keep maintenance comparisons; retire new legacy correspondence product |
+| B | R-0482 exported contract · 7324–7339 | live | 6, 7 | Merge into typed contract and package-interface owners |
+| B | R-0482 three dependency strengths · 7415 | live | 5, 6, 7 | Keep semantically justified edges; adapt model edge to Core/abstraction identity |
+| B | R-0482 partial evidence linker · 7430–7452 | duplicate of R-0440/package tasks | 7 | Merge all refusal classes |
+| B | R-0482 receipt fields · 7454–7472 | live | 2, 5 | Merge canonical task; avoid competing constructors |
+| B | R-0482 attacks 1–25 · 7474–7505 | live | 1, 2, 3, 4, 5, 6, 7 | Keep as distributed acceptance matrix; each attack follows its owning increment |
+| B | R-0479 remaining vocabulary sweep · 7619–7626 | live | 1 | Keep beyond already-clean status/edge vocabularies |
+| B | R-0479 bottom-value exception · 7643 | live | 1 | Keep explicit justified allowlist under R-0494 migration |
+| B | R-0476 uncounted shapes · 7752 | live | 1 | Keep four audit classes; malformed-block case remains conditional |
+| B | R-0476 central freshness build · 7760 | duplicate of R-0513 | 1 | Merge |
+| B | R-0473 operand widths · 7792 | live | 1, 6 | Keep typed-contract requirement |
+| B | R-0473 bool arithmetic · 7793 | live | 1, 6 | Keep |
+| B | R-0473 result type · 7794 | live | 1, 6 | Keep |
+| B | R-0473 loop scope · 7795 | live | 1, 6 | Merge identity/loop-binding controls into R-0492/R-0495 |
+| B | R-0473 spec/total/runtime/trusted distinction · 7798 | live | 6 | Keep; capability-free is not total |
+| B | R-0473 isolated declarations · 7807, 8281–8290 | live | 3, 6 | Keep bounded diagnostics/contract-analysis mode |
+| B | R-0473 embedded Slice-6 work · 7823–8235 | historical | 1 | Archive under R-0004 closure; exact contract witness is the live exception |
+| B | R-0473 BindingId steps 1–3 · 8249–8254 | superseded by R-0492 | 2 | Merge; IDs originate at Resolve, not a second contract elaborator |
+| B | R-0475 origin-labelled report · 8382–8401 | live | 3 | Keep; derive origin during project assembly |
+| B | R-0472 MIN negation · 8417 | live | 2, 3, 4 | Merge into R-0460 and typed arithmetic operation coverage |
+| B | R-0472 float→int trap VC · 8418 | live | 4 | Merge into V7/R-0460 |
+| B | R-0472 bitwise tier · 8427 | live | 4 | Merge Core ProofKit/bitvector owner; no required extra proof kernel |
+| B | R-0472 enum tier · 8434 | live | 4 | Merge V2/Core proof libraries |
+| B | R-0472 recursion/decreases · 8444 | live | 6 | **R-0526** (owner) — Merge totality owner; a linear measure VC alone is not full recursion soundness |
+| B | R-0472 loop properties · 8453 | live | 4, 5, 6 | Merge exact Core loop binding and contract owners; retire blanket “no invariants” |
+| B | R-0472 heap/pointers · 8456 | superseded by VP S7/S11/V3–V6 | 2, 3, 4 | Merge compiler memory model; keep richer logic separately scoped |
+| B | R-0472 constant time · 8457 | live | after-1.0/research | Merge relational research; not ordinary safety VCs |
+| B | R-0472 print fidelity · 8463 | live | 5; after-1.0/research | Merge R-0450 validation; retire categorical “never proved” claim |
+| B | R-0471 query arity · 8549 | live | 3 | Keep class-level CLI test |
+| B | R-0471 retired syntax · 8560 | live | 3 | Keep |
+| B | R-0471 candidate hints · 8568 | live | 3 | Keep valid-remedy tests |
+| B | R-0450 Lean rendering witness · 8715–8726 | live | 2, 3, 4, 5 | Keep within canonical goal/rendering migration |
+| B | R-0010 `.audit_me/` · 8831 | live | 1 | Keep bounded inventory; no generated binary promotion |
+| B | R-0010 publication state machine · 8843 | duplicate of R-0439/R-0447 | 1 | Merge operational owner; not a compiler bug state |
+| B | R-0439 named worktree · 8870–8877 | live | 1 | Keep disposition inventory; never wholesale-merge superseded implementation |
+| B | R-0435 systematic rename probe · 8961–8973 | duplicate of R-0500 | 1 | Merge into language migration evidence |
+| B | R-0440 raw digest migration · 9007 | live | 1, 2, 3, 4, 5 | Merge identity/artifact owners; preserve compile-fail swaps |
+| B | R-0440 authorship modes · 9021 | duplicate of R-0482 modes | 5, 6 | Merge single design after proof-surface freeze |
+| B | R-0440 residual ladder prose · 9045 | live | 1, 5 | Keep corpus-wide terminology repair |
+| B | R-0447 ownership map · 9477 | duplicate of R-0481 | 1, 2, 3 | Merge unique manifest requirement |
+| B | R-0447 dependency ratchet · 9484 | duplicate of R-0481 | 2, 3 | Merge and update pipeline direction |
+| B | R-0447 manifest tests/routing/commands · 9492 | live | 1 | Merge into R-0481/R-0513; preserve exact-command parity |
+| B | R-0447 corpus/site homes · 9506 | duplicate of R-0481/R-0135 | 3 | Merge; adjudicate conflicting proof/document homes first |
+| B | R-0447 diagnostic catalog · 9518 | live | 3 | Merge into R-0137/R-0494 decomposition |
+| B | R-0447 artifact hygiene · 9524 | live | 1, 2, 3 | Merge isolation now into R-0513; broader hygiene incremental |
+| B | R-0447 publication invariants · 9557 | live | 1 | Merge R-0439 operational acceptance |
+| B | R-0444 slice 1 · 9615 | live | 3 | Keep |
+| B | R-0444 slice 2 · 9624 | live | 3 | Keep |
+| B | R-0444 proof handoff · 9631 | duplicate of R-0170/R-0244 | 4, 5, 6 | Merge, grounded in R-0460/Core semantics |
+| B | R-0444 resource handoff · 9650 | duplicate of R-0445 | 3 | Merge |
+| B | R-0445 two falsification probes · 9726 | live | 3 | Keep prerequisite experiments |
+| B | R-0011 visibility bullets · 9738–9760 | live | 3, 4 | Keep all seven under one construction-rights migration |
+| B | R-0012 combinator bullets · 9775–9789 | live | 3, 4 | Keep all five under R-0012 |
+| B | R-0013 UTF-8 · 9795 | live | 1, 3 | Keep confirmed correction |
+| B | R-0013 C strings · 9800 | live | 1, 3 | Keep complete source inventory |
+| B | R-0013 external results · 9806 | live | 1, 3 | Keep concrete witnesses and successful controls |
+| B | R-0013 env/args · 9813 | live | 3 | Keep |
+| B | R-0013 random bounds · 9818 | live | 1, 3 | Keep documented contract; recoverable variant separately pulled |
+| B | F7/F8 · 9825 | live | 1, 3 | Keep repair in R-0013, dynamic validation in R-0030 |
+| B | `io.read_all` future reconsideration · 9848 | L, conditional | 3 | Keep trigger; do not misclassify accepted contract as defect |
+| B | R-0014 public-safety manifest · 9875 | duplicate of R-0021 | 3 | Merge |
+| B | R-0014 bug-046 dereference path · 9886 | live | 1, 2, 3, 4 | Merge checker containment into R-0514 and raw semantics into V6 |
+| B | R-0014 raw signature audit · 9899 | live | 3 | Keep with R-0016/R-0021 |
+| B | R-0015 legacy discrepancies · 9945 | live | 3 | Keep explicit subcases; confirmed errors remain R-0013 priority |
+| B | R-0016 derived capability inference · 9964 | done (not yet moved) | 1 | Retire prerequisite; R-0470 records both paths fixed |
+| B | R-0016 escapable slices · 9984 | live | after-1.0/research | Keep excluded from current second-class-reference profile |
+| B | R-0017 net · 10017 | live | 3 | Keep |
+| B | R-0017 fs/io · 10021 | duplicate of R-0013/R-0015 | 3 | Merge |
+| B | R-0017 env · 10024 | duplicate of R-0013 | 3 | Merge |
+| B | R-0017 args · 10027 | duplicate of R-0013 | 3 | Merge |
+| B | R-0017 time · 10030 | duplicate of R-0038 | 3 | Merge |
+| B | R-0017 process · 10033 | duplicate of R-0020.1 | 3 | Merge |
+| B | R-0017 rand · 10035 | duplicate of R-0013/R-0036 | 3 | Merge |
+| B | BytesRaw split · 10071 | live | 1, 3 | Keep immediate ownership audit under R-0018 |
+| B | Collection bullet list · 10094–10109 | duplicate of R-0031 | 3 | Merge every listed requirement |
+| B | Naming/coherence ledger · 10111 | live | 3 | Merge into R-0031/R-0066 |
+| B | R-0020.1 · 10125 | live | 3 | Keep workload gate; do not recreate removed public fork |
+| B | R-0020.2 · 10128 | duplicate of R-0038 | 3 | Merge |
+| B | R-0020.3 · 10131 | duplicate of R-0036 | 3 | Merge |
+| B | R-0020.4 · 10136 | duplicate of R-0039/R-0040 | 3 | Merge |
+| B | R-0020.5 · 10139 | duplicate of R-0039/R-0030 | 3 | Merge |
+| B | R-0020.6 · 10141 | duplicate of R-0055 | 3 | Merge |
+| B | R-0020.7 · 10143 | live | 3 | Keep under HMAC/std API owner; streaming separately pulled |
+| B | R-0020.8 · 10147 | duplicate of R-0047 | 3 | Merge |
+| B | R-0020.9 · 10152 | duplicate of R-0012/R-0055 | 3 | Merge; replace undefined “A3” label with R-ID |
+| B | R-0020.10 · 10156 | live | 1, 2, 3 | Merge into R-0034/R-0036 and `IntArith` controls |
+| B | R-0020.11 · 10162 | live | 3 | Keep five separate demand records; no blanket polish release |
+| B | R-0438 temporary missing rows · 10207 | live | 1 | Keep stopgap only until generated inventory replaces it |
+| B | R-0438 one-time truth repair · 10248 | live | 1 | Keep; normative interpreter target must now be shared Core semantics |
+| B | Phase-7 completion bullets · 10286–10308 | duplicate of listed task owners | 3 | Keep as bounded correction checklist, not full catalog release gate |
+| B | Phase-7 trigger exception · 10310 | live | 3 | Keep; replace undefined S2/S4–S7 labels with R-IDs |
+| B | Layout panic hygiene · 10325 | superseded by R-0502 | 2, 3 | Merge after layout-owner split |
+| B | Bug-039 residual · 10339 | superseded by R-0492 | 1, 2 | Merge; reproduced correctness bugs should not await workload demand |
+| B | No public Slice constructor · 10343 | duplicate of R-0016 | 3 | Merge |
+| B | Bug-027 rendering · 10349 | duplicate of R-0140 | 3 | Merge measured builder repair |
+| B | Fuzzer residuals · 10351 | duplicate of R-0491 | 1, 2, 3, 4 | Merge scope-specific minima; account for unobservable binary trap kinds |
+| B | Raw-name classifiers · 10354 | superseded by R-0492/R-0514 | 1, 2 | Merge |
+| B | Non-finite float literals · 10358 | live | 3, 4 | Keep bounded diagnostic/emitter repair |
+| B | Silent-default sweep · 10365 | live | 1, 2 | Merge into typed artifacts/layout; retain all three controls |
+| B | Bug-043 C-string lint · 10372 | duplicate of R-0013 | 1, 3 | Merge source inventory |
+| B | Destructor capability fence · 10459 | live | 3, 4 | Keep first-consumer trigger and ownership proof obligations |
+| B | R-0031.1a Clone/indexed swap · 10473 | live | after-1.0/research | Keep separate research decisions |
+| B | R-0031.1b arenas · 10483 | live | after-1.0/research | Keep before stable arena admission |
+| B | R-0031.1c dictionaries · 10498 | live | 3 | Keep before binary collection operations stabilize |
+| B | R-0031.1d alias guard · 10512 | L, continuing | 1, 2, 3, 4 | Keep gate; integrate declarative borrow proof |
+| B | R-0031.1e returned references · 10516 | live | after-1.0/research | Keep outside V1–V7 until separately specified |
+| B | R-0031.1f const generics · 10521 | live | after-1.0/research | Keep; admitted feature must enter maintained V7 inventory/versioned scope |
+| B | R-0031.1g allocator values · 10531 | live | after-1.0/research | Keep before allocator-heavy stabilization |
+| B | R-0031.1h behavioral laws · 10544 | live | 3, 6 | Keep R-0031 API example and R-0271 proof meaning |
+| B | R-0060 rational theory · 10761 | live | after-1.0/research | Keep separately workload-pulled |
+| B | R-0065 deferred families · 10803 | live | after-1.0/research | Keep every family explicitly excluded until admitted; do not infer completion |
+| B | R-0483 “remaining … owner-bound results” · 10967 | done (not yet moved) | 3 | Retire; BoundView closure explicitly resolves it |
+| B | R-0483 failed migration/investigation · 10974–11111 | historical | 1, 3 | Archive; retain accepted coordinate limit at 10907 |
+| B | R-0484 descriptor second step · 11147, 11304–11306 | live | 3, 4 | **R-0530** (owner) — Turn into separately identifiable task after closed R-0484 |
+| B | R-0484 dependency/query limit · 11142 | L, accepted limit | 3 | Keep limitation; expansion requires a scoped task, not reopening closure |
+| B | R-0484 bug-077 containment · 11145 | live | 3 | Keep bug owner and valid-program restoration separately from containment |
+| B | R-0484 old indirect opacity analysis · 11151 | live | 2, 3 | Merge retirement into R-0514/R-0494 after parity |
+| B | R-0484 campaign “not qualified” · 11154 | historical | 1 | Archive chronology; retain exact later qualifying SHA, not inherited release qualification |
+| B | R10 remaining bullets · 11185–11196 | done (not yet moved) | 1 | Retire stale open wording; closure at 11130 covers them |
+| B | Proof-admission consolidation/docs audit · 11216–11229 | done (not yet moved) | 1 | Archive under recorded closure |
+| B | F7/F8 follow-up · 11347 | duplicate of R-0013/R-0030 | 1, 3 | Merge |
+| B | Historical “still open” · 11396 | historical | 1 | Archive |
+| B | Historical bug-071/classify-82 remainder · 11533–11552 | historical | 1 | Archive under R-0484 closure |
+| B | Historical dependency-opacity remainder · 11599–11619 | historical | 1 | Archive; current accepted coverage limits remain explicit |
+| B | Historical “next transition” · 11666 | historical | 1 | Archive |
+| B | R-0488.1 mutation audit · 11766 | live | 1, 3 | Keep; merge discovered violations into immediate repairs |
+| B | R-0488.2 library pressure · 11774 | live | 3 | Keep bounded workload |
+| B | R-0488 partial-progress failure · 11781 | live | 3, 6 | Keep controlled failure and no-duplicate-retry example |
+| B | R-0488.3 footprints · 11789 | duplicate of R-0175/R-0473/74 | 6 | Merge |
+| B | R-0488.4 upgrade diffs · 11796 | duplicate of R-0182/83/84/R-0372 | 5, 6, 7 | Merge |
+| B | R-0488.5 failure explanations · 11802 | duplicate of R-0137/R-0466 | 3 | Merge |
+| B | QBE phase goal/done · 11817–11834 | superseded by VP V1–V7/top queue | 2, 3, 4 | Retire mandatory QBE prerequisite; retain optional research scope |
+| B | QBE product contract bullets · 11838–11852 | duplicate of R-0074/75/80/83/110 | 3; after-1.0/research | Merge general requirements; QBE-specific work conditional |
+| B | Preflight order · 11862 | superseded by VP slice delivery | 2 | Retire competing backend sequence |
+| B | Zig correspondence / “defer target MIR” · 11873–11888 | superseded by R-0505 | 2, 3, 4 | Retire; owned Machine IR/encoding now required |
+| B | Thin executable slices · 11890 | duplicate of R-0511/R-0512 | 2, 3, 4 | Merge delivery discipline |
+| B | `main -> 42` milestone · 11900 | superseded by R-0511 V1 | 2 | Merge useful smoke test, not replacement for V1 theorem exit |
+| B | Expansion ladder · 11907–11911 | superseded by VP V1–V7 | 2, 3, 4 | Map families to admitted slices; no monolithic scalar scope |
+| B | LLVM byte-parity rule · 11913 | live | 2, 3, 4 | Keep as migration check, supplemented by compatibility/theorem requirements |
+| B | QBE “first three slices” kill criterion · 12243 | live | after-1.0/research | Keep if experiment retained; transfer general checkpoint discipline |
+| B | Phase-8 three-role contract · 12253 | duplicate of R-0119 | 7 | Merge |
+| B | Architecture “after QBE” · 12271 | superseded by R-0492/R-0497/R-0514 | 1, 2 | Retire dependency outright |
+| B | HMAC role · 12352 | duplicate of R-0119/R-0124 | 3, 4, 5, 6, 7 | Keep |
+| B | Secure-update role · 12353 | duplicate of R-0119/R-0120 | 3, 4, 5, 6, 7 | Keep all listed properties with bounded theorem scope |
+| B | Protocol role · 12358 | duplicate of R-0119/R-0121 | 3, 4, 5, 6, 7 | Keep |
+| B | Demote four old flagships · 12362 | live | 3 | Merge corpus disposition into R-0135/R-0481 |
+| B | Flagship graduation sequencing · 12367 | live | 7 | Keep public graduation gate; permit stage-3 workload implementation |
+| B | Main-repo workload tier · 12492 | duplicate of R-0134/R-0481 | 3 | Merge corpus classification |
+| B | Medium tier · 12497 | live | 3 | Keep selection gate; do not instantiate all candidates |
+| B | Separate workload repository · 12520 | live | 3 | Keep conditional setup; reconcile R-0481’s “no second repository” wording |
+| B | Compatibility-port candidates · 12534 | live | 3; after-1.0/research | Keep named triggers; no automatic acceptance of all candidates |
+| B | Stress-port tier · 12542 | live | 3 | Merge priority with R-0490; avoid parallel arbitrary large-port commitment |
+| B | Performance pull triggers · 12579 | duplicate of R-0416/phase 15.75 | 3 | Keep |
+| B | Example-refresh three candidates · 12598 | live | 3 | Keep three explicit judgment items under R-0135 |
+| B | Human trial · 12632 | live | 3 | Keep with R-0515 recurring pilots |
+| B | “Primary trial is model” amendment · 12642 | superseded by R-0515 | 3 | Retire priority claim; retain complementary R-0466 measurement |
+| B | Minimum diagnostic bar · 12658 | live | 3 | Keep four classes with spans and valid-edit controls |
+| B | R-0445 human session · 12688 | live | 3 | Keep accounting rule |
+| B | Conditional synthesis probe · 12692 | live | 3; after-1.0/research | Keep bounded trigger; remove its authority over editor delivery |
+| B | Capability-firewall workload · 12700 | live | 3, 4 | Merge into R-0443 forcing workload |
+| B | WAL store workload · 12702 | live | 3, 6 | Keep candidate; requires explicit storage/crash assumptions |
+| B | Regex pair · 12704 | live | 3, 4, 5, 6 | Merge R-0244 complexity workload |
+| B | Editor buffer workload · 12706 | live | 3, 4 | Merge R-0006/V3–V4 validation |
+| B | Job-runner workload · 12708 | live | 3 | Keep only when this surface needs pressure |
+| B | DNS pointer-chasing · 12709 | duplicate of R-0244/R-0444 | 3, 4, 5, 6 | Merge |
+| B | Incremental GO trigger · 12719 | superseded by stage-3/R-0515 commitment | 3 | Keep measurement prerequisites; replace late all-or-nothing GO gate |
+| B | “Roadmap remains linear” · 12730 | superseded by top queue | 3 | Retire phase-number scheduling rule |
+| B | Engine before proof cache · 12737 | live | 3 | Keep dependency for cache activation, not for proof development |
+| B | No pre-GO session seam · 12757 | superseded by R-0515/R-0385 | 3 | Replace with bounded editor-enabling session checkpoint |
+| B | Incremental equivalence exit · 12750 | duplicate of R-0149 | 3 | Merge |
+| B | R-0139 seven query families · 12813–12823 | live | 3 | Keep all families; update artifact chain to current checked IRs |
+| B | Future BackendIR migration · 12828, 13008 | superseded by R-0503/VP V1 | 2, 3 | Retire old phase assumption; support actual profile-specific artifacts |
+| B | Local-cache threat model · 12951–12961 | L, accepted boundary | 3 | Keep explicit limitation; verified profile needs authentic expected roots/revalidation |
+| B | Proof-cache authority · 12977–12990 | live | 3, 4, 5 | Keep; one Verdict authority decides current status |
+| B | Native/object cache limit · 13024–13027 | live | 3, 4 | Keep LLVM label; add native certificate/image correspondence before verified reuse |
+| B | Parallel/cancellation rule · 13033–13042 | live | 3 | Keep |
+| B | Validation-artifact placement · 13061 | duplicate of R-0481 corpus policy | 3 | Merge into tests/workload home |
+| B | 20×/5× targets · 13084–13090 | live | 3 | Keep measured baselines/count bounds; do not promote numeric targets to gates |
+| C | Phase 9 “proof-cost probe”, 13100–13103 | duplicate of R-0150 | 3 | merge into R-0150 |
+| C | “First shared consumer: R-0486”, 13111–13117 | live | 3, 5 | keep under R-0150 |
+| C | “cost” / “coverage”, 13121–13128 | live | 3, 4 | keep both in R-0150 |
+| C | “Publish a small table…retain comparable history”, 13133–13136 | live | 3, 5 | keep under R-0150/R-0438 |
+| C | “Keep registered spec PExprs…until…split”, 13155–13156 | superseded by R-0512 | 4 | retire split dependency; retain compatibility during migration |
+| C | “when…features land, update this guide”, 13213–13216 | live | 4, 6, 7 | keep as R-0157 exit |
+| C | “fixture…replay command”, 13257–13262 | duplicate of R-0191 | 3, 4 | merge persistence into R-0191 |
+| C | Synthesis “replay bundle”, 13286–13290 | live | after-1.0/research | keep under R-0167 |
+| C | Synthesis gates/red-team fixtures, 13292–13299 | live | after-1.0/research | keep under R-0167; reuse R-0494/R-0213 |
+| C | “Agent discoverability”, 13301–13310 | live | 3, 4 | merge into existing Phase 6E catalog owner; do not wait for synthesis |
+| C | Cache activation/one-store conditions, 13315–13331 | live | after-1.0/research | keep under R-0168 |
+| C | R-0170 “completed forcing probe”, 13350–13351 | historical | 4 | retire from open-work narrative |
+| C | “active V1 gaps”, 13351–13354 | live | 4 | keep as explicit R-0170 increments |
+| C | “Defer whole SHA…heap…induction”, 13360–13363 | live | after-1.0/research | keep as deferred scope |
+| C | “Loop-bound…named discharge class”, 13365–13368 | duplicate of R-0244 | 6 | merge into R-0244 acceptance |
+| C | “first reuse-economics customer”, 13381–13387 | live | 4, 6 | keep R-0170/R-0444 joint exit |
+| C | Formal-container “end-to-end refinement slice”, 13408–13415 | live | 6 | keep under R-0172 |
+| C | Frame inference “before…second update shape”, 13454–13462 | live | 6 | keep; separate early semantic frame proofs |
+| C | Phase 10 “three…flagships and one package”, 13505–13506 | duplicate of R-0201 | 5, 7 | merge into R-0201 |
+| C | “Absorb…R-0445…resource-fact schema”, 13512–13516 | live | 5 | keep under R-0178 |
+| C | “direct…transitively reachable trap kinds”, 13518–13523 | live | 4, 5 | keep under R-0178 |
+| C | “no second truth source”, 13525–13538 | superseded by R-0494 | 1, 5 | merge authority checks into R-0494 |
+| C | Diff “First increment”, 13561–13569 | live | 5 | keep under R-0182 |
+| C | Diff gate “First increment”, 13589–13594 | live | 5 | keep under R-0183 |
+| C | “Selected-function equivalence follow-on”, 13596–13602 | live | 6 | **R-0531** (owner) — turn prose into a separately bounded task |
+| C | “canonical reachability witness”, 13619–13626 | live | 3, 4 | keep under R-0184 |
+| C | R-0441 “list repair is complete”, 13663–13664 | done-but-not-moved | 3 | retire completed half |
+| C | R-0441 “Decide one rule and gate it”, 13655–13671 | live | 3, 7 | keep under R-0441 |
+| C | Oracle manifest/buckets/report/failure persistence, 13713–13719 | live | 3, 5 | keep under R-0189 |
+| C | Oracle cross-check/metamorphic/weakening diff, 13720–13723 | live | 3, 5 | keep optional cross-check distinct from required diff |
+| C | Phase 11 “FnTable-complete”, 13816–13819 | superseded by R-0495/R-0512 | 2, 4 | retire FnTable-based phase exit |
+| C | Checker-advisory register, 13849–13855 | done-but-not-moved | 1 | move with R-0208 closure |
+| C | Lean 4.28 fire drill and seven acceptance bullets, 13857–13879 | done-but-not-moved | 1 | move with R-0208 closure |
+| C | “nothing implemented” scope and boundary bullets, 13881–13904 | historical | 1 | retire stale prospective wording |
+| C | Five “Design decisions”, 13911–13930 | historical | 1 | retain concise decisions, move implementation diary |
+| C | “decision 1…open…decisions 3–4…open”, 13946–13948 | historical | 1 | retire; later paragraphs close them |
+| C | Identity limits, 13948–13950 | live | 2, 5 | merge explicit limits into R-0509; task any promised reduction |
+| C | Native-trust policy question, 13966–13968 | historical | 1 | retire question; decision at 13995–13997 answers it |
+| C | Trusted core modules / nonce limits, 13972–13973 | live | 2, 5 | keep in R-0509 assumption inventory |
+| C | Limited policy rollback, 13986–13989 | live | 5, 7 | **R-0532** (owner) — turn prose into threat-model-specific task or accepted limitation |
+| C | “Open, and owned by the user”, 13990–13993 | historical | 1 | retire; choices recorded at 13995–13998 |
+| C | “Linux stays unaccepted”, 14012–14014 | historical | 1 | retire; 14023–14032 records closure |
+| C | “R-0208 closes only when…”, 14022 | done-but-not-moved | 1 | move with closure evidence |
+| C | “native-trust receipts (withheld)”, 14033 | live | 5 | **R-0532** (owner) — turn prose into task linked to R-0506/R-0440 |
+| C | “limited rollback protection”, 14033 | duplicate of 13986–13989 | 5, 7 | **R-0532** (owner) — merge into that residual |
+| C | “correlated not authenticated…self-report”, 14033–14034 | live | 2, 5 | merge into R-0509/R-0353 |
+| C | “Fragment-scoped narrowing”, 14036–14038 | live | 5; after-1.0/research | **R-0532** (owner) — turn prose into task; broad refusal remains safe fallback |
+| C | “trusted-boundary shrinker”, 14057–14059 | live | after-1.0/research | **R-0533** (owner) — turn prose into optional task |
+| C | SAT microsat→MiniSat staging, 14093–14112 | live | after-1.0/research | keep under R-0451 |
+| C | “axiom-inventory…clean checkout…cache” bullets, 14147–14165 | live | 1, 2 | merge axiom work into R-0506; retain replay/cache controls |
+| C | R-0458 “Partially landed”, 14187–14195 | live | 5 | keep only the stated remainder |
+| C | R-0458 “keep” / “attest”, 14197–14201 | live | 5; after-1.0/research | merge driver mechanics into R-0455 |
+| C | Phase 12 “subset family…public names”, 14215–14217 | superseded by R-0511/R-0512 | 2, 4 | merge into slice admission manifests |
+| C | Float witness “epsilon-bound…later”, 14337–14339 | live | after-1.0/research | **R-0534** (owner) — turn prose into deferred task |
+| C | R-0459 “Exhaustiveness”, 14388–14400 | live | 4, 6 | keep; separate language match checking from user protocol completeness |
+| C | R-0459 “Relational (2-safety)”, 14401–14406 | live | after-1.0/research | **R-0527** (owner) — turn prose into distinct task |
+| C | Bitvector xor/and/or/shift prerequisite, 14408–14412 | duplicate of R-0450 | 2, 4 | merge into R-0450 |
+| C | “Also add `proved_by_hand`”, 14414–14416 | live | after-1.0/research | **R-0535** (owner) — turn prose into policy task; no kernel-proof authority |
+| C | Phase 13 “absence of runtime errors”, 14423–14433 | live | 2, 4 | keep; clarify runtime traps do not prove absence of errors |
+| C | R-0244 auto-discharge/call-graph composition, 14460–14468 | live | 6 | keep under R-0244 |
+| C | DNS compression-pointer forcing case, 14470–14474 | live | 6 | keep under R-0244/R-0444 |
+| C | “7a. Implement explicit enum discriminant values”, 14490–14504 | live | 3, 4 | **R-0536** (owner) — turn prose into a task |
+| C | Inflate then conditional deflate, 14579–14583 | live | 6; after-1.0/research | keep separate bounded increments under R-0452 |
+| C | Inflate proof-ratio and trusted-island conditions, 14594–14608 | live | 6 | keep; specify a measurable pass criterion |
+| C | “Closes H23, which is live”, 14616–14621 | historical | 1 | retire false current-status wording |
+| C | Hypothesis origins/status cap/gate, 14633–14668 | done-but-not-moved for H23 | 1 | archive fix; retain regression controls |
+| C | “Widen beyond loops”, 14670–14671 | live | 1, 2, 4 | merge into R-0494/R-0460 |
+| C | R-0462 “continuous check…missing”, 14678–14684 | done-but-not-moved for initial harness | 1 | retire “missing”; expand through R-0491 |
+| C | R-0463 extraction probe/kill criterion, 14717–14732 | live | after-1.0/research | keep |
+| C | H24 div/shift defects and register repair, 14746–14768 | done-but-not-moved | 1 | archive; preserve totality/injectivity controls |
+| C | Delete stale-hypothesis analyses via SSA, 14770–14800 | superseded by R-0492/R-0495/R-0460 | 2, 4 | merge goal; retire blanket SSA/deletion prescription |
+| C | “every syntactic analysis…total…unsafe default”, 14802–14805 | live | 1, 2 | merge into R-0506/R-0498 |
+| C | R-0450/R-0454/SSA sequencing bullets, 14816–14829 | superseded by R-0495/R-0512 | 2, 4 | replace with Core migration dependencies |
+| C | R-0465 assumption-union/adapter pieces, 14847–14860 | done-but-not-moved | 1 | archive with existing gate |
+| C | Closed/refused exclusivity, 14866–14872 | done-but-not-moved | 1 | archive with `KernelCell` gate |
+| C | Three consumers/recomputed release verdict, 14873–14880 | superseded by R-0494 | 1 | merge remaining universal-authority requirement |
+| C | R-0467 three scheduling options, 14902–14911 | done-but-not-moved | 1 | retire alternatives; main-push option implemented |
+| C | H22 nightly closure condition, 14927–14931 | historical | 1 | retire obsolete closure concern; preserve scheduling fix |
+| C | “Nobody knows…approximately never”, 14932–14935 | historical | 1 | retire stale claim; later qualified campaigns exist |
+| C | Repository pin / merge coverage, 14937–14939 | live | 1 | merge into R-0513 |
+| C | R-0460 “four rows…Zero”, 14946–14950 | live, stale count | 2, 4 | keep; update to five rows/four partial proofs |
+| C | “Sketch both [bounds/div]”, 14957–14962 | historical | 2 | retire; both semantic halves already exist |
+| C | Phase 14 Core→ProofCore goal/exit, 14982–14997 | superseded by R-0511/R-0512 | 2, 4 | replace with cumulative Core/native proof exits |
+| C | “compiler…out of the trusted base”, 14999–15015 | superseded by R-0508/R-0509 | 2, 4 | merge; remove unconditional execution-TCB claim |
+| C | R-0261 parenthesized old objective, 15025 | historical | 2 | retire explicitly superseded objective |
+| C | Generic behavioral-law acceptance, 15075–15084 | live | 4, 6 | keep under R-0510/R-0271 acceptance |
+| C | Differential shape/operator expansion, 15090–15097 | live | 1, 4 | merge into R-0491 |
+| C | Rotating seeds/minimization, 15098–15099 | live | 1, 4 | merge into R-0491/R-0513 |
+| C | Dead-path reference-return extra load, 15100–15104 | superseded by S8 reference prohibition | 2 | retire feature repair; retain rejection and raw-pointer positive controls |
+| C | Metamorphic alpha/hostile-name oracle, 15105–15117 | live | 1, 2 | merge into R-0491/R-0492 |
+| C | Semantic matrix, 15122–15125 | duplicate of R-0491/R-0498 | 1, 4 | merge |
+| C | Primitive boundary tests, 15126–15128 | duplicate of R-0491 | 1, 4 | merge |
+| C | Std authority/allocation audit, 15129–15132 | duplicate of R-0509 | 3, 4 | merge |
+| C | Proof/runtime consistency fixtures, 15133–15136 | duplicate of R-0491 | 1, 4 | merge |
+| C | “old-assumption grep”, 15137–15141 | duplicate of R-0498 | 1 | merge; use maintained manifest, not only keyword matching |
+| C | R-0274 old authority/boundary chain, 15160–15206 | superseded by R-0499/R-0514 | 2 | retire architecture, retain typed/payload-bound invariants |
+| C | Certificate predicate/proof levels/negative gates, 15224–15282 | live | 2, 4, 5 | keep under R-0275 |
+| C | R-0443 “Falsification probe first”, 15326–15329 | live | 4 | keep as R-0443 entry criterion |
+| C | R-0454 “No subjectDigest…cost zero”, 15353–15358 | historical | 2, 5 | retire stale timing claim; use R-0482/R-0512 inventory |
+| C | R-0454 three encoding invariants, 15366–15373 | live | 2, 5 | merge into R-0450/R-0492 canonicalization controls |
+| C | “AST→SSA…digest-neutral”, 15375–15381 | live requirement, invalid justification | 2, 4 | replace with explicit versioned proposition migration |
+| C | R-0455 dropped ops/symbols/driver cloning, 15397–15420 | live, partly implemented | 2, 4 | merge remaining IR work into R-0450; archive landed factoring |
+| C | Register B transform proofs, 15422–15430 | live | 2, 4 | keep under R-0455 |
+| C | “Collapse N printers”, 15466–15469 | live | after-1.0/research | keep workload/coverage-gated |
+| C | “Keep…print validation…instance count”, 15470–15471 | live | 1, 2, 4 | keep under R-0455/R-0513 |
+| C | “deleting the validation layer”, 15479–15483 | historical | 2, 4 | retire contradictory paragraph |
+| C | R-0456 “meta-theory…or defer”, 15512–15516 | live | after-1.0/research | keep as research decision, targeting Core |
+| C | R-0456 adversarial conformance/dependencies, 15518–15522 | live | after-1.0/research | keep only if renewed Core proposal passes probe |
+| D | “Done when: SSA…” · 15529–15532 | Superseded by S10–S15 | 2, 4 | Merge into R-0301 with profile-specific boundaries |
+| D | “Trigger the production half” · 15558–15571 | Live | 3 | Keep under R-0281, workload-triggered |
+| D | “No implementation…until a forcing workload” · 15592–15598 | Live | after-1.0/research | Keep under R-0284; do not defer basic memory alignment |
+| D | “First executable slice” 1 · 15624–15628 | Live | 3 | Keep under R-0285/R-0364/R-0365 |
+| D | Same list, 2 · 15629–15633 | Live | 3 | Keep under R-0285 |
+| D | Same list, 3 · 15634–15637 | Live | 3 | Keep under R-0285 |
+| D | Same list, 4 · 15638–15643 | Live | 3 | Keep under R-0285; share pilot records |
+| D | “Automate a fresh-consumer CI case” · 15645–15651 | Live | 3 | Keep under R-0285; reuse in R-0352/R-0354 |
+| D | “Report the scope as each slice becomes usable” · 15653–15655 | Live | 3 | Keep under R-0285 |
+| D | “Failure and resource contract” · 15657–15679 | Live | 3, 6 | Keep under R-0285/R-0488 |
+| D | “Reuse supported upstream…annotations” · 15683–15686 | Live | 3 | Keep under R-0285 |
+| D | “Store missing facts…external metadata” · 15687–15691 | Live | 3 | Keep under R-0285 |
+| D | “Generate only the selected public API” · 15692–15695 | Live | 3 | Keep under R-0285 |
+| D | “Validate generated ABI claims” · 15696–15698 | Live | 3 | Keep under R-0283/R-0287 |
+| D | “Diagnostics identify the exact missing fact” · 15699–15703 | Live | 3 | Keep under R-0285 |
+| D | “Implement the metadata subset needed” · 15705–15708 | Live | 3 | Keep under R-0285 |
+| D | “Ease-of-use acceptance” · 15710–15738 | Live | 3 | Keep under R-0285 |
+| D | “Binding contract: C headers” · 15742–15747 | Live | 3 | Keep under R-0285 |
+| D | “A narrow typed Rust bridge” · 15748–15752 | Live | 3 | Keep under R-0285 |
+| D | “Zig packages…” · 15753–15759 | Live | 3 | Keep under R-0285 |
+| D | “Generated safe APIs…” · 15760–15764 | Live | 3 | Keep under R-0285 |
+| D | “Start the shared ABI subset…” · 15765–15768 | Live | 3 | Keep under R-0285/R-0287 |
+| D | “Networking adapters…” · 15769–15772 | Live | 3 | Keep; verified admission waits for V6 environment contracts |
+| D | “Generated headers…round-trip” · 15773–15778 | Live | 3 | Keep under R-0287 |
+| D | “Integrate transitive libraries…” · 15779–15784 | Live | 3 | Keep under R-0364/R-0365 |
+| D | “Acceptance workload” · 15786–15800 | Live | 3 | Keep under R-0285 |
+| D | “Each language/library gap…” · 15828–15835 | Live | 3 | Keep under R-0490/R-0515 |
+| D | “Full functional proofs are a subsequent increment” · 15843–15846 | Live | 4, 6 | Turn prose into bounded R-0490 increments with owners/exits |
+| D | “Silver is a later, separate systems pressure test” · 15847–15848 | Live | after-1.0/research | Turn prose into a deferred workload record under R-0415 |
+| D | “R-18 – R-20 relabelled shape-only” · 15995 | Live | 1 | Keep under R-0498 |
+| D | “historical 092/095…rejection fixtures” · 16028–16031 | Live | 1, 2 | Keep under R-0499/R-0491 |
+| D | “minimal independently checked…V1 claim” · 16203–16205 | Live | 2 | Keep under R-0509/R-0353 |
+| D | “legacy implementation…maintenance only” · 16271–16287 | Live | 1, 4 | Keep under R-0512 |
+| D | “Before the first pilot” · 16363–16366 | Live | 3 | Merge into R-0346/R-0347; R-0515 coordinates |
+| D | “Now…External pilot” · 16367–16372 | Live | 3 | Keep under R-0515 |
+| D | “Diagnostics quality bar” · 16373–16379 | Live | 3 | Keep under R-0515 and diagnostic owners |
+| D | “V1 tooling checkpoints” · 16380–16386 | Live | 3 | Merge into R-0385–R-0388/R-0281/R-0355 |
+| D | “Before public release” · 16387–16390 | Live | 3 | Merge into R-0358/R-0359; retain R-0515 coverage inventory |
+| D | “Expand std and the tutorial into a book” · 16391–16392 | Live | after-1.0/research | Keep under R-0515/R-0347 |
+| D | “dated decision…deferral…reopening trigger” · 16393–16394 | Live | 3; after-1.0/research | Keep under R-0399/R-0515 |
+| D | “Exit (per checkpoint)” · 16396–16410 | Live | 3 | Keep under R-0515; checkpoints do not close whole owner tasks |
+| D | “Nightly builds publish automatically” · 16419–16428 | Live | 3 | Keep under R-0516 |
+| D | “V1 deliverables: export annotation” · 16442–16443 | Live | 3 | Keep under R-0286 |
+| D | “staticlib and/or sharedlib” · 16444–16445 | Live | 3 | Keep static library first; dynamic verified support remains excluded |
+| D | “generated C header” · 16446 | Live | 3 | Keep under R-0286 |
+| D | “exported-function ABI classification” · 16447–16449 | Live | 3 | Keep under R-0286/R-0287 |
+| D | “generated boundary docs” · 16450–16452 | Live | 3 | Keep under R-0286 |
+| D | “evidence bundle next to the library” · 16453–16454 | Live | 3, 5 | Keep versioned experimental evidence before freeze |
+| D | “V1 should cover a narrow subset” · 16478–16486 | Superseded by R-0503 | 2, 4 | Merge tooling into R-0503; replace parity-only retirement criterion |
+| D | “Small owned backend investigation” · 16543–16558 | Superseded in delivery scope by R-0505 | 2; after-1.0/research | Merge native delivery into R-0505; research into R-0413 |
+| D | “Actual emitted LLVM increment” · 16593–16613 | Live | 2, 4 | Keep under R-0299 |
+| D | “V1 admission is whole-function” · 16635–16642 | Live | 2, 4 | Keep under R-0300 |
+| D | “independent V1 relation check stops…” · 16644–16662 | Live for legacy LLVM relation | 2, 4 | Keep scoped to that relation; not universal native boundary |
+| D | “Emitted-LLVM replay increment” · 16664–16683 | Live | 2, 4, 5 | Keep under R-0300 |
+| D | “20a. LLVM bitcode emitter” · 16704–16728 | Live | after-1.0/research | Keep gated; remove automatic freestanding/no-clang necessity |
+| D | “21a. Guaranteed tail-call optimization” · 16733–16739 | Live | after-1.0/research | Turn prose into task if pulled; require cleanup/resource/refinement obligations |
+| D | “21b. Bit-level data layout” · 16740–16745 | Live | after-1.0/research | Turn prose into task if pulled; connect R-0502 certificates |
+| D | “SOA containers and std.bigint” · 16745–16746 | Live | after-1.0/research | Turn prose into bounded stdlib tasks when activated |
+| D | “preferred backend after QBE” · 16754–16756 | Superseded by native-profile plan | after-1.0/research | Retire mandatory ordering |
+| D | Wasm entrance: “QBE’s documented subset” · 16764–16766 | Superseded by R-0503/R-0505 | after-1.0/research | Retire QBE prerequisite |
+| D | Wasm entrance: “ValidatedBackendIR” · 16767–16769 | Superseded by R-0503 | after-1.0/research | Merge as validated-BIR prerequisite |
+| D | Wasm entrance: “named…workload” · 16770–16771 | Live | after-1.0/research | Keep |
+| D | Wasm entrance: “preferable to Cranelift” · 16772–16774 | Live | after-1.0/research | Keep decision record; no implied commitment to either |
+| D | “Browser…component model…GC…Wasm64…threads…SIMD…exceptions” · 16780 | Live | after-1.0/research | Keep separate admission entries under R-0305 |
+| D | Wasm “Done when” · 16810–16816 | Live | after-1.0/research | Keep; remove mandatory four-way/QBE coverage |
+| D | Unsafe “Done when” · 16827–16830 | Live | 4 | Merge into R-0321 acceptance |
+| D | Taxonomy: “safe references…second-class” · 16875 | Live | 1, 2 | Merge normative rule into R-0500/R-0499 |
+| D | Taxonomy: distinct pointer/slice shapes · 16876–16877 | Live | 4 | Keep under R-0312 |
+| D | Taxonomy: “nullable pointers…explicit” · 16878 | Live | 4 | Keep under R-0312 |
+| D | Taxonomy: “mutability, provenance…alignment…bounds” · 16879–16887 | Live | 2, 4 | Keep under R-0312/R-0502 |
+| D | “sanitizer opt-out attributes” · 16905–16907 | Live | 4 | Keep under R-0315 |
+| D | “closure or upvalue-like indirection” · 16930–16935 | Live | 4 | Keep under R-0318 with explicit non-language-feature scope |
+| D | Performance “Trigger” · 16968–16972 | Live | 3 | Keep; permit R-0515’s earlier bounded baselines |
+| D | Performance “Done when” · 16974–16978 | Live | 3 | Merge into R-0424 |
+| D | “complexity_guarded may carry…” · 16992–16999 | Live | 3, 6 | Keep under R-0417; no duplicate cost semantics |
+| D | “correlation experiment first” · 17001–17005 | Live | after-1.0/research | Keep conditional under R-0417 |
+| D | Freestanding prerequisite/trigger · 17101–17107 | Live | after-1.0/research | Keep; express prerequisites as task exits |
+| D | Freestanding “Done when” · 17109–17111 | Live | after-1.0/research | Merge into R-0332 |
+| D | littlefs “Definition of done” · 17181–17187 | Live | after-1.0/research | Keep under R-0453 |
+| D | littlefs “Claim discipline” · 17189–17194 | Live | after-1.0/research | Keep under R-0453; do not imply relational proof |
+| D | Phase 17 “under ten minutes” · 17201–17203 | Live | 3, 5, 7 | Merge measured scoped exit into R-0333/R-0346 |
+| D | Alpha: “At least one non-author…” · 17217–17219 | Live | 7 | Keep under R-0333; early pilots do not substitute |
+| D | Alpha: “Diagnostics teach…” · 17220–17225 | Live | 3, 7 | Merge into R-0515 plus alpha acceptance |
+| D | Alpha: “Source contracts are primary…” · 17226–17227 | Live | 6, 7 | Keep under R-0333; reconcile 0.9 scheduling |
+| D | Alpha: “concrete prove guides…” · 17228–17229 | Live | 6, 7 | Keep explicit alpha owner mapping |
+| D | Alpha: “every public claim class” · 17230–17232 | Live | 3, 5, 7 | Merge into R-0334/R-0336 |
+| D | Alpha: “Core language surface blockers…” · 17233–17235 | Live | 3, 4 | Keep per-feature dispositions under R-0333 |
+| D | Alpha: “Runtime safety obligations…” · 17236–17237 | Live | 1, 2, 4 | Merge into Core semantics and public claim matrix |
+| D | Alpha: “README…agree” · 17238–17239 | Duplicate of R-0337 | 3, 7 | Merge into R-0337 candidate checks |
+| D | Beta: “fmt…test…Concrete.toml” · 17243–17244 | Live | 3 | Keep under R-0333 with actual owner IDs |
+| D | Beta: “minimal local package/evidence foundation” · 17245–17248 | Live | 3, 5, 7 | Keep; clarify which schema freeze requires which prototype |
+| D | Beta: “minimal editor path” · 17249–17251 | Live | 3 | Merge into R-0515/R-0385–R-0388 |
+| D | Beta: “proof-registry.json…remain absent” · 17252–17253 | Historical | 1, 4 | Retire as open work; retain permanent negative regression |
+| D | Beta: “Release bundles have stable schemas…” · 17254–17255 | Live | 5 | Merge into R-0353/R-0338 |
+| D | Beta: “installed independent…verify-bundle” · 17256–17259 | Live | 5 | Keep R-0353/R-0354 acceptance |
+| D | Beta: “verified-profile policy gate” · 17260–17262 | Live | 5, 7 | Merge into R-0341/R-0440 |
+| D | Beta: “stdlib/runtime boundary…daily examples” · 17263 | Live | 3 | Merge into R-0292/R-0515 |
+| D | Beta: “external user…without…intervention” · 17264–17265 | Live | 7 | Keep separate from assisted quarterly pilots |
+| D | “9a. Publish SECURITY.md” · 17377–17390 | Live | 3 | Keep under R-0343 before preview |
+| D | “9b. proof-revocation procedure” · 17391–17404 | Live | 2, 5 | Keep; preserve historical replay separately |
+| D | “9c. upstream checker/kernel…advisories” · 17405–17413 | Live | 1, 2, 5 | Keep under R-0343/R-0353 |
+| D | “Required cleanup” interpolation blockers · 17438–17443 | Live | 3 | Merge into R-0349; decision itself is historical |
+| D | Verifier “concrete-cert-core” · 17483–17486 | Live | 2, 5 | Keep under R-0353 |
+| D | Verifier “concrete-cert” · 17487–17488 | Live | 2, 5 | Keep under R-0353 |
+| D | Verifier “kernel adapters” · 17489–17490 | Live | 2, 5 | Keep; do not make every prover a V1 prerequisite |
+| D | “Envelope/accounting” · 17497–17502 | Live | 2, 5 | Keep under R-0353 |
+| D | “Certificate profiles” · 17503–17507 | Live | 2, 5 | Keep under R-0353 |
+| D | “Translation assurance” · 17508–17513 | Live | 2, 4, 5 | Keep; add native transport as distinct relation |
+| D | “Linear arithmetic follows R-0463” · 17517–17521 | Live | 5 | Keep under R-0463, consumed by R-0353 |
+| D | “Boolean/bit-vector evidence” · 17522–17525 | Live | 5 | Keep under R-0451/R-0353 |
+| D | “Nonlinear evidence remains solver_trusted” · 17526–17527 | Live | 5 | Keep named limitation |
+| D | “Record independence…separate axes” · 17529–17533 | Live | 2, 5 | Keep under R-0353 |
+| D | “Build sequence…freeze…ship Layer 0” · 17535–17540 | Superseded by queue rows 9–11 | 5 | Retire ordering; experimental encodings and consumer precede freeze |
+| D | “From the first checker commit…” · 17542–17545 | Live | 2, 5 | Keep under R-0353 |
+| D | “canonical binary format” · 17547–17550 | Live | 2, 5 | Keep under R-0353 |
+| D | Kernel incident: “every replay receipt binds…” · 17558–17559 | Live | 2, 5 | Keep under R-0353 |
+| D | Kernel incident: “accepted, vulnerable and revoked…” · 17560–17562 | Live | 2, 5 | Keep under R-0353 |
+| D | Kernel incident: “advisory status…external” · 17563–17565 | Live | 2, 5 | Keep under R-0353 |
+| D | Kernel incident: “high-assurance…independent replay” · 17566–17567 | Live | 2, 5 | Keep |
+| D | Kernel incident: “checker independence…lineage” · 17568–17570 | Live | 2, 5 | Keep |
+| D | Kernel incident: “every future…reproducer” · 17571–17573 | Live | 1, 2, 5 | Keep |
+| D | Kernel incident: “re-executed…isolated process” · 17574–17575 | Live | 2, 5 | Keep |
+| D | Kernel incident: “revocation enumerates…” · 17576–17577 | Live | 5, 7 | Keep |
+| D | “Fragment-scoped revocation…” · 17579–17583 | Live | 5 | Keep optional optimization gated |
+| D | “Move the common…codecs here” · 17591–17597 | Live | 2, 5 | Keep under R-0353; update IR names |
+| D | “Every edge declares its relation…” · 17599–17605 | Live | 2, 5 | Keep under R-0353 |
+| D | “Define…verify-bundle” / result vectors · 17607–17621 | Live | 2, 5 | Keep under R-0353 |
+| D | “BackendIR → object → binary remains…trusted” · 17623–17629 | Superseded by S13/S15 for native profile | 2, 4, 5 | Keep only for uncovered LLVM/legacy edges |
+| D | “self-contained offline proof-replay payload” · 17631–17636 | Live | 2, 5 | Keep under R-0353/R-0354 |
+| D | “Gate expected-root mismatch…” · 17638–17645 | Live | 2, 5 | Keep under R-0353 |
+| D | “Also gate omitted/duplicated/surplus…” · 17647–17653 | Live | 2, 5 | Keep under R-0353 |
+| D | “Authority progression” · 17655–17658 | Live | 2, 5 | Keep with separate minimal-V1 and cross-profile scopes |
+| D | Supply-chain bullet: toolchain and dependency locks · 17704–17711 | Live | 2, 3 | Keep under R-0357 |
+| D | Supply-chain bullet: “THIRD_PARTY.md” · 17712–17715 | Live | 3 | Keep under R-0357 |
+| D | Supply-chain bullet: “Red-team gate” · 17716–17720 | Live | 3 | Keep under R-0357 |
+| D | “Windows must not remain ambient” · 17742–17748 | Live | 3 | Keep under R-0359 |
+| D | “Governance” · 17753–17757 | Live | 3, 7 | Keep under R-0359 |
+| D | “starts only after…public release” · 17801–17804 | Superseded by release readiness requirements | 3 | Retire start restriction; operations continue after release |
+| D | Stewardship “Done when” · 17806–17810 | Live | 3, 7 | Merge into R-0433 readiness/operating checkpoints |
+| D | Packages “Done when…registry protocol” · 17912–17914 | Live | 7; after-1.0/research | Keep full-phase exit separate from beta local foundation |
+| D | Packages “Phase 8.5 completed” · 17916–17918 | Superseded in breadth by local-foundation decision | 3 | Replace with exact required graph/query checkpoints |
+| D | “local foundation before beta” · 17920–17927 | Live | 3, 5, 7 | Keep under R-0383/R-0333 |
+| D | “Integrated package management” · 17929–17942 | Live | 3 | Keep under R-0364–R-0367 |
+| D | “interop checkpoint pulls forward…” · 17944–17955 | Live | 3 | Keep; explicit exception to whole-Phase-8.5 prerequisite |
+| D | “Proof-authoring edges” · 17991–17999 | Live | 5, 7 | Keep under R-0364 |
+| D | “exact application/binding manifest examples” · 18001–18005 | Live | 3 | Keep under R-0364 |
+| D | “--locked…--offline…--frozen” · 18019–18025 | Live | 3 | Keep under R-0365 |
+| D | “one workspace lock…multiple host/target” · 18027–18031 | Live | 3 | Keep under R-0365 |
+| D | “private verifier input is withheld” · 18075–18078 | Live | 7 | Keep under R-0369 |
+| D | Import constraints: “leave room…” · 18120–18125 | Live | 7; after-1.0/research | Keep under R-0372/R-0440; no premature claims |
+| D | “checked fact set…at least” · 18138–18155 | Live | 7 | Keep under R-0372 |
+| D | “first report view…small and agent-readable” · 18156–18161 | Live | 7 | Keep under R-0372/R-0390 |
+| D | “Remote…native outputs…Regenerate locally” · 18251–18256 | Superseded for validated native images by S13/S15 | after-1.0/research | Keep conservative fallback; permit exact proved/checkable profile only |
+| D | “Upload only deterministic…privacy” · 18257–18260 | Live | after-1.0/research | Keep under R-0382 |
+| D | Editor “Done when” · 18280–18282 | Live | 3 | Merge into R-0398 |
+| D | Editor “Phase 8.5 completed” · 18284–18286 | Live, overbroad dependency | 3 | Keep architecture requirement; enumerate minimal prerequisite exits |
+| D | “Minimal pre-release slice…” · 18288–18294 | Live | 3, 7; after-1.0/research | Merge into R-0515/R-0398 checkpoints |
+| D | “Also surface development-only expectations” · 18374–18377 | Live | 6 | Keep under R-0396 |
+| D | Phase 20 “Done when” · 18412–18413 | Live | after-1.0/research | Merge into R-0415 |
+| D | “atomics…shared mutable state…” · 18419–18429 | Live | after-1.0/research | Keep under R-0399–R-0402 |
+| D | “Verona…Pony” design survey · 18431–18443 | Live | after-1.0/research | Keep under R-0399; survey is not a runtime commitment |
+| D | “trigger fired…combinator core…R-0444” · 18483 | Superseded by R-0444 | 3, 4 | Retire from R-0406 scope; retain historical cross-reference |
+| D | “generation layer proper…remains gated” · 18483 | Live | after-1.0/research | Keep under R-0406 |
+| D | “First pressure-test only” · 18533–18540 | Live | after-1.0/research | Keep under R-0413 |
+| D | “Native backend comparison” · 18542–18552 | Live | after-1.0/research | Keep under R-0413; R-0505 owns first backend |
+| D | “What remains deferred…Datalog” · 18566–18580 | Live | after-1.0/research | Keep under R-0414 |
+| D | “R-0005 removed…the recurrence mechanism” · 18590–18594 | Historical | 1 | Retire from open-work accounting; keep provenance pointer |
+| D | “generated form…did not build” · 18596–18602 | Live | 1, 2 | Keep under R-0446 |
+| D | “Two consumers…fuzz generation” · 18597–18599 | Live | 1 | Keep under R-0446/R-0491 |
+| D | “and the capability matrix” · 18599–18606 | Live | 1, 2 | Keep under R-0446 |
+| D | “original framing…superseded” · 18618–18626 | Historical; superseded by R-0484 | 1 | Retire original design; preserve explanatory reference |
+| D | “Potential authority per function” · 18628–18634 | Live | 3, 4 | Keep under R-0487; containment remains R-0499/R-0510 |
+| D | “Instantiation-level reports” · 18635–18638 | Live | 3, 4 | Keep under R-0487 |
+| D | “Negative questions only under completeness” · 18639–18644 | Live | 3, 4 | Keep under R-0487 |
+| D | “Out of scope…mutation, termination…inputs” · 18645–18647 | Live under R-0488/R-0473/R-0474 | 3, 6 | Keep owner cross-references; do not duplicate |
+| D | R-0487 “Exit” · 18649–18656 | Live | 3, 4 | Keep |
+
 ## Verified-compiler pipeline, stabilization and usability tasks
 
 These tasks carry the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md)
@@ -4200,6 +5282,10 @@ open work promoted from roadmap prose by the 2026-10-19 reconciliation. They wer
 until 2026-10-19; their queue rows, not this position, schedule them.
 
 ### Task R-0491
+
+**Stage:** 1, 2, 4
+
+**Reconciliation (2026-10-19):** Keep; extend explicit defect inventory through 101. Extend the permanent defect inventory and per-surface expected results through bug 101.
 
 **Objective:** Prevention harness — stage S1 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4222,6 +5308,10 @@ pre-fix SHA and passes at its fix; generated features have pinned minimum comple
 counts; missing inventory entries fail.
 
 ### Task R-0492
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep under R-0514; avoid unnecessary legacy migration before retirement.
 
 **Objective:** Resolved identities — the identity half of S5; R-0497 owns immutable, payload-bound artifacts — stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4247,6 +5337,10 @@ diagnostic-path bypass.
 
 ### Task R-0493
 
+**Stage:** 1, 2, 4
+
+**Reconciliation (2026-10-19):** Keep immediate and slice checkpoints separate.
+
 **Objective:** Typed operations — stage S6 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned; the immediate checkpoint is queue row 2.**
@@ -4268,6 +5362,10 @@ signed-minimum fixtures pass; 088's reproducers agree on every side.
 
 ### Task R-0494
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Keep; row 6 extends it per slice. Hypothesis dependencies: cycles (O1 needs O2 needs O1), self-support and missing references are rejected or handled by a stated well-founded/SCC rule, with hostile cycle fixtures (with R-0460). The structured subject-facts schema replaces the scraped human report here (with R-0481).
+
 **Objective:** One verdict authority — stage S2 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned; starts now.**
@@ -4284,6 +5382,10 @@ everywhere; a cross-surface gate pins the expected positive and negative judgmen
 and clause.
 
 ### Task R-0495
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; coverage and loop binding are essential exits.
 
 **Objective:** Claims on Core — stage S9 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4306,6 +5408,10 @@ final retirement conditions; historical replay remains available.
 
 ### Task R-0496
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; state implementation versus proved-subset coverage separately.
+
 **Objective:** Core semantics — stage S7 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
@@ -4327,6 +5433,8 @@ clauses; the representative lemmas are proved.
 
 ### Task R-0497
 
+**Stage:** 2, 4
+
 **Objective:** Immutable, payload-bound pipeline artifacts — the artifact half of stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md); R-0492 owns the identity half.
 
 **Status (2026-10-18): planned; starts with R-0492.**
@@ -4336,6 +5444,10 @@ Each stage's output is an immutable artifact bound to its exact payload, constru
 **Exit:** compile-fail controls cover artifact forgery, certificate reuse after mutation and the diagnostic-path bypass; `Pipeline.lean` exposes only typed stages.
 
 ### Task R-0498
+
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Keep; grow manifest with new boundaries.
 
 **Objective:** Enforcement demonstrated — stage S3 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4350,6 +5462,10 @@ S11 lands. R-18 – R-20 relabelled shape-only until their proofs exist.
 qualified campaign.
 
 ### Task R-0499
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; R-0514 owns whole-language rollout.
 
 **Objective:** Checker rules, authoritative on Core — stage S8 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4384,6 +5500,10 @@ loop-mutation/downward-borrow fixture detects stale storage.
 
 ### Task R-0500
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Keep; row 6 adds the rules each slice admits.
+
 **Objective:** Written language rules — stage S4 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned; starts now.**
@@ -4400,6 +5520,10 @@ paragraph to its semantic clause.
 
 ### Task R-0501
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep by slice.
+
 **Objective:** Place MIR — stage S10 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
@@ -4414,6 +5538,10 @@ minimum counts; cleanup expansion is proved for one representative function with
 
 ### Task R-0502
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; early design obligations precede full implementation.
+
 **Objective:** Memory model, layout and Memory CFG — stage S11 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
@@ -4425,6 +5553,10 @@ representation certificates; Place MIR → Memory CFG comparisons cover related 
 traces, traps, allocation and alignment cases; a representative memory-injection lemma is proved.
 
 ### Task R-0503
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; absorb R-0278/R-0288.
 
 **Objective:** BIR, the LLVM adapter and the rt module — stage S11 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4438,6 +5570,10 @@ are replaced by `rt`; profile labels are emitted; the old `Lower` is retired onl
 replacement path meets its gates.
 
 ### Task R-0504
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; retain R-0299/R-0300’s distinct assurance scopes.
 
 **Objective:** Validators — stage S12 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4457,6 +5593,10 @@ the retained `.ll` bytes including helper bodies; LLVM optimization, emission, l
 runtime/ABI behaviour remain explicitly trusted for that profile.
 
 ### Task R-0505
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Re-pointed 2026-10-19: integrate the Lean Compiler Backend (R-0517); no Concrete machine backend. Absorbs R-0297's scheduling.
 
 **Objective:** Native AArch64 profile: LCB integration, linking and image — stage S13 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design. Concrete integrates the Lean Compiler Backend (R-0517) and builds no machine backend of its own.
 
@@ -4481,6 +5621,8 @@ assembler, linker or loader behaviour LCB still assumes is named in the profile 
 and shrinks only as LCB's V04/V05 milestones land.
 
 ### Task R-0506
+
+**Stage:** 1, 2, 4
 
 **Objective:** Stated obligations and totality — stage S12a of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4509,6 +5651,10 @@ linking.
 
 ### Task R-0507
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; cumulative proofs, not a deferred final phase.
+
 **Objective:** Type and ownership soundness — stage S14 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned (Part 2; starts when its prerequisites exist).**
@@ -4520,6 +5666,8 @@ start as soon as S7 and S8 exist.
 **Exit:** proved for the full checked subset; S8's hunt finds nothing the theorem does not exclude.
 
 ### Task R-0508
+
+**Stage:** 2, 4
 
 **Objective:** Compiler correctness and proof transport — stage S15 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4543,6 +5691,10 @@ HIR-only and `CheckedCore`-only theorems are intermediate milestones. Every bina
 cites its preservation theorem.
 
 ### Task R-0509
+
+**Stage:** 1, 2, 4, 5
+
+**Reconciliation (2026-10-19):** Keep; inventory starts now, minimal consumer at V1. The trusted list is non-increasing for a fixed supported scope; additions for newly admitted scope are recorded and reviewed separately. A separate compiler/checker execution-trust reduction plan with milestones is recorded here; R-0413 explores only the Concrete-hosted path.
 
 **Objective:** Trusted base and independent evidence check — stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
@@ -4569,6 +5721,10 @@ axiom-policy gate.
 
 ### Task R-0510
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep whole-language implementation in R-0514’s checkpoint.
+
 **Objective:** Checked specialization — stage S8a of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
@@ -4586,6 +5742,10 @@ wrong impls, invalid conditional Copy and effect-erased callbacks are rejected b
 differential tests and a proved substitution/dispatch example.
 
 ### Task R-0511
+
+**Stage:** 2
+
+**Reconciliation (2026-10-19):** Proof-library engineering (refinement, clock, memory-injection, substitution and ownership libraries) has bounded deliverables recorded with each V1 increment.
 
 **Objective:** The first cumulative verified releases — a proved path from checked Core to a native
 image for a small language, carried through every stage of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices).
@@ -4619,6 +5779,10 @@ semantics and the design examples is recorded.
 
 ### Task R-0512
 
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; enumerate V2–V7 delivery ownership explicitly. Delivery ownership for V2 – V7: each slice's cumulative exit from the plan is recorded as a milestone record under this task, including the maintained V7 feature inventory.
+
 **Objective:** Migrate every claim onto compiler-generated Core statements and retire the legacy
 evidence implementation, keeping its responsibilities.
 
@@ -4641,6 +5805,8 @@ deprecation; legacy issuance code is deleted with its bug-class controls transfe
 historical replay remains available; no name-keyed lookup grants current authority.
 
 ### Task R-0513
+
+**Stage:** 1
 
 **Objective:** Trustworthy, affordable gates: checked inventories instead of incidental counts, and a
 fast push tier separate from full qualification.
@@ -4665,6 +5831,10 @@ fails; the fast tier meets its recorded budget; full results bind exact commits,
 artifacts; a fast-tier pass is never presented as full qualification.
 
 ### Task R-0514
+
+**Stage:** 2
+
+**Reconciliation (2026-10-19):** Keep; broader proof coverage remains stage 4.
 
 **Objective:** Make the shared front end sound for every user now: identities from Resolve on and one
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
@@ -4695,6 +5865,10 @@ qualified suite and accepts its well-formed positive controls, with minimum comp
 and feature combination.
 
 ### Task R-0515
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep coordination; existing tasks retain implementation ownership.
 
 **Objective:** Make Concrete a language people choose to use, measured continuously alongside the proof
 track rather than after it, by advancing bounded checkpoints of the tasks that already own each concern.
@@ -4767,6 +5941,10 @@ published.
 
 ### Task R-0516
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; required after preview, not only at final ecosystem stage.
+
 **Objective:** Release automation, so that nightly builds, the release train and milestone releases cost
 minutes of attention instead of days.
 
@@ -4793,6 +5971,10 @@ successive scheduled nightlies publish unattended with retained records. Semanti
 compatibility and limitation decisions remain explicit reviewed inputs.
 
 ### Task R-0517
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Coordinated under queue row 3 (V1b) with R-0505.
 
 **Objective:** Lean Compiler Backend as Concrete's native backend. The native AArch64 code
 generation of the `verified` profile (V1b onward) is the separately developed, general-purpose
@@ -4856,6 +6038,316 @@ diagnostic; the adapter refinement is proved against LCB's imported semantics; t
 statement type-checks with LCB's trust boundaries as named premises; wrong-check, dropped-trap,
 wrong-width and substituted-callee mutations of the adapter are rejected by the proof or by the
 differential suite; and the release record states which LCB milestones the shipped claim depends on.
+
+### Promoted from roadmap prose (2026-10-19 reconciliation)
+
+The tasks below give an owner and an exit to open work that was previously stated only in prose
+(the source lines, at commit `7b134645`, are listed in the [reconciliation ledger](#reconciliation-ledger)).
+Each records what it absorbs; none deletes the prose it came from.
+
+### Task R-0518
+
+**Stage:** 1
+
+**Objective:** Close the mutation-harness lifecycle defects H-1, H-4, H-7 and H-9 recorded under the
+post-R-0004 qualification checkpoint, each independently.
+
+**Status (2026-10-19): planned; under R-0513's gate-health checkpoint.** H-2 and H-6 merge into
+R-0513 directly; H-3 and H-5 are closed. H-7 carried a "before the first qualified campaign"
+deadline that the 2026-10-11 qualification passed without meeting; that deadline is recorded as
+missed, and the published sound-by-argument invariant (one authority consumer, inside
+`candidate_incoherent`'s qualification branch, reached only when `SCOPE_NOTES` is empty) is gated
+until the fields are separated.
+
+**Exit:** H-1 — a supervisor signalled during launch keeps the lock while any campaign child
+survives, with a signal-injection control; H-4 — the golden copy re-checks its own `run_id` after
+copying, with a concurrent-replacement control; H-7 — integrity refusals and scope notes are
+published as separate fields and the authority consumer reads only the former; H-9 — lock ownership
+records a namespace-independent identity so a sandboxed run's lock is reclaimable, with an
+`--unshare-pid` control. Each item closes separately with its control and commit.
+
+### Task R-0519
+
+**Stage:** 1
+
+**Objective:** Finish the mutation campaign's remaining completeness work: the mutation-52 survivor,
+full worktree support and measured shard balancing.
+
+**Status (2026-10-19): planned.** Mutation 52 ("Elab V2 input: resolved field use omitted") survived
+on main and on the R-0484 branch; the later sharded campaign does not establish its closure, because
+it ran a different inventory. Worktree support has only its early refusal (2026-10-03). Shard
+balancing is performance-pulled.
+
+**Exit:** mutation 52 is killed by a named gate leg in a qualified run, or retired with a recorded
+reason; the harness discovers checkout-local and shared Git state with `git rev-parse` and passes a
+two-worktree lock test; shard assignment uses measured durations once a campaign exceeds its job
+budget, with serial/sharded verdict agreement checked.
+
+### Task R-0520
+
+**Stage:** 3, 5
+
+**Objective:** Produce `solver_error`, so that an absent or broken solver is distinguishable from a
+proof-difficulty `unproven`.
+
+**Status (2026-10-19): planned.** Absent solver, garbage solver and the negatives fixture all report
+`unproven` today. That is fail-closed, so nothing over-claims, but consumers cannot tell an
+environment defect from a proof result.
+
+**Exit:** the three gate sites that expected `solver_error` restore their strict assertions; absent,
+crashing and malformed-output solvers produce `solver_error` on every surface R-0494 renders; a
+genuine `unproven` control is unchanged.
+
+### Task R-0521
+
+**Stage:** 2, 5
+
+**Objective:** Compiler provenance and one canonical production `VerificationTask` (queue row 9).
+Separate source-build provenance from the identity of the executable bytes that actually ran, and
+build every verification task through one constructor binding the exact subject, proposition,
+contract state, rule set, dependency material and environment.
+
+**Status (2026-10-19): planned.** A minimal form is required with V1 (every publicly authoritative V1
+claim needs minimal task identity and executable provenance); the cross-profile form completes at
+row 9. Receipt `importsId` and proof-workspace binding gaps merge here.
+
+**Exit:** a receipt names the executable digest it was produced by, not only the source and build
+recipe; substituting a differently built compiler with the same source identity is detected; every
+production task is built by the one constructor, and a hand-built task is refused by status,
+issuance and R-0353's consumer.
+
+### Task R-0522
+
+**Stage:** 5
+
+**Objective:** Collapse the Isabelle builder's duplicated batch and single-goal paths into one
+implementation with both entry points.
+
+**Status (2026-10-19): planned; bounded cleanup recorded twice in prose without an owner.**
+
+**Exit:** one builder path; batch and single runs produce identical theories for a shared fixture
+set; a mutation in the shared path fails both entry points.
+
+### Task R-0523
+
+**Stage:** 1, 4
+
+**Objective:** Explain the unclassified `fixed_capacity` obligation that both the old and new
+obligation paths drop, and make that class of drop visible.
+
+**Status (2026-10-19): planned.** One obligation is rejected by both paths without a recorded reason.
+
+**Exit:** the dropped obligation is classified (generated, unsupported with a reason, or a defect
+with a bug record); an unclassified drop fails the coverage report; a control reintroducing an
+unexplained drop is rejected.
+
+### Task R-0524
+
+**Stage:** 6
+
+**Objective:** Two-state mutation contracts (queue row 13): a narrow record/array state model, `old`,
+`modifies`/frames, then ghost locals and parameters with erasure and admissibility rules.
+
+**Status (2026-10-19): planned; after R-0473/R-0474.** Links R-0175 (frame inference) and R-0239
+(frame/flow contracts). Unsupported heap and reborrow shapes refuse explicitly.
+
+**Exit:** `old` and frame clauses on records and arrays are typed, generated against Core's
+two-state semantics and replayed; a contract omitting a mutated field is refused; ghost locals and
+parameters erase with a proved erasure lemma for the admitted forms; unsupported shapes report
+`unsupported` rather than `proved`.
+
+### Task R-0525
+
+**Stage:** 6
+
+**Objective:** Ninth-table conversion (queue row 14): extract and replay the three currently
+fail-closed `proofFnsExt` links using R-0524's mutable-state model.
+
+**Status (2026-10-19): planned; after R-0524.** Retargeted to Core migration (R-0512): the conversion
+produces generated Core statements, not new legacy table rows.
+
+**Exit:** the three links replay against generated Core statements; until then they provide no
+authority, which a control asserts; no-authority exclusions remain gated during migration.
+
+### Task R-0526
+
+**Stage:** 6
+
+**Objective:** Checked recursion and total functions (queue row 15, with R-0270's totality requirement
+and R-0060's specification library): `#[decreases]`, well-founded descent VCs over every recursive
+edge including mutual recursion, recursive definitions extracted to each admitted proof host, and
+induction-capable automation; only checked-total definitions are callable from contracts.
+
+**Status (2026-10-19): planned.** A decrease of `n - 1 < n` alone is not well-foundedness: lower
+bounds, every recursive edge and combined measures across cycles are required. Termination is not
+liveness. Symbolic stack bounds from admitted measures need the frame/resource correspondence of
+R-0224/R-0248 before they become byte bounds.
+
+**Exit:** recursive functions with checked measures are admitted, including one mutually recursive
+pair; a measure that fails to decrease on one edge, or is unbounded below, is refused; a contract
+calling a non-total helper is refused; one recursive claim is proved by induction and replayed.
+
+### Task R-0527
+
+**Stage:** after-1.0/research
+
+**Objective:** Scope relational properties (noninterference, constant time, program equivalence)
+before any implementation: select the observation model (branches, addresses, termination, resource
+use), permitted declassification and how a relational claim would be preserved to native code.
+
+**Status (2026-10-19): research.** Ordinary refinement does not preserve noninterference; the
+verified-compiler plan's refinement is not a relational theorem. R-0459's 2-safety proposal and the
+paired-execution prose merge here; R-0136/R-0225/R-0226 keep source-flow restrictions.
+
+**Exit:** a decision record with the observation and declassification contract, one worked
+self-composition example on a bounded program, and an explicit statement of what native transport
+would additionally require; or a recorded deferral with its reopening trigger.
+
+### Task R-0528
+
+**Stage:** 3, 5
+
+**Objective:** Cross-command resource limits: bound input size, memory, time, import closure and
+diagnostic volume for every command that reads untrusted inputs (receipts, tasks, manifests,
+policies, packages, source).
+
+**Status (2026-10-19): planned.** Each limit names its owning command; a limit is a refusal with a
+diagnostic, never a silent truncation.
+
+**Exit:** each listed input class has a documented limit and a hostile fixture exceeding it that is
+refused with a stable diagnostic; inputs at the limit are accepted.
+
+### Task R-0529
+
+**Stage:** 5
+
+**Objective:** Atomic evidence persistence: crash-safe writes, permissions and concurrent readers for
+the evidence store. Distinct from R-0144's compiler cache.
+
+**Status (2026-10-19): planned.**
+
+**Exit:** an interrupted write leaves either the previous or the new record, never a partial one
+(fault-injection control); concurrent readers never observe a partial record; store permissions are
+checked on open.
+
+### Task R-0530
+
+**Stage:** 3, 4
+
+**Objective:** Typed descriptors and `dup`/`dup2`/`fdopen` alias ownership — the "second step" left
+open when R-0484 closed.
+
+**Status (2026-10-19): planned; conditional on a workload that needs descriptor duplication.**
+R-0484's closure stands; this is new work, not a reopening.
+
+**Exit:** descriptors are typed handles; duplication produces an explicitly owned second handle;
+closing one handle does not invalidate the other's capability accounting; double-close and
+use-after-close of an alias are rejected or trap with a regression fixture.
+
+### Task R-0531
+
+**Stage:** 6
+
+**Objective:** Selected-function equivalence across revisions: compare a function's two revisions
+with their original dependencies and semantics, as the follow-on to R-0183's diff gate.
+
+**Status (2026-10-19): planned; after typed contracts.**
+
+**Exit:** an equivalence claim between two revisions of one function is generated against Core and
+replayed; a behaviour-changing edit is refused; a dependency change is reported as a changed
+premise, not hidden.
+
+### Task R-0532
+
+**Stage:** 5
+
+**Objective:** R-0208's residual limits: native-trust receipt issuance, advisory-policy rollback
+protection and fragment-scoped advisory narrowing — each either implemented or kept as an explicit,
+published limitation.
+
+**Status (2026-10-19): planned.** R-0208 is closed; these are its recorded accepted limits. Native-
+evaluation receipts remain withheld until issued with distinct trust labels (R-0506/R-0440).
+Reverting both policy and minimum defeats the local rollback guard; that limitation stays published
+until a threat-model-specific guard exists. Narrowing an advisory to a fragment requires an
+independently checked environment footprint; whole-version refusal is the safe fallback.
+
+**Exit:** each of the three has an implemented control or a published limitation with its threat
+model and owner.
+
+### Task R-0533
+
+**Stage:** after-1.0/research
+
+**Objective:** Optional trusted-boundary shrinker: suggest smaller trusted wrappers without upgrading
+any evidence.
+
+**Status (2026-10-19): pull-gated.**
+
+**Exit:** suggestions are advisory only; a suggestion never changes a verdict; a control shows an
+applied suggestion still requires the ordinary checks.
+
+### Task R-0534
+
+**Stage:** after-1.0/research
+
+**Objective:** Floating-point error-bound specifications (epsilon bounds via real analysis) after the
+exact IEEE float profile (V7).
+
+**Status (2026-10-19): deferred; requires V7's float semantics.**
+
+**Exit:** a decision record on the real-analysis library and one bounded worked example, or a recorded
+deferral.
+
+### Task R-0535
+
+**Stage:** after-1.0/research
+
+**Objective:** Decide whether reviewed human proof arguments (`proved_by_hand`) can be recorded as
+freshness-tracked reviewed evidence without ever presenting as machine-checked `proved`.
+
+**Status (2026-10-19): research.** R-0461 forbids `proved` for unresolved conditions; a human
+argument is reviewed evidence, not a kernel-checked proposition.
+
+**Exit:** a policy decision; if adopted, the evidence class is distinct on every surface and a control
+shows it never satisfies a kernel-only policy.
+
+### Task R-0536
+
+**Stage:** 3, 4
+
+**Objective:** Explicit enum discriminant values: honour explicit tags, reject collisions, and
+validate representation/FFI agreement.
+
+**Status (2026-10-19): planned (previously prose item "7a" without an R-id).** The representation
+proof enters V2/V6 through R-0502's layout certificates.
+
+**Exit:** explicit tags are emitted as written; duplicate or out-of-range tags are rejected; a C round
+trip confirms ABI agreement for a `repr`-annotated enum.
+
+### Task R-0537
+
+**Stage:** 4, 7
+
+**Objective:** Closed-world library evolution: callable-set compatibility and escape hatches when a
+library's set of callables changes, respecting open imported callbacks.
+
+**Status (2026-10-19): planned.**
+
+**Exit:** removing or changing a callable that a dependent's closed-world assumption relied on is
+reported as a compatibility break; adding one is not; open callbacks are never treated as closed.
+
+### Task R-0538
+
+**Stage:** after-1.0/research
+
+**Objective:** Reduce the native `bv_decide` checking trust (H20): bitvector proofs currently rely on
+native evaluation in the checker.
+
+**Status (2026-10-19): research.** R-0506 owns honest classification of the native-evaluation axiom
+now; this task owns eliminating the trust, which was previously "unowned".
+
+**Exit:** a decision record on certificate replay or kernel-reducible checking for the admitted
+bitvector fragment, with measured cost; or a recorded deferral.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -4934,6 +6426,9 @@ notes become work only when their named workload or failing gate pulls them.
 
 ### Global Task Sequence
 
+> **[historical] Reconciled 2026-10-19:** this competing R-0004-first sequence is superseded by the current execution queue; its task obligations remain with their owners. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
 reducer, plus a four-part proof-freshness class. The unbound-proof containment,
@@ -4965,6 +6460,10 @@ work without letting proof-product expansion repeatedly displace known defects.
 Proof automation remains behind honest semantics and the external-user trial.
 
 ### Task R-0004
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** done — closed 2026-08-20; the body is retained for its explicit follow-ups and historical boundary; physical move to the archive under R-0481.
 
 **[shipped] Objective:** Fix proof-subject freshness and fail closed. R-0004 closed on 2026-08-20;
 the canonical closure result and current follow-up state are at the top of this roadmap.
@@ -5958,6 +7457,9 @@ Postfix `?` joins this list: recoverable failure uses `Result`, exhaustive `matc
 there is no implicit conversion, cleanup, drop, or capability use during propagation.
 
 **Strict post-R-0004 critical path**
+> **[historical] Reconciled 2026-10-19:** this older sequence is superseded by the current execution queue. Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 
 post-closure mutation qualification
 → R-0208 toolchain/revocation fire drill
@@ -7361,6 +8863,9 @@ not promote automated verdicts into authoritative claims before this gate.
 
 ### Multi-kernel: where the ladder actually stands (2026-08-08)
 
+> **[historical] Reconciled 2026-10-19:** a dated snapshot; the ladder is an evidence vector, not a schedule (R-0440/R-0448). Its live remainders are mapped to owning tasks in the
+> [reconciliation ledger](#reconciliation-ledger); nothing in it schedules work.
+
 Consolidated because the answer was previously spread across six places in this file, and
 "what can the multi-kernel path prove today?" could not be answered without reading all of them.
 
@@ -7490,6 +8995,10 @@ it. This is why the identity substrate moved into R-0473 rather than waiting for
 
 ### Task R-0480
 
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Keep remaining lifecycle/authority gates; archive completed physical migration.
+
 **Documentation information architecture.**
 
 **Scheduling: incremental; physical moves wait for a stable integration boundary.** The ownership
@@ -7566,6 +9075,10 @@ normative hierarchy. For every moved family:
   the hierarchy instead of accumulating detailed design prose themselves.
 
 ### Task R-0481
+
+**Stage:** 1, 2, 3, 4, 5
+
+**Reconciliation (2026-10-19):** Keep canonical owner; absorb overlapping R-0447/R-0478 work.
 
 **Final repository architecture: temporal honesty, generated facts, and enforced dependency
 boundaries.**
@@ -7922,6 +9435,10 @@ make every structural boundary executable. A cleaner tree without unique fact ow
 is not completion; it is future archaeology with better folder names.
 
 ### Task R-0482
+
+**Stage:** 1, 2, 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep P1 qualification; split later increments among R-0495, R-0473/74 and R-0440.
 
 **Identity separation, model attestations, exported interfaces, and proof-aware package linking.**
 
@@ -8296,6 +9813,10 @@ production path without collapsing evidence into one status.
 
 ### Task R-0479
 
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Merge evidence-surface cases into R-0494; retain broader diagnostic audit.
+
 **Scheduling: opportunistic.** Nothing blocks on it, and each instance is a one-line change. The
 survey is the work, not the fix.
 
@@ -8397,6 +9918,10 @@ a report line for an uncomputed fact does NOT render as a valid value; and the `
 
 ### Task R-0478
 
+**Stage:** 1, 6
+
+**Disposition (2026-10-19):** duplicate of R-0481 / R-0474: merge each half into its actual owner.
+
 **Scheduling: opportunistic.** No queue position and nothing blocks on it. Do either half when
 already working in the affected file; the `substExpr` rename is the one with a deadline, since it
 must land before R-0474 retires the unsound function or that commit becomes ambiguous.
@@ -8432,6 +9957,10 @@ enforces.
 
 ### Task R-0477
 
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep disposition task; retarget useful calculus work to R-0460/Core.
+
 **Objective:** bring `vcgen/calculus` back onto current `main`, or retire it — it is tracked
 nowhere in this file, which is how a branch quietly becomes a fork.
 
@@ -8459,6 +9988,10 @@ means rebasing twice, and the calculus is the natural consumer of resolved typed
 rather than of the AST it reads today.
 
 ### Task R-0476
+
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Merge gate-health checkpoint into R-0513; retain standalone freshness guards.
 
 **Objective:** drain two ratchets to zero, so neither becomes a permanent debt marker that
 everyone learns to read past.
@@ -8503,6 +10036,10 @@ protection exactly where it earned its place — running one gate directly while
 four stale-binary incidents happened in a single session.
 
 ### Task R-0473
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; consume Resolve-owned identities; archive unrelated R-0004 history.
 
 **typed contract records, and contract type checking that earns the name**
 
@@ -9032,6 +10569,10 @@ which is materially weaker than "the corpus is compatible".
 
 ### Task R-0474
 
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep substitution work; move identity foundation to R-0492.
+
 **lexical binding identities and capture-safe substitution**
 
 **Objective:** Retire by-name substitution as proof infrastructure, and graduate H25 and H27's
@@ -9069,6 +10610,10 @@ diagnostic fires, and nothing records *which* binding the contract means.
 reasoning, call-site contract instantiation, and quantified predicates with binders.
 
 ### Task R-0475
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Archive shipped snapshot fix; retain origin-labelled reporting increment.
 
 **decouple fixture snapshots from the stdlib**
 
@@ -9139,6 +10684,10 @@ undischarged obligation inside stdlib code still affects the user's program. The
 separate labelled sections, not a filter.
 
 ### Task R-0472
+
+**Stage:** 2, 3, 4, 5, 6; after-1.0/research
+
+**Reconciliation (2026-10-19):** Split into existing Core/VC, totality and research owners; remove obsolete absence claims.
 
 **what could be provable but is not yet, by reason**
 
@@ -9213,6 +10762,10 @@ did.
 
 ### Task R-0466
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep under R-0515; do not subordinate human pilots to it.
+
 **Objective:** Measure whether the language is legible to the consumer that
 actually writes it — a language model — by gating two numbers in CI: can a model
 author correct Concrete from the documentation alone, and can it repair a
@@ -9274,6 +10827,10 @@ same no-erased-dimensions rule as R-0440.
 
 ### Task R-0471
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep bounded diagnostics increment under R-0137/R-0515.
+
 **Objective:** Close the diagnostic-legibility defects the 2026-07-31 surface
 audit reproduced, as the early slice of R-0137's diagnostics bar rather than
 behind its Phase 8 dashboard.
@@ -9311,42 +10868,11 @@ them forward is the point of this task; it does not narrow R-0137.
   reachable from the corpus carries a non-empty next action, with a mutation
   blanking one hint.
 
-### Task R-0470
-
-**Status (2026-09-20): DONE — both sites fixed and gated.**
-`check_cap_inference.sh` 10/0. The first fix (2026-09-19) closed only
-`Check.lean`'s function-call path; `CheckHelpers.lean`'s method-call path carried
-a byte-identical copy and was found by the sweep that became
-`docs/project/ABSENCE_IS_NOT_A_FACT.md`. The method path is the one real callers
-reach, because std's capability-polymorphic combinators (`Set::fold`,
-`for_each`, `with_value`) are METHODS. Fixtures exist for both — the four derived
-argument forms and a generic-return E0242 control, per path — which retires the
-"no fixture yet" note below.
-
-**Objective:** Fix bug 063 — capability-variable inference reads "unknown
-argument type" as "no capabilities", so a stored or derived function pointer
-cannot reach a `cap C` parameter.
-
-Filed 2026-07-27 and reproduced on four derived argument forms; it had no roadmap
-owner until now, which is why it is here rather than later. A
-capability-polymorphic combinator accepts a function pointer written as a bare
-name or an annotated local, but rejects `apply(ops.op, 4)` — a fn pointer read
-from a struct field, a call result, or an array element — as an E0220 type
-mismatch against a `with()` the program never wrote.
-
-This is a rejected-valid-program defect today, not wrong code. It is scheduled
-early anyway because of what the repro shows about the mechanism: the authority
-check already passes on the fabricated empty capability set, and only `expectTy`
-stops the program. Authority visibility in the signature is a load-bearing pillar
-claim, so an inference path that silently manufactures an empty capset is worth
-closing while it is still merely a false rejection. See the repro table in
-[the bug](docs/bugs/063_cap_inference_defaults_derived_fnptr_to_empty.md). The
-four derived forms were the negative corpus; they are now positive fixtures on
-both paths (`tests/regressions/cap_inference/`), asserting E0242 and the ABSENCE
-of E0220 — a gate that only checked "does it fail" would pass either way, and
-would keep passing after fn-type comparison is relaxed to subsetting.
-
 ### Task R-0469
+
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Keep immediate fail-closed repair; native resource proof remains separate.
 
 **Objective:** Fix bug 065 — make stack unboundedness propagate through the call
 graph, and give `--report stack-depth` and `--report recursion` the gate neither
@@ -9392,6 +10918,10 @@ is `"?"` today, so prefer an explicit `"unbounded"`. A mutation restoring the
 `!isRecursive c` filter must fail the gate.
 
 ### Task R-0450
+
+**Stage:** 2, 3, 4, 5
+
+**Reconciliation (2026-10-19):** Keep; generate obligations against Core, not a new SSA proof authority.
 
 **Objective:** Unify obligation lowering into one prover-neutral IR with per-backend drivers (Why3 shape) — implementation already in progress off-repo; land it in a worktree and merge once green per the operating rules. The problem is duplicated expression lowerings of the same obligations: several answers to one question, free to drift — and drift here means the Lean proof and the external check silently prove DIFFERENT obligations, an evidence-integrity defect in the system R-0004 is hardening. Define one typed obligation IR (linear integer arithmetic, bitvectors, bools, arrays: the deliberate intersection fragment; everything else `not_supported`), one semantics (a single `eval` in Lean, the IntArith single-source discipline), lowering as small named transforms, and per-backend drivers that select which transforms run.
 
@@ -9478,9 +11008,17 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
 ### Task R-0006
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Keep containment now; integrate proof obligations into V3/V4.
+
 **Objective:** Fix bug 052 — array element destruction becomes a no-op Immediate containment: reject `T: Destroy` for arrays/unnamed element types whose drop glue cannot be resolved; never synthesize an empty destroy function from “name lookup missed.” Root fix: structural, type-directed drop-glue identity for arrays and nested aggregates, independent of `tyName`. Gate destructor counters for arrays of linear values in Vec/Deque/heap containers, nesting, partial construction/failure, clear/remove/drop, exactly-once behavior, and a mutation replacing structural glue with the old no-op fallback.
 
 ### Task R-0007
+
+**Stage:** 1, 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls.
 
 **Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
 
@@ -9513,9 +11051,17 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
 ### Task R-0008
 
+**Stage:** 1, 2
+
+**Disposition (2026-10-19):** superseded by R-0492: merge reproducer and alias permutations into identity migration.
+
 **Objective:** Fix bug 055 — sibling renamed import emits an undefined callee Resolve an import once to canonical definition identity and carry that identity through Mono/codegen; do not repair only one alias-string orientation. Gate plain and generic sibling imports, qualified/unqualified and renamed forms, duplicate basenames, module-order permutations, and undefined-symbol failure injection. This is a rejected-valid-program bug unless a wrong-code witness appears.
 
 ### Task R-0434
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0502: merge into layout certificates and Memory CFG verification.
 
 **Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
 
@@ -9538,6 +11084,10 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
 ### Task R-0009
 
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Keep; remove unusable predicate until implemented.
+
 **Objective:** Fix bug 049 — vacuous `reduce --predicate crash` Remove the predicate from help/CLI immediately unless the same slice evaluates candidates in an isolated subprocess with bounded time/memory/output and preserves the original crash boundary/class. Parse success is never a crash predicate.
 
     The reducer must verify the final candidate still satisfies the predicate,
@@ -9547,6 +11097,10 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
     failure class, empty candidate, and reducer self-failure.
 
 ### Task R-0010
+
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Keep; connect to R-0491/R-0513 inventories.
 
 **Objective:** Make the bug-corpus truth gate honest Replace the current skip-based audit summary with an explicit per-bug state:
 
@@ -9593,6 +11147,10 @@ fast-forward stops publication for an explicit reconciliation; the helper may
 not hide it with a force push.
 
 ### Task R-0439
+
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Keep bounded gate; merge hook-budget implementation with R-0513.
 
 **Objective:** Gate work that is finished but not landed — the local counterpart
 of publication discipline.
@@ -9646,6 +11204,10 @@ and a milestone with an unmerged owned slice; plus a mutation removing the
 dirty-state leg. Cheap to run — level 1 must not need a compiler build.
 
 ### Task R-0435
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** superseded by R-0500: merge migration, renamed-pattern syntax and controls.
 
 **Objective:** Ban lexical value shadowing while preserving explicit assignment
 rebind.
@@ -9711,6 +11273,10 @@ Land the cross-cutting migration in a worktree and merge once green.
    migration lands.
 
 ### Task R-0440
+
+**Stage:** 1, 5, 7
+
+**Reconciliation (2026-10-19):** Split immediate verdict honesty from later package-policy productization.
 
 **Objective:** Make evidence multidimensional instead of a ladder, and record
 compiler trust per claim.
@@ -9808,6 +11374,10 @@ spelling or reintroduce the old ambiguous `PExpr.call` representation.
 
 ### Task R-0448
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Retire scheduled graduation; retain experimental replay work and honest labels.
+
 **Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). The spike branch may continue as an experiment, but supported-feature graduation follows R-0004, R-0450, R-0440, and the pulled-forward correctness queue; active ownership is not permission to displace known semantic defects.
 
    **Blocking merge item added 2026-07-31, CLEARED 2026-08-03 (R-0461).** The badge was
@@ -9846,6 +11416,10 @@ spelling or reintroduce the old ambiguous `PExpr.call` representation.
    trust; bridge trust is untouched until realization (R-0449).
 
 ### Task R-0437
+
+**Stage:** 1, 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics.
 
 **Objective:** Give generic bounds a closed, validated vocabulary — an unknown
 bound name is currently a silent no-op.
@@ -9904,6 +11478,10 @@ bounds exist and are load-bearing across the stdlib. Name bounds as a required
 section of the Phase 17 language reference.
 
 ### Task R-0447
+
+**Stage:** 1, 2, 3
+
+**Disposition (2026-10-19):** duplicate of R-0481: merge unique operational controls; retire conflicting directory blueprint.
 
 **Objective:** Freeze repository ownership and layout before broad stdlib,
 test, proof, and documentation growth multiplies the current ambiguity.
@@ -10348,6 +11926,10 @@ a global hand-maintained registry.
 
 ### Task R-0444
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep implementation workload; proofs follow Core/VC prerequisites.
+
 **Objective:** Pull the fired parser trigger: build a combinator core for binary/text parsing and port the duplicated spellings onto it. R-0406's gate was "binary-format DSLs only if packet/ELF examples show repeated parser boilerplate" — the 2026-07-25 audit count found it already fired: seven combinator shapes spelled ~45–50 times across std.numeric, std.parse, std.base64, std.hex, std.cli, std.text, and five example parsers, with `numeric.con` writing the same bounds-guard-plus-endian-fold sixteen times. The seven: `take(n)` bounds-guard-then-advance, `tag` literal match, length-prefixed consume, bounded repeat over remaining, `take_until`/`skip_while` scan, byte→`Option` table map, verify-over-region — plus one pure fixed-width assembly fold.
 
    Slice 1 (no Lean): the seven combinators + assembly fold as a
@@ -10393,6 +11975,10 @@ a global hand-maintained registry.
    parser-private cost annotations.
 
 ### Task R-0445
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep source scope; do not substitute for native sufficient-resource theorem.
 
 **Objective:** Ship a compile-time source-resource certificate early, before
 broad stdlib expansion. For each monomorphized function and selected program
@@ -10470,6 +12056,10 @@ non-goals here.
 
 ### Task R-0011
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; enforce through authoritative Core/front-end boundaries.
+
 **Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/language/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
 
 
@@ -10507,6 +12097,10 @@ variant or omit one enforcement path.
 
 ### Task R-0012
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; use ordinary ownership rules and V3/V5 proof coverage.
+
 **Objective:** Generalize workload-pulled Option/Result combinators for linear payloads This is an ergonomics/ownership blocker, not a current soundness defect, but workloads already pay the manual-match tax. Do not merely delete Copy bounds: prove arm-wise conservation and explicitly dispose of every unused owned default/error.
 
 
@@ -10527,6 +12121,10 @@ variant or omit one enforcement path.
   representative kernel proofs to remain alpha-invariant after generalization.
 
 ### Task R-0013
+
+**Stage:** 1, 3
+
+**Reconciliation (2026-10-19):** Keep confirmed contract defects ahead of API breadth.
 
 **Objective:** Close confirmed boundary correctness holes
 
@@ -10594,6 +12192,10 @@ bug.
 
 ### Task R-0014
 
+**Stage:** 1, 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep library migration; merge checker rules into R-0514/V6.
+
 **Objective:** Put Unsafe behind domain-capability wrappers and close trusted dereference duplication Split hosted modules into ordinary public wrappers and private trusted/raw adapters:
 
 
@@ -10645,6 +12247,10 @@ current set/map capability mismatch according to public authority.
 
 ### Task R-0015
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-gated; use capability-parameterized handles.
+
 **Objective:** Converge File and Reader/Writer when its recorded trigger fires Direction only; not a Phase 7A closure condition. Pull this when a real socket, file, or buffered-IO workload otherwise needs a second implementation of short-read/write, close, or ownership behavior.
 
 
@@ -10688,6 +12294,10 @@ writers do not apply the same external-write result policy. Fix each when its
 vertical consumer moves to the common spine.
 
 ### Task R-0016
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; retire already-fixed R-0470 prerequisite. The R-0470 prerequisite is retired (R-0470 done).
 
 **Objective:** Add provenance-safe scoped Slice access Promote the currently exempt `std.slice` surface because existing public raw accessors already need a safe counterpart and the compiled-coverage exemption is concrete evidence. V1 deliberately uses scoped access rather than escapable slice returns:
 
@@ -10747,6 +12357,10 @@ slice.
 
 ### Task R-0017
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep unpulled API work; merge confirmed defects into R-0013.
+
 **Objective:** Normalize hosted failure shapes as their recorded triggers fire The normative direction below follows `ERROR_CONVENTIONS.md`, but each signature change is pulled by a workload or a failing manifest leg. It is not a demand to migrate every hosted module in one campaign.
 
 
@@ -10784,6 +12398,10 @@ environmental failure, and trap for documented invariants/OOM. Add
 recoverable error, cleanup error, and invalid-input leg per hosted module.
 
 ### Task R-0018
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; update stale borrowed-Text description after R-0483. The borrowed-Text description is updated to R-0483's owner-backed Text.
 
 **Objective:** Stabilize boundary type roles under pull discipline Freeze and gate these roles:
 
@@ -10825,6 +12443,10 @@ its fallibility or an unchecked operation loses the suffix.
 
 ### Task R-0019
 
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0031: merge with explicit pull counts and safety requirements.
+
 **Objective:** Add collection ergonomics as recorded workloads pull them Preserve the strong existing decisions: scoped callback access instead of escaping references, `Destroy` for live non-Copy contents, capability- polymorphic traversal, and ascending traversal only for ordered containers.
 
 Then:
@@ -10856,6 +12478,10 @@ for example HashMap returning a displaced value is not equivalent to Set
 reporting whether membership changed.
 
 ### Task R-0020
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep trigger ledger; assign each candidate to module owner below.
 
 **Objective:** Add remaining module shapes as recorded workloads pull them The following are design candidates, not scheduled Phase 7A migrations. Each requires independent workload evidence or a confirmed contract failure before implementation.
 
@@ -10906,6 +12532,10 @@ reporting whether membership changed.
 
 ### Task R-0021
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; R-0117 supplies producer, R-0056 supplies diff.
+
 **Objective:** Complete the mechanical manifest and fail-closed coverage gate Extend `concrete std snapshot --json` and the compiled-coverage inventory so every public symbol records: canonical signature, safety class, capabilities, allocation, ownership/consumption, success/absence/error/trap behavior, platform availability, evidence class, examples, and trusted-boundary id.
 
 Generate rather than hand-count the inventory.
@@ -10920,6 +12550,10 @@ failure classification fails CI. This extends the existing five-fact manifest
 and compiled-coverage machinery; do not create a parallel review database.
 
 ### Task R-0438
+
+**Stage:** 1, 2, 3, 4
+
+**Reconciliation (2026-10-19):** Merge enforcement rows into R-0498; share inventory with R-0118/V7.
 
 **Objective:** Generate the semantically-dark-construct inventory from compiler
 constructors, and make the docs-drift gate check claims rather than paths.
@@ -11053,10 +12687,18 @@ correction slice.
 
 ### Task R-0023
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep versioned language change; coordinate startup with R-0505.
+
 **Objective:** Retire the remaining entry-point tails Deliberately decoupled from the completed exit-model migration: retire Int-main in a later surface pass by narrowing the entry signature to `fn main() -> u8 | Unit`; workload-gate any `main -> Result<Unit, E>` form and nominal error rendering to stderr.
 
 
 ### Task R-0024
+
+**Stage:** 1, 2, 3
+
+**Reconciliation (2026-10-19):** Split concrete residuals into owners; remove obsolete phase-number priority rule.
 
 **Objective:** Finish compiler hygiene and known-defect tails Each item lands as its own evidence-ranked slice with the battery:
 
@@ -11117,21 +12759,41 @@ correction slice.
         reintroduced.
 ### Task R-0025
 
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0047/R-0020: merge; no separate umbrella implementation task.
+
 **Objective:** CLI/env/process helpers for real tools (stdlib APIs, not compiler CLI).
 
 ### Task R-0026
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Merge concrete exits into R-0515’s debugging/diagnostics checkpoints.
 
 **Objective:** Finish trap/debug UX and verified-profile/ proof-obligation UX.
 
 ### Task R-0027
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** duplicate of R-0061: merge.
+
 **Objective:** Extend the shipped pure-core proof arc over actual `Option`/`Result`, `Bytes`/slice, numeric checked helpers, and checked text/path conversions against their documented contracts.
 
 ### Task R-0028
 
+**Stage:** 6
+
+**Disposition (2026-10-19):** duplicate of R-0060: merge.
+
 **Objective:** Proof-facing formal stdlib models (`formal_vec`, `formal_map`, `formal_set`, `bigint`, lemma helpers) once contracts need them.
 
 ### Task R-0029
+
+**Stage:** after-1.0/research
+
+**Disposition (2026-10-19):** duplicate of R-0065: merge deferral policy; retain narrow stage-3 module owners.
 
 **Objective:** Broad compression/crypto/networking/threading only after workload demand.
 
@@ -11151,6 +12813,10 @@ lines (`std.cli`), read process arguments (`std.args`), and build real tools.
 Do not duplicate compiler-command cleanup here.
 
 ### Task R-0030
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; F7/F8 already provide a forcing trigger.
 
 **Objective:** Deterministic capability-fault simulation (pull-gated; the *dynamic* complement to H3). H3's manifest gate proves an IO error *can* be surfaced (static shape); this proves it *is* surfaced under real failure (dynamic).
 
@@ -11177,6 +12843,10 @@ Do not duplicate compiler-command cleanup here.
   replays a fixed fault schedule and asserts each effect-boundary property.
 
 ### Task R-0031
+
+**Stage:** 3, 4, 6
+
+**Reconciliation (2026-10-19):** Keep; separate research extensions listed below. Hash-flood policy: a fixed deterministic hasher gives collision correctness, not denial-of-service resistance. Choose and document bounded input/work, a collision-resistant strategy for attacker-controlled keys, or an explicit non-adversarial-use limitation (with R-0036).
 
 **Objective:** Build the remaining collection APIs across `std.vec`, `std.map`, `std.set`, `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`, `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets, buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs C/Rust users expect: `contains`, `remove`, `iter` for maps and sets;
 
@@ -11306,6 +12976,10 @@ tracking to the hash collections.
 
 ### Task R-0032
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled; no external iterator/lifetime expansion.
+
 **Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend `docs/project/ITERATION_PROTOCOL.md` when these land),
 
 plus byte/text builders and tree/buffer builders inspired by Gleam's
@@ -11313,9 +12987,17 @@ plus byte/text builders and tree/buffer builders inspired by Gleam's
 `with(Alloc)` or operate over fixed buffers.
 ### Task R-0033
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep over one capability-preserving spine.
+
 **Objective:** Complete the Hare/Zig-shaped IO adapter layer on top of the one `std.io.Reader` / `std.io.Writer` spine: buffered reader/writer helpers (`bufio` shape), fixed-memory readers/writers (`memio` shape), byte-counting and tee/discard adapters, and small copy/drain helpers. These are adapters, not a second IO abstraction. Every adapter must preserve the underlying capability story, keep allocation explicit (`with(Alloc)` or caller-provided buffers), and be covered by `std.test` sink/source oracles.
 
 ### Task R-0034
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; consume the single `IntArith` semantics.
 
 **Objective:** Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
 
@@ -11324,21 +13006,41 @@ narrowing/conversion helpers, endian conversions, byte/word packing, and
 evidence classes for each helper.
 ### Task R-0035
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; bind coherence/laws to R-0031.
+
 **Objective:** Build sorting and searching primitives in proposed `std.sort` and `std.search`: comparison conventions, stable/unstable sort decision, binary search, min/max helpers, and evidence/oracle tests over edge cases.
 
 ### Task R-0036
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; distinguish entropy authority and security claims.
 
 **Objective:** Build hashing, checksums, and deterministic random helpers in `std.hash`, proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets, non-cryptographic checksums, seeded deterministic RNG for tests/oracles, and a clear split from cryptographic randomness. Any OS entropy source is hosted-only and capability-visible.
 
 ### Task R-0037
 
+**Stage:** 3; after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep source-shape claims only; no automatic binary timing transport.
+
 **Objective:** Build constant-time helper APIs in proposed `std.ct` only for narrow, auditable cases: equality/compare over fixed-size bytes, no secret-dependent branches or early exits, source-shape audit evidence, and clear machine-level timing assumptions. This belongs to the narrow security surface, not broad crypto.
 
 ### Task R-0038
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled.
+
 **Objective:** Build time and duration helpers in `std.time`: monotonic versus wall-clock distinction, timestamp formatting/parsing if admitted, timeout helpers, and explicit hosted authority for reading the clock.
 
 ### Task R-0039
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; R-0444 owns combinator core.
 
 **Objective:** Build formatting and parsing helpers in `std.fmt` and `std.parse`:
 
@@ -11348,6 +13050,10 @@ evidence classes for each helper.
  assembly core; this task consumes that core for the remaining formatting and
  text-parsing surface rather than creating a second parser vocabulary.
 ### Task R-0040
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep unique adapters; merge overlapping scanner work into R-0039.
 
 **Objective:** Complete the scanner/parser surface left after R-0444 over
 `std.bytes.Bytes` and `std.text.Text`: span/position tracking, structured error
@@ -11359,9 +13065,17 @@ keeping two nominal owners.
 
 ### Task R-0041
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep pull gate.
+
 **Objective:** Extend `std.base64` only when a workload pulls streaming encode/decode; preserve canonical padding-bit strictness and the args -> bytes/text -> parse/errors -> Writer oracle path.
 
 ### Task R-0042
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep pull gate and syntax/authority separation.
 
 **Objective:** Add `std.uri` parsing/formatting after the byte/text/path split is stable:
 
@@ -11369,17 +13083,33 @@ keeping two nominal owners.
  clear distinction between syntax validation and network authority.
 ### Task R-0043
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled.
+
 **Objective:** Add `std.json` as the first structured data module: tokenization, string/number handling, error spans, bounded recursion policy, optional DOM-like representation only if the allocation story is explicit, and oracle tests against a reference implementation.
 
 ### Task R-0044
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep only with a forcing consumer.
 
 **Objective:** Add a small typed decoding layer in proposed `std.decode` after `std.json`: dynamic value decoding, field access, error paths, and examples comparable to Gleam's `dynamic/decode`, without broad reflection or hidden runtime typing.
 
 ### Task R-0045
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; reuse R-0444/R-0034.
+
 **Objective:** Add binary serialization helpers in proposed `std.bin`: endian-aware reading/writing, fixed-width integers, length-prefixed fields only with explicit bounds, byte-span diagnostics, and no hidden allocation.
 
 ### Task R-0046
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled.
 
 **Objective:** Add semantic-version and config-format helpers in proposed `std.semver` and `std.config` if package/build work starts depending on them:
 
@@ -11389,9 +13119,17 @@ keeping two nominal owners.
  stdlib/package-boundary helpers, not general metaprogramming.
 ### Task R-0047
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; absorb R-0025’s CLI portion.
+
 **Objective:** Add command-line parser helpers in proposed `std.cli`: flags, positional arguments, usage text, typed parse errors, no ambient environment access except through `std.args`, and examples that keep authority visible. This is for user programs. The `concrete` compiler's own command taxonomy and help behavior are Phase 6E, and `std.cli` should learn from that surface without coupling to compiler internals.
 
 ### Task R-0048
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep narrow workload gate.
 
 **Objective:** Add narrow shell/path helper modules only as tool workloads demand them:
 
@@ -11402,13 +13140,25 @@ keeping two nominal owners.
   pure parser cannot accidentally become a hosted operation.
 ### Task R-0049
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled.
+
 **Objective:** Add simple logging/diagnostic output APIs in proposed `std.log`: levels, writers, formatting integration, capability requirements, and policy for release builds. Keep this small; it is not a tracing framework.
 
 ### Task R-0050
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep named consumer trigger.
+
 **Objective:** Add progress/status output helpers for CLI tools in proposed `std.progress` only after `examples/daily/word_count` and `examples/base64_cli` need visible progress output. V1 surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`, `finish`, terminal detection through an explicit console handle, and no ambient terminal authority. Wire `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
 
 ### Task R-0051
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0014: merge wrappers, documentation and boundary fixtures.
 
 **Objective:** Build capability-scoped console, file, network, process, and time APIs in `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`, `std.net`, and `std.time`. Authority must be visible in function types and audit reports; no API may smuggle ambient authority through a convenience wrapper. New output/input APIs target the `std.io.Reader` / `std.io.Writer` spine; a separate public `std.writer` sink surface must not reappear.
 
@@ -11429,17 +13179,33 @@ keeping two nominal owners.
  sides of the boundary.
 ### Task R-0052
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; include external-call assumptions in V6/V7.
+
 **Objective:** Build handle-relative filesystem APIs in `std.fs` as the preferred file/path shape: directory/file handles carry authority; operations are relative to handles for `open`, `create`, `read`, `write`, `metadata`, `remove`, `rename`, and `list`. Ambient absolute-path helpers must be hosted-only convenience wrappers with explicit authority. Temp-file, symlink, path-normalization, and TOCTOU behavior must appear in `docs/stdlib/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
 
 ### Task R-0053
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep behind R-0052.
 
 **Objective:** Add small `std.temp` and `std.dirs` helpers after the handle-relative filesystem shape is gated. `std.temp` owns temporary files/directories with explicit cleanup (`drop`/`defer`, no implicit scope-end delete) and visible `with(File)` authority; `std.dirs` exposes only conservative hosted directory discovery needed by tools. Do not add XDG/platform policy sprawl until package/build workloads pull it.
 
 ### Task R-0054
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep workload-pulled; no general networking expansion.
+
 **Objective:** Build handle-based network surface in `std.net` only as far as the validation workloads require: address parsing, socket handle wrappers, HTTP header parsing as a pure parser first, and no full HTTP client/server until package/workload evidence demands it.
 
 ### Task R-0055
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; share public-symbol denominator with R-0021.
 
 **Objective:** Build stdlib test/oracle helpers in `std.test`: expected failures, capability-scoped fixtures, temp directories, oracle vector runners, interpreter-vs-compiled helpers, and report snapshots. Stdlib tests must also serve as runnable API documentation: every public stdlib type/function gets a tiny positive usage test and, where meaningful, a negative or edge case. Public docs should link to or quote those tests rather than carrying stale hand-written examples. This is the Zig stdlib lesson adapted to Concrete: usage examples should be executable fixtures, not prose that can rot. Add a gate that fails when a new public stdlib symbol lacks a test/doc
 
@@ -11447,6 +13213,10 @@ keeping two nominal owners.
  an evidence class/capability/allocation behavior that the test/report does
  not produce.
 ### Task R-0056
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep consumer of R-0021/R-0117, not a second scanner.
 
 **Objective:** Add a public stdlib API snapshot/diff immediately after the first real workload (`base64_cli`) and before broad URI/JSON/CLI/log/progress breadth.
 
@@ -11466,6 +13236,10 @@ keeping two nominal owners.
   still small.
 ### Task R-0057
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep enforcement/documentation remainder; avoid duplicating settled policy.
+
 **Objective:** Define stdlib error-handling conventions: when APIs return `Result`, `Option`, panic/abort, or require a policy gate; how ignored-result diagnostics apply; and how accumulating error sets are reported. Split recoverable domain/environment failures from fatal invariant failures:
 
  `Result`/`Option` for user, file, network, parse, and domain errors that a
@@ -11481,6 +13255,10 @@ keeping two nominal owners.
  its own.
 ### Task R-0058
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep checked onboarding material.
+
 **Objective:** Define the canonical **consume / destroy / handoff** conventions for linear code. The guide must distinguish explicit cleanup (`destroy(x)` or the type's consuming `.drop()`/Destroy verb), ownership transfer by by-value call, ownership transfer by return, destructuring into owned fields, `defer` as explicit scheduled cleanup, and the forbidden cases (bare non-`Copy` statement, `_` over non-`Copy`, `let _`, non-`Copy` sub-place projection by value). This is documentation plus examples and diagnostics, not automatic `Drop`: no hidden cleanup and no hidden control flow. Include a short **Copy and Linear Values** guide: when to mark a type
 
  `Copy`, why `Option<i32>` is `Copy` but `Option<String>` is linear, how
@@ -11492,13 +13270,25 @@ keeping two nominal owners.
  examples and linked from README/site docs.
 ### Task R-0059
 
+**Stage:** 3, 4, 5
+
+**Disposition (2026-10-19):** duplicate of R-0021/R-0440: merge; replace single-class taxonomy with orthogonal facts.
+
 **Objective:** Define stdlib evidence classes per public API: `proved`, `enforced`, `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class must appear in docs and audit artifacts, not just implementation comments.
 
 ### Task R-0060
 
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep after totality; rational theory remains separately pull-gated. Absorbs the canonical int/list/map/set/bitvector theory modules, spec enums (constructor injectivity/disjointness) and spec pattern matching as scoped modules.
+
 **Objective:** Add proof-facing formal stdlib models only when a proof or contract workload pulls them. These are not runtime containers: `std.formal_vec`, `std.formal_map`, and `std.formal_set` model mathematical sequences, maps, and sets for contracts, loop invariants, and Lean obligations; `std.bigint` models unbounded mathematical integers for specs before any runtime big-number API exists; `std.rational` stays deferred until exact-ratio specs need it. Each formal module must state its erasure/runtime story, its evidence class, the Lean artifact it lowers to, and the refinement relation to runtime containers such as `Vec`, `HashMap`, `OrderedMap`, and `HashSet`.
 
 ### Task R-0061
+
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep on generated Core statements; preserve supported legacy replay.
 
 **Objective:** Add a **selective shipped pure-core stdlib proof arc**, distinct from the pull-gated formal-container work in 24a. This proves stable stdlib code users actually call, not separate mathematical containers, and it is not a mandate to prove all 414+ public API rows before the API surface has been validated by workloads. Scope v1 narrowly:
 
@@ -11523,13 +13313,25 @@ keeping two nominal owners.
  have been validated.
 ### Task R-0062
 
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0021/R-0056: merge behavioral regression gates.
+
 **Objective:** Add stdlib authority/allocation/runtime-obligation gates so core helpers cannot silently widen capabilities, allocation behavior, trusted assumptions, or runtime-risk obligations.
 
 ### Task R-0063
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; feed VP S7’s instrumented-semantics validation.
+
 **Objective:** Add sanitizer/runtime-instrumentation hooks as debug and validation surfaces, not proof evidence. Inspired by Odin's sanitizer-facing base surface, Concrete should expose named hooks for bounds, overflow, use-after-free-like trusted/FFI probes where applicable, allocator checks, and generated-code validation. Audit output must classify this as `runtime_checked`, `tested`, or `instrumented`, never `proved`.
 
 ### Task R-0064
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep API inventory now; freestanding implementation after 1.0.
 
 **Objective:** Split hosted versus freestanding-ready stdlib modules at the API level:
 
@@ -11538,9 +13340,17 @@ keeping two nominal owners.
  The freestanding target implementation still lands in Phase 16.
 ### Task R-0065
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep explicit deferral ledger, not a phase-completion blocker.
+
 **Objective:** Record deliberately deferred stdlib families so they do not disappear from planning: compression/archive formats, broad crypto beyond the narrow hash/HMAC/constant-time story, PEM/ASN.1/X509, MIME helpers beyond the first workload, full HTTP client/server, DNS/Unix-socket breadth, dynamic libraries, OS debug formats (`ELF`, DWARF, image parsing), atomics, threads, SIMD, target/ABI databases, and platform-specific C/POSIX wrappers. Each stays package-later, backend-later, freestanding-later, or research-later until a workload forces it.
 
 ### Task R-0066
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep under onboarding; no additional flagship gallery.
 
 **Objective:** Add stdlib documentation and checked recipes for C/Rust users without creating a
 gallery of standalone public examples:
@@ -11572,6 +13382,10 @@ gallery of standalone public examples:
  snippets and fixtures, not additional flagships.
 ### Task R-0067
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; preserve oracle mode per vector.
+
 **Objective:** Add a stdlib compatibility/oracle corpus under `tests/compat/stdlib/` (or the corpus
 manifest's canonical compatibility home): `fmt_parse_vectors`, `bytes_text_vectors`, `path_vectors`,
 `collection_vectors`, `base64_vectors`, `uri_vectors`, `json_vectors`, `semver_vectors`,
@@ -11581,6 +13395,10 @@ manifest's canonical compatibility home): `fmt_parse_vectors`, `bytes_text_vecto
 `negative_expected_failure`. Compatibility vectors are not public examples.
 
 ### Task R-0068
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep selected workloads, not the entire candidate list.
 
 **Objective:** Add real stdlib workload checks before Phase 8 relies on the library.
 
@@ -11600,6 +13418,10 @@ manifest's canonical compatibility home): `fmt_parse_vectors`, `bytes_text_vecto
  a checked-in reference model.
 ### Task R-0069
 
+**Stage:** 1, 2, 3
+
+**Reconciliation (2026-10-19):** Keep confirmed wrong behavior urgent; use `IntArith` contract.
+
 **Objective:** Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The checked-arithmetic flip exposed syscall/sentinel-style code that relied on silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels, bit-packed flags, checksum/hash arithmetic). Add `scripts/tests/check_stdlib_sentinel_arithmetic.sh` or fold the checks into `check_stdlib_workloads.sh`: every intentional modular/sentinel operation in `std.fs`, `std.process`, `std.net`, `std.io`, hash/checksum code, and binary parsers must use explicit `wrapping_*`/bit operations with a comment or a report-visible classification; every non-intentional trap must be fixed as a
 
  real bug, not papered over. The gate should include at least one non-
@@ -11607,6 +13429,10 @@ manifest's canonical compatibility home): `fmt_parse_vectors`, `bytes_text_vecto
  maps/iterators, formatter/parser round-trip, or proof/report views) so the
  post-arithmetic validation does not overfit to numeric examples.
 ### Task R-0070
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Merge coverage requirements into R-0068 if existing workloads suffice.
 
 **Objective:** Add the Phase 7 validation workload under the corpus manifest's workload home (for
 example `tests/workloads/stdlib_client/`) plus `scripts/tests/check_phase6_stdlib.sh`. It validates
@@ -11621,12 +13447,20 @@ the library and is not a fourth public flagship.
 
 ### Task R-0071
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Objective revised by the audit: closing Phase 7 no longer activates QBE; per-release std acceptance and compaction stay with R-0333/R-0515.
+
 **Objective:** Close Phase 7 against its Completion Contract, archive completed work
 while preserving future-relevant invariants, and select the next checkpoint from the
 current execution queue. Phase closure does not automatically activate QBE.
 
 
 ### Task R-0483
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** done — closed 2026-10-09 at `4f005715`; the body is retained for its accepted coordinate/provenance limit.
 
 **Objective:** Make safe zero-copy parsing preserve owner lifetime through every
 stdlib wrapper, not only through syntactic `&T` references.
@@ -11863,6 +13697,10 @@ R-0486 reuses this parser after the contract prerequisites; this task does not c
 heap proofs or emitted-binary correctness.
 
 ### Task R-0484
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** done — closed 2026-10-08 at `245cd51c`; the body is retained for its accepted limits; the typed-descriptor second step is R-0530.
 
 **Objective:** Give capability headers, resource handles and operational effects
 one coherent meaning that checking, reports, proof eligibility and policy share.
@@ -12434,6 +14272,10 @@ schema or claiming unrestricted least-authority enforcement.
 
 ### Task R-0485
 
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep; refresh obsolete “during R-0483” scheduling.
+
 **Objective:** Improve review clarity without changing explicit error propagation
 or implicit-drop policy.
 
@@ -12450,6 +14292,10 @@ change. Do not equate generated verbosity with human reviewability. `?`, implici
 error conversion, implicit drop and unwinding remain excluded.
 
 ### Task R-0486
+
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep workload now; formal graduation after stage-5/6 prerequisites.
 
 **Objective:** Use one bounded parser/state-machine component to validate compositional
 contracts, audit diffs and the external-consumer workflow end to end.
@@ -12492,6 +14338,10 @@ runtime costs; use those observations to prioritize subsequent features. Unsuppo
 heap, relational, resource-proof and backend claims remain explicit.
 
 ### Task R-0488
+
+**Stage:** 1, 3
+
+**Reconciliation (2026-10-19):** Keep safety audit early; later contract/diff additions stay with existing owners.
 
 **Objective:** After R-0484, audit parameter-mutation guarantees, then pressure-test
 the library model before adding more language machinery.
@@ -12664,6 +14514,10 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
 ### Task R-0072
 
+**Stage:** none — retired; see the disposition below
+
+**Disposition (2026-10-19):** retired — LCB pins QBE 1.3 in its own upstream lock; Concrete pins the LCB version under R-0517.
+
 **Objective:** Provision QBE as an explicit toolchain dependency. Pin a supported release and checksum in Nix/CI, verify the installed binary rather than accepting an arbitrary `PATH` match, document source/bootstrap and system-package paths, and make local discovery available through `concrete doctor` / agent feature JSON. Tool download is never an implicit compilation side effect.
 
 CI must cover a clean checkout and reject an unsupported QBE version with a
@@ -12677,9 +14531,17 @@ Do not infer support from an OS or CPU-family label alone.
 
 ### Task R-0073
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0497/R-0503: merge into payload-bound validated BIR artifacts.
+
 **Objective:** Introduce an immutable `CodegenInput` wrapper around cleaned `ValidatedSSA`, plus `CodegenFacts` derived once per program: target-neutral type/layout facts, function signatures, symbol identities, module-local aliases, entry/test metadata, string/global inventory, builtin identities, runtime-helper requirements, and source-span mappings. This is not a new IR and must not rewrite instructions. Both LLVM and QBE consume the identical value; a hash of its canonical form appears in backend artifacts and differential bundles. Eliminate emitter-owned rescans that can disagree by program/module order (the bug-039 class).
 
 ### Task R-0074
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles.
 
 **Objective:** Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched backend driver returning a structured `CodegenArtifact`:
 
@@ -12690,6 +14552,10 @@ Do not infer support from an OS or CPU-family label alone.
  from external validation, assembly, and linking.
 ### Task R-0075
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep the shared prepare/emit/verify/assemble/link driver; the LCB-native profile (R-0517) is its forcing consumer.
+
 **Objective:** Consolidate the duplicated file/build/test compilation paths in `Main.lean` behind one backend-neutral driver:
 
  `prepare -> emit -> verify -> assemble/codegen -> link`. Backend-specific
@@ -12698,6 +14564,10 @@ Do not infer support from an OS or CPU-family label alone.
  policy once. Add failure-injection tests at every boundary so a QBE error
  cannot take a less structured path than an LLVM error.
 ### Task R-0076
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0502: merge into single proved Layout authority.
 
 **Objective:** Split target-neutral layout computation from LLVM rendering. Rename or move `tyToLLVM`, LLVM type-definition construction, target triple/data-layout text, and LLVM ABI spellings out of `Concrete/Check/Layout.lean`; retain one checked `LayoutFacts` source for size, alignment, field offsets, enum tag/payload placement, pass-by-pointer decisions, and canonical builtin aggregates. LLVM and QBE render those facts independently. No emitter may recompute layout from syntax or host assumptions.
 
@@ -12708,9 +14578,17 @@ Do not infer support from an OS or CPU-family label alone.
  hygiene slice does not move and rewrite the same functions twice.
 ### Task R-0077
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0503/R-0509: merge with `rt` contracts, support inventory and trust accounting.
+
 **Objective:** Extract a versioned `RuntimeABI`/`BuiltinCodegenManifest` from `EmitSSA.lean`: symbol names, signatures, ownership/capability class, failure/trap behavior, required helper, and backend support status. Keep builtin semantic behavior detection in the existing interpreter/compiled gate; this manifest owns codegen availability and linkage, not a second signature or semantic truth source. A new builtin must fail closed until both backend rows are classified.
 
 ### Task R-0078
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; share scheduling/reproducibility with R-0146/47.
 
 **Objective:** Make backend emission function-local and deterministic where possible.
 
@@ -12722,6 +14600,10 @@ Do not infer support from an OS or CPU-family label alone.
  and only then allow parallel codegen. This follows Zig's successful isolated
  codegen-job shape without pulling in its linker architecture.
 ### Task R-0079
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0493/R-0501/03: merge into typed operations and pass obligations.
 
 **Objective:** Define a legalization responsibility table before QBE instruction coverage:
 
@@ -12735,9 +14617,17 @@ Do not infer support from an OS or CPU-family label alone.
  span and semantic-family identity into emitted artifacts.
 ### Task R-0080
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** duplicate of R-0118: merge backend/profile dimensions into one inventory.
+
 **Objective:** Add a generated backend capability matrix keyed by the constructors of `SInst`, `STerm`, `Ty`, ABI shape, builtin, target, and mode (normal/test/debug/release). Coverage derives from compiler constructors, not a hand-maintained prose list, so adding an IR operation makes the gate fail until LLVM/QBE support is declared and tested. Expose the matrix in `concrete agent features --json`, debug bundles, and the Phase 7.5 capstone.
 
 ### Task R-0081
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** merged — emitter independence between the LLVM adapter and the LCB adapter, and shared-helper disclosure, move to R-0505/R-0517.
 
 **Objective:** Preserve oracle independence with a review/firewall gate. QBE modules may import SSA, target-neutral layout/codegen facts, diagnostics, and semantic identities, but not LLVM AST/printer/emitter modules. LLVM and QBE may share runtime helpers only when the manifest discloses the correlation. Add an import-direction test and a source scan preventing calls from one emitter into the other.
 
@@ -12745,6 +14635,10 @@ Do not infer support from an OS or CPU-family label alone.
 ### Architecture And Independence Rules
 
 ### Task R-0082
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR.
 
 **Objective:** Preserve one frontend and one lowering spine:
 
@@ -12757,6 +14651,10 @@ entry-point policy; keep instruction selection, aggregate materialization,
 ABI spelling, wrappers, globals, and runtime-helper emission independent.
 ### Task R-0083
 
+**Stage:** none — retired; see the disposition below
+
+**Disposition (2026-10-19):** retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517.
+
 **Objective:** Add an explicit backend selection surface:
 
 `--backend llvm|qbe`, `--emit-qbe`, and the corresponding project-build
@@ -12765,9 +14663,17 @@ unavailable backend with a structured diagnostic that names the missing
 tool/target; never fall back to LLVM after the user selects QBE.
 ### Task R-0084
 
+**Stage:** none — delegated; see the disposition below
+
+**Disposition (2026-10-19):** delegated — a typed QBE-style IR and printer are LCB's input layer; Concrete's adapter constructs LCB-IR under R-0517.
+
 **Objective:** Add `Concrete/Backend/QBE.lean` for a small typed QBE IL AST, `EmitQBE.lean` for the pure text printer, and an SSA-to-QBE translation module separate from `EmitSSA.lean`. Do not build QBE text through ad-hoc concatenation inside CLI code. Pin the supported QBE release/tool identity in CI and record it in debug/audit output.
 
 ### Task R-0085
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** duplicate of R-0076: merge through R-0076 into R-0502.
 
 **Objective:** Keep layout facts backend-neutral. Split LLVM spelling out of `Concrete/Check/Layout.lean` where necessary, but do not create a second size/alignment calculator. Add a gate proving LLVM and QBE consume the same Concrete layout decisions while independently realizing them.
 
@@ -12776,11 +14682,19 @@ tool/target; never fall back to LLVM after the user selects QBE.
 
 ### Task R-0086
 
+**Stage:** 2
+
+**Disposition (2026-10-19):** superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices.
+
 **Objective:** Land a scalar smoke slice first: integer and boolean constants, arithmetic, comparisons, casts, direct calls, returns, blocks, branches, phi/copy lowering, stack slots, loads/stores, globals, string data, and the stage-2 main wrapper. Map Concrete `i8`/`i16`/`i32`/`bool` temporaries deliberately onto QBE word operations with explicit truncation and signed/unsigned extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
 
 Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
 and exit-code edge cases rather than accepting scalar happy paths alone.
 ### Task R-0087
+
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by VP V7/R-0512: merge with total float model and profile-specific trust labels.
 
 **Objective:** Give floating point its own executable slice rather than treating the `f32`/`f64` type mapping as coverage. Add arithmetic; ordered/unordered comparisons; NaN, infinity, signed-zero, subnormal, and precision-change vectors; int-to-float conversions; and checked float-to-int conversions.
 
@@ -12791,9 +14705,17 @@ and exit-code edge cases rather than accepting scalar happy paths alone.
  `qbe_pending` capability row rather than silently absent from the subset.
 ### Task R-0088
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded — aggregate/memory ABI realization moves to R-0502 (layout) and the adapter boundary (R-0505/R-0517) across V2–V6.
+
 **Objective:** Add memory and aggregate support: fixed arrays, structs, packed/explicitly aligned layouts, enums, canonical `Option`/`Result`, strings, vectors, nested places, byte-union payloads, aggregate copies, and small/large aggregate calls/returns. QBE aggregates are memory/ABI objects rather than general SSA temporaries, so make materialization explicit and test tag/payload offsets, padding, alignment, and partially initialized payload storage.
 
 ### Task R-0089
+
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency.
 
 **Objective:** Add calls and platform boundaries: indirect calls, externs, variadics used by the runtime, argc/argv accessors, symbol visibility, linker aliases, C ABI scalar/aggregate classification, and Linux/macOS target selection for the architectures QBE and Concrete both declare supported. Unsupported target, calling convention, TLS, or ABI shapes must fail before emission with a stable diagnostic.
 
@@ -12806,9 +14728,17 @@ be tested; only a shape that the pinned target/toolchain actually cannot
 realize receives a named `qbe_pending` row or runtime-mediated boundary.
 ### Task R-0090
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0503: retire preferred-C-runtime prescription; implement Concrete `rt`, named libc FFI.
+
 **Objective:** Port the compiler-emitted builtin/runtime surface needed by the validation corpus. Prefer a small shared C runtime for allocation, IO, traps, and other platform services when that keeps semantics explicit; keep pure scalar builtins in the emitter when independence is more valuable. Extend the builtin-semantics inventory so every builtin is one of `qbe_equal`, `qbe_runtime_helper`, or `qbe_pending`; adding a builtin without an explicit class fails CI.
 
 ### Task R-0091
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** merged — native test-mode entry generation joins R-0075's driver and the LCB-native profile (R-0517).
 
 **Objective:** Add QBE test-mode entry generation so `concrete test` can execute the same discovered tests and module filter under both native backends. Preserve the test runner's result accounting and output exactly; do not special-case a smaller, silently different QBE test semantics.
 
@@ -12817,12 +14747,20 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
 
 ### Task R-0092
 
+**Stage:** 1, 2, 3, 4
+
+**Disposition (2026-10-19):** superseded — the three-way differential is Core semantics / LLVM profile / LCB-native under R-0491.
+
 **Objective:** Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver that runs each fixture through the source interpreter, LLVM, and QBE and compares a structured observation:
 
  `{compile_class, stdout_bytes, stderr_bytes, exit_status, runtime_class}`.
  Normalize only declared platform noise; never normalize program output,
  trap kind, or exit status merely to make paths agree.
 ### Task R-0093
+
+**Stage:** 1, 2, 3, 4
+
+**Disposition (2026-10-19):** duplicate of R-0092: merge; labels are hypotheses, not proof of faulty component.
 
 **Objective:** Classify every mismatch rather than printing a generic wrong-code failure:
 
@@ -12838,9 +14776,17 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
  observations, and classification in the wrong-code/debug bundle.
 ### Task R-0094
 
+**Stage:** 1, 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0491: merge; retain hand/reference/metamorphic controls.
+
 **Objective:** Require an independent expected result for cases capable of exposing a shared lowering error: a hand-authored expectation, checked-in reference model, system-tool/Python oracle, or metamorphic property. Two backends agreeing is corroboration, not correctness, because both consume the same lowered SSA.
 
 ### Task R-0095
+
+**Stage:** 1, 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0491/R-0118: merge manifests and minimum completed comparisons.
 
 **Objective:** Build the validation corpus by semantic family, not file count:
 every `SInst`, terminator, scalar width, signedness-sensitive operation,
@@ -12853,6 +14799,10 @@ at least one injected fault in lowering, LLVM emission, QBE emission,
 interpreter semantics, layout, and builtin behavior.
 
 ### Task R-0096
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** superseded by R-0513/R-0491: merge; remove mandatory QBE availability.
 
 **Objective:** Run a deterministic quick differential matrix on every CI change
 and a larger rotating fuzz/differential matrix on schedule. Before QBE is
@@ -12869,6 +14819,10 @@ retain their artifacts.
 
 ### Task R-0097
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0512: merge profile admission; retain no silent fallback.
+
 **Objective:** Phase 7.5 may close with a declared subset, but that subset must be honest:
 
  `concrete agent features --json`, help, audit output, and documentation list
@@ -12877,6 +14831,10 @@ retain their artifacts.
  LLVM is forbidden.
 ### Task R-0098
 
+**Stage:** 3, 4, 5, 6, 7
+
+**Disposition (2026-10-19):** duplicate of R-0137: merge profile-aware workload matrix and owned exclusions.
+
 **Objective:** Exercise the completed subset immediately in Phase 8: every new flagship workload that stays inside it runs interpreter/LLVM/QBE differential checks;
 
  exclusions require a named missing feature and roadmap owner. Record bugs
@@ -12884,11 +14842,19 @@ retain their artifacts.
  that exposed them.
 ### Task R-0099
 
+**Stage:** none — retired; see the disposition below
+
+**Disposition (2026-10-19):** retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists.
+
 **Objective:** Graduation to a supported release backend occurs only in Phase 15: migrate QBE from the direct validation path onto `ValidatedBackendIR`, pass the full target/toolchain and C ABI matrices, integrate debug/source maps and incremental artifacts, attach translation-validation status, define optimization/tool-version policy, and pass release/platform soak gates.
 
  Until then `--backend qbe` is explicitly experimental and its native result
  remains backend-trusted/test evidence.
 ### Task R-0100
+
+**Stage:** after-1.0/research
+
+**Disposition (2026-10-19):** superseded — Wasm/Cranelift no longer wait for QBE; the Phase 15.25 entrance criteria (R-0305) consume validated BIR.
 
 **Objective:** After the QBE backend is stable, evaluate a complementary target rather than starting one in parallel. WebAssembly is the provisional next backend, governed by Phase 15.25's entrance criteria and narrow Wasm32/WASI scope.
 
@@ -12900,22 +14866,42 @@ retain their artifacts.
  class or workload that LLVM plus QBE cannot pressure effectively.
 ### Task R-0101
 
+**Stage:** none — delegated; see the disposition below
+
+**Disposition (2026-10-19):** delegated — legality verification of the QBE-style IR is LCB's (its F04/V02); Concrete validates adapter output under R-0517.
+
 **Objective:** Define and gate QBE-IL legality independently of execution. Add a pure verifier for Concrete's typed QBE AST (definition-before-use where QBE requires it, unique temporaries/blocks/symbols, legal base/extended type positions, phi predecessor agreement, terminator completeness, entry-block restrictions, call/return ABI agreement, aggregate definitions before use, alignment validity, and escaped identifier/string syntax), then run the pinned `qbe` parser as a second validation layer. An emitter failure must be a structured Concrete diagnostic with the `.qbe` artifact retained; raw QBE/assembler/linker errors must not be the first user-facing diagnosis for
 
  a compiler-owned invalid artifact.
 ### Task R-0102
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded — the operation gap ledger becomes typed pass obligations (R-0506) and the adapter's obligations (R-0517).
+
 **Objective:** Write a QBE semantic-gap ledger before broad coverage. For every Concrete SSA operation, record the QBE instruction sequence and the assumptions that make it equivalent: signed division overflow and divide-by-zero, shift counts, float-to-int out-of-range behavior, NaNs and signed zero, sub-word truncation/extension, uninitialized bytes, invalid pointers, alignment, aliasing, aggregate padding, unreachable paths, traps, and integer/pointer conversions. Where LLVM uses poison/undef, flags, or intrinsics that have no direct QBE analogue, lower to explicit checks/helpers or mark the operation pending; never inherit accidental host behavior as Concrete semantics.
 
 ### Task R-0103
+
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0492/R-0505: merge; general separate compilation arrives in V6.
 
 **Objective:** Make symbol and module composition a first-class gate. Test duplicate basenames, import aliases, colliding private names, generic specializations, extern/defined-symbol collisions, linker aliases, string and type-name escaping, multi-module declaration deduplication, visibility, and deterministic ordering. Compile both one combined QBE unit and, once supported, separate units linked together; their observations and exported symbol sets must agree.
 
 ### Task R-0104
 
+**Stage:** 3
+
+**Disposition (2026-10-19):** merged — deterministic emission and toolchain identity join R-0146; the LCB version and upstream lock are pinned by R-0517.
+
 **Objective:** Add deterministic-emission and reproducibility checks: identical cleaned SSA plus an identical target/toolchain configuration must produce byte-identical QBE IL, assembly where the pinned toolchain permits it, link manifests, and backend observation records. Debug paths, temporary paths, hash-map order, host locale, parallel test scheduling, and environment variables must not perturb semantic artifacts. Record the QBE version, target, assembler, C compiler/linker, runtime-helper hash, and flags in the build/debug bundle and cache key.
 
 ### Task R-0105
+
+**Stage:** 1, 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0491/R-0504: merge debug/release and sanitizer controls.
 
 **Objective:** Add optimization-sensitive triangulation. For every eligible fixture, compare interpreter, LLVM at the supported debug/release optimization levels, and QBE followed by the supported assembler/linker configurations.
 
@@ -12926,9 +14912,17 @@ retain their artifacts.
  program-output comparison channel.
 ### Task R-0106
 
+**Stage:** 1, 2, 3
+
+**Disposition (2026-10-19):** duplicate of R-0009/R-0491: merge new backend predicates into shared reducer/harness.
+
 **Objective:** Extend fuzzing and reduction for the new path. Add backend-aware predicates for QBE compile crash/rejection, QBE runtime mismatch, three-way semantic split, LLVM-only mismatch, shared-compiled mismatch, optimization mismatch, and nondeterministic QBE emission. Reducers must preserve the mismatch classification and relevant target/tool versions, save the smallest reproducer plus replay command, and prove by mutation tests that a reduced case is not accepted merely because one backend stopped compiling.
 
 ### Task R-0107
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0075: merge bounded external-tool execution contract.
 
 **Objective:** Separate compiler defects from toolchain defects operationally. The bundle and CI report must identify the first failing boundary:
 
@@ -12940,6 +14934,10 @@ retain their artifacts.
  disagreement.
 ### Task R-0108
 
+**Stage:** 3
+
+**Disposition (2026-10-19):** duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements.
+
 **Objective:** Establish performance guardrails without making QBE win benchmarks. Track compiler wall time, peak memory where available, emitted IL/assembly/object size, final binary size, and runtime for a small stable corpus against LLVM.
 
  Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
@@ -12947,9 +14945,17 @@ retain their artifacts.
  they cannot choose a backend silently or weaken semantic/evidence gates.
 ### Task R-0109
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0503/R-0146: merge; remove assumption helpers must be C.
+
 **Objective:** Define runtime-helper ownership and versioning. Shared C helpers must have a narrow, documented ABI; checked-in source; deterministic build; symbol namespace; target/feature manifest; sanitizer tests; and interpreter/LLVM/ QBE semantic vectors. Decide explicitly which helpers are common semantic infrastructure and which remain independently emitted oracle logic. A helper change invalidates both backend cache keys and reruns every builtin/ ABI consumer; sharing a helper must be disclosed when it reduces oracle independence.
 
 ### Task R-0110
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile.
 
 **Objective:** Add release-surface and compatibility discipline even while experimental:
 
@@ -12961,6 +14967,10 @@ retain their artifacts.
  bundles must state the exact backend used; examples and documentation must
  not show QBE-derived native evidence as LLVM-derived or backend-independent.
 ### Task R-0111
+
+**Stage:** 2, 3
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase.
 
 **Objective:** Add a Phase 7.5 capstone artifact:
 
@@ -12977,11 +14987,19 @@ retain their artifacts.
  fault class. All pending rows need an owner and Phase 8/15 disposition.
 ### Task R-0112
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone.
+
 **Objective:** Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the structured backend driver, and the extracted layout/runtime facts with byte/behavior parity, delete the old direct `Pipeline.emit -> String` path, duplicated CLI compile/link branches, and emitter-local program-wide fact discovery. Do not carry two LLVM pipelines through the QBE implementation;
 
  the compatibility window must have a named removal commit and mutation-
  sensitive parity gate.
 ### Task R-0113
+
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Kept as the QBE reconciliation decision record; decided 2026-10-19 that the Lean Compiler Backend is the QBE path (R-0517).
 
 **Decision (2026-10-19):** the Lean Compiler Backend is Concrete's QBE path. LCB is a Lean 4 port of QBE 1.3
 developed as a separate general-purpose project; Concrete consumes it through R-0517's adapter and builds
@@ -13037,6 +15055,10 @@ these migrations with a path-only `Concrete/` reshuffle.
 
 ### Task R-0114
 
+**Stage:** 1, 2
+
+**Disposition (2026-10-19):** superseded by R-0492: merge; distinguish compilation-local IDs from persistent evidence identity.
+
 **Objective:** Introduce stable semantic identities at definition boundaries.
 Give modules, definitions, fields, variants, binders, monomorphized instances,
 blocks, values, runtime checks, and proof subjects stable typed identities where
@@ -13056,6 +15078,10 @@ and delete each superseded text-keyed lookup in the same slice.
 
 ### Task R-0115
 
+**Stage:** 2, 3
+
+**Reconciliation (2026-10-19):** Keep canonical facts; share indexes with R-0140.
+
 **Objective:** Build one immutable indexed ProgramFacts store Derive module/definition indexes, signatures, layouts, builtin identities, aliases, target/runtime facts, call relationships, and source/semantic identity once per program. Passes query typed keys rather than rescanning lists or building private first-match tables. Facts are immutable within a compilation;
 
 transformations produce a new version with an explicit invalidation boundary.
@@ -13067,6 +15093,10 @@ derive conflicting values for the same fact.
 
 ### Task R-0116
 
+**Stage:** 2
+
+**Disposition (2026-10-19):** superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain.
+
 **Objective:** Make successful compiler pass boundaries type-safe Introduce thin opaque results such as `ParsedProgram`, `ResolvedProgram`, `CheckedProgram`, `ElaboratedCore`, `CanonicalCore`, `MonomorphizedCore`, `LoweredSSA`, `ValidatedSSA`, `CleanedSSA`, and `CodegenInput`. Constructors live with the pass that earns each invariant; reports, backends, tests, and projects cannot call a later consumer with an earlier-stage value.
 
 
@@ -13076,6 +15106,10 @@ no unwrap/backdoor constructor, and delete the parallel raw-list entry point as
 each boundary lands. Do not introduce a universal pass monad.
 
 ### Task R-0117
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; source of R-0021/R-0056 facts.
 
 **Objective:** Replace the temporary stdlib scanner with compiler-derived interface facts Emit canonical public symbol/signature, visibility/construction rights, capabilities, allocation, ownership, failure, trust, platform, and evidence facts from the compiler's resolved/checked interface artifact. Compare them against the repaired balanced scanner until every row agrees, then delete the scanner rather than retaining two authorities.
 
@@ -13088,6 +15122,10 @@ the same artifact.
 
 ### Task R-0118
 
+**Stage:** 1, 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep one inventory; integrate R-0438/R-0080 and V7 coverage.
+
 **Objective:** Generate a self-enforcing IR/pass/consumer coverage matrix Generate, from compiler constructors and interface facts, the matrix spanning Check, CoreCheck, Interp, Lower, Verify, Cleanup, LLVM, QBE, reports, source identity, obligations/proofs, and tests. Every constructor is explicitly classified as implemented, intentionally no-op, rejected-before-here, runtime-helper, pending, or not-applicable; catch-all matches do not count.
 
 
@@ -13098,6 +15136,10 @@ inventories are deleted or reduced to generated snapshots.
 
 
 ### Task R-0119
+
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep workload/graduate distinction.
 
 **Objective:** Graduate and maintain exactly three public flagships, keeping their evidence bundles
 green:
@@ -13131,13 +15173,25 @@ proposed fourth showcase must replace or merge with an existing role. This cap d
 regression, adversarial, compatibility or performance coverage.
 ### Task R-0120
 
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep one bounded, precisely scoped theorem first. The theorem states its durable anti-rollback model: which version is committed, when, how it binds the accepted payload, and the outcome after interruption or two concurrent updates — with crash/interleaving controls — or it excludes persistent anti-rollback enforcement from its claim as an offline verifier.
+
 **Objective:** Add a stretch theorem for `secure_update_verifier`: manifest-to-payload binding, version monotonicity / rollback prevention, or trusted-key rotation invariant. This is the flagship theorem that demonstrates fail-closed evidence for a real systems-security workflow.
 
 ### Task R-0121
 
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep after state/totality prerequisites.
+
 **Objective:** Add a stretch theorem for `protocol_state_machine`: success-path / failure-completeness or invalid-transition refusal theorem once proof ergonomics support it.
 
 ### Task R-0122
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep explicit forcing-claim gate.
 
 **Objective:** Audit the next stronger real-crypto candidate only if it forces a new public claim:
 Ed25519 verification subset, AEAD, or a post-quantum primitive. It extends or replaces HMAC's
@@ -13145,13 +15199,25 @@ portfolio role; it does not automatically create another public flagship.
 
 ### Task R-0123
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0495/R-0512: retire new legacy-model semantics; add admitted Core features/proof lemmas instead.
+
 **Objective:** Add only the ProofCore surface that candidate forces: shifts, bitand, u32 compound loops, rotations, byte-to-word packing, and multi-round invariants.
 
 ### Task R-0124
 
+**Stage:** 1, 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep controls; replace fixed count and migrate under R-0512.
+
 **Objective:** Keep `hmac_sha256` as the regression anchor for exact-extraction, spec-drift-tied refinement: source perturbations must make the registered proof stale, and ProofKit refactors must keep the 11 proof checks green.
 
 ### Task R-0125
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep ongoing claim alignment; retire pre-R-0004 caveat.
 
 **Objective:** Keep the paper, website, README, and showcase manifest aligned
 with HMAC's actual claim: the stored-fingerprint extracted source body refines
@@ -13162,9 +15228,17 @@ fact is pinned.”
 
 ### Task R-0126
 
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep in Core-oriented ProofKit; require real reuse.
+
 **Objective:** Use HMAC-derived proof patterns only after they move into ProofKit or an explicit example guide; do not let future flagships copy private `Sha256Refine` scaffolding as hidden infrastructure.
 
 ### Task R-0127
+
+**Stage:** 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep with R-0460 soundness and exact loop binding.
 
 **Objective:** Satisfy the runtime-error-obligation claim through the `secure_update_verifier` or
 `protocol_state_machine` flagship: demonstrate that no OOB/div-zero/overflow obligation remains
@@ -13172,13 +15246,25 @@ undischarged on its bounded parser/validator, with the evidence visible in the b
 
 ### Task R-0128
 
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep; use authoritative capability rules/certificates.
+
 **Objective:** Satisfy the authority/capability claim through the `secure_update_verifier` flagship: a privilege-separated verification core that cannot touch files/network/processes except through named wrappers, and whose authority boundary is independently auditable.
 
 ### Task R-0129
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep bounded interop and named trust assumptions.
+
 **Objective:** Demonstrate one trusted C/FFI boundary as part of the `secure_update_verifier` or as a standalone evidence-class fixture. Do not promote it to a fourth flagship; keep the public example set capped at three.
 
 ### Task R-0130
+
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep; normal-exit conservation, not cleanup-on-abort promise.
 
 **Objective:** Satisfy the ownership-heavy resource claim through the `secure_update_verifier` or
 `protocol_state_machine` flagship: explicit cleanup, borrow-heavy APIs, no leaks/double-use and
@@ -13187,11 +15273,19 @@ benchmark corpus, not `examples/`.
 
 ### Task R-0131
 
+**Stage:** 7
+
+**Disposition (2026-10-19):** duplicate of R-0119: merge as portfolio acceptance criterion.
+
 **Objective:** Keep the three-program portfolio collectively balanced across parser/protocol,
 bounded state, crypto/security, authority, FFI/trust and ownership-heavy behavior. An axis may have
 multiple fixtures or workloads, but the public flagship count remains three.
 
 ### Task R-0132
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep byte/path/exit/error oracle coverage.
 
 **Objective:** Add Unix-tool/protocol compatibility as a workload and fold the relevant behavior
 into `secure_update_verifier` or `protocol_state_machine`: byte-preserving I/O, path/OS-string
@@ -13199,6 +15293,10 @@ handling, handle-relative filesystem authority, exit-code/error compatibility, i
 diagnostics and oracle tests. This work does not create a fourth public flagship.
 
 ### Task R-0133
+
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep implementation early; independent consumer before public graduation.
 
 **Objective:** Add a thin end-to-end credibility slice before the larger workload ladder, so skeptical users can replay one compelling artifact before the full Phase 5/6/12/13 surface is complete. This is the entrance version of `protocol_state_machine`, not a temporary fourth showcase. Target:
 
@@ -13227,6 +15325,10 @@ diagnostics and oracle tests. This work does not create a fourth public flagship
  and `defer`/cleanup item if the chosen slice owns resources. It also does not graduate or become
  public before R-0353 supplies the independent-consumer workflow required by R-0119.
 ### Task R-0134
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep bounded selection; align large-port priority with R-0490.
 
 **Objective:** Add a graduated real-workload ladder. The goal is to make sure Concrete builds real things that can be checked against references, not only tiny proof demos. Each workload must name the surface or public claim it forces;
 
@@ -13309,6 +15411,10 @@ diagnostics and oracle tests. This work does not create a fourth public flagship
 
 ### Task R-0416
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep early under R-0515; remove QBE dependency.
+
 **Objective:** Establish the first generated-code performance evidence corpus
 from Phase 8 flagships and workloads, before public comparison pressure turns
 informal speed impressions into claims.
@@ -13342,6 +15448,10 @@ the comparison detects, and no gating threshold derived from a single sample.
 
 ### Task R-0135
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep candidate checks; use release checkpoints instead of phase linearity.
+
 **Objective:** Do not run broad examples cleanup/polish sweeps. Clean examples opportunistically when a roadmap task touches them. Improve examples only when they serve proof-link migration, `concrete prove` authoring, external validation, or a release-facing tutorial. Add an example-refresh checkpoint at every phase closure, and after every two substantial Phase-6/7 usability increments. The checkpoint is not a broad rewrite; it is a small, gate-backed audit that asks whether the three graduated flagships, minimal onboarding sequence and release-facing docs still teach the current language. It must remove stale "deferred" language for newly landed features; update examples that should
 
  now use the preferred surface (`if let` / `while let`, range patterns,
@@ -13369,6 +15479,10 @@ through these refresh checkpoints, and fail new examples that omit their
 lifecycle/owner record.
 ### Task R-0136
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep separate specification; no machine constant-time claim or premature claim surface.
+
 **Objective:** Upgrade the `constant_time_tag` evidence workload from `reported` to `enforced` with a secret-dependent-flow checker. Today it reports a constant-time source shape and leaves machine timing `assumed`; add a source/IR information-flow pass that rejects secret-tagged values reaching branch conditions, loop bounds, or array indices, so the discipline becomes a compiler-enforced structural property, not a reported shape. This needs no hardware/timing model and must not claim machine-level timing: it produces `enforced` for the source-flow property only, with machine timing still named `assumed`. Mark secrets with an explicit annotation (e.g. `#[secret]`); the
 
  checker reports `enforced` or a counterexample flow path back to source. Add a clean positive
@@ -13378,6 +15492,10 @@ lifecycle/owner record.
  every negative and must never present source-flow enforcement as timing
  proof.
 ### Task R-0137
+
+**Stage:** 3, 4, 5, 6, 7
+
+**Reconciliation (2026-10-19):** Keep; split early usability checkpoint from flagship graduation.
 
 **Objective:** Add the Phase 8 validation artifact: a showcase/workload dashboard that proves every flagship and graduated workload has a check story, evidence bundle, oracle or reference when appropriate, interpreter-vs-compiled coverage, property-test/counterexample-regression coverage where relevant, runtime-obligation audit, trust/assumption classification, and release-CI replay. The first external-user workload in this dashboard is the external-validation-gate trial. Also publish representative cold pipeline timings and Phase 6C shadow invalidation traces for no-op, private-body, public-interface, proof/contract, policy, and target edits; those traces are
 
@@ -13518,6 +15636,10 @@ that conversion, and that payoff exists only if the bet validates.
 
 ### Task R-0138
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; align artifact binding with R-0497.
+
 **Objective:** Freeze every build revision into an immutable `ProjectInputSnapshot` before evaluating queries.
 
 The snapshot owns canonical project/file/module discovery and exact file
@@ -13540,6 +15662,10 @@ path, SDK/sysroot/tool binary, symlink/case alias, add/delete/rename, and
 edit-during-build snapshots.
 
 ### Task R-0139
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; replace old Check→Elab/SSA-only stage list with current architecture.
 
 **Objective:** Define one typed query/artifact contract and one `CompilerSession` driver.
 
@@ -13595,6 +15721,10 @@ correctness bug and fails a mutation gate.
 
 ### Task R-0140
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Merge common indexing with R-0115; retain cache-specific checks.
+
 **Objective:** Add deterministic indexed compiler data and linear-time builders before persisting today's hot whole-program scans.
 
 Introduce measured `ProgramIndex`/`OrderedIndex`-style structures for modules,
@@ -13618,6 +15748,10 @@ quadratic builder and that swap two incompatible typed IDs; both must fail
 their gates.
 
 ### Task R-0141
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep reuse contract; checker-return-artifact prerequisite belongs to R-0514.
 
 **Objective:** Make reusable frontend artifact boundaries operational.
 
@@ -13647,6 +15781,8 @@ not permission to add a redundant typed tree.
 
 ### Task R-0142
 
+**Stage:** 3
+
 **Objective:** Implement the serial in-memory query engine and conservative reverse-dependency invalidation.
 
 Record every actual dependency read while evaluating a query and maintain
@@ -13664,6 +15800,8 @@ after a gate or theorem demonstrates completeness for that query family.
 
 ### Task R-0143
 
+**Stage:** 3
+
 **Objective:** Define deterministic internal codecs before persisting an artifact family.
 
  Each cacheable type needs a compiler-versioned canonical encoder/decoder,
@@ -13674,6 +15812,10 @@ after a gate or theorem demonstrates completeness for that query family.
  Phase 18 separately owns stable public package encodings.
 
 ### Task R-0144
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; integrate payload-bound CheckedCore/CheckedMonoCore validation.
 
 **Objective:** Add an opaque compiler-versioned local content-addressed store under `.build/concrete-cache/` (or an equivalent project-local path).
 
@@ -13713,6 +15855,10 @@ internal consistency checks as detecting it.
 
 ### Task R-0145
 
+**Stage:** 3, 4, 5
+
+**Reconciliation (2026-10-19):** Keep; migrate ProofCore references and preserve R-0155 ownership.
+
 **Objective:** Turn proof, obligation, and report work into queries rather than cached rendered strings.
 
 Cache per-function ProofCore extraction, call/SCC classification,
@@ -13741,6 +15887,10 @@ diagnostics, filesystem discovery, environment-dependent operations, solver
 results, and cancelled work need explicit cache contracts before reuse.
 
 ### Task R-0146
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep LLVM increment; native reuse must retain image/certificate bindings.
 
 **Objective:** Add stable codegen units, an object cache, and deterministic relinking.
 
@@ -13779,6 +15929,10 @@ to the trusted local action mapping—not that LLVM produced correct code.
 
 ### Task R-0147
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep editor prerequisite; parallel scheduling follows serial correctness.
+
 **Objective:** Add a long-lived service/watch surface over the same session, then deterministic independent-query scheduling.
 
 The initial engine is serial. Once serial reuse is correct, allow independent
@@ -13794,6 +15948,8 @@ session rather than a batch `runFrontend` or editor-only cache.
 
 ### Task R-0148
 
+**Stage:** 3
+
 **Objective:** Add cache/query observability and a conservative rollout.
 
 Extend pipeline events with `executed | memory_hit | disk_hit | invalidated |
@@ -13806,6 +15962,10 @@ persists a minimized regression. Audit/why/diff output may explain reuse but
 may not cite reuse as correctness evidence.
 
 ### Task R-0149
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; move validation program to fixture/workload home.
 
 **Objective:** Add the Phase 8.5 validation artifact.
 
@@ -13855,6 +16015,10 @@ too expensive.
 
 ### Task R-0150
 
+**Stage:** 3, 4, 7
+
+**Reconciliation (2026-10-19):** Keep; start measurements before automation.
+
 **Objective:** Instrument the flagships with PROOF-EFFORT AND COVERAGE TELEMETRY
 before investing in automation, so the external-validation gate's “was the
 proof discipline worth the cost?” question has data instead of anecdotes.
@@ -13891,6 +16055,10 @@ external-user trial. Cheap to collect now; impossible to reconstruct later.
 
 ### Task R-0151
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; remove dependence on a future PExpr layering split.
+
 **Objective:** Move example Lean proofs physically next to their Concrete examples. Target layout:
 
 `examples/<name>/src/main.con`, `examples/<name>/proofs/Proofs.lean`,
@@ -13911,6 +16079,10 @@ example-specific theorem code, fixtures, snapshots, and replay metadata stay
 with the example.
 ### Task R-0152
 
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; use checked Core and canonical proposition artifacts.
+
 **Objective:** Add proof minimization: `concrete prove --minimize <obligation_id>` emits the smallest source / ProofCore / Lean slice needed to reproduce a failed obligation. Output directory:
 
  `.build/prove/<function>/<obligation_id>/minimized/` with `source.con`,
@@ -13921,6 +16093,10 @@ with the example.
  functions.
 ### Task R-0153
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; names remain display conventions, not identity.
+
 **Objective:** Define and document stable theorem naming conventions in tool output:
 
  `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
@@ -13929,9 +16105,17 @@ with the example.
  these names instead of leaving agents to invent them.
 ### Task R-0154
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep, incrementally with each authoring surface.
+
 **Objective:** Add CI gates for the agent-facing proof surfaces: snapshot representative `--json` output, validate schema versioning, ensure generated Lean stubs parse/check up to the intended placeholder boundary, assert replay JSON reports the same statuses as human replay, and assert proof-check JSON maps a failing Lean proof back to the intended obligation id.
 
 ### Task R-0155
+
+**Stage:** 2, 5
+
+**Reconciliation (2026-10-19):** Keep; derive from canonical task/evidence objects.
 
 **Objective:** Define one proof artifact schema shared by obligations, minimization, `--why`, generated stubs, synthesis attempts, repair plans, stale-proof reports, proof-cache entries, and replay bundles.
 
@@ -13948,6 +16132,8 @@ with the example.
  dialect.
 ### Task R-0156
 
+**Stage:** 3, 4
+
 **Objective:** Add human docs only after the binary path exists:
 
  `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
@@ -13955,6 +16141,10 @@ with the example.
  they must not be the source of truth for agents using only an installed
  binary.
 ### Task R-0157
+
+**Stage:** 3, 4, 6
+
+**Reconciliation (2026-10-19):** Keep as continuing acceptance requirement.
 
 **Objective:** Keep AI/agent assurance guidance aligned with the implemented proof surface.
 
@@ -13967,39 +16157,71 @@ with the example.
  intended suggestion pattern.
 ### Task R-0158
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no prerequisite for compiler proofs.
+
 **Objective:** Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP server should wrap the binary rather than duplicate logic, exposing resources such as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and `concrete://examples/evidence-classes`, plus tools for `prove_json`, `show_obligation`, `emit_lean`, `check`, `replay`, and `check_proofs`.
 
 ### Task R-0159
+
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; replace “OOB stuck” with defined bounds-trap semantics. Out-of-bounds access is a defined bounds trap in Core, not stuck execution; lemmas target the trap semantics.
 
 **Objective:** Build reusable proof lemmas for arrays: lookup, update, length, in-bounds, OOB stuck behavior.
 
 ### Task R-0160
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; target Core loops and clock semantics.
+
 **Objective:** Build reusable lemmas for loop-carried state and `while_step`.
 
 ### Task R-0161
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep, driven by admitted widths/operators.
 
 **Objective:** Build reusable lemmas for BitVec operations used by flagships.
 
 ### Task R-0162
 
+**Stage:** 4
+
 **Objective:** Build reusable lemmas for structs, fields, enum construction, match, Result, Option, and bounded-buffer invariants.
 
 ### Task R-0163
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; replace PExpr/FnTable output with exact Core statements.
 
 **Objective:** Upgrade generated proof stubs for real shapes: arrays, structs, enums, fixed buffers, Result/Option, loops, source contracts, and refinement composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton, expected theorem statement, common imports/tactics, and TODO blocks for loop invariants. These items enrich what `--emit-lean` produces; they do not introduce a second stub generator. Provide a friendly alias such as `concrete prove <file> <fn> --stub` only if it is the same artifact path and schema as `--emit-lean`, not a second proof surface.
 
 ### Task R-0164
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; replace manually assembled FnTables.
+
 **Objective:** Add generated composition scaffolds: FnTable entries, call lemmas, callee refinement dependencies, and composed theorem skeletons.
 
 ### Task R-0165
+
+**Stage:** 4
 
 **Objective:** Add generated loop-invariant templates for common proof shapes:
 
  counter loop over array writes, copy loop, fold loop, multi-store loop,
  offset loop, and block-processing loop.
 ### Task R-0166
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; share persistence with R-0191.
 
 **Objective:** Improve failed-proof diagnostics after `--json`, failed artifacts, and `--minimize` exist: classify common failures into actionable categories such as missing callee theorem, stale source link, missing table entry, failed arithmetic bridge, insufficient frame fact, and spec/extraction mismatch. Add `concrete prove <file> <fn> --why <obligation_id>` (or an equivalent `--show-obligation --why` form) to explain why the obligation exists, which source span generated it, which facts are in scope, what evidence classes are allowed, and why automation did not close it.
 
@@ -14012,6 +16234,10 @@ with the example.
  text. The fixture is evidence of failure only; it must never upgrade a claim
  to proof.
 ### Task R-0167
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep, conditional on R-0150 economics and exact Core claims.
 
 **Objective:** Add **LLM-guided proof synthesis, kernel-verified** as a first-class proof-authoring workflow, not as prose-only AI help. Command shape:
 
@@ -14061,6 +16287,10 @@ with the example.
  repository docs.
 ### Task R-0168
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep performance-pulled, as R:220 requires.
+
 **Objective:** Add proof-result caching once proof artifacts and fingerprints are stable.
 
  This item is active only when Phase 8.5 completed after a GO verdict; if
@@ -14082,6 +16312,10 @@ with the example.
  proof statuses and replay artifacts.
 ### Task R-0169
 
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; choose coverage from measured workloads.
+
 **Objective:** Add simple auto-discharge for structural obligations that do not need human proof search. V1 shapes: reflexive field projection, tuple/struct constructor-destructor round trips, enum tag preservation, fixed-array literal length, direct call wrapper, and source-contract metadata erasure.
 
  Command surface: `concrete prove --auto <function> --json`, reporting
@@ -14094,6 +16328,10 @@ with the example.
  assumption. It consumes R-0442 callable identity and R-0004 replay receipts;
  it does not replace kernel replay of existing hand-written artifacts.
 ### Task R-0170
+
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; retarget symbolic execution to normative Core.
 
 **Objective:** Add operational VC auto-discharge as the next automation tier after structural auto-discharge. Today `linear` and `bitvector` obligations route to `omega` / `bv_decide`, while `operational` and `refinement` obligations route to Lean proof links; that leaves ordinary `#[ensures]` bodies and loop operational-preservation steps dependent on hand-written bridge theorems.
 
@@ -14138,6 +16376,10 @@ with the example.
  result.
 ### Task R-0171
 
+**Stage:** 1, 4
+
+**Disposition (2026-10-19):** superseded by R-0494: merge into R-0494; preserve route-specific attacks.
+
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
 
  Any auto-discharge, generated proof, solver route, cache hit, replay helper,
@@ -14153,6 +16395,10 @@ with the example.
  external solver path.
 ### Task R-0172
 
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; distinguish library models from compiler semantics.
+
 **Objective:** Add a small verified/spec-checked standard proof library for common predicates and formal stdlib models: sorted, bounded, no-duplicates, fixed-length, prefix, checksum, constant-time source shape, `formal_vec`, `formal_map`, `formal_set`, spec-only `bigint`, and the first reusable lemma families over those models. Treat these as **formal shadow models** for real containers: user proofs reason about the mathematical model, while collection implementations prove refinement facts from `Vec`, `HashMap`, `OrderedMap`, and `HashSet` to the corresponding formal model.
 
 
@@ -14166,6 +16412,10 @@ with the example.
  the checker/kernel. This is the tractability unlock for proving real
  programs that use containers.
 ### Task R-0173
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; lower through typed contracts/TermIR.
 
 **Objective:** Add bounded quantified specs for collections, not arbitrary open-ended logic. V1 syntax should cover only finite, source-visible domains:
 
@@ -14184,6 +16434,10 @@ with the example.
  proved unless the generated finite theorem actually checks.
 ### Task R-0174
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; share R-0166 diagnostics and R-0167 artifacts.
+
 **Objective:** Add AI-assisted proof repair only after artifacts, statuses, and replay are stable enough to validate suggestions mechanically. The binary surface is `concrete prove --repair-plan <obligation_id> --json`; it emits no edited source, only candidate next actions with required checks. Required JSON fields: `obligation_id`, `failure_class`, `minimal_artifact`, `suggested_lemma`, `suggested_imports`, `candidate_tactic`, `validation_command`, and `risk`. Wire `scripts/tests/check_proof_repair_plan.sh` with missing theorem, stale proof, missing frame fact, arithmetic bridge failure, and spec mismatch.
 
  No repair suggestion may change a proof status until `--check` or
@@ -14192,6 +16446,10 @@ with the example.
  same repair-plan artifact; it must not edit source by default and must never
  upgrade evidence without replay.
 ### Task R-0175
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; foundational memory/frame lemmas still start in stage 2.
 
 **Objective:** **Frame inference (the proof-scaling cliff).** Every loop/state proof must establish not just what an iteration *changes* but what it *preserves* — the frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
 
@@ -14228,6 +16486,10 @@ model gets framing for free.
    the byte model.
 ### Task R-0176
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151.
+
 **Objective:** Deferred architecture refactor: split the current `Concrete.Proof` layering so registered example specs can move without a cycle, but do not let this block the active frontier unless spec ownership or proof authoring starts depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns the spec-drift table and imports whichever example spec modules it registers;
 
 `Concrete.Proof` becomes the generic proof-theorem / compatibility umbrella.
@@ -14241,6 +16503,10 @@ example-owned theorem/spec definitions, `check-proofs` can reach moved
 modules through the umbrella import, and changing a moved example body still
 reports stale/spec-drift rather than silently accepting the old proof.
 ### Task R-0177
+
+**Stage:** 2, 4, 6
+
+**Reconciliation (2026-10-19):** Keep as cumulative checkpoints, not one late capstone.
 
 **Objective:** Add the Phase 9 validation artifact: a proof-authoring project that exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked proof attachment across straight-line, array update, loop copy, fold, composition, bounded quantified specs, ghost, stale, missing, partial, and repair cases. The gate must typecheck generated stubs, reject any `proof-registry.json`, and verify that failing Lean proofs map back to stable obligation ids. If Phase 8.5 completed, it must also exercise proof-query memory/disk hits, stale dependency invalidation, proof-tool/policy drift,
 
@@ -14257,6 +16523,10 @@ Done when: `concrete audit`, semantic diff, and an artifact viewer cover the
 three graduated flagships and one package-scale workload.
 
 ### Task R-0178
+
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; minimal authoritative dimensions needed in stage 2.
 
 **Objective:** Stabilize machine-readable fact schemas for proof status, obligations, effects, capabilities, assumptions, policies, snapshots, showcase metadata, runtime traps, synthesis attempts, stdlib evidence, and package evidence.
 
@@ -14289,9 +16559,15 @@ relation, and `kernel_replayed` answer different questions and may not be
 collapsed into or used to upgrade a proof/evidence class.
 ### Task R-0179
 
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; render R-0494 verdicts.
+
 **Objective:** Add `concrete audit`: one human-readable plus machine-readable bundle covering authority, trust, allocation, proof status, obligations, assumptions, policy, snapshots, backend/target assumptions, replay, and the proof-story matrix specialized to the audited program.
 
 ### Task R-0180
+
+**Stage:** 3, 5
 
 **Objective:** Add `concrete explain <function>`: capabilities, proof status,
 assumptions, obligations, trusted callees, direct and transitively reachable
@@ -14301,9 +16577,17 @@ completeness boundary rather than deriving reachability again.
 
 ### Task R-0181
 
+**Stage:** 3, 5
+
+**Reconciliation (2026-10-19):** Keep; use shared conservative call facts.
+
 **Objective:** Add `concrete why <capability>`: explain why a function needs `File`, `Network`, `Alloc`, `Unsafe`, etc., including transitive call chains.
 
 ### Task R-0182
+
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; retain bounded R-0486 increment.
 
 **Objective:** Add `concrete diff old new`: authority/proof/trust/runtime-obligation diff.
 
@@ -14335,6 +16619,10 @@ changelog: `+ File capability`, `+ trusted function`, `- Unsafe removed`,
 and must not collapse the review into one green badge.
 ### Task R-0183
 
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; separate later equivalence proving.
+
 **Objective:** Add semantic trust diff gates: capability widening, allocation change, trusted boundary addition, stale proof, weakened/missing obligation, assumption widening, runtime-obligation change, and stdlib evidence-class drift. Add a red-team fixture proving the diff cannot emit a false-clean summary when a capability/trust/proof fact changed.
 
 **First increment:** gate R-0182's three-family diff using R-0486. Each controlled
@@ -14353,6 +16641,10 @@ to the old program. Keep this behind the typed contract/model and R-0482 identit
 prerequisites; a model-level proof does not supply an unchecked codegen edge.
 
 ### Task R-0184
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; separate policy acceptance from compiler verification.
 
 **Objective:** Add early **capability budget files** before full package facts exist.
 
@@ -14377,6 +16669,10 @@ R-0443 later makes the narrow whole-program authority property independently
 checkable from the canonical artifact.
 
 ### Task R-0441
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; documentation repair is already complete.
 
 **Objective:** Decide how `with(Std)` behaves under an authority budget. The
 canonical-list documentation half is complete.
@@ -14423,9 +16719,17 @@ outright is likely the cleanest rule and should be the default proposal.
 
 ### Task R-0185
 
+**Stage:** 5
+
+**Disposition (2026-10-19):** duplicate of R-0179: merge into R-0179.
+
 **Objective:** Add `concrete audit --json`: machine-readable audit output for CI, dashboards, editor tooling, and release bundles.
 
 ### Task R-0186
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep; rename to avoid collision with compiler `verified` profile. Name the policy so it does not collide with the compiler's `verified` profile: a policy-clean LLVM program is not compiled through the verified native pipeline.
 
 **Objective:** Add a **verified profile** command/policy surface that makes "formally verifiable code" operational without overclaiming. Candidate spellings:
 
@@ -14442,9 +16746,15 @@ outright is likely the cleanest rule and should be the default proposal.
  unchecked unsafe, and unresolved runtime obligation.
 ### Task R-0187
 
+**Stage:** 5, 7
+
 **Objective:** Add an artifact viewer CLI/TUI over facts, obligations, proofs, assumptions, release bundles, and diffs. It may show a compact dashboard, but it must never collapse different evidence classes into one fake green badge: `proved`, `runtime_checked`, `tested_by_oracle`, `assumed`, and `trusted` stay distinct on screen and in JSON.
 
 ### Task R-0188
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep; minimum slice replay belongs in stage 2.
 
 **Objective:** Ensure every release bundle includes an evidence replay command.
 
@@ -14458,6 +16768,8 @@ Done when the replay gate covers: clean bundle replays green, stale proof
 fails, missing gate fails, changed source fails, schema mismatch fails, and
 an LLM-generated proof bundle replays using only checked artifacts.
 ### Task R-0189
+
+**Stage:** 3, 5
 
 **Objective:** Make `tested_by_oracle` evidence structured and diffable:
 
@@ -14473,6 +16785,10 @@ an LLM-generated proof bundle replays using only checked artifacts.
  - flag oracle evidence weakening in `concrete diff` when cases, seeds,
    reference, comparison mode, or boundary coverage shrink.
 ### Task R-0190
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; requires typed contract semantics.
 
 **Objective:** Add property-based contract testing as a cheap counterexample finder, not proof. Command surface: `concrete test --contracts --property --json` generates inputs satisfying `#[requires]`, executes the function, checks `#[ensures]`, runtime obligations, and selected `assert` facts, then shrinks failures to a minimal source-level witness. Evidence class:
 
@@ -14490,6 +16806,10 @@ an LLM-generated proof bundle replays using only checked artifacts.
  ever producing a `proved_*` status.
 ### Task R-0191
 
+**Stage:** 1, 3, 5
+
+**Reconciliation (2026-10-19):** Keep; minimum persistence joins R-0491 immediately.
+
 **Objective:** Add counterexample-to-regression persistence for obligation witnesses from SMT, property tests, oracle failures, fuzzers, differential mismatches, runtime traps, proof failures, and future fuzzed contracts. Command surface: `concrete counterexample save <obligation_id> --out tests/counterexamples/<name>.con` plus JSON mode. The saved fixture must include source inputs, expected failing obligation id, expected status (`counterexample`, `tested_by_property_failure`, `oracle_failure`, etc.), replay command, and the original tool provenance. Wire `scripts/tests/check_counterexample_regressions.sh` with one SMT overflow
 
  witness, one property-test contract witness, one oracle mismatch, one
@@ -14498,6 +16818,8 @@ an LLM-generated proof bundle replays using only checked artifacts.
  gate must fail if a future refactor turns the same counterexample into
  `proved_*` without changing the checked fixture expectation.
 ### Task R-0192
+
+**Stage:** after-1.0/research
 
 **Objective:** Add **observed contract inference from tests** as an explicit non-proof on-ramp to specs.
 
@@ -14516,33 +16838,61 @@ an LLM-generated proof bundle replays using only checked artifacts.
   policy-approved assumption.
 ### Task R-0193
 
+**Stage:** 2, 5
+
 **Objective:** Add spec provenance and adequacy facts to audit/release bundles: spec name, source standard or paper, independent reference if any, test-vector set, reviewer, review date, assumptions, and evidence class (`spec_trusted`, `spec_reviewed`, `tested_by_oracle`, or future `spec_refines_standard`). Do not let a source-to-spec proof imply the spec itself is adequate.
 
 ### Task R-0194
+
+**Stage:** 1, 5
+
+**Disposition (2026-10-19):** duplicate of R-0209: merge into R-0209.
 
 **Objective:** Add evidence-level monotonicity checks to audit/diff output.
 
 ### Task R-0195
 
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep as workflow fixture.
+
 **Objective:** Add one AI-audit demo where an agent answers authority/proof/trust questions using compiler facts rather than source guesses.
 
 ### Task R-0196
+
+**Stage:** 5, 7
 
 **Objective:** Add review checklists generated from facts: what changed, what widened, what became trusted, what lost proof, what gained assumptions, and which obligations remain open.
 
 ### Task R-0197
 
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; preserve replayability and identity.
+
 **Objective:** Add artifact redaction/stability rules so release bundles can be shared publicly without leaking local paths, secrets, or machine-specific noise.
 
 ### Task R-0198
+
+**Stage:** 1, 5
+
+**Disposition (2026-10-19):** duplicate of R-0178: merge schema work into R-0178; verdict enforcement into R-0494.
 
 **Objective:** Keep audit, contracts, obligations, assumptions, policies, manifests, and proof-status output on one shared vocabulary. Do not let each artifact grow its own mini-language for the same evidence classes.
 
 ### Task R-0199
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep as release acceptance.
+
 **Objective:** Keep public-facing docs and website copy grounded in the same evidence vocabulary. Use `docs/project/WHY_CONCRETE.md` as the source for a C/Rust-oriented "why this exists" page: small systems code, explicit authority, visible evidence classes, spec-drift-tied proofs, named trust boundaries, and what Concrete deliberately avoids. The website should show the end goal and the current honest status, not catchy slogans or one-badge proof claims.
 
 ### Task R-0200
+
+**Stage:** 5
+
+**Reconciliation (2026-10-19):** Keep; “historical origin” does not mean completed.
 
 **Objective:** [historical origin: closed Phase 4 item 42] Add compiler self-audit: `concrete audit
 
@@ -14554,6 +16904,10 @@ an LLM-generated proof bundle replays using only checked artifacts.
  pipeline facts. Neither branch may recompute a private audit-only compiler
  model, create a private cache, or present a cache hit as validation.
 ### Task R-0201
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep, staged with available producers.
 
 **Objective:** Add the Phase 10 validation artifact: one package-scale audit bundle fixture with human and JSON output, semantic diff before/after a change, artifact viewer smoke test, oracle manifest, property-test manifest, persisted counterexample regression, spec-provenance facts, redaction check, replay command, and a README showing how a reviewer answers authority, proof, trust, assumption, and runtime-obligation questions without reading compiler internals. When Phase 8.5 exists, cold, warm, and cache-off audit/diff/why output must be identical after normalizing timing/cache-observability fields, and corrupt/stale query artifacts must recompute or fail closed; otherwise
 
@@ -14571,29 +16925,57 @@ under a stronger badge.
 
 ### Task R-0202
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0495/R-0512: merge dependency-closure requirement into Core migration; maintain legacy checks until retirement.
+
 **Objective:** Add transitive FnTable completeness: walk registered spec call graphs, not only direct call sites, and fail or flag missing callees before theorem authors hit confusing `none` evaluations.
 
 ### Task R-0203
+
+**Stage:** 1, 2, 5
+
+**Reconciliation (2026-10-19):** Keep; use canonical dependencies and R-0494.
 
 **Objective:** Add proof dependency tracking: if proof/spec for `f` depends on `g`, drift in `g` must affect `f`'s proof/evidence status or surface an explicit dependency warning.
 
 ### Task R-0204
 
+**Stage:** 1
+
+**Disposition (2026-10-19):** superseded by R-0494: merge into R-0494.
+
 **Objective:** Add per-obligation proof/evidence status. Function-level status is only a summary; padding, block fold, digest serialization, final composition, contract clauses, runtime obligations, oracle checks, and assumptions each carry their own evidence class.
 
 ### Task R-0205
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** superseded by R-0494: merge into R-0494’s evidence-class controls.
 
 **Objective:** Keep oracle-tested evidence separate from Lean/spec refinement. Oracles are implementation sanity and regression evidence, not proof completion.
 
 ### Task R-0206
 
+**Stage:** 3, 4
+
+**Disposition (2026-10-19):** duplicate of R-0166: merge into R-0166.
+
 **Objective:** Add proof debugging output for failed/stale proofs: extracted spec, current fingerprint, registered fingerprint, expected theorem shape, missing callee facts, likely missing lemma class.
 
 ### Task R-0207
 
+**Stage:** 2, 5
+
+**Reconciliation (2026-10-19):** Keep; canonical task owns shared fields.
+
 **Objective:** Add evidence provenance to proof/evidence facts: source file/span, compiler commit, theorem name, spec name, policy file, assumption file, tool version, and replay command where available.
 
 ### Task R-0208
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** done — closed 2026-10-13 at `2b570c5a`; the body is retained for its accepted limits, now owned by R-0532.
 
 **Objective:** Add tool-version drift checks: proof/evidence facts record the Lean version, Concrete compiler commit, ProofKit hash, extraction version, decision procedure version, and solver version where relevant. A toolchain bump marks affected evidence `needs_recheck` until replayed; old green badges are never silently reused across a proof-tool upgrade.
 
@@ -14790,13 +17172,23 @@ declarations; an accepted narrowing needs an independently checked retained-envi
 
 ### Task R-0209
 
+**Stage:** 1, 5
+
+**Disposition (2026-10-19):** superseded by R-0494: merge into R-0494; retain audit/diff tests.
+
 **Objective:** Add evidence monotonicity checks: a refactor cannot silently present a weaker claim as if it were still stronger (`proved` cannot degrade to `reported` while retaining the same badge/summary).
 
 ### Task R-0210
 
+**Stage:** 2, 5, 7
+
 **Objective:** Add assumption lifecycle checks: every assumption has an owner, scope, rationale, review date, affected claims, and a diff gate when it widens.
 
 ### Task R-0211
+
+**Stage:** 2, 4, 5
+
+**Disposition (2026-10-19):** superseded by R-0509/S16: merge into R-0509; retain audit command acceptance.
 
 **Objective:** Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern, backend, runtime, and target assumptions in one machine-readable list.
 
@@ -14810,13 +17202,23 @@ but suggestions must be advisory until a replayed proof/audit diff validates
 the smaller boundary.
 ### Task R-0212
 
+**Stage:** 5, 7
+
 **Objective:** Add spec-adequacy gates: release policy can require reviewed spec provenance for selected claims, forbid unreviewed specs in graduated flagships, and show when a theorem is `proved_by_lean` against a `spec_trusted` or unreviewed spec.
 
 ### Task R-0213
 
+**Stage:** 1, 2, 5
+
+**Reconciliation (2026-10-19):** Keep; specify decidable scope and unknown outcomes. Vacuity results form an explicit algebra (`nonvacuous` / `vacuous` / `unknown`) with timeout behaviour, policy treatment and witness scope; the admitted decision fragment is stated. A valid implication and a useful specification are different judgments.
+
 **Objective:** Add vacuity gates to proof status: `proved` summaries must be downgraded or blocked when the proof depends on an unsatisfiable precondition, contradictory assumptions, unreachable code path, or invariant `false`.
 
 ### Task R-0214
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep outside the strict queue.
 
 **Objective:** Add solver portfolio and cross-solver agreement as a strictly separate evidence class, never as kernel evidence. External SMT V1 may start with Z3 only, but the trust-gate roadmap must define how to run `z3`, `cvc5`, and `bitwuzla` where the fragment applies. Result classes:
 
@@ -14837,6 +17239,10 @@ the smaller boundary.
  release claims unless explicitly assumed.
 
 ### Task R-0451
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep as measured certificate-checking experiment.
 
 **Objective:** Reduce what `solver_trusted` actually asks a reviewer to trust by
 making refutation *certificates* replayable in code the project controls: port a
@@ -14871,6 +17277,10 @@ an existing solver result. If the port cannot be given a class that is honestly
 weaker than kernel evidence, it does not ship.
 ### Task R-0215
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Merge common infrastructure into R-0491/R-0498; retain workload mutations.
+
 **Objective:** Add spec/proof mutation testing to prove evidence is load-bearing. Command surface: `concrete mutate-evidence --target <example> --json` creates controlled mutants: change a function body under a proof link, weaken or delete an `#[ensures]` clause, strengthen an impossible `#[requires]`, remove a loop invariant, alter a spec PExpr/table entry, change a theorem name, and perturb a trusted assumption. Expected outcomes must be explicit:
 
  stale, missing, vacuous, partial, failed proof, widened trust, or unchanged
@@ -14881,6 +17291,10 @@ weaker than kernel evidence, it does not ship.
  evidence class without an allowed explanation. This is evidence about the
  evidence: proofs must constrain the implementation, not merely decorate it.
 ### Task R-0216
+
+**Stage:** 2, 5
+
+**Reconciliation (2026-10-19):** Keep; R-0208’s one upgrade does not supply the general command.
 
 **Objective:** Add proof-corpus migration across toolchain upgrades, the active half of the §7 drift story. Detection marks evidence `needs_recheck`; migration must turn a bumped corpus green again without hand-walking every obligation. Command surface: `concrete prove --recheck-corpus [--json]` re-runs every linked proof/evidence check under the current toolchain and triages each into `still_proved`, `replayed_clean`, `broke_needs_repair`, or `unavailable_dependency`; `concrete prove --recheck <obligation_id>` does one.
 
@@ -14894,6 +17308,10 @@ weaker than kernel evidence, it does not ship.
  `unavailable_dependency`, and that no `needs_recheck` obligation can reach a
  green badge without an actual kernel re-check.
 ### Task R-0217
+
+**Stage:** 1, 2
+
+**Reconciliation (2026-10-19):** Merge axiom policy into R-0506; keep clean-replay increment.
 
 **Objective:** Add an axiom-inventory and clean-checkout proof replay gate. Every `proved_by_lean` / `proved_by_kernel_decision` fact must record the Lean axioms its theorem transitively depends on (the `#print axioms` walk):
 
@@ -14916,15 +17334,27 @@ weaker than kernel evidence, it does not ship.
  all four before any evidence becomes green.
 ### Task R-0218
 
+**Stage:** 1
+
+**Disposition (2026-10-19):** superseded by R-0494: merge into R-0494.
+
 **Objective:** [historical origin: closed Phase 3 items 15/16] Convert `--report proof-status` and `concrete prove`'s obligation facts from consistency-gated recompute to literal `ObligationCore`-ledger views — the last Phase 3 surfaces that recompute (sound today because consistency-gated). They are the proof-status / trust surfaces, so they belong in this phase.
 
 ### Task R-0219
+
+**Stage:** 1, 5
+
+**Reconciliation (2026-10-19):** Keep as cumulative gate suite.
 
 **Objective:** Add the Phase 11 validation artifact: a trust-gate pressure project that includes transitive proof dependencies, stale dependency propagation, tool-version drift, proof-corpus migration across a simulated toolchain bump, assumption widening, spec-adequacy policy, vacuity downgrade, solver portfolio / disagreement handling, evidence mutation testing, axiom inventory and clean-checkout replay, weaker-evidence monotonicity, and a release gate proving each status cannot be silently presented as stronger evidence. Include cache-off/on/verify parity and stale/corrupt-cache negatives so the trust gates cover the operational path
 
  users actually run.
 
 ### Task R-0458
+
+**Stage:** 5; after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; reconcile with R-0440 and current evidence architecture.
 
 **Objective:** Split the evidence vocabulary into two independent coordinates and make
 every attestation carry its own re-check procedure.
@@ -14969,6 +17399,10 @@ promises.
 
 ### Task R-0220
 
+**Stage:** 4, 6
+
+**Reconciliation (2026-10-19):** Keep as orthogonal policy over verified slices.
+
 **Objective:** Define `PredictableV1`: no allocation unless bounded, no FFI
 unless trusted and assumed, no unbounded loops/recursion, an enforced
 target/profile stack budget, and an explicit failure-path policy. A stack
@@ -14981,10 +17415,18 @@ boundary.
 
 ### Task R-0221
 
+**Stage:** 1, 2
+
+**Disposition (2026-10-19):** superseded by R-0493/S6: merge semantic ownership into R-0493.
+
 **Objective:** Freeze arithmetic-site semantics for subset claims. This task is reconciled with historical Phase 6 item 10 and `docs/language/ARITHMETIC_POLICY.md`: build/profile names are policy bundles, not arithmetic modes, and the same source expression must not mean wrap in one profile and checked in another. Ordinary `+ - *` are checked in every profile; intentional modular arithmetic is written as `wrapping_*`; intentional clamping is written as `saturating_*`. Subset reports must classify arithmetic sites as `checked`, `proved`, `runtime- checked`, `explicit-wrapping`, or `explicit-saturating`; they must never infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or
 
 `proof`.
 ### Task R-0222
+
+**Stage:** 1, 2, 4
+
+**Reconciliation (2026-10-19):** Keep; replace obsolete operator-coverage snapshot.
 
 **Objective:** Carry arithmetic-site facts into diagnostics, reports, assumptions, proof obligations, release bundles, and backend contracts. A theorem about checked arithmetic is not a theorem about modular arithmetic; a function using `wrapping_*` is either proved against the proof model's explicit modular operator (today only `wrapping_add@u32 → addw 32`, as SHA-256 uses) or, for the not-yet-modeled forms (`wrapping_sub`/`wrapping_mul`, other widths, saturating), outside the default proof subset. Add `docs/ARITHMETIC_SITE_EVIDENCE.md`, `examples/arithmetic_site_evidence/{checked,wrapping,saturating,profile_invariant}/`,
 
@@ -14995,6 +17437,10 @@ and rejection/downgrade of proof claims that confuse checked and wrapping
 semantics.
 ### Task R-0223
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0496/S7: merge into R-0496’s semantic contract.
+
 **Objective:** Define a first runtime failure model: abort, assertion failure,
 OOM, stack overflow, checked arithmetic/bounds traps, `defer`/cleanup,
 impossible branches, and what each does to proof/resource claims. Abort is a
@@ -15003,6 +17449,10 @@ freestanding execution invokes a declared non-returning handler. Neither form
 promises unwinding, `defer`, destruction, or recovery.
 
 ### Task R-0224
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; integrate S13/S15 resource relation.
 
 **Objective:** Define source-level stack-depth versus backend/target stack
 claims, including how a source estimate, ABI/backend frame growth, and a named
@@ -15013,20 +17463,36 @@ source estimate as target stack bytes.
 
 ### Task R-0225
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no native timing guarantee without separate transport.
+
 **Objective:** Define source-level constant-time profile v1:
 
 no secret-dependent branch, no secret-dependent memory index, fixed loop
 bounds, explicit backend timing assumptions.
 ### Task R-0226
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Merge into R-0225’s security-profile design.
+
 **Objective:** Define secret/data-sensitivity labels for future security work:
 
 `public`, `secret`, `timing-sensitive`.
 ### Task R-0227
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0499/R-0507: merge into checker rules and soundness.
+
 **Objective:** Define source-level memory-safety claims precisely: what linearity, borrows, cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
 
 ### Task R-0228
+
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0499/S8 and V6: merge enforcement into R-0499; raw-operation extensions into V6.
 
 **Objective:** Define the **Unsafe island** rule for unchecked operations. Any operation that bypasses a safe runtime check, borrow/linearity rule, raw-pointer restriction, layout proof, or FFI ownership boundary must be exposed through a deliberately small surface requiring `with(Unsafe)` or an explicitly named `trusted` boundary. Examples include future `get_unchecked`, raw pointer place writes, unchecked casts/conversions, inline asm, and unchecked FFI wrappers. There is no global unsafe mode and no silent trusted wrapper that hides authority: audit output must show the safe wrapper, the underlying trusted/Unsafe operation, and the assumption being
 
@@ -15040,21 +17506,41 @@ bounds, explicit backend timing assumptions.
  trusted/Unsafe operation.
 ### Task R-0229
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0495 and V2–V4: merge into slice admission/claim coverage.
+
 **Objective:** Decide the proof class for references and borrows. A function using `&` or `&mut` must be classified as one of: value-only/borrow-free, proved over read-only references, proved over mutable references with explicit frame/modifies obligations, or enforced-only and outside `ProvableV1`. Do not let borrow-using code appear proof-eligible through a value-only ProofCore model.
 
 ### Task R-0230
+
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0509/S16: merge into R-0509 and slice profiles.
 
 **Objective:** Define the v1 threat model: adversary, trusted base, proof scope, backend scope, side-channel scope, dependency scope, and what remains out of model.
 
 ### Task R-0231
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0512: merge into each slice’s admission controls.
+
 **Objective:** Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
 
 ### Task R-0232
 
+**Stage:** 2, 4, 7
+
+**Reconciliation (2026-10-19):** Keep; use versioned V-slice/profile names.
+
 **Objective:** Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use the frozen subset names consistently.
 
 ### Task R-0233
+
+**Stage:** 1
+
+**Disposition (2026-10-19):** done — the unprofiled-float exclusion shipped (`ProofCore.lean`, `Report.lean`); profiled floats remain V7 (R-0496/R-0495).
 
 **Objective:** Close the unprofiled-float proof hole before any float proof claim:
 
@@ -15064,12 +17550,20 @@ bounds, explicit backend timing assumptions.
  than reporting a float operation as extracted through integer `PBinOp.add`.
 ### Task R-0234
 
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0496/S7, V7: merge into V7 float-profile work.
+
 **Objective:** Define `ProvableFloatV1` as a separate, narrow proof profile:
 
  IEEE-754 binary32/binary64, round-to-nearest-even, no fast-math, no
  reassociation, no implicit FMA contraction, no ambient rounding-mode
  mutation, and explicit NaN/infinity/subnormal/signed-zero policy.
 ### Task R-0235
+
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics.
 
 **Objective:** Add ProofCore support for profiled floats only after Task R-0233 is closed:
 
@@ -15078,9 +17572,17 @@ bounds, explicit backend timing assumptions.
  and backend/audit checks that prove/report `fast_math: forbidden`.
 ### Task R-0236
 
+**Stage:** 1, 4
+
+**Disposition (2026-10-19):** superseded by R-0506/R-0509: merge axiom classification and inventory.
+
 **Objective:** Classify the first float semantics layer honestly. Until Concrete imports or proves a checked IEEE-754 semantics library, primitive float operations are `float_semantics_trusted`; proofs over profiled float code are refinements to an explicit bit-level IEEE spec under that named trusted primitive layer, not `proved_by_lean` from first principles.
 
 ### Task R-0237
+
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep as fixture, not another flagship.
 
 **Objective:** Add one small `ProvableFloatV1` proof-profile witness only after the profile exists.
 It is a fixture/workload, not a fourth public flagship:
@@ -15090,9 +17592,15 @@ It is a fixture/workload, not a fourth public flagship:
  refinement is a later layer.
 ### Task R-0238
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0512: merge into cumulative slice matrices; retain orthogonal policies.
+
 **Objective:** Add the Phase 12 validation artifact: a profile matrix project covering `PredictableV1`, `ProvableV1`, unprofiled-float exclusion, profiled-float admission, borrow/reference proof-class decisions, constant-time source shape, stack/runtime-failure assumptions, and negative examples for every exclusion. The gate must prove reports never call excluded code proof eligible.
 
 ### Task R-0239
+
+**Stage:** 6
 
 **Objective:** Define the SPARK-class contract layer in Concrete's vocabulary, not Ada's:
 
@@ -15107,6 +17615,8 @@ It is a fixture/workload, not a fourth public flagship:
  loop and one policy/data-flow function, and a gate proving facts are
  reported as proved/enforced/reported/assumed/trusted rather than prose-only.
 ### Task R-0240
+
+**Stage:** after-1.0/research
 
 **Objective:** Define a development-only expectation policy, borrowing Roc's useful lightweight `expect` idea but fitting Concrete's evidence model. The goal is a clear place for "this should hold during tests/dev" that cannot be mistaken for proof, runtime-safety evidence, or a release assumption.
 
@@ -15123,6 +17633,10 @@ It is a fixture/workload, not a fourth public flagship:
  integrity profile cannot silently rely on it.
 
 ### Task R-0459
+
+**Stage:** 4, 6; after-1.0/research
+
+**Reconciliation (2026-10-19):** Split exhaustiveness, relational logic and hand-proof policy. Its relational (2-safety) proposal moved to R-0527.
 
 **Objective:** Add obligation families that are not arithmetic, so the ledger can demand
 non-arithmetic proofs instead of merely accepting them.
@@ -15185,17 +17699,33 @@ commands, and visible proof/enforcement status.
 
 ### Task R-0241
 
+**Stage:** 2, 5
+
+**Disposition (2026-10-19):** duplicate of R-0155/R-0178: merge obligation payload into those canonical schemas.
+
 **Objective:** Define stable obligation schema v1: id, kind, source span, function, expression, dependencies, evidence status, discharging theorem/check/ assumption, and replay command.
 
 ### Task R-0242
+
+**Stage:** 2, 3
+
+**Reconciliation (2026-10-19):** Keep; align terminal semantics with R-0496.
 
 **Objective:** Define the user-level error model: `Result`, `Option`, assertion failure, abort/panic, recoverable errors, test failures, and how error flow interacts with capabilities, proofs, runtime obligations, and audit output.
 
 ### Task R-0243
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Merge semantic/generator proof ownership into R-0460 and typed-operation slices.
+
 **Objective:** Generate narrowing/invalid-cast obligations.
 
 ### Task R-0244
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; no separate resource analyzer.
 
 **Objective:** Generate loop bound and variant obligations for bounded loops.
 Where the obligation can expose a symbolic iteration bound, retain it as a
@@ -15226,15 +17756,27 @@ claim, not wall-clock timing.
 
 ### Task R-0245
 
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep; runtime checked arithmetic remains unconditional.
+
 **Objective:** Define policy gates for `#[overflow_checked]`: release profiles may require overflow obligations for selected functions/packages, while ordinary examples remain quiet unless they opt in. Reports must distinguish `overflow_checked`, `overflow checking not requested`, and explicit wrapping or saturating arithmetic.
 
 ### Task R-0246
+
+**Stage:** 4, 6
+
+**Reconciliation (2026-10-19):** Keep; distinguish deliberate permitted traps from no-trap claims.
 
 **Objective:** Generate obligations for panic/abort/assert-as-denial-of-service risks:
 
 unchecked indexing, unwrap-like operations, explicit abort paths, failed
 assertions, and profile-dependent panic behavior.
 ### Task R-0247
+
+**Stage:** 4, 6
+
+**Reconciliation (2026-10-19):** Keep; separate unrelated enum-discriminant bullet.
 
 **Objective:** Generate byte/text/path boundary obligations: invalid UTF-8, lossy conversion, OS-string conversion, path normalization assumptions, and rejected implicit conversions.
 
@@ -15255,6 +17797,8 @@ assertions, and profile-dependent panic behavior.
   rejected.
 ### Task R-0248
 
+**Stage:** 2, 4, 6
+
 **Objective:** Generate stack/recursion obligations where the profile claims
 boundedness and enforce the configured target/profile stack budget rather than
 only reporting it. Gate just-under/just-over programs, deep call chains with
@@ -15265,34 +17809,62 @@ target byte claims distinct in the resulting evidence.
 
 ### Task R-0249
 
+**Stage:** 5
+
+**Disposition (2026-10-19):** duplicate of R-0178/R-0179: merge into R-0178/R-0179.
+
 **Objective:** Report runtime-error obligations in human and JSON forms.
 
 ### Task R-0250
+
+**Stage:** 5, 7
+
+**Disposition (2026-10-19):** duplicate of R-0186: merge into R-0186.
 
 **Objective:** Add policy gates that can require selected runtime-error obligations to be proved/enforced before graduation.
 
 ### Task R-0251
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Keep; integrate R-0491.
+
 **Objective:** Add a runtime-error regression corpus: invalid cast, loop-bound violation, lossy byte/text conversion, ignored fallible result, unwrap-like failure, panic/abort profile mismatch, and release-policy rejection for missing `#[overflow_checked]` evidence where required.
 
 ### Task R-0252
+
+**Stage:** 7
 
 **Objective:** Add a runtime-error-obligation portfolio requirement: `secure_update_verifier` or
 `protocol_state_machine` must demonstrate no OOB/div-zero/overflow under a named profile.
 
 ### Task R-0253
 
+**Stage:** 3, 4
+
+**Disposition (2026-10-19):** duplicate of R-0166: merge into R-0166.
+
 **Objective:** Add high-quality diagnostics for obligation failures: violated obligation, source expression, required evidence, current status, and next action.
 
 ### Task R-0254
+
+**Stage:** 1, 5, 7
+
+**Reconciliation (2026-10-19):** Keep; route through R-0494 and policy.
 
 **Objective:** Add obligation suppression only through explicit assumptions or policy waivers, never comments or hidden allowlists.
 
 ### Task R-0255
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** duplicate of R-0460: merge into R-0460.
+
 **Objective:** Prove or validate obligation-generation soundness for the first obligation kinds through the compiler soundness bridge.
 
 ### Task R-0256
+
+**Stage:** 4, 6
 
 **Objective:** Add automatic invariant inference / abstract interpretation as an annotation-reduction pass, not as trusted proof. V1 analysis is finite and auditable: interval facts, simple relational facts (`i <= n`, `i < len`, `0 <= i`), monotone loop counters, constant loop bounds, simple affine equalities/inequalities, and fixed-array length facts. It may synthesize candidate loop invariants and scoped facts for bounds, div/mod-zero, overflow, cast, and loop-variant obligations. Every inferred fact must be emitted in the obligation ledger with source span, analysis name, abstract domain, dependencies, and a replay command, then independently discharged
 
@@ -15307,6 +17879,8 @@ target byte claims distinct in the resulting evidence.
  false green obligations.
 ### Task R-0257
 
+**Stage:** 4, 6
+
 **Objective:** Connect runtime-safety obligations to loop, frame, and dependency facts.
 
  Bounds/cast/overflow obligations should be dischargeable from explicit loop
@@ -15315,6 +17889,10 @@ target byte claims distinct in the resulting evidence.
  invariant or frame fact discharged each obligation, and missing facts must
  produce actionable diagnostics rather than generic "unproven" output.
 ### Task R-0258
+
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; include mutation/re-establishment rules. Invariants must be re-established after writable access, moves through representations and foreign mutation, not only at construction; open/close rules and negative fixtures (with S8).
 
 **Objective:** Add newtype/type invariants as scoped obligation hypotheses after they are checked at construction boundaries. This connects validated wrappers to the proof/runtime-safety pipeline: a type such as `#[invariant(self.0 > 0 && self.0 < 65536)] newtype Port = u16` must have the invariant proved/enforced at every constructor or `try_new` admission point, then injected as a named hypothesis for obligations in any function receiving a `Port`. No invariant may enter scope from a raw cast, trusted constructor, FFI boundary, stale proof, or unchecked assumption without a ledger entry saying so. Add `docs/NEWTYPE_INVARIANT_OBLIGATIONS.md`,
 
@@ -15325,6 +17903,10 @@ target byte claims distinct in the resulting evidence.
  facts, and obligation reports name the type invariant source.
 
 ### Task R-0452
+
+**Stage:** 6; after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep as workload, with measurable acceptance.
 
 **Objective:** Prove the obligation machinery survives obligation *density* on
 code that was written for speed, by porting zlib's inflate path (2,365 lines:
@@ -15359,10 +17941,18 @@ with the reason it could not be indexed, and performance evidence for the port
 belongs to Phase 15.75's machinery rather than to a hand-timed claim here.
 ### Task R-0259
 
+**Stage:** 2, 4, 6
+
+**Reconciliation (2026-10-19):** Keep as cumulative corpus.
+
 **Objective:** Add the Phase 13 validation artifact: a runtime-safety corpus covering bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path boundaries, stack/recursion, inferred invariant candidates, newtype invariant hypotheses, arithmetic-site evidence mismatches, and obligation suppression. Each case must show one of `proved`, `enforced`, `assumed`, `missing`, or `blocked`, include a negative variant, and run through policy gates plus human/JSON reports.
 
 
 ### Task R-0461
+
+**Stage:** 1, 2
+
+**Reconciliation (2026-10-19):** Live; the H23 fix is done — merge the remaining generalization into R-0494/R-0460 and archive the H23 implementation narrative.
 
 **Objective:** Give hypotheses provenance, and compose obligation status across the
 assumption edge. **Closes H23, which is live: a guaranteed out-of-bounds access currently
@@ -15423,6 +18013,10 @@ and any call-site precondition whose caller-side discharge is itself conditional
 
 ### Task R-0462
 
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Live; the initial gate is done — broader coverage merges into R-0491; the "missing" claim is historical.
+
 **Objective:** Fuzz the *compiled binary* against the safety claims — the empirical shadow
 of Register A.
 
@@ -15448,6 +18042,10 @@ project's own doctrine applied consistently — differential against the real ar
 outranks agreement between checkers of a model.
 
 ### Task R-0463
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep with explicit measurement/kill criteria.
 
 **Objective:** Make the linear-arithmetic tier certificate-bearing, and reconsider whether
 a second kernel is the right spend at that tier at all.
@@ -15483,6 +18081,10 @@ before any "majority of claims" or "small checker" estimate becomes a roadmap
 fact.
 
 ### Task R-0464
+
+**Stage:** 1, 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription.
 
 **Objective:** ONE trap-semantics definition, consumed by SSA construction,
 interpretation, optimization, obligation generation and the backends — and, second,
@@ -15581,6 +18183,10 @@ one pipeline and they are easy to mistake for overlapping work:
 
 ### Task R-0465
 
+**Stage:** 1
+
+**Disposition (2026-10-19):** done for its enumerated wiring; the remaining universal-verdict-authority requirement merges into R-0494.
+
 **Objective:** Extend the discharge-adapter firewall to the assumption axis, and bring the
 multi-kernel path inside it.
 
@@ -15630,38 +18236,11 @@ which is precisely this task's subject.
   ledger, so the release gate and the stored artifact can be built from separate prover
   runs whose transient results differ.
 
-### Task R-0467
-
-**Objective:** Run the multi-kernel evidence job on merges to `main`, not only on
-dispatch, schedule, or a PR label.
-
-`.github/workflows/lean_action_ci.yml`'s `multi-kernel` job is gated on
-`workflow_dispatch || schedule || contains(labels, 'multi-kernel')`. Everything the
-multi-kernel arc built — the badge classes, lowering agreement, certificate replay, the
-release-gate composition, `kernel_disagreement` — is therefore unverified on the commit
-that actually lands. A regression merges green and is discovered whenever someone next
-remembers to dispatch the job.
-
-This is the pinning that let H22 survive: `check_gate_mutation_coverage.sh` was
-nightly-only, so a gate that could not detect removal of the property it guarded stayed
-green for months. Same shape, newer subsystem.
-
-The cost is real and is why this is a task rather than a one-line edit: the job installs a
-multi-gigabyte Isabelle closure and cold proof runs cost roughly 30s per goal, with a
-90-minute timeout. Options, cheapest first:
-
-1. `push: branches: [main]` only — pays the cost once per merge, not per PR push. The
-   recommended default; merges are rare relative to pushes.
-2. Split the job — the Rocq half (`coqc` is a small closure) on every PR, the Isabelle
-   half on merge. Most of the evidence surface at a fraction of the cost.
-3. Keep opt-in but make the label mandatory for PRs touching
-   `Concrete/Report/Evidence.lean`, `ReportObligations.lean` or the multi-kernel gate —
-   enforceable with a path filter, and it fails closed rather than relying on memory.
-
-Whichever is chosen, record it: an evidence gate that does not run on the merge commit
-should say so where readers of the evidence will see it, not only in the workflow file.
-
 ### Task R-0468
+
+**Stage:** 1
+
+**Reconciliation (2026-10-19):** Merge into R-0513.
 
 **Objective:** Make the nightly-pinned gates reachable in this repository, and fix the
 hole-closure conditions that currently depend on them.
@@ -15690,6 +18269,10 @@ the mutation-coverage gate on merges to `main` here, since it is the gate whose 
 self-concealing — a decorative gate stays green, so nothing else will report its absence.
 
 ### Task R-0460
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; reconcile register with exact checked Core. The register count is five lowering rows, none fully discharged and four half discharged (stale "four rows" text corrected).
 
 **Objective:** Discharge the obligation-sufficiency register — *if the flat goal holds,
 the runtime property holds* — rule by rule.
@@ -15767,15 +18350,27 @@ passes here.
 
 ### Task R-0260
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0506/S12a: merge into pass/validator obligation ledger; preserve legacy historical view.
+
 **Objective:** Add a compiler-soundness rule-status dashboard over R-01..R-21:
 
 `shape-preserved`, `eval-preserved`, `source-preserved`, `trusted`, or
 `blocked`, with theorem names and source links for each status.
 ### Task R-0261
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** duplicate of R-0496/R-0460: merge; already explicitly reconciled.
+
 **Objective:** Discharge Phase 14 semantic obligations through R-0496's normative Core semantics; do not introduce a separate subset interpreter. (Superseded objective, 2026-10-18: Build source semantics for the provable subset as needed by rule discharge, not as a speculative full-language semantics.)
 
 ### Task R-0262
+
+**Stage:** 4
+
+**Disposition (2026-10-19):** superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges.
 
 **Objective:** Upgrade extraction-only rules to three-view preservation where practical:
 
@@ -15783,17 +18378,33 @@ source Core evaluation, extracted PExpr evaluation, and extraction theorem
 agree.
 ### Task R-0263
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0512: merge into V1–V7 slice ordering.
+
 **Objective:** Prioritize the hard eval/source rules in dependency order: direct calls, structs/fields, enums/match, arrays, casts, arraySet, flat bounded `while`, and `while_step`.
 
 ### Task R-0264
+
+**Stage:** 1, 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0494/R-0509: merge implementation into R-0494, soundness proof into S16.
 
 **Objective:** Prove selected proof-report facts agree with compiler state: `proved`, `stale`, `blocked`, `missing`, `ineligible`, `trusted`.
 
 ### Task R-0265
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0495/R-0509: merge into statement/binding/aggregation soundness.
+
 **Objective:** Prove or mechanically validate trust-gate correctness: body fingerprint determinism, spec-drift completeness, proof attachment lookup, FnTable completeness, eligibility classification.
 
 ### Task R-0266
+
+**Stage:** 2, 4, 5
+
+**Disposition (2026-10-19):** superseded by R-0509/S16: merge; distinguish trusted assumptions from ordinary proof dependencies.
 
 **Objective:** Record a machine-readable trusted computing base for proof/evidence claims:
 
@@ -15805,21 +18416,41 @@ version/availability dependency (see Phase 11 proof-corpus migration); the TCB
 record must name them so a proof's replay surface stays reproducible.
 ### Task R-0267
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0499/R-0507/R-0495: merge; capabilities and purity remain distinct.
+
 **Objective:** Prove selected checker/report agreement for authority and purity facts used by proof eligibility, so a function cannot be called proof-eligible while secretly requiring capabilities.
 
 ### Task R-0268
+
+**Stage:** 2
+
+**Disposition (2026-10-19):** superseded by S5–S8: retire undecided architecture question; plan has chosen the chain.
 
 **Objective:** Decide whether deeper source-semantics proofs require a normalized Core layer. Add the layer only if the direct rule proofs show repeated semantic duplication across at least two forcing examples.
 
 ### Task R-0269
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0495: merge composition needs into R-0164; retire PExpr table architecture.
+
 **Objective:** Automate dependency-ordered spec/table generation. Function specs and PExpr bodies should be collected/generated in dependency order together with FnTable completeness and call dependencies, so proof authors do not hand-relocate definitions above tables like `shaFns`.
 
 ### Task R-0270
 
+**Stage:** 6
+
+**Reconciliation (2026-10-19):** Keep; distinguish user-spec totality from stage-2 compiler totality.
+
 **Objective:** Prove or mechanically validate spec/ghost totality reporting: every contract-referenced `spec fn` or ghost computation is either backed by Lean termination, accepted by a Concrete totality check, or rejected with a `totality_obligation_missing` status. A contract may not depend on a partial or non-terminating spec expression silently.
 
 ### Task R-0271
+
+**Stage:** 4, 6
+
+**Disposition (2026-10-19):** superseded by R-0510/S8a, V5: merge into R-0510, retaining explicit law-evidence acceptance.
 
 **Objective:** Define proof preservation across monomorphization and capability-polymorphic instantiation. The compiler must report whether a theorem proves a specific generated instance (`proved_for_instance`) or a generic body (`proved_generic`), and it must prevent one instance proof from being presented as proof for every future instantiation.
 
@@ -15835,6 +18466,10 @@ discharged law obligations distinct, and require no implicit trait resolution or
 mandatory proofs for ordinary generic code.
 
 ### Task R-0272
+
+**Stage:** 1, 4
+
+**Reconciliation (2026-10-19):** Merge shared harness into R-0491; split obsolete reference-return repair.
 
 **Objective:** [historical origin: Phase 4 items 44f/44g] Finish the remaining compiler-correctness hardening:
 
@@ -15868,6 +18503,10 @@ mandatory proofs for ordinary generic code.
    renamer.
 ### Task R-0273
 
+**Stage:** 1, 4
+
+**Disposition (2026-10-19):** superseded by R-0491/R-0498: merge; map every listed family to a retained control.
+
 **Objective:** Add a semantic-darkness audit and red-team gate. The goal is to catch the checked-arithmetic class of bug before it repeats: a construct looks ordinary in source, but its real behavior depends on width, profile, target, allocation, authority, runtime checks, or an outdated proof/interpreter model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the Phase 14 validation artifact. The audit must cover:
 
  - **source-semantics matrix** for each core operation: parser/AST,
@@ -15900,6 +18539,10 @@ mandatory proofs for ordinary generic code.
  equivalence checking. See
  `research/compiler/pipeline-lessons-2026-07.md`.
 ### Task R-0274
+
+**Stage:** 2
+
+**Disposition (2026-10-19):** superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription.
 
 **Objective:** **Preserve the one source of typing truth through proofs.** Every 2026-07 front-end bug was two passes holding different opinions about the same program: Check typed literals from the hint while Elab typed them from the sibling operand;
 
@@ -15956,6 +18599,10 @@ mandatory proofs for ordinary generic code.
  boundary. Later identity/DB refinement remains available for edge facts, but it
  is not on the critical path for type drift.
 ### Task R-0275
+
+**Stage:** 2, 4, 5
+
+**Reconciliation (2026-10-19):** Keep; align with checked-Core derivations and R-0353.
 
 **Objective:** Add an independent Core-certificate checker for a narrow, explicit validated-Core predicate.
 
@@ -16034,6 +18681,10 @@ mandatory proofs for ordinary generic code.
 
 ### Task R-0443
 
+**Stage:** 4, 7
+
+**Reconciliation (2026-10-19):** Keep; separate structural graph proof from semantic containment.
+
 **Objective:** Add independently checkable whole-program authority-property
 certificates over a conservative closed-world call graph.
 
@@ -16081,6 +18732,10 @@ compiler’s authority-report implementation.
 
 ### Task R-0276
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only.
+
 **Objective:** Reduce ProofCore partial-def opacity only where proof preservation needs it.
 
  (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
@@ -16093,10 +18748,18 @@ compiler’s authority-report implementation.
 
 ### Task R-0277
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** superseded by R-0511/R-0512: merge into each slice’s cumulative acceptance.
+
 **Objective:** Add the Phase 14 validation artifact: a compiler-soundness dashboard with one witness program per shipped ProofCore construct, one status per R-rule, replay commands for proved/mechanically-validated facts, and regressions proving report facts (`proved`, `stale`, `blocked`, `missing`, `ineligible`, `trusted`) agree with compiler state. Include the `CoreCertificateV1` predicate/rule-set version, checker binary/source hash, soundness theorem names, independent receipt per artifact, mutation corpus, cache-off/on receipt parity, and a machine-readable list of every boundary V1 still leaves producer/compiler-trusted.
 
 
 ### Task R-0454
+
+**Stage:** 2, 5
+
+**Reconciliation (2026-10-19):** Merge implementation ownership into R-0450; retain identity invariants. Alpha-normalization alone does not make a proposition digest migration-neutral across SSA conversion; same-proposition criteria, version changes, compatibility mapping and negative controls are explicit (with R-0450/R-0512).
 
 **Objective:** Encode obligations in a neutral term form and compute
 `ProofSubjectDigest` over that neutral term rather than over any host AST.
@@ -16137,6 +18800,10 @@ Normative rule and record shapes in
 [docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md).
 
 ### Task R-0455
+
+**Stage:** 2, 4; after-1.0/research
+
+**Reconciliation (2026-10-19):** Merge typed-IR implementation into R-0450; keep Register B obligations. The paragraph proposing to delete the validation layer is historical and void; rendering validation remains required.
 
 **Objective:** Replace per-prover string printing with a transformation pipeline, and
 give each transformation a soundness register row.
@@ -16235,6 +18902,12 @@ when it is a driver plus a validator plus a prover run per obligation.
 
 ### Task R-0456
 
+**Stage:** after-1.0/research
+
+**Disposition (2026-10-19):** superseded by R-0496 for proposed PExpr port: retire PExpr-port design; reconsider only a measured Core-metatheory proposal.
+
+**Reconciliation (2026-10-19):** The "no single kernel can bridge two kernels" claim conflates formal correspondence with trust in external executions; any renewed proposal targets Core.
+
 **Objective:** Port `eval` to a second host and relate the two semantics by an
 adversarial conformance vector suite.
 
@@ -16284,17 +18957,33 @@ replayable; and every boundary after that slice remains explicitly trusted.
 
 ### Task R-0278
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** Superseded by R-0503/S11: merge into R-0503; BIR replaces this architecture.
+
 **Objective:** Stabilize SSA as the only backend contract.
 
 ### Task R-0279
+
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep; define separate LLVM/native profiles.
 
 **Objective:** Document target/toolchain model: triple, data layout, linker, runtime/startup, libc expectation, clang/llc boundary, sanitizer/coverage hooks.
 
 ### Task R-0280
 
+**Stage:** 2, 3, 4
+
+**Disposition (2026-10-19):** Duplicate of R-0421: merge into R-0421; connect certificate obligations to R-0504.
+
 **Objective:** Define optimization policy: allowed optimizations, evidence preservation, debug/release behavior, report/codegen validation. Follow the QBE-style "small auditable backend contract first" principle: prefer a stable, inspectable subset with explicit assumptions over early attempts to match LLVM-level optimization coverage.
 
 ### Task R-0281
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; split V1b debugging from workload-triggered production features.
 
 **Objective:** Add native compiled-program debugging and production-crash
 diagnosis: DWARF/source-map emission, source-mapped backtraces for runtime
@@ -16323,9 +19012,17 @@ evidence.
 
 ### Task R-0282
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; replace old artifact names with actual IR chain.
+
 **Objective:** Extend Phase 8.5 clean-build versus incremental-build equivalence across backend variants: facts, obligations, diagnostics, reports, BackendIR, codegen units/objects, link manifests, and native behavior must agree under target, ABI/layout, optimization, sanitizer, debug, and toolchain changes.
 
 ### Task R-0283
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; testing supports interop, proofs enter V6.
 
 **Objective:** Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment and
 calling conventions, including the C-compatible adapters generated for Rust and Zig packages.
@@ -16333,6 +19030,10 @@ Execute native/Concrete round trips on every advertised target; type layout calc
 do not qualify a target or an aggregate calling shape.
 
 ### Task R-0284
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep surface extension gated; foundational alignment belongs to R-0502 now.
 
 **Objective:** Design and, if pulled by a workload, implement first-class alignment facts.
 
@@ -16348,6 +19049,10 @@ projections conservatively weaken facts, runtime checked refinement records the
 fact, unchecked assumptions are `unsafe`/trusted and reported, and backend IR
 alignment metadata is emitted only from Concrete facts.
 ### Task R-0285
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep four-adapter exit and incremental delivery. Foreign builds run under an execution policy: filesystem, network, inherited environment/secrets, subprocess authority and undeclared generated inputs are controlled, with a hostile-build test (with R-0364). Dependency hashes establish identity, not safe execution.
 
 **Objective:** Make C, Rust and Zig libraries usable as normal Concrete dependencies, with generated
 bindings and one build command, before the bulk ethlambda port.
@@ -16552,6 +19257,10 @@ R-0490; it does not require wrapping every dependency in advance. Implementation
 
 ### Task R-0490
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; distinguish bounded feedback from full-port completion. Functional proofs of serialization, state transitions, fork choice and signing are bounded later increments with their own owners and exits; the Silver shared-state workload is a separate deferred record under R-0415.
+
 **Objective:** Port the complete client-owned ethlambda implementation to Concrete, get it running
 and tested, and use concrete blockers to improve the language before proving client components.
 
@@ -16600,6 +19309,10 @@ architecture does not expand this task's exit.
 
 ### Task R-0286
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; distinguish task “V1” from verified slice V1.
+
 **Objective:** Add outbound FFI / embeddability as a first-class backend/ABI contract.
 
  Concrete's most likely early adoption path is not replacing a whole
@@ -16633,6 +19346,10 @@ architecture does not expand this task's exit.
  than silently choosing an ABI.
 ### Task R-0287
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep as R-0283’s concrete classification suite.
+
 **Objective:** Add a C ABI classification suite, inspired by QBE's explicit ABI contract:
 
 scalar parameters and returns, small and large structs, arrays, nested
@@ -16642,6 +19359,10 @@ capability/trust annotations. Wire `scripts/tests/check_c_abi_matrix.sh`
 with generated C callers and Concrete callers, plus Rust/Zig adapters and callers for the
 package interop subset. Keep target-specific positive and unsupported-shape controls.
 ### Task R-0288
+
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** Superseded by R-0503/S11: merge inspection, verification and parity requirements into R-0503.
 
 **Objective:** Add `BackendIR` as a structured backend contract between `ValidatedSSA` and LLVM/native emission. This is useful even if Concrete never ships its own native backend: it gives the compiler a typed, inspectable place to preserve runtime checks, trap/source-span facts, layout/ABI decisions, target constants, trusted/runtime helper calls, and capability/trust labels before they disappear into LLVM text or target code. The intended ladder is `ValidatedSSA -> BackendIR -> ValidatedBackendIR -> EmitLLVM` first; later emitters (native, C, WASM, QBE-style) may consume the same `ValidatedBackendIR` only after the contract is stable.
 
@@ -16657,22 +19378,40 @@ Gate old path vs BackendIR-mediated LLVM where both exist:
 direct SSA->LLVM path once parity is established.
 ### Task R-0289
 
+**Stage:** 3, 4
+
 **Objective:** Add sanitizer-backed generated-code validation for trusted/FFI/layout/ pointer-heavy examples, plus the stdlib sanitizer/runtime hooks from Phase
 
  11. Sanitizer findings are `runtime_checked` / `tested` evidence, not proof.
 ### Task R-0290
 
+**Stage:** 1, 2, 4
+
+**Disposition (2026-10-19):** Duplicate of R-0491: merge into R-0491, retaining backend/profile matrix.
+
 **Objective:** Add backend/codegen differential validation where executable oracles exist.
 
 ### Task R-0291
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; distinct from generated-program performance.
 
 **Objective:** Add compiler self-leak/resource soak harness for long-running workflows.
 
 ### Task R-0292
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; link R-0358 policy and R-0509 verification/audits.
+
 **Objective:** Harden stdlib stability and evidence policy from Phase 7: which stdlib functions are trusted, proved, enforced, allocation-free, capability-free, or assumption carriers.
 
 ### Task R-0293
+
+**Stage:** 3, 4, 6
+
+**Reconciliation (2026-10-19):** Keep practical contracts early; richer specifications later.
 
 **Objective:** Define stdlib contracts for allocators, I/O handles, directory/file/path handles, byte/text/path conversion APIs, and fallible return discipline.
 
@@ -16684,13 +19423,23 @@ direct SSA->LLVM path once parity is established.
  depends on.
 ### Task R-0294
 
+**Stage:** 3, 4
+
 **Objective:** Add stdlib evidence gates so core helpers cannot silently widen authority, allocation, proof assumptions, or runtime-error obligations.
 
 ### Task R-0295
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision.
+
 **Objective:** Evaluate a normalized mid-level IR only when traceability/backend-contract reports expose a concrete gap.
 
 ### Task R-0296
+
+**Stage:** none — retired; see the disposition below
+
+**Ledger:** retired — owners R-0517, R-0505; see the [reconciliation ledger](#reconciliation-ledger).
 
 **Disposition (2026-10-19): retired — superseded by R-0517/R-0505.** There is no Concrete QBE backend to
 graduate; the native profile is LCB-backed. Its graduation requirements (validated backend input, source maps,
@@ -16707,6 +19456,10 @@ to the LCB-native profile under R-0517/R-0505. Wasm, Cranelift and further backe
  additional backend deferred until a forcing workload or uncovered bug class
  justifies another independent path.
 ### Task R-0297
+
+**Stage:** none — delegated; see the disposition below
+
+**Ledger:** delegated — owners R-0517, R-0505; see the [reconciliation ledger](#reconciliation-ledger).
 
 **Disposition (2026-10-19): delegated to the Lean Compiler Backend.** LCB owns machine IR, instruction
 selection, register allocation and encoding with their proofs; Concrete consumes it under R-0517 and R-0505.
@@ -16740,9 +19493,17 @@ itself, and this investigation does not block R-0299/R-0300 or interop delivery.
 
 ### Task R-0298
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; make assurance-profile selection explicit. Core claim validity is backend-independent; binary-transport assurance necessarily depends on the profile/backend.
+
 **Objective:** Define backend-default policy explicitly if multiple production backends graduate: defaults are a versioned `(target, build_mode) -> backend` table, visible in help/audit/build receipts and overridable by an explicit flag. Changing a default requires clean-build/incremental equivalence, behavior and optimization matrices, performance data, a rollback switch, and release notes. Backend availability must never change source-language semantics, proof status, diagnostics before codegen, or package resolution.
 
 ### Task R-0299
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; retarget old SSA/BackendIR language to S12.
 
 **Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the Phase 15 placement below.
 
@@ -16794,6 +19555,10 @@ the full BackendIR migration is not a prerequisite for learning from it.
 LLVM optimization and LLVM-to-machine-code correctness are separate edges.
 
 ### Task R-0300
+
+**Stage:** 2, 4, 5
+
+**Reconciliation (2026-10-19):** Keep distinct relation versions and call-closure accounting.
 
 **Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the Phase 15 placement below.
 
@@ -16865,6 +19630,10 @@ producer-only bytes or mint stronger receipts during the development probe.
 
 ### Task R-0301
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep as bounded checkpoints, not a monolithic phase gate.
+
 **Objective:** Add the Phase 15 validation artifact: a backend/std-lib contract project with ABI/layout C round trips, C/ABI glue generation/import checks, the C ABI classification matrix, alignment-fact fixtures if Task R-0284 is pulled into implementation, backend-IR emission/verifier checks, producer translation-validation checks, independent `BackendTranslationCertificateV1` replay and mutations, sanitizer runs, compiled-oracle differential tests, native debug/source-map smoke tests, clean-vs-incremental fact equivalence, cached-object substitution negatives, and stdlib
 
  authority/allocation/evidence gates. The artifact must show the exact point
@@ -16873,6 +19642,10 @@ producer-only bytes or mint stronger receipts during the development probe.
  that profile graduates, with overflow-helper and output-substitution negatives;
  keep its coverage separate from the BackendIR V1 and native-code edges.
 ### Task R-0302
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; connect candidate identity to R-0357.
 
 **Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/language/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/compiler/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
 
@@ -16909,6 +19682,10 @@ producer-only bytes or mint stronger receipts during the development probe.
    self-hosted backend), Roc (reused it in the Zig rewrite).
 ### Task R-0303
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; repair incorrect “no proof interaction” assertion. Tail-call conversion interacts with deferred cleanup, live borrows, frame/resource relations and observations; 21a (TCO), 21b (bit-level layout) and SOA/`std.bigint` become tasks only when pulled.
+
 **Objective:** Compiler-writing / verified-self-host language prerequisites (pull-gated research). Features a future proof-preserving self-host (CakeML-style, Phase 14) or a compiler-in-Concrete workload would need, surfaced by what makes ML/OCaml and Zig good compiler hosts. None is scheduled; each is pulled by a real workload and must preserve the linear / no-GC / visible-layout thesis — the OCaml GC path is deliberately not taken; this task's non-GC arena and typed-index subitems plus the layout path are.
 
  - 21a. Guaranteed tail-call optimization: a tail call lowers to a loop, so
@@ -16926,6 +19703,10 @@ producer-only bytes or mint stronger receipts during the development probe.
    silently. (SOA containers and `std.bigint` are stdlib-level, pulled the same
    way; nested patterns is tracked in `docs/language/NESTED_PATTERNS.md`.)
 ### Task R-0304
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep as shared acceptance constraint.
 
 **Objective:** Keep inbound FFI, outbound FFI, and unsafe-profile work connected but distinct. Inbound FFI says how Concrete safely calls host code; outbound FFI says how host code safely calls Concrete exports; Phase 15.5 says how the trusted/raw-pointer implementation islands remain auditable. Release-facing docs must not collapse these into a vague "FFI supported" claim. Each side needs its own examples, ABI restrictions, ownership-transfer rules, capability/evidence report, and red-team negatives.
 
@@ -16957,21 +19738,41 @@ Initial scope:
 
 ### Task R-0305
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
+
 **Objective:** Target Wasm32 with a pinned WebAssembly toolchain and one documented WASI profile. Browser integration, the component model, Wasm GC, Wasm64, threads, SIMD, and exception handling are explicitly later work unless a forcing workload promotes one of them.
 
 ### Task R-0306
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
 
 **Objective:** Lower validated BIR (R-0503) into a small typed Concrete WebAssembly AST, run a pure Concrete verifier, emit deterministic `.wasm`, and validate it with the pinned external validator. Do not emit ad-hoc WAT from CLI code and do not route WebAssembly through LLVM.
 
 ### Task R-0307
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
+
 **Objective:** Reuse canonical semantic, layout, builtin, trap, source-identity, and capability facts, while keeping WebAssembly instruction selection and control-flow restructuring independent from LLVM and LCB lowering.
 
 ### Task R-0308
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
+
 **Objective:** Deliver thin vertical slices in this order: `main -> 42`; direct calls and returns; branches/loops; integer operations and checked traps; linear-memory loads/stores; basic aggregates; runtime imports. Each slice ends in an executable differential fixture.
 
 ### Task R-0309
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
 
 **Objective:** Map external authority deliberately onto an explicit WASI import manifest.
 
@@ -16980,9 +19781,17 @@ generation with stable `wasm_pending` diagnostics; there is no LLVM/LCB or
 per-function fallback.
 ### Task R-0310
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
+
 **Objective:** Integrate `--backend wasm`, `--emit-wasm`, projects, retained artifacts, debug bundles, replay commands, caching, `doctor`, feature JSON, audit output, and ordinary `run`/`test` workflows through the backend-neutral driver.
 
 ### Task R-0311
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no QBE prerequisite (R-0113); consumes validated BIR (R-0503); compares against LLVM and LCB-native.
 
 **Objective:** Compare Core-semantics, LLVM, LCB-native and WebAssembly observations for every eligible fixture: stdout, stderr, exit status, and normalized trap/failure class. Add Wasm-specific cases for structured control flow, linear-memory bounds, alignment, integer-width conversion, imports, and deterministic module composition.
 
@@ -17050,6 +19859,10 @@ more legible in source and reports.
 
 ### Task R-0312
 
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep core decisions before memory interfaces freeze; surface breadth in V6.
+
 **Objective:** Freeze the unsafe-surface taxonomy:
 
 - safe references remain second-class and may not be returned;
@@ -17067,9 +19880,15 @@ whether bounds/null/alignment/provenance are statically known, runtime-
 checked, trusted, or unavailable.
 ### Task R-0313
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; obey prohibition on returned/stored safe references. Safe wrappers use scoped/downward construction or owned wrappers; no recipe returns or stores a safe reference.
+
 **Objective:** Add safe-wrapper recipes for the common unsafe shapes: checked slice from raw pointer + length, bounds-checked indexed access, non-null construction, alignment-refined pointer construction, FFI-owned handle wrappers, allocator-backed buffers, and raw-place writes. Each recipe must show the public safe wrapper, the private trusted/Unsafe operation, the accepted assumption, and the report line that exposes it.
 
 ### Task R-0314
+
+**Stage:** 3, 4
 
 **Objective:** Add a debug allocator / checked allocator profile inspired by Zig's development allocators: allocation/free stack identity where available, double-free detection, use-after-free-like sentinel checks where applicable, leak reporting for tests, red-zone or canary checks where practical, and allocator-name reporting in audit output. This is `runtime_checked`, not proof evidence. It must work with Concrete's allocator-as-value direction:
 
@@ -17080,12 +19899,20 @@ value or report fact, and allocation permission remains visible as
 `with(Alloc)`.
 ### Task R-0315
 
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep; cannot erase safe-Core checks without certificates. Opt-outs apply only to explicitly unsafe/trusted instrumentation; safe-Core checks are never erased by reporting alone (operation-specific certificates are required, S12).
+
 **Objective:** Add pointer/slice runtime-instrumentation hooks for unsafe code: null checks, bounds checks for trusted slice views, alignment checks, provenance/trust labels, lifetime/owner debugging where the runtime can track it, and explicit opt-out for trusted performance paths. A checked profile may trap; a release profile may erase checks only when reports still say which checks became assumptions.
 
 Include sanitizer opt-out attributes only as named unsafe/trusted facts
 (`no_sanitize_address`-style behavior must appear in audit output), never as
 comments or unreported compiler flags.
 ### Task R-0316
+
+**Stage:** 2, 4
+
+**Reconciliation (2026-10-19):** Keep; settle with R-0496/R-0502 before interface freeze.
 
 **Objective:** Add an unsafe-aliasing policy that avoids Rust's hidden reference-UB trap:
 
@@ -17096,9 +19923,15 @@ frame assumptions in the wrapper contract/report. No "trust me, this raw
 pointer is an ordinary `&mut` now" shortcut.
 ### Task R-0317
 
+**Stage:** 3, 4
+
 **Objective:** Add allocator-strategy examples: global allocator, arena/bump allocator, fixed-buffer allocator, debug allocator, and test allocator. Every example must show allocation authority, allocator identity, cleanup path, and failure behavior. Do not add ambient allocation.
 
 ### Task R-0318
+
+**Stage:** 4
+
+**Reconciliation (2026-10-19):** Keep as workload, not additional flagship or closure feature.
 
 **Objective:** Add VM/interpreter-style pressure test as the validation workload:
 
@@ -17115,11 +19948,19 @@ from the unsafe pointer version. The output is not a performance claim; it is
 an ergonomics/evidence stress test.
 ### Task R-0319
 
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep; bind results to R-0498’s enforcement manifest.
+
 **Objective:** Add FFI/trusted-boundary red-team tests: wrong length, stale pointer, null pointer, alignment mismatch, double free, missing capability, hidden allocation, and wrapper that forgets to report the underlying trusted call.
 
 Safe code must fail to reach the operation; unsafe code must appear in
 `concrete audit --trust-boundaries`.
 ### Task R-0320
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep gated by taxonomy and auditability.
 
 **Objective:** Add syntax/ergonomics only after the taxonomy and gates exist. Candidate sugar may include pointer-field access or checked slice construction helpers, but it must not reintroduce removed `->` syntax as a general language form and must not blur raw pointers with safe references. Ergonomics serve audit, not the other way around.
 
@@ -17127,6 +19968,8 @@ Candidate ergonomics must be rejected if they make a raw pointer look like a
 safe reference, hide a bounds/null/alignment assumption, or make an unchecked
 operation harder to grep.
 ### Task R-0321
+
+**Stage:** 4
 
 **Objective:** Add the Phase 15.5 validation artifact:
 
@@ -17159,6 +20002,10 @@ release budgets consume the same ledger.
 
 ### Task R-0417
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; source-cost bounds remain distinct.
+
 **Objective:** Define performance evidence classes and claim grammar.
 
 Use `measured_replayable`, `measured_nonreplayable`, `estimated`,
@@ -17186,6 +20033,8 @@ complexity claims; only a strong result licenses even speaking about time.
 
 ### Task R-0418
 
+**Stage:** 3
+
 **Objective:** Turn the Phase 8 corpus into a reproducible benchmark harness and
 committed baseline ledger.
 
@@ -17197,6 +20046,8 @@ reviewed artifacts with provenance, not an uncommitted `tests/perf` file. A
 baseline update requires an explanatory diff and replay transcript.
 
 ### Task R-0419
+
+**Stage:** 3
 
 **Objective:** Add statistically honest generated-code regression gates.
 
@@ -17210,6 +20061,8 @@ mutations to prove the corresponding gates are load-bearing.
 
 ### Task R-0420
 
+**Stage:** 3, 4
+
 **Objective:** Measure codegen quality directly, not only elapsed time.
 
 For selected hot paths record dynamic/static instruction counts where stable,
@@ -17221,6 +20074,10 @@ growth. These are target/backend-specific measured or reported facts, never
 source-semantics proof.
 
 ### Task R-0421
+
+**Stage:** 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep; absorb R-0280 and require S12 certificates where proved.
 
 **Objective:** Define the optimization ownership and evidence-preservation
 contract across Concrete SSA, backend IR, LLVM, and QBE.
@@ -17236,6 +20093,10 @@ or evidence status.
 
 ### Task R-0422
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; do not equate throughput with program speed.
+
 **Objective:** Close measured compiler and emitter performance defects under one
 owned queue, beginning with bug 027's quadratic emission class.
 
@@ -17247,6 +20108,10 @@ does not by itself prove LLVM emission fixed. Keep compiler-throughput facts
 separate from generated-program runtime facts in reports and release claims.
 
 ### Task R-0423
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep under R-0515/R-0355 checkpoint.
 
 **Objective:** Publish fair comparative performance reports without turning
 benchmarks into marketing badges.
@@ -17260,6 +20125,10 @@ cross-language comparisons that silently omit safety/runtime checks present in
 only one implementation.
 
 ### Task R-0424
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; compares the LLVM and LCB-native (`verified`) profiles; no QBE rows.
 
 **Objective:** Add the Phase 15.75 validation artifact and graduate its facts
 into release budgets.
@@ -17292,6 +20161,8 @@ choices, and an audit report naming every remaining target/runtime assumption.
 
 ### Task R-0322
 
+**Stage:** after-1.0/research
+
 **Objective:** Define `hosted` versus `freestanding` target profiles: libc,
 startup, allocator, terminal abort behavior, stack assumptions, I/O
 availability, floating-point assumptions, and supported capabilities. Hosted
@@ -17300,33 +20171,51 @@ non-returning target handler. Neither profile promises cleanup.
 
 ### Task R-0323
 
+**Stage:** after-1.0/research
+
 **Objective:** Split stdlib modules by target profile: core no-alloc/no-OS modules, allocator-backed modules, hosted OS modules, and explicitly unavailable modules.
 
 ### Task R-0324
+
+**Stage:** after-1.0/research
 
 **Objective:** Define freestanding capability policy: no ambient `File`, `Network`, `Console`, or `Process`; target-specific capabilities must be declared and audited.
 
 ### Task R-0325
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; no implicit extension of sequential native theorem.
+
 **Objective:** Define hardware-access primitives and evidence classes before device-driver examples: `volatile`/MMIO operations require explicit `with(Mmio)` or `with(Device)` capability, inline assembly is `trusted` and requires `with(Unsafe)`, and interrupt handlers are an effectful/trusted boundary with explicit target assumptions.
 
 ### Task R-0326
+
+**Stage:** after-1.0/research
 
 **Objective:** Add explicit allocator/runtime hooks for freestanding builds, including ownership of allocation failure behavior and cleanup expectations.
 
 ### Task R-0327
 
+**Stage:** after-1.0/research
+
 **Objective:** Add linker/startup configuration: entry symbol, no-main mode, target triple, data layout, linker script hooks, and section/layout assumptions.
 
 ### Task R-0328
+
+**Stage:** after-1.0/research
 
 **Objective:** Add freestanding diagnostics: reject hosted APIs, hidden allocation, libc calls, unsupported target features, and unavailable capabilities.
 
 ### Task R-0329
 
+**Stage:** after-1.0/research
+
 **Objective:** Add one freestanding example: bounded parser, small checksum/hash kernel, or fixed-capacity state machine with no allocation and no hosted I/O.
 
 ### Task R-0330
+
+**Stage:** after-1.0/research
 
 **Objective:** Add one embedded-style audit bundle naming all remaining target assumptions:
 
@@ -17334,14 +20223,24 @@ stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
 backend/toolchain boundary.
 ### Task R-0331
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; baseline updated to the LLVM and LCB-native paths (R-0517).
+
 **Objective:** Keep production freestanding Wasm and additional backend targets deferred until freestanding profiles prove the LLVM and LCB-native paths are not enough. Any LCB freestanding target, runtime/startup contract, or release claim graduates here and through R-0505/R-0517's profile contract; LCB's own target breadth (its P10) is an external dependency, not Concrete work. (Updated 2026-10-19: Phase 7.5's QBE differential oracle is retired in favour of the LCB-native leg of R-0491's differential harness.)
 
 ### Task R-0332
+
+**Stage:** after-1.0/research
 
 **Objective:** Add the Phase 16 validation artifact: one freestanding demo project plus an MMIO/device-profile mock audit bundle. The demo must build with no hosted APIs, name allocator/startup/linker assumptions, reject hidden libc or allocation, and report `with(Device)`/`with(Mmio)`/`with(Unsafe)` evidence classes without pretending hardware behavior is proved.
 
 
 ### Task R-0453
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep after profiles and forcing workload.
 
 **Objective:** Extend the freestanding story from "no libc" to "no libc, plus a
 device and a crash model" by porting littlefs, the power-loss-resilient flash
@@ -17446,6 +20345,10 @@ audience):**
 
 ### Task R-0333
 
+**Stage:** 1, 2, 3, 7
+
+**Reconciliation (2026-10-19):** Keep; repair release-map inconsistencies.
+
 **Objective:** Define first public release criteria: supported subset, required examples, required diagnostics, proof workflow, stdlib/project UX, evidence/policy/ tooling story.
 
 Own the [release map](#release-map) and one bounded checklist/candidate record per
@@ -17457,9 +20360,17 @@ The systems preview does not satisfy or replace the verification alpha bar.
 
 ### Task R-0334
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; share one tutorial with R-0346/R-0347.
+
 **Objective:** Add the first-user teaching path as a release-bar artifact, not marketing copy. Deliverable: `docs/LEARN_CONCRETE.md` plus a checked tutorial transcript that covers install/build/run/test, `Copy` vs linear values, consume/destroy/handoff, capabilities in function headers, `Result` / ignored-result diagnostics, stdlib basics, one runtime trap, one audit report, and the five evidence classes. The tutorial must use runnable snippets covered by the doc-snippet gate and must not claim proof where the compiler reports only testing, runtime checking, assumption, or trust.
 
 ### Task R-0335
+
+**Stage:** 1, 3, 7
+
+**Reconciliation (2026-10-19):** Keep; stage 1 settles rules, each release publishes its subset.
 
 **Objective:** Publish a versioned authoritative language reference before any public release claim. The tutorial/book is not the reference. The current normative material is scattered across grammar, value-flow, execution, invariants, and evidence docs; release users need one versioned document whose sections define the language surface, not merely explain it.
 
@@ -17476,6 +20387,10 @@ The systems preview does not satisfy or replace the verification alpha bar.
  construct has a diagnostic or policy citation, and README/site/book links
  point to this reference as the normative source.
 ### Task R-0425
+
+**Stage:** 1, 2, 3, 4
+
+**Reconciliation (2026-10-19):** Keep; grow alongside normative semantics.
 
 **Objective:** Publish a versioned language conformance suite derived from the
 normative language reference, runnable by every backend and any future
@@ -17506,17 +20421,29 @@ language version with an unexplained conformance failure.
 
 ### Task R-0336
 
+**Stage:** 1, 3, 7
+
 **Objective:** Publish a public claim matrix: what Concrete proves, enforces, reports, assumes, and trusts.
 
 ### Task R-0337
+
+**Stage:** 1, 3, 7
 
 **Objective:** Add release claim freeze: README, `CLAIMS_TODAY.md`, roadmap, showcase manifest, and release bundles must agree.
 
 ### Task R-0338
 
+**Stage:** 2, 5, 7
+
+**Reconciliation (2026-10-19):** Keep; minimal V1 versions precede final schema freeze.
+
 **Objective:** Add compatibility policy for proof artifacts and fact schemas.
 
 ### Task R-0339
+
+**Stage:** 2, 5, 6
+
+**Reconciliation (2026-10-19):** Keep; distinguish display stability from semantic identity.
 
 **Objective:** Add compatibility policy for generated contract/VC obligation IDs:
 
@@ -17524,6 +20451,8 @@ obligation IDs should stay stable across harmless formatting and local
 refactors, and any unavoidable churn should be reported as artifact churn,
 not hidden under ordinary proof drift.
 ### Task R-0340
+
+**Stage:** 3, 7
 
 **Objective:** Add public API compatibility checking before release:
 
@@ -17534,6 +20463,10 @@ API-digester lesson adapted to Concrete: API drift is a reportable fact,
 not a release-note afterthought.
 ### Task R-0341
 
+**Stage:** 1, 5, 7
+
+**Reconciliation (2026-10-19):** Keep; use typed policy rather than scalar evidence ranking.
+
 **Objective:** Define release/showcase evidence policy by class:
 
 `proved_by_lean` and `proved_by_kernel_decision` are strong evidence;
@@ -17543,6 +20476,8 @@ not a release-note afterthought.
 the Phase 10 verified-profile command, not just written in prose.
 ### Task R-0342
 
+**Stage:** 3, 7
+
 **Objective:** Add public examples policy: public-facing examples, website copy, README snippets,
 paper examples and showcase manifests must not outclaim their proof status. The public flagship
 portfolio is exactly HMAC-SHA256, `secure_update_verifier` and `protocol_state_machine`; active
@@ -17551,6 +20486,10 @@ bars land. Other fixtures/workloads may be documented without being marketed as 
 flagships.
 
 ### Task R-0343
+
+**Stage:** 1, 2, 5, 7
+
+**Reconciliation (2026-10-19):** Keep; current validity and historical replay must remain separate. Revocation rejects current policy acceptance while preserving accurately labelled historical replay (R-0430).
 
 **Objective:** Add public security/soundness disclosure policy: compiler/proof pipeline bugs are security-relevant.
 
@@ -17593,6 +20532,10 @@ flagships.
   checker families.
 ### Task R-0344
 
+**Stage:** 6, 7
+
+**Reconciliation (2026-10-19):** Keep conditional on claims and available frame/flow facts.
+
 **Objective:** Add a certification-style assurance bundle profile before any SPARK-class comparison claim. The bundle must include the claim matrix, authority/capability report, obligation ledger, proof status, runtime-safety status, assumptions, trusted boundaries, package/dependency evidence, toolchain versions, replay commands, and any SPARK-class flow/frame facts.
 
  It must also include an agent-readable summary naming which annotations were
@@ -17600,17 +20543,33 @@ flagships.
  artifact over existing facts, not a second evidence system.
 ### Task R-0345
 
+**Stage:** 1, 3, 7
+
+**Reconciliation (2026-10-19):** Keep before relevant public claims.
+
 **Objective:** Publish `THREAT_MODEL.md` and keep it linked from README, release bundles, showcase manifests, and assumptions docs.
 
 ### Task R-0346
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; reuse R-0285 consumer.
 
 **Objective:** Add first-user workflow CI: install compiler, create/run one example, inspect one audit bundle without repo-local assumptions.
 
 ### Task R-0347
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep as tutorial content, not another onboarding project.
+
 **Objective:** Improve onboarding, tutorial, and docs around `proved` / `enforced` / `reported` / `assumed` / `trusted`.
 
 ### Task R-0348
+
+**Stage:** 3
+
+**Disposition (2026-10-19):** merged — the formatting decision is settled; residual documentation cleanup moves to R-0349.
 
 **Objective:** Resolve string interpolation / formatting as an explicit release-facing decision, not an orphaned gap. V1 rejects string interpolation syntax, format macros, and trait-object-style `Display` because they hide allocation, dispatch, and formatting authority. The supported path is `std.fmt` over `std.io.Writer`, with any string-returning helper carrying `with(Alloc)` and any future convenience helper pulled by workloads.
 
@@ -17623,21 +20582,35 @@ flagships.
   gate proving fixed-buffer formatting remains allocation-free.
 ### Task R-0349
 
+**Stage:** 1, 3
+
 **Objective:** Refresh or archive stale gap/backlog documents before release. Documents such as `docs/language/LANGUAGE_GAPS.md`, root-level idea piles, and old stdlib reviews may be useful historically, but they cannot sit next to the roadmap making claims that contradict closed known holes or current semantics. Gate: `scripts/tests/check_gap_docs_current.sh` rejects stale "true blocker" / "largest gap" claims unless they map to an open roadmap item or known-hole id; otherwise the material moves to CHANGELOG/archive with a date and status.
 
 ### Task R-0350
+
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep; derive claims from current matrix.
 
 **Objective:** Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Hylo, Cogent, Dafny, F*, Why3.
 
 ### Task R-0351
 
+**Stage:** 3, 7
+
 **Objective:** Add migration/adoption playbook: what C/Rust/Zig code moves first, how to wrap libraries honestly, what stays outside Concrete.
 
 ### Task R-0352
 
+**Stage:** 3
+
 **Objective:** Add release/install distribution matrix: host triples, checksums/signing, install paths, supported/deferred channels.
 
 ### Task R-0353
+
+**Stage:** 2, 5
+
+**Reconciliation (2026-10-19):** Keep; fix freeze ordering and profile-specific native edges.
 
 **Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
 
@@ -17838,6 +20811,10 @@ adversarially closed`. No stage may be skipped, and internal consistency alone n
 release policy.
 ### Task R-0354
 
+**Stage:** 3, 5
+
+**Reconciliation (2026-10-19):** Keep; scope preview separately from replay-bearing releases.
+
 **Objective:** Add concrete distribution UX:
 
  `concrete --version --json`, `scripts/release/build_dist.sh`,
@@ -17855,6 +20832,10 @@ release policy.
  checksums, the supply-chain lock, and `THIRD_PARTY.md`.
 ### Task R-0355
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; consume performance ledger and add proof scalability metrics. Before large R-0512 migrations, budgets include proof scalability: elaboration/recheck memory, proof-term size, artifact size and validator scaling.
+
 **Objective:** Add release performance budgets:
 
  `scripts/tests/check_release_performance.sh` must measure compiler startup,
@@ -17865,6 +20846,10 @@ release policy.
  `release/perf-baseline.json`. Done when
  release CI blocks unexplained regressions and prints the regressed command.
 ### Task R-0356
+
+**Stage:** 2, 3, 5
+
+**Reconciliation (2026-10-19):** Keep; preserve historical replay instead of blanket old-format rejection. Current issuance may reject old formats; retained historical verification stays supported through its versioned path (R-0512).
 
 **Objective:** Add reproducible release artifact hashes:
 
@@ -17878,6 +20863,8 @@ release policy.
  `scripts/tests/check_reproducible_release_hash.sh`; the gate must build the
  same release artifact twice from a clean tree and compare all hashes.
 ### Task R-0357
+
+**Stage:** 2, 3
 
 **Objective:** Add a toolchain/dependency supply-chain lock and license inventory before any release claim:
 
@@ -17900,12 +20887,20 @@ release policy.
    recorded in replay metadata differs from the one in the lock.
 ### Task R-0358
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep before first public release.
+
 **Objective:** Add the language/stdlib/artifact deprecation policy (moved up from Phase 18 — users of a released language need the policy BEFORE the release, not after): what stability the first release promises for syntax, stdlib API, proof/fact schemas, and obligation ids; how deprecations are announced (diagnostic with a replacement, minimum deprecation window measured in releases); and what may never break silently (anything that would flip an evidence class without `needs_recheck`). The Phase 19 migration tooling (`concrete migrate`) implements this policy; the policy itself is a release-bar document. Gate: Task R-0340's `concrete api-diff` must classify every
 
  public-surface change as `compatible`, `deprecated(window)`, or
  `breaking`, and the release gate fails on `breaking` without a recorded
  policy exception.
 ### Task R-0359
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; bound checklist to implemented gates. Gates every implemented or activated requirement, with explicit dispositions for future tasks.
 
 **Objective:** Add the external-contributor and public-platform surface before release.
 
@@ -17938,9 +20933,17 @@ rationale as well as accepted ones.
 
 ### Task R-0360
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; replace “all above” with scoped R-0333 candidate criteria. Ships against R-0333's bounded candidate checklist, not "all of the above".
+
 **Objective:** Ship the first narrow public release only after the above are green.
 
 ### Task R-0361
+
+**Stage:** 3, 5
+
+**Reconciliation (2026-10-19):** Keep; historical origin does not make remainder complete.
 
 **Objective:** [relocated from closed Phase 4] Artifact and docs stability hardening:
 
@@ -17952,6 +20955,10 @@ rationale as well as accepted ones.
  marker detection. (Found not mechanically robust as a default during historical item 44
  work; they belong here, gated for the release bar.)
 ### Task R-0362
+
+**Stage:** 3, 5, 7
+
+**Reconciliation (2026-10-19):** Keep; branch native versus LLVM assurance.
 
 **Objective:** Add the Phase 17 validation artifact:
 
@@ -17991,6 +20998,10 @@ opt-in or public data rather than hidden telemetry.
 
 ### Task R-0426
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep readiness before 0.1; operate from 0.1.
+
 **Objective:** Define the supported-version, maintenance, and end-of-life
 policy.
 
@@ -18003,6 +21014,10 @@ silent best effort.
 
 ### Task R-0427
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; rehearse before first supported release.
+
 **Objective:** Make release rebuild, hotfix, rollback, and revocation procedures
 replayable.
 
@@ -18013,6 +21028,10 @@ rotation, and how installers refuse a revoked release. Drill a bad binary, bad
 metadata, failed rollout, and lost build host; retain timings and manual steps.
 
 ### Task R-0428
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; share policy with R-0343.
 
 **Objective:** Operate a security and soundness response process.
 
@@ -18026,6 +21045,10 @@ explicit non-backport decision.
 
 ### Task R-0429
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; seed fixtures before second supported version.
+
 **Objective:** Gate cross-version language, stdlib, package, and evidence
 compatibility across the current and previous supported releases.
 
@@ -18037,6 +21060,10 @@ preserve provenance and downgrade to `needs_recheck` whenever evidence cannot
 be retained honestly.
 
 ### Task R-0430
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep; make this distinction authoritative for R-0343.
 
 **Objective:** Define package, dependency, proof, certificate, and claim
 revocation operations.
@@ -18050,6 +21077,10 @@ key compromise, malicious replacement, and recovery to a clean dependency.
 
 ### Task R-0431
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep from first pilot, not only after release.
+
 **Objective:** Turn every qualifying external failure into durable evidence.
 
 Provide an intake/reduction template that records affected version/target,
@@ -18062,6 +21093,10 @@ links the advisory/issue, fix, regression, and released versions.
 
 ### Task R-0432
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; reuse pilot evidence and disclose sampling limits.
+
 **Objective:** Measure post-release ecosystem health without hidden telemetry.
 
 Use opt-in diagnostics bundles, explicit surveys, public issue data, CI from
@@ -18073,6 +21108,10 @@ size disclosed. The compiler sends nothing by default; absence of telemetry is
 not evidence of success.
 
 ### Task R-0433
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep bounded rehearsal before support promises.
 
 **Objective:** Add the Phase 17.5 operational validation drill.
 
@@ -18136,6 +21175,10 @@ current execution queue or reducing R-0285's automatic generation/build exit.
 
 ### Task R-0363
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; JSON summaries must not replace canonical authority bytes.
+
 **Objective:** Expand package artifacts only after reports, policies, assumptions, interface artifacts, and CI gates prove what packages must carry. The first package artifact refactor must define exact files:
 
 `Concrete.package.json` (manifest summary), `Concrete.lock`,
@@ -18154,6 +21197,10 @@ package/workspace boundaries, import hygiene, visibility/API stability,
 versioning, generated docs, and evidence summaries before the language can
 claim to support multi-team codebases rather than only single-repo examples.
 ### Task R-0364
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep minimal exact-pin schema first. Build-time authority is enforced by R-0285's foreign-build execution policy, not only declared.
 
 **Objective:** Design and parse package manifest.
 
@@ -18186,6 +21233,10 @@ the next field, preserving the shared graph and identity contracts.
 
 ### Task R-0365
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; ranges follow specified conflict behavior. Before automatic fetching is supported: path traversal, symlink/hardlink escapes, decompression limits, interrupted acquisition and atomic installation into the dependency store each have a hostile fixture.
+
 **Objective:** Add version constraints, dependency resolution, and lockfile.
 
 Specify deterministic version selection and permitted duplicate versions before
@@ -18212,6 +21263,8 @@ only after their selection/compatibility rules and conflict fixtures are decided
 
 ### Task R-0366
 
+**Stage:** 3
+
 **Objective:** Add workspace and multi-package support.
 
 Use one root, shared lockfile, dependency graph and compiler session. Root-only
@@ -18221,9 +21274,13 @@ facts and native link inputs under build, test, check and report.
 
 ### Task R-0367
 
+**Stage:** 3
+
 **Objective:** Add package-aware test selection.
 
 ### Task R-0368
+
+**Stage:** 3, 7
 
 **Objective:** Split interface artifacts from body artifacts at package/workspace scale.
 
@@ -18238,6 +21295,10 @@ may compile against interface artifacts without seeing private bodies, but
 audit/release bundles must still show when a public claim depends on a
 private body proof, trusted boundary, or assumption.
 ### Task R-0369
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep before package facts become authoritative.
 
 **Objective:** Define the public package codecs and `PackageInterfaceCertificateV1` before consuming certificates.
 
@@ -18264,6 +21325,10 @@ private body proof, trusted boundary, or assumption.
  `scripts/tests/check_package_interface_certificate_schema.sh`.
 ### Task R-0370
 
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep; consume R-0494 judgments rather than new verdict logic.
+
 **Objective:** Add proof-aware package artifacts: facts, obligations, proof status, trusted assumptions, policy declarations, package-boundary evidence summaries.
 
 Required statuses: `proved_by_lean`, `proved_by_kernel_decision`,
@@ -18272,6 +21337,8 @@ Required statuses: `proved_by_lean`, `proved_by_kernel_decision`,
 must record whether evidence is package-local, inherited from a dependency,
 or trusted through a boundary.
 ### Task R-0371
+
+**Stage:** 7
 
 **Objective:** Verify dependency interface certificates before consuming package facts or reusable artifacts.
 
@@ -18296,6 +21363,10 @@ or trusted through a boundary.
  unsupported predicate, proof revocation, and source-rebuild fallback. Wire
  `scripts/tests/check_package_certificates.sh`.
 ### Task R-0372
+
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep; align with R-0440 typed policy.
 
 **Objective:** Add module/package authority budgets after package graphs are real, and make imports fact-checked boundaries. Imports do not grant capabilities; they declare and constrain facts about the imported interface. The first concrete fact class is authority: support source-level or manifest-level constraints such as `import std.parse requires(no File, no Network, no Unsafe)` and package-wide budgets such as `allowed = ["Alloc"]`. A dependency capability widening must be a build/audit diff and, when constrained, a build failure until explicitly accepted. The design must leave room for the same import mechanism to constrain allocation (`no Alloc` / bounded allocation), trust
 
@@ -18341,21 +21412,39 @@ table. This report is the thing an AI assistant, reviewer, or CI policy reads
 before accepting a dependency update.
 ### Task R-0373
 
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep as R-0440/R-0372 policy dimension.
+
 **Objective:** Add dependency trust policy: trust widening across boundaries, review and inheritance.
 
 ### Task R-0374
+
+**Stage:** 7
 
 **Objective:** Add package-level assumption inheritance: dependency assumptions must be visible to dependents and release bundles.
 
 ### Task R-0375
 
+**Stage:** 7; after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; split local provenance from hosted publication.
+
 **Objective:** Add package provenance and publishing model.
 
 ### Task R-0376
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep deferred; not beta prerequisite.
+
 **Objective:** Add package registry server protocol and trust model.
 
 ### Task R-0377
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep; local docs before hosting.
 
 **Objective:** Add API docs publishing for packages and stdlib:
 
@@ -18367,9 +21456,17 @@ before accepting a dependency update.
  be reproducible from the package artifact.
 ### Task R-0378
 
+**Stage:** after-1.0/research
+
+**Disposition (2026-10-19):** Duplicate of R-0377 in export scope: merge export requirements into R-0377; retain hosting as deferred increment.
+
 **Objective:** Add package documentation hosting/export format only after `concrete doc` and package artifacts are stable: static HTML, JSON docs, versioned stdlib docs, package docs, release-note links, and `scripts/tests/check_docs_publish.sh` to prove generated docs are reproducible.
 
 ### Task R-0379
+
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep as R-0372’s evidence dimension under typed policy.
 
 **Objective:** Design evidence-typed imports before the package fact schema freezes. A dependent package should be able to demand an evidence floor at the import boundary, for example `import hmac.compute requires(proved_by_lean)` or a manifest-level equivalent for all imports from a dependency. The compiler must check the requirement against the dependency's interface/evidence artifacts and fail the import if the evidence is missing, stale, vacuous, downgraded, inherited only through an unaccepted assumption, or weaker than the importing package's policy. This is a package-boundary trust-chain feature, not a local proof feature: it must define how evidence classes are
 
@@ -18386,9 +21483,17 @@ before accepting a dependency update.
  channels, and that an evidence downgrade breaks the importing package.
 ### Task R-0380
 
+**Stage:** 6, 7
+
+**Reconciliation (2026-10-19):** Keep after underlying facts exist.
+
 **Objective:** Add package-level SPARK-class assurance summaries once frame/dependency contracts exist. Interface artifacts should expose public contract facts, read/write/modifies summaries, dependency-flow summaries, ghost/spec assumptions, capability requirements, trusted boundaries, and evidence class per public function. Package consumers and agents must be able to ask "what may this dependency read, write, depend on, assume, trust, or prove?" without inspecting private bodies.
 
 ### Task R-0381
+
+**Stage:** 5, 7
+
+**Reconciliation (2026-10-19):** Keep; reuse common encoders.
 
 **Objective:** Extend content-addressing beyond proof fingerprints for package/evidence artifacts.
 
@@ -18415,6 +21520,10 @@ before accepting a dependency update.
  nondeterministic wrapper is caught by a gate; and package cache/dependency
  keys use these roots instead of source paths or human names.
 ### Task R-0382
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; update native validation assumptions per profile.
 
 **Objective:** Add optional shared/remote artifact reuse only after the local Phase 8.5 store and independent package verification are mature.
 
@@ -18449,6 +21558,10 @@ before accepting a dependency update.
  of network/cache availability.
 ### Task R-0383
 
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep separate local-foundation and evidence-policy checkpoints.
+
 **Objective:** Add the Phase 18 validation artifact: a multi-package workspace project with dependency resolution, lockfile, package-aware tests, interface/body artifact split, dependency trust policy, assumption inheritance, authority budgets, provenance, independently checked dependency certificates, evidence-typed imports, published docs, downstream reuse after a dependency private-body edit, invalidation after a public-interface edit, and release-bundle evidence for every dependency. Include remote-cache hostile input/offline fallback if Task R-0382 is implemented. Wire it as `examples/package_workspace/` plus
 
  `scripts/tests/check_phase18_packages.sh`.
@@ -18475,9 +21588,15 @@ proof language exclusively through batch reports, but release is not blocked on 
 
 ### Task R-0384
 
+**Stage:** 3, 5
+
 **Objective:** Add artifact viewer integration for proof/evidence facts.
 
 ### Task R-0385
+
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep V1a checkpoint.
 
 **Objective:** Add compiler-as-service / LSP entrypoints after diagnostics and facts are structured. The service must host the Phase 8.5 `CompilerSession`; it may not wrap batch `runFrontend` as its normal edit path.
 
@@ -18488,6 +21607,8 @@ Scripted incomplete-source and edit/repair cases verify useful results without s
 facts or changes to proof authority.
 
 ### Task R-0386
+
+**Stage:** 3
 
 **Objective:** Reuse the incremental query/certificate graph as the only editor fact engine.
 
@@ -18507,17 +21628,29 @@ facts or changes to proof authority.
  or batch whole-project rebuild for a private leaf edit fails the gate.
 ### Task R-0387
 
+**Stage:** 3
+
 **Objective:** Add hover/type info for capability status, proof status, predictable status, assumptions, obligations, and trusted boundaries.
 
 ### Task R-0388
+
+**Stage:** 3
 
 **Objective:** Add obligation navigation: jump from source contract/index/mod/loop to the generated obligation and discharging theorem.
 
 ### Task R-0389
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep after minimal editor path.
+
 **Objective:** Add refactor support that preserves or updates facts/proofs where possible.
 
 ### Task R-0390
+
+**Stage:** 7
+
+**Reconciliation (2026-10-19):** Keep after package facts.
 
 **Objective:** Add dependency audit UI for capability, allocation, FFI, trust, evidence, predictability, proof-obligation drift.
 
@@ -18529,9 +21662,17 @@ command palette action should answer "what can this dependency do, what does
 it assume, and what evidence does it carry?" without reading private bodies.
 ### Task R-0391
 
+**Stage:** 3, 7
+
+**Disposition (2026-10-19):** Duplicate of R-0429: merge into R-0429; intake through R-0431.
+
 **Objective:** Add backwards-compatibility regression corpus once public users exist.
 
 ### Task R-0392
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep minimal diagnostics for early breaking rules; broader automation later.
 
 **Objective:** Add migration/deprecation tooling after the policy exists (Task R-0358):
 
@@ -18543,17 +21684,31 @@ evidence facts or explicitly mark them `needs_recheck`. The tool must read
 obligation ledger rather than scraping text.
 ### Task R-0393
 
+**Stage:** 3, 7
+
 **Objective:** Add API-docs/editor integration: LSP go-to-docs for stdlib/package APIs, evidence/capability/deprecation badges in hover, and diagnostic links to `concrete doc` output. The LSP payload must reuse the same doc/evidence JSON as the CLI.
 
 ### Task R-0394
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep optional.
 
 **Objective:** Add a playground or local web runner only after the release subset is stable: `concrete playground --local` or a static hosted runner with preloaded examples, no hidden claims, visible evidence class, audit output, and clear sandbox/timeout/resource assumptions. This is a teaching surface, not a second compiler pipeline.
 
 ### Task R-0395
 
+**Stage:** 3
+
+**Reconciliation (2026-10-19):** Keep; V1 editor is now the forcing consumer.
+
 **Objective:** [historical origin: closed Phase 4 item 11 tail] Route obligation / proof / policy facts into the structured `Diagnostic` record / `--diagnostics-json` channel so LSP/editor and CI-JSON consumers see them (array-bounds, solver-policy, vacuous-contract, stale-proof, …) — without duplicating the `ObligationCore`/report model. Includes interpreter structured diagnostics (historical Phase 4 item 18a). Pull when a real consumer (LSP / CI JSON parser) needs machine-readable obligation diagnostics; see LANGUAGE_GAPS for the frontend-vs-obligation diagnostic split.
 
 ### Task R-0396
+
+**Stage:** 6, 7
+
+**Reconciliation (2026-10-19):** Keep after facts exist.
 
 **Objective:** Add editor and agent diagnostics for SPARK-class assurance facts after the facts exist: failed loop invariants, weak variants, missing frame facts, over-broad `writes`, unsatisfied `depends`, ghost/spec partiality, package evidence downgrades, and runtime-safety obligations that need a frame or invariant. The LSP/JSON payload must reuse the obligation/evidence ledger and point agents to the validation command; no editor-only proof status.
 
@@ -18562,6 +21717,8 @@ obligation ledger rather than scraping text.
  should suggest "promote this to a contract/obligation" when release or
  high-integrity policy requires stronger evidence.
 ### Task R-0397
+
+**Stage:** 3
 
 **Objective:** Add installed-binary feature discovery for agents and editor tooling.
 
@@ -18578,6 +21735,10 @@ obligation ledger rather than scraping text.
   proof synthesis, replay, capability diffs, and counterexample saving from
   the installed binary alone.
 ### Task R-0398
+
+**Stage:** 3, 7
+
+**Reconciliation (2026-10-19):** Keep minimal V1 checkpoint; defer advanced-feature exit.
 
 **Objective:** Add the Phase 19 validation artifact:
 
@@ -18599,6 +21760,10 @@ Done when: each research idea is either pulled into an earlier phase by a
 forcing example, explicitly deferred, or rejected.
 
 ### Task R-0399
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep dated decision/deferral under R-0515.
 
 **Objective:** Keep concurrency design-only until the v1 surface is frozen:
 
@@ -18629,25 +21794,43 @@ second control-flow semantics.
    runtime.
 ### Task R-0400
 
+**Stage:** after-1.0/research
+
 **Objective:** Build concurrency pressure-test sketches and expected reports before implementation.
 
 ### Task R-0401
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; disambiguate “v1 concurrency” from language 1.0.
 
 **Objective:** Mechanize the v1 concurrency formal model before claiming safety.
 
 ### Task R-0402
 
+**Stage:** after-1.0/research
+
 **Objective:** Implement OS threads/scopes/channels only after the model and reports are stable.
 
 ### Task R-0403
+
+**Stage:** after-1.0/research
 
 **Objective:** Research typestate only if a current state-machine/protocol example needs it.
 
 ### Task R-0404
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep only unresolved lifetime/region design; ordinary allocator examples are R-0317.
+
 **Objective:** Research arena allocation after bounded-capacity/allocation-profile work exposes a concrete gap.
 
 ### Task R-0405
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep after freestanding hardware model.
 
 **Objective:** Research exact WCET/cache/pipeline behavior only with a
 target/hardware model. Posture: be a strong WCET annotation frontend, not
@@ -18662,33 +21845,63 @@ must not silently reinterpret or overwrite their source scope.
 
 ### Task R-0449
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep workload gate; align bridge with Core/VC semantics.
+
 **Objective:** Research Why3-style realization for the prover backends — proving, in Rocq and Isabelle themselves, that the obligation IR's built-in theories are sound in that prover's model — only after R-0448 has a real multi-kernel user who needs bridge-level trust rather than agreement-level trust. Each realization proof converts a slice of the trusted Core→obligation bridge into kernel-checked evidence; without it, "three kernels" means three syntaxes over one trusted bridge. Pulled by an audited consumer requiring it, not by symmetry.
 
 ### Task R-0406
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep only generation remainder.
 
 **Objective:** Research binary-format DSLs only if packet/ELF examples show repeated parser boilerplate. The trigger fired (2026-07-25 audit: seven combinator shapes spelled ~45–50 times; elf_header the least-protected parser in the tree); the combinator core and the numeric/PNG/ELF ports are pulled forward as R-0444. What remains gated here is the generation layer proper — EverParse-style spec→Concrete source — gated on R-0170's checked combinator proof leg existing and on DECISIONS' external-generation rule (generated output is audited as ordinary source).
 
 ### Task R-0407
 
+**Stage:** after-1.0/research
+
 **Objective:** Research hardware capability mapping after source-level capabilities and package policies are stable.
 
 ### Task R-0408
+
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** Superseded in core scope by R-0496/S7: merge required instrumentation into R-0496; separately specify any extra research.
 
 **Objective:** Broaden the proof-relevant interpreter toward Miri-style UB checking only if the proof-subset interpreter proves valuable.
 
 ### Task R-0409
 
+**Stage:** 2, 4
+
+**Disposition (2026-10-19):** Superseded by R-0496/R-0512: retire legacy redesign; carry demonstrated proof debt into Core proof engineering.
+
 **Objective:** Investigate a sized/indexed ProofCore evaluator only if the current fuel-indexed evaluator remains repeated proof debt after HMAC and at least one other substantial loop/composition proof. This is ProofCore v2 research, not a migration commitment; see [research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md).
 
 ### Task R-0410
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep with explicit workload trigger.
 
 **Objective:** Research persistent equality/rewrite state after backend contracts, semantic diff, and proof/evidence pipeline are stronger.
 
 ### Task R-0411
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep deferral, not implementation backlog.
+
 **Objective:** Do not adopt row effects for v1. The default design stays object-capability and audit-visible: authority should be obvious in source, not hidden behind abstract effect inference. Revisit only as a research note if explicit capabilities create a proven, repeated blocker in real programs after the stdlib and concurrency pressure tests exist.
 
 ### Task R-0412
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep strict pressure-test and evidence-class conditions.
 
 **Objective:** Research a generational-reference-style dynamic fallback only if a forcing workload proves static linearity plus second-class references are too restrictive. The target use case is not ordinary ownership; it is a narrow escape for liveness/provenance facts around observers, back-references, callback-heavy object graphs, or host/FFI handles that Concrete cannot prove statically without unacceptable surface complexity. If adopted, the runtime check discharges an obligation as `checked_dynamically`, never as `proved`, and audit/report output must distinguish it from static ownership proof.
 
@@ -18699,6 +21912,10 @@ must not silently reinterpret or overwrite their source scope.
  claim, and prove the fallback does not become a hidden borrow checker,
  hidden GC, implicit Drop, or a way to weaken the linear default.
 ### Task R-0413
+
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep distinct from proving existing Lean compiler.
 
 **Objective:** Research dogfooding Concrete's evidence model onto the compiler's own TCB.
 
@@ -18738,6 +21955,10 @@ detection, reproducibility and actual TCB reduction. See
 [QBE/native-backend research](research/compiler/qbe-in-concrete.md#lean-4-alternative-and-generated-runtime-2026-10-18).
 ### Task R-0414
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; do not reopen incremental-driver architecture.
+
 **Objective:** Research a Datalog-style / stratified relational **rule layer** only when the shipped Phase 8.5 `CompilerDB` has real relational consumers that typed queries/maps cannot express cleanly.
 
 
@@ -18766,9 +21987,17 @@ detection, reproducibility and actual TCB reduction. See
  future rule-layer reference, not unfinished incremental-compiler work.
 ### Task R-0415
 
+**Stage:** after-1.0/research
+
+**Reconciliation (2026-10-19):** Keep; add omitted R-0449 to enumerated coverage. Records the deferred Silver shared-state systems workload (outside ethlambda completion), and R-0449 belongs to its enumerated coverage.
+
 **Objective:** Add the Phase 20 validation artifact: one pressure-test sketch, expected report, and decision record for every research-gated extension (concurrency, atomics/memory model, typestate, arena allocation, WCET, binary-format DSLs, hardware capability mapping, Miri-style interpreter, sized evaluator, persistent rewrite state, row effects, generational dynamic fallback, compiler self-verification, and Datalog-style relational facts). No research item graduates unless its forcing example, report shape, evidence class, and rejection or pull-forward criteria are recorded.
 
 ### Task R-0446
+
+**Stage:** 1, 2
+
+**Reconciliation (2026-10-19):** Keep; misplaced in the research phase — its generated trap/fuzzer/consumer coverage is an increment of R-0491/R-0493.
 
 **Objective:** Generate the operation-semantics/trap inventory rather than
 hand-maintaining it, and extend its consumer set.
@@ -18795,6 +22024,10 @@ must be shown to read the generated artifact rather than a local copy.
 ---
 
 ### Task R-0487
+
+**Stage:** 3, 4
+
+**Reconciliation (2026-10-19):** Keep reporting analysis separate from mandatory capability containment.
 
 **Objective:** Infer the authority each function's body MAY use, and use that to check and
 explain capability declarations — never to replace them. Every inferred fact is a potential
