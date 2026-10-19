@@ -98,8 +98,10 @@ scrapers="$(grep -rlE 'Max stack bound:[^|]*\[0-9\]' scripts/ | grep -vE 'script
 
 echo "=== 5. an edge with no target frame is not a leaf ==="
 # Codex review of 19e2ab9a: depth computation FILTERED callees with no frame, so a function calling
-# an extern (or a callee resolving to no unique definition) published a finite bound.
-for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main"; do
+# an extern (or a callee resolving to no unique definition) published a finite bound. Codex round 2:
+# an extern SPELLED like an intrinsic (extern_intrinsic_name) is still an extern, not exempt.
+for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main" \
+           "extern_intrinsic_name:main.wrap, main.main"; do
   f="${leg%%:*}"; want="${leg#*:}"
   out="$("$CC" "$FIX/$f.con" --report stack-depth 2>&1)"
   line="$(grep -E '^Max stack bound:' <<<"$out")"

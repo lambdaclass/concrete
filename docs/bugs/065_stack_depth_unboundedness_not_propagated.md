@@ -244,3 +244,15 @@ Controls in `check_stack_budget.sh` section 5: `extern.con` and `unresolved.con`
 `intrinsic.con` (a `print_int` edge) keeps its exact 24-byte bound. The two
 `assumptions.toml` fixtures the gate reads are now committed; a `.gitignore` rule for
 compiled outputs under `tests/regressions/*/*/` had hidden them.
+
+## Codex round 2
+
+* **An extern spelled like an intrinsic kept a finite bound (P1).** The frameless-edge rule
+  exempted every callee `resolveIntrinsic` recognizes, by SPELLING, so an explicitly declared
+  `trusted extern fn wrapping_add(..)` — which Elab calls instead of the intrinsic, because a
+  user/extern signature wins — published `Max stack bound: 24 bytes (main)`. Only a resolved
+  intrinsic identity is exempt now: a recognized spelling that is not a declared extern, or an
+  extern declared AS an intrinsic (`intrinsicDecls`). Fixture
+  `tests/regressions/bug065_unbounded_stack/extern_intrinsic_name.con`, a leg of
+  `check_stack_budget.sh` section 5 (unbounded, naming main.wrap and main.main); the
+  `print_int` positive control keeps its 24 bytes.

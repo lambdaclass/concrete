@@ -695,6 +695,12 @@ private def stackSummaryLine (infos : List FnStackInfo) : String :=
     | some i => s!"Max stack bound: {i.stackBound} bytes ({i.name})"
     | none => "Max stack bound: 0 bytes (no functions)"
 
+/-- Every declared extern name in a module tree, and those declared AS an intrinsic. -/
+private partial def stackExternNames (ms : List CModule) : List String × List String :=
+  ms.foldl (fun (ex, intr) m =>
+    let (subEx, subIntr) := stackExternNames m.submodules
+    (ex ++ m.externFns.map (·.1) ++ subEx, intr ++ m.intrinsicDecls.map (·.1) ++ subIntr)) ([], [])
+
 /-- Stack-depth report for functions passing the no-recursion profile. -/
 def stackDepthReport (modules : List CModule) (locMap : FnLocMap := [])
     (pc : Concrete.ProofCore) : String :=
@@ -713,9 +719,18 @@ def stackDepthReport (modules : List CModule) (locMap : FnLocMap := [])
   -- budget consumer accepted (bug 065 follow-up). No stack bound is ever validated for those
   -- targets, so their callers are seeded as "no bound established". Compiler intrinsics are the
   -- one exception: the compiler lowers them itself and they never call back into program code.
+  --
+  -- The exemption is for a RESOLVED intrinsic identity, never a spelling: an explicitly
+  -- declared extern named `wrapping_add` is externally implemented with no validated bound,
+  -- and Elab already calls IT rather than the intrinsic (a user/extern signature wins), so it
+  -- stays opaque here too (Codex round 2). An extern DECLARED as an intrinsic
+  -- (`intrinsicDecls`) is the compiler's own lowering and stays exempt.
   let framed := frameSizes.map (·.1)
+  let (externNames, intrinsicExterns) := stackExternNames modules
+  let isResolvedIntrinsic := fun (c : String) =>
+    (resolveIntrinsic c).isSome && (!externNames.contains c || intrinsicExterns.contains c)
   let opaqueCallers := callGraph.filterMap fun (n, cs) =>
-    if cs.any (fun c => !framed.contains c && (resolveIntrinsic c).isNone) then some n else none
+    if cs.any (fun c => !framed.contains c && !isResolvedIntrinsic c) then some n else none
   -- Anything that can REACH a function with no bound has no bound either.
   let seed := (allFns.filter (fun (_, _, _, isRec, _) => isRec)).map (fun (qn, _, _, _, _) => qn)
     ++ opaqueCallers

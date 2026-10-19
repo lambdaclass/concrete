@@ -1,0 +1,14 @@
+// Bug 065, Codex round 2: an EXPLICITLY DECLARED extern spelled like a compiler
+// intrinsic (`wrapping_add`) is externally implemented — Elab calls the extern,
+// not the intrinsic — so it has no validated stack bound and its callers have
+// none either. Before the fix the report exempted it by spelling and published
+// "Max stack bound: 24 bytes (main)".
+trusted extern fn wrapping_add(a: i64, b: i64) with() -> i64;
+
+fn wrap(n: i64) -> i64 {
+    return wrapping_add(n, 1);
+}
+
+fn main() -> i32 {
+    return (wrap(0 - 1)) as i32;
+}
