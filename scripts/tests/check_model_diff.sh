@@ -7,8 +7,16 @@
 # evaluates both, in process, on boundary inputs of every scalar-signature extracted function.
 #
 #   C  the corpus (every example and std) has ZERO value mismatches, over a non-empty population;
-#   V  every row's verdict is RE-DERIVED here from its model/runtime columns, so a comparator that
-#      always answers `agree` cannot pass;
+#      Every function the report lists as eligible (extracted, scalar signature) has at least one row
+#      — a nullary or bool-only function used to get no input tuple at all — and at least one row
+#      that is not ERROR (neither side produced a value, so the input compared nothing), except three
+#      named, reasoned all-ERROR functions;
+#   V  every row's verdict is RE-DERIVED here from its model/runtime columns;
+#   N  the negative control: CONCRETE_MODEL_DIFF_PERTURB changes one function's MODEL value before the
+#      PRODUCTION comparator sees it, and every row of that function must read MISMATCH (and only its
+#      rows). The corpus agrees everywhere, so V alone cannot show the comparator compares;
+#   B  scalar coverage: a nullary function is compared on the empty tuple, bool parameters on false
+#      and true (never an integer), and `b as bool` stays a bool on both sides;
 #   F  the bug 080 fixture: narrowing (300 -> 44), sign change and widening all agree, and the 300 row
 #      shows the WRAPPED value on both sides.
 #   E  the bug 084 fixture: match-arm binders bind BY POSITION in the model as in Elab, the
@@ -17,7 +25,8 @@
 #      `Mk { _, a }`, so each pin fails under the old binding. The compiled binary is run too
 #      (exit 22 = 5+5+5+7), so "runtime" is not only the interpreter.
 #   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
-#      agree, each pinned to its runtime value.
+#      agree, each pinned to its runtime value; a branch- or body-local `let` named by what follows its
+#      scope (bug 087) is not extracted, while a local nothing after it names still is.
 #   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
 #      extracted; a tail match/if whose arms return agrees.
 #
@@ -33,9 +42,11 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== C/V: the corpus ==="
-: > "$TMP/rows"
+: > "$TMP/rows"; : > "$TMP/elig"
 for f in $(ls examples/*/src/main.con examples/*/*/src/main.con 2>/dev/null) std/src/lib.con; do
-  "$BIN" "$f" --report model-diff 2>/dev/null | grep -vE '^MODEL-DIFF|^$' >> "$TMP/rows" || true
+  "$BIN" "$f" --report model-diff > "$TMP/one" 2>/dev/null || true
+  grep -vE '^MODEL-DIFF|^$' "$TMP/one" >> "$TMP/rows" || true
+  grep '^MODEL-DIFF-ELIGIBLE' "$TMP/one" | cut -f2 >> "$TMP/elig" || true
 done
 N="$(grep -c . "$TMP/rows" || true)"
 FNS="$(cut -f2 "$TMP/rows" | sort -u | grep -c . || true)"
@@ -43,11 +54,41 @@ CLAIMED="$(awk -F'\t' '$3 == "claimed"' "$TMP/rows" | cut -f2 | sort -u | grep -
 [ "$N" -gt 1000 ] && [ "$FNS" -gt 50 ] && [ "$CLAIMED" -gt 5 ] \
   && ok "C: $FNS functions ($CLAIMED claimed) over $N inputs were compared" \
   || no "C: the population is too small to mean anything ($FNS functions, $CLAIMED claimed, $N inputs)"
+ELIG="$(sort -u "$TMP/elig" | grep -c . || true)"
+UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | head -5 | tr '\n' ' ')"
+[ "$ELIG" -gt 50 ] && [ -z "$UNCOVERED" ] \
+  && ok "C: every one of the $ELIG eligible functions has at least one compared input" \
+  || no "C: eligible functions without a compared input (of $ELIG): $UNCOVERED"
+# ERROR rows (neither side produced a value) compared nothing. Most are inputs on which both sides
+# legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
+# at all; only the functions named here may be, each for a stated reason, and each must still be all
+# ERROR (so an entry cannot outlive its reason silently).
+ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate "
+#   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
+#   cn.violation      is ratio(10, 0): the same trap, nullary;
+#   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
+#                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement).
+ERR="$(grep -c '^ERROR' "$TMP/rows" || true)"
+NOVAL=""
+for fn in $(sort -u "$TMP/elig"); do
+  r="$(grep -P "\t\Q$fn\E\t" "$TMP/rows")"
+  if ! grep -qv '^ERROR' <<<"$r"; then
+    case "$ALL_ERROR_OK" in *" $fn "*) ;; *) NOVAL="$NOVAL $fn";; esac
+  fi
+done
+STALE=""
+for fn in $ALL_ERROR_OK; do
+  r="$(grep -P "\t\Q$fn\E\t" "$TMP/rows")"
+  { [ -z "$r" ] || grep -qv '^ERROR' <<<"$r"; } && STALE="$STALE $fn"
+done
+[ -z "$NOVAL" ] && [ -z "$STALE" ] \
+  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the 3 named ones has a compared value" \
+  || no "C: functions compared on nothing:${NOVAL:- none}; stale all-ERROR entries:${STALE:- none}"
 MM="$(grep -c '^MISMATCH' "$TMP/rows" || true)"
 [ "$MM" -eq 0 ] && ok "C: no input where the model and the runtime produce different values" \
   || no "C: $MM model/runtime value mismatches: $(grep -m3 '^MISMATCH' "$TMP/rows" | tr '\t' ' ' | tr '\n' '|')"
 BAD="$(awk -F'\t' '{m=$5; r=$6; sub(/^model=/,"",m); sub(/^runtime=/,"",r);
-  want = (m!="—" && r!="trap") ? (m==r ? "agree" : "MISMATCH") : (m!="—" ? "partial" : (r!="trap" ? "model_stuck" : "agree"));
+  want = (m!="—" && r!="trap") ? (m==r ? "agree" : "MISMATCH") : (m!="—" ? "partial" : (r!="trap" ? "model_stuck" : "ERROR"));
   if (want != $1) print}' "$TMP/rows" | head -3)"
 [ -z "$BAD" ] && ok "V: every verdict re-derives from its model and runtime columns" \
   || no "V: verdicts disagree with their own columns: $(echo "$BAD" | tr '\t' ' ' | tr '\n' '|')"
@@ -64,6 +105,58 @@ for fn in narrow to_signed widen; do
   if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "F: every input of $fn agrees ($(grep -c . <<<"$r"))"
   else no "F: $fn has a non-agreeing or missing row: $(grep -v '^agree' <<<"$r" | head -1 | tr '\t' ' ')"; fi
 done
+
+# A one-step newtype rebrand between two non-integer types (`Inner -> Middle`, `Middle -> Outer`) is the
+# identity, as CoreCheck admits it; refusing it cost extraction of a well-typed body (Codex land1 review).
+"$BIN" tests/programs/adversarial/newtype/chained.con --report proof-status > "$TMP/nt" 2>&1
+grep -A1 '`main.Outer_unwrap_all`' "$TMP/nt" | grep -q 'obligation: extractable' \
+  && ok "F: a chained newtype unwrap (Outer -> Middle -> Inner) is extractable" \
+  || no "F: Outer_unwrap_all is not extractable: $(grep -A1 'Outer_unwrap_all' "$TMP/nt" | tr '\n' ' ')"
+
+echo ""
+echo "=== N: the negative control — a perturbed model value reads MISMATCH ==="
+CONCRETE_MODEL_DIFF_PERTURB=main.narrow "$BIN" "$F" --report model-diff > "$TMP/n" 2>&1
+r="$(grep -P "\tmain\.narrow\t" "$TMP/n")"
+if [ -n "$r" ] && ! grep -qv '^MISMATCH' <<<"$r"; then
+  ok "N: every input of the perturbed narrow reads MISMATCH ($(grep -c . <<<"$r"))"
+else no "N: a perturbed narrow row does not read MISMATCH: $(grep -v '^MISMATCH' <<<"$r" | head -1 | tr '\t' ' ')"; fi
+grep -qP '^MISMATCH\tmain\.narrow\tunclaimed\t\(300\)\tmodel=45\truntime=44$' "$TMP/n" \
+  && ok "N: narrow(300) reads model=45 runtime=44 under the perturbation" \
+  || no "N: narrow(300) under the perturbation: $(grep -P 'narrow\t.*\(300\)' "$TMP/n" | tr '\t' ' ')"
+other="$(grep -vP "\tmain\.narrow\t" "$TMP/n" | grep -vE '^MODEL-DIFF|^$' | grep -v '^agree' | head -1)"
+[ -z "$other" ] && ok "N: only the perturbed function's rows changed" \
+  || no "N: an unperturbed row does not agree: $(tr '\t' ' ' <<<"$other")"
+BF="tests/regressions/model_diff_scalars/repro.con"
+CONCRETE_MODEL_DIFF_PERTURB=main.flip "$BIN" "$BF" --report model-diff > "$TMP/nb" 2>&1
+grep -qP '^MISMATCH\tmain\.flip\tunclaimed\t\(true\)\tmodel=true\truntime=false$' "$TMP/nb" \
+  && ok "N: a perturbed bool result reads MISMATCH (flip(true): model=true runtime=false)" \
+  || no "N: the perturbed bool row: $(grep -P 'flip\t' "$TMP/nb" | tr '\t' ' ' | tr '\n' '|')"
+
+echo ""
+echo "=== B: scalar coverage — nullary, bool and mixed signatures ==="
+"$BIN" "$BF" --report model-diff > "$TMP/b" 2>&1
+bpin(){ grep -qP "^agree\tmain\.$1\tunclaimed\t\($2\)\tmodel=$3\truntime=$3\$" "$TMP/b" \
+  && ok "B: $1($2) is $3 in the model and at runtime" \
+  || no "B: $1($2) does not read model=$3 runtime=$3: $(grep -P "\tmain\.$1\t" "$TMP/b" | head -3 | tr '\t' ' ' | tr '\n' '|')"; }
+bpin seven "" 7
+bpin flip false true
+bpin flip true false
+bpin pick "1, true" 1
+bpin pick "0, false" 0
+bpin keep true true
+bpin keep false false
+bpin cond_cast true 1
+bpin cond_cast false 2
+for fn in seven flip pick keep cond_cast; do
+  grep -q "^MODEL-DIFF-ELIGIBLE	main\.$fn\$" "$TMP/b" && ok "B: $fn is listed eligible" || no "B: $fn is not listed eligible"
+  r="$(grep -P "\tmain\.$fn\t" "$TMP/b")"
+  if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "B: every input of $fn agrees ($(grep -c . <<<"$r"))"
+  else no "B: $fn has a non-agreeing or missing row: $(grep -v '^agree' <<<"$r" | head -1 | tr '\t' ' ')"; fi
+done
+# A bool parameter is never handed an integer: every pick row's second input is a boolean.
+grep -P "\tmain\.pick\t" "$TMP/b" | cut -f4 | grep -qvE ', (true|false)\)$' \
+  && no "B: a pick row passes a non-boolean for its bool parameter: $(grep -P "\tmain\.pick\t" "$TMP/b" | cut -f4 | grep -vE ', (true|false)\)$' | head -1)" \
+  || ok "B: every pick row passes a boolean for its bool parameter"
 
 echo ""
 echo "=== E: the bug 084 fixture ==="
@@ -110,8 +203,16 @@ want "$TMP/s" ifthen 0 10 S           # (was stuck)
 want "$TMP/s" if_else_step 0 12 S
 want "$TMP/s" ret_after_assign 0 21 S # Break reads the new value (was 14)
 want "$TMP/s" ret_pending 7 8 S       # (was 7)
+want "$TMP/s" branch_let_returns 0 20 S  # a branch-local let consumed before its branch returns
+want "$TMP/s" fresh_branch_let 0 8 S     # a fresh branch-local let nothing after the branch names
 for fn in twice seq seq_assign assign_then_let use_i_after if_fallthrough ifthen if_else_step \
-          ret_after_assign ret_pending; do allagree "$TMP/s" "$fn" S; done
+          ret_after_assign ret_pending branch_let_returns fresh_branch_let; do allagree "$TMP/s" "$fn" S; done
+# Bug 087: a local named by what follows its scope. Before the fix scoped(1) read 10 in the model and 1
+# at runtime; scoped_flat(0) likewise; body_local_assigned read 6 for 1. Not extracted at all now.
+for fn in scoped scoped_flat body_local_assigned; do
+  grep -qP "\tmain\.$fn\t" "$TMP/s" && no "S: $fn is extracted: $(grep -m1 -P "\tmain\.$fn\t" "$TMP/s" | tr '\t' ' ')" \
+    || ok "S: $fn is not extracted (a local is named after its scope ends)"
+done
 
 echo ""
 echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="

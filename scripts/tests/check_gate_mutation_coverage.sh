@@ -1171,11 +1171,13 @@ add "p1-closure-reads-program" "Concrete/Proof/ProofCore.lean" "check_identity_s
   $'  | some _ =>\n    pc'
 
 # BUG 080. THE COMPARATOR COMPARES. A model/runtime value mismatch must read MISMATCH; the mutation
-# answers `agree` whatever the values, so the next modeling defect would pass silently. Killed by the
-# gate's independent re-derivation of every verdict from its own columns (leg V).
+# answers `agree` whatever the values, so the next modeling defect would pass silently. The corpus
+# agrees everywhere, so re-deriving its verdicts (leg V) cannot see this; it is killed by leg N, the
+# negative control that perturbs one function's model value through the PRODUCTION comparator and
+# requires MISMATCH.
 add "model-diff-compares-values" "Concrete/Report/ModelDiff.lean" "check_model_diff.sh" yes \
-  $'        | some a, some b => if a == b then "agree" else "MISMATCH"' \
-  $'        | some a, some b => if a == b || true then "agree" else "MISMATCH"'
+  $'  | some a, some b => if a == b then "agree" else "MISMATCH"' \
+  $'  | some a, some b => if a == b || true then "agree" else "MISMATCH"'
 
 # EXTERNAL RE-CHECK. THE SWAP MUST SWAP. The hostile control hands one theorem another's proof; the
 # mutation hands it its own, so the doctored stream is the accepted one and both checkers accept it.

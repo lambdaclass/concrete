@@ -2919,7 +2919,9 @@ def compileAndReport (inputPath : String) (reportType : String)
     -- Bug 080 prevention: the extracted model against the interpreter, per function, on boundary
     -- inputs. The interpreter needs every callee, std's included, so it gets the whole program.
     if reportType == "model-diff" then
-      IO.println (modelDiffReport pc (fullValidCore.coreModules ++ depModules))
+      -- Test-only negative control for check_model_diff.sh: perturb one function's model value.
+      let perturb ← IO.getEnv "CONCRETE_MODEL_DIFF_PERTURB"
+      IO.println (modelDiffReport pc (fullValidCore.coreModules ++ depModules) perturb)
       return 0
     if reportType == "lean-stubs" then
       IO.println (Report.leanStubsReport pc (registry := registry))

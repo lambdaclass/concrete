@@ -1,0 +1,28 @@
+// Model-diff sampling covers every scalar signature (Codex land1 review). Before, a nullary function
+// had NO input tuple, a bool-only function had no boundaries, and a mixed int/bool function was handed
+// INTEGERS for its bool parameters on both sides — both evaluations failed and the row read `agree`.
+// check_model_diff.sh (leg B) requires each function below to have rows with the inputs named in the
+// comments, every row agreeing.
+mod main {
+    // Nullary: exactly one input, the empty tuple. seven() = 7.
+    fn seven() -> i32 { return 7; }
+    // Bool-only: inputs (false) and (true). flip(true) = false.
+    fn flip(b: bool) -> bool {
+        if b { return false; }
+        return true;
+    }
+    // Mixed: the bool parameter is sampled as false/true, never as an integer. pick(1, true) = 1.
+    fn pick(x: i32, b: bool) -> i32 {
+        if b { return x; }
+        return 0;
+    }
+    // A same-type bool cast is the identity on both sides (the interpreter made it `.int 1`).
+    fn keep(b: bool) -> bool { return b as bool; }
+    // ...and stays a bool where it is used as a condition. cond_cast(true) = 1.
+    fn cond_cast(b: bool) -> i32 {
+        let c: bool = b as bool;
+        if c { return 1; }
+        return 2;
+    }
+    pub fn main() -> i32 { return 0; }
+}
