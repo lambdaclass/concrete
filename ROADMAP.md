@@ -31,7 +31,7 @@ development. All checkpoints share the capacity rule. New soundness defects take
 | stage | rows | what it delivers |
 |---|---|---|
 | **1. Stabilize** | 0 – 2 | Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates |
-| **2. Verified foundation** | 3 – 4 | The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language |
+| **2. Verified foundation** | 3 – 4 | The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language |
 | **3. Usable language** | 5, 7, 8 | Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance |
 | **4. Verified growth** | 6 | Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved |
 | **5. Evidence as a product** | 9 – 11 | Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze |
@@ -52,7 +52,7 @@ assignment does not override an individual task's prerequisites.
 | phase (tasks) | stage | how it fits |
 |---|---|---|
 | 7 Standard library and core APIs (97) | 1, 3–7 — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
-| 7.5 QBE backend and independent validation (42) | 3 — **reconcile** | The plan's backends are LLVM (unverified, fast) and an owned native AArch64 backend (verified). QBE is kept, merged into the native-backend work, or retired, task by task |
+| 7.5 QBE backend and independent validation (42) | 2–4 — **reconciled 2026-10-19** | R-0113's decision: the Lean Compiler Backend (R-0517) is the QBE path; Concrete builds no QBE backend. Each task is kept, merged or retired with its controls transferred (reconciliation ledger) |
 | 8 Flagship depth and examples (25) | 1–4, then 7 — **reconcile** | R-0114–R-0118 supply shared compiler foundations; workloads run in stage 3; the three public flagships graduate in stage 7 |
 | 8.5 Incremental compiler driver (12) | 3 | Prerequisite for the editor (R-0385) and the compile-time budgets |
 | 9 Proof authoring and automation (28) | 2, 4, 6 — **reconcile** | Core proof authoring grows with slices; specification libraries, quantified contracts and frame work follow their stage-6 prerequisites; legacy PExpr/FnTable objectives require explicit disposition |
@@ -79,6 +79,8 @@ R-0296, R-0305–R-0311, R-0331 and R-0424 plus the Wasm entrance criteria and a
 mandatory QBE comparisons. Useful ABI, differential, legality and reproducibility
 controls transfer to named owners even if QBE is retired. QBE is not a prerequisite
 for R-0505's native backend. Any retained backend has an explicit maintenance budget.
+**Decision recorded 2026-10-19:** the Lean Compiler Backend, a separate Lean 4 port of QBE 1.3, is
+Concrete's QBE path and native backend (R-0517); R-0505 integrates it and R-0297 is delegated to it.
 
 
 ## The current execution queue
@@ -92,7 +94,7 @@ the next transition; completed milestones move to the changelog rather than accu
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
 | 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | repair known authority and safety defects; one `Verdict` authority renders every evidence surface; permanent reproducer controls for 080 – 101 and trustworthy gate execution (checked inventories instead of incidental count pins, minimum completed comparisons, a fast push tier separate from full qualification); the axiom-policy gate on today's evidence; one `IntArith` for the existing pipeline; the rules the next slice needs — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals, and the other disputed rules (statement vs value position, sequential assignment within a loop iteration, literal range, cast semantics per width, evaluation order, short-circuiting) — written down and enforced with versioned migration diagnostics. Broader prevention coverage continues throughout and does not block isolated proof development |
-| 3 | **First cumulative verified releases (R-0511)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 with final-image correspondence) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
+| 3 | **First cumulative verified releases (R-0511, with R-0517)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 through the Lean Compiler Backend, R-0517, with final-image correspondence; the native claim gated on LCB's Stage 1 exit, with R-0517's fallback) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
 | 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3 once row 2 lands, the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
 | 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
@@ -162,8 +164,8 @@ semantics. The [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md) 
 reconciles two independent architecture designs and Codex's reviews into one target: Core as the
 language definition with an executable semantics, the authoritative checker on Core, `PExpr`
 retired in favour of claims on Core, a Place MIR → Memory CFG → BIR lower pipeline each with a
-semantics, LLVM behind a specified, unverified BIR-to-LLVM adapter, and a native AArch64 backend
-designed for proof. Part 1 establishes semantic interfaces, states obligations and proves
+semantics, LLVM behind a specified, unverified BIR-to-LLVM adapter, and native AArch64 code generation
+delegated to the separately developed Lean Compiler Backend through a proved adapter (R-0517). Part 1 establishes semantic interfaces, states obligations and proves
 representative cases before dependent implementations freeze; Part 2 completes proofs for the
 admitted profile (delivered as vertical slices since 2026-10-19: rows 2, 3, 4 and 6). Every
 slice is reviewed by Codex before publication, the proof surface is feature-frozen until the
@@ -218,10 +220,10 @@ guarantees still enter through the existing soundness-repair rule.
 the existing SSA/LLVM foundations and a bounded check of actual emitted LLVM,
 beyond optional `llvm-as` well-formedness checks. R-0299/R-0300 own that additional
 semantic edge and its independent replay; their existing BackendIR V1 relation
-keeps its scope. R-0297/R-0413 compare a possible small native backend in Lean 4
-with a later Concrete implementation. Lean 4 is the recommended first host for
-the assurance experiment; implementation language alone supplies no correctness
-guarantee. Fresh-consumer checks join R-0285; deeper backend research does not
+keeps its scope. The small Lean 4 native backend this analysis anticipated is now
+the separate Lean Compiler Backend, which Concrete consumes under R-0517 (R-0297
+delegated); R-0413 keeps only the later Concrete-hosted comparison. Implementation
+language alone supplies no correctness guarantee. Fresh-consumer checks join R-0285; deeper backend research does not
 reorder the queue or delay its first executable dependency slice.
 
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
@@ -4147,11 +4149,53 @@ coverage matrix.
 The corresponding local/CI gate work is scheduled as a stable-ID task
 below; this index carries no executable work.
 
+## Reconciliation ledger
+
+The 2026-10-19 reconciliation mapped every task heading and every open-work prose item in this file
+onto the seven stages, the verified-compiler plan and the Lean Compiler Backend decision. Every
+`### Task R-NNNN` carries a **Stage:** line; tasks that are superseded, merged, delegated, retired or
+done also carry a **Disposition:** line and a row below naming the owner that replaces them. Nothing
+was deleted: superseded task bodies remain as historical rationale, and their acceptance obligations,
+regression cases and controls survive under the named owner unless the row records why they were
+retired. `scripts/tests/check_roadmap_coverage.sh` checks that every task has a stage or a ledger
+disposition, that every ledger row and queue row names an existing task, and that no task's stage
+contradicts its queue row.
+
+### Binding reconciliation dispositions
+
+The following dispositions replace conflicting implementation directions in the named tasks.
+Existing regression cases and acceptance obligations survive unless explicitly retired with a reason.
+
+- R-0114 merges into R-0492/R-0514; R-0116 merges into R-0497/R-0510/R-0514.
+- R-0123, R-0163 and R-0164 target checked Core, generated ClaimSpec statements and
+  Core-based composition under R-0495/R-0512. They add no new PExpr/FnTable mechanism.
+- R-0176's forward ProofCore architecture is retired. R-0512 owns any isolation needed
+  to preserve historical replay.
+- R-0202, R-0262 and R-0269 retain legacy correctness maintenance only. New dependency
+  closure and statement-generation work belongs to R-0495/R-0509; a PExpr bridge is
+  permitted only as an explicitly proved R-0512 migration bridge.
+- R-0268's architecture decision is settled by R-0496.
+- R-0274 preserves a single authoritative checker over Core under R-0499/R-0514.
+  Source diagnostics and elaboration do not replace its typing, ownership or capability rules.
+- R-0278/R-0288 supply the validated BIR contract under R-0503, not an additional
+  competing IR. R-0295's decision is settled by R-0501/R-0502.
+- R-0464 retains the shared trap-definition and fail-closed analysis requirements.
+  R-0460 owns VC generation proved sound against Core. Any SSA-based analysis needs
+  an explicit proved relation to Core and must account for stores, aliases and calls.
+- R-0408/R-0409 evaluate instrumentation and proof-engineering improvements to normative
+  Core semantics under R-0496; they do not establish another language evaluator.
+- R-0446's generated trap/fuzzer/consumer coverage is an increment of R-0491/R-0493.
+- R-0297 is delegated to the Lean Compiler Backend; R-0505 integrates LCB and builds no Concrete
+  machine backend; R-0113 records that LCB is Concrete's QBE path (R-0517).
+
+R-0460, R-0299/R-0300 and R-0353 are not redundant with compiler correctness: VC soundness,
+LLVM-profile validation and independent evidence consumption retain distinct obligations.
+
 ## Verified-compiler pipeline, stabilization and usability tasks
 
 These tasks carry the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md)
 (R-0491 – R-0512), the gate and shared-front-end work it depends on (R-0513, R-0514), the usability
-and release-automation tracks (R-0515, R-0516) and the
+and release-automation tracks (R-0515, R-0516), the Lean Compiler Backend dependency (R-0517) and the
 open work promoted from roadmap prose by the 2026-10-19 reconciliation. They were filed under Phase 15
 until 2026-10-19; their queue rows, not this position, schedule them.
 
@@ -4414,26 +4458,27 @@ runtime/ABI behaviour remain explicitly trusted for that profile.
 
 ### Task R-0505
 
-**Objective:** Native AArch64 backend, linking and image — stage S13 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
+**Objective:** Native AArch64 profile: LCB integration, linking and image — stage S13 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design. Concrete integrates the Lean Compiler Backend (R-0517) and builds no machine backend of its own.
 
-**Status (2026-10-18): planned.**
+**Status (2026-10-19): planned; re-pointed from an owned Concrete machine backend to LCB integration.**
 
-For the full first profile
-(AArch64, Apple ARM64 ABI, macOS, Mach-O): Machine IR, instruction selection, frame construction,
-register allocation (untrusted search + validator), assembly, an ISA model with its semantics;
-assembly text through a named-trust assembler first, then owned encoding. **Separate compilation
-and linking:** module interfaces, compatible linking, symbol resolution and imported-contract
-satisfaction; source-module linking related to independently compiled object linking; compiler,
-profile, interface, runtime and dependency identities bound into the image. FFI ABI realization
-covers callbacks, external memory and aggregate argument/return classification. R-0505 owns ABI
-realization, object/image validation and startup; R-0508 owns the semantic composition theorem.
+For the full first profile (AArch64, Apple ARM64 ABI, macOS, Mach-O): LCB supplies machine IR,
+instruction selection, frame construction, register allocation, assembly, encoding and their proofs
+(LCB's C01 – C03 and V01 – V05, external dependencies under R-0517). Concrete owns the profile around
+it: the BIR → LCB-IR adapter (R-0517); **separate compilation and linking** — module interfaces,
+compatible linking, symbol resolution and imported-contract satisfaction, source-module linking
+related to independently compiled object linking, and compiler, profile, LCB version, interface,
+runtime and dependency identities bound into the image; the `rt` module and startup; FFI ABI
+realization at the adapter boundary (callbacks, external memory, aggregate argument/return
+classification, as LCB's P07 ABI coverage admits them); and Concrete-side object/image validation.
+R-0508 owns the semantic composition theorem.
 
 **Exit:** corpus execution and performance against the LLVM profile are intermediate milestones.
-The stage closes only when owned encoding and final-image validation check actual instruction and
-data bytes, symbols, relocations, entry state and startup against the recorded Machine IR and
-profile; wrong-instruction, wrong-relocation, wrong-symbol, ABI and startup mutations are rejected;
-any assembler, linker or loader behaviour still assumed is named in the profile and theorem
-premises.
+The stage closes only when final-image validation checks actual instruction and data bytes, symbols,
+relocations, entry state and startup against the recorded adapter output, LCB artifact and profile;
+wrong-instruction, wrong-relocation, wrong-symbol, ABI and startup mutations are rejected; every
+assembler, linker or loader behaviour LCB still assumes is named in the profile and theorem premises
+and shrinks only as LCB's V04/V05 milestones land.
 
 ### Task R-0506
 
@@ -4554,12 +4599,13 @@ executable BIR refinement for `i64`, `u64`, `bool`, locals and assignment, condi
 with structured exits, non-recursive direct calls, comparisons, checked `+ - *` and one
 capability-authorized `print_int` event, with terminating, trapping and divergent behaviours; subsequent
 V1 increments for the remaining widths, casts, division, shifts, recursion and loop forms; **V1b**,
-native AArch64 through a deliberately simple code generator with proved or validated register/frame
-handling, encoding and final-image correspondence; restricted-source correspondence (syntax,
+native AArch64 through Concrete's BIR → LCB-IR adapter and the Lean Compiler Backend's restricted
+certified path (R-0517; LCB's C01 – C03), with register/frame handling and encoding proved by LCB and
+final-image correspondence checked by R-0505; restricted-source correspondence (syntax,
 resolution, elaboration judgments specified independently, then proved or certificate-checked); a
 minimal canonical task identity and an independent retained-artifact consumer for every published slice
 claim. Stages exercised, restricted to the admitted subset: R-0492 – R-0493, R-0495 – R-0497, R-0499,
-R-0501 – R-0510, with minimal task identity and independent replay delivered under the V1 requirements.
+R-0501 – R-0510 and R-0517, with minimal task identity and independent replay delivered under the V1 requirements.
 
 **Exit:** for successful compilation of an admitted `CheckedCore` program to an identified image, under
 related initial states, admissible environments and recorded resource premises, a Lean proof of S15's
@@ -4745,6 +4791,71 @@ train/milestone publication rehearsal, retry after partial failure without repla
 an existing release identity, and the applicable R-0427 rollback procedure. Two
 successive scheduled nightlies publish unattended with retained records. Semantic,
 compatibility and limitation decisions remain explicit reviewed inputs.
+
+### Task R-0517
+
+**Objective:** Lean Compiler Backend as Concrete's native backend. The native AArch64 code
+generation of the `verified` profile (V1b onward) is the separately developed, general-purpose
+[Lean Compiler Backend](https://github.com/unbalancedparentheses/lean-compiler-backend) (LCB), a Lean 4 port of QBE 1.3 whose correctness is
+developed alongside its implementation. Concrete **uses** LCB; it does not build it, and it builds no
+machine backend of its own.
+
+**Status (2026-10-19): planned; coordinated under queue row 3 (V1b) and R-0505.** The existing
+restricted adapter is [Concrete draft PR #8](https://github.com/unbalancedparentheses/concrete2/pull/8)
+(branch `feat/lean-backend-integration`): an experimental `--emit-qbe` path from today's checked SSA,
+covering wrapping arithmetic, comparisons, branches and loops and rejecting checked arithmetic, calls
+and memory. It is a consumer experiment, not the adapter this task delivers.
+
+**Dependency contract.**
+- LCB is a pinned dependency: an exact LCB version (commit and release identity) enters through a
+  lake/nix input whose lock records LCB's own `upstream-lock.json` hash, so the QBE 1.3 and Zig
+  reference sources LCB ports are part of Concrete's recorded build identity.
+- Concrete and LCB build with the same Lean toolchain (4.34.1 today); an LCB upgrade that changes the
+  toolchain is a Concrete toolchain upgrade under R-0302/R-0357's procedure.
+- Concrete's theorems import LCB's semantic definitions (its source IR, target and observation
+  semantics) rather than restating them; a restated copy would be a second source of truth and is
+  refused by review.
+
+**Ownership.** Concrete owns: the BIR → LCB-IR adapter, preserving Concrete's semantics — checked
+overflow is lowered to explicit checks or to LCB's checked operations once LCB's E02 Concrete
+adapter work provides them (wrapping LCB arithmetic does not implement checked operations by itself),
+and traps, capability-tagged effects and the runtime ABI are preserved; the adapter's refinement
+proof (BIR semantics to LCB-IR semantics under the explicit observation relation); version pinning
+and upgrade qualification; Concrete-side final-image checks (with R-0505); and the composition of
+theorems (with R-0508). LCB owns its IR semantics, lowering, register allocation, encoding and their
+proofs. LCB's milestones — C01 – C03 (first composed preservation result), V01 – V05 (semantics,
+pass preservation, allocation, encoding, composition) and E02 (Concrete-facing adapter support) —
+are tracked here as external dependencies, never as Concrete work; Concrete records their status
+from LCB's published reports and does not schedule them.
+
+**V1b theorem.** V1b's native theorem is the composition: Concrete's checked Core → BIR refinement
+(V1a), the adapter's BIR → LCB-IR refinement, and LCB's preservation theorem for its exact certified
+domain. The composed statement is restricted to the intersection of the three domains and carries
+every trust boundary LCB names (today: rendering, ISA model, assembler, linker, host OS and the Lean
+kernel, until LCB's V04/V05 remove them) as explicit premises in Concrete's theorem and profile.
+
+**Release gate.** The 0.2 verified-preview native claim is gated on LCB's Stage 1 exit (C01 – C03:
+a composed preservation statement for a restricted integer/control-flow pipeline with its certified
+domain and remaining assumptions published). **Fallback:** if LCB's Stage 1 has not exited when the
+rest of the verified preview qualifies, 0.2 ships V1a proved (checked Core → BIR) with the native
+step validated and differentially tested through LCB, labelled `tested`/`backend_trusted`, and no
+source-to-native or native-transport claim.
+
+**Transferred controls.** The useful controls of the retired QBE tasks (R-0072 – R-0112, R-0296) apply
+at the adapter: emitter independence from the LLVM adapter, a generated adapter support matrix with
+explicit unsupported diagnostics and no silent fallback to LLVM, three-way differential observations
+(Core semantics, LLVM profile, LCB-native) with classified disagreements and retained reductions, ABI
+classification against native C round trips, deterministic emission and full toolchain identity
+(including the LCB lock), and performance comparison between the LLVM and LCB-native profiles under
+R-0416 – R-0424.
+
+**Exit:** a pinned LCB version builds inside Concrete's Nix/lake build with the shared toolchain and its
+upstream lock recorded in the candidate identity; the adapter covers V1's admitted subset with checked
+arithmetic, traps, `print_int` and direct calls, and rejects everything else with a stable
+diagnostic; the adapter refinement is proved against LCB's imported semantics; the composed V1b
+statement type-checks with LCB's trust boundaries as named premises; wrong-check, dropped-trap,
+wrong-width and substituted-callee mutations of the adapter are rejected by the proof or by the
+differential suite; and the release record states which LCB milestones the shipped claim depends on.
 
 ## Phase 7: Standard Library And Core APIs
 
@@ -12443,6 +12554,11 @@ completeness alone does not establish that everything touched is known.
 
 ## Phase 7.5: Usable QBE Backend And Independent Validation
 
+**Reconciled 2026-10-19 (R-0113):** the Lean Compiler Backend (R-0517) is Concrete's QBE path; Concrete builds
+no QBE backend. The goal, contract and tasks below are retained as historical rationale and as the source of
+controls transferred to R-0517, R-0505 and the named owners; each task's **Stage** line and the
+[reconciliation ledger](#reconciliation-ledger) give its current disposition.
+
 Goal: add QBE as a real, user-selectable native backend for ordinary Concrete
 programs and use its independent implementation to find shared lowering,
 interpreter, ABI/layout, and LLVM-emission bugs before the Phase 8 flagship
@@ -12866,6 +12982,14 @@ retain their artifacts.
  the compatibility window must have a named removal commit and mutation-
  sensitive parity gate.
 ### Task R-0113
+
+**Decision (2026-10-19):** the Lean Compiler Backend is Concrete's QBE path. LCB is a Lean 4 port of QBE 1.3
+developed as a separate general-purpose project; Concrete consumes it through R-0517's adapter and builds
+no QBE backend of its own. Each Phase 7.5 task carries its disposition (kept, merged with its new owner,
+or retired with its useful controls transferred to R-0517 or a named owner) in its **Stage** line and the
+[reconciliation ledger](#reconciliation-ledger). R-0296, R-0305 – R-0311, R-0331, R-0424 and the Wasm
+entrance criteria were updated in the same change. This task remains the decision record and owns any
+reopening, which requires measured evidence that a separate QBE path finds bugs or serves users LCB does not.
 
 **Objective:** Keep a Phase 7.5 decision log tied to implementation evidence. For every vertical slice record: the supported semantic families, newly shared facts, deliberately independent logic, LLVM textual changes (if any), three-way result counts, mutations caught, performance deltas, and remaining blocker.
 
@@ -16568,7 +16692,12 @@ direct SSA->LLVM path once parity is established.
 
 ### Task R-0296
 
-**Objective:** Graduate the Phase 7.5 QBE backend from experimental to release-supported only after evidence attachment, optimization policy, backend-IR verification, and backend trust boundaries are trustworthy. Phase 7.5 deliberately emits directly from validated/cleaned SSA to maximize independence and find bugs early; that is the initial usable backend architecture, not yet the release architecture.
+**Disposition (2026-10-19): retired — superseded by R-0517/R-0505.** There is no Concrete QBE backend to
+graduate; the native profile is LCB-backed. Its graduation requirements (validated backend input, source maps,
+ABI/target matrices, incremental artifacts, honest translation-validated versus backend-trusted labels) apply
+to the LCB-native profile under R-0517/R-0505. Wasm, Cranelift and further backends stay deferred.
+
+**Objective (historical):** Graduate the Phase 7.5 QBE backend from experimental to release-supported only after evidence attachment, optimization policy, backend-IR verification, and backend trust boundaries are trustworthy. Phase 7.5 deliberately emits directly from validated/cleaned SSA to maximize independence and find bugs early; that is the initial usable backend architecture, not yet the release architecture.
 
  Production QBE support must consume `ValidatedBackendIR`, emit the same source maps and
  target assumptions as other supported backends, pass the full C ABI and
@@ -16579,7 +16708,12 @@ direct SSA->LLVM path once parity is established.
  justifies another independent path.
 ### Task R-0297
 
-**Objective:** Supply target-specific Machine IR for R-0505's native AArch64 profile. QBE is independent and is not a prerequisite; R-0505 owns scheduling and native proof/validation exits. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. Reuse the Phase
+**Disposition (2026-10-19): delegated to the Lean Compiler Backend.** LCB owns machine IR, instruction
+selection, register allocation and encoding with their proofs; Concrete consumes it under R-0517 and R-0505.
+The Concrete-hosted comparison stays with R-0413. The text below is retained as historical rationale; the
+"small owned backend investigation" it describes became the separate LCB project.
+
+**Objective (historical):** Supply target-specific Machine IR for R-0505's native AArch64 profile. QBE is independent and is not a prerequisite; R-0505 owns scheduling and native proof/validation exits. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. Reuse the Phase
 
   7.5 immutable per-function job/deterministic merge contract, but keep MIR
   architecture-specific rather than creating a lowest-common-denominator
@@ -16798,24 +16932,23 @@ producer-only bytes or mint stronger receipts during the development probe.
 
 ## Provisional Phase 15.25: WebAssembly Portability And Sandbox Backend
 
-Status: provisional. This phase records the preferred backend after QBE; it
-does not authorize WebAssembly implementation in parallel with Phase 7.5 or
-before the entrance criteria below pass.
+Status: provisional, after 1.0. This phase records a possible later portable backend; it
+does not authorize WebAssembly implementation before the entrance criteria below pass. QBE is no
+longer a prerequisite (R-0113's 2026-10-19 decision: the Lean Compiler Backend is the QBE path).
 
 Goal: add an independently lowered, portable, sandbox-oriented backend that
 pressures Concrete's memory, control-flow, capability, layout, and trap
-semantics differently from the native LLVM and QBE paths.
+semantics differently from the LLVM and LCB-native paths.
 
 Entrance criteria:
 
-- QBE's documented subset works through ordinary `build`, `run`, and `test`
-  workflows and its backend boundary, `CodegenInput`, capability matrix,
-  diagnostics, and artifact/replay model are stable.
-- Phase 15 has established `ValidatedBackendIR`, translation-validation status,
-  and explicit target/toolchain/runtime contracts that WebAssembly can consume
-  without inventing a parallel middle end.
+- The backend-neutral driver (R-0075), generated support matrix, diagnostics and
+  artifact/replay model are stable for the LLVM and LCB-native profiles.
+- Validated BIR (R-0503), translation-validation status and explicit
+  target/toolchain/runtime contracts exist that WebAssembly can consume without
+  inventing a parallel middle end.
 - At least one named portability, sandboxing, deployment, or validation
-  workload demonstrates value that LLVM plus QBE do not provide.
+  workload demonstrates value that LLVM plus the LCB-native profile do not provide.
 - A short design record confirms Wasm remains preferable to Cranelift for that
   workload. If fast native/JIT compilation is the actual requirement, schedule
   Cranelift instead and leave this phase provisional.
@@ -16828,11 +16961,11 @@ Initial scope:
 
 ### Task R-0306
 
-**Objective:** Lower `ValidatedBackendIR` into a small typed Concrete WebAssembly AST, run a pure Concrete verifier, emit deterministic `.wasm`, and validate it with the pinned external validator. Do not emit ad-hoc WAT from CLI code and do not route WebAssembly through LLVM.
+**Objective:** Lower validated BIR (R-0503) into a small typed Concrete WebAssembly AST, run a pure Concrete verifier, emit deterministic `.wasm`, and validate it with the pinned external validator. Do not emit ad-hoc WAT from CLI code and do not route WebAssembly through LLVM.
 
 ### Task R-0307
 
-**Objective:** Reuse canonical semantic, layout, builtin, trap, source-identity, and capability facts, while keeping WebAssembly instruction selection and control-flow restructuring independent from LLVM and QBE lowering.
+**Objective:** Reuse canonical semantic, layout, builtin, trap, source-identity, and capability facts, while keeping WebAssembly instruction selection and control-flow restructuring independent from LLVM and LCB lowering.
 
 ### Task R-0308
 
@@ -16843,7 +16976,7 @@ Initial scope:
 **Objective:** Map external authority deliberately onto an explicit WASI import manifest.
 
 Missing capabilities and unsupported operations fail before partial code
-generation with stable `wasm_pending` diagnostics; there is no LLVM/QBE or
+generation with stable `wasm_pending` diagnostics; there is no LLVM/LCB or
 per-function fallback.
 ### Task R-0310
 
@@ -16851,7 +16984,7 @@ per-function fallback.
 
 ### Task R-0311
 
-**Objective:** Compare interpreter, LLVM, QBE, and WebAssembly observations for every eligible fixture: stdout, stderr, exit status, and normalized trap/failure class. Add Wasm-specific cases for structured control flow, linear-memory bounds, alignment, integer-width conversion, imports, and deterministic module composition.
+**Objective:** Compare Core-semantics, LLVM, LCB-native and WebAssembly observations for every eligible fixture: stdout, stderr, exit status, and normalized trap/failure class. Add Wasm-specific cases for structured control flow, linear-memory bounds, alignment, integer-width conversion, imports, and deterministic module composition.
 
 
 Done when: the declared Wasm32/WASI subset builds and runs at least one Phase
@@ -17132,7 +17265,7 @@ only one implementation.
 into release budgets.
 
 Ship a pinned mixed corpus containing compute, allocation, parsing, collection,
-I/O, and binary-size workloads; replay LLVM and supported QBE rows on named
+I/O, and binary-size workloads; replay LLVM and LCB-native (`verified` profile) rows on named
 hosts; demonstrate one caught runtime, allocation, code-size, and scaling
 regression; emit the performance evidence ledger and raw samples; and feed the
 same schema into Task R-0355 rather than creating a release-only benchmark
@@ -17201,7 +17334,7 @@ stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
 backend/toolchain boundary.
 ### Task R-0331
 
-**Objective:** Keep production freestanding WASM, QBE, and additional backend targets deferred until freestanding profiles prove the current LLVM path is not enough. This does not defer Phase 7.5's hosted experimental QBE differential oracle: that path validates cleaned SSA/codegen under hosted toolchains and carries only `tested`/`backend_trusted` evidence. Any QBE freestanding target, runtime/startup contract, or release claim still graduates here and through Phase 15's backend/target contract.
+**Objective:** Keep production freestanding Wasm and additional backend targets deferred until freestanding profiles prove the LLVM and LCB-native paths are not enough. Any LCB freestanding target, runtime/startup contract, or release claim graduates here and through R-0505/R-0517's profile contract; LCB's own target breadth (its P10) is an external dependency, not Concrete work. (Updated 2026-10-19: Phase 7.5's QBE differential oracle is retired in favour of the LCB-native leg of R-0491's differential harness.)
 
 ### Task R-0332
 
@@ -18592,8 +18725,8 @@ must not silently reinterpret or overwrite their source scope.
  duplicates it, or creates a second source of truth. Pull forward only if a
  real pass can be checked without weakening the no-second-truth-source rule.
 
-**Native backend comparison (planned 2026-10-18):** R-0297 owns the possible
-target-specific backend; this task owns evaluating a Concrete implementation
+**Native backend comparison (planned 2026-10-18; updated 2026-10-19):** the Lean Compiler Backend
+(R-0517) is the Lean 4 reference; R-0297 is delegated to it. This task owns evaluating a Concrete implementation
 alongside a Lean 4 reference. Recommend Lean 4 for the first assurance prototype,
 with explicit instruction semantics and preservation/validation obligations.
 Writing the generator in Lean does not prove it correct; writing it in Concrete

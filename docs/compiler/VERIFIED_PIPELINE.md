@@ -142,12 +142,13 @@ structure, not to individual functions:
 | **Place MIR** | typed non-SSA CFG: fixed evaluation order, match decision trees, cleanup/`defer` edges on every exit, loan boundaries, explicit runtime checks; symbolic fields, stable storage identities | Core's structured values and byte/provenance memory over stable places, preserving the typed/raw representation relation | the first half of `Lower.lean` (defer ~:1525 – 1554, match, promotion ~:559, bounds ~:171) |
 | **Memory CFG** | layout from the single `Layout` authority, offsets, alignment, loads/stores, allocation/free, scalar representations | CompCert block–offset memory (bytes, pointer fragments, undef, permissions) | the second half of `Lower.lean`, `Layout.lean` |
 | **BIR** | CFG with block arguments (no phi instruction; SSA is a well-formedness property, not semantics), `RegId`/`BlockId`, `add.ovf`-style ops returning (value, flag), `trap` terminator | block memory | `SSA.lean` (which has both `phi` and block params today) |
-| **Machine IR → allocated Machine IR** | AArch64 operations and addressing modes, virtual then physical registers, spills, calling convention, frames | block memory + frame | new |
-| **Asm → loaded image** | linearized code, prologue/epilogue, encoding, relocations, startup | ISA model over decoded bytes | new |
+| **LCB-IR** (external) | the Lean Compiler Backend's checked QBE-style SSA input: typed integer, memory and call operations; checked arithmetic as explicit checks or LCB's checked ops | LCB's semantics, imported by Concrete's theorems, never restated | produced from BIR by Concrete's adapter (R-0517); draft PR #8 emits a restricted form from today's SSA |
+| **Machine IR → allocated Machine IR** | AArch64 operations and addressing modes, virtual then physical registers, spills, calling convention, frames | block memory + frame | inside LCB (external dependency, its C01 – C03 and V01 – V05) |
+| **Asm → loaded image** | linearized code, prologue/epilogue, encoding, relocations, startup | ISA model over decoded bytes | encoding inside LCB; linking, `rt`, startup and final-image checks are Concrete's (R-0505) |
 
 LLVM is printed from BIR (block arguments to phis, `.ovf` ops to `*.with.overflow`). It is the
-fast, **unverified** profile; its binaries are labelled so, and only the native profile carries
-proof transport. Unverified does not mean unspecified: the BIR → LLVM adapter expands Concrete's
+fast, **unverified** profile; its binaries are labelled so, and only the native profile — Concrete's
+BIR → LCB-IR adapter plus the Lean Compiler Backend — carries proof transport. Unverified does not mean unspecified: the BIR → LLVM adapter expands Concrete's
 defined checks and implements the specified conversion, shift and memory semantics; it introduces
 no poison/UB-generating flags, attributes or metadata without their required preconditions;
 unsupported mappings fail explicitly; retained-LLVM controls cover poison, undef, helpers and ABI
@@ -216,12 +217,19 @@ The first native target is a full profile, not just an ISA: AArch64 + Apple's AR
 Mach-O (the host, `Backend.lean` ~:18), so native and LLVM binaries are differentially tested on
 the same machine; Linux/ELF AArch64 follows as a second profile. Runtime helpers (today 875 lines of LLVM AST in `EmitBuiltins.lean`,
 plus raw LLVM strings) are rewritten in Concrete as an `rt` module compiled through the same
-pipeline; libc becomes FFI with stated contracts. Native output starts as assembly text through a
-named-trust assembler, then owns encoding and validates the final linked, loaded image.
+pipeline; libc becomes FFI with stated contracts. Native code generation is delegated to the
+separately developed [Lean Compiler Backend](https://github.com/unbalancedparentheses/lean-compiler-backend)
+(LCB, a Lean 4 port of QBE 1.3; R-0517): Concrete owns the BIR → LCB-IR adapter and its refinement
+proof, version pinning (a lake/nix input with LCB's upstream lock, the same Lean toolchain), linking,
+`rt`, startup, final-image checks and theorem composition; LCB owns its IR semantics, lowering,
+register allocation, encoding and their proofs. LCB starts with assembly text through a named-trust
+assembler; its trust boundaries are carried into Concrete's theorem premises until LCB removes them.
 
 ### Trusted at the end
 
-The Lean kernel (re-checked by con-leche and nanoda); the ISA model; the operating system as
+The Lean kernel (re-checked by con-leche and nanoda); the ISA model; every trust boundary the Lean
+Compiler Backend names for its certified domain (today rendering, assembler and linker, until its
+V04/V05 milestones remove them); the operating system as
 specified by external-call contracts; listed resource premises; for the LLVM profile, LLVM and the
 system toolchain; and the compiler's own execution only where no proved validator checks its
 output (listed and minimized). Native execution of a validator is not kernel evidence: validators
@@ -285,8 +293,12 @@ contracts are fixed at this boundary (S7 with R-0502).
   event, including terminating, trapping and divergent behaviours. Other widths, casts, division, shifts,
   recursion and further surface loop forms are explicit subsequent V1 increments. A Core → BIR theorem
   is an intermediate result, not the native guarantee; no throwaway VM is built.
-- **V1b** carries the subset to native AArch64 through a deliberately simple code generator, with proved
-  or validated register/frame handling, instruction encoding and final-image correspondence.
+- **V1b** carries the subset to native AArch64 through Concrete's BIR → LCB-IR adapter and the Lean
+  Compiler Backend's restricted certified path (R-0517): the native theorem composes V1a, the adapter's
+  refinement and LCB's preservation theorem for its exact domain (LCB's Stage 1, C01 – C03), carrying
+  LCB's named trust boundaries, with final-image correspondence checked by R-0505. The 0.2 native claim
+  is gated on LCB's Stage 1 exit; otherwise 0.2 ships V1a proved with the native step validated,
+  tested and labelled.
   Intermediate assembly-level results name their trusted assembler/linker boundary and are not labelled
   native-image proofs. `print_int` has a specified observable trace and implementation or
   external-service contract; internal calling conventions, startup, stack requirements and trap
@@ -562,21 +574,29 @@ semantic relations and obligations type-check and a representative preservation 
 validator-soundness lemma is proved for its motivating feature, including native encoding and
 linking.
 
-**S13 Native AArch64 backend, linking and image (R-0505; with R-0297).** For the full first profile
-(AArch64, Apple ARM64 ABI, macOS, Mach-O): Machine IR, instruction selection, frame construction,
-register allocation (untrusted search + validator), assembly, an ISA model with its semantics;
-assembly text through a named-trust assembler first, then owned encoding. **Separate compilation
-and linking:** module interfaces, compatible linking, symbol resolution and imported-contract
-satisfaction; source-module linking related to independently compiled object linking; compiler,
-profile, interface, runtime and dependency identities bound into the image. FFI ABI realization
-covers callbacks, external memory and aggregate argument/return classification. R-0505 owns ABI
-realization, object/image validation and startup; R-0508 owns the semantic composition theorem.
+**S13 Native AArch64 profile: Lean Compiler Backend integration, linking and image (R-0505, R-0517).**
+For the full first profile (AArch64, Apple ARM64 ABI, macOS, Mach-O), native code generation is the
+separately developed Lean Compiler Backend; Concrete builds no machine backend. **LCB owns** its IR
+semantics, machine IR, instruction selection, frame construction, register allocation, assembly,
+encoding and their proofs (its C01 – C03, V01 – V05 and E02 milestones are external dependencies,
+tracked by R-0517, never scheduled as Concrete work). **Concrete owns:** the BIR → LCB-IR adapter,
+which lowers checked overflow to explicit checks or LCB's checked operations and preserves traps,
+capability-tagged effects and the runtime ABI, with its refinement proof against LCB's imported
+semantics (not a restatement); the pinned dependency (an exact LCB version through a lake/nix input
+recording LCB's upstream lock, built with the same Lean toolchain); **separate compilation and
+linking** — module interfaces, compatible linking, symbol resolution and imported-contract
+satisfaction, source-module linking related to independently compiled object linking, and compiler,
+profile, LCB, interface, runtime and dependency identities bound into the image; `rt` and startup; FFI
+ABI realization at the adapter boundary; and final-image checks. R-0508 owns the semantic composition
+theorem: Concrete's Core → BIR refinement, the adapter refinement and LCB's preservation theorem for
+its exact domain, with LCB's named trust boundaries as premises. The existing restricted adapter is
+Concrete draft PR #8 (`feat/lean-backend-integration`, `--emit-qbe` from today's SSA).
 **Exit:** corpus execution and performance against the LLVM profile are intermediate milestones.
-The stage closes only when owned encoding and final-image validation check actual instruction and
-data bytes, symbols, relocations, entry state and startup against the recorded Machine IR and
-profile; wrong-instruction, wrong-relocation, wrong-symbol, ABI and startup mutations are rejected;
-any assembler, linker or loader behaviour still assumed is named in the profile and theorem
-premises.
+The stage closes only when final-image validation checks actual instruction and data bytes, symbols,
+relocations, entry state and startup against the recorded adapter output, LCB artifact and profile;
+wrong-instruction, wrong-relocation, wrong-symbol, ABI and startup mutations are rejected; any
+assembler, linker or loader behaviour still assumed (by LCB or Concrete) is named in the profile and
+theorem premises.
 
 ## Part 2 — proofs
 
