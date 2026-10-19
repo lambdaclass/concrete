@@ -608,8 +608,8 @@ implementations verified against contracts or listed with audit (the list only s
 published trusted-base inventory. R-0353 independently checks retained evidence — decoding,
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
-correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile
-consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked
+correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile
+consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked
 retained-artifact consumer is required for every publicly authoritative V1 claim. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while

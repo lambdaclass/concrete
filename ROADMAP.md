@@ -35,18 +35,19 @@ the next transition; completed milestones move to the changelog rather than accu
 | 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | repair known authority and safety defects; one `Verdict` authority renders every evidence surface; permanent reproducer controls for 080 – 101 and trustworthy gate execution (checked inventories instead of incidental count pins, minimum completed comparisons, a fast push tier separate from full qualification); the axiom-policy gate on today's evidence; one `IntArith` for the existing pipeline; the rules the next slice needs — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals, and the other disputed rules (statement vs value position, sequential assignment within a loop iteration, literal range, cast semantics per width, evaluation order, short-circuiting) — written down and enforced with versioned migration diagnostics. Broader prevention coverage continues throughout and does not block isolated proof development |
 | 3 | **First cumulative verified releases (R-0511)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 with final-image correspondence) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
 | 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3 once row 2 lands, the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
-| 5 | **Bounded interop and usability track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
+| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
-| 8 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
-| 9 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 10 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
-| 11 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
-| 12 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
-| 13 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
-| 14 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
-| 15 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
-| 16 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
+| 8 | **Usability track (R-0515), alongside the proof track** | in waves within the capacity rule: **now** — an external pilot each quarter (a non-author builds a real program; the friction log feeds priorities) and a diagnostics quality bar (every error states cause, location and a suggested fix, snapshot-gated); **with V1** — an LSP showing types, errors and per-function proof and capability status, debuggability (DWARF line info, stack traces on traps), and published compile-time and runtime budgets against C, Rust and Zig; **pull-gated** — a `std` coverage plan with a stability policy, a book/tutorial with an owner, a concurrency design decision date, and a second maintainer |
+| 9 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
+| 10 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
+| 11 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 12 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
+| 13 | **Two-state mutation contracts** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
+| 14 | **Ninth-table conversion** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
+| 15 | **Totality and specification library** | add checked `#[decreases]`/total functions, then canonical `int`, list, map, set and bitvector theories before richer or relational logic |
+| 16 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
+| 17 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
@@ -108,6 +109,11 @@ representative cases before dependent implementations freeze; Part 2 completes p
 admitted profile (delivered as vertical slices since 2026-10-19: rows 2, 3, 4 and 6). Every
 slice is reviewed by Codex before publication, the proof surface is feature-frozen until the
 verdict authority and claims-on-Core land, and the fixes for 081 – 101 land first (row 0).
+
+**Usability decision, 2026-10-19:** a great language needs real users, good errors, tooling, a
+reliable `std` and published performance, not only a sound compiler. Usability moves from the end of
+the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule; the external
+user pilot that row 16 required at the end now starts with the immediate protections.
 
 **Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
 through the whole compiler, with explicit intermediate and source-to-native theorem boundaries, rather
@@ -16116,8 +16122,8 @@ implementations verified against contracts or listed with audit (the list only s
 published trusted-base inventory. R-0353 independently checks retained evidence — decoding,
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
-correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile
-consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked
+correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile
+consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked
 retained-artifact consumer is required for every publicly authoritative V1 claim. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while
@@ -16255,6 +16261,38 @@ reference, capability or `Unsafe` rule; 087's borrow-block case, 090 – 094 and
 compiled correctly through it; R-0499's rule-violation fuzzer rejects every rule-breaking mutant in the
 qualified suite and accepts its well-formed positive controls, with minimum completed counts per rule
 and feature combination.
+
+### Task R-0515
+
+**Objective:** Make Concrete a language people choose to use, measured continuously alongside the proof
+track rather than after it.
+
+**Status (2026-10-19): planned; queue row 8, in waves under the capacity rule.** The verification
+work makes Concrete trustworthy; users make it good. Until now usability sat at the end of the queue
+(external-user workflow and productization), and the only workloads were author-written.
+
+Work, in waves (each item has its own exit):
+- **Now.** (1) *External pilot:* each quarter at least one non-author builds a real program; their
+  friction log (errors, missing library pieces, build time, documentation) is published and feeds slice
+  and ergonomics priorities (R-0485, R-0488). (2) *Diagnostics quality bar:* every diagnostic states its
+  cause, its location and a suggested fix where one exists, held by snapshot tests and a review checklist
+  (docs/compiler/DIAGNOSTIC_UX.md).
+- **With V1.** (3) *LSP:* types, diagnostics, go-to-definition, and per-function proof, trust and
+  capability status in the editor. (4) *Debuggability:* DWARF line information and source-level stack
+  traces on traps, in both profiles. (5) *Budgets:* compile time for the corpus and runtime for
+  representative workloads, benchmarked against C, Rust and Zig and published per release; the
+  `verified` profile's gap to LLVM is measured, not assumed.
+- **Pull-gated** (started when a pilot or workload asks). (6) A `std` coverage plan — time, filesystem,
+  process, networking, serialization — under a stated stability policy and versioned APIs. (7) A book or
+  tutorial with an owner, tested by its examples. (8) A dated concurrency design decision, even if
+  implementation follows the early slices. (9) A second maintainer, reducing the bus factor recorded in
+  the plan's ownership discipline.
+
+**Exit (per wave):** *now* — two consecutive quarterly pilots completed with published friction logs and
+at least one acted-on finding each, and the diagnostics checklist enforced on every new diagnostic;
+*with V1* — the LSP shows proof/capability status on the corpus, traps print source stack traces, and the
+budgets are published and gated against regression; *pull-gated* items each close with their own stated
+exit when started.
 
 ### Task R-0286
 
@@ -17288,7 +17326,7 @@ flagships.
 
 ### Task R-0353
 
-**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
+**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
 
 **Objective:** Define the canonical release-evidence DAG and offline independent bundle verifier before packaging or benchmarking it.
 
