@@ -49,9 +49,9 @@ increment follows its explicit queue assignment or the reconciliation ledger bel
 Unscheduled work remains pull-gated or deferred with a recorded trigger. A phase-level
 assignment does not override an individual task's prerequisites.
 
-| phase (tasks) | stage | how it fits |
+| phase (tasks) | stage (principal stages, non-exhaustive, except the two rows marked exhaustive) | how it fits |
 |---|---|---|
-| 7 Standard library and core APIs (96) | 1, 3–7 — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
+| 7 Standard library and core APIs (96) | 1–7, plus after-1.0/research (exhaustive) — **reconcile** | Includes identity/evidence infrastructure and typed contracts as well as stdlib work: R-0482 follows rows 0–1; R-0473/R-0474/R-0477 follow stage 6; R-0440 follows its evidence/package checkpoints; R-0486 graduates through stages 6–7 |
 | 7.5 QBE backend and independent validation (42) | 2–4 — **reconciled 2026-10-19** | R-0113's decision: the Lean Compiler Backend (R-0517) is the QBE path; Concrete builds no QBE backend. Each task is kept, merged or retired with its controls transferred (reconciliation ledger) |
 | 8 Flagship depth and examples (25) | 1–4, then 7 — **reconcile** | R-0114–R-0118 supply shared compiler foundations; workloads run in stage 3; the three public flagships graduate in stage 7 |
 | 8.5 Incremental compiler driver (12) | 3 | Prerequisite for the editor (R-0385) and the compile-time budgets |
@@ -61,7 +61,7 @@ assignment does not override an individual task's prerequisites.
 | 12 Provable and predictable subsets (22) | 2, 4 — **reconcile** | The verified slices define the admitted subsets from now on |
 | 13 Runtime safety obligations (27) | 1, 2, 4, 6 — **reconcile** | Immediate soundness repairs precede release; R-0460 proves Core-to-VC rules; contract-dependent obligations follow stage 6 |
 | 14 Compiler soundness bridge (22) | 2, 4–6 — **reconcile** | Refinement and evidence soundness follow the verified plan; spec/ghost totality follows its contract prerequisites; R-0460, filed in Phase 13, remains the Core-to-VC owner |
-| Verified-compiler pipeline, stabilization and usability (48) | 1–5 and every release | R-0491–R-0514 follow their explicit queue/slice assignments (rows 2, 3, 4, 6); R-0515 is the stage-3 usability track; R-0516 supplies release automation before automated publication |
+| Verified-compiler pipeline, stabilization and usability (48) | 1–7 and every release, plus after-1.0/research (exhaustive) | R-0491–R-0517 follow their queue, slice and release checkpoints. R-0518–R-0538 follow their individual Stage lines: stabilization, provenance and tooling, stage-6 contracts/totality/equivalence, compatibility, and explicitly deferred research. |
 | 15 Backend, target and stdlib contracts (28) | 2–4 and every release — **reconcile** | Backend/target contracts reconcile with S10 – S13; interop (R-0285, ABI/export tasks) and applications (R-0490) follow stage 3; QBE-derived tasks follow R-0113's decision |
 | 15.25 WebAssembly (7) | after 1.0 | A later target profile; research-gated |
 | 15.5 Unsafe Concrete and trusted systems profile (10) | 4 | V6 (raw pointers, `Unsafe`, FFI) and the trusted-base inventory |
@@ -102,7 +102,7 @@ the next transition; completed milestones move to the changelog rather than accu
 | 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
 | 9 | **Compiler provenance and canonical `VerificationTask` (R-0521)** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 10 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
-| 11 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
+| 11 | **Receipt v1 freeze (R-0338, with R-0353/R-0521)** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
 | 12 | **R-0473/R-0474 typed contracts and exact contract identity** | replace conservative implementation-bound contract witnessing with typed contracts, imported hypotheses, exact `ContractIdentity`, and contract-preserving/body-changing controls |
 | 13 | **Two-state mutation contracts (R-0524)** | add a narrow record/array state model, `old`, `modifies`/frames, then ghost locals and parameters; unsupported heap/reborrow shapes refuse explicitly |
 | 14 | **Ninth-table conversion (R-0525)** | use the narrow mutable-state model to extract and replay the three currently fail-closed `proofFnsExt` links; until then they remain unable to provide authority |
@@ -6199,9 +6199,7 @@ calling a non-total helper is refused; one recursive claim is proved by inductio
 
 **Stage:** after-1.0/research
 
-**Objective:** Scope relational properties (noninterference, constant time, program equivalence)
-before any implementation: select the observation model (branches, addresses, termination, resource
-use), permitted declassification and how a relational claim would be preserved to native code.
+**Objective:** Scope noninterference, constant-time properties, and relational extensions beyond R-0531’s bounded Core-level revision equivalence before implementing them. Select the observation model, permitted declassification and additional obligations for native transport.
 
 **Status (2026-10-19): research.** Ordinary refinement does not preserve noninterference; the
 verified-compiler plan's refinement is not a relational theorem. R-0459's 2-safety proposal and the
@@ -6260,6 +6258,8 @@ use-after-close of an alias are rejected or trap with a regression fixture.
 with their original dependencies and semantics, as the follow-on to R-0183's diff gate.
 
 **Status (2026-10-19): planned; after typed contracts.**
+
+Before implementation, define the admitted Core fragment, input relation, observation relation, treatment of termination and traps, and versioned dependency environments. This task owns bounded Core-level equivalence across revisions; it makes no native-transport, constant-time or noninterference claim.
 
 **Exit:** an equivalence claim between two revisions of one function is generated against Core and
 replayed; a behaviour-changing edit is refused; a dependency change is reported as a changed
@@ -6341,8 +6341,7 @@ library's set of callables changes, respecting open imported callbacks.
 
 **Status (2026-10-19): planned.**
 
-**Exit:** removing or changing a callable that a dependent's closed-world assumption relied on is
-reported as a compatibility break; adding one is not; open callbacks are never treated as closed.
+**Exit:** additions, removals and changes to a dependent’s reachable callable set trigger dependency invalidation and compatibility checking. Previously closed-world evidence is retained only after rechecking the enlarged or changed set against its contracts, capabilities and proof obligations. Adding an unreachable export may remain compatible. Controls cover both cases; open imported callbacks are never treated as closed.
 
 ### Task R-0538
 
@@ -20446,6 +20445,8 @@ language version with an unexplained conformance failure.
 **Reconciliation (2026-10-19):** Keep; minimal V1 versions precede final schema freeze.
 
 **Objective:** Add compatibility policy for proof artifacts and fact schemas.
+
+Own queue row 11’s receipt-v1 freeze decision: producer and independent consumer agree on canonical fixtures, the permanent schema attacks pass, and incompatible changes require a version bump.
 
 ### Task R-0339
 
