@@ -14,12 +14,16 @@
 #   3. every queue row names at least one owning task, and every task it names exists, ranges such
 #      as `R-0491–R-0510` included;
 #   4. a task named by a queue row lists that row's stage (from "Roadmap at a glance") in its Stage
-#      line — a task cannot be scheduled by the queue in a stage its own record contradicts.
+#      line — a task cannot be scheduled by the queue in a stage its own record contradicts;
+#   5. every task body archived in docs/archive/ROADMAP_RETIRED_TASKS.md (a bare `## R-NNNN` section)
+#      has its `### Task R-NNNN` stub in ROADMAP with a **Disposition** line and a link to that
+#      section, and every such link resolves to its own task's archived section.
 #
 # Run with no argument it checks ROADMAP.md with the reconciliation record and then runs its negative
-# controls against temporary copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, and a
-# stage that contradicts its queue row must each fail; a crashed or silent checker must fail too.
-# With arguments `ROADMAP [LEDGER]` it checks those files only.
+# controls against temporary copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, a
+# stage that contradicts its queue row, an archived body without its stub and a stub without its archived body
+# must each fail; a crashed or silent checker must fail too.
+# With arguments `ROADMAP [LEDGER [ARCHIVE]]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -29,16 +33,19 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 TARGET="${1:-ROADMAP.md}"
 LEDGER="${2:-docs/project/ROADMAP_RECONCILIATION.md}"
+ARCHIVE="${3:-docs/archive/ROADMAP_RETIRED_TASKS.md}"
 CHANGELOG="CHANGELOG.md"
 [ -f "$TARGET" ] || { echo "FATAL: $TARGET missing" >&2; exit 2; }
 [ -f "$LEDGER" ] || { echo "FATAL: $LEDGER missing" >&2; exit 2; }
+[ -f "$ARCHIVE" ] || { echo "FATAL: $ARCHIVE missing" >&2; exit 2; }
 
-check_file() { # roadmap ledger -> prints "OK <msg>" / "FAIL <msg>" lines
-  python3 - "$1" "$CHANGELOG" "$2" <<'PY'
+check_file() { # roadmap ledger archive -> prints "OK <msg>" / "FAIL <msg>" lines
+  python3 - "$1" "$CHANGELOG" "$2" "$3" <<'PY'
 import re, sys
 road = open(sys.argv[1], encoding='utf-8').read()
 chg = open(sys.argv[2], encoding='utf-8').read()
 rec = open(sys.argv[3], encoding='utf-8').read()
+arc = open(sys.argv[4], encoding='utf-8').read()
 out = []
 def ok(m): out.append('OK ' + m)
 def no(m): out.append('FAIL ' + m)
@@ -146,12 +153,44 @@ for order, work in qrows:
             have = sorted(st[0]) if st else 'no Stage line'
             no(f'{tid}: queue row {order} schedules it in stage {stage}, its Stage line says {have}'); qbad += 1
 if qrows and not qbad: ok(f'{len(qrows)} queue rows name {named} existing tasks, each staged consistently')
+
+# --- archived task bodies <-> roadmap stubs
+sections = re.findall(r'^## (R-\d{4})$', arc, re.M)
+abad = 0
+if not sections:
+    no('the retired-task archive has no `## R-NNNN` sections'); abad += 1
+for tid in sorted(set(t for t in sections if sections.count(t) > 1)):
+    no(f'archived body {tid} appears more than once'); abad += 1
+# A stub names its own archived body in one fixed sentence; any other link into the archive (an
+# owner's inherited-obligation list) must still resolve to an existing section.
+STUB = re.compile(r"^The rest of this task's original body is archived in \[ROADMAP_RETIRED_TASKS\.md\]"
+                  r"\(docs/archive/ROADMAP_RETIRED_TASKS\.md#(r-\d{4})\)\.$", re.M)
+stubs = {}
+for tid in active:
+    for target in STUB.findall(bodies[tid]):
+        stubs.setdefault(tid, set()).add(target.upper())
+for tid in dict.fromkeys(sections):
+    if tid not in stubs:
+        no(f'archived body {tid} has no stub in ROADMAP linking it'); abad += 1
+    elif not re.search(r'^\*\*Disposition', bodies[tid], re.M):
+        no(f'archived body {tid}: its ROADMAP stub has no Disposition line'); abad += 1
+for tid, targets in stubs.items():
+    for target in targets:
+        if target != tid:
+            no(f'{tid}: its stub sentence names the archived body of {target}'); abad += 1
+        elif target not in sections:
+            no(f'{tid} links an archived body that does not exist'); abad += 1
+for tid in active:
+    for target in set(re.findall(r'ROADMAP_RETIRED_TASKS\.md#(r-\d{4})', bodies[tid])):
+        if target.upper() not in sections and target.upper() != tid:
+            no(f'{tid} links the archived body of {target.upper()}, which does not exist'); abad += 1
+if sections and not abad: ok(f'{len(set(sections))} archived task bodies each have a linked stub with a disposition, and every stub link resolves')
 print('\n'.join(out))
 PY
 }
 
-run_on() { # roadmap [ledger] -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
-  if ! RESULT="$(check_file "$1" "${2:-$LEDGER}")"; then
+run_on() { # roadmap [ledger [archive]] -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
+  if ! RESULT="$(check_file "$1" "${2:-$LEDGER}" "${3:-$ARCHIVE}")"; then
     RESULT="FAIL checker execution failed for $1"
     return 1
   fi
@@ -174,10 +213,14 @@ done <<< "$RESULT"
 if [ $# -eq 0 ]; then
   echo "=== 2. negative controls ==="
   TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
-  neg() { # name, python-edit, expected-substring[, "ledger" to mutate the reconciliation record]
-    local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" src="$TARGET" dst
-    cp "$TARGET" "$f"; cp "$LEDGER" "$l"
-    if [ "${4:-}" = ledger ]; then src="$LEDGER"; dst="$l"; else dst="$f"; fi
+  neg() { # name, python-edit, expected-substring[, "ledger"/"archive" to mutate that file instead]
+    local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" a="$TMPD/$1.archive.md" src="$TARGET" dst
+    cp "$TARGET" "$f"; cp "$LEDGER" "$l"; cp "$ARCHIVE" "$a"
+    case "${4:-}" in
+      ledger) src="$LEDGER"; dst="$l" ;;
+      archive) src="$ARCHIVE"; dst="$a" ;;
+      *) dst="$f" ;;
+    esac
     python3 - "$src" "$dst" "$2" <<'PY'
 import sys, re
 s = open(sys.argv[1], encoding='utf-8').read()
@@ -185,7 +228,7 @@ exec(sys.argv[3])
 open(sys.argv[2], 'w', encoding='utf-8').write(s)
 PY
     if [ "$?" -ne 0 ]; then no "control $1: could not build its mutated copy"; return; fi
-    if run_on "$f" "$l"; then
+    if run_on "$f" "$l" "$a"; then
       no "control $1: the mutated roadmap passed"
     elif printf '%s\n' "$RESULT" | grep -q -- "$3"; then
       ok "control $1 is rejected ($3)"
@@ -211,6 +254,18 @@ PY
   neg queue_row_no_owner \
     "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\`** |')" \
     "queue row 9 names no owning task"
+  neg archived_body_without_stub \
+    "s=s.rstrip('\n')+'\n\n## R-0491\n\nAn archived body whose task is live and links nothing here.\n'" \
+    "archived body R-0491 has no stub" archive
+  neg stub_without_archived_body \
+    "i=s.index('\n## R-0007\n'); j=s.index('\n## ',i+1); s=s[:i]+s[j:]" \
+    "R-0007 links an archived body that does not exist" archive
+  neg stub_names_other_body \
+    "old='archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0019).')" \
+    "R-0007: its stub sentence names the archived body of R-0019"
+  neg stub_link_removed \
+    "old='archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived.')" \
+    "archived body R-0007 has no stub"
   # The wrapper itself must not read a crashed or silent checker as a pass.
   if ( check_file() { return 17; }; run_on "$TARGET" ); then
     no "control checker_exit_failure: a nonzero checker exit passed"

@@ -20,6 +20,19 @@ elif grep -nE '^#+ (Completed )?Task R-[0-9]{4}' "$RECORD"; then
   fail=$((fail + 1))
 fi
 
+# The roadmap archives (history and retired task bodies) cite task IDs but declare none either: a
+# retired body sits under its bare `## R-NNNN` heading, its `### Task` stub stays in ROADMAP.md.
+ARCHIVES="docs/archive/ROADMAP_HISTORY.md docs/archive/ROADMAP_RETIRED_TASKS.md"
+for a in $ARCHIVES; do
+  if [ ! -f "$a" ]; then
+    echo "FAIL $a is missing; ROADMAP.md links it"
+    fail=$((fail + 1))
+  elif grep -nE '^#+ (Completed )?Task R-[0-9]{4}' "$a"; then
+    echo "FAIL $a declares task headings; task IDs are declared only in ROADMAP.md and CHANGELOG.md"
+    fail=$((fail + 1))
+  fi
+done
+
 grep -oE '^### Task R-[0-9]{4}$' ROADMAP.md | awk '{print $3}' > "$active_file" || true
 grep -oE '^### Completed Task R-[0-9]{4}$' CHANGELOG.md | awk '{print $4}' > "$retired_file" || true
 cat "$active_file" "$retired_file" > "$all_ids_file"
@@ -43,7 +56,9 @@ while IFS=: read -r file line ref; do
     fail=$((fail + 1))
   fi
 done < <(
-  grep -nHoE 'R-[0-9]{4}' ROADMAP.md CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD")
+  # shellcheck disable=SC2086
+  grep -nHoE 'R-[0-9]{4}' ROADMAP.md CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD") \
+    $(for a in $ARCHIVES; do [ -f "$a" ] && echo "$a"; done)
 )
 
 if grep -nE '^(##|###) (Current Frontier|.*Queue|Phase .* Tasks)$' ROADMAP.md; then
