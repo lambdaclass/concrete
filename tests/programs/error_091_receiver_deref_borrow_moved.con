@@ -1,0 +1,12 @@
+// Bug 091 round 3: a by-value `self` method on `(*(&r))` moves the value out through
+// the `&` borrow while `r` still owns it. Expected: E0290.
+mod m {
+    struct R { v: i64 }
+    impl R { fn take(self) -> i64 { let R { v } = self; return v; } }
+    fn main() -> Int {
+        let r: R = R { v: 1 };
+        let n: i64 = (*(&r)).take();
+        let R { v } = r;
+        return n + v;
+    }
+}

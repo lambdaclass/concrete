@@ -1468,6 +1468,8 @@ run_err "$TESTDIR/error_091_mut_receiver_immutable.con"              "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable_concrete.con"     "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_deref.con"            "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_borrow.con"           "(E0237)"
+run_err "$TESTDIR/error_091_receiver_deref_borrow_moved.con"         "(E0290)"
 run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0
 for r091m in "trait_mut_receiver_forms:8" "trait_generic_receiver_forms:4030412"; do
     r091m_f="${r091m%%:*}"; r091m_want="${r091m#*:}"

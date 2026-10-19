@@ -233,4 +233,8 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_destroy_paren_then_destroy.con` (E0205), `error_091_destroy_static_borrowed.con`,
   `error_091_destroy_deref_ref.con`, `error_091_destroy_defname_borrowed.con`,
   `error_091_receiver_deref_moved.con` (E0290), `error_091_mut_receiver_paren_deref.con` (E0237).
+  A `&`/`&mut` borrow or a cast to a reference inside the place (`(*(&p)).bump()`,
+  `(*(&r)).take()`) is the reference the place is reached through, not a temporary:
+  `error_091_mut_receiver_deref_borrow.con` (E0237), `error_091_receiver_deref_borrow_moved.con`
+  (E0290).
 

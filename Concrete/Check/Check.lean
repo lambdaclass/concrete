@@ -111,6 +111,15 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
   | .fieldAccess _ obj _ => placeVia obj
   | .arrayIndex _ arr _ => placeVia arr
   | .deref _ inner => placeVia inner
+  -- A borrow or cast expression is itself the reference the place is reached through:
+  -- `(*(&p)).bump()` mutates through a `&` borrow, never an owned place.
+  | .borrow _ _ => return .shared "the place is reached through a `&` borrow"
+  | .borrowMut _ _ => return .exclusive
+  | .cast _ _ ty =>
+    match ty with
+    | .ref _ => return .shared "the place is reached through a cast to `&`"
+    | .refMut _ | .ptrMut _ | .ptrConst _ => return .exclusive
+    | _ => return .temp
   | _ => return .temp
 
 /-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed

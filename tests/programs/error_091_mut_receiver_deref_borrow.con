@@ -1,0 +1,14 @@
+// Bug 091 round 3 (Codex review): `(*(&p)).bump()` reached the place through a `&`
+// BORROW expression, which the place walk treated as a temporary, so an immutable
+// owner was mutated (--interp printed 2). The borrow is a shared reference: E0237.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn main() with(Std) -> Int {
+        let p: P = P { n: 1 };
+        (*(&p)).bump();
+        let P { n } = p;
+        print_int(n);
+        return 0;
+    }
+}
