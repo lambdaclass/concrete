@@ -778,6 +778,54 @@ partial def cExprDiverges : CExpr → Bool
   | _ => false
 end
 
+/-- Does `n` occur in `e` — as a variable read, a binder, or a write target? CONSERVATIVE (an
+    over-approximation is always safe here): binders count, every `Cont`/`Break` field name of the
+    loop-step enum counts (that field name IS the variable written back), and a loop's carried and
+    assigned names count. Used only to refuse extraction (bug 087). -/
+partial def pexprMentions (n : String) : Proof.PExpr → Bool
+  | .lit _ => false
+  | .var m => m == n
+  | .binOp _ l r => pexprMentions n l || pexprMentions n r
+  | .letIn m v b => m == n || pexprMentions n v || pexprMentions n b
+  | .ifThenElse c t e => pexprMentions n c || pexprMentions n t || pexprMentions n e
+  | .call _ args => args.any (pexprMentions n)
+  | .applyVar m args => m == n || args.any (pexprMentions n)
+  | .structLit _ fs => fs.any (pexprMentions n ·.2)
+  | .enumLit en _ fs => (en == "LoopStep" && fs.any (·.1 == n)) || fs.any (pexprMentions n ·.2)
+  | .fieldAccess o _ => pexprMentions n o
+  | .arrayIndex a i => pexprMentions n a || pexprMentions n i
+  | .match_ sc arms => pexprMentions n sc || arms.any (pexprMentions n ·.2)
+  | .cast i | .wrapCast _ _ i => pexprMentions n i
+  | .arrayLit es => es.any (pexprMentions n)
+  | .arraySet a i v => pexprMentions n a || pexprMentions n i || pexprMentions n v
+  | .while_ c as k => pexprMentions n c || as.any (fun (m, v) => m == n || pexprMentions n v)
+      || pexprMentions n k
+  | .while_step c carried st k => carried.contains n || pexprMentions n c || pexprMentions n st
+      || pexprMentions n k
+
+/-- The names `let`-declared by THIS block that are still in scope where control can fall off its
+    end (bug 087), or `[]` when no path falls through. A branch (`if`/`else` body) is a scope: its
+    `let`s die when control leaves it. The extractors compose a fall-through branch with its
+    continuation by nesting the continuation INSIDE the branch's `letIn`s, so a branch-local `let x`
+    captured every later read of an outer `x` — `if c { let x = 10; } y = x;` read 10 in the model
+    and the outer `x` at runtime. Conservative: an `if` is assumed to fall through unless both arms
+    end in `return`; `let`s of nested blocks are checked when THOSE blocks are composed. -/
+def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
+  | [] => declared
+  | (.return_ _ _) :: _ => []
+  | (.letDecl n _ _ _) :: rest => cStmtsLetsAtEnd (n :: declared) rest
+  | [.expr _ true] => []  -- a value tail is the block's value; nothing falls through
+  | (.ifElse _ t (some e)) :: rest =>
+    if cStmtsDiverge t && cStmtsDiverge e then [] else cStmtsLetsAtEnd declared rest
+  | (.expr e _) :: rest => if cExprDiverges e then [] else cStmtsLetsAtEnd declared rest
+  | _ :: rest => cStmtsLetsAtEnd declared rest
+
+/-- May `branch` be composed with the continuation `k` (already extracted)? Only when none of the
+    branch's own `let`s that reach its end is mentioned by `k` — then nesting `k` inside them changes
+    nothing. A fresh local nothing after the branch names stays extractable. -/
+def cBranchComposes (branch : List CStmt) (k : Proof.PExpr) : Bool :=
+  (cStmtsLetsAtEnd [] branch).all fun n => !pexprMentions n k
+
 /-- Set a loop step's `Cont` field: replace `name`'s entry in place, or append it. -/
 def upsertAssign (assigns : List (String × Proof.PExpr)) (name : String) (pv : Proof.PExpr) :
     List (String × Proof.PExpr) :=
@@ -951,13 +999,16 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     | some updates => some (.while_ pc updates pCont)
     | none => do
       let carried := extractCarried body
-      let step ← cStmtsToStepExprK [] body none
+      let step ← cStmtsToStepExprK [] [] body none
       some (.while_step pc carried step pCont)
   -- Singleton if-else (last stmt of body): each branch inherits the
   -- outer continuation. If a branch returns, k is dead; if it falls
   -- through, k is used.
   | [.ifElse cond thenBranch (some elseBranch)], k => do
     if !cExprNoEscape cond then none
+    -- A branch composed with a continuation must not scope its `let`s over it (bug 087).
+    if let some kk := k then
+      if !(cBranchComposes thenBranch kk && cBranchComposes elseBranch kk) then none
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExprKImpl thenBranch k
     let pe ← cStmtsToPExprKImpl elseBranch k
@@ -968,6 +1019,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprKImpl rest k
+    if !(cBranchComposes thenBranch pkRest && cBranchComposes elseBranch pkRest) then none  -- bug 087
     let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
     let pe ← cStmtsToPExprKImpl elseBranch (some pkRest)
     some (.ifThenElse pc pt pe)
@@ -983,6 +1035,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprKImpl rest k
+    if !cBranchComposes thenBranch pkRest then none  -- bug 087
     let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
     some (.ifThenElse pc pt pkRest)
   | _, _ => none
@@ -1031,13 +1084,26 @@ def extractCarried : List CStmt → List String
       - `letDecl name _ _ val`: wraps rest in `letIn`
       - `assign name val`: `letIn` + `Cont` field `.var name` (or the value itself when last)
       - `return_ (some e)`: produces `Break e`
-      - `ifElse cond thenBr elseBr?`: each branch continues with the rest of the body. -/
+      - `ifElse cond thenBr elseBr?`: each branch continues with the rest of the body.
+
+    SCOPES (bug 087). `locals` are the names `let`-declared by the CURRENT block (the body, or the
+    branch being walked). They die at the block's end, but the extraction nests what follows inside
+    their `letIn`s — so a block's end refuses when what follows mentions one of them, and the body's
+    end refuses when a `Cont` field would write one back to the outer scope. -/
 def cStmtsToStepExprK
-    (assigns : List (String × Proof.PExpr)) :
+    (locals : List String) (assigns : List (String × Proof.PExpr)) :
     List CStmt → Option (List (String × Proof.PExpr) → Option Proof.PExpr) → Option Proof.PExpr
+  -- End of the loop body. Its own `let`s die here, so a `Cont` field may not write one back: that
+  -- would update an OUTER variable of the same name, which the runtime leaves alone (bug 087).
   | [], none =>
-    some (.enumLit "LoopStep" "Cont" assigns)
-  | [], some f => f assigns
+    if assigns.any (locals.contains ·.1) then none
+    else some (.enumLit "LoopStep" "Cont" assigns)
+  -- End of a branch, continuing after its `if`. The continuation is nested inside this branch's
+  -- `letIn`s, so it may not mention any of them (bug 087: `if c { let x = 10; } y = x;`).
+  | [], some f => do
+    let r ← f assigns
+    if locals.any (pexprMentions · r) then none
+    some r
   | (.return_ (some e) _) :: _, _ => do
     if !cExprTailOk e then none
     let pv ← cExprToPExprImpl e
@@ -1045,28 +1111,31 @@ def cStmtsToStepExprK
   | (.letDecl name _ _ val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToStepExprK assigns rest k
+    let pb ← cStmtsToStepExprK (name :: locals) assigns rest k
     some (.letIn name pv pb)
   | [.assign name val], none => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    some (.enumLit "LoopStep" "Cont" (upsertAssign assigns name pv))
+    let as := upsertAssign assigns name pv
+    if as.any (locals.contains ·.1) then none  -- see `[], none`
+    some (.enumLit "LoopStep" "Cont" as)
   | (.assign name val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToStepExprK (upsertAssign assigns name (.var name)) rest k
+    let pb ← cStmtsToStepExprK locals (upsertAssign assigns name (.var name)) rest k
     some (.letIn name pv pb)
+  -- A branch is a new scope (`locals := []`); its continuation runs in THIS block's scope.
   | (.ifElse cond thenBr none) :: rest, k => do
     if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
-    let pt ← cStmtsToStepExprK assigns thenBr (some fun a => cStmtsToStepExprK a rest k)
-    let pe ← cStmtsToStepExprK assigns rest k
+    let pt ← cStmtsToStepExprK [] assigns thenBr (some fun a => cStmtsToStepExprK locals a rest k)
+    let pe ← cStmtsToStepExprK locals assigns rest k
     some (.ifThenElse pc pt pe)
   | (.ifElse cond thenBr (some elseBr)) :: rest, k => do
     if !cExprNoEscape cond then none
     let pc ← cExprToPExprImpl cond
-    let pt ← cStmtsToStepExprK assigns thenBr (some fun a => cStmtsToStepExprK a rest k)
-    let pe ← cStmtsToStepExprK assigns elseBr (some fun a => cStmtsToStepExprK a rest k)
+    let pt ← cStmtsToStepExprK [] assigns thenBr (some fun a => cStmtsToStepExprK locals a rest k)
+    let pe ← cStmtsToStepExprK [] assigns elseBr (some fun a => cStmtsToStepExprK locals a rest k)
     some (.ifThenElse pc pt pe)
   | _, _ => none
 
@@ -1209,7 +1278,7 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
 /-- A loop body's step expression: `cStmtsToStepExprK` with no enclosing continuation. -/
 def cStmtsToStepExpr (assigns : List (String × Proof.PExpr)) (body : List CStmt) :
     Option Proof.PExpr :=
-  cStmtsToStepExprK assigns body none
+  cStmtsToStepExprK [] assigns body none
 
 /-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
     `.letDecl :: rest` directly so Phase 12 R-06 (letIn
@@ -1242,6 +1311,7 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
     if !cExprNoEscape cond then none
     let pc ← cExprToPExpr cond
     let pkRest ← cStmtsToPExprK rest k
+    if !cBranchComposes thenBranch pkRest then none  -- bug 087
     let pt ← cStmtsToPExprK thenBranch (some pkRest)
     some (.ifThenElse pc pt pkRest)
   -- Bounded while loop: flat-assign body extracts to PExpr.while_;

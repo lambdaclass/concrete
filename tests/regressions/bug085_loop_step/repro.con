@@ -103,5 +103,54 @@ mod main {
         }
         return 0;
     }
+    // Bug 087 (Codex land1 review): a branch-local `let` must not scope over the statements after the
+    // branch. The model nested `y = x` inside the branch's `let x = 10`, so scoped(1) read 10; the
+    // runtime's `x` after the branch is the outer one, 1. A branch whose own `let` is named by what
+    // follows it is now refused (not extracted).
+    fn scoped(n: i32) -> i32 {
+        let x: i32 = 1;
+        let mut y: i32 = 0;
+        for (let mut i: i32 = 0; i < n; i = i + 1) {
+            if i == 0 { let x: i32 = 10; } else {}
+            y = x;
+        }
+        return y;
+    }
+    // The loop body is a scope too: its own `let mut x` assigned in the body must not be written back
+    // to the outer `x` by `Cont`. The runtime returns the outer x, 1 (the model read 6). Refused.
+    fn body_local_assigned(n: i32) -> i32 {
+        let x: i32 = 1;
+        for (let mut i: i32 = 0; i < 1; i = i + 1) {
+            let mut x: i32 = 5;
+            x = x + 1;
+        }
+        return x;
+    }
+    // The same capture outside a loop: an if-without-else whose branch-local `let` shadows. 1.
+    fn scoped_flat(n: i32) -> i32 {
+        let x: i32 = 1;
+        if n == 0 { let x: i32 = 10; }
+        return x;
+    }
+    // Control: a branch-local `let` the branch itself consumes before RETURNING never reaches the code
+    // after the branch, so it stays extracted and agrees. branch_let_returns(0) = 6*2+8 = 20.
+    fn branch_let_returns(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        for (let mut i: i32 = 0; i < 5; i = i + 1) {
+            if i == 2 { let t: i32 = s * 2 + 8; return t; }
+            s = s + 3;
+        }
+        return s;
+    }
+    // Control: a fresh (non-shadowing) branch-local `let` that falls through. Nothing after the branch
+    // names it, so nesting the rest inside it is harmless: still extracted, and agrees. 1+1+6 = 8.
+    fn fresh_branch_let(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            if i == 1 { let t: i32 = 5; s = s + t; }
+            s = s + 1;
+        }
+        return s;
+    }
     pub fn main() -> i32 { return 0; }
 }

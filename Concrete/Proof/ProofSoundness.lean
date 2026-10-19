@@ -458,8 +458,12 @@ Wrapper arm:
     | (.ifElse cond thenBranch none) :: rest, k => do
         let pc ← cExprToPExpr cond
         let pkRest ← cStmtsToPExprK rest k
+        if !cBranchComposes thenBranch pkRest then none  -- bug 087
         let pt ← cStmtsToPExprK thenBranch (some pkRest)
         some (.ifThenElse pc pt pkRest)
+
+`h_scope` is the bug 087 side condition: the branch's own `let`s that reach its end are not named by
+the continuation nested inside them.
 
 Lean accepts the structural recursion on the nested
 `thenBranch` (sub-list of the head CStmt). -/
@@ -469,10 +473,11 @@ theorem if_no_else_as_fallthrough_preservation
     (h_esc  : cExprNoEscape cond = true)
     (h_cond : cExprToPExpr cond = some pc)
     (h_rest : cStmtsToPExprK rest k = some pkRest)
+    (h_scope : cBranchComposes thenBranch pkRest = true)
     (h_then : cStmtsToPExprK thenBranch (some pkRest) = some pt) :
     cStmtsToPExprK ((CStmt.ifElse cond thenBranch none) :: rest) k
       = some (.ifThenElse pc pt pkRest) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_then]
+  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_scope, h_then]
 
 /-! ## Rules unlocked by the partial-def → def lift (2026-05-30)
 

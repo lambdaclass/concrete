@@ -51,4 +51,4 @@ required to agree on every input and pinned to its runtime value (`twice(7) = 14
 `while_step_preservation` (ProofSoundness R-20) is SHAPE-ONLY: it states which constructor extraction
 builds from the step, not that the step computes the body. The bug lived entirely below it and it held
 throughout; agreement of step and body is sampled by model-diff, not proved. A `let` inside a branch
-that shadows an outer name (scoping, not sequencing) is bug 087, tracked separately.
+that shadows an outer name (scoping, not sequencing) is bug 087, fixed separately.
