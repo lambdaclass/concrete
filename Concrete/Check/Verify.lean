@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Elab.Core
 import Concrete.Report.Diagnostic
 import Concrete.Check.Layout
@@ -425,7 +426,7 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
 /-- **Post-mono capability verifier** (bug 091, defense in depth). Capability
     discipline is decided before monomorphization: Check decides a call through a trait
     bound against the TRAIT method's declared set, and CoreCheck bounds every impl
-    method by that set (E0586). Mono then turns `T_method` into a direct call to the
+    method by that set (E0586). Mono then turns `T$method` into a direct call to the
     impl's body and nothing re-asked the question — which is how an impl's extra
     `with(Std)` once ran under a caller with none.
     This re-asks it on the specialized call graph: every direct call in a non-generic
@@ -447,8 +448,12 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
   let plainCaps : CapSet → Option (List String) := fun cs =>
     let (caps, vars) := cs.normalize
     if !vars.isEmpty || caps.any (fun c => !validCaps.contains c) then none else some caps
+  -- Definitions by name, built once: a per-call scan of every function was quadratic in
+  -- program size (self-review of bug 091).
+  let byName : Std.HashMap String (List CFnDef) :=
+    fns.foldl (fun m f => m.insert f.name (f :: (m.getD f.name []))) {}
   let required : String → Option (List String) := fun callee =>
-    match fns.filter (·.name == callee) with
+    match byName.getD callee [] with
     | [] => none
     | d :: ds =>
       if !d.typeParams.isEmpty || ds.any (fun d' => d'.capSet.normalize != d.capSet.normalize) then none

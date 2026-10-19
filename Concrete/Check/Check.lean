@@ -1345,7 +1345,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- Bug 091: a call through a trait bound exercises the authority the TRAIT
           -- method declares — the only set every implementation is bounded by
           -- (CoreCheck E0586) — so the generic caller must hold it. The call reaches
-          -- Core as an unresolved `T_method` that CoreCheck cannot look up, and Mono
+          -- Core as an unresolved `T$method` that CoreCheck cannot look up, and Mono
           -- specializes it without re-checking, so this is the one place the decision
           -- is made; `Unsafe` included, since nothing downstream would see it. A
           -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.

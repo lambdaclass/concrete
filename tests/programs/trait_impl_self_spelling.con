@@ -1,0 +1,25 @@
+// Bug 091 self-review: trait/impl signature conformance (E0587) compared the trait's
+// `Self`-resolved parameter types against the impl's AS WRITTEN, so an impl spelling its
+// own type `Self` (`other: &Self`) was refused as a mismatch; a `-> Self` return was
+// likewise E0582. `Self` in an impl means the implementing type. Expect 42.
+trait Same {
+    fn same(&self, other: &Self) -> bool;
+    fn make(&self) -> Self;
+}
+struct Copy P { v: i32 }
+impl Same for P {
+    fn same(&self, other: &Self) -> bool { return self.v == other.v; }
+    fn make(&self) -> Self { return P { v: self.v }; }
+}
+struct Copy Q { v: i32 }
+impl Same for Q {
+    fn same(&self, other: &Q) -> bool { return self.v == other.v; }
+    fn make(&self) -> Q { return Q { v: self.v }; }
+}
+fn eqg<T: Same>(a: &T, b: &T) -> bool { return a.same(b); }
+fn main() -> i32 {
+    let p: P = P { v: 1 };
+    let q: Q = Q { v: 2 };
+    if eqg::<P>(&p, &p) && eqg::<Q>(&q, &q) { return 42; }
+    return 1;
+}

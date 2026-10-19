@@ -111,3 +111,21 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
     it, another declares less, and the generic caller holds it. It prints `3` and exits `7`.
 - `scripts/tests/check_corecheck_boundary.sh` has class 4b: the smuggling program must not reach a
   binary.
+
+## Follow-up: self-review of 423e2c64
+
+* **Self-spelled impl signatures were refused.** Conformance (E0587) resolved `Self` on the
+  trait side only, so `fn same(&self, other: &Self)` in an impl was "expected &P, got
+  &Self"; a `-> Self` return was likewise E0582 (that half predates this bug). The impl
+  side now resolves `Self` the same way. Fixture `tests/programs/trait_impl_self_spelling.con`
+  (42).
+* **verifyCapsPostMono** looked every callee up with a scan of all functions (quadratic in
+  program size); definitions are indexed by name once.
+* Confirmed sound as shipped: the impl-caps subset check fails closed (a trait method with
+  no `with(..)` admits only impls with none), the bound charge at a `T: Trait` call runs
+  before Core, the post-mono pass skips only what it cannot decide (cap variables, cap
+  params, homonyms with different sets, `Unsafe`), and the three std `remove` signatures
+  gained `with(Alloc)` because they destroy a `K: Destroy` key. Bug 052's synthesized
+  array glue carries `Alloc` for the same reason, and its fixtures declare it.
+* Trait-method calls on a type parameter are now spelled `T$m` in Core (bug 052
+  follow-up); comments referring to `T_method` were updated.

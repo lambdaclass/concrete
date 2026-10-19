@@ -1003,9 +1003,11 @@ def ccCheckModuleDecls (m : CModule)
       for sig in td.methods do
         match ti.methodRetTys.find? fun (mn, _) => mn == sig.name with
         | none => errors := errors ++ [mkDeclDiag (.missingTraitMethod ti.typeName sig.name) ti.declSpan]
-        | some (_, actualRetTy) =>
+        | some (_, actualRetTy0) =>
           let implTy := tyFromName ti.typeName
           let expectedRetTy := resolveSelfTy sig.retTy implTy
+          -- An impl may spell its own type `Self`; it means the same type (bug 091 review).
+          let actualRetTy := resolveSelfTy actualRetTy0 implTy
           if expectedRetTy != actualRetTy then
             errors := errors ++ [mkDeclDiag (.traitMethodRetTyMismatch sig.name (tyToString expectedRetTy) (tyToString actualRetTy)) ti.declSpan]
         -- Bug 091: the REST of the signature. Generic code calling a method through a
@@ -1026,10 +1028,13 @@ def ccCheckModuleDecls (m : CModule)
               | some .ref => "`&self`" | some .refMut => "`&mut self`"
             errors := errors ++ [mismatch s!"expected receiver {showKind sig.selfKind}, got {showKind ms.selfKind}"]
           let expectedParams := sig.paramTys.map (resolveSelfTy · ti.selfTy)
+          -- The impl side resolves `Self` the same way: `other: &Self` in an impl is the
+          -- trait's `other: &Self`, not a mismatch (self-review of bug 091).
+          let actualParams := ms.paramTys.map (resolveSelfTy · ti.selfTy)
           if ms.paramTys.length != expectedParams.length then
             errors := errors ++ [mismatch s!"expected {expectedParams.length} parameter(s) besides the receiver, got {ms.paramTys.length}"]
           else
-            for (i, (e, a)) in (List.range expectedParams.length).zip (expectedParams.zip ms.paramTys) do
+            for (i, (e, a)) in (List.range expectedParams.length).zip (expectedParams.zip actualParams) do
               if e != a then
                 errors := errors ++ [mismatch s!"parameter {i + 1}: expected {tyToString e}, got {tyToString a}"]
           if !ms.ownTypeParams.isEmpty then

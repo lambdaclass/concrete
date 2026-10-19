@@ -1431,6 +1431,9 @@ run_err "$TESTDIR/error_trait_bound_call_missing_cap.con"   "function 'Act::act'
 run_err "$TESTDIR/error_trait_impl_sig_mismatch.con"        "expected receiver"
 run_err "$TESTDIR/error_trait_method_generic.con"           "generic trait methods are not supported"
 run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
+# Bug 091 self-review: an impl spelling its own type `Self` in a parameter or return
+# conforms to the trait (was a false E0587 / E0582).
+run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42
 run_err "$TESTDIR/error_cap_pure.con"            "but caller has"
 run_err "$TESTDIR/error_cap_propagation.con"     "but caller has"
 run_err "$TESTDIR/error_cap_method.con"          "but caller has"
