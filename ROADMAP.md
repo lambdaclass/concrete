@@ -557,7 +557,7 @@ or create another queue.
 | Canonical VIR and certificate profiles | R-0450, R-0451, R-0463, R-0353 | portable propositions and small independent replay |
 | Diagnostic isolation and non-vacuous gates | R-0473, testing hardening tasks | truthful denominators and assurance controls |
 | Language/stdlib usability and workload pull | Phase 7 | real programs without hidden authority or ownership shortcuts |
-| Independent backend and differential validation | Phase 7.5 | QBE/LLVM independence and miscompile detection |
+| Independent backend and differential validation | Phase 7.5 (reconciled), R-0517, R-0491 | LLVM/LCB-native independence and miscompile detection |
 | Flagships and cross-feature forcing examples | Phase 8 | proof that features survive realistic composition |
 | Incrementality, artifact store and query graph | Phase 8.5 | scalable builds, proof caching, packages and editor service |
 | Proof authoring, automation, frames and spec library | Phase 9 | affordable compositional proof work |
@@ -743,8 +743,8 @@ queue. Phase headings and task position are topical filing only. There are no ph
 hidden priority overlays or separate stop-the-line lists; a reproduced urgent defect must be
 placed in the current queue explicitly.
 Phases 1–6E and completed Phase 7 foundations/workloads 1–8 are historical and
-live in [CHANGELOG.md](CHANGELOG.md). Phase 7.5's QBE backend is specified but
-has not started.
+live in [CHANGELOG.md](CHANGELOG.md). Phase 7.5's QBE backend was specified but never
+started; since 2026-10-19 the Lean Compiler Backend (R-0517) is the QBE path (R-0113).
 
 ## Current Execution State (2026-08-31)
 
@@ -3572,6 +3572,12 @@ performance claims only after backend contracts and measurements exist; Phase
 
 ### Future Compiler-Pipeline Refactor Contract
 
+> **Reconciled 2026-10-19:** where this contract names QBE as a backend or a forcing consumer, read the
+> LCB-native profile behind Concrete's BIR → LCB-IR adapter (R-0517); its QBE-first sequencing is
+> superseded by the current queue and the verified-pipeline IR chain (Place MIR → Memory CFG → BIR).
+> The refactor acceptance requirements remain in force; each refactor's owner is recorded in the
+> [reconciliation ledger](#reconciliation-ledger).
+
 The pipeline works, but several bug classes came from boundaries represented by
 convention rather than types: raw module lists reused after different validation
 stages, ordered first-match lookup tables standing in for scoped identity,
@@ -4137,6 +4143,10 @@ create ordering or an alternate queue.
    both paths rather than claiming trusted linearity already holds generally.
 
 ### Backend-Separation Decisions
+> **Reconciled 2026-10-19:** LayoutFacts is now R-0502's single `Layout` authority and typed emission
+> is R-0503's BIR; the forcing consumers are the LLVM adapter and the LCB adapter (R-0517), and the
+> "Phase 7.5 order" below is historical.
+
 - **Backend-neutral LayoutFacts** (size/align/offsets/tags/ABI/legal scalar),
     separate from LLVM spelling — the opening slice; QBE is the forcing consumer.
 - **Typed emitter fragments** (structured defs/blocks/instrs/terminators, rendered
