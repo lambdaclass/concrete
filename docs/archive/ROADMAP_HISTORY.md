@@ -27,6 +27,9 @@ Sections, in their original order:
 - [Historical record and detailed slice traceability](#historical-record-and-detailed-slice-traceability) — from R-0004 historical material under "Post-R-0004 milestones and longer-term research" (Phase 7)
 - [Binder frames: position and meaning are separate obligations](#binder-frames-position-and-meaning-are-separate-obligations) — from R-0004 historical material under "Post-R-0004 milestones and longer-term research" (Phase 7)
 - [Multi-kernel: where the ladder actually stands (2026-08-08)](#multi-kernel-where-the-ladder-actually-stands-2026-08-08) — from subsection of Phase 7 (Standard Library And Core APIs)
+- [R-0480: physical documentation migration (2026-08-14)](#r-0480-physical-documentation-migration-2026-08-14) — from the body of R-0480
+- [R-0473: the embedded R-0004 Slice-6 record (2026-08-07 – 2026-09-02)](#r-0473-the-embedded-r-0004-slice-6-record-2026-08-07--2026-09-02) — from the body of R-0473
+- [R-0475: exposure audit and shipped snapshot fix (2026-08-07)](#r-0475-exposure-audit-and-shipped-snapshot-fix-2026-08-07) — from the body of R-0475
 
 ## Current Execution State (2026-08-31)
 
@@ -3589,3 +3592,464 @@ committed while documenting it.
 Register A is the register that remains open in the semantic sense: **0 of 5 families fully
 discharged, 4 of 5 half-discharged**. Register B has 1 of 3 rows. C is not pending in the way A
 is, and grouping the three as equally-open understates what has been paid for.
+
+## R-0480: physical documentation migration (2026-08-14)
+
+_Moved from the body of [R-0480](../../ROADMAP.md#task-r-0480); the task keeps its objective, current status, exit and a summary of this record._
+
+**Physical migration landed 2026-08-14.** The worktree reached a clean integration boundary, so
+the stable documents moved into `language`, `compiler`, `verification`, `platform`, and `project`
+families; the existing book/bugs/notes/stdlib trees remained intact. Repository references were
+rewritten in the same change, the last root-level research note moved under `research/meta/`, and
+`check_doc_links.py` now checks local Markdown destinations on every docs-drift run. Phase A's full
+lifecycle-header inventory and Phase B's one-owner/duplicate-current-status controls remain open;
+physical neatness is not completion of the authority audit.
+
+## R-0473: the embedded R-0004 Slice-6 record (2026-08-07 – 2026-09-02)
+
+_Moved from the body of [R-0473](../../ROADMAP.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
+
+**STEP 1 CLOSED (2026-08-09).** `check_migration_manifest.sh` reports **44/44 links accounted,
+0 unowned, 0 non-deterministic, 0 without a subject** — the closure gate is CLOSED and
+dependency-root integration may resume. Both blockers are resolved, and neither was what it first
+appeared to be:
+
+1. ~~*8 of 44 stored links have no manifest row.*~~ They were never missing — they were **merged**.
+   Rows keyed by callable alone collapsed across files, and `elf_header` ships both `main.con` and
+   `main_drifted.con` defining the same callable ids, each with its own stored fingerprint. The
+   fix was the field the row schema specified from the start and the gate omitted: **source
+   location**. A link key without it cannot distinguish a duplicate from two distinct links that
+   happen to name the same callable. Now an equality assertion, not a ratchet.
+2. ~~*The subject digest is not a function of the subject alone.*~~ Root cause: `elabFn` did not
+   reset the binder frame per function, so lexical scope accumulated across declarations and a
+   parameter's resolved index depended on what was elaborated before it. Fixed at the start of
+   `elabFn`; the check is an equality assertion.
+
+**Closure gate** (`check_migration_manifest.sh`, separate from the ratchets): required state is
+0 missing, 0 unowned, 0 nondeterministic, 0 without subject, 44/44 accounted. It currently reports
+**CLOSED**. Preserve this as equality: a ratchet and a completion gate answer different questions,
+and a future regression must reopen closure rather than remain green above a lowered floor. The
+script cleanup below removes the obsolete duplicate ratchet block; it does not weaken these values.
+
+**The exact migration manifest — authoritative input to Slice 7, CLOSED 2026-08-09.** The compiler
+now produces exactly one row per stored source link:
+
+```
+source-location | callable-id | stored-v1 | selected-spec-id | current-v2 | disposition
+```
+
+The closure gate established 44/44 rows, 0 unowned, 0 links without subjects and 0
+nondeterministic keys, covering 33 distinct callable owners. Source location is repository-relative
+migration metadata only; it is absent from subject and receipt identity. **Post-closure cleanup
+completed 2026-09-02:** the duplicate exact-join/obsolete 35-row ratchet was removed, the parser was
+updated to the live V2 subject report, and the live 43-link denominator is shared with the V1 golden
+gate rather than restated.
+
+**Slice 6 starting sequence, in order.** Recorded because the order is what keeps a partial
+consumer away from the `proved` decision path:
+
+1. ~~implement the Lean-side `MetaM` classification hand-back~~ **DONE 2026-08-09**
+   (`classifyOrUnclassified`, `classifyAll`, `renderClassification` — one row per request, an
+   unknown name yields `unclassified` rather than a dropped row, serialization sorted so caller
+   order cannot enter the bytes);
+2. ~~produce complete typed edge material~~ **DONE** — the `unclassified` edge kind exists, with
+   completeness proved by `DependencyEdge.mem_all` rather than asserted by a length check;
+3. ~~let incomplete/unclassified material REFUSE roots~~ **DONE** — refused at BOTH doors: the
+   root via `isCurrentForDependents` (exhaustive, no catch-all, so a future kind is non-current
+   by construction) and `mint?` independently, rather than trusting a caller to consult the root
+   first. `mergeClassifications` refuses five distinct ways — unanswered, duplicate, unknown,
+   still-unclassified, classified-missing — each its own constructor because the repairs differ;
+4. ~~wire validated roots into ProofCore and reports **in shadow**~~ **DONE 2026-08-09**.
+   `ProofCore.dependencyNodesOf` builds nodes over SEMANTIC IDENTITIES from ProofCore's own
+   entries and call graph — one producer, so both consumers read the same nodes rather than each
+   rebuilding. `--report subject-facts` carries a sixth axis, `shadow depRoot`. Names are resolved
+   to `CallableId` at the boundary and never enter a node; the name-keyed `CallGraph` is thereby
+   subordinated rather than propagated.
+
+   **Current: 62 of 64 subjects root, 2 REFUSE** (was 53/11 at first wiring, then 57/7 after the
+   hand-back ran, then 62/2 once the generated table covered BOTH proof-attachment paths — the
+   investigation narrative is in the commit history; this line is the state) — every refusal naming the
+   non-current edge that caused it. That is the expected honest outcome: the compiler cannot mint
+   `contract`/`body` without the hand-back, so those edges are `unclassified` and the root refuses
+   them. Coverage recovers by classifying more dependencies, never by weakening the root. A gate
+   asserts BOTH directions — a leaf must produce a root (or the integration would be
+   indistinguishable from not running, and "0 roots" would read as success) and a subject reaching
+   an unclassified dependency must refuse — plus that no root reaches `deriveObligationStatus`;
+5. ~~compare root determinism and dependency-change sensitivity~~ **DONE 2026-08-09**. Both
+   halves gated: discovery ARTEFACTS do not move the root (edge order, node-list order,
+   duplicated edges) and dependency SEMANTICS do (a deep callee edit, an edge-KIND change — so
+   typing the edges is load-bearing rather than decorative). Trust propagates from a DEEP
+   dependency and an untrusted closure does not acquire qualification, which is monotonicity in
+   both directions: non-monotone trust would let a claim be laundered clean by adding a
+   dependency. A root that moves on order is unusable as a stored value; one that does not move
+   on content binds nothing;
+6. connect the root to status composition — **BLOCKED on a precondition the sequence did not
+   state, found 2026-08-09 before wiring anything.** Every one of the 11 current refusals is an
+   `unclassified` edge, and `unclassified` means *we have not asked the Lean side yet*. Gating
+   `proved` on the root today would report `depsNotCurrent` for subjects whose dependencies are
+   perfectly fine — a claim about OUR unfinished toolchain rendered as a claim about the USER's
+   program.
+
+   The invariant says `unclassified` must never enter a CURRENT root, and it does not: the root
+   refuses it. It does not follow that a refusal caused by an unrun classifier should degrade a
+   verdict. `missing` degrading a verdict is honest — something really is unvalidated.
+   `unclassified` degrading one is the compiler blaming a program for the compiler's own state.
+
+   **Hand-back RUN 2026-08-09 and wired** (`scripts/gen/classifications.lean` ->
+   `Concrete/Proof/ClassificationTable.lean`, consumed by `dependencyNodesOf`). Refusals dropped
+   **11 -> 7** and roots rose 53 -> 57: the classifier answers `body` for every theorem it sees,
+   so real classifications do land.
+
+   **The remaining 7 expose a gap in the GENERATOR, not in the classifier.** `main.verify_message`
+   is `proved` AND its root refuses, which is exactly the case that must not exist before step 6.
+   Its theorem is absent from the table because the generator enumerates
+   `Proof.provedFunctions` — the hardcoded list — and misses proofs linked from SOURCE via
+   `#[proof_by]`/the registry. The table is therefore complete for one of the two ways a proof
+   can be attached.
+
+   **Fixed 2026-08-09** — `scripts/gen/refresh_classifications.sh` unions `provedFunctions` with
+   source-linked `#[proof_by]`/`#[ensures_proof]` names (43 rows). Refusals 7 -> 2.
+
+   **THREE FURTHER BLOCKERS before step 6 connects**, from review, all real:
+
+   a. ~~`dependencyNodesOf` silently dropped unresolved callees~~ **FIXED** — it was a
+      `filterMap`, so a callee whose identity could not be resolved vanished and the root covered
+      LESS than the actual closure while looking complete. Now every call-graph edge is
+      represented; an unresolved one becomes an edge to an identity with no node, which the root
+      refuses by name. A dependency you cannot resolve is not a dependency you do not have.
+   b. **HALF CLOSED.** The table carries the theorem artifact digest, freshness is a MANDATORY
+      gate (`make test-classification-freshness`, ~1s), and the gate rediscovers the
+      theorem-name inventory from source rather than trusting the generator's own list. ~~Still
+      open: the digest does not participate in classification.~~ **CLOSED 2026-08-09** —
+      classification routes through `validatedRowOf`, which refuses a row whose digest is absent,
+      empty, a placeholder, or not 32 hex chars, and `ValidatedRow`'s constructor is private so a
+      caller cannot assemble one around a failed row. Verified end to end: corrupting a digest in
+      the table turns that theorem's edge from `body` to `unclassified`.
+
+      **What consumer validation cannot establish**, stated so it is not read as more: the
+      compiler cannot recompute a theorem's artifact digest (that needs `MetaM` and the proof
+      modules), so the consumer checks STRUCTURE, not correspondence to the live theorem.
+      Correspondence stays `check_classification_freshness.sh`'s job, now mandatory. The two
+      answer different questions and neither substitutes for the other.
+
+      STILL OPEN: table identities, table digests and quantifies-over-table are discarded — the
+      row carries which THEOREM, not yet which DEPENDENCIES. Original finding: Before production it must preserve enough to prove *this
+      classification belongs to this exact theorem and applies to these exact dependencies*;
+      otherwise a stale or misattached `body`/`contract` label stays structurally valid. OPEN.
+   c. **CRITICAL PATH. Correspondence is per-EDGE, not per-theorem.** A partial shape check
+      landed (`rowJustifies`: `contract` requires quantification, `body` requires a bound table)
+      and it is NECESSARY-not-sufficient — quantification alone does not establish that the
+      relevant contract hypothesis exists for a given callee, so an edge passing it may still
+      under-bind. It catches the gross failure only.
+
+      The right shape, per review, replaces `classifiedEdgeOf theorem` with something closer to
+      `validatedEdgesOf theorem`, returning dependency-specific evidence:
+
+      ```
+      EdgeJustification { callee; kind; table?; tableDigest?; witness }
+      ```
+
+      The merge must require EXACTLY ONE justified result per compiler-produced call edge and
+      refuse: missing or duplicate edges; classifications for unknown callees; callable or
+      table-identity mismatches; a `body` edge whose implementation is absent from the bound
+      table; a `contract` edge without a corresponding quantified lookup/hypothesis; leftover
+      caller-level classifications applied by default; unresolved or ambiguous table entries.
+
+      Conservative rules: `body` only when the bound table contains the exact callee
+      implementation (whole-table digest retained for dynamic access); `contract` only when the
+      theorem type establishes the relevant contract hypothesis for that callee; `trusted` only
+      from the compiler's declared boundary; anything not PROVEN to correspond is `unclassified`
+      and refuses the root.
+
+      **PREREQUISITE LANDED 2026-08-09** (`tableEntryEvidence`, `entryEvidenceContains`). Table
+      digests cannot prove membership — a digest answers "did this table change", not "does it
+      CONTAIN that callee", and one had been standing in for the other. Entry evidence reads what
+      `PFnDef` already carries (`identity : PFnIdentity`, `sourceBodyDigest`) rather than
+      inventing a parallel record.
+
+      **The field holds the V1 SOURCE-BODY digest, not the V2 subject**, and is now named
+      `sourceBodyDigestV1` to say so. It was briefly called `subjectDigest` and documented as
+      "which subject it came from" — reinterpreting a V1 body digest as the frozen V2 subject,
+      under which a signature or contract change would leave entry evidence looking current and
+      the eventual per-edge join would be exact over the WRONG subject identity.
+
+      **RESOLVED 2026-08-11, and the first attempt was keyed on the wrong identity.** Table
+      entries bind an IMPLEMENTATION digest, not a proof subject: the frozen V2 subject includes
+      selected specification and claim scope, one callable can carry several proof links, so
+      `CallableId -> ProofSubjectDigestV2` is not a function and a join on it is ill-defined. An
+      entry describes an implementation and does not change when a different spec is pointed at
+      it.
+
+      `implementationPreimage` / `implementationDigest` extract that component from the existing
+      V2 construction; the subject hashes the PREIMAGE rather than nesting the hash, so every V2
+      value stays byte-identical and the schema freeze passes unchanged — which is the proof the
+      refactor added and removed nothing. The implementation hash is domain-separated
+      (`implementationV1:`) so the two identities cannot collide over the same inputs.
+
+      `bindEntryImplementations` joins against a CLOSED `ImplementationManifest` and refuses the
+      whole list when any entry is absent. The earlier version took a
+      `CallableId -> Option String` CALLBACK, so any caller could mint a bound entry from any
+      non-empty string — the tests passed `"v2:abc"` and demonstrated exactly that. A private
+      constructor guarding a caller-supplied value is not a guard.
+
+      `implementationManifestOf` is the authoritative producer, computing each digest from
+      complete canonical facts; an entry with incomplete facts or a refused body is ABSENT rather
+      than defaulted, so the fail-closed chain runs end to end: undescribable implementation -> no
+      manifest row -> no binding -> no `body` justification -> root refuses.
+
+      **STEP 2 IS NOT CLOSED. Three open items, the first an unsoundness:**
+
+      1a. ~~**`tableEntryEvidence` trusts the stored digest.**~~ **FIXED 2026-08-11.**
+         It now RECOMPUTES the canonical digest from `PFnDef.body` and refuses the whole table
+         unless the stored provenance agrees, with schema and scope checked first (a digest under
+         another schema is a different formula, so it is refused rather than compared). The
+         acceptance mutation — replace the body, keep the identity AND the stored digest — is
+         killed and registered as mutation family `entry-body-recomputed`.
+
+         `TableEntryEvidence.sourceBodyDigestV1` is now `String`, not `Option String`: an entry
+         with no provenance, and one whose provenance was never checked against a body, both lose
+         their representation.
+
+         **Two things measured rather than assumed**, because either would have made it vacuous:
+         the 24 hand-authored `sourceBodyDigest` literals in `Proof.lean` AGREE with the recompute,
+         so the producer matches the real corpus instead of refusing all of it; and the positive
+         controls yield evidence, so the refusals do not hold merely because nothing can.
+
+         The enabling refactor took SEVEN declarations, not the five predicted — `stripAlpha` and
+         `byteToHex` surfaced only by rebuilding after each step — and landed in a new
+         `BodyIdentity` module (plus a general `Digest`) rather than `Proof.lean`, because `ProofCore` is `namespace
+         Concrete` while `Proof.lean` is `namespace Concrete.Proof` and moving there would have
+         renamed every call site.
+
+      1. ~~**The join matches `CallableId` ALONE.**~~ **FIXED 2026-08-11.** Manifest rows carry
+         `(callable, authoritative source-body digest, implementation digest)`, and binding now
+         requires the entry's stored body digest to be PRESENT and EQUAL to the authoritative one.
+         The comparable value turned out to be reachable after all: `ProofCoreEntry.extracted`
+         holds the `PExpr`, so `shortHash (pexprCanonical (normalizePExpr pe))` computes the same
+         value Report's `sourceBodyDigestV1` does. Three acceptance legs: a STALE body digest
+         refuses, a MISSING one refuses (absence is not agreement), a MATCHING one binds.
+
+         **TWO LIMITS, both explicit.** (i) The digest formula is now DUPLICATED — Report computes
+         it and so does `implementationManifestOf`. One canonical producer in a neutral module
+         imported by both is the durable shape; two copies can drift, and the whole point of the
+         comparison is that both sides mean the same thing. (ii) Matching V1 source-body digests
+         establishes ARTIFACT binding and freshness, **not semantic equivalence** between the
+         source body and the `PFnDef`. That remains the source-to-proof-model faithfulness
+         boundary, and this repair must not be read as a claim that two representations have
+         proved-equal semantics.
+
+      1b. **Superseded description of the original hole:** `bindEntryImplementations` attaches the
+         manifest's implementation digest without checking that the entry's stored body is the one
+         the manifest describes, and `TableEntryEvidence.sourceBodyDigestV1` is ignored — a test
+         with `sourceBodyDigestV1 := none` binds successfully, which demonstrates it. So a stale
+         or substituted table entry carrying the right identity ACQUIRES the current authoritative
+         digest. That is the misattachment blocker (c) exists to kill.
+
+         It cannot be fixed where the producer lives, for a concrete reason: the manifest digest
+         is built from `bodyBytesV2`, the entry field holds `sourceBodyDigestV1`, and `ProofCore`
+         records NO source-body digest at all — `renderSourceBodyDigest` is in Report. There is
+         nothing in the producer's reach to compare against. Closing it needs the authoritative
+         body component carried where the manifest is built; binding then requires identities
+         equal AND the entry's body digest PRESENT AND equal to that component.
+
+         **The acceptance mutation:** replace a table entry's body while preserving its
+         `CallableId`. Binding must refuse. Today it succeeds.
+
+      2. **`ofRows` validates FORMAT only and is public** — thirty-two zeros mints a manifest.
+
+         **NOT actually blocked — measured 2026-08-11, and the earlier "cannot be made private
+         while the producer is cross-module" was wrong.** The fix does not need a correspondence
+         module importing ProofCore. It needs the digest COMPUTATION below `DependencyEdge`, and
+         everything it depends on already is:
+
+         - `implementationPreimage`/`implementationDigest` need only `Proof.CheckedDeclFacts`,
+           `Proof.CompleteEvidenceBodyV2`, `Proof.bodyBytesV2` and `shortHash`;
+         - those live in `SubjectFacts`, `EvidenceTree`/`IdentityUseBytes`, and (since the
+           `BodyIdentity`/`Digest` extraction) below `DependencyEdge`;
+         - **none of `SubjectFacts`, `EvidenceTree` or `IdentityUseBytes` mentions
+           `DependencyEdge`** — verified by grep, so `DependencyEdge` can import that chain with
+           no cycle.
+
+         **The shape that closes it**, rather than merely narrowing it: move those two into a
+         module `DependencyEdge` imports, then replace the caller-supplied-digest entry point with
+         one taking `(CallableId × CheckedDeclFacts × CompleteEvidenceBodyV2)` and computing both
+         digests itself. A caller then has nowhere to put invented hex — the guard becomes the
+         type rather than a format check, which is the same move that fixed `TableEntryEvidence`.
+         `implementationManifestOf` can stay in `ProofCore`, since only the computation has to
+         move down, not the builder that walks a `ProofCore`.
+
+         Keep the format validation as well: it still rejects a malformed digest from the
+         authoritative producer, which is a different failure from a forged one.
+
+         **The shape, refined 2026-08-11.** Do NOT expose a replacement constructor taking bare
+         `CheckedDeclFacts` and `CompleteEvidenceBodyV2`: those prove completeness, but a caller
+         could pair one callable's facts or body with a different `CallableId`. Take a closed
+         record instead, so the three cannot be mixed independently:
+
+         ```lean
+         structure CompleteImplementation where
+           private mk ::
+           callable : CallableId
+           facts    : Proof.CheckedDeclFacts
+           body     : Proof.CompleteEvidenceBodyV2
+         ```
+
+         then `ImplementationManifest.ofImplementations : List CompleteImplementation -> Option
+         ImplementationManifest`, computing both digests internally. Raw
+         `(CallableId x String x String)` construction becomes private or test-only.
+
+         **What the smart constructor can and CANNOT check — measured, so no control is claimed
+         that cannot be delivered.** `implementationIdentityOf` now sits below `DependencyEdge`
+         (landed 2026-08-11), so the constructor can live there and verify:
+
+         - `facts.id == callable` — checkable, `CheckedDeclFacts.id : CallableId`;
+         - facts complete — checkable;
+         - the evidence body validates — checkable.
+
+         **"Both originated from the same `ProofCoreEntry`" is NOT checkable there**, twice over.
+         `ProofCoreEntry` lives in `ProofCore`, ABOVE this module, so a `private mk` in the low
+         module cannot be reached by a producer that walks entries — the constructor has to be a
+         validating function taking the three parts. And `CompleteEvidenceBodyV2` carries only
+         `val.statements`, **no identity**, so pairing entry A's BODY with entry B's facts and id
+         passes every check above and silently yields a wrong digest. A mutation for that swap
+         would SURVIVE, and must not be registered as if it were killed.
+
+         Closing it properly needs the body to carry its owning `CallableId`, which is a V2 schema
+         change and must not be done casually while the freeze holds. Until then this is a NAMED
+         REFUSAL, not a covered case, and the id/facts pairing mutation (which the `facts.id ==
+         callable` check does kill) must not be described as covering it.
+
+      2a. **Manifest completeness must be self-denominating** — `implementationManifestOf` uses
+         `filterMap`, which launders an incomplete production into a smaller apparently-complete
+         manifest. Prefer a result carrying NAMED refusals:
+
+         ```lean
+         structure ManifestResult where
+           expected : List CallableId
+           rows     : List ManifestRow
+           refusals : List (CallableId x ManifestRefusal)
+         ```
+
+         A manifest usable for correspondence exists only when: expected identities = row
+         identities, `refusals = []`, and no duplicates. The denominator is then stored rather
+         than inferred from the numerator, which is the defect `filterMap` has.
+
+      3. **`implementationManifestOf` uses `filterMap`**, so the manifest is neither complete nor
+         self-denominating. The downstream join refuses a missing callable, which is fail-closed
+         for that use, but the manifest must not be called complete without either retaining
+         named refusal rows or storing the expected eligible identity set and proving every
+         identity received exactly one digest.
+
+      Body, capability and generic sensitivity controls are also still owed — only signature and
+      contract sensitivity are demonstrated.
+
+      DUPLICATE IDENTITIES REFUSED: a table holding one callable twice cannot say which
+      implementation a static lookup selects, and membership answering "at least one" would let a
+      `body` edge be justified by an entry dispatch never reaches.
+
+      ALL-OR-NOTHING: one legacy entry refuses evidence for the whole table, because a partial
+      membership list answers "is this callee present" with "not in the part I could read" —
+      indistinguishable from "absent", and absence is what justifies refusing an edge. Membership
+      is decided by IDENTITY, never by display name, gated with a same-named callable from
+      another module. Whole-table digests remain necessary and are not replaced: a dynamic index
+      can reach any entry, so entry evidence answers the statically-known case and cannot narrow
+      the dynamic one.
+
+      **Acceptance is stronger than 64/64:** every actual call edge has exactly one validated
+      justification, and removing, swapping, or weakening any justification makes the
+      corresponding root refuse. Only once that mutation gate holds — and `calls.combine` closes
+      for the right reason — is connecting roots to verdict composition defensible.
+
+      Original finding: A `contract` theorem does not thereby establish that every call-graph edge is
+      covered by an appropriate contract hypothesis — over-approximating is safe, but `contract`
+      could UNDER-bind implementation dependencies unless the theorem's hypothesis structure is
+      matched to the emitted edges. OPEN.
+
+   And the precondition itself is still unmet by one case: `calls.combine` is `proved` with a
+   refusing root. Step 6 connects only when that count is zero.
+
+   **So step 6 waits for the hand-back to RUN over the real proof corpus**, producing genuine
+   `contract`/`body` classifications, not merely for the merge machinery to exist (steps 1-3,
+   done). Once real classifications land, the remaining refusals will be `missing` — and those
+   SHOULD gate `proved`. The step-4 measurement (53 of 64 rooting, 11 refusing, all
+   `unclassified`) is the baseline that says when this precondition is met: it is met when the
+   refusal REASONS change, not when the count drops;
+7. kill the mutation that omits the root while attempting `proved`;
+8. delete or permanently subordinate the old advisory/name-keyed path.
+
+**Mass refusal at the first honest integration is expected EVIDENCE, not a regression to hide.**
+Coverage recovers only by classifying more dependencies — never by weakening root completeness.
+That sentence is here because the pressure at step 3 will be to relax the refusal so the numbers
+look better, and relaxing it converts a fail-closed root into an advisory one, which is the whole
+defect class R-0004 exists to close.
+
+**Slice 6 acceptance boundary (recorded 2026-08-09, before starting).** Integration is the
+highest-risk remaining step, so its done-condition is written first rather than discovered:
+
+* ProofCore AND reports consume the SAME validated root — two consumers building their own is how
+  a second, weaker answer appears;
+* direct, transitive and recursive dependencies included;
+* dynamic table access binds the WHOLE table (`tableValueDigest` already does this, and
+  `tablesFullyBound` is the predicate a root must respect);
+* missing, unclassified or unbindable edges FAIL CLOSED — `dependencyRootMaterial` already
+  refuses these, and integration must not add a path around it;
+* trust and assumptions propagate MONOTONICALLY;
+* dependency ORDER and duplicate discovery do not change the root; any dependency SEMANTIC change
+  does; comments, paths, import order and equivalent traversal order do not;
+* no legacy `staleDeps`, name-keyed, or advisory path can issue `proved`;
+* a production-consumer MUTATION proves that omitting the root prevents a friendly verdict —
+  without it, "integrated" means the code is called, not that it decides anything.
+
+**Known shape of the first integration, from reading `DepNode`.** Nodes carry
+`(id : CallableId, digest : Option String, edges : List (DependencyEdge × CallableId))`. The
+compiler can honestly mint `trusted` and `missing` edges; the `contract` vs `body` split needs
+`classifyTheorem`, which runs in `MetaM` on the Lean side. Since `dependencyRootMaterial` fails
+closed on a `missing` edge, the first honest integration will REFUSE most roots — that is the
+correct outcome and must not be softened into an advisory value to make coverage look better.
+
+**Boundary between the three digests, recorded 2026-08-09 so the subject does not accrete.** It
+was tempting to fold dependency material and trust qualification into `ProofSubjectDigest`; they
+belong elsewhere, and keeping them out is what lets the subject be *frozen* independently:
+
+* **subject digest** — semantic identity, typed signature, structural V2 body, contracts,
+  selected specification, claim scope. What the proof is ABOUT.
+* **dependency root** — transitive dependency material, computed FROM finished subject digests.
+  Depends on the subject, so it cannot be inside it.
+* **receipt** — dependency root, trust and assumptions, theorem/replay/environment identities.
+  What the evidence RESTS ON, and the only layer that qualifies a claim.
+
+Order that follows from it: structural body (done) -> selected-spec identity -> claim scope ->
+freeze/version the subject schema -> integrate dependency roots -> environment identities and
+complete receipts -> replay and migrate. Receipts must not be minted nor fingerprints migrated
+before the freeze.
+
+## R-0475: exposure audit and shipped snapshot fix (2026-08-07)
+
+_Moved from the body of [R-0475](../../ROADMAP.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
+
+**Exposure audited 2026-08-07, and it is exactly one snapshot.** The audit is recorded because
+"the other project-mode fixtures probably have this too" was the natural assumption and it was
+wrong:
+
+* 49 examples carry a `Concrete.toml` and therefore build against the stdlib;
+* `scripts/tests/phase1_snapshots` is the only golden directory, and of its 13 snapshotted
+  fixtures exactly **one** — `assume_taint` — is project-mode. The other 12 are single-file and
+  cannot see stdlib contracts at all;
+* the other 2 project-mode contract fixtures (`assume_scope_adversarial`, `obligation_redteam`)
+  are used only by gates making targeted assertions, with zero references to `cmp`/`diff`/golden
+  files, so a stdlib addition cannot perturb them. All four such gates pass (8/0, 21/0, 9/0, 16/0);
+* the 3 remaining golden-comparing gates that touch project-mode examples (`check_concrete_fmt`,
+  `check_httpget_differential`, `check_tcpserve`) compare *program* output — formatted source,
+  HTTP bytes, a server response body — not a report, so contracts are not in their basis.
+
+So the coupling had one instance, it is the one H26 found, and the attribution diagnostic added in
+`1c310a07` covers the case where a future fixture gains a `Concrete.toml`.
+
+**Durable fix landed** (`31710d4e`): the contracts comparison is scoped to modules the fixture
+defines, so a project-mode golden cannot depend on the stdlib. Comparison only — the report is
+unchanged, so nothing a user sees is lost. `assume_taint`'s golden went 153 -> 32 lines with zero
+stdlib entries. The invariant ("a project-mode golden contains no entry from a module it does not
+define") is asserted on every run rather than registered as a mutation, because that harness
+proves a gate goes RED when a rule is disabled and this property is a gate staying GREEN under a
+change that is none of its business. Verified both ways: the H26 mutation no longer moves the
+golden, and appending a `sha256.` entry makes the assertion fail.
