@@ -1,0 +1,31 @@
+// Bug 091, Codex round 2 (the concrete-path sibling found while unifying the
+// receiver rule): a by-value `self` method called through `&Tracked` would move
+// the value out of a borrow while its owner still holds it. Refused (E0290).
+// Before the fix this compiled and destroyed the one Tracked value TWICE (printed 2).
+mod m {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    impl Tracked {
+        fn consume(self) with(Alloc) {
+            destroy(self);
+        }
+    }
+    fn reuse(x: &Tracked) with(Alloc) {
+        x.consume();
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = Tracked { cell: cell };
+        reuse(&t);
+        destroy(t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

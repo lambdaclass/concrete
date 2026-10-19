@@ -1,0 +1,33 @@
+// Bug 091, Codex round 2: an owned `y: T` calling `&mut self` / `&self` trait
+// methods through a bound is BORROWED (Elab shapes the receiver by the trait's
+// declared form), and `take(self)` consumes it. bump twice -> b = 4:
+// show = 403 then 404, take = 4 + 4 = 8 -> 4030412. Before the fix the receiver
+// was passed by value, the bumps mutated copies, and this printed 4020410.
+mod m {
+    struct P { a: i64, b: i64 }
+    trait Show {
+        fn show(&self) -> i64;
+        fn bump(&mut self);
+        fn take(self) -> i64;
+    }
+    impl Show for P {
+        fn show(&self) -> i64 { return self.a * 100 + self.b; }
+        fn bump(&mut self) { self.b = self.b + 1; }
+        fn take(self) -> i64 { let P { a, b } = self; return a + b; }
+    }
+    fn f<T: Show>(x: T) -> i64 {
+        let mut y: T = x;
+        y.bump();
+        let s: i64 = y.show();
+        bump_via(&mut y);
+        let s2: i64 = y.show();
+        return s * 10000 + s2 + y.take();
+    }
+    fn bump_via<T: Show>(r: &mut T) { r.bump(); }
+    fn main() with(Std) -> Int {
+        let p: P = P { a: 4, b: 2 };
+        print_int(f::<P>(p));
+        print_char(10);
+        return 0;
+    }
+}

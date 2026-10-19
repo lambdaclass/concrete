@@ -147,3 +147,16 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   Fixtures: `tests/programs/error_091_nested_destroy_caps.con` (E0584; previously compiled and
   printed 7 from the Alloc-only `quiet`), pipeline-test `mono/nested-destroy-verified` (the
   verifier names the widened nested destructor, exact and through its alias; failed before).
+* **Generic trait calls ignored the receiver form (P1).** A call through a trait bound
+  checked and consumed the explicit arguments but never applied `sig.selfKind`: with
+  `consume(self)`, `x.consume(); return x;` returned an owner its impl had already destroyed
+  (the fixture destroyed one value twice). Check now applies ONE receiver rule to concrete and
+  bound calls (`consumeReceiver` / `receiverBorrowParts`: borrow conflicts, by-value move,
+  projection restriction), and Elab shapes the bound receiver by the trait's form (an owned
+  `y: T` calling `&mut self` is borrowed; it was passed by value, so the impl mutated a copy:
+  4020410 instead of 4030412). Unifying the rule also closed the concrete sibling: a by-value
+  `self` method called through `&T` on a non-Copy type moved out of a borrow (double destroy);
+  now E0290. Fixtures: `error_091_generic_receiver_moved.con` (E0205),
+  `error_091_receiver_through_ref.con` (E0290), `trait_generic_receiver_forms.con` (4030412).
+  The interpreter does not run non-Destroy trait calls on type parameters before this round
+  (see bug 052's round-2 note), so these legs are compiled-only.

@@ -1202,7 +1202,16 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let selfTy := Ty.typeVar n
           let retTy := substSelf sig.retTy selfTy
           let params := sig.params.map fun p => { p with ty := substSelf p.ty selfTy }
-          let mut cArgs : List CExpr := [cObj]
+          -- The receiver is shaped by the TRAIT's declared form, exactly as a concrete
+          -- receiver is by its method's (Codex round 2 of bug 091): an owned `x: T` calling
+          -- a `&self` / `&mut self` method is borrowed, never passed by value — the impl
+          -- body then mutated a copy and the caller's value never changed.
+          let selfArg := match sig.selfKind, objTy with
+            | some .ref, .ref _ | some .ref, .refMut _ | some .refMut, .refMut _ => cObj
+            | some .ref, _ => CExpr.borrow cObj (.ref objTy)
+            | some .refMut, _ => CExpr.borrowMut cObj (.refMut objTy)
+            | _, _ => cObj
+          let mut cArgs : List CExpr := [selfArg]
           for (arg, p) in args.zip params do
             let cArgEv ← elabExprEv arg (some p.ty)
             cArgs := cArgs ++ [cArgEv.core]

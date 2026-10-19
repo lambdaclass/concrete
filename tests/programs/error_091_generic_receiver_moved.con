@@ -1,0 +1,34 @@
+// Bug 091, Codex round 2: a call through a trait bound applies the TRAIT's
+// receiver form. `consume(self)` moves `x`, so returning `x` afterwards is a
+// use after move (E0205). Before the fix the bound path never consumed the
+// receiver: this compiled and destroyed the one Tracked value TWICE (printed 2).
+mod m {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        pub fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    trait Consume {
+        fn consume(self) with(Alloc);
+    }
+    impl Consume for Tracked {
+        fn consume(self) with(Alloc) {
+            destroy(self);
+        }
+    }
+    fn reuse<T: Consume>(x: T) with(Alloc) -> T {
+        x.consume();
+        return x;
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = reuse::<Tracked>(Tracked { cell: cell });
+        destroy(t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

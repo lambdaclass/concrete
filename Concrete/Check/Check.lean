@@ -64,6 +64,57 @@ def exprPureDiscardable : Expr → Bool
     | _ => exprPureDiscardable l && exprPureDiscardable r
   | _ => false
 
+/-- The receiver form a method signature's leading parameter declares. -/
+def selfKindOfParams (params : List (String × Ty)) : Option SelfKind :=
+  match params.head? with
+  | some ("self", .ref _) => some .ref
+  | some ("self", .refMut _) => some .refMut
+  | some ("self", _) => some .value
+  | _ => none
+
+/-- E0293: the auto-borrowed receiver counts as a borrow of the receiver PLACE. -/
+def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) : List ((String × List String) × Bool) :=
+  match selfKind with
+  | some .ref => (match borrowPathOf obj with | some p => [(p, false)] | none => [])
+  | some .refMut => (match borrowPathOf obj with | some p => [(p, true)] | none => [])
+  | _ => []
+
+/-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed
+    by a trait-bounded type parameter (Codex round 2 of bug 091: the bound path never applied
+    the receiver form, so `x.consume(); return x;` returned an owner its impl had destroyed):
+      * `&self`: never consumes (a shared reference is Copy);
+      * `&mut self`: consumes only a borrow-block exclusive ref (a scoped linear view);
+      * `self`: MOVES the receiver. An owned binding is consumed; a projection, or a
+        reference, leaves the place owning the same value, so a non-Copy receiver there is
+        refused (H11) — moving out through `&T` destroyed a value its owner still held. -/
+def consumeReceiver (selfKind : Option SelfKind) (obj : Expr) (objTy innerTy : Ty)
+    (methodName : String) (span : Option Span) : CheckM Unit := do
+  match selfKind with
+  | some .refMut =>
+    match objTy, obj with
+    | .refMut _, .ident _ varName =>
+      if (← getEnv).borrowRefs.contains varName then consumeVarIfExists varName span
+    | _, _ => pure ()
+  | some .value =>
+    let refused := throwCheck (.nonCopyProjection (tyToString innerTy)
+      s!"place projection (by-value `self` receiver of '{methodName}')") span
+    match objTy with
+    | .ref _ | .refMut _ =>
+      if !(← isCopyType innerTy) then
+        throwCheck (.nonCopyProjection (tyToString innerTy)
+          s!"a reference (by-value `self` receiver of '{methodName}')") span
+    | _ =>
+      match obj with
+      | .ident _ varName => consumeVarIfExists varName span
+      | .fieldAccess _ (.ident _ _) f =>
+        -- `v.0.drop()` on a newtype ident is a whole-owner move: the fieldAccess already
+        -- consumed `v`. Any other field projection leaves the place owning the same value.
+        if f != newtypeFieldName && !(← isCopyType innerTy) then refused
+      | .fieldAccess .. | .arrayIndex .. =>
+        if !(← isCopyType innerTy) then refused
+      | _ => pure ()
+  | _ => pure ()
+
 -- LEAN 4.34.1 `do` ELABORATOR (R-0208 upgrade). 4.34.1 elaborates `do` blocks with a new elaborator
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
 -- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
@@ -1360,12 +1411,18 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- Type check arguments (params in FnSigDef excludes self)
           if args.length != params.length then
             throwCheck (.wrongArgCount s!"method '{methodName}'" params.length args.length) (some e.getSpan)
+          if sig.selfKind.isNone then
+            throwCheckMsg s!"trait method '{foundTrait}::{methodName}' has no `self` receiver and cannot be called as a method"
+          -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
+          -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
+          checkCallBorrowConflicts (receiverBorrowParts sig.selfKind obj ++ (← borrowArgParts args)) (some e.getSpan)
           for (arg, p) in args.zip params do
             let argTy ← checkExpr arg (some p.ty) .callArg
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match arg with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
             | _ => pure ()
+          consumeReceiver sig.selfKind obj objTy innerTy methodName (some e.getSpan)
           return retTy
       | _ => throwCheck .methodCallOnNonNamedType (some e.getSpan)
     else
@@ -1376,14 +1433,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
       -- alias the container through the context and must reject
       -- (container-not-in-context, #18 §5.1).
-      let receiverPart : List ((String × List String) × Bool) :=
-        match sig.params.head? with
-        | some ("self", .ref _) =>
-          (match borrowPathOf obj with | some p => [(p, false)] | none => [])
-        | some ("self", .refMut _) =>
-          (match borrowPathOf obj with | some p => [(p, true)] | none => [])
-        | _ => []
-      checkCallBorrowConflicts (receiverPart ++ (← borrowArgParts args)) (some e.getSpan)
+      checkCallBorrowConflicts (receiverBorrowParts (selfKindOfParams sig.params) obj
+        ++ (← borrowArgParts args)) (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
       let objTypeArgs := match innerTy with
         | .generic _ args _ => args
@@ -1404,44 +1455,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
-      -- Consume the receiver when appropriate:
-      -- - &self: never consume (shared ref is Copy)
-      -- - &mut self: consume only if receiver is a borrow-block exclusive ref
-      --   (function param &mut refs are reborrowable; auto-borrowed values don't consume)
-      -- - self (by value): always consume
-      match sig.params.head? with
-      | some ("self", selfTy) =>
-        match selfTy with
-        | .ref _ => pure ()  -- shared reference: Copy, no consume needed
-        | .refMut _ =>
-          -- Only consume borrow-block refs (scoped linear views into an alloca).
-          match objTy with
-          | .refMut _ =>
-            match obj with
-            | .ident _ varName =>
-              let env ← getEnv
-              if env.borrowRefs.contains varName then
-                consumeVarIfExists varName (some e.getSpan)
-              else pure ()
-            | _ => pure ()
-          | _ => pure ()
-        | _ =>
-          -- Self is by value — this method consumes the receiver
-          match obj with
-          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
-          | .fieldAccess _ (.ident _ _) f =>
-            -- `v.0.drop()` on a newtype ident is a whole-owner move: the
-            -- fieldAccess already consumed `v`. Any other field projection
-            -- leaves the place owning the same value — the H11 rule applies.
-            if f != newtypeFieldName && !(← isCopyType innerTy) then
-              throwCheck (.nonCopyProjection (tyToString innerTy) s!"place projection (by-value `self` receiver of '{methodName}')") (some e.getSpan)
-          | .fieldAccess .. | .arrayIndex .. =>
-            -- H11: a by-value `self` MOVES the receiver, but a projection
-            -- receiver (`w.f.take()`) leaves the place owning the same value.
-            if !(← isCopyType innerTy) then
-              throwCheck (.nonCopyProjection (tyToString innerTy) s!"place projection (by-value `self` receiver of '{methodName}')") (some e.getSpan)
-          | _ => pure ()
-      | _ => pure ()
+      consumeReceiver (selfKindOfParams sig.params) obj objTy innerTy methodName (some e.getSpan)
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>

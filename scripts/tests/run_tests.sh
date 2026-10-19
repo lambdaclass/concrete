@@ -1434,6 +1434,12 @@ run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
 # Codex round 2: a NESTED module's Destroy impl is fenced too (its destructor is
 # `inner_Noisy_destroy`; the fence looked up `Noisy_destroy` and silently passed).
 run_err "$TESTDIR/error_091_nested_destroy_caps.con"        "(E0584)"
+# Codex round 2: a bound call applies the trait's receiver form — by-value `self` moves
+# the receiver (E0205 on reuse), `&self`/`&mut self` borrow an owned receiver (4030412,
+# was 4020410), and by-value `self` through a reference is refused (E0290).
+run_err "$TESTDIR/error_091_generic_receiver_moved.con"     "(E0205)"
+run_err "$TESTDIR/error_091_receiver_through_ref.con"       "(E0290)"
+run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
 # Bug 091 self-review: an impl spelling its own type `Self` in a parameter or return
 # conforms to the trait (was a false E0587 / E0582).
 run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42
