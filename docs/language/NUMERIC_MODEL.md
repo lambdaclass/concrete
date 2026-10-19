@@ -1,6 +1,6 @@
 # Numeric Model (literals, casts, overflow)
 
-Status: CORE-COMPLETE — ROADMAP Phase 6 #6. The de-facto numeric rules are
+Status: CORE-COMPLETE — ROADMAP old Phase 6 #6. The de-facto numeric rules are
 documented and gated here; the soundness footgun (silent out-of-range literal
 truncation) is fixed; the remaining sub-parts are routed to their natural homes
 (overflow profiles → #10 build profiles; lossy-cast and signed/unsigned lints →

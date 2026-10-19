@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
 # EVERY ROADMAP TASK HAS A PLACE IN THE PLAN, AND THE QUEUE AGREES WITH IT.
 #
-# The 2026-10-19 reconciliation found tasks that sat in a phase whose stage did not describe them,
+# The 2026-10-19 reconciliation found tasks filed in an area whose schedule did not describe them,
 # superseded tasks that still read as live, and open work stated only in prose. Its repair gave every
-# `### Task R-NNNN` a **Stage:** line, recorded every non-live task in the reconciliation ledger with
-# the owner that replaces it, and named the owning task in every queue row. This gate keeps that true:
+# `### Task R-NNNN` a **Phase:** line (the execution phases 1-7 were called "stages" until the same
+# day's rename), recorded every non-live task in the reconciliation ledger with the owner that
+# replaces it, and named the owning task in every queue row. This gate keeps that true:
 #
-#   1. every task has a **Stage:** line naming a stage (1-7 or after-1.0/research), or a ledger row,
+#   1. every task has a **Phase:** line naming a phase (1-7 or after-1.0/research), or a ledger row,
 #      or a **Disposition** line giving its retirement/merge reason;
 #   2. every row of the task-disposition table in docs/project/ROADMAP_RECONCILIATION.md (the moved
 #      ledger, linked from ROADMAP's "Reconciliation record") names an existing task (ROADMAP heading
 #      or CHANGELOG `Completed Task`), and every owner it names exists;
 #   3. every queue row names at least one owning task, and every task it names exists, ranges such
 #      as `R-0491–R-0510` included;
-#   4. a task named by a queue row lists that row's stage (from "Roadmap at a glance") in its Stage
-#      line — a task cannot be scheduled by the queue in a stage its own record contradicts;
+#   4. a task named by a queue row lists that row's phase (from the "queue rows" column of "Phases and
+#      releases") in its Phase line — the queue cannot schedule a task in a phase its own record
+#      contradicts;
 #   5. every task body archived in docs/archive/ROADMAP_RETIRED_TASKS.md (a bare `## R-NNNN` section)
 #      has its `### Task R-NNNN` stub in ROADMAP with a **Disposition** line and a link to that
 #      section, and every such link resolves to its own task's archived section.
 #
 # Run with no argument it checks ROADMAP.md with the reconciliation record and then runs its negative
-# controls against temporary copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, a
-# stage that contradicts its queue row, an archived body without its stub and a stub without its archived body
+# controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row naming a missing task or no task, a
+# phase that contradicts its queue row, an archived body without its stub and a stub without its archived body
 # must each fail; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE]]` it checks those files only.
 set -uo pipefail
@@ -68,8 +70,8 @@ for pos, tid in heads:
     m = re.compile(r'^#{2,3} ', re.M).search(road, pos + 1)
     bodies[tid] = road[pos:(m.start() if m else len(road))]
 
-def stages_of(body):
-    m = re.search(r'^\*\*Stage:\*\* (.*)$', body, re.M)
+def phases_of(body):
+    m = re.search(r'^\*\*Phase:\*\* (.*)$', body, re.M)
     if not m: return None
     head = m.group(1).split(' — ')[0]
     st = set(int(d) for d in re.findall(r'(?<![\d.])([1-7])(?![\d.])', head))
@@ -106,26 +108,31 @@ if ledger and not bad: ok(f'{len(ledger)} ledger rows name existing tasks and ow
 unplaced = 0
 for tid in active:
     b = bodies[tid]
-    st = stages_of(b)
-    has_stage = st is not None and (st[0] or st[1])
+    st = phases_of(b)
+    has_phase = st is not None and (st[0] or st[1])
     has_disp = re.search(r'^\*\*Disposition[^*]*\*\*.*(retire|merge|supersed|delegat|done|duplicate)', b, re.M | re.I)
-    if not (has_stage or tid in ledger or has_disp):
-        no(f'{tid} has no stage assignment, ledger disposition or retirement/merge reason'); unplaced += 1
-if not unplaced: ok(f'all {len(active)} tasks have a stage or a recorded disposition')
+    if not (has_phase or tid in ledger or has_disp):
+        no(f'{tid} has no phase assignment, ledger disposition or retirement/merge reason'); unplaced += 1
+if not unplaced: ok(f'all {len(active)} tasks have a phase or a recorded disposition')
 
-# --- queue rows and stage map
-gm = re.search(r'^## Roadmap at a glance$', road, re.M)
-row_stage = {}
+# --- queue rows and phase map ("Phases and releases": one row per phase, a "queue rows" column)
+gm = re.search(r'^## Phases and releases$', road, re.M)
+row_phase = {}
 if gm:
-    for line in road[gm.end():].splitlines():
-        if line.startswith('## '): break
-        m = re.match(r'^\| \*\*(\d)\. [^|]*\*\* \| ([^|]+) \|', line)
-        if m:
-            spec = m.group(2)
+    lines = road[gm.end():].split('\n')
+    end = next((k for k, l in enumerate(lines) if l.startswith('## ')), len(lines))
+    col = None
+    for line in lines[:end]:
+        cells = [c.strip() for c in line.strip().strip('|').split('|')] if line.startswith('|') else []
+        if cells and 'queue rows' in cells:
+            col = cells.index('queue rows'); continue
+        m = re.match(r'^\*\*Phase (\d)\b', cells[0]) if cells else None
+        if m and col is not None and col < len(cells):
+            spec = cells[col]; p = int(m.group(1))
             for a, b in re.findall(r'(\d+)\s*[–-]\s*(\d+)', spec):
-                for k in range(int(a), int(b) + 1): row_stage[k] = int(m.group(1))
-            for k in re.findall(r'(?<![\d–-])(\d+)(?!\s*[–-]|\d)', spec): row_stage.setdefault(int(k), int(m.group(1)))
-if not row_stage: no('could not read the queue-row-to-stage map from "Roadmap at a glance"')
+                for k in range(int(a), int(b) + 1): row_phase[k] = p
+            for k in re.findall(r'(?<![\d–-])(\d+)(?!\s*[–-]|\d)', spec): row_phase.setdefault(int(k), p)
+if not row_phase: no('could not read the queue-row-to-phase map from "Phases and releases"')
 qm = re.search(r'^## The current execution queue$', road, re.M)
 qrows = []
 if qm:
@@ -136,9 +143,9 @@ if qm:
 if not qrows: no('no queue rows found')
 qbad = 0; named = 0
 for order, work in qrows:
-    stage = row_stage.get(order)
-    if stage is None:
-        no(f'queue row {order} has no stage in "Roadmap at a glance"'); qbad += 1; continue
+    phase = row_phase.get(order)
+    if phase is None:
+        no(f'queue row {order} has no phase in "Phases and releases"'); qbad += 1; continue
     tids = expand(work)
     if not tids:
         no(f'queue row {order} names no owning task')
@@ -148,11 +155,11 @@ for order, work in qrows:
         named += 1
         if tid not in active:
             no(f'queue row {order} names nonexistent task {tid}'); qbad += 1; continue
-        st = stages_of(bodies[tid])
-        if st is None or stage not in st[0]:
-            have = sorted(st[0]) if st else 'no Stage line'
-            no(f'{tid}: queue row {order} schedules it in stage {stage}, its Stage line says {have}'); qbad += 1
-if qrows and not qbad: ok(f'{len(qrows)} queue rows name {named} existing tasks, each staged consistently')
+        st = phases_of(bodies[tid])
+        if st is None or phase not in st[0]:
+            have = sorted(st[0]) if st else 'no Phase line'
+            no(f'{tid}: queue row {order} schedules it in Phase {phase}, its Phase line says {have}'); qbad += 1
+if qrows and not qbad: ok(f'{len(qrows)} queue rows name {named} existing tasks, each phased consistently')
 
 # --- archived task bodies <-> roadmap stubs
 sections = re.findall(r'^## (R-\d{4})$', arc, re.M)
@@ -236,21 +243,24 @@ PY
       no "control $1 failed for an unexpected reason"
     fi
   }
-  neg removed_stage \
-    "h='### Task R-0494\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Stage:**'); s=s[:i]+s[j+2:]" \
-    "R-0494 has no stage assignment"
-  neg removed_stage_unscheduled \
-    "h='### Task R-0522\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Stage:**'); s=s[:i]+s[j+2:]" \
-    "R-0522 has no stage assignment"
+  neg removed_phase \
+    "h='### Task R-0494\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
+    "R-0494 has no phase assignment"
+  neg removed_phase_unscheduled \
+    "h='### Task R-0522\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
+    "R-0522 has no phase assignment"
   neg bogus_ledger_id \
     "h='|---|---|---|---|\n| R-'; i=s.index(h)+len('|---|---|---|---|\n'); s=s[:i]+'| R-9999 | merged | R-0494 | control |\n'+s[i:]" \
     "ledger row names missing task R-9999" ledger
   neg queue_missing_task \
     "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-9998)** |')" \
     "names nonexistent task R-9998"
-  neg stage_contradicts_queue \
-    "h='### Task R-0511\n\n**Stage:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Stage:** 6')" \
-    "R-0511: queue row 3 schedules it in stage 2"
+  neg phase_contradicts_queue \
+    "h='### Task R-0511\n\n**Phase:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Phase:** 6')" \
+    "R-0511: queue row 3 schedules it in Phase 2"
+  neg phase_table_row_moved \
+    "old='| 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 4 | V1a and V1b')" \
+    "queue row 3 has no phase"
   neg queue_row_no_owner \
     "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\`** |')" \
     "queue row 9 names no owning task"

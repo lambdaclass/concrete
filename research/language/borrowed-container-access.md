@@ -1,7 +1,7 @@
 # Borrowed Container Access Without Lifetimes
 
 Status: research note, design input for `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md`
-and ROADMAP Phase 7 #8a / Phase 6 #18.
+and ROADMAP old Phase 7 #8a / old Phase 6 #18.
 
 ## Question
 

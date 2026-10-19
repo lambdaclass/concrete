@@ -1,6 +1,6 @@
 # Callable Values and Capability-Polymorphic Callbacks
 
-Status: design checkpoint (ROADMAP Phase 6 #18) — the single model that
+Status: design checkpoint (ROADMAP old Phase 6 #18) — the single model that
 must exist before the Phase 7 stdlib iteration/HOF surface, scoped collection
 callbacks, and the V1.1 immutable-read withdrawal land. This document records
 the *decided* design. Items marked **[implemented]** already hold today; items
@@ -56,7 +56,7 @@ constrain everything below.
    borrowed `&V` / `&mut V` *into* the callback for the duration of the call; the
    combinator returns only owned values (`Option<R>`, counts, etc.). This is the
    same no-aggregate-ref subtraction that fixes H1 (ROADMAP #8a).
-7. **`from(param)` returned references stay deeply deferred** (ROADMAP Phase 7
+7. **`from(param)` returned references stay deeply deferred** (ROADMAP old Phase 7
    #8e). They are not this design's job, not the H1 fix, and not planned unless
    real workloads prove scoped callbacks / owned views insufficient.
 
@@ -280,7 +280,7 @@ chosen, for one decisive reason: it requires the checker to understand that
 `m.get(k)` **returns a reference borrowed from `self`**. That is
 returned-reference provenance — a *minimal* `from(self)` (just "borrows self,"
 with no region variables, inference, or outlives propagation, so far weaker than
-Rust lifetimes) — but it is still the `from()` machinery that ROADMAP Phase 7 #8e
+Rust lifetimes) — but it is still the `from()` machinery that ROADMAP old Phase 7 #8e
 deliberately defers and that H1's whole resolution was designed *not* to depend
 on. Re-opening it to close H1's tail would undo that decision.
 
@@ -293,7 +293,7 @@ This is why `with_value` is the V1.1 mechanism and the borrow block is not.
 ergonomic alternative: borrow-block container projections (`borrow v = m.get(k)
 in 'R { … }`), to be designed **only if `with_value` proves too awkward in real
 code** — evidence-gated, exactly like `from()` itself. `from(self)` /
-returned-reference provenance remains deeply deferred (ROADMAP Phase 7 #8e)
+returned-reference provenance remains deeply deferred (ROADMAP old Phase 7 #8e)
 until such evidence exists. The borrow block, if ever built, is ergonomic syntax for an
 already-proven model, not the first mechanism.
 
@@ -456,7 +456,7 @@ Examples to add under `examples/callbacks/`:
   workload needs it.
 - **No returned references from these APIs** (§1.6). Scoped access yields a
   borrow *into* the callback only.
-- **No `from(param)` returned references** (ROADMAP Phase 7 #8e, deeply
+- **No `from(param)` returned references** (ROADMAP old Phase 7 #8e, deeply
   deferred). Not the H1 fix; H1 is fixed by subtraction + scoped callbacks.
 - **No `view struct … from(Bytes)`** (deferred with the above).
 - **No first-class capability values, no effect handlers, no capability
@@ -494,6 +494,6 @@ Examples to add under `examples/callbacks/`:
   capture nothing.
 - `docs/verification/KNOWN_HOLES.md` — H1 (returned-reference provenance), mutable half
   closed, immutable half withdrawn by §5 here.
-- ROADMAP Phase 6 #18 (this item), Phase 7 #8a / #8e (H1 by subtraction,
+- ROADMAP old Phase 6 #18 (this item), old Phase 7 #8a / #8e (H1 by subtraction,
   `from()` deferred), Phase 6 #17 (iteration), and the completed inference
   through references work that made `&T`-callback ergonomics viable.

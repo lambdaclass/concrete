@@ -1,6 +1,6 @@
 # Tuples — deliberate no-tuples decision (V1)
 
-Status: DECIDED — no anonymous tuples in V1. ROADMAP Phase 6 #5 ("tuple types,
+Status: DECIDED — no anonymous tuples in V1. ROADMAP old Phase 6 #5 ("tuple types,
 or a deliberate no-tuples decision (record which)"). Gated by
 `scripts/tests/check_no_tuples.sh`.
 Date: 2026-06-22

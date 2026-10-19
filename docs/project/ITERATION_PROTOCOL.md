@@ -1,6 +1,6 @@
 # Iteration Protocol
 
-Status: canonical reference — ROADMAP Phase 6 #17.
+Status: canonical reference — ROADMAP old Phase 6 #17.
 
 Concrete has **no `Iterator` trait, no closures, and no trait-object iterator
 protocol**. Traversal is expressed with a small hierarchy of explicit forms,

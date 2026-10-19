@@ -1,6 +1,6 @@
 # Target-Conditional Code Selection
 
-Status: decision — ROADMAP Phase 6 #26.
+Status: decision — ROADMAP old Phase 6 #26.
 
 How does a Concrete project select different code for different targets/profiles
 (OS, arch, freestanding vs hosted, build profile)? This document records the

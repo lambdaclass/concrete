@@ -1,6 +1,6 @@
 # Pipeline stage contracts
 
-ROADMAP Phase 6.5 #3. The compiler is a sequence of stages, each of which
+ROADMAP old Phase 6.5 #3. The compiler is a sequence of stages, each of which
 consumes the previous stage's output and **promises** something to the next.
 This note states those promises explicitly, so the pipeline is *reviewable*:
 every later pass can point to the earlier contract that makes a case

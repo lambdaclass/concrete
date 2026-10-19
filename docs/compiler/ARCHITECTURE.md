@@ -104,7 +104,7 @@ record model (id, span, kind, scoped hypotheses, conclusion, semantic profile,
 allowed engines, status, evidence class, counterexample, replay, policy impact),
 and reports / policies / proof workspaces / audit bundles / codegen gates all
 become views over it. That consolidation is its own work item — see
-[OBLIGATION_CORE.md](../verification/OBLIGATION_CORE.md) and ROADMAP Phase 3 (ObligationCore
+[OBLIGATION_CORE.md](../verification/OBLIGATION_CORE.md) and ROADMAP old Phase 3 (ObligationCore
 Pipeline Consolidation). `OBLIGATION_CORE.md` is canonical for the obligation /
 evidence model; this document and [PASSES.md](PASSES.md) own the front-end pass
 contracts that feed it.
@@ -144,14 +144,14 @@ All artifact boundaries from Resolve onward are load-bearing:
 - `SSAProgram` → currently consumed by Emit; long-term consumed by BackendIR
   lowering, then `ValidatedBackendIR` is consumed by EmitLLVM/native emitters
 
-**Remaining gap:** `Pipeline.resolveFiles` (the IO step that reads `mod X;` sub-module files from disk) returns `ParsedProgram × SourceMap`, not a dedicated artifact type. This means the transition from "parsed single file" to "parsed all files with sub-modules resolved" has no named boundary. The `ParsedProgram` that comes out of `resolveFiles` is structurally the same type as what went in, just with sub-module stubs replaced by their parsed contents. Roadmap Phase 8.5 must make the useful file/module reuse boundary explicit; `ResolvedFilesProgram` is a candidate name, not a pre-decided extra tree.
+**Remaining gap:** `Pipeline.resolveFiles` (the IO step that reads `mod X;` sub-module files from disk) returns `ParsedProgram × SourceMap`, not a dedicated artifact type. This means the transition from "parsed single file" to "parsed all files with sub-modules resolved" has no named boundary. The `ParsedProgram` that comes out of `resolveFiles` is structurally the same type as what went in, just with sub-module stubs replaced by their parsed contents. Roadmap old Phase 8.5 must make the useful file/module reuse boundary explicit; `ResolvedFilesProgram` is a candidate name, not a pre-decided extra tree.
 
 `Pipeline.runFrontend` threads `ResolvedProgram` from Resolve through Check and Elab. Both `checkProgram` and `elabProgram` take `List ResolvedModule` and extract the surface `Module` internally. The `globalScope` in each `ResolvedModule` is available for the scheduled Phase 8.5 incremental driver, where an unchanged file/module should skip re-resolution.
 
 `FileSummary` and `ResolvedImports` still carry full impl/trait-impl bodies because imported method checking and elaboration need them. Splitting interface-only and body-bearing artifacts is a Phase 8.5 prerequisite for avoiding downstream invalidation on dependency-private body edits; Phase 18 later turns the internal split into a stable package format.
 
 The current artifact types are in-process stage boundaries, not serialized
-certificates. Roadmap Phase 6B #14a adds structured producer validation records,
+certificates. Roadmap old Phase 6B #14a adds structured producer validation records,
 Phase 8.5 adds an opaque local artifact/query cache, and Phases 14/15 add the
 separate independent Core/BackendIR certificate checker. Until those items land,
 `ValidatedCore` means the current compiler ran `CoreCheck`; it does not remove

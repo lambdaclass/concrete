@@ -1,6 +1,6 @@
 # Nested patterns — deferred (workload-gated)
 
-Status: DEFERRED — not in V1. ROADMAP Phase 6 #5 (the last open pattern item).
+Status: DEFERRED — not in V1. ROADMAP old Phase 6 #5 (the last open pattern item).
 Gated by `scripts/tests/check_nested_patterns.sh`.
 Date: 2026-06-22
 

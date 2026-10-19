@@ -1,6 +1,6 @@
 # Compiler-Known Target Constants — Decision
 
-Status: decided, implementation deferred — ROADMAP Phase 6 #27.
+Status: decided, implementation deferred — ROADMAP old Phase 6 #27.
 
 Programs sometimes need to know the target (OS, arch, endianness, profile).
 Inspired by Odin's builtin target constants, but Concrete's constraint is that

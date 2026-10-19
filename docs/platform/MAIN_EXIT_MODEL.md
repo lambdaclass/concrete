@@ -58,7 +58,7 @@ matching the echoed compiled output (under the knob) at full width.
 status propagation, 8-bit masking (negative + wide), Unit=0, clean stdout,
 knob works, and the negative (no echo without the knob).
 
-## Stage 2 (designed, not started — ROADMAP Phase 7 follow-up)
+## Stage 2 (designed, not started — ROADMAP old Phase 7 follow-up)
 
 1. Accept `fn main() -> u8` and `fn main()` as THE two entry signatures.
 2. Migrate the differential fuzzer to self-printing wrappers (generated

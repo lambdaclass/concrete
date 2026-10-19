@@ -21,7 +21,7 @@ source body turns the proof stale. Bars met: #1–#10.
 ## Why this example
 
 Fifth candidate; **first cryptographic-primitive flagship**
-per ROADMAP Phase 7 item 5 ("Audit the next stronger
+per ROADMAP old Phase 7 item 5 ("Audit the next stronger
 real-crypto candidate: HMAC-SHA256 verification or Ed25519
 verification subset").  constant_time_tag was the first
 real-crypto flagship; it proved a comparison helper.  This
@@ -464,7 +464,7 @@ These are decided BEFORE bar #1 attempts:
 - `docs/verification/PROOF_STORY_MATRIX.md` — the per-construct matrix
   this candidate moves several cells of from "open" to
   "proved at u32 width".
-- `ROADMAP.md` Phase 7 items 5–7 — the slot this candidate
+- `ROADMAP.md` old Phase 7 items 5–7 — the slot this candidate
   fills.
 - **RFC 2104** — HMAC: Keyed-Hashing for Message
   Authentication.

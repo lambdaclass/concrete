@@ -4,7 +4,7 @@ Date: 2026-07-09
 Status: objective design record. The Check/Elab `TypeJudgment` migration is
 still ahead; `CompilerDB` remains future infrastructure pulled by relational
 facts.
-Roadmap: Phase 6.5 #9 ≡ Phase 14 #13b (the two items collapse into this arc).
+Roadmap: old Phase 6.5 #9 ≡ old Phase 14 #13b (the two items collapse into this arc).
 Research backing: [pipeline-lessons-2026-07.md](pipeline-lessons-2026-07.md).
 
 This is the target architecture for the type/ownership/capability/proof axes,

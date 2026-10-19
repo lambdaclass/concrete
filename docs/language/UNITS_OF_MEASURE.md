@@ -1,6 +1,6 @@
 # Units of Measure / Dimensional Annotations — Decision
 
-Status: evaluated, deferred (no units in v1) — ROADMAP Phase 6 #15.
+Status: evaluated, deferred (no units in v1) — ROADMAP old Phase 6 #15.
 
 Units-of-measure annotations (bytes vs bits, ms vs s, block-count vs byte-offset,
 protocol-length, memory-size) would catch a real class of systems mistakes. This

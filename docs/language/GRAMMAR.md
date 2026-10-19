@@ -1,6 +1,6 @@
 # Grammar Reference
 
-Status: pointer + reference — ROADMAP Phase 6 #2. The canonical grammar is the
+Status: pointer + reference — ROADMAP old Phase 6 #2. The canonical grammar is the
 EBNF file; this page indexes it and the surrounding syntax facts.
 
 ## Canonical grammar

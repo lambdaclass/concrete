@@ -3,6 +3,12 @@
 Status: historical record — read by `scripts/tests/check_roadmap_coverage.sh`.
 Date: 2026-10-19
 
+> **Vocabulary after the same day's rename:** the seven execution *stages* named in this record are the
+> roadmap's **Phases 1 – 7**, and a task's **Stage:** line is now its **Phase:** line. The topical
+> sections it calls "Phase 7" to "Phase 20" are now *areas* (`## Area: …`); the roadmap's
+> [Where every area fits](../../ROADMAP.md#where-every-area-fits) table maps each old phase number to its area.
+> The record below is kept as written.
+
 The 2026-10-19 reconciliation mapped every task heading and every open-work prose item in
 [ROADMAP.md](../../ROADMAP.md) onto the seven stages, the
 [verified-compiler plan](../compiler/VERIFIED_PIPELINE.md) and the Lean Compiler Backend decision

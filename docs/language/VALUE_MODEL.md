@@ -77,7 +77,7 @@ API (`update`, `remove`) or a scoped mutable callback; for cheap `Copy` data,
 return **by value**. Low-level code may return a **raw pointer** (`*const T` /
 `*mut T`, deref requires `Unsafe`, audit-visible) — never a `&T`. `from(param)`
 (returned-reference provenance) stays deeply deferred and evidence-gated
-(ROADMAP Phase 7 #8e).
+(ROADMAP old Phase 7 #8e).
 
 Comparison: Austral permits references as values tracked by *regions*
 (`Reference[T, R]`); Concrete is deliberately stricter — it removes the
@@ -89,7 +89,7 @@ escape valve if real workloads ever prove the restriction too costly.
 ## The four-cell value model (Copy / Clone / Move / Borrow)
 
 Duplication and ownership transfer fall into four explicit, distinct cells.
-This frames the *possible* design of `Clone` (see ROADMAP Phase 7 #1a) — and
+This frames the *possible* design of `Clone` (see ROADMAP old Phase 7 #1a) — and
 the deliberate decision NOT to treat it as foundational language machinery:
 
 | Cell | Meaning | Status | Visibility |

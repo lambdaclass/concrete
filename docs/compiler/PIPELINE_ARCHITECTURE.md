@@ -93,7 +93,7 @@ Each judgment module must satisfy the same contract:
 - obeys the fact-home rule: node-local structural facts are typed-IR fields;
   relational, cross-node, cross-stage, provenance, evidence, and query facts
   live in `CompilerDB` when that DB is pulled by Phase 6B consumers and becomes
-  the persistent incremental driver in Roadmap Phase 8.5.
+  the persistent incremental driver in Roadmap old Phase 8.5.
 
 The practical purity rule belongs to this same pattern. Once capability
 judgment can prove an expression is pure, trap-free/total, and returns
@@ -183,7 +183,7 @@ rather than adding it:
 6. Record the prospective query/dependency graph in Phase 6C shadow mode while
    still recomputing the batch pipeline; use real Phase 8 edit traces to test
    invalidation completeness.
-7. Only after the Phase 8 external-validation verdict is GO, implement Roadmap
+7. Only after the old Phase 8 external-validation verdict is GO, implement Roadmap
    Phase 8.5's persistent `CompilerSession`, conservative query engine, local
    content-addressed store, and codegen-unit cache. Phase 14/15 then add the
    independent Core and BackendIR certificate checkers over those canonical
@@ -235,6 +235,6 @@ principles are checkable:
   typed boundaries/producer validation records where they exist and by
   pass-agreement gates elsewhere
   (items #2, #3, #5, #9); mutation testing proves each gate is load-bearing
-  (item #22). Independent certificate claims begin later in Roadmap Phase 14;
+  (item #22). Independent certificate claims begin later in Roadmap old Phase 14;
   this document does not use `certificate` as a synonym for an in-process stage
   token.

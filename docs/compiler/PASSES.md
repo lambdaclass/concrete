@@ -592,7 +592,7 @@ Source Text
 `Pipeline.runFrontend` composes the shared prefix (parse → resolveFiles → buildSummary → resolve → check → elaborate → coreCheck) used by all CLI entry points.
 
 This diagram is the current eager implementation, not the final operational
-driver. Roadmap Phase 6C first records the same stage/fact dependencies in
+driver. Roadmap old Phase 6C first records the same stage/fact dependencies in
 cache-free shadow manifests. Conditional Phase 8.5 then makes file/module/
 function-SCC/mono/codegen-unit/project artifacts demand-driven through one
 `CompilerSession`, with a local content-addressed store and clean/incremental

@@ -9,7 +9,7 @@ This document defines the direction for formatting and text output in Concrete b
 
 For encoding rules, see [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
 For stdlib direction, see [STDLIB.md](../stdlib/STDLIB.md). For the current
-roadmap contract, see Phase 7 items 14a/14b in [ROADMAP.md](../../ROADMAP.md):
+roadmap contract, see old Phase 7 items 14a/14b in [ROADMAP.md](../../ROADMAP.md):
 formatting targets a `Writer`, and user-defined rendering is an explicit
 static `write_to` / `format_into` convention, not a trait-object `Display`
 surface.

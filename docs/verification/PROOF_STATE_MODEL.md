@@ -1,6 +1,6 @@
 # ProofCore State Model
 
-Status: design proposal (compiler soundness bridge input; see ROADMAP Phase 10).
+Status: design proposal (compiler soundness bridge input; see ROADMAP old Phase 10).
 
 This document fixes how `PExpr` and `eval` model state for mutation,
 arrays, structs, loops, and failure.  It is the guiding contract for

@@ -1,7 +1,7 @@
 # Creating a project
 
 Concrete projects are plain directories — there is no generator command (a
-`concrete new` scaffolding command is roadmap Phase 18 work, not implemented
+`concrete new` scaffolding command is roadmap old Phase 18 work, not implemented
 today). Create the two files by hand:
 
 ```bash

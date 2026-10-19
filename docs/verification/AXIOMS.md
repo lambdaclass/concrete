@@ -4,7 +4,7 @@
 file names the **proof-layer** trust boundary: what a theorem backing a
 `proved_by_lean` / `proved_by_kernel_decision` fact actually depends on,
 checked mechanically by `scripts/tests/check_axiom_inventory.sh`
-(ROADMAP Phase 10 #16). The gate runs `#print axioms` over every theorem
+(ROADMAP old Phase 10 #16). The gate runs `#print axioms` over every theorem
 named by a `#[proof_by(...)]` attribute and fails on anything not
 documented here.
 
@@ -107,7 +107,7 @@ gate's scope.
 - `sorryAx` — an incomplete proof can never back evidence. Gate fails hard.
 - Any user-declared `axiom` — Concrete's proof layer declares none, and the
   gate keeps it that way. (The planned float profile will introduce a named
-  trusted axiom layer, `float_semantics_trusted` — see ROADMAP Phase 11;
+  trusted axiom layer, `float_semantics_trusted` — see ROADMAP old Phase 11;
   when it lands it becomes a Tier 1-style named entry here, not a silent
   allowlist widening.)
 
@@ -192,7 +192,7 @@ evidence chain are trusted without a theorem at all; they are the deeper
 items, tracked in the ROADMAP, not silently assumed here:
 
 - **Core→PExpr extraction preservation** — per-rule theorems in progress
-  (ROADMAP Phase 12, R-01…R-28). Until complete, "the extracted body" is
+  (ROADMAP old Phase 12, R-01…R-28). Until complete, "the extracted body" is
   trusted to represent the Core IR.
 - **PExpr evaluator** — `partial def eval`; its agreement with the
   interpreter and compiled code is tested, not proved (Phase 12).

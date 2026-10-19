@@ -2,7 +2,7 @@
 
 Status: audit
 Date: 2026-06-17
-Scope: ROADMAP Phase 4 items #1–#45, audited against code + gates (parallel mapping,
+Scope: ROADMAP old Phase 4 items #1–#45, audited against code + gates (parallel mapping,
 risk items verified by hand).
 
 ## Purpose
@@ -117,7 +117,7 @@ Reconciliation: add a status line per top-level item (done in this pass).
 Because **no active risk exists**, the choice is workload-driven / value-driven, not
 risk-driven. Ranked:
 
-1. **Reconcile the ROADMAP Phase 4 markers** — DONE alongside this audit (cheap,
+1. **Reconcile the ROADMAP old Phase 4 markers** — DONE alongside this audit (cheap,
    high-value — stops the recurring "untracked partially-done phase" trap).
 2. **#44 docs-drift gate** — DONE 2026-06-17 (`scripts/tests/check_docs_drift.sh`,
    Makefile + CI). Robust grep-pinned core: present-tense docs (CLAIMS_TODAY,

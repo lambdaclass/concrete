@@ -1,6 +1,6 @@
 # Pre/Post Conditions: Should Concrete Add Refinement Types or Contracts?
 
-**Status:** Decided — not on the roadmap. Revisit at Phase 12+ only if the simpler system proves insufficient.
+**Status:** Decided — not on the roadmap. Revisit at old Phase 12+ only if the simpler system proves insufficient.
 **Affects:** Language design, Phase 11 (kernel formalization), verification scope
 **Date:** 2026-03-07
 

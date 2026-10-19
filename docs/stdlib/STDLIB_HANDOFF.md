@@ -1,6 +1,6 @@
 # Stdlib Handoff Contract (Phase 6 → Phase 7)
 
-Status: handoff contract — ROADMAP Phase 6 #19.
+Status: handoff contract — ROADMAP old Phase 6 #19.
 
 Phases 5–6 decide the *language surfaces* the standard library depends on; the
 actual library APIs are built in the dedicated stdlib phase (Phase 7). This
@@ -14,7 +14,7 @@ a checked claim, not an aspiration.
   Phase 7 may build on it directly; a breaking change must update both the gate
   and this contract.
 - **`provisional_with_gate`** — the surface works and is gated, but some part of
-  its design is deliberately deferred (tracked by a ROADMAP item). Phase 7 may
+  its design is deliberately deferred (tracked by a ROADMAP item). old Phase 7 may
   use it within the documented bounds; the deferred part is named so stdlib APIs
   don't assume it.
 - **`blocked`** — the surface is not usable yet. **Phase 7 may not start while

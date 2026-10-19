@@ -71,5 +71,5 @@ bash examples/parse_validate/oracle/run_oracle.sh 42
 - `examples/parse_validate/AUDIT.md` — graduation bar #5.
 - `tests/oracle/` — the Phase A semantic oracle (compiled vs
   `--interp`) at the project scope.
-- Phase 1 D.6 / D.9 in `ROADMAP.md` — property-based and metamorphic
+- old Phase 1 D.6 / D.9 in `ROADMAP.md` — property-based and metamorphic
   testing as broader infrastructure.

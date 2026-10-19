@@ -17,7 +17,7 @@ file's declared values match the compiler's actual output. If the
 source drifts outside the assumed surface (e.g. someone adds an
 allocation, or pulls in a capability), the gate fails.
 
-Roadmap reference: Phase 2 E.24.
+Roadmap reference: old Phase 2 E.24.
 
 ## Where the file lives
 

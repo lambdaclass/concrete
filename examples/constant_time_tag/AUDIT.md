@@ -313,7 +313,7 @@ disproportionate to its size:
   the first time Concrete explicitly says "this proof
   doesn't cover machine-level timing."  That gap should be
   visible to readers and motivate the eventual target-model
-  / timing-evidence work (ROADMAP Phase 3, Phase 5).
+  / timing-evidence work (ROADMAP old Phase 3, old Phase 5).
 
 ## 9. Suggested first pilot batch
 
@@ -364,5 +364,5 @@ one row at a time:
 - `docs/verification/PROOF_STATE_MODEL.md` — the state model whose
   multi-iteration while_step the composition theorem here
   will exercise.
-- `ROADMAP.md` Phase 7 item 8 — the explicit real-crypto
+- `ROADMAP.md` old Phase 7 item 8 — the explicit real-crypto
   flagship slot this candidate begins filling.

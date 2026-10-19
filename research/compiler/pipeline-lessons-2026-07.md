@@ -7,7 +7,7 @@ especially the comparison against Zig, Odin, Gleam, Rust, MLIR, Hylo, Austral,
 Koka/Lean Perceus, Vale, and Roc.
 
 It is not a second roadmap. The roadmap stays linear. This document is the
-research backing for the relevant roadmap items, especially Phase 6.5
+research backing for the relevant roadmap items, especially old Phase 6.5
 (`Compiler Pipeline Refactor And Invariant Hardening`), Phase 9 (proof
 automation), Phase 14 (compiler soundness bridge), Phase 19 (editor/tooling),
 and Phase 20 (research-gated extensions).
@@ -488,7 +488,7 @@ expressions:
 - borrow/place contexts never consume;
 - call arguments obey parameter-directed pass agreement.
 
-Roadmap fit: Phase 6.5 value-flow / stage-contract work, or Phase 14 if it
+Roadmap fit: old Phase 6.5 value-flow / stage-contract work, or old Phase 14 if it
 becomes part of typed preservation.
 
 ### 2. Stable Interned IDs / Fact Interning
@@ -513,7 +513,7 @@ Rules:
 - IDs used in caches must be stable across unrelated edits where possible.
 - Human reports show source names; internal artifacts use stable IDs.
 
-Roadmap fit: Phase 6.5 #11, #16/#17, #23; Phase 18 package evidence; Phase 19
+Roadmap fit: old Phase 6.5 #11, #16/#17, #23; old Phase 18 package evidence; old Phase 19
 editor tooling.
 
 ### 3. Fingerprint-Keyed Incremental Verification Cache
@@ -540,7 +540,7 @@ serialization: stable schema versions, explicit IDs, normalized ordering, and no
 temp paths or host-dependent formatting. Hashing is easy; making the artifact
 canonical enough that the hash is meaningful is the hard part.
 
-Roadmap fit: Phase 9 proof cache / synthesis; Phase 11 proof-status drift;
+Roadmap fit: old Phase 9 proof cache / synthesis; old Phase 11 proof-status drift;
 Phase 18 package evidence; Phase 19 editor responsiveness.
 
 ### 4. Analysis Preservation / Invalidation Contracts
@@ -556,7 +556,7 @@ Once Concrete caches analyses or query results, every pass needs a contract:
 This is the MLIR/rustc lesson. Without it, caching becomes another second truth
 source.
 
-Roadmap fit: after Phase 6.5 #3/#4, before serious incremental/LSP caching.
+Roadmap fit: after old Phase 6.5 #3/#4, before serious incremental/LSP caching.
 
 ### 5. Query/Facts Dependency Graph
 
@@ -580,7 +580,7 @@ This does not replace the batch pipeline during Phase 6B. Phase 6C first records
 the edges as cache-free trace/replay metadata; conditional Phase 8.5 turns the
 validated graph into the demand-driven query engine after the external GO gate.
 
-Roadmap fit: Phase 6B dependency/invalidation contracts, Phase 6C shadow graph,
+Roadmap fit: old Phase 6B dependency/invalidation contracts, old Phase 6C shadow graph,
 Phase 8.5 engine, and Phase 19 editor tooling.
 
 ## Garnet — Convergent Capability/Evidence Project (`diff-caps`)
@@ -601,7 +601,7 @@ is the gate and is deliberately minimal + byte-stable: exit `0` = no expansion,
 `1` = authority expanded (review the delta), `2` = usage/parse error; a
 `--machine` deterministic schema-versioned single-line JSON verdict with
 identical exit codes; scoped to the declared capability surface ONLY (no
-other-axis claim, and it says so). Recorded as ROADMAP Phase 6.5 #4 `diff-caps`
+other-axis claim, and it says so). Recorded as ROADMAP old Phase 6.5 #4 `diff-caps`
 slice, generalizing to `diff-evidence` (cap / trust / proof / evidence-class
 deltas) when pulled — Concrete has more evidence axes than Garnet, so the
 generalized delta is a strictly stronger agent-review story than caps-only.

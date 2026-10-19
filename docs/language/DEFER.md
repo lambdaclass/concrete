@@ -1,6 +1,6 @@
 # Resource Cleanup: `defer`
 
-Status: CORE-COMPLETE — ROADMAP Phase 6 #7. The `defer <call>;` form and its
+Status: CORE-COMPLETE — ROADMAP old Phase 6 #7. The `defer <call>;` form and its
 cleanup semantics are implemented and gated (`scripts/tests/check_defer.sh`,
 `examples/defer/cleanup_order/`); the open edges (block-form body, failure during
 cleanup, and normal-call argument coercions) are documented below.

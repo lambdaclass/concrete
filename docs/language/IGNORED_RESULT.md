@@ -1,6 +1,6 @@
 # Ignored-Result Diagnostics
 
-Status: implemented + gated (ROADMAP Phase 6 #13).
+Status: implemented + gated (ROADMAP old Phase 6 #13).
 
 ## What it is
 
@@ -115,4 +115,4 @@ impossible, not merely discouraged.
 
 The future error-set report (`--report error-sets`) is required to keep these
 diagnostics firing: accumulating the error variants of `Result`-heavy code must
-not weaken the discard rule. See ROADMAP Phase 6 #14.
+not weaken the discard rule. See ROADMAP old Phase 6 #14.

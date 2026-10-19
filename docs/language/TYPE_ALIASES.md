@@ -1,6 +1,6 @@
 # Type Aliases
 
-Status: IMPLEMENTED — ROADMAP Phase 6 #3. Gated by
+Status: IMPLEMENTED — ROADMAP old Phase 6 #3. Gated by
 `scripts/tests/check_type_alias.sh` (fixtures in `tests/programs/type_alias/`).
 Date: 2026-06-22
 

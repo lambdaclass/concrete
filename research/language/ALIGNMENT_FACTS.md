@@ -1,6 +1,6 @@
 # Alignment Facts
 
-Status: design analysis / not implemented. Tracked by ROADMAP Phase 15 #6a.
+Status: design analysis / not implemented. Tracked by ROADMAP old Phase 15 #6a.
 
 Question: should Concrete make alignment first-class, and if so should it be
 part of the type system?

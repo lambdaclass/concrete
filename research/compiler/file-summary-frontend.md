@@ -99,7 +99,7 @@ The summary-based frontend is now implemented. Here is what landed:
 
 ### "Done enough" criteria met
 
-1. `FileSummary` is the single cross-file interface artifact — all passes consume it rather than rebuilding views from raw ASTs. **Caveat:** FileSummary and ResolvedImports carry full impl/trait-impl blocks with method bodies (not just signatures) because Check and Elab need them for cross-module method type-checking and elaboration. Conditional Roadmap Phase 8.5 owns the interface/body split needed for incremental reuse.
+1. `FileSummary` is the single cross-file interface artifact — all passes consume it rather than rebuilding views from raw ASTs. **Caveat:** FileSummary and ResolvedImports carry full impl/trait-impl blocks with method bodies (not just signatures) because Check and Elab need them for cross-module method type-checking and elaboration. Conditional Roadmap old Phase 8.5 owns the interface/body split needed for incremental reuse.
 2. `ResolvedImports` is an explicit stable artifact (documented, not ad hoc)
 3. No early pass rebuilds import/export/signature views ad hoc
 4. Resolve is purely shallow/interface-oriented
@@ -107,7 +107,7 @@ The summary-based frontend is now implemented. Here is what landed:
 6. CoreCheck owns all post-elaboration legality rules
 7. The artifact flow is explicit in the pipeline
 
-### What remains for Roadmap Phase 8.5
+### What remains for Roadmap old Phase 8.5
 
 - Split `FileSummary` into interface-only and body portions (currently carries `implBlocks`/`traitImpls` for Elab)
 - Cache summaries by file content hash

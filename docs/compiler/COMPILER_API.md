@@ -1,6 +1,6 @@
 # Compiler-internal API boundary (V1)
 
-Status: **V1 — enforced by `scripts/tests/check_compiler_api_boundary.sh`** (ROADMAP Phase 4 #16).
+Status: **V1 — enforced by `scripts/tests/check_compiler_api_boundary.sh`** (ROADMAP old Phase 4 #16).
 
 External consumers — editor/LSP integrations, MCP servers, package tooling, and
 anything outside the compiler proper — must depend on a small, stable **boundary**

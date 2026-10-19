@@ -2,7 +2,7 @@
 
 Status: research note, not a committed design.
 
-Roadmap reference: Phase 16 research-gated extensions.
+Roadmap reference: old Phase 16 research-gated extensions.
 
 ## Why this exists
 

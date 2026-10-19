@@ -1,6 +1,6 @@
 # ProofCore Pass Contracts and Phase 10 Obligations Register
 
-Status: contract document (compiler soundness bridge input; see ROADMAP Phase 14).
+Status: contract document (compiler soundness bridge input; see ROADMAP old Phase 14).
 
 This document is the **per-rule register** of the ProofCore extraction
 surface.  For every PExpr construct, evaluator rule,
@@ -678,5 +678,5 @@ signal.
 - `CHANGELOG.md` — the chronological narrative of how each
   rule landed.  Pair this register with CHANGELOG entries for
   full context.
-- `ROADMAP.md` Phase 12 — the formalization track that will
+- `ROADMAP.md` old Phase 12 — the formalization track that will
   eventually discharge every obligation here.

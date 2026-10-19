@@ -32,7 +32,7 @@ how this file went stale last time.
 ## Phase 3: ObligationCore Pipeline Consolidation — CLOSED (core-complete, 2026-06-20)
 
 Audited and closed; see [PHASE3_OBLIGATION_CORE_AUDIT.md](../verification/PHASE3_OBLIGATION_CORE_AUDIT.md)
-and the ROADMAP Phase 3 CLOSED banner. The hub is the single truth source for
+and the ROADMAP old Phase 3 CLOSED banner. The hub is the single truth source for
 policy, `--report vcs`, `--report obligation-ledger`, obligation JSON, the audit
 VC summary, and `--report contracts`; records unified, `ofVC` lossless; families
 #4–#11 (incl. assert/assume/vacuity, #8) in the ledger; discharge-adapter firewall
@@ -45,7 +45,7 @@ facts from consistency-gated recompute to literal ledger views (#15/#16 tail).
 ## Phase 4: CompilerLedger Pipeline And Typed IR — CLOSED (core-complete, 2026-06-20)
 
 Audited and closed; see [PHASE4_COMPILER_LEDGER_AUDIT.md](../verification/PHASE4_COMPILER_LEDGER_AUDIT.md)
-and the ROADMAP Phase 4 CLOSED banner. Core #1–#17 done and gated; the audit
+and the ROADMAP old Phase 4 CLOSED banner. Core #1–#17 done and gated; the audit
 verified **no active soundness or dual-truth-source risk** in the open tail.
 
 **Deferred (workload-gated #18–#45, build only when a real workload pulls it):**
@@ -138,7 +138,7 @@ require explicit unfreezing per `docs/stdlib/STDLIB_SURFACE_FREEZE.md`.
 The old "Phase 4: Tooling, Tests, Wrong-Code Corpus", "Phase 5: Performance,
 Artifacts, Contract", "Phase 6: Release Credibility, Showcase", and "Phase 7:
 Proof Expansion, Provable Subset" checklists are superseded by the current
-ROADMAP's Phase 4 (pipeline + tooling items #30-#43), Phase 7 (flagships),
+ROADMAP's old Phase 4 (pipeline + tooling items #30-#43), old Phase 7 (flagships),
 Phase 8 (proof authoring), and Phase 16 (public release bar). Their stale
 status lines ("0/12 done") predated the formatter, fuzzers, wrong-code corpus,
 and reducer that have since shipped; consult ROADMAP.md and CHANGELOG.md for

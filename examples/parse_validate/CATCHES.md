@@ -74,4 +74,4 @@ fails with the wrong error — fails the gate.
 - `docs/project/POLICY_FILES.md` — the `[policy]` section that this case
   enforces by demonstration.
 - `docs/verification/ASSUMPTION_FILES.md` — assumption-file sibling.
-- ROADMAP Phase 1 (Hardening) item on first-class negative examples.
+- ROADMAP old Phase 1 (Hardening) item on first-class negative examples.

@@ -1,6 +1,6 @@
 # Concrete Style Guide
 
-Status: guidance — ROADMAP Phase 6 #16.
+Status: guidance — ROADMAP old Phase 6 #16.
 
 Mechanical layout (indentation, spacing, wrapping, trailing commas) is **not a
 matter of taste in Concrete**: it is owned by `concrete fmt`. Run it; do not hand-

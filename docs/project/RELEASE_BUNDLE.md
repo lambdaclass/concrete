@@ -18,7 +18,7 @@ Sibling to `docs/project/BUG_BUNDLE.md`:
   flagships). It carries the evidence that justifies the example's
   claims.
 
-Roadmap reference: Phase 7 / Phase 8.
+Roadmap reference: old Phase 7 / old Phase 8.
 
 ## Where the bundle lives
 

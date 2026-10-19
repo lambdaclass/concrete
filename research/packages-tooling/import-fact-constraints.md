@@ -1,6 +1,6 @@
 # Import Fact Constraints
 
-Status: research note, design input for ROADMAP Phase 17.
+Status: research note, design input for ROADMAP old Phase 17.
 
 ## Thesis
 
@@ -172,6 +172,6 @@ It should prove:
 
 - `research/packages-tooling/authority-budgets.md` covers package/subsystem
   authority ceilings.
-- ROADMAP Phase 17 #15 covers evidence-typed imports.
+- ROADMAP old Phase 17 #15 covers evidence-typed imports.
 - This note connects them: imports are both evidence boundaries and authority
   boundaries, and eventually general fact boundaries.

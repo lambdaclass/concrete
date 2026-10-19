@@ -2,7 +2,7 @@
 
 Status: audit
 Date: 2026-06-15
-Scope: ROADMAP Phase 3 items #1–#19, audited against the code and gate suite.
+Scope: ROADMAP old Phase 3 items #1–#19, audited against the code and gate suite.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Phase 3's goal is **one typed obligation ledger** (`ObligationCore`) that every
 proof / contract / runtime-safety / assertion / SMT / policy / audit / report /
 prove surface reads from, so no two surfaces can classify the same fact
 differently. This document records the *actual* state of that migration, because
-the ROADMAP Phase 3 prose has drifted from the code (see "Stale ROADMAP findings"
+the ROADMAP old Phase 3 prose has drifted from the code (see "Stale ROADMAP findings"
 below) — a spec-vs-code dual-truth-source that is itself the class of problem
 Phase 3 exists to kill.
 
@@ -145,7 +145,7 @@ Neither blocks the structural conclusions below.
    sets by engine; byte-identical, locked by `check_contracts_ledger_parity.sh`
    + the single-truth source guard. (The parity gate, landed 2026-06-15, also
    fixed a real call-site vocabulary drift.)
-2. **Reconcile the ROADMAP Phase 3 prose** (done 2026-06-15/16) so the spec stops
+2. **Reconcile the ROADMAP old Phase 3 prose** (done 2026-06-15/16) so the spec stops
    being a second truth source about the truth-source migration. (#13 was found
    already done — gate `check_discharge_adapters.sh`; no new gate needed.)
 3. **Remaining:** convert `--report proof-status` and `concrete prove` from

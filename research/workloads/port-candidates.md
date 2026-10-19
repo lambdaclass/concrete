@@ -8,7 +8,7 @@ analysis that decides which roadmap item owns each. It exists so the port ladder
 (`Task R-0134`) can admit one port at a time against a named forcing claim
 instead of re-litigating candidate choice each time a tier opens.
 
-The roadmap items that own this inventory are `Task R-0449` (Phase 8, the port
+The roadmap items that own this inventory are `Task R-0449` (old Phase 8, the port
 set and the admission rule), `Task R-0450` (Phase 8, the X.509 security
 flagship), `Task R-0451` (Phase 11, the SAT/DRAT trust item), `Task R-0452`
 (Phase 13, the obligation-density port), and `Task R-0453` (Phase 16, the

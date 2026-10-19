@@ -1,6 +1,6 @@
 # parse_validate — Pilot Audit
 
-Status: pull-through pilot per ROADMAP Active Dependency Order rule 2. Not a Phase 7 entry yet; this audit lists the gaps that need to close before it can graduate.
+Status: pull-through pilot per ROADMAP Active Dependency Order rule 2. Not a old Phase 7 entry yet; this audit lists the gaps that need to close before it can graduate.
 
 ## 1. Current behavior and oracle
 
@@ -113,7 +113,7 @@ Pure, no calls, no loops, no allocation. Trivially eligible. The natural propert
 
 1. **Extend ProofCore.** Add support for "if without else" in `Core → ProofCore` extraction. This is the right path for the pilot to *force* — it's a real Phase 4 gap the pilot is supposed to surface. Cost: extend `Concrete/ProofCore.lean` extractor, add a regression test, surface in proof-status.
 
-2. **Rewrite the source.** Convert each validator to use `if-else` returning a value. Cheaper, but papers over a real ProofCore gap that other flagships will hit too. **Do not do this** without first opening the Phase 4 item — that would violate the "pilot does not paper over gaps" rule in ROADMAP Active Dependency Order rule 2.
+2. **Rewrite the source.** Convert each validator to use `if-else` returning a value. Cheaper, but papers over a real ProofCore gap that other flagships will hit too. **Do not do this** without first opening the old Phase 4 item — that would violate the "pilot does not paper over gaps" rule in ROADMAP Active Dependency Order rule 2.
 
 Decision deferred to next commit: open Phase 4.2 with this case as the forcing repro, then attach the `validate_version` theorem once extraction works.
 
@@ -195,7 +195,7 @@ Each commit closes one bar above. After all 10 bars close, parse_validate gradua
 
 ## See also
 
-- `ROADMAP.md` — Active Dependency Order rule 2 (the pilot rule); Phase 7 header (pilot vs flagship distinction).
+- `ROADMAP.md` — Active Dependency Order rule 2 (the pilot rule); old Phase 7 header (pilot vs flagship distinction).
 - `tests/oracle/vectors.txt` — already wired.
 - `scripts/tests/run_tests.sh` — `parsevalidate` section.
 - `tests/wrong-code/cases/WC-0004.md` — historical reference; the dominator bug was originally found in this example's accumulator style and forced the early-return rewrite that ships today.

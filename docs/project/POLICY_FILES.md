@@ -9,7 +9,7 @@ The CI gate (`make test-policy`) compiles the project, runs the
 relevant reports, and asserts every policy is met. Violating a
 policy fails CI.
 
-Roadmap reference: Phase 2 E.25.
+Roadmap reference: old Phase 2 E.25.
 
 ## Policy vs. assumption
 

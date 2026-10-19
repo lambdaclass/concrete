@@ -1,7 +1,7 @@
 # base64_cli — friction log (Phase 7, workload 1)
 
 The first workload program: build first, record every friction point, implement
-only what the workload actually pulls. Rules of engagement in ROADMAP Phase 7.
+only what the workload actually pulls. Rules of engagement in ROADMAP old Phase 7.
 
 Verified against system `base64`: fixed vectors ("", "a", "ab", "abc", "abcd",
 "hello world", multibyte UTF-8) + 40 random round-trips, encode and decode,

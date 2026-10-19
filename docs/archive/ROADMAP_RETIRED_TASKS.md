@@ -5,7 +5,8 @@ Status: archive — the bodies of done, superseded, merged, retired and delegate
 Source: `ROADMAP.md` at commit `a159c489` (2026-10-19), moved verbatim; only heading levels and relative
 links were adjusted for this location.
 
-Each task keeps a stub in the roadmap — its `### Task R-NNNN` heading, **Stage:**, **Disposition:**
+Each task keeps a stub in the roadmap — its `### Task R-NNNN` heading, **Phase:** (called **Stage:**
+when these bodies were moved), **Disposition:**
 and **Objective:** lines, and a link here. This file declares no task: each section below is headed
 by the bare task ID, so every ID is still declared exactly once, in the roadmap.
 `scripts/tests/check_roadmap_coverage.sh` checks that every section here has its stub and every stub

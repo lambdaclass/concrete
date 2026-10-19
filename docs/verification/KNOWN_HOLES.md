@@ -729,7 +729,7 @@ fixed linear struct destructure (was a fail-closed E0208 over-rejection); see
 (`match e { E::A { t } => { } }`) — and not consumed before that scope exited used
 to leak: the branch/arm merge dropped the local before the function-level
 `checkScopeExit` ran, so it was never seen. Closed by the three pieces the H6
-thread always pointed at (ROADMAP Phase 6 #13a), in `Concrete/Check/Check.lean`:
+thread always pointed at (ROADMAP old Phase 6 #13a), in `Concrete/Check/Check.lean`:
 
 1. **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is
    consumed; no-op for Copy sources, incl. `&T`). Before, a bare-ident let-RHS only
@@ -1044,7 +1044,7 @@ corrupt any FFI/protocol/serialization enum (and made duplicate discriminants
 `A = 1, B = 1` "compile" because both were discarded). Now rejected at parse
 time (E0001) with a hint pointing at the planned feature.
 - **Locked by:** `tests/programs/error_enum_explicit_discriminant.con`.
-- **Feature:** ROADMAP Phase 12 #7a — honor the value at the repr/ABI
+- **Feature:** ROADMAP old Phase 12 #7a — honor the value at the repr/ABI
   boundary and reject duplicate discriminants.
 
 ### C3. Unknown attributes silently ignored — CLOSED 2026-06-10
@@ -1089,7 +1089,7 @@ These are not holes (no current unsoundness) but are unmade decisions that must
 land before the relevant freeze. Full text in ROADMAP; listed here so the
 whole picture is in one place.
 
-- **Callable values + capability-polymorphic callbacks** — ROADMAP Phase 6
+- **Callable values + capability-polymorphic callbacks** — ROADMAP old Phase 6
   #18. DESIGN DONE (2026-06-12): `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md`
   now exists and records the decided model; the HOF freeze is lifted (doc
   governs). What remains is implementation only when workloads pull it:
@@ -1129,7 +1129,7 @@ whole picture is in one place.
   public claim, and a ROADMAP fix item.
 - Fixing a hole: flip its gate to expected-reject, move the entry to CLOSED,
   remove the `CLAIMS_TODAY.md` disclosure, and update the ROADMAP item.
-- The `check_docs_drift` gate (ROADMAP Phase 4 #44) should treat this file as
+- The `check_docs_drift` gate (ROADMAP old Phase 4 #44) should treat this file as
   claim-bearing: an OPEN entry whose gate no longer reproduces the hole, or a
   CLOSED entry whose regression fixture is missing, is drift.
 

@@ -71,7 +71,7 @@ evidence-class machinery.
   **no recursion, no unbounded loops, no heap, no FFI**; loops modeled with **fuel**.
   Types: `Int`, `Bool`, fixed integers, structs, enums, fixed arrays.
 - **Size:** ~35k LOC compiler, ~11.3k LOC proofs, zero Mathlib/Batteries dependency.
-- **Roadmap:** immutable `R-NNNN` task IDs; currently Phase 7+.
+- **Roadmap:** immutable `R-NNNN` task IDs; currently old Phase 7+.
 
 ### How each article point lands on Concrete
 - **Point 1 (coinduction) — mostly NOT a threat, by design.** ProvableV1 excludes
@@ -182,7 +182,7 @@ compiler to Rocq" is four jobs with very different costs:
 ### Verdict
 Two corrections to a naive estimate: (a) metaprogramming cost is ~zero, not weeks;
 (b) a "4–5 month" figure is a *one-time* number for a *frozen* target — but Concrete is
-a moving target (Phase 7+, live roadmap), so the real cost of a full port is the
+a moving target (old Phase 7+, live roadmap), so the real cost of a full port is the
 **recurring divergence** of maintaining two compilers in lockstep, which is unbounded.
 A full executable port is feasible but expensive and never "done." **The part worth
 dual-hosting is the ~6.8k-LOC soundness kernel**, which has the favorable profile

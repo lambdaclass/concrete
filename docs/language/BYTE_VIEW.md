@@ -1,6 +1,6 @@
 # Owned Byte Views
 
-Status: IMPLEMENTED — ROADMAP Phase 5 #5a. Design + `std.numeric.ByteView` +
+Status: IMPLEMENTED — ROADMAP old Phase 5 #5a. Design + `std.numeric.ByteView` +
 `std.text` UTF-8 path + `examples/byte_view/*`, gated by
 `scripts/tests/check_byte_view.sh`.
 Date: 2026-06-20 (core), 2026-06-21 (Text/UTF-8 composition)

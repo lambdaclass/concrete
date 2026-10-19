@@ -38,7 +38,7 @@ Classification:
 
 ## Executive Summary
 
-Concrete's Phase 7 roadmap already covers the important small core:
+Concrete's old Phase 7 roadmap already covers the important small core:
 errors, bytes/text/path, collections, formatting/parsing, binary helpers,
 capability-scoped I/O, tests/oracles, boundary modules, evidence classes, and
 validation workloads.

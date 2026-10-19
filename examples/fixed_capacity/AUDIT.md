@@ -17,7 +17,7 @@ parser state machine."
 
 The structural value of this candidate is that **it forces the
 Phase 4 ProofCore extractor extensions** the next real-crypto
-flagship is gated on. ROADMAP Phase 4 item 2 enumerates the named
+flagship is gated on. ROADMAP old Phase 4 item 2 enumerates the named
 subgoals; this example surfaces every one in concrete blocked
 functions:
 
@@ -219,7 +219,7 @@ audit and graduation.
 - `examples/parse_validate/AUDIT.md` — template this audit follows.
 - `examples/crypto_verify/AUDIT.md` — second candidate to graduate.
 - `tests/showcase/manifest.toml` — graduation target.
-- ROADMAP Phase 4 item 2 — the extractor extensions this example
+- ROADMAP old Phase 4 item 2 — the extractor extensions this example
   surfaces by name.
-- ROADMAP Phase 7 item 7 — real-cryptography flagship slot
+- ROADMAP old Phase 7 item 7 — real-cryptography flagship slot
   gated on those extensions.

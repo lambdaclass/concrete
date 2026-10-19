@@ -1,6 +1,6 @@
 # Capability facts — one source of truth
 
-ROADMAP Phase 6.5 #4. Capabilities/effects are the second identity-defining
+ROADMAP old Phase 6.5 #4. Capabilities/effects are the second identity-defining
 semantic axis of Concrete (after integer arithmetic, #1). This note records
 where capability facts live so no stage re-derives them.
 

@@ -243,7 +243,7 @@ The deferred part is the SPARK-class assurance layer: loop
 invariants/variants as a mature authoring UX, frame/read/write contracts,
 dependency-flow contracts, ghost/spec erasure discipline, and package/release
 evidence summaries. See [SPARK_CLASS_ASSURANCE.md](../verification/SPARK_CLASS_ASSURANCE.md)
-and ROADMAP Phase 12 #19 / Phase 13 #16a.
+and ROADMAP old Phase 12 #19 / old Phase 13 #16a.
 
 **Prerequisite for the deferred layer:** a workload or flagship that needs
 frame/dependency/ghost facts, plus gates proving those facts are reported

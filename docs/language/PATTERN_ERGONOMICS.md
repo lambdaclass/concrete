@@ -1,6 +1,6 @@
 # Pattern Ergonomics
 
-Status: CLOSED — ROADMAP Phase 6 #5. The compound usability block is complete
+Status: CLOSED — ROADMAP old Phase 6 #5. The compound usability block is complete
 for V1: built features are gated by `scripts/tests/check_pattern_ergonomics.sh`,
 and the two non-built items are explicitly workload-gated decisions rather than
 hidden holes.

@@ -1,6 +1,6 @@
 # Loop Control
 
-Status: IMPLEMENTED — ROADMAP Phase 6 #4. Gated by
+Status: IMPLEMENTED — ROADMAP old Phase 6 #4. Gated by
 `scripts/tests/check_loop_control.sh` (fixtures in `tests/programs/loop_control/`).
 Date: 2026-06-21
 

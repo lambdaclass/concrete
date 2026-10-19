@@ -307,7 +307,7 @@ release_bundle(project)
 ```
 
 The Phase 6B/6C implementation may recompute everything while recording and
-shadow-checking dependencies. Roadmap Phase 8.5 is the explicit transition to a
+shadow-checking dependencies. Roadmap old Phase 8.5 is the explicit transition to a
 persistent `CompilerSession`, conservative red/green invalidation, a local
 content-addressed store, and cached codegen units after the external-validation
 gate returns GO.

@@ -1,6 +1,6 @@
 # Macro / Metaprogramming Stance
 
-Status: PERMANENT NON-GOAL — ROADMAP Phase 6 #11.
+Status: PERMANENT NON-GOAL — ROADMAP old Phase 6 #11.
 Gated by `scripts/tests/check_no_macros.sh`.
 Date: 2026-06-23
 

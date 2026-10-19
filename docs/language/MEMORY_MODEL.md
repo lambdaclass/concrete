@@ -1,6 +1,6 @@
 # Memory Model (for ordinary users)
 
-Status: user-facing overview — ROADMAP Phase 6 #33.
+Status: user-facing overview — ROADMAP old Phase 6 #33.
 
 This is the plain-language entry point to how Concrete manages memory: enough to
 write and read everyday code without surprises. It is a narrative summary; the

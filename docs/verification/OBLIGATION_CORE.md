@@ -29,7 +29,7 @@ front end: the `parse / resolve / typecheck / capability check -> typed Core`
 passes are owned by [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) and
 [PASSES.md](../compiler/PASSES.md), and this ledger generalizes the report-only "shared fact
 layer" in [PROOF_AUDIT_PIPELINE.md](PROOF_AUDIT_PIPELINE.md). The migration is
-tracked as ROADMAP Phase 3 (ObligationCore Pipeline Consolidation).
+tracked as ROADMAP old Phase 3 (ObligationCore Pipeline Consolidation).
 
 ObligationCore does not own proposition semantics. `TermIR` owns the internal
 language; VIR is its validated canonical artifact form. ObligationCore owns
