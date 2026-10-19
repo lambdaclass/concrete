@@ -1443,6 +1443,10 @@ run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
 # Bug 091 self-review: an impl spelling its own type `Self` in a parameter or return
 # conforms to the trait (was a false E0587 / E0582).
 run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42
+# Codex round 2: return-position `Self` is the impl's full type (`Cell<T>`) and return
+# types are alias-normalized (was a false E0582); a genuinely wrong return still is E0582.
+run_ok  "$TESTDIR/trait_impl_generic_self_return.con" 42
+run_err "$TESTDIR/error_091_generic_self_return_mismatch.con" "(E0582)"
 run_err "$TESTDIR/error_cap_pure.con"            "but caller has"
 run_err "$TESTDIR/error_cap_propagation.con"     "but caller has"
 run_err "$TESTDIR/error_cap_method.con"          "but caller has"

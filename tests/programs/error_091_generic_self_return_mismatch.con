@@ -1,0 +1,10 @@
+// Bug 091, Codex round 2 negative control: resolving `Self` to the impl's full type
+// must not admit a WRONG return type. `-> Cell<i64>` is not `Self` (`Cell<T>`). E0582.
+trait Again {
+    fn again(&self) -> Self;
+}
+struct Copy Cell<T> { v: T }
+impl<T: Copy> Again for Cell<T> {
+    fn again(&self) -> Cell<i64> { return Cell::<i64> { v: 1 }; }
+}
+fn main() -> i32 { return 0; }

@@ -1,0 +1,33 @@
+// Bug 091, Codex round 2: return-position `Self` is the impl's FULL type. A generic
+// impl returning `Cell<T>` (or spelling `Self`) for a trait's `-> Self`, and an impl
+// returning `i32` for a trait's `-> Num` (alias of i32), conform. Before the fix
+// both were false E0582 ("expected return type Cell, got Cell<T>"; "expected Num,
+// got i32"). Expect 42 (40 + 1 + 1).
+trait Again {
+    fn again(&self) -> Self;
+}
+struct Copy Cell<T> { v: T }
+impl<T: Copy> Again for Cell<T> {
+    fn again(&self) -> Cell<T> { return Cell::<T> { v: self.v }; }
+}
+struct Copy Twin<T> { v: T }
+impl<T: Copy> Again for Twin<T> {
+    fn again(&self) -> Self { return Twin::<T> { v: self.v }; }
+}
+type Num = i32;
+struct Copy N { v: i32 }
+trait Out {
+    fn out(&self) -> Num;
+}
+impl Out for N {
+    fn out(&self) -> i32 { return self.v; }
+}
+fn dup<T: Again>(x: &T) -> T { return x.again(); }
+fn main() -> i32 {
+    let c: Cell<i32> = Cell::<i32> { v: 40 };
+    let d: Cell<i32> = dup::<Cell<i32>>(&c);
+    let t: Twin<i32> = Twin::<i32> { v: 1 };
+    let u: Twin<i32> = dup::<Twin<i32>>(&t);
+    let n: N = N { v: 1 };
+    return d.v + u.v + n.out();
+}

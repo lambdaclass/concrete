@@ -160,3 +160,10 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_receiver_through_ref.con` (E0290), `trait_generic_receiver_forms.con` (4030412).
   The interpreter does not run non-Destroy trait calls on type parameters before this round
   (see bug 052's round-2 note), so these legs are compiled-only.
+* **Return-position `Self` dropped the impl's type arguments (P2).** The return check
+  resolved `Self` with `tyFromName ti.typeName` (bare `Cell`), while parameters used
+  `ti.selfTy` (`Cell<T>`), so a generic impl returning `Cell<T>` for `-> Self` was a false
+  E0582; return types also skipped the alias normalization parameters get (`-> Num` vs
+  `-> i32`). Both return signatures are now `sigTyNormalize`d in Elab and `Self` resolves to
+  `ti.selfTy`. Fixtures `trait_impl_generic_self_return.con` (42; was E0582) and
+  `error_091_generic_self_return_mismatch.con` (a genuinely wrong `Cell<i64>` is still E0582).

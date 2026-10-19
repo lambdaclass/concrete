@@ -1004,7 +1004,11 @@ def ccCheckModuleDecls (m : CModule)
         match ti.methodRetTys.find? fun (mn, _) => mn == sig.name with
         | none => errors := errors ++ [mkDeclDiag (.missingTraitMethod ti.typeName sig.name) ti.declSpan]
         | some (_, actualRetTy0) =>
-          let implTy := tyFromName ti.typeName
+          -- `Self` is the impl's full type, type arguments included (`Cell<T>`), the same
+          -- `ti.selfTy` the parameter check uses; `tyFromName ti.typeName` dropped them, so a
+          -- generic impl returning `Cell<T>` for a trait's `-> Self` was a false E0582
+          -- (Codex round 2 of bug 091).
+          let implTy := if ti.selfTy == .unit then tyFromName ti.typeName else ti.selfTy
           let expectedRetTy := resolveSelfTy sig.retTy implTy
           -- An impl may spell its own type `Self`; it means the same type (bug 091 review).
           let actualRetTy := resolveSelfTy actualRetTy0 implTy

@@ -3000,7 +3000,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     traitDefs := m.traits.map fun td =>
       { name := td.name,
         methods := td.methods.map fun sig =>
-          { name := sig.name, retTy := sig.retTy,
+          -- Return types are normalized exactly as parameters are, so conformance compares
+          -- `-> Num` (an alias of i32) with an impl's `-> i32` structurally (Codex round 2).
+          { name := sig.name, retTy := sigTyNormalize typeAliasMap [] sig.retTy,
             paramTys := sig.params.map fun p => sigTyNormalize typeAliasMap [] p.ty,
             selfKind := sig.selfKind, capSet := sig.capSet },
         builtinId := td.builtinId, declSpan := some td.span : CTraitDef }
@@ -3014,7 +3016,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       { traitName := tb.traitName,
         typeName := tb.typeName,
         methodNames := tb.methods.map (·.name),
-        methodRetTys := tb.methods.map fun f => (f.name, f.retTy),
+        methodRetTys := tb.methods.map fun f => (f.name, sigTyNormalize typeAliasMap tb.typeParams f.retTy),
         selfTy := selfTy,
         methodSigs := tb.methods.map fun f =>
           -- The parser prepends the receiver as a `self` parameter; read its form back.
