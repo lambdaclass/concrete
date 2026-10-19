@@ -32,12 +32,12 @@ the next transition; completed milestones move to the changelog rather than accu
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **Protections, gate health and language decisions (R-0491, R-0494, R-0498, R-0500, R-0513)** | the prevention harness fails its assigned differential, name-binding, evidence and checker controls at the pre-fix SHAs of 080–101 and passes at their fixes, with pinned minimum completed-comparison counts; one `Verdict` authority renders every evidence surface; every enforcement claim has a gate leg and a killed targeted mutation; the language decisions the verified slices depend on — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals — are written down and enforced by the current compiler, together with the rest of the disputed rules (statement vs value position, sequential assignment within a loop iteration, literal typing and range, cast semantics per width pair, evaluation order, short-circuiting); `IntArith` is the only integer arithmetic in the existing pipeline too (interpreter, folder and proof model, enforced by a lint); the axiom-policy gate rejects `sorryAx` and unregistered axioms transitively and labels native-evaluation and float axioms separately on today's evidence; gates assert properties rather than corpus counts, and a fast push tier (≤ 5 min) is split from the full batch tier. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
-| 3 | **Verified vertical slice V1 (R-0511)** | for the V1 language (integer and boolean scalars, locals, assignment, `if`/`else`, bounded loops, direct calls, checked arithmetic with defined traps, an output event), a Lean theorem that every behaviour of the native AArch64 image is a behaviour of the checked Core program, re-checked by con-leche and nanoda; built as a `verified` compilation profile that refuses everything outside the slice, through identities, typed operations, Core semantics, the Core checker, claims on Core, Place MIR, Memory CFG, BIR and the native backend; one slice claim transported to its binary; an outside expert has reviewed Core's slice semantics |
-| 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits `CheckedCore`, and is the only input the existing lowering and the `verified` profile accept; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V3 – V5); this row makes it authoritative for every user now |
-| 5 | **R-0285 C/Rust/Zig package interop, with R-0283/R-0286/R-0287** | declare a dependency and use normal imports; tooling generates adapters, builds and links the native libraries; a non-author exercises RocksDB C, Rust crypto/networking and an upstream Zig library with no application bridge/build scripts, generated-file edits or manual compiler/linker flags |
-| 6 | **Slice growth and legacy evidence retirement (R-0512, R-0491–R-0510 by slice)** | each slice V2–V7 (aggregates and bounds; heap and linear resources; references and borrows; generics, traits and capabilities; raw pointers, FFI and linking; the rest of the language and `std`) extends the proved pipeline with its own end-to-end theorem; every existing claim moves to a compiler-generated Core statement as its slice lands, and the legacy evidence layer (`PExpr`, name tables, the classification generator, the identity freeze) is deleted when the last claim has moved |
-| 7 | **R-0490 complete ethlambda port and language pressure testing** | port client-owned logic in executable slices; a Concrete node syncs, proposes, attests and finalizes in a mixed-client devnet, with retained dependency bindings, conformance/differential tests and measured resource costs; full functional proofs follow the working port |
+| 2 | **Immediate protections and semantic decisions (R-0491, R-0494, R-0498, R-0500, R-0513)** | repair known authority and safety defects; one `Verdict` authority renders every evidence surface; permanent reproducer controls for 080 – 101 and trustworthy gate execution (checked inventories instead of incidental count pins, minimum completed comparisons, a fast push tier separate from full qualification); the axiom-policy gate on today's evidence; one `IntArith` for the existing pipeline; the rules the next slice needs — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals, and the other disputed rules (statement vs value position, sequential assignment within a loop iteration, literal range, cast semantics per width, evaluation order, short-circuiting) — written down and enforced with versioned migration diagnostics. Broader prevention coverage continues throughout and does not block isolated proof development |
+| 3 | **First cumulative verified releases (R-0511)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 with final-image correspondence) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
+| 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3 once row 2 lands, the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits `CheckedCore`, and is the only input the existing lowering and the `verified` profile accept; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V3 – V5); this row makes it authoritative for every user now |
+| 5 | **Bounded interop and usability track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
+| 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
+| 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
 | 8 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 9 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
 | 10 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
@@ -48,7 +48,7 @@ the next transition; completed milestones move to the changelog rather than accu
 | 15 | **External-user workflow and productization** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
 | 16 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
-**Delivery decision, 2026-10-17** (ordering amended 2026-10-19: interop now follows verified slice V1; see the vertical-slice decision below)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
@@ -109,26 +109,23 @@ admitted profile (delivered as vertical slices since 2026-10-19: rows 2, 3, 4 an
 slice is reviewed by Codex before publication, the proof surface is feature-frozen until the
 verdict authority and claims-on-Core land, and the fixes for 081 – 101 land first (row 0).
 
-**Vertical-slice decision, 2026-10-19:** the verified compiler is delivered as **proved vertical
-slices**, not layer by layer. Building all of Core's semantics, then the whole checker, then the whole
-lower pipeline would take years before any end-to-end guarantee existed, and would test the
-architecture only when the proofs began. CompCert and CakeML each proved a small language end to end
-and grew it. Slice V1 (row 3: integer and boolean scalars, control flow, direct calls, checked
-arithmetic, an output event) is carried through every stage of the [plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)
-to native AArch64 code with its compiler-correctness theorem, as a `verified` profile beside the
-existing compiler; each later slice (row 6) extends a pipeline that already has a theorem. The same
-decision stops investing in the current evidence layer: the name tables, the theorem-type
-classification generator, the identity freeze and its amendments, attestations and per-surface status
-logic are where bugs 079 – 101 lived, and every repair added more of them. They stay frozen (soundness
-fixes only) and are deleted as claims move to compiler-generated Core statements (R-0512). Gates assert
-properties rather than corpus counts and split into a fast push tier and a full batch tier (R-0513),
-because process cost, not engineering, had become the limit on throughput. The shared front end (row 4) then
-moves identities and the authoritative checker onto Core for the whole language, closing the live
-checked-is-not-compiled gap for every user; interop (row 5) follows and stays bounded to its
-four-adapter checkpoint; the ethlambda port (row 7) follows slice growth.
+**Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
+through the whole compiler, with explicit intermediate and source-to-native theorem boundaries, rather
+than layer by layer, which would postpone any end-to-end guarantee — and the first real test of the
+architecture — by years. Before shared interfaces freeze, representative ownership, borrowing and
+memory-representation cases are proved. Frontend correspondence and safety proofs grow with the
+admitted language. One converging compiler architecture carries distinct assurance profiles (`verified`
+and the existing one), and the LLVM profile stays supported for production use. The proof track, the
+shared front end (row 4), and the bounded interop and application-feedback tracks proceed alongside one
+another after the immediate protections, with explicit capacity for each; new authority defects take
+priority. Legacy claims migrate when their Core semantics and evidence boundaries are ready, preserving
+supported replay and exact assurance labels. Property gates replace brittle corpus cardinalities while
+keeping independent coverage inventories and minimum completed comparisons. No multi-year proof
+milestone suspends supported releases or external-user feedback. The [plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)
+holds the milestones and the discipline (proof engineering, Lean scalability, compiler-execution trust,
+ownership and specialist review, specification validation, release strategy).
 
-**Implementation and feedback decision, 2026-10-17:** once queue rows 0–4 meet
-their recorded exits, start R-0285 with a working RocksDB C-API consumer and the
+**Implementation and feedback decision, 2026-10-17** (amended 2026-10-19)**:** once the immediate authority and safety protections (rows 0 – 2) are qualified, start R-0285 with a working RocksDB C-API consumer and the
 minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
 examples and only the resolution decisions needed by that slice, then implement,
 run and measure it. Each later adapter repeats that feedback loop. Full registry,
@@ -16140,68 +16137,81 @@ differential tests and a proved substitution/dispatch example.
 
 ### Task R-0511
 
-**Objective:** Verified vertical slice V1 — the first end-to-end compiler-correctness theorem, for a
-small language subset carried through every stage of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices).
+**Objective:** The first cumulative verified releases — a proved path from checked Core to a native
+image for a small language, carried through every stage of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices).
 
-**Status (2026-10-19): planned; queue row 3, after the row 2 protections and language decisions.**
+**Status (2026-10-19): planned; queue row 3, after the row 2 protections.**
 
-V1 language: integer scalars of every width and `bool`; immutable and mutable locals; assignment;
-`if`/`else`; `while`/`for` with `break`/`continue`; direct calls including recursion; checked
-arithmetic, division and shifts with defined traps; integer casts; comparisons; one capability-tagged
-output event (`print_int`). Nothing else: the `verified` profile refuses every other construct with a
-named reason, and the existing compiler keeps compiling the whole language.
+Work (details and premises in the plan's *V1 milestones*): reviewed machine-checked design examples for
+move/destroy, downward exclusive and shared borrows, reborrowing, structured cleanup and typed-value
+representation in byte/provenance memory, before Core's interfaces freeze; **V1a**, checked Core →
+executable BIR refinement for `i64`, `u64`, `bool`, locals and assignment, conditionals, a general loop
+with structured exits, non-recursive direct calls, comparisons, checked `+ - *` and one
+capability-authorized `print_int` event, with terminating, trapping and divergent behaviours; subsequent
+V1 increments for the remaining widths, casts, division, shifts, recursion and loop forms; **V1b**,
+native AArch64 through a deliberately simple code generator with proved or validated register/frame
+handling, encoding and final-image correspondence; restricted-source correspondence (syntax,
+resolution, elaboration judgments specified independently, then proved or certificate-checked); a
+minimal canonical task identity and an independent retained-artifact consumer for every published slice
+claim. Stages exercised, restricted to the admitted subset: R-0492, R-0493, R-0496, R-0497, R-0499,
+R-0495, R-0501 – R-0503, R-0505, R-0506, R-0508.
 
-Work, all restricted to V1: resolved identities and typed operations (R-0492, R-0493, R-0497); Core's
-clock-indexed semantics with behaviours, traces and traps (R-0496); the Core checker emitting
-`CheckedCore` (R-0499); compiler-generated claim statements on Core (R-0495); Place MIR, a stack-only
-Memory CFG and BIR, each with a semantics (R-0501 – R-0503); the obligation ledger and totality for
-everything V1 uses (R-0506); native AArch64 for the first profile (R-0505); proofs of every V1 pass and
-their composition (R-0508 for V1). The differential fuzzer compares the `verified` and existing
-profiles on every generated V1 program.
-
-**Exit:** a Lean theorem that for every program the checker accepts within V1, every behaviour of the
-native image is a behaviour of its `CheckedCore` (traces, traps and divergence preserved), re-checked by
-con-leche and nanoda, stating that it starts from `CheckedCore`; one V1 claim transported to its native
-binary through a preservation lemma; an outside expert's review of Core's V1 semantics recorded; V1b
-(HIR → `CheckedCore` elaboration correspondence for the V1 surface) scheduled with its own exit.
+**Exit:** for successful compilation of an admitted `CheckedCore` program to an identified image, under
+related initial states, admissible environments and recorded resource premises, a Lean proof of S15's
+maximal-behaviour refinement through the explicit observation relation, the preserved target-memory
+validity invariant and the sufficient-resource theorem; checker soundness and basic capability
+containment for the subset; every used pass or validator proved; one nontrivial Core claim transported
+to its binary; the closure re-checked by con-leche and nanoda and bound to the exact retained artifacts.
+V1 is described as source-to-native only once its frontend correspondence is proved; until then the
+published theorem states that it starts at `CheckedCore`. An outside expert's review of Core's V1
+semantics and the design examples is recorded.
 
 ### Task R-0512
 
-**Objective:** Retire the legacy evidence layer by moving every claim onto compiler-generated Core
-statements, slice by slice.
+**Objective:** Migrate every claim onto compiler-generated Core statements and retire the legacy
+evidence implementation, keeping its responsibilities.
 
-**Status (2026-10-19): planned; proceeds with each slice from V1 on (queue row 6).** The legacy layer
-— `PExpr` and `Proof.eval`, name-keyed tables, the theorem-type classification generator, the frozen
-identity rows and amendments, attestations, per-surface status logic — receives soundness fixes only.
+**Status (2026-10-19): planned; proceeds with the slices (queue row 6).** The legacy implementation
+(`PExpr` and `Proof.eval`, name-keyed tables, the theorem-type classification generator, the frozen
+identity rows and amendments, attestations, per-surface status logic) receives soundness, compatibility
+and security maintenance only, with no new semantic claim mechanisms.
 
-Work: when a slice lands, every existing claim on functions inside it is re-stated as a generated Core
-statement (R-0495) and re-proved or adapted, keeping weaker coverage where that is what was proved; its
-legacy link is removed; the R-0482 identity freeze is released for migrated subjects with each move
-recorded. When no legacy claim remains, the layer's modules and the gates that only guard it are
-deleted.
+Work (the plan's *Evidence migration*): an inventory of every supported claim and consumer with its exact
+subject, proposition, coverage, transitive dependencies, assumptions and replay version; a claim migrates
+once its complete semantic dependency closure has supported Core statements and sound statement
+generation, binding and evidence interpretation — native compilation coverage is not required —
+re-proved or carried by a proved bridge, with any change in domain, coverage or assumptions recorded for
+review; each migration ships user-facing assurance and compatibility diffs; historical artifacts and a
+versioned replay path are preserved; a superseded or invalidated claim never silently stays
+authoritative. Subject identity, dependency binding and provenance remain required in the replacement.
 
-**Exit:** every claim in `examples/`, `std/` and `tests/` replays against a generated Core statement;
-the legacy modules and their gates are deleted; no evidence surface reads a name-keyed table.
+**Exit:** every supported claim replays against a generated Core statement or has completed explicit
+deprecation; legacy issuance code is deleted with its bug-class controls transferred to the replacement;
+historical replay remains available; no name-keyed lookup grants current authority.
 
 ### Task R-0513
 
-**Objective:** Gates that assert properties, not corpus counts, and a fast push tier separate from the
-full batch tier.
+**Objective:** Trustworthy, affordable gates: checked inventories instead of incidental counts, and a
+fast push tier separate from full qualification.
 
 **Status (2026-10-19): planned; queue row 2.** On 2026-10-18 – 19 every legitimate corpus change tripped
 several count pins (the corpus split, the convergence inventory, the identity freeze), and the full set
 took hours under load, then an hour of CI per push.
 
-Work: replace count pins with property assertions — every proved claim binds, every eligible function
-is compared, every stored link is explained — starting with `check_dependency_edges`,
-`check_convergence_inventory`, `check_identity_freeze` and `check_coverage_baseline`; a fast tier
-(≤ 5 minutes: hygiene, docs, the gates selected by the touched paths) for every push and a full tier
-per landing batch and nightly; remote runners for the full tier; the claim-inventory step that runs
-only on Linux CI added to the local full tier.
+Work: replace incidental corpus cardinality pins with independently checked inventory and coverage
+properties — every expected claim and comparison accounted for, exclusions with explicit reasons, and
+missing entries, skipped work or unexpected eligibility shrinkage failing; keep minimum completed
+comparisons by semantic feature and permanent positive/negative controls; test the gate machinery with
+deleted inventory entries, disabled generators, empty suites and altered eligibility. A fast push tier
+targeting five minutes, selected by the dependency closure of changed semantics, implementations and
+proof infrastructure; the full tier on the exact candidate commit before qualification or release, and
+nightly; semantic, checker, evidence and trusted-base changes run their complete affected proof and
+regression closure; remote runners for the full tier with local reproduction kept; the Linux-only
+claim-inventory step in the local full tier.
 
-**Exit:** a representative legitimate corpus change (adding a proved example) requires editing no gate
-count; the fast tier runs in ≤ 5 minutes on the development machine; the full tier runs remotely with
-results recorded against exact SHAs.
+**Exit:** adding a legitimate proved example requires no incidental count edit; deliberate coverage loss
+fails; the fast tier meets its recorded budget; full results bind exact commits, toolchains and
+artifacts; a fast-tier pass is never presented as full qualification.
 
 ### Task R-0514
 

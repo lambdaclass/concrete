@@ -257,58 +257,104 @@ BIR, the native backend — and closes with its own end-to-end theorem. A later 
 that already has one. Part 2's proofs are therefore not deferred: each slice proves its scope before
 the next grows it.
 
-**Coexistence.** The verified pipeline is a `verified` compilation profile beside the existing
-compiler. It shares the front end, accepts only programs inside the current slice and refuses
-everything else with a named reason; the existing compiler keeps compiling the whole language. A
-construct moves to the verified pipeline when its slice lands, and the existing path for it is
-retired once the slice's gates pass on the corpus. The differential fuzzer compares both profiles on
-every slice program from the day the profile exists.
+**Coexistence and convergence.** `verified` is a versioned admission and assurance profile of
+Concrete, with a stated language subset, target, environment contracts and theorem boundary. It rejects
+unsupported reachable code, dependencies and feature combinations; it never silently falls back to LLVM
+or an unproved pass. The existing profile remains supported while both converge on shared identities,
+typed operations, checked Core, layout and validated lower IRs: replacements arrive as shadow paths and
+the production compiler migrates incrementally. Sharing an implementation does not extend its proof
+beyond the admitted subset. An old path retires only when its complete replacement supports the affected
+programs and dependencies, meets correctness and compatibility gates, and has an explicit release and
+rollback plan; corpus agreement alone is insufficient. The LLVM backend stays a supported performance
+profile unless a separate product decision retires it. Verified and unverified modules compose only
+through recorded contracts and explicit assurance boundaries.
 
-**Slice V1 (queue row 3, R-0511).**
-- *Language:* integer scalars of every width and `bool`; immutable and mutable locals; assignment;
-  `if`/`else`; `while` and `for` with `break`/`continue`; direct calls, including recursion;
-  checked arithmetic, division and shifts with defined traps; integer casts; comparisons; one
-  capability-tagged output event (`print_int`) so traces are non-trivial. No aggregates, heap,
-  references, pointers, generics, traits or FFI.
-- *Stages exercised:* S5/S6 (identities, typed operations) for the slice, S7 (Core semantics), S8 (the
-  Core checker; all V1 values are Copy, so linearity is trivial), S9 (generated claim statements on
-  Core), S10 – S11 (Place MIR, a stack-only Memory CFG, BIR), S12a (stated obligations), S13 (native
-  AArch64 for the slice).
-- *Theorem:* for every program the checker accepts within V1, every behaviour of the native image is a
-  behaviour of its `CheckedCore` (traces, traps and divergence preserved), re-checked by con-leche and
-  nanoda; and one slice claim is transported to its binary through its preservation lemma.
-- *Front end:* V1's theorem starts at `CheckedCore`. Elaboration correspondence for the V1 surface
-  (HIR → `CheckedCore`) is V1b; parser correspondence joins at V7. The published theorem says which
-  artifact it starts from.
-- *Review:* an outside expert reviews Core's V1 semantics before it freezes.
+**Early semantic risk retirement.** A scalar slice is a good first delivery but a poor test of
+Concrete's distinctive architecture: second-class references simplify escape reasoning, not aliasing,
+storage identity, reborrowing or call-boundary obligations. So before Core's interfaces freeze, reviewed
+machine-checked design examples cover a linear move and destroy, a downward exclusive borrow across a
+call, shared borrowing, permitted reborrowing, structured cleanup, and typed-value representation in
+byte/provenance memory. They test the interfaces without admitting unfinished features to the profile.
+Allocation lifetime, initialization, alignment, address exposure, foreign mutation and external-call
+contracts are fixed at this boundary (S7 with R-0502).
 
-**Later slices (queue row 6).** Each adds its constructs to every stage and extends the theorem:
-V2 structs, enums, `match` and fixed arrays with bounds traps (value semantics, stack memory);
-V3 heap and linear resources (`rt` allocation, destroy, `defer`, out-of-memory behaviour) with
-ownership soundness (S14) for the covered subset; V4 second-class references and borrows (borrow
-validity); V5 generics, traits, monomorphization and capabilities (S8a, post-Mono capability checks);
-V6 raw pointers, `Unsafe`, FFI with the byte-and-provenance memory component, external-call contracts,
-separate compilation and linking; V7 the rest of the language and `std`, frontend correspondence
-from source bytes (S15), and retirement of the existing pipeline.
+**V1 milestones (queue row 3, R-0511).**
+- **V1a** proves checked Core → executable BIR refinement for `i64`, `u64`, `bool`, locals and
+  assignment, conditionals, a general loop with structured exits, non-recursive direct calls,
+  comparisons, checked addition/subtraction/multiplication, and one capability-authorized `print_int`
+  event, including terminating, trapping and divergent behaviours. Other widths, casts, division, shifts,
+  recursion and further surface loop forms are explicit subsequent V1 increments. A Core → BIR theorem
+  is an intermediate result, not the native guarantee; no throwaway VM is built.
+- **V1b** carries the subset to native AArch64 through a deliberately simple code generator, with proved
+  or validated register/frame handling, instruction encoding and final-image correspondence.
+  Intermediate assembly-level results name their trusted assembler/linker boundary and are not labelled
+  native-image proofs. `print_int` has a specified observable trace and implementation or
+  external-service contract; internal calling conventions, startup, stack requirements and trap
+  realization are covered. AArch64 stays the target: a simpler ISA would help only if an available
+  formal model, toolchain and deployment environment reduced the complete proof burden.
+- **Native exit.** For successful compilation of an admitted `CheckedCore` program to an identified
+  image, under related initial states, admissible environments and the recorded resource premises,
+  prove S15's maximal-behaviour refinement through the explicit observation relation, the preserved
+  target-memory validity invariant and the sufficient-resource theorem; prove checker soundness for the
+  admitted subset, basic capability containment, every used pass or validator, and transport of one
+  nontrivial Core claim; re-check the proof closure with con-leche and nanoda and bind it to the exact
+  retained artifacts. Fuel-bounded evaluation never stands in for a termination proof.
+- **Frontend assurance.** Early backend releases explicitly begin at retained `CheckedCore`. In
+  parallel, the restricted surface syntax, resolution and elaboration judgments are specified
+  independently of their implementations; before V1 is called source-to-native verified, successful
+  parsing, resolution, desugaring and elaboration are proved to implement them, or proved certificate
+  checkers cover those boundaries. The first theorem may cover a single source unit with fixed imports;
+  later slices extend it to package resolution and exact import roots. Each admitted surface extension
+  carries its frontend obligation. Retained-Core inspection and differential testing are transitional
+  aids, not correspondence proofs.
+- **Evidence delivery.** A minimal canonical task identity and an independent retained-artifact consumer
+  ship with every publicly authoritative slice claim from V1 on. Differential tests compare the
+  normative semantics, the existing compiler and the new pipeline, with timeouts classified inconclusive.
+- **Review.** An outside expert reviews Core's V1 semantics and the early design examples before they
+  freeze.
 
-**Legacy evidence retirement (R-0512).** The current evidence layer — `PExpr` and its evaluator, the
-name tables, the theorem-type classification generator, the frozen identity rows and their
-amendments, attestations and per-surface status logic — receives soundness fixes only. As a slice
-lands, every existing claim on functions within it moves to a compiler-generated Core statement; when
-the last claim has moved, the layer and the gates that guard it are deleted.
+**Cumulative growth (queue row 6).** V2 adds aggregates, bounds checks, stable places and
+stack-local/downward second-class references, with borrow validity and target representation proofs.
+V3 adds owned heap allocation, linear resources, destruction and `defer`, extending the borrow proofs to
+heap-backed places and stating out-of-memory behaviour. V4 completes the admitted reference, reborrow and
+resource interactions. V5 adds generics, traits and capability polymorphism (basic capability
+containment and external-event authorization are proved from V1). V6 adds raw-pointer operations,
+general FFI, callbacks and separately compiled module composition against the previously specified
+memory and interface contracts. V7 completes a maintained feature inventory — floats, indirect calls,
+module initialization, runtime facilities, unsafe libraries and every other actual feature, each with an
+owner and exit — and the supported `std` components; concurrency and dynamic linking stay excluded until
+separately specified. Every release proves the **cumulative** admitted language, including interactions
+with earlier features. Extensions preserve earlier semantics through an embedding theorem, or declare
+and review a versioned semantic change. Unsupported combinations are rejected explicitly. Whole-program
+image construction is required from V1; general separate compilation is a later extension. Source
+correspondence grows with the slices rather than waiting for V7.
+
+**Evidence migration (R-0512).** The legacy evidence implementation receives soundness, compatibility
+and security maintenance, but no new semantic claim mechanisms. An inventory records every supported
+claim and consumer with its exact subject, proposition, coverage, transitive dependencies, assumptions
+and replay version. A claim may migrate once its complete semantic dependency closure has supported Core
+statements and sound statement generation, binding and evidence interpretation — native compilation
+coverage is not required. It is re-proved or carried by an explicit proved bridge; any change in domain,
+coverage or assumptions is recorded for review. Core-proved and binary-transported remain distinct.
+Each migration ships with user-facing assurance and compatibility diffs; historical artifacts and a
+versioned replay path are preserved; a superseded or invalidated claim never silently stays
+authoritative. Subject identity, dependency binding and provenance remain required in the replacement:
+it is their fragile implementations, not those responsibilities, that are retired. Legacy issuance code
+is deleted only after supported claims and consumers have migrated or completed explicit deprecation;
+bug-class controls transfer to the replacement before implementation-specific gates are removed; no
+name-keyed lookup grants current authority.
 
 **The shared front end is whole-language early (queue row 4, R-0514).** Core, its identities and its
-checker are shared by both profiles; only lowering differs. So the authoritative checker on Core is
-built for the whole language right after V1 — closing the checked-is-not-compiled gap (087, 090,
-092 – 094) for every user — while the slices prove its rules as they reach them.
+checker are shared by both profiles; only lowering differs. So the authoritative checker on Core is made
+whole-language alongside the first verified releases — closing the checked-is-not-compiled gap (087,
+090, 092 – 094) for every user — while the slices prove its rules as they reach them.
 
 **Protections in the meantime (queue row 2).** S1 (prevention harness), S2 (one verdict authority),
-S3 (demonstrated enforcement) and S4 (written language rules) protect users of the existing compiler
-for the years the legacy pipeline remains. The language decisions the slices depend on — strictly
-second-class references, no block `let` shadowing, explicit match binders, typed literals — are
-decided and enforced in the existing compiler first, so the verified pipeline never has to model the
-looser rules. R-0513 makes gates assert properties instead of corpus counts and splits a fast push
-tier from the full batch tier.
+S3 (demonstrated enforcement) and S4 (written language rules) protect users of the existing profile.
+The rules the next slice needs are decided and enforced in the existing compiler first, with versioned
+migration diagnostics, so the verified pipeline never models looser rules. Broader prevention coverage
+continues throughout and does not block isolated proof development. R-0513 replaces incidental count pins
+with checked inventories and splits a fast push tier from the full tier.
 
 ## Part 1 — the proof-ready pipeline
 
@@ -571,7 +617,10 @@ S4 fixes the relevant language rules before S7 freezes their semantics. S9 depen
 S10 consumes `CheckedMonoCore` after S8a. S12a starts with S5; validator implementations follow
 their IRs. S14 begins after S7/S8. S15 composes the frontend, checker/specialization,
 pass/validator, linking and claim-transport obligations. The trusted-base inventory starts
-immediately; R-0353's authoritative use keeps queue row 9.
+immediately. A minimal canonical task identity and an independent retained-artifact consumer are
+required for each publicly authoritative slice claim from V1 onward; rows 8 – 10 complete cross-profile
+interoperability and schema stabilization and do not defer subject/proposition binding, provenance or
+independent replay for claims already issued.
 
 Stage order above is the dependency order *within* each slice. Queue row 2 delivers Track A's
 protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 4
@@ -587,8 +636,42 @@ prevented it; if none would, the plan gains one.
   claim-inventory step otherwise run only on Linux CI), is reviewed by Codex, and is published to
   both remotes before the next builds on it. New boundaries arrive as shadow paths with
   disagreement gates.
-- **Measure by hunting.** After each stage, rerun the hunts for its classes; a stage closes when its
-  hunt finds nothing reproducible of its class.
+- **Stage completion.** A stage closes when its stated proof obligations, compatibility requirements and
+  qualified regression gates pass. Hunts and mutations supplement these exits; a hunt that finds nothing
+  is not proof of completeness.
+- **Proof engineering from V1.** Reusable libraries for behaviour refinement, clock adequacy, stuttering,
+  composition, memory injections, representation, substitution, renaming, frames and ownership. Each pass
+  exposes stable well-formedness and simulation interfaces; where a slice does not yet need a stage,
+  identity passes or proved trivial instances keep the declared artifact types. Proofs depend on
+  documented semantic interfaces, not unrestricted unfolding of implementations. A semantics change ships
+  with a dependency-impact review, migrated proofs and a checked compatibility or version-change
+  argument; each release rechecks the cumulative theorem and its complete assumption closure.
+- **Lean scalability.** Pinned Lean, libraries and external recheckers. Benchmarks for clean and
+  incremental elaboration, kernel and independent rechecking, peak memory, proof-term and artifact size,
+  validator execution and representative client proofs, with recorded budgets and scaling tests before
+  large claim migration. Symbolic evaluation stays controlled and modular — no whole-program
+  normalization or unlimited global simplification.
+- **Compiler execution assurance.** The theorem is about the Lean compilation function; the executable
+  that produced an image is a separate trust question. Lean code generation, native libraries and
+  foreign implementations are recorded in the execution TCB; kernel-checked per-compilation certificates
+  or proved validators whose results are checked by the declared trusted path come first. Native
+  execution of a proved validator alone does not remove execution trust. A separate long-term plan
+  reduces compiler and checker execution trust further (CakeML's bootstrapping is the reference point).
+- **Ownership and review.** An accountable maintainer and a second reviewer for semantics/checker proofs,
+  memory and runtime, backend/ISA, and evidence/release infrastructure. Roles may overlap, but major
+  semantic interfaces get independent specialist review, with continuing expert review and maintainer
+  succession budgeted. Automated review (Codex) assists rather than replaces this.
+- **Specification validation.** Before each semantic extension is admitted: executable examples,
+  rejection cases, representation counterexamples, observation boundaries and theorem premises reviewed,
+  with accepted examples showing the subset is useful and non-vacuous. Memory/borrowing, unsafe
+  abstractions, capabilities, runtime and linking are reviewed separately; decisions and unresolved
+  assumptions are recorded.
+- **Release strategy.** Versioned supported subsets, semantics, target profiles, assumptions and known
+  limitations. Each release retains source and import identities, checked IRs, proof dependencies,
+  compiler/runtime identities and final-image bindings. A supported production branch, a verification
+  development track, migration guidance and rollback procedures. Real application acceptance,
+  diagnostics, compile time and runtime performance are tracked alongside proof coverage. Breaking
+  language changes are versioned with migration support.
 - **Review.** Every slice is reviewed by Codex (`codex exec -s read-only` on the commit, with the
   stage's section as specification); findings are fixed or answered in the commit message before
   publication. Review complements the gates.
