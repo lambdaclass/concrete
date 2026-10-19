@@ -183,11 +183,11 @@ rather than adding it:
 6. Record the prospective query/dependency graph in Phase 6C shadow mode while
    still recomputing the batch pipeline; use real Phase 8 edit traces to test
    invalidation completeness.
-7. Only after the old Phase 8 external-validation verdict is GO, implement Roadmap
-   Phase 8.5's persistent `CompilerSession`, conservative query engine, local
-   content-addressed store, and codegen-unit cache. Phase 14/15 then add the
-   independent Core and BackendIR certificate checkers over those canonical
-   artifacts.
+7. Implement the incremental-driver checkpoints required by R-0515’s V1 tooling milestones under the
+   current execution queue and capacity rule. R-0138–R-0149 own persistent sessions, queries and
+   artifact reuse. External pilots continue alongside this work; the historical external-validation GO
+   verdict is no longer an entrance gate. Independent checking and compiler proofs follow their current
+   task and verified-slice prerequisites.
 
 ## Relationship to Phase 14
 
@@ -212,9 +212,9 @@ proves/checks the explicitly supported relations.
   Turning the batch pipeline into a memoized query engine (salsa /
   rust-analyzer style) is a real 200x lever for *tooling* — it can make
   `concrete why`, `concrete diff`, `explain`, proof replay, and the Phase 19 LSP
-  surface effectively instant on unchanged work. The Roadmap now schedules that
-  implementation in conditional Phase 8.5, after semantic boundaries stabilize
-  and the Phase 8 external-validation gate says the project is worth scaling.
+  surface effectively instant on unchanged work. The roadmap schedules bounded
+  incremental-driver work in Phase 3 through R-0515’s tooling checkpoints and the individual task
+  prerequisites.
   Phase 6B owns prerequisites, not cache activation.
 - **Not a claim that hashes or producer records certify semantics.** Phase 8.5
   cache hits preserve existing evidence classes. Only Phase 14/15's independent
