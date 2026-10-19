@@ -20,11 +20,14 @@
 #   5. every task body archived in docs/archive/ROADMAP_RETIRED_TASKS.md (a bare `## R-NNNN` section)
 #      has its `### Task R-NNNN` stub in ROADMAP with a **Disposition** line and a link to that
 #      section, and every such link resolves to its own task's archived section.
+#   6. every transfer the ledger records (followed through superseded owners to a live one), plus the
+#      three explicit residuals of done tasks, appears as an entry in that live owner's
+#      **Inherited obligations** block, and no block lists a transfer the ledger does not record.
 #
 # Run with no argument it checks ROADMAP.md with the reconciliation record and then runs its negative
 # controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row naming a missing task or no task, a
-# phase that contradicts its queue row, an archived body without its stub and a stub without its archived body
-# must each fail; a crashed or silent checker must fail too.
+# phase that contradicts its queue row, an archived body without its stub, a stub without its archived body,
+# a removed inheritance entry and a fabricated one must each fail; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE]]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -192,6 +195,41 @@ for tid in active:
         if target.upper() not in sections and target.upper() != tid:
             no(f'{tid} links the archived body of {target.upper()}, which does not exist'); abad += 1
 if sections and not abad: ok(f'{len(set(sections))} archived task bodies each have a linked stub with a disposition, and every stub link resolves')
+
+# --- inherited obligations: every transfer the ledger records appears in its live owner, and no other
+def live_owners(tid, seen=frozenset()):
+    if tid in seen:
+        no(f'ownership cycle involving {tid}')
+        return set()
+    owners = expand(ledger[tid][2]) if tid in ledger else []
+    if not owners:
+        return {tid}
+    return set().union(*(live_owners(o, seen | {tid}) for o in owners))
+
+expected = {
+    (tid, owner)
+    for tid in ledger
+    for owner in live_owners(tid)
+    if tid != owner
+}
+# Explicit residual obligations of completed tasks.
+expected |= {
+    ('R-0208', 'R-0532'),
+    ('R-0465', 'R-0494'),
+    ('R-0484', 'R-0530'),
+}
+actual = set()
+for owner, body in bodies.items():
+    if '**Inherited obligations' in body:
+        inherited = body.split('**Inherited obligations', 1)[1]
+        actual.update((tid, owner) for tid in
+                      re.findall(r'^- \*\*(R-\d{4})\*\*', inherited, re.M))
+ibad = 0
+for tid, owner in sorted(expected - actual):
+    no(f'{owner} lacks inherited obligations from {tid}'); ibad += 1
+for tid, owner in sorted(actual - expected):
+    no(f'{owner} has unexplained inherited obligations from {tid}'); ibad += 1
+if not ibad: ok(f'{len(actual)} inherited-obligation entries match the ledger transfers exactly')
 print('\n'.join(out))
 PY
 }
@@ -276,6 +314,12 @@ PY
   neg stub_link_removed \
     "old='archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived.')" \
     "archived body R-0007 has no stub"
+  neg inheritance_entry_removed \
+    "import re; m=re.search(r'^- \*\*R-0007\*\* \(superseded\)[^\n]*\n', s, re.M); assert m; i=s.index('### Task R-0492\n'); assert m.start()>i; s=s[:m.start()]+s[m.end():]" \
+    "R-0492 lacks inherited obligations from R-0007"
+  neg inheritance_entry_fabricated \
+    "old='- **R-0008** (superseded):'; assert s.count(old)==1; s=s.replace(old,'- **R-0019** (merged): fabricated transfer.\n'+old)" \
+    "R-0492 has unexplained inherited obligations from R-0019"
   # The wrapper itself must not read a crashed or silent checker as a pass.
   if ( check_file() { return 17; }; run_on "$TARGET" ); then
     no "control checker_exit_failure: a nonzero checker exit passed"
