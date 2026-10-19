@@ -1,0 +1,16 @@
+// The specification nested inside the program `eval` runs: Examples.TestFixtures.Proofs.
+// spec_inside_evaluated_term proves `eval … (ignoreSpec n add_commutativity) = some (.int 0)`, which is
+// about `ignoreSpec`'s literal 0, not the spec. Only a whole closed spec argument binds, so this claim
+// is spec_unbound, never proved.
+// Checked by check_subject_binding.sh (leg H).
+
+#[spec(add_commutativity)]
+#[proof_by(Examples.TestFixtures.Proofs.spec_inside_evaluated_term)]
+#[proof_fingerprint("v2:7bd7ae4e79b8542ec15512b64e4242ad")]
+fn add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn main() -> i64 {
+    return add(1, 2);
+}

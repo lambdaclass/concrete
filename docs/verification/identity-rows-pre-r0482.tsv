@@ -114,6 +114,7 @@ link	tests/programs/spec_in_hypothesis_only/test_spec_hyp.con	add	v2:7bd7ae4e79b
 link	tests/programs/spec_in_irrelevant_disjunction/test_spec_disj.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+link	tests/programs/spec_inside_evaluated_term/test_spec_inside.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 reference	combineFns_@_combine	examples/proof_patterns/composition/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_trusted_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_unlinked_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42

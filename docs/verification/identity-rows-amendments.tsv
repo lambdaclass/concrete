@@ -20,3 +20,5 @@ A	link	tests/programs/spec_in_irrelevant_disjunction/test_spec_disj.con	add	v2:7
 A	link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 # 2026-10-19, Codex land1 confirmation review: the spec inside an arbitrary function's proof argument.
 A	link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+# 2026-10-19, Codex land1 confirmation review: the spec nested inside the term eval runs.
+A	link	tests/programs/spec_inside_evaluated_term/test_spec_inside.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad

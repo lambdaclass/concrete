@@ -102,4 +102,14 @@ theorem spec_in_proof_argument
     (h : eval FnTable.empty Env.empty 1 add_commutativity = none) :
     ignoreProof (eval FnTable.empty Env.empty 1 add_commutativity = none) h = 0 := rfl
 
+/-- A spec-valued function that ignores its spec argument. -/
+def ignoreSpec (_ : Nat) (_ : PExpr) : PExpr := .lit (.int 0)
+
+/-- The specification nested INSIDE the evaluated program: `eval` runs `ignoreSpec n spec`, which is
+    the literal 0, so the conclusion says nothing about `spec`. Only a whole closed spec argument binds
+    (Codex land1 confirmation review; check_subject_binding.sh, H). -/
+theorem spec_inside_evaluated_term (n : Nat) :
+    eval FnTable.empty Env.empty 1 (ignoreSpec n add_commutativity) = some (.int 0) := by
+  simp [ignoreSpec, eval]
+
 end Examples.TestFixtures.Proofs

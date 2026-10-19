@@ -830,7 +830,7 @@ mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
 EXPECTED_ORDINARY_PROBES=247
-EXPECTED_ORDINARY_MANIFEST_SHA256="7f61bd95edab57fb7a760cdf05e1c3935377c52564b6f403ce150f0c4be44593"
+EXPECTED_ORDINARY_MANIFEST_SHA256="cc915502b99060359cf8765001101d3bcf97bcc4cf8ce1b87258eafd0d932a3c"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
@@ -840,7 +840,9 @@ EXPECTED_TOTAL_ASSERTIONS=321
 # leg, which now passes with pureCoreFns dispatched. The ordinary manifest moved for the split's label.
 # Re-pinned 2026-10-18 for exactly one relabelled assertion, the corpus split (113/169 -> 114/173, the
 # five theorems named at the probe); the ordinary manifest moved for that label alone.
-EXPECTED_ASSERTION_LABELS_SHA256="7e0bc6584dc2c3c1cc3fbfb0324312c7b2ac4639c4e9e3420981c04209255c3c"
+# Re-pinned 2026-10-19 for the same assertion, 114/173 -> 114/174 (spec_inside_evaluated_term, named at
+# the probe); the ordinary manifest moved for that label alone.
+EXPECTED_ASSERTION_LABELS_SHA256="cf2f6faa77bdec1d81a28e04e85258f4960708d5d635bae4296ff78fe5476bb6"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -1090,7 +1092,10 @@ echo "=== corpus split, pinned ==="
 # negative fixtures `Examples.TestFixtures.Proofs.spec_in_hypothesis_only`,
 # `spec_in_nested_implication` and `spec_in_irrelevant_disjunction` — each evaluates over
 # `FnTable.empty`, so it classifies `body` even though none binds a claim.
-probe "the corpus splits 114 contract / 173 body" "114/173" \
+# 114/173 -> 114/174 on 2026-10-19 (Codex land1 confirmation review): body +1,
+# `Examples.TestFixtures.Proofs.spec_inside_evaluated_term`, the negative fixture whose evaluated program
+# ignores the spec nested inside it; it evaluates over `FnTable.empty` and binds nothing.
+probe "the corpus splits 114 contract / 174 body" "114/174" \
 '#eval show MetaM Unit from do
    let env ← getEnv
    let mut nc := 0; let mut nb := 0

@@ -83,6 +83,7 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction,
     `Examples.TestFixtures.Proofs.spec_in_nested_implication,
     `Examples.TestFixtures.Proofs.spec_in_proof_argument,
+    `Examples.TestFixtures.Proofs.spec_inside_evaluated_term,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
   ]
@@ -130,7 +131,10 @@ def operandSpecTerms (o : Lean.Expr) : MetaM (List Lean.Expr) := do
       let mut acc : List Lean.Expr := []
       for a in o.getAppArgs.toList do
         if (← try isDefEq (← inferType a) specTy catch _ => pure false) then
-          acc := acc ++ (← closedSpecTerms a)
+          -- The WHOLE argument must be one closed spec term; nothing found inside it counts
+          -- (`eval … (ignoreSpec n spec)` evaluates `ignoreSpec`, not `spec`).
+          let w ← closedSpecTerms a
+          if w == [a] then acc := acc ++ w
       return acc
   -- The operand itself is a spec term (defining equation): `closedSpecTerms` returns it only when
   -- the WHOLE operand is one closed spec-valued term, never something found inside it.
