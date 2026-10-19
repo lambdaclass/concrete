@@ -1,0 +1,7 @@
+// Bug 091 control: admitting Destroy's by-value receiver must not admit every
+// receiver — `&mut self` is still a signature mismatch (E0587).
+struct R { v: i32 }
+impl Destroy for R {
+    fn destroy(&mut self) { }
+}
+fn main() -> i32 { return 0; }

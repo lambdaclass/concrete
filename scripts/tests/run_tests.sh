@@ -1446,6 +1446,18 @@ run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42
 # Codex round 2: return-position `Self` is the impl's full type (`Cell<T>`) and return
 # types are alias-normalized (was a false E0582); a genuinely wrong return still is E0582.
 run_ok  "$TESTDIR/trait_impl_generic_self_return.con" 42
+# Gate regression of batch 2: builtin Destroy admits the by-value `destroy(self)` form
+# (canonical terminal consumer) as well as `&self`; `&mut self` is still E0587.
+run_ok  "$TESTDIR/trait_destroy_by_value_receiver.con" "2" 0
+run_err "$TESTDIR/error_091_destroy_mut_receiver.con" "(E0587)"
+r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_by_value_receiver.con" --interp 2>&1 | head -1 || true)
+if [ "$r091d_interp" = "2" ]; then
+    echo "  ok  bug 091: by-value Destroy receiver — interp == binary (2)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 091: by-value Destroy receiver — interp gave '$r091d_interp', want 2"
+    FAIL=$((FAIL + 1))
+fi
 run_err "$TESTDIR/error_091_generic_self_return_mismatch.con" "(E0582)"
 run_err "$TESTDIR/error_cap_pure.con"            "but caller has"
 run_err "$TESTDIR/error_cap_propagation.con"     "but caller has"

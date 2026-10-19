@@ -1026,7 +1026,14 @@ def ccCheckModuleDecls (m : CModule)
         | some ms =>
           let mismatch := fun (detail : String) =>
             mkDeclDiag (.traitMethodSigMismatch ti.traitName ti.typeName sig.name detail) ti.declSpan
-          if ms.selfKind != sig.selfKind then
+          -- The builtin `Destroy::destroy` admits BOTH documented receivers: `&self`
+          -- (std's collections) and by-value `self`, the canonical terminal-consumer form
+          -- (`fn destroy(self) { let File { fd } = self; }`, OWNERSHIP_MODEL.md H17). Only
+          -- `&mut self` (or no receiver) is a mismatch. Requiring exactly `&self` refused
+          -- the canonical form (batch 2 gate regression).
+          let receiverOk := ms.selfKind == sig.selfKind ||
+            (ti.traitName == destroyTraitName && ms.selfKind == some .value)
+          if !receiverOk then
             let showKind : Option SelfKind → String := fun k => match k with
               | none => "no receiver" | some .value => "`self`"
               | some .ref => "`&self`" | some .refMut => "`&mut self`"

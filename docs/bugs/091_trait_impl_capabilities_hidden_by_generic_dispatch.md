@@ -167,3 +167,10 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `-> i32`). Both return signatures are now `sigTyNormalize`d in Elab and `Self` resolves to
   `ti.selfTy`. Fixtures `trait_impl_generic_self_return.con` (42; was E0582) and
   `error_091_generic_self_return_mismatch.con` (a genuinely wrong `Cell<i64>` is still E0582).
+* **Gate regression: E0587 refused the canonical by-value destructor.** Conformance compared
+  the receiver exactly against the builtin signature's `&self`, so `impl Destroy for File {
+  fn destroy(self) { let File { fd } = self; } }` — the form OWNERSHIP_MODEL.md (H17) gives
+  for a terminal consumer, used across the linear gates and `pressure_destroy_wrapper.con` —
+  was rejected. Destroy admits `self` and `&self` (std's collections use `&self`); `&mut self`
+  stays E0587. Fixtures `trait_destroy_by_value_receiver.con` (2, compiled and --interp,
+  through generic `x.destroy()` and `destroy(t)`) and `error_091_destroy_mut_receiver.con`.
