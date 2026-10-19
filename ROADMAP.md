@@ -4879,7 +4879,7 @@ now carries the requirement; *done* items are closure records; *historical* item
 | B | R-0013 env/args · 9813 | live | 3 | Keep |
 | B | R-0013 random bounds · 9818 | live | 1, 3 | Keep documented contract; recoverable variant separately pulled |
 | B | F7/F8 · 9825 | live | 1, 3 | Keep repair in R-0013, dynamic validation in R-0030 |
-| B | `io.read_all` future reconsideration · 9848 | L, conditional | 3 | Keep trigger; do not misclassify accepted contract as defect |
+| B | `io.read_all` future reconsideration · 9848 | live, conditional | 3 | Keep trigger; do not misclassify accepted contract as defect |
 | B | R-0014 public-safety manifest · 9875 | duplicate of R-0021 | 3 | Merge |
 | B | R-0014 bug-046 dereference path · 9886 | live | 1, 2, 3, 4 | Merge checker containment into R-0514 and raw semantics into V6 |
 | B | R-0014 raw signature audit · 9899 | live | 3 | Keep with R-0016/R-0021 |
@@ -4924,7 +4924,7 @@ now carries the requirement; *done* items are closure records; *historical* item
 | B | R-0031.1a Clone/indexed swap · 10473 | live | after-1.0/research | Keep separate research decisions |
 | B | R-0031.1b arenas · 10483 | live | after-1.0/research | Keep before stable arena admission |
 | B | R-0031.1c dictionaries · 10498 | live | 3 | Keep before binary collection operations stabilize |
-| B | R-0031.1d alias guard · 10512 | L, continuing | 1, 2, 3, 4 | Keep gate; integrate declarative borrow proof |
+| B | R-0031.1d alias guard · 10512 | live, continuing | 1, 2, 3, 4 | Keep gate; integrate declarative borrow proof |
 | B | R-0031.1e returned references · 10516 | live | after-1.0/research | Keep outside V1–V7 until separately specified |
 | B | R-0031.1f const generics · 10521 | live | after-1.0/research | Keep; admitted feature must enter maintained V7 inventory/versioned scope |
 | B | R-0031.1g allocator values · 10531 | live | after-1.0/research | Keep before allocator-heavy stabilization |
@@ -4934,7 +4934,7 @@ now carries the requirement; *done* items are closure records; *historical* item
 | B | R-0483 “remaining … owner-bound results” · 10967 | done (not yet moved) | 3 | Retire; BoundView closure explicitly resolves it |
 | B | R-0483 failed migration/investigation · 10974–11111 | historical | 1, 3 | Archive; retain accepted coordinate limit at 10907 |
 | B | R-0484 descriptor second step · 11147, 11304–11306 | live | 3, 4 | **R-0530** (owner) — Turn into separately identifiable task after closed R-0484 |
-| B | R-0484 dependency/query limit · 11142 | L, accepted limit | 3 | Keep limitation; expansion requires a scoped task, not reopening closure |
+| B | R-0484 dependency/query limit · 11142 | live, accepted limit | 3 | Keep limitation; expansion requires a scoped task, not reopening closure |
 | B | R-0484 bug-077 containment · 11145 | live | 3 | Keep bug owner and valid-program restoration separately from containment |
 | B | R-0484 old indirect opacity analysis · 11151 | live | 2, 3 | Merge retirement into R-0514/R-0494 after parity |
 | B | R-0484 campaign “not qualified” · 11154 | historical | 1 | Archive chronology; retain exact later qualifying SHA, not inherited release qualification |
@@ -4992,7 +4992,7 @@ now carries the requirement; *done* items are closure records; *historical* item
 | B | Incremental equivalence exit · 12750 | duplicate of R-0149 | 3 | Merge |
 | B | R-0139 seven query families · 12813–12823 | live | 3 | Keep all families; update artifact chain to current checked IRs |
 | B | Future BackendIR migration · 12828, 13008 | superseded by R-0503/VP V1 | 2, 3 | Retire old phase assumption; support actual profile-specific artifacts |
-| B | Local-cache threat model · 12951–12961 | L, accepted boundary | 3 | Keep explicit limitation; verified profile needs authentic expected roots/revalidation |
+| B | Local-cache threat model · 12951–12961 | live, accepted boundary | 3 | Keep explicit limitation; verified profile needs authentic expected roots/revalidation |
 | B | Proof-cache authority · 12977–12990 | live | 3, 4, 5 | Keep; one Verdict authority decides current status |
 | B | Native/object cache limit · 13024–13027 | live | 3, 4 | Keep LLVM label; add native certificate/image correspondence before verified reuse |
 | B | Parallel/cancellation rule · 13033–13042 | live | 3 | Keep |
