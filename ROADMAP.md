@@ -22,6 +22,24 @@ state or queue.
 > target portable proposition boundary. This roadmap sequences their implementation and must not
 > invent competing definitions.
 
+## Roadmap at a glance
+
+The execution queue below has eighteen rows. They group into seven stages; stages 2 – 4 run side by side
+under the capacity rule, and new soundness defects always enter stage 1 first.
+
+| stage | rows | what it delivers |
+|---|---|---|
+| **1. Stabilize** | 0 – 2 | Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates |
+| **2. Verified foundation** | 3 – 4 | The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language |
+| **3. Usable language** | 5, 7, 8 | Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance |
+| **4. Verified growth** | 6 | Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and every claim migrated onto compiler-generated Core statements |
+| **5. Evidence as a product** | 9 – 11 | Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze |
+| **6. Richer verification** | 12 – 15 | Typed contracts and exact contract identity, two-state (`old`, frames) contracts, the ninth-table conversion, and totality with a specification library |
+| **7. Release and ecosystem** | 16 – 17 | External-user workflow and three graduated flagships, then package-level evidence and typed policy |
+
+The [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) holds stages 2 and 4 in detail; the
+task sections below hold every row's exit.
+
 ## The current execution queue
 
 This is the only current queue. It is intentionally not padded to a fixed number: rows exist only
@@ -38,7 +56,7 @@ the next transition; completed milestones move to the changelog rather than accu
 | 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
-| 8 | **Usability track (R-0515), alongside the proof track** | in waves within the capacity rule: **now** — an external pilot each quarter (a non-author builds a real program; the friction log feeds priorities) and a diagnostics quality bar (every error states cause, location and a suggested fix, snapshot-gated); **with V1** — an LSP showing types, errors and per-function proof and capability status, debuggability (DWARF line info, stack traces on traps), and published compile-time and runtime budgets against C, Rust and Zig; **pull-gated** — a `std` coverage plan with a stability policy, a book/tutorial with an owner, a concurrency design decision date, and a second maintainer |
+| 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
 | 9 | **Compiler provenance and canonical `VerificationTask`** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 10 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
 | 11 | **Receipt v1 freeze** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
@@ -1740,6 +1758,7 @@ The remaining design work has existing owners:
 | Safe library abstractions | R-0483, with R-0485 for review clarity | Make views, cursors, text and resource APIs preserve the existing ownership rules; distinguish reusable coordinates from access tied to an encapsulated owner, and preserve validated content against mutation. This is primarily library/API work, not a presumption that a new lifetime system is needed. |
 | Authority and effects | R-0484 | **Decided 2026-09-29/30:** a header's `with(...)` is the complete list of the function's external authority. Handles carry their capability in their type (`Writer<C>`) and using one requires `with(C)`; `trusted` absorbs only `Unsafe`. Implemented; closed 2026-10-08 (see the task). |
 | Compositional contract semantics | R-0473/R-0474/R-0477, Phase 9 and the existing VC bridge tasks | Complete typed contracts, binding/substitution, call composition, narrow mutation/frame semantics and checked totality. This is the largest remaining language-design area; R-0486 supplies the forcing workload. |
+| Tuples and destructuring | R-0515 coordinates the decision record | Before language-surface freeze, document whether named records remain the supported product type or a workload justifies tuples. Include a multi-value-return example, ownership/cleanup implications, and acceptance or rejection examples. A deliberate deferral with a reopening trigger closes the decision; implementation is not presumed. |
 
 **First bounded verification milestone — planned, not shipped:** one sequential
 parser/state-machine component, drawn from the already selected flagships, with contracts
@@ -16265,34 +16284,71 @@ and feature combination.
 ### Task R-0515
 
 **Objective:** Make Concrete a language people choose to use, measured continuously alongside the proof
-track rather than after it.
+track rather than after it, by advancing bounded checkpoints of the tasks that already own each concern.
 
-**Status (2026-10-19): planned; queue row 8, in waves under the capacity rule.** The verification
-work makes Concrete trustworthy; users make it good. Until now usability sat at the end of the queue
-(external-user workflow and productization), and the only workloads were author-written.
+**Status (2026-10-19): planned; queue row 8, delivered through bounded checkpoints within the existing
+capacity rule.** After rows 0 – 2 qualify, each checkpoint records its scope, accountable maintainer,
+reviewer, acceptance evidence and integration slot before starting. Usability, interop and application
+work share the existing integration limit; proof progress remains reserved. Quarterly pilots are a
+continuing feedback obligation, not a prerequisite for advancing rows 9 – 17; missed pilots and their
+recovery dates are recorded rather than counted as completed.
 
-Work, in waves (each item has its own exit):
-- **Now.** (1) *External pilot:* each quarter at least one non-author builds a real program; their
-  friction log (errors, missing library pieces, build time, documentation) is published and feeds slice
-  and ergonomics priorities (R-0485, R-0488). (2) *Diagnostics quality bar:* every diagnostic states its
-  cause, its location and a suggested fix where one exists, held by snapshot tests and a review checklist
-  (docs/compiler/DIAGNOSTIC_UX.md).
-- **With V1.** (3) *LSP:* types, diagnostics, go-to-definition, and per-function proof, trust and
-  capability status in the editor. (4) *Debuggability:* DWARF line information and source-level stack
-  traces on traps, in both profiles. (5) *Budgets:* compile time for the corpus and runtime for
-  representative workloads, benchmarked against C, Rust and Zig and published per release; the
-  `verified` profile's gap to LLVM is measured, not assumed.
-- **Pull-gated** (started when a pilot or workload asks). (6) A `std` coverage plan — time, filesystem,
-  process, networking, serialization — under a stated stability policy and versioned APIs. (7) A book or
-  tutorial with an owner, tested by its examples. (8) A dated concurrency design decision, even if
-  implementation follows the early slices. (9) A second maintainer, reducing the bus factor recorded in
-  the plan's ownership discipline.
+R-0515 owns pilot coordination and acceptance evidence. R-0485/R-0488 retain ownership of ergonomics
+changes and their prerequisites; row 7 supplies application workloads; row 16 retains
+dependency-upgrade/replay acceptance and flagship graduation; R-0385 – R-0388 own the editor, R-0355
+performance, R-0358 stability and deprecation, R-0346/R-0347 onboarding, R-0359 contribution and
+governance, R-0399 – R-0401 concurrency. A shared workload may supply evidence to several tasks, but does
+not close their distinct exits.
 
-**Exit (per wave):** *now* — two consecutive quarterly pilots completed with published friction logs and
-at least one acted-on finding each, and the diagnostics checklist enforced on every new diagnostic;
-*with V1* — the LSP shows proof/capability status on the corpus, traps print source stack traces, and the
-budgets are published and gated against regression; *pull-gated* items each close with their own stated
-exit when started.
+Work, in bounded checkpoints:
+- **Before the first pilot.** Pull forward the minimal R-0346/R-0347 onboarding path: install on a named
+  supported host, create, build, run and test a project, use one dependency, and repair one
+  representative error. Retain a non-author transcript, elapsed time and all author assistance; keep
+  tutorial examples executable in CI.
+- **Now.** (1) *External pilot:* each quarter, a non-author attempts a bounded program with a stated user
+  goal and executable acceptance checks on the supported existing profile. Record installation and
+  first-success time, failed attempts, author assistance, error-recovery effort, missing APIs and
+  build/runtime measurements. Publish a consented or redacted friction log. Each blocking finding
+  receives an owner and disposition; implemented fixes retain regression evidence and are retried by the
+  participant. Reuse row 7 workloads where suitable without requiring the full application port.
+  (2) *Diagnostics quality bar:* inventory diagnostic families encountered by the pilot and maintain a
+  reviewed coverage list. New or changed diagnostics, and existing diagnostics blocking the pilot, must
+  identify the violated rule, semantic consequence, relevant source or input location, and a valid next
+  action or explicit unsupported boundary. Reuse R-0137/R-0466 and R-0488's structured-path criteria.
+  Test representative failing programs and repaired positive controls; suggested repairs must preserve
+  the intended ownership and authority policy. Snapshots supplement these checks
+  ([DIAGNOSTIC_UX](docs/compiler/DIAGNOSTIC_UX.md)).
+- **V1 tooling checkpoints.** At V1a, qualify the minimal R-0385 – R-0388 editor path over the shared
+  compiler session: types, diagnostics, definition navigation, proof/trust/capability status and replay
+  links. At V1b, qualify DWARF line mappings and source-level trap traces for the admitted native subset
+  on each declared supported profile/target. These checkpoints retain the Phase 8.5 prerequisites; any
+  unresolved dependency and its effect on the release schedule is recorded before the checkpoint is
+  committed. R-0355 owns performance baselines and regression gates, extended with equivalent-workload
+  comparisons against pinned C, Rust and Zig toolchains and the verified-versus-LLVM comparison.
+- **Before public release.** R-0358 owns the language/stdlib stability and deprecation policy. Publish a
+  supported/missing `std` coverage inventory and assign owners to pilot-blocking gaps. Begin contributor
+  onboarding and succession planning under R-0359 and the verified-pipeline ownership discipline; name
+  critical-area reviewers and retain an independently completed review or release-replay exercise.
+- **Pull-gated.** Expand `std` and the tutorial into a book when recorded workloads justify them. Each
+  activated item records an owner, bounded scope and executable acceptance criteria before work starts.
+  R-0399 – R-0401 retain concurrency design and implementation ownership; record a dated decision or an
+  explicit deferral with a reopening trigger.
+
+**Exit (per checkpoint):** *onboarding* — a non-author completes the first-project path with the
+transcript, time and assistance retained, and its examples run in CI; *now* — two consecutive quarterly
+pilots retain their program, acceptance results and assistance record, each with a participant-validated
+improvement to a recorded obstacle (author-completed steps remain unresolved usability limitations;
+pilots continue quarterly after this checkpoint), and the diagnostic coverage list has no unowned
+pilot-blocking gaps, with gates exercising failing inputs and valid repairs for each selected family;
+*V1 tooling* — scripted editor tests exercise every promised operation and verify CLI/editor agreement
+after source, dependency and profile changes, including stale and unsupported evidence; a debugger
+resolves known source lines and nested trap fixtures produce expected source frames on every declared
+supported profile/target; benchmark sources, correctness checks, hardware, toolchain versions, build
+flags, safety settings, repeated measurements and numeric regression thresholds are published, cold
+builds, incremental edits and runtime are measured separately, CI rejects a deliberately injected
+threshold violation, and unsupported comparisons are reported explicitly and do not count as covered;
+*before public release* — the stability policy, `std` coverage inventory and named reviewers are
+published.
 
 ### Task R-0286
 
@@ -17617,6 +17673,12 @@ release policy.
  language" unless `concrete bench` and release performance gates publish
  replayable numbers; otherwise docs must say performance claims are not made
  yet.
+**Governance (added 2026-10-19 via R-0515):** publish a lightweight governance document naming
+language-design and release decision owners, the proposal/comment/decision process, how disagreements
+and conflicts of interest are handled, and how maintainer authority is delegated or transferred. Retain
+a public decision record for the first externally proposed change; record rejected proposals and their
+rationale as well as accepted ones.
+
 ### Task R-0360
 
 **Objective:** Ship the first narrow public release only after the above are green.
