@@ -7174,6 +7174,18 @@ else
     echo "FAIL  bug 087: sibling promoted aggregates — interp gave '$r087s_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
+# Codex round 2: an UNPROMOTED re-declaration of the dead name (immutable array, scalar
+# of another type, a declaration after the scope) gets its own binding, never the dead
+# promoted storage (pre-fix: E0715 / invalid LLVM).
+run_ok "$TESTDIR/regress_087_unpromoted_sibling.con" 42
+r087u_interp=$($COMPILER "$TESTDIR/regress_087_unpromoted_sibling.con" --interp 2>&1 || true)
+if [ "$r087u_interp" = "42" ]; then
+    echo "  ok  bug 087: unpromoted re-declaration — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 087: unpromoted re-declaration — interp gave '$r087u_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Same fixture, the other two consumers: the interpreter must agree with the
 # binary (pre-fix it returned 2), and the extracted proof model must be the
 # lexical one — no branch `let` leaking into the continuation (pre-fix

@@ -144,3 +144,15 @@ it compares suffix-free names where that is injective.
   renamed now; the spec binding is back to 11/0.
 * The `regress_087_let_block_shadow` model assertion is now a property (the loop body
   binds `k.bN = 1000` and reads `k.bN`), not the exact pre-bug-085 statement layout.
+
+## Codex round 2
+
+* **The promoted-storage repair missed UNPROMOTED re-declarations (P2).** Lower replaced a
+  dead name's promoted entry only when the new declaration was itself promoted; any other
+  declaration went through `setVar`, which consults the promoted table first, so an immutable
+  `let x: [i32; 1]`, a scalar `let x: i32` in a sibling branch, or a `let x: i64` after the
+  scope was stored into the dead binding's storage at the dead binding's type (E0715, or
+  invalid LLVM). A declaration now drops every promoted entry under its name before binding:
+  Elab renames shadows of visible names, so a re-declared Core name is always a dead one.
+  Fixture `tests/programs/regress_087_unpromoted_sibling.con` (42 compiled and --interp;
+  previously failed to build).

@@ -1,0 +1,53 @@
+// Bug 087, Codex round 2: a dead name re-declared WITHOUT promotion. Lower's
+// promoted-storage table was only updated by a promoted declaration, and
+// `setVar` consults it first, so an immutable array (`imm`), a scalar of
+// another type (`scalar`), or a later declaration after the scope (`later`)
+// was stored into the dead then-branch binding's `[i32; 1]` storage. Before the
+// fix this failed to build (E0715 in `scalar`; with it removed, invalid LLVM:
+// '%x.agg' defined with type 'ptr' but expected '[1 x i32]'). Expect 42 compiled
+// and interpreted.
+fn imm(c: bool) -> i32 {
+    let mut result: i32 = 0;
+    if c {
+        let mut x: [i32; 1] = [1];
+        x[0] = x[0] + 10;
+        result = x[0];
+    } else {
+        let x: [i32; 1] = [2];
+        result = x[0] + 40;
+    }
+    return result;
+}
+
+fn scalar(c: bool) -> i32 {
+    let mut result: i32 = 0;
+    if c {
+        let mut x: [i32; 1] = [1];
+        x[0] = x[0] + 10;
+        result = x[0];
+    } else {
+        let x: i32 = 3;
+        result = x + 40;
+    }
+    return result;
+}
+
+fn later(c: bool) -> i32 {
+    let mut result: i32 = 0;
+    if c {
+        let mut x: [i32; 1] = [1];
+        x[0] = x[0] + 10;
+        result = x[0];
+    }
+    let x: i64 = 7;
+    return result + (x as i32);
+}
+
+fn main() -> i32 {
+    if imm(true) != 11 { return 1; }
+    if scalar(true) != 11 { return 2; }
+    if later(true) != 18 { return 3; }
+    if later(false) != 7 { return 4; }
+    if scalar(false) != 43 { return 5; }
+    return imm(false);
+}

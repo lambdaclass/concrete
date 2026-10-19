@@ -1722,6 +1722,14 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
   | .letDecl name mutable ty value =>
     let val ← lowerExpr value
+    -- A declaration BINDS; it never assigns into an earlier binding's storage. Elab renames
+    -- every binding that shadows a VISIBLE name (bug 087), so a Core name declared again is
+    -- a dead name being reused (a sibling branch, or code after the scope that declared it),
+    -- and any promoted storage still registered under it belongs to that dead binding.
+    -- `setVar` consults the promoted table first, so an UNPROMOTED re-declaration (immutable,
+    -- or a scalar, or another type) was stored into — and read back from — the dead
+    -- binding's storage at the dead binding's type (Codex round 2 of bug 087).
+    removePromotedAllocas [name]
     -- A mutable VALUE aggregate (array, or a user struct/enum) needs a stable
     -- alloca so in-place element/field assignment AND `&mut place` borrows operate
     -- on real storage. This must happen at the declaration, not lazily mid-
