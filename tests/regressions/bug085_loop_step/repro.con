@@ -105,8 +105,8 @@ mod main {
     }
     // Bug 101 (Codex land1 review): a branch-local `let` must not scope over the statements after the
     // branch. The model nested `y = x` inside the branch's `let x = 10`, so scoped(1) read 10; the
-    // runtime's `x` after the branch is the outer one, 1. A branch whose own `let` is named by what
-    // follows it is now refused (not extracted).
+    // runtime's `x` after the branch is the outer one, 1. Bug 087's Elab alpha-renaming gives the
+    // branch's `let x` its own name, so this now extracts and agrees (check_model_diff.sh leg S).
     fn scoped(n: i32) -> i32 {
         let x: i32 = 1;
         let mut y: i32 = 0;

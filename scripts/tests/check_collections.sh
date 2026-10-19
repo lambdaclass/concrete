@@ -57,13 +57,14 @@ echo "=== 3. the H1-clean value/operation + scoped-callback surface is present =
 # Maps: value get, value remove, in-place update, scoped read.
 grep -qE 'pub fn get\(&self, key: &K\) -> Option<V>' "$STD/map.con" \
   && ok "HashMap::get -> Option<V> (value, Copy)" || no "HashMap value-get missing"
-grep -qE 'pub fn remove\(&mut self, key: &K\) -> Option<V>' "$STD/map.con" \
+# remove destroys a `K: Destroy` key, so bug 091 (batch 2) gave it `with(Alloc)`.
+grep -qE 'pub fn remove\(&mut self, key: &K\) with\(Alloc\) -> Option<V>' "$STD/map.con" \
   && ok "HashMap::remove -> Option<V>" || no "HashMap::remove -> Option<V> missing"
 grep -qE 'pub fn update\(&mut self, key: &K, f: fn\(V\) -> V\)' "$STD/map.con" \
   && ok "HashMap::update(key, fn(V)->V)" || no "HashMap::update missing"
 grep -qE 'pub fn with_value<' "$STD/map.con" \
   && ok "HashMap::with_value (scoped callback)" || no "HashMap::with_value missing"
-grep -qE 'pub fn remove\(&mut self, key: &K\) -> Option<V>' "$STD/ordered_map.con" \
+grep -qE 'pub fn remove\(&mut self, key: &K\) with\(Alloc\) -> Option<V>' "$STD/ordered_map.con" \
   && ok "OrderedMap::remove -> Option<V>" || no "OrderedMap::remove -> Option<V> missing"
 # Vec: value get + scoped at-access.
 grep -qE 'pub fn get\(&self, at: u64\) -> Option<T>' "$STD/vec.con" \

@@ -217,11 +217,18 @@ want "$TMP/s" reloop 0 4 S
 for fn in twice seq seq_assign assign_then_let use_i_after if_fallthrough ifthen if_else_step \
           ret_after_assign ret_pending branch_let_returns fresh_branch_let reloop; do allagree "$TMP/s" "$fn" S; done
 # Bug 101: a local named by what follows its scope. Before the fix scoped(1) read 10 in the model and 1
-# at runtime; scoped_flat(0) likewise; body_local_assigned read 6 for 1. Not extracted at all now.
-for fn in scoped scoped_flat body_local_assigned; do
-  grep -qP "\tmain\.$fn\t" "$TMP/s" && no "S: $fn is extracted: $(grep -m1 -P "\tmain\.$fn\t" "$TMP/s" | tr '\t' ' ')" \
-    || ok "S: $fn is not extracted (a local is named after its scope ends)"
-done
+# at runtime; scoped_flat(0) likewise; body_local_assigned read 6 for 1. Bug 087's Elab alpha-renaming
+# (batch 2) gives the branch-local `let x` its own name, so scoped/scoped_flat now EXTRACT and must
+# AGREE with the runtime at pinned values (the old 10 is the bug); body_local_assigned is still refused.
+want "$TMP/s" scoped 0 0 S
+want "$TMP/s" scoped 1 1 S
+want "$TMP/s" scoped 2 1 S
+want "$TMP/s" scoped_flat 0 1 S
+want "$TMP/s" scoped_flat 1 1 S
+allagree "$TMP/s" scoped_flat S
+grep -qP "\tmain\.body_local_assigned\t" "$TMP/s" \
+  && no "S: body_local_assigned is extracted: $(grep -m1 -P "\tmain\.body_local_assigned\t" "$TMP/s" | tr '\t' ' ')" \
+  || ok "S: body_local_assigned is not extracted (a local is named after its scope ends)"
 
 echo ""
 echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="
