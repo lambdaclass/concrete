@@ -133,6 +133,32 @@ partial def collectEnums : List CModule → List CEnumDef
 def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
   fns.find? (fun f => f.name == name)
 
+/-- Reserved key of a type's `Destroy` impl method in the interpreter's function table. `$`
+    cannot occur in a source identifier, so no user function is ever found under it. -/
+def destroyImplKey (typeName : String) : String := "$impl$Destroy$" ++ typeName
+
+/-- Reserved key of a type's (non-Destroy) trait impl method `method`. A type has at most one
+    method of a given name, so (type, method) identifies the impl method. -/
+def traitImplKey (typeName method : String) : String := "$impl$" ++ typeName ++ "$" ++ method
+
+partial def collectTraitImpls : List CModule → List CTraitImpl
+  | [] => []
+  | m :: ms => m.traitImpls ++ collectTraitImpls m.submodules ++ collectTraitImpls ms
+
+/-- Trait-impl methods under their reserved keys, resolved through the impl's own record
+    (`CTraitImpl.implMethodFnName`) — never a `Type_method` spelling guessed from a name, which
+    selected an unrelated `P_destroy` function for a Copy `P` with no Destroy impl and missed
+    a nested module's `sub_Type_destroy` entirely (Codex round 2, bug 052). A top-level impl
+    is listed first, matching Mono's choice among same-named types. -/
+def implMethodFns (modules : List CModule) (fns : List CFnDef) : List CFnDef :=
+  let impls := collectTraitImpls modules
+  let ordered := impls.filter (·.fnPrefix.isEmpty) ++ impls.filter (!·.fnPrefix.isEmpty)
+  ordered.flatMap fun ti =>
+    ti.methodSigs.filterMap fun ms =>
+      (findFn fns (ti.implMethodFnName ms.name)).map fun f =>
+        { f with name := if ti.traitName == destroyTraitName && ms.name == destroyMethodName
+                         then destroyImplKey ti.typeName else traitImplKey ti.typeName ms.name }
+
 def findEnum (enums : List CEnumDef) (name : String) : Option CEnumDef :=
   enums.find? (fun e => e.name == name)
 
@@ -725,11 +751,11 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         -- Dispatch on the RUNTIME value's type (see
         -- `destroyValue`): user destructor side effects must match the
         -- compiled binary, including per-element glue for arrays (bug 052).
-        if (splitTraitParamCallee fnName).any (·.2 == destroyMethodName) then
+        if fnName == destroyDispatchCallee then
           let env' ← destroyValue fns enums env arg
           return (env', .val .unit)
-        else .error s!"interp: undefined function '{fnName}'"
-      | _, _ => .error s!"interp: undefined function '{fnName}'"
+        else evalTraitParamCall fns enums env fnName argVals
+      | _, _ => evalTraitParamCall fns enums env fnName argVals
 
   | .structLit name _ fields _ => do
     let (env, fieldVals) ← evalFields fns enums env fields
@@ -821,8 +847,9 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
 /-- H18 drop-glue for the pre-mono interpreter, mirroring Mono's synthesized
     glue: an array destroys each element once, in index order (bug 052 — the
-    array used to fall through to the no-op); a struct/enum runs its
-    `{Type}_destroy` if one is defined; anything else (Copy values, and
+    array used to fall through to the no-op); a struct/enum runs its `Destroy`
+    impl's method (`destroyImplKey`, resolved from the impl table — never a
+    `{Type}_destroy` name lookup); anything else (Copy values, and
     memory-only destructors in the heapless model) is a no-op. `arg` is the
     destroy call's argument: a reference (element refs extend its path) or a
     value. -/
@@ -839,7 +866,7 @@ partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
       env ← destroyValue fns enums env elemArg
     return env
   | .struct_ n _ | .enum_ n _ _ =>
-    match findFn fns (n ++ "_destroy") with
+    match findFn fns (destroyImplKey n) with
     | some fdef =>
       let outerLen := env.length
       let callEnv := bindParams env fdef.params [arg]
@@ -847,6 +874,32 @@ partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
   | _ => return env
+
+/-- A `T$m` call on a type parameter that is not the builtin destructor (Elab spells that one
+    `destroyDispatchCallee`): dispatched on the RUNTIME receiver's type through the trait-impl
+    table, as Mono's per-instantiation rewrite does. Anything else is an undefined function. -/
+partial def evalTraitParamCall (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
+    (fnName : String) (argVals : List IVal) : Except String (Env × Flow) := do
+  match splitTraitParamCallee fnName, argVals with
+  | some (_, m), recv :: _ =>
+    let target ← autoDeref env recv
+    let tn := match target with
+      | .struct_ n _ | .enum_ n _ _ => n
+      | _ => ""
+    match (if tn.isEmpty then none else findFn fns (traitImplKey tn m)) with
+    | some fdef =>
+      if fdef.params.length != argVals.length then
+        .error s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
+      else
+        let outerLen := env.length
+        let callEnv := bindParams env fdef.params argVals
+        let (postEnv, flow) ← evalStmts fns enums callEnv fdef.body
+        let restored := postEnv.drop (postEnv.length - outerLen)
+        match flow with
+        | .ret v | .val v => return (restored, .val v)
+        | _ => return (restored, .val .unit)
+    | none => .error s!"interp: undefined function '{fnName}'"
+  | _, _ => .error s!"interp: undefined function '{fnName}'"
 
 partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
   let (env, f) ← evalExpr fns enums env e
@@ -1235,7 +1288,8 @@ def qualifiedTopLevelFns (modules : List CModule) : List CFnDef :=
 /-- Interpret a program from its validated Core modules.
     Finds and runs `main`, returns exit code. -/
 def interpret (modules : List CModule) : Except String (Option Int × String) := do
-  let fns := collectFns modules ++ qualifiedTopLevelFns modules
+  let fns0 := collectFns modules ++ qualifiedTopLevelFns modules
+  let fns := fns0 ++ implMethodFns modules fns0
   let enums := collectEnums modules
   match fns.find? (fun f => f.name == "main") with
   | none => .error "interp: no 'main' function found"

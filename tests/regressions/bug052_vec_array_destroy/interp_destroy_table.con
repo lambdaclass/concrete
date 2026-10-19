@@ -1,0 +1,42 @@
+// Bug 052, Codex round 2: the interpreter's destructor dispatch uses the
+// Destroy-impl table, never a `Type_destroy` name lookup.
+//   * Copy `P` has NO Destroy impl but an unrelated function `P_destroy`:
+//     `kill::<P>` is a no-op (compiled agreed; old --interp printed 999);
+//   * `Tracked`'s Destroy impl lives in a NESTED module (`inner_Tracked_destroy`):
+//     `kill::<Tracked>` runs it (old --interp skipped it: printed 0, 1).
+// Expected (compiled AND --interp): 1, 2, exit 0.
+mod m {
+    mod inner {
+        pub struct Tracked { cell: *mut u64 }
+        trusted impl Destroy for Tracked {
+            pub fn destroy(&self) {
+                *self.cell = *self.cell + 1;
+            }
+        }
+        pub fn track(cell: *mut u64) -> Tracked { return Tracked { cell: cell }; }
+    }
+    import inner.{Tracked, track};
+    struct Copy P { v: i64 }
+    fn P_destroy(p: &P) with(Console) {
+        print_int(999);
+        print_char(10);
+    }
+    fn kill<T: Destroy>(x: &T) with(Alloc) {
+        x.destroy();
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let p: P = P { v: 1 };
+        kill::<P>(&p);
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = track(cell);
+        kill::<Tracked>(&t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        destroy(t);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

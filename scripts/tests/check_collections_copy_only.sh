@@ -208,6 +208,22 @@ if "$C" "$B52/review_forms.con" -o "$TMP/b52r" >"$TMP/b52r.out" 2>&1; then
 else
   no "bug 052 review-forms fixture failed to compile"; sed 's/^/        /' "$TMP/b52r.out" | head -5
 fi
+# Codex round 2 of bug 052: (a) only the builtin Destroy trait's `destroy` is typed destructor
+# dispatch -- an unrelated `Reset::destroy` on a Copy type runs its impl (old compiled: 1, the
+# no-op glue); (b) the interpreter dispatches destructors through the Destroy-impl table: an
+# unrelated `P_destroy` fn is never called (old --interp printed 999) and a NESTED module's
+# Destroy impl runs (old --interp: 0 1).
+for leg in "unrelated_destroy_trait:7 1 0 " "interp_destroy_table:1 2 0 "; do
+  f="${leg%%:*}"; want="${leg#*:}"
+  if "$C" "$B52/$f.con" -o "$TMP/b52_$f" >"$TMP/b52_$f.out" 2>&1; then
+    cgot="$( { "$TMP/b52_$f" 2>&1; echo "$?"; } | tr '\n' ' ')"
+    igot="$("$C" "$B52/$f.con" --interp 2>&1 | tr '\n' ' ')"
+    [ "$cgot" = "$want" ] && ok "$f compiled: $want" || no "$f compiled output '$cgot', want '$want'"
+    [ "$igot" = "$want" ] && ok "$f --interp agrees: $want" || no "$f --interp output '$igot', want '$want'"
+  else
+    no "bug 052 $f fixture failed to compile"; sed 's/^/        /' "$TMP/b52_$f.out" | head -5
+  fi
+done
 # Interp-vs-compiled control: a reinterpreting pointer cast (`&mut u64 as *mut u8`) is refused
 # by the interpreter with a clear error (it stores typed values, not bytes) instead of
 # overwriting the whole value (old interp: 3; compiled: 259).

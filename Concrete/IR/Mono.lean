@@ -118,9 +118,10 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
     --
     -- Only the RESERVED spelling `T$m` (`traitParamCallee`) is rewritten, never a name that
     -- merely starts with `T_`: that prefix rewrite also renamed a user's own `T_helper` call.
-    -- `T$destroy` becomes the typed destructor dispatch (`destroyDispatchCallee`), resolved
-    -- from the argument type by `monoDestroyDispatch` — so a user `T_destroy`, or a free
-    -- function spelled like a type's destructor, can never stand in for it (bug 052 review).
+    -- The builtin `Destroy::destroy` never reaches here as `T$destroy`: Elab, which knows
+    -- the trait, emits `destroyDispatchCallee` for it directly, and `monoDestroyDispatch`
+    -- resolves that from the argument type. A `T$destroy` here belongs to some OTHER trait
+    -- and is an ordinary method call (Codex round 2, bug 052).
     -- A nameless concrete type (`concreteName == ""`, e.g. an array) keeps any other `T$m`:
     -- it has no impl to name, and the unresolved callee fails loudly downstream.
     let callee' := match callee with
@@ -128,8 +129,7 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
       | .direct name => Callee.direct (match splitTraitParamCallee name with
           | some (p, m) => match nameMap.lookup p with
             | some c =>
-              if m == destroyMethodName then destroyDispatchCallee
-              else if c.isEmpty then name else mangledMethodName c m
+              if c.isEmpty then name else mangledMethodName c m
             | none => name
           | none => name)
     .call callee' targs (args.map (rewriteCallNames nameMap)) ty

@@ -1,0 +1,27 @@
+// Bug 052, Codex round 2: a trait method merely NAMED `destroy` is not the
+// builtin destructor. `Reset::destroy` on a Copy `P` must run P's Reset impl
+// through a `T: Reset` bound. Before the fix Mono turned any `T$destroy` into
+// typed destructor dispatch, and P (Copy, no Destroy impl) got the no-op glue:
+// compiled printed only 1. Expected (compiled AND --interp): 7, 1, exit 0.
+mod m {
+    struct Copy P { v: i64 }
+    trait Reset {
+        fn destroy(&self) with(Console);
+    }
+    impl Reset for P {
+        fn destroy(&self) with(Console) {
+            print_int(self.v);
+            print_char(10);
+        }
+    }
+    fn reset_all<T: Reset>(x: &T) with(Console) {
+        x.destroy();
+    }
+    fn main() with(Std) -> Int {
+        let p: P = P { v: 7 };
+        reset_all::<P>(&p);
+        print_int(1);
+        print_char(10);
+        return 0;
+    }
+}

@@ -135,3 +135,24 @@ E0241, and 0 destructions with the user `T_destroy`) and `reinterpret_cast.con` 
 259; `--interp` refuses; previous interpreter printed 3), both in
 `check_collections_copy_only.sh`. `single.con`/`refuse_unresolved.con` now declare
 `with(Alloc)` on `kill`, as bug 091 requires.
+
+## Codex round 2
+
+* **Any trait method named `destroy` became builtin Destroy (P1).** Mono rewrote every
+  `T$destroy` to typed destructor dispatch by the method NAME; a `Reset { fn destroy(&self); }`
+  impl on a Copy type was replaced by the trivial no-op glue. Elab, which knows the resolved
+  trait, now emits `destroyDispatchCallee` only for the builtin `Destroy` trait
+  (`builtinId == .destroy`); Mono and ProofCore's free-call classification key on that callee,
+  and every other `T$m` is an ordinary method call. Fixture
+  `tests/regressions/bug052_vec_array_destroy/unrelated_destroy_trait.con` (7 1, compiled and
+  --interp; old compiled printed only 1).
+* **The interpreter selected destructors by name (P2).** `destroyValue` called
+  `findFn (n ++ "_destroy")`: an unrelated `P_destroy` function ran for a Copy `P` with no
+  Destroy impl, and a nested module's `sub_Type_destroy` was never found. The interpreter now
+  builds a trait-impl table from the impls' own records (`CTraitImpl.implMethodFnName`,
+  reserved `$impl$...` keys) and destroys through it; the same table runs non-Destroy `T$m`
+  calls on a type parameter (dispatched on the runtime receiver's type), which the
+  interpreter previously rejected as undefined functions. Fixture
+  `interp_destroy_table.con` (1 2, compiled and --interp; old --interp printed 999, 0, 1).
+  Both legs are in `check_collections_copy_only.sh`. Mono's dispatch also names the RESOLVED
+  destructor definition now (bug 091 round 2).

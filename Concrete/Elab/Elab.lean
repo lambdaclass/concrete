@@ -1188,11 +1188,12 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
         let mut foundSig : Option FnSigDef := none
+        let mut foundBuiltin : Option BuiltinTraitId := none
         for traitName in bounds do
           match env.traits.find? fun td => td.name == traitName with
           | some td =>
             match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; break
+            | some ms => foundSig := some ms; foundBuiltin := td.builtinId; break
             | none => pure ()
           | none => pure ()
         match foundSig with
@@ -1218,7 +1219,15 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           -- Reserved spelling (see `traitParamCallee`): a user function named `T_m` is a
           -- different callable and must not be selected, so the evidence does not resolve
           -- the call by that string either.
-          return ElaboratedExprV2.mk (CExpr.call (traitParamCallee n methodName) typeArgs cArgs retTy)
+          --
+          -- The TRAIT is decided here, where it is known: only the builtin `Destroy` trait's
+          -- `destroy` becomes typed destructor dispatch (`destroyDispatchCallee`). Mono used
+          -- to infer it from the method NAME, so an unrelated `Reset::destroy` on a Copy type
+          -- was rewritten to the trivial no-op glue and its impl never ran (Codex round 2,
+          -- bug 052).
+          let callee := if foundBuiltin == some .destroy && methodName == destroyMethodName
+            then destroyDispatchCallee else traitParamCallee n methodName
+          return ElaboratedExprV2.mk (CExpr.call callee typeArgs cArgs retTy)
             Proof.evTraitMethodOnTypeParam
       | _ => throwElab .methodCallOnNonNamedType (some e.getSpan)
     else

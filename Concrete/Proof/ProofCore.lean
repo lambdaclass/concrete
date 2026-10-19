@@ -178,7 +178,7 @@ def isAllocCall (name : String) : Bool :=
 def isFreeCall (name : String) : Bool :=
   freeIntrinsics.contains name ||
   name.endsWith "_destroy" ||
-  (splitTraitParamCallee name).any (·.2 == destroyMethodName) ||
+  name == destroyDispatchCallee ||
   match resolveIntrinsic name with
   | some .free | some .destroy | some .vecFree | some .dropString => true
   | _ => false
