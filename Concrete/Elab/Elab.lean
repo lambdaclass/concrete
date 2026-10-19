@@ -2323,8 +2323,8 @@ partial def prefixModuleFnNames (pfx : String) (cm : CModule) : CModule :=
       body := renameFnStmts rmap f.body }
   -- Prefix trait impl method names
   let prefixedTraitImpls := cm.traitImpls.map fun ti =>
-    { ti with methodNames := ti.methodNames.map fun mn =>
-        rmap.lookup mn |>.getD mn }
+    { ti with methodNames := ti.methodNames.map (fun mn => (rmap.lookup mn).getD mn),
+              fnPrefix := pfx }
   -- Recursively prefix nested submodules
   let prefixedSubs := cm.submodules.map fun sub =>
     prefixModuleFnNames (pfx ++ "_" ++ sub.name) sub

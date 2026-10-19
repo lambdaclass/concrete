@@ -129,3 +129,21 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   array glue carries `Alloc` for the same reason, and its fixtures declare it.
 * Trait-method calls on a type parameter are now spelled `T$m` in Core (bug 052
   follow-up); comments referring to `T_method` were updated.
+
+## Codex round 2
+
+* **Nested-module Destroy impls escaped the Alloc fence (P1).** The H18 fence (E0584) looked
+  up `Type_destroy` among the module's functions, but `prefixModuleFnNames` had renamed a
+  nested module's destructor `sub_Type_destroy`, so the lookup missed and the fence passed; a
+  `with(Console)` destructor then ran under generic `x.destroy()` from a caller holding only
+  `Alloc`. The fence now reads the impl's own method signature (`ti.methodSigs`). Mono's typed
+  destructor dispatch names the RESOLVED definition (`CTraitImpl.fnPrefix` /
+  `implMethodFnName`) instead of the `Type_destroy` alias, and `verifyCapsPostMono` resolves
+  alias spellings itself (every alias any module declares, deciding only when all candidate
+  definitions agree). Mono does not re-spell other non-generic calls: its program-wide alias
+  pool is first-match, and re-spelling broke regress_039 (the backend prefers a module's own
+  aliases). Same-named types with Destroy impls in several modules: the top-level impl wins
+  (the old exact-name rule); otherwise an ambiguous choice is refused (E0814).
+  Fixtures: `tests/programs/error_091_nested_destroy_caps.con` (E0584; previously compiled and
+  printed 7 from the Alloc-only `quiet`), pipeline-test `mono/nested-destroy-verified` (the
+  verifier names the widened nested destructor, exact and through its alias; failed before).

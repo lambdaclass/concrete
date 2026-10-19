@@ -1431,6 +1431,9 @@ run_err "$TESTDIR/error_trait_bound_call_missing_cap.con"   "function 'Act::act'
 run_err "$TESTDIR/error_trait_impl_sig_mismatch.con"        "expected receiver"
 run_err "$TESTDIR/error_trait_method_generic.con"           "generic trait methods are not supported"
 run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
+# Codex round 2: a NESTED module's Destroy impl is fenced too (its destructor is
+# `inner_Noisy_destroy`; the fence looked up `Noisy_destroy` and silently passed).
+run_err "$TESTDIR/error_091_nested_destroy_caps.con"        "(E0584)"
 # Bug 091 self-review: an impl spelling its own type `Self` in a parameter or return
 # conforms to the trait (was a false E0587 / E0582).
 run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42

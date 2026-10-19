@@ -452,8 +452,24 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
   -- program size (self-review of bug 091).
   let byName : Std.HashMap String (List CFnDef) :=
     fns.foldl (fun m f => m.insert f.name (f :: (m.getD f.name []))) {}
-  let required : String → Option (List String) := fun callee =>
+  -- A callee spelled by an import alias names no definition directly (Codex round 2 of bug
+  -- 091: Mono kept a nested destructor's `Type_destroy` alias spelling and this lookup
+  -- found nothing). Resolve it through EVERY alias any module declares for that spelling
+  -- (one more hop each, as Mono's `lookupFn` does), and decide only when all candidate
+  -- definitions agree — never guess which module's alias the backend will pick.
+  let rec allAliases (ms : List CModule) : List (String × String) :=
+    ms.foldl (fun acc m => acc ++ m.linkerAliases ++ allAliases m.submodules) []
+  let aliasTargets : Std.HashMap String (List String) :=
+    (allAliases modules).foldl (fun m (l, t) => m.insert l (t :: (m.getD l []))) {}
+  let definitionsOf : String → List CFnDef := fun callee =>
     match byName.getD callee [] with
+    | [] =>
+      let targets := aliasTargets.getD callee []
+      let hops := targets ++ targets.flatMap (aliasTargets.getD · [])
+      hops.eraseDups.flatMap (byName.getD · [])
+    | ds => ds
+  let required : String → Option (List String) := fun callee =>
+    match definitionsOf callee with
     | [] => none
     | d :: ds =>
       if !d.typeParams.isEmpty || ds.any (fun d' => d'.capSet.normalize != d.capSet.normalize) then none

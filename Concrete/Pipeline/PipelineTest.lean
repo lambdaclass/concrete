@@ -308,6 +308,55 @@ def testMonoTrait : IO UInt32 := do
       IO.eprintln (renderDiagnostics ds)
       return 1
 
+/-- Codex round 2 of bug 091: a nested module's destructor (`outer_inner_Noisy_destroy` after
+    `prefixModuleFnNames`) reached through generic `x.destroy()`. Mono used to spell the call
+    `Noisy_destroy` — a linker alias — so `verifyCapsPostMono`'s exact-name lookup found
+    nothing and passed. Simulate a front-end miss by widening the destructor's declared set
+    to `Console` AFTER Mono, and require the post-mono verifier to name it. -/
+def nestedDestroySource : String :=
+  "mod outer { mod inner { pub struct Noisy { v: i64 } impl Destroy for Noisy { " ++
+  "pub fn destroy(&self) with(Alloc) { } } pub fn make(v: i64) -> Noisy { return Noisy { v: v }; } } " ++
+  "import inner.{Noisy, make}; fn kill<T: Destroy>(x: &T) with(Alloc) { x.destroy(); } " ++
+  "fn quiet(n: Noisy) with(Alloc) -> Noisy { kill::<Noisy>(&n); return n; } " ++
+  "fn main() with(Std) -> Int { let n: Noisy = quiet(make(7)); destroy(n); return 0; } }"
+
+partial def widenFnCaps (target : String) (cs : CapSet) (m : CModule) : CModule :=
+  { m with functions := m.functions.map (fun f => if f.name == target then { f with capSet := cs } else f)
+           submodules := m.submodules.map (widenFnCaps target cs) }
+
+partial def respellCalls (rmap : List (String × String)) (m : CModule) : CModule :=
+  { m with functions := m.functions.map (fun f =>
+             if rmap.any (·.1 == f.name) then f else { f with body := renameFnStmts rmap f.body })
+           submodules := m.submodules.map (respellCalls rmap) }
+
+def testMonoNestedDestroyVerified : IO UInt32 := do
+  match frontendNoIO nestedDestroySource with
+  | .error ds =>
+    IO.eprintln "FAIL: mono/nested-destroy-verified — frontend failed"
+    IO.eprintln (renderDiagnostics ds)
+    return 1
+  | .ok (_, _, validCore) =>
+    match Pipeline.monomorphize validCore with
+    | .error ds =>
+      IO.eprintln "FAIL: mono/nested-destroy-verified — mono failed"
+      IO.eprintln (renderDiagnostics ds)
+      return 1
+    | .ok mono =>
+      let widened := mono.coreModules.map (widenFnCaps "inner_Noisy_destroy" (.concrete ["Console"]))
+      let ds := verifyCapsPostMono widened
+      -- Same violation with the call spelled by its linker ALIAS (`Noisy_destroy`, the old Mono
+      -- spelling): the verifier resolves aliases itself, and must still name the definition.
+      let respelled := widened.map (respellCalls [("inner_Noisy_destroy", "Noisy_destroy")])
+      let dsAlias := verifyCapsPostMono respelled
+      if ds.any (fun d => d.message.contains' "'inner_Noisy_destroy' requires capabilities (Console)")
+         && dsAlias.any (fun d => d.message.contains' "'Noisy_destroy' requires capabilities (Console)") then
+        IO.println "PASS: mono/nested-destroy-verified"
+        return 0
+      else
+        IO.eprintln "FAIL: mono/nested-destroy-verified — verifyCapsPostMono did not see the nested destructor (exact or through its alias)"
+        IO.eprintln (renderDiagnostics (ds ++ dsAlias))
+        return 1
+
 -- ============================================================
 -- Tests: SSA lowering (isolated)
 -- ============================================================
@@ -733,9 +782,10 @@ def main : IO UInt32 := do
 
   -- Mono tests
   IO.println "--- Monomorphize ---"
-  total := total + 2
+  total := total + 3
   failures := failures + (← testMonoGeneric)
   failures := failures + (← testMonoTrait)
+  failures := failures + (← testMonoNestedDestroyVerified)
   IO.println ""
 
   -- SSA Lowering tests

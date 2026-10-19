@@ -383,9 +383,12 @@ structure MonoState where
   /-- Newtypes, for the same Copy judgment: function-body types keep newtype names, so a
       `newtype Meters = Int` must read as Copy here as it does in Check (bug 052 review). -/
   newtypes : List NewtypeDef := []
-  /-- Type names with a `Destroy` trait impl: the typed destructor dispatch calls exactly
-      these impls' methods (`monoDestroyDispatch`). -/
-  destroyImpls : List String := []
+  /-- Type names with a `Destroy` trait impl, each with its destructor's RESOLVED definition
+      name (`CTraitImpl.implMethodFnName`): the typed destructor dispatch calls exactly these
+      definitions (`monoDestroyDispatch`). A nested module's impl is `sub_Type_destroy`; the
+      re-spelled `Type_destroy` reached it only through a linker alias, which the post-mono
+      capability verifier could not see through (Codex round 2, bug 091). -/
+  destroyImpls : List (String × String) := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
@@ -480,7 +483,13 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
       match fnDef? with
       | some fnDef =>
         if fnDef.typeParams.isEmpty then
-          return .call fn [] args' ty  -- truly non-generic
+          -- Truly non-generic: the spelling is KEPT. `lookupFn` resolves aliases from the
+          -- program-wide pool (first match), while the backend resolves a module's own
+          -- import aliases first (bug 039) — re-spelling here as `fnDef.name` called the
+          -- wrong `get` in regress_039. Destructor dispatch, the case the post-mono
+          -- verifier needs exact, is spelled by its resolved definition at the source
+          -- (`destroyImpls`), and the verifier resolves aliases conservatively itself.
+          return .call fn [] args' ty
         else
           -- Generic function called without type args (e.g., sibling method call).
           -- Try to infer type args from concrete argument types.
@@ -609,10 +618,22 @@ partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := d
       return ← refuseDestroy s!"destructor call on an unresolved type '{tyToSuffix target}': the element's destructor cannot be determined (bug 052)"
         "name the type argument explicitly (turbofish, e.g. `f::<[T; 2]>(&x.field)`) so the destructor is resolved."
     let tn := tyName target
-    if !tn.isEmpty && st.destroyImpls.contains tn then
+    -- Core names types by their bare name, so several modules' private types can share one
+    -- (std's vec test helper `Tracked` beside a user `Tracked`). A top-level impl keeps the
+    -- bare `Type_destroy` definition — the one the exact-name rule always selected — and wins;
+    -- otherwise the impl must be unique, and an ambiguous choice is refused, never guessed.
+    let candidates := (st.destroyImpls.filter (·.1 == tn)).map (·.2) |>.eraseDups
+    let chosen? : Option String :=
+      if tn.isEmpty then none
+      else if candidates.contains (destroyFnNameFor tn) then some (destroyFnNameFor tn)
+      else candidates.head?
+    if candidates.length > 1 && !candidates.contains (destroyFnNameFor tn) then
+      return ← refuseDestroy s!"destructor call on '{tn}': several modules implement Destroy for a type of that name ({String.intercalate ", " candidates}) and Core cannot tell which one this is (bug 052)"
+        "rename one of the types so the destructor is unambiguous."
+    if let some dfn := chosen? then
       -- The impl's own method. Re-enter the ordinary call path with the ORIGINAL argument so
       -- a generic impl (`impl<T: Destroy> Destroy for Vec<T>`) is specialized as usual.
-      return ← monoExpr (.call (.direct (destroyFnNameFor tn)) [] [a0] ty)
+      return ← monoExpr (.call (.direct dfn) [] [a0] ty)
     let glueName := destroyGlueName (tyToSuffix argTy)
     if monoIsCopy st target then
       enqueueMono glueName {
@@ -1281,7 +1302,8 @@ def monoProgram (modules : List CModule)
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllModuleEnums m) []
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllModuleNewtypes m) []
   let destroyImpls := (modules.foldl (fun acc m => acc ++ collectAllModuleTraitImpls m) []).filterMap
-    fun ti => if ti.traitName == destroyTraitName then some ti.typeName else none
+    fun ti => if ti.traitName == destroyTraitName
+      then some (ti.typeName, ti.implMethodFnName destroyMethodName) else none
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap,
                                  structs := allStructs, enums := allEnums,
                                  newtypes := allNewtypes, destroyImpls := destroyImpls }

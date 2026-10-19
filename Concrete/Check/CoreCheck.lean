@@ -1051,11 +1051,14 @@ def ccCheckModuleDecls (m : CModule)
       -- v1 BECAUSE this fence guarantees no cap-carrying destructor exists;
       -- lifting it requires the associated-capability machinery in Check
       -- (RUNTIME_COLLECTIONS.md drop-glue rule 4).
+      -- Read off the impl's OWN method signature, never a function found by spelling: a
+      -- nested module's destructor is `sub_Type_destroy` after `prefixModuleFnNames`, so a
+      -- `Type_destroy` lookup missed it and the fence silently passed (Codex round 2, bug 091).
       if ti.traitName == destroyTraitName then
-        match m.functions.find? fun f => f.name == ti.typeName ++ "_" ++ destroyMethodName with
-        | some dfn =>
-          if !Capabilities.capsContain (.concrete ["Alloc"]) dfn.capSet then
-            errors := errors ++ [mkDeclDiag (.destroyImplCapsBeyondAlloc ti.typeName (capSetToString dfn.capSet)) ti.declSpan]
+        match ti.methodSigs.find? fun ms => ms.name == destroyMethodName with
+        | some ms =>
+          if !Capabilities.capsContain (.concrete ["Alloc"]) ms.capSet then
+            errors := errors ++ [mkDeclDiag (.destroyImplCapsBeyondAlloc ti.typeName (capSetToString ms.capSet)) ti.declSpan]
         | none => pure ()
   errors
 

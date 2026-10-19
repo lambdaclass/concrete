@@ -1,0 +1,30 @@
+// Bug 091, Codex round 2: a Destroy impl in a NESTED module requiring Console.
+// prefixModuleFnNames renames its destructor `inner_Noisy_destroy`, so the H18
+// fence's `Noisy_destroy` lookup found nothing and passed; generic
+// `x.destroy()` then ran Console under a caller holding only Alloc (the
+// compiled binary printed 7 from `quiet`). Expected: E0584.
+mod outer {
+    mod inner {
+        pub struct Noisy { v: i64 }
+        impl Destroy for Noisy {
+            pub fn destroy(&self) with(Console) {
+                print_int(self.v);
+                print_char(10);
+            }
+        }
+        pub fn make(v: i64) -> Noisy { return Noisy { v: v }; }
+    }
+    import inner.{Noisy, make};
+    fn kill<T: Destroy>(x: &T) with(Alloc) {
+        x.destroy();
+    }
+    fn quiet(n: Noisy) with(Alloc) -> Noisy {
+        kill::<Noisy>(&n);
+        return n;
+    }
+    fn main() with(Std) -> Int {
+        let n: Noisy = quiet(make(7));
+        destroy(n);
+        return 0;
+    }
+}

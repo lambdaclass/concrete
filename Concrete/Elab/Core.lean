@@ -207,7 +207,18 @@ structure CTraitImpl where
   selfTy : Ty := .unit
   methodSigs : List CTraitImplMethodSig := []
   builtinTraitId : Option BuiltinTraitId := none
+  /-- The submodule chain `prefixModuleFnNames` prepended to this impl's method
+      DEFINITIONS (`""` at top level): a nested module's `Type_destroy` is defined as
+      `sub_Type_destroy`. Consumers name an impl method through `implMethodFnName`,
+      never by re-spelling `Type_method` (Codex round 2 of bugs 052/091). -/
+  fnPrefix : String := ""
   declSpan : Option Span := none
+
+/-- The Core definition name of impl method `method` of `ti` — the resolved definition,
+    never a spelling an alias table must still translate. -/
+def CTraitImpl.implMethodFnName (ti : CTraitImpl) (method : String) : String :=
+  let bare := ti.typeName ++ "_" ++ method
+  if ti.fnPrefix.isEmpty then bare else ti.fnPrefix ++ "_" ++ bare
 
 structure CModule where
   name : String
