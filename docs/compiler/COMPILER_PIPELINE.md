@@ -307,10 +307,11 @@ release_bundle(project)
 ```
 
 The old phases 6B/6C implementation may recompute everything while recording and
-shadow-checking dependencies. Roadmap old Phase 8.5 is the explicit transition to a
-persistent `CompilerSession`, conservative red/green invalidation, a local
-content-addressed store, and cached codegen units after the external-validation
-gate returns GO.
+shadow-checking dependencies. The incremental-driver area owns persistent `CompilerSession`, conservative
+red/green invalidation, a local content-addressed store, and cached codegen units.
+Work follows R-0515's tooling checkpoints, the current execution queue, capacity
+rule, and individual task prerequisites; external pilots continue alongside it
+without a GO entrance gate.
 
 The intended shape is query-first: each compiler fact has a named key, stable
 inputs, and declared dependencies. This borrows the useful discipline from
