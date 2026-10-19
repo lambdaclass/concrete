@@ -19,7 +19,11 @@
 #   M   a subject ATTESTED in its theorem's table, linked to a theorem whose specification is a
 #       different body: membership is not binding;
 #   K   parameters: the specification's body with the parameters in another order is refused;
-#   N   a theorem whose statement evaluates no specification binds nothing.
+#   N   a theorem whose statement evaluates no specification binds nothing;
+#   L   count_up's `coverage: invariant` label discharges its loop step in none of contracts, prove
+#       and the VC report — there is no loop-step binding;
+#   H   a specification mentioned only as an assumption — a top-level hypothesis, an implication's
+#       domain beneath a conjunction, or a disjunct never established — binds nothing.
 #
 # Everything runs in a scratch copy: receipts are minted only for a workspace resolved from the input.
 set -uo pipefail
@@ -210,6 +214,28 @@ grep -q "^-- spec not bound to body" <<<"$B" \
   || no "N: count_up is not refused for an unbound specification: $(head -1 <<<"$B")"
 
 echo ""
+echo "=== L: no coverage label discharges count_up's loop step (contracts, prove, VCs) ==="
+# The link says `coverage: invariant` and names count_up_loop_preserves, a theorem about a loop step
+# that no loop-step binding ties to this loop. Three views used to discharge O2 from the label alone.
+LI=examples/loop_invariant/src/main.con
+CT="$("$BIN" "$LI" --report contracts 2>&1)"
+COUNTUP="$(awk '/^loop_invariant.count_up  \(loop/{f=1;next} /^loop_invariant\./{f=0} f' <<<"$CT")"
+[ -n "$COUNTUP" ] && ! grep -q "proved_by_lean\|Proofs\.count_up_loop_preserves" <<<"$COUNTUP" \
+  && grep -q "operational step:  planned — needs Lean" <<<"$COUNTUP" \
+  && ok "L: contracts — count_up's operational step reads needs Lean, not proved_by_lean" \
+  || no "L: contracts still discharge count_up's loop step: $(grep -m1 'operational step' <<<"$COUNTUP")"
+PV="$("$BIN" prove "$LI" count_up 2>&1)"
+grep -q "O2 invariant_preservation.*operational: needs Lean" <<<"$PV" && ! grep -q "Proofs\.count_up_loop_preserves\|proved_by_lean" <<<"$PV" \
+  && ok "L: prove — O2's operational half needs Lean; the label's theorem is not cited" \
+  || no "L: prove discharges count_up's O2: $(grep -m1 'O2' <<<"$PV")"
+VC="$("$BIN" "$LI" --report vcs 2>&1)"
+O2="$(awk '/count_up@[0-9]+#O2\]/{f=1;print;next} /^  \[/{f=0} f' <<<"$VC")"
+[ -n "$O2" ] && ! grep -q "proved_by_lean\|Proofs\.count_up_loop_preserves" <<<"$O2" \
+  && grep -q "Total: .* 0 proved_by_lean" <<<"$VC" \
+  && ok "L: VCs — count_up's O2 is not proved_by_lean and no VC in the file is" \
+  || no "L: the VC report discharges count_up's O2 by Lean: $(tr '\n' ' ' <<<"$O2" | head -c 200)"
+
+echo ""
 echo "=== H: a specification mentioned only in a HYPOTHESIS binds nothing ==="
 # Examples.TestFixtures.Proofs.spec_in_hypothesis_only assumes add_commutativity evaluates to none and
 # concludes True. The generator read spec terms from the whole type, so it bound — and the claim's body
@@ -229,6 +255,23 @@ B="$(block "$(status tests/programs/spec_in_hypothesis_only/test_spec_hyp.con)" 
 grep -q "^-- spec not bound to body" <<<"$B" && grep -q "spec_in_hypothesis_only' evaluates no specification" <<<"$B" \
   && ok "H: the claim is not proved — its theorem's conclusion evaluates no specification" \
   || no "H: the hypothesis-only claim is not refused: $(head -1 <<<"$B")"
+# The same assumption beneath a connective (Codex land1 review): the generator removed only the OUTER
+# hypotheses and still searched nested implication domains, so `True ∧ ((eval … = none) → True)`
+# bound. Only recognized evaluation conclusions bind; a disjunct never established binds nothing.
+for case in "spec_in_nested_implication:test_spec_nested.con:a nested implication's domain" \
+            "spec_in_irrelevant_disjunction:test_spec_disj.con:an irrelevant disjunction"; do
+  thm="${case%%:*}"; rest="${case#*:}"; file="${rest%%:*}"; why="${rest#*:}"
+  grep -q "^  (\"Examples.TestFixtures.Proofs.$thm\", \"body\"" "$TBL" \
+    && ok "H: $thm was processed (it has a classification row)" \
+    || no "H: $thm has no classification row, so the leg below would be vacuous"
+  grep -qE "^  \(\"Examples.TestFixtures.Proofs.$thm\", \"add_commutativity\"" "$TBL" \
+    && no "H: a binding row exists for a spec that appears only in $why" \
+    || ok "H: no binding row for $thm — the spec appears only in $why"
+  B="$(block "$(status "tests/programs/$thm/$file")" main.add)"
+  grep -q "^-- spec not bound to body" <<<"$B" && grep -q "$thm' evaluates no specification" <<<"$B" \
+    && ok "H: the $thm claim is not proved — its conclusion evaluates no specification" \
+    || no "H: the $thm claim is not refused: $(head -1 <<<"$B")"
+done
 
 echo ""
 echo "SUBJECT-BINDING: PASS=$PASS FAIL=$FAIL"

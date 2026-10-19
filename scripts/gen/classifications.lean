@@ -80,6 +80,8 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.pure_sub_correct,
     `Examples.TestFixtures.Proofs.right_add_correct,
     `Examples.TestFixtures.Proofs.spec_in_hypothesis_only,
+    `Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction,
+    `Examples.TestFixtures.Proofs.spec_in_nested_implication,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
   ]
@@ -100,10 +102,43 @@ partial def closedSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
           return [e]
   match e with
   | .app f a => return (← closedSpecTerms f) ++ (← closedSpecTerms a)
-  | .lam _ t b _ | .forallE _ t b _ => return (← closedSpecTerms t) ++ (← closedSpecTerms b)
-  | .letE _ t v b _ => return (← closedSpecTerms t) ++ (← closedSpecTerms v) ++ (← closedSpecTerms b)
+  -- A binder's TYPE is never searched, and neither is a `∀`: inside an equation's operand either
+  -- one is a proposition the term assumes (`fun (h : eval … spec = none) => …`), not a value it
+  -- computes. A lambda's body is still a value.
+  | .lam _ _ b _ => closedSpecTerms b
+  | .forallE .. => return []
+  | .letE _ _ v b _ => return (← closedSpecTerms v) ++ (← closedSpecTerms b)
   | .mdata _ x | .proj _ _ x => closedSpecTerms x
   | _ => return []
+
+/-- Is `α` the sort `Prop` itself (so `@Eq α a b` equates two propositions)? -/
+def isPropSort (α : Lean.Expr) : MetaM Bool := do
+  return (← whnfR α).isProp
+
+/-- The specifications a theorem's CONCLUSION evaluates (bug 079, Codex land1 review).
+
+    Only RECOGNIZED evaluation conclusions bind: an equation (`eval T env fuel spec = v`, or a
+    spec's own defining equation `spec = e`) between VALUES, whose two operands are searched; a
+    conjunction of recognized conclusions; a `∀`/implication, whose DOMAIN is a hypothesis and whose body
+    is the conclusion; a `let`, whose body is. Every other proposition — a disjunction, an iff, a
+    negation, an existential, an equation between propositions, `True`, an opaque predicate — yields NOTHING, so a claim on it fails closed as
+    unbound. Searching the whole statement bound `True ∧ ((eval … spec = none) → True)`, which
+    mentions the spec only as an assumption and says nothing about any body. -/
+partial def conclusionSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
+  match e with
+  | .mdata _ x => conclusionSpecTerms x
+  | .letE _ _ v b _ => conclusionSpecTerms (b.instantiate1 v)
+  | .forallE .. => forallTelescope e fun _ body => conclusionSpecTerms body
+  | _ =>
+    -- An equation of VALUES only: `(eval … spec = none) = (eval … spec = none)` is an equation of
+    -- propositions, true by reflexivity, and says nothing about the spec.
+    -- (`getAppArgs`, not `appFn!`: the `!` accessors do not run under the generator's `#eval`.)
+    match e.getAppFn.constName?, e.getAppArgs.toList with
+    | some ``Eq, [α, lhs, rhs] =>
+      if (← isProp α) || (← isPropSort α) then return []
+      return (← closedSpecTerms lhs) ++ (← closedSpecTerms rhs)
+    | some ``And, [a, b] => return (← conclusionSpecTerms a) ++ (← conclusionSpecTerms b)
+    | _, _ => return []
 
 #eval show MetaM Unit from do
   let hardcoded := (Proof.provedFunctions.map (fun t => t.2.2)).map (·.toName)
@@ -246,7 +281,7 @@ partial def closedSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
     -- THE CONCLUSION ONLY. A specification mentioned in a HYPOTHESIS is something the theorem
     -- assumes, not something it shows: "if addThreeExpr evaluates to none then True" mentions the
     -- spec and says nothing about any body. Collecting from the whole type bound such a theorem.
-    let terms ← forallTelescope ci.type fun _ body => closedSpecTerms body
+    let terms ← conclusionSpecTerms ci.type
     let mut seen : List (String × String) := []
     for t in terms do
       let some head := t.getAppFn.constName? | continue

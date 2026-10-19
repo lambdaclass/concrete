@@ -1,0 +1,16 @@
+// A theorem whose only mention of the specification is a disjunct it never establishes cannot be what
+// this claim is about. Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction proves
+// `(eval … add_commutativity = some 7) ∨ True` by its right disjunct; the subject binding reads only
+// recognized evaluation conclusions, so this claim is spec_unbound, never proved.
+// Checked by check_subject_binding.sh (leg H).
+
+#[spec(add_commutativity)]
+#[proof_by(Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction)]
+#[proof_fingerprint("v2:7bd7ae4e79b8542ec15512b64e4242ad")]
+fn add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn main() -> i64 {
+    return add(1, 2);
+}

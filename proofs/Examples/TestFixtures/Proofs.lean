@@ -79,4 +79,16 @@ theorem right_add_correct (a b : Int) (fuel : Nat) :
 theorem spec_in_hypothesis_only
     (_h : eval FnTable.empty Env.empty 1 add_commutativity = none) : True := trivial
 
+/-- The same assumption one connective down: a conjunct that is an IMPLICATION whose domain mentions
+    the specification. Its conclusion is `True`; it must bind nothing (check_subject_binding.sh, H). -/
+theorem spec_in_nested_implication :
+    True ∧ ((eval FnTable.empty Env.empty 1 add_commutativity = none) → True) :=
+  ⟨trivial, fun _ => trivial⟩
+
+/-- A disjunction with an irrelevant `True` disjunct: the evaluation is never established, so it must
+    bind nothing (check_subject_binding.sh, H). -/
+theorem spec_in_irrelevant_disjunction :
+    (eval FnTable.empty Env.empty 1 add_commutativity = some (.int 7)) ∨ True :=
+  Or.inr trivial
+
 end Examples.TestFixtures.Proofs

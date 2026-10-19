@@ -1,0 +1,16 @@
+// A theorem that mentions the specification only in the DOMAIN of an implication nested under a
+// conjunction cannot be what this claim is about. Examples.TestFixtures.Proofs.spec_in_nested_implication
+// proves `True ∧ ((eval … add_commutativity = none) → True)`; the subject binding reads only recognized
+// evaluation conclusions, so this claim is spec_unbound, never proved.
+// Checked by check_subject_binding.sh (leg H).
+
+#[spec(add_commutativity)]
+#[proof_by(Examples.TestFixtures.Proofs.spec_in_nested_implication)]
+#[proof_fingerprint("v2:7bd7ae4e79b8542ec15512b64e4242ad")]
+fn add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn main() -> i64 {
+    return add(1, 2);
+}
