@@ -205,8 +205,10 @@ want "$TMP/s" ret_after_assign 0 21 S # Break reads the new value (was 14)
 want "$TMP/s" ret_pending 7 8 S       # (was 7)
 want "$TMP/s" branch_let_returns 0 20 S  # a branch-local let consumed before its branch returns
 want "$TMP/s" fresh_branch_let 0 8 S     # a fresh branch-local let nothing after the branch names
+want "$TMP/s" reloop 1 6 S               # a later for re-declares the branch's i (hmac_sha256's shape)
+want "$TMP/s" reloop 0 4 S
 for fn in twice seq seq_assign assign_then_let use_i_after if_fallthrough ifthen if_else_step \
-          ret_after_assign ret_pending branch_let_returns fresh_branch_let; do allagree "$TMP/s" "$fn" S; done
+          ret_after_assign ret_pending branch_let_returns fresh_branch_let reloop; do allagree "$TMP/s" "$fn" S; done
 # Bug 087: a local named by what follows its scope. Before the fix scoped(1) read 10 in the model and 1
 # at runtime; scoped_flat(0) likewise; body_local_assigned read 6 for 1. Not extracted at all now.
 for fn in scoped scoped_flat body_local_assigned; do

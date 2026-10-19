@@ -152,5 +152,16 @@ mod main {
         }
         return s;
     }
+    // Control (hmac_sha256's shape): a branch's `for` declares `i`, and the `for` after the branch
+    // declares its OWN `i`. The later `let mut i` shadows, so nothing after the branch reads the
+    // branch's `i`: still extracted. reloop(1) = 2 + 4 = 6, reloop(0) = 4.
+    fn reloop(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        if n > 0 {
+            for (let mut i: i32 = 0; i < 2; i = i + 1) { s = s + 1; }
+        }
+        for (let mut i: i32 = 0; i < 2; i = i + 1) { s = s + 2; }
+        return s;
+    }
     pub fn main() -> i32 { return 0; }
 }

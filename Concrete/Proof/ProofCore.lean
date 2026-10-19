@@ -788,15 +788,17 @@ partial def cExprDiverges : CExpr → Bool
   | _ => false
 end
 
-/-- Does `n` occur in `e` — as a variable read, a binder, or a write target? CONSERVATIVE (an
-    over-approximation is always safe here): binders count, every `Cont`/`Break` field name of the
+/-- Does `n` occur FREE in `e` — as a variable read or a write target? CONSERVATIVE (an
+    over-approximation is always safe here) except at `letIn`, which shadows: every `Cont` field name of the
     loop-step enum counts (that field name IS the variable written back), and a loop's carried and
     assigned names count. Used only to refuse extraction (bug 087). -/
 partial def pexprMentions (n : String) : Proof.PExpr → Bool
   | .lit _ => false
   | .var m => m == n
   | .binOp _ l r => pexprMentions n l || pexprMentions n r
-  | .letIn m v b => m == n || pexprMentions n v || pexprMentions n b
+  -- A `letIn` of the same name SHADOWS it: the body's occurrences are the new binding's, so only
+  -- the value can read the outer one (a later `for` re-declaring `i` does not read a branch's `i`).
+  | .letIn m v b => pexprMentions n v || (m != n && pexprMentions n b)
   | .ifThenElse c t e => pexprMentions n c || pexprMentions n t || pexprMentions n e
   | .call _ args => args.any (pexprMentions n)
   | .applyVar m args => m == n || args.any (pexprMentions n)
