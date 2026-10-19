@@ -1,6 +1,6 @@
 # Verified-compiler pipeline
 
-Status: planned, 2026-10-18. Owners: R-0491 – R-0510 in [ROADMAP.md](../../ROADMAP.md), with
+Status: planned, 2026-10-18. Owners: R-0491 – R-0513 in [ROADMAP.md](../../ROADMAP.md), with
 R-0299, R-0300, R-0353, R-0413 and R-0460 linked where named. The architecture reconciles two
 independent designs (a Claude design agent and Codex) and four Codex reviews of earlier drafts (42
 findings, all applied).
@@ -245,6 +245,66 @@ supports an unqualified kernel-only verdict.
 8. **Totality where proofs need it:** semantics, checkers, validators and proved passes are total;
    untrusted search (heuristics, elaboration search, register-allocation search) may stay partial.
 
+## Delivery: verified vertical slices
+
+Decided 2026-10-19. The stages below (S1 – S16) are the architecture's components; they are not
+delivered layer by layer. Building all of Core's semantics, then the whole checker, then the whole
+lower pipeline would take years before any end-to-end guarantee existed, and would test the
+architecture only when proving began. CompCert and CakeML each proved a small language end to end and
+grew it. Concrete does the same: each **slice** carries a fixed language subset through every stage —
+identities, typed operations, Core semantics, the Core checker, claims on Core, Place MIR, Memory CFG,
+BIR, the native backend — and closes with its own end-to-end theorem. A later slice extends a pipeline
+that already has one. Part 2's proofs are therefore not deferred: each slice proves its scope before
+the next grows it.
+
+**Coexistence.** The verified pipeline is a `verified` compilation profile beside the existing
+compiler. It shares the front end, accepts only programs inside the current slice and refuses
+everything else with a named reason; the existing compiler keeps compiling the whole language. A
+construct moves to the verified pipeline when its slice lands, and the existing path for it is
+retired once the slice's gates pass on the corpus. The differential fuzzer compares both profiles on
+every slice program from the day the profile exists.
+
+**Slice V1 (queue row 3, R-0511).**
+- *Language:* integer scalars of every width and `bool`; immutable and mutable locals; assignment;
+  `if`/`else`; `while` and `for` with `break`/`continue`; direct calls, including recursion;
+  checked arithmetic, division and shifts with defined traps; integer casts; comparisons; one
+  capability-tagged output event (`print_int`) so traces are non-trivial. No aggregates, heap,
+  references, pointers, generics, traits or FFI.
+- *Stages exercised:* S5/S6 (identities, typed operations) for the slice, S7 (Core semantics), S8 (the
+  Core checker; all V1 values are Copy, so linearity is trivial), S9 (generated claim statements on
+  Core), S10 – S11 (Place MIR, a stack-only Memory CFG, BIR), S12a (stated obligations), S13 (native
+  AArch64 for the slice).
+- *Theorem:* for every program the checker accepts within V1, every behaviour of the native image is a
+  behaviour of its `CheckedCore` (traces, traps and divergence preserved), re-checked by con-leche and
+  nanoda; and one slice claim is transported to its binary through its preservation lemma.
+- *Front end:* V1's theorem starts at `CheckedCore`. Elaboration correspondence for the V1 surface
+  (HIR → `CheckedCore`) is V1b; parser correspondence joins at V7. The published theorem says which
+  artifact it starts from.
+- *Review:* an outside expert reviews Core's V1 semantics before it freezes.
+
+**Later slices (queue row 5).** Each adds its constructs to every stage and extends the theorem:
+V2 structs, enums, `match` and fixed arrays with bounds traps (value semantics, stack memory);
+V3 heap and linear resources (`rt` allocation, destroy, `defer`, out-of-memory behaviour) with
+ownership soundness (S14) for the covered subset; V4 second-class references and borrows (borrow
+validity); V5 generics, traits, monomorphization and capabilities (S8a, post-Mono capability checks);
+V6 raw pointers, `Unsafe`, FFI with the byte-and-provenance memory component, external-call contracts,
+separate compilation and linking; V7 the rest of the language and `std`, frontend correspondence
+from source bytes (S15), and retirement of the existing pipeline.
+
+**Legacy evidence retirement (R-0512).** The current evidence layer — `PExpr` and its evaluator, the
+name tables, the theorem-type classification generator, the frozen identity rows and their
+amendments, attestations and per-surface status logic — receives soundness fixes only. As a slice
+lands, every existing claim on functions within it moves to a compiler-generated Core statement; when
+the last claim has moved, the layer and the gates that guard it are deleted.
+
+**Protections in the meantime (queue row 2).** S1 (prevention harness), S2 (one verdict authority),
+S3 (demonstrated enforcement) and S4 (written language rules) protect users of the existing compiler
+for the years the legacy pipeline remains. The language decisions the slices depend on — strictly
+second-class references, no block `let` shadowing, explicit match binders, typed literals — are
+decided and enforced in the existing compiler first, so the verified pipeline never has to model the
+looser rules. R-0513 makes gates assert properties instead of corpus counts and splits a fast push
+tier from the full batch tier.
+
 ## Part 1 — the proof-ready pipeline
 
 Ordered as a migration: the compiler builds, passes the full gate set and ships after every slice.
@@ -480,7 +540,7 @@ published trusted-base inventory. R-0353 independently checks retained evidence 
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
 correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may
-proceed beside queue rows 3 – 4; authoritative use stays queue row 6, after row 5 and R-0004's
+proceed beside queue rows 3 – 6; authoritative use stays queue row 8, after row 7 and R-0004's
 prerequisites. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while
@@ -506,11 +566,11 @@ S4 fixes the relevant language rules before S7 freezes their semantics. S9 depen
 S10 consumes `CheckedMonoCore` after S8a. S12a starts with S5; validator implementations follow
 their IRs. S14 begins after S7/S8. S15 composes the frontend, checker/specialization,
 pass/validator, linking and claim-transport obligations. The trusted-base inventory starts
-immediately; R-0353's authoritative use keeps queue row 6.
+immediately; R-0353's authoritative use keeps queue row 8.
 
-Queue row 2 covers Track A and Track B through S8 (identities, typed operations, Core semantics,
-the authoritative Core checker). S8a onward and Part 2 are a permanent track beside the delivery
-queue. New soundness defects still enter at row 0, and each fix names the stage that would have
+Stage order above is the dependency order *within* each slice. Queue row 2 delivers Track A's
+protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 5
+grows the slices and retires the legacy evidence layer. New soundness defects still enter at row 0, and each fix names the stage that would have
 prevented it; if none would, the plan gains one.
 
 ## Discipline
