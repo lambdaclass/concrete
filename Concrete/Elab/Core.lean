@@ -262,6 +262,10 @@ structure CModule where
   constBindings : List (ConstId × String) := []
   structs : List CStructDef
   enums : List CEnumDef
+  /-- Names of the structs/enums this module DEFINES (`structs`/`enums` also hold imported
+      and sibling types). Core names types by bare name, so a name defined by two modules
+      is one Core type name for two types; trait dispatch on it is refused (bug 052 round 3). -/
+  ownTypeNames : List String := []
   functions : List CFnDef
   externFns : List (String × List (String × Ty) × Ty × Bool)  -- (name, params, retTy, isTrusted)
   /-- Each foreign binding's DECLARED effects (R-0484), keyed by binding name. Resolve has

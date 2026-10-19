@@ -1,0 +1,31 @@
+// Bug 052 round 3: the same collision through an ordinary trait bound. A nested
+// `inner::P` (score 1) and a top-level `P` (score 100) each implement their own
+// `Score`; `total::<P>` inside `inner` dispatched `T$score` to the top-level
+// `P_score` (compiled and --interp printed 100, 100 instead of 1, 100). Refused:
+// E0815 compiled, a runtime error under --interp.
+mod m {
+    mod inner {
+        trait Score { fn score(&self) -> i64; }
+        pub struct P { v: i64 }
+        impl Score for P { fn score(&self) -> i64 { return 1; } }
+        fn total<T: Score>(x: &T) -> i64 { return x.score(); }
+        pub fn run() -> i64 {
+            let p: P = P { v: 0 };
+            let n: i64 = total::<P>(&p);
+            let P { v } = p;
+            return n;
+        }
+    }
+    trait Score { fn score(&self) -> i64; }
+    struct P { v: i64 }
+    impl Score for P { fn score(&self) -> i64 { return 100; } }
+    fn main() with(Std) -> Int {
+        print_int(inner::run());
+        print_char(10);
+        let p: P = P { v: 0 };
+        print_int(p.score());
+        print_char(10);
+        let P { v } = p;
+        return 0;
+    }
+}

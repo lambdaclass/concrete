@@ -1446,6 +1446,20 @@ run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
 # out of bounds; on an immutable binding E0233; while the binding is borrowed E0232. Every
 # legal `&mut self` receiver form still runs (8), and --interp agrees (it failed on `T$bump`
 # and on a projection through `&mut W`).
+# Bug 052 round 3 (Codex): same-named types in two modules — generic dispatch chose the
+# top-level impl for the nested type (101 / 100). Refused in both backends.
+run_err "tests/regressions/bug052_vec_array_destroy/collision_destroy.con" "(E0814)"
+run_err "tests/regressions/bug052_vec_array_destroy/collision_trait.con"   "(E0815)"
+for r052c in collision_destroy collision_trait; do
+    r052c_out=$($COMPILER "tests/regressions/bug052_vec_array_destroy/$r052c.con" --interp 2>&1 || true)
+    if grep -qF "several types of that name" <<<"$r052c_out"; then
+        echo "  ok  bug 052: $r052c — --interp refuses the ambiguous dispatch"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 052: $r052c — --interp did not refuse the ambiguous dispatch"
+        FAIL=$((FAIL + 1))
+    fi
+done
 run_err "$TESTDIR/error_091_mut_receiver_through_ref.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_through_ref_concrete.con"   "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_through_ref_projection.con" "(E0237)"

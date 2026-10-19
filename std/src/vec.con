@@ -294,8 +294,8 @@ mod vec {
 
     // --- H18 drop-glue test helpers ---
     // Observable destructor: counts invocations through a raw cell.
-    struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
+    struct VecDropTracked { cell: *mut u64 }
+    trusted impl Destroy for VecDropTracked {
         pub fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
@@ -312,19 +312,19 @@ mod vec {
         // H18: drop/clear destroy every LIVE element exactly once; pop
         // transfers ownership out (not destroyed by the container).
         let cell: *mut u64 = h18_cell_new();
-        let mut v: Vec<Tracked> = Vec::<Tracked>::new();
-        v.push(Tracked { cell: cell });
-        v.push(Tracked { cell: cell });
-        v.push(Tracked { cell: cell });
-        v.push(Tracked { cell: cell });
-        let popped: Option<Tracked> = v.pop();
+        let mut v: Vec<VecDropTracked> = Vec::<VecDropTracked>::new();
+        v.push(VecDropTracked { cell: cell });
+        v.push(VecDropTracked { cell: cell });
+        v.push(VecDropTracked { cell: cell });
+        v.push(VecDropTracked { cell: cell });
+        let popped: Option<VecDropTracked> = v.pop();
         match popped {
             Option::Some { value } => { destroy(value); },
             Option::None => {},
         }
         v.clear();                      // destroys the 3 remaining
-        v.push(Tracked { cell: cell });
-        v.push(Tracked { cell: cell });
+        v.push(VecDropTracked { cell: cell });
+        v.push(VecDropTracked { cell: cell });
         v.drop();                       // destroys 2
         let n: u64 = h18_cell_get(cell);
         if n != 6 { return 1; }
@@ -336,9 +336,9 @@ mod vec {
         // H18 overwrite rule: replace() hands the displaced element back —
         // no hidden destruction.
         let cell: *mut u64 = h18_cell_new();
-        let mut v: Vec<Tracked> = Vec::<Tracked>::new();
-        v.push(Tracked { cell: cell });
-        let old: Tracked = v.replace(0, Tracked { cell: cell });
+        let mut v: Vec<VecDropTracked> = Vec::<VecDropTracked>::new();
+        v.push(VecDropTracked { cell: cell });
+        let old: VecDropTracked = v.replace(0, VecDropTracked { cell: cell });
         if h18_cell_get(cell) != 0 { v.drop(); destroy(old); return 1; }  // nothing destroyed yet
         destroy(old);                                                     // +1, caller-owned
         v.drop();                                                         // +1, the replacement
@@ -348,17 +348,17 @@ mod vec {
 
     #[test]
     fn test_vec_nested_destroys() with(Alloc, Unsafe) -> i32 {
-        // H18 composition: Vec<Vec<Tracked>> destroys every LEAF exactly once
+        // H18 composition: Vec<Vec<VecDropTracked>> destroys every LEAF exactly once
         // through the conditional `impl<T: Destroy> Destroy for Vec<T>`.
         let cell: *mut u64 = h18_cell_new();
-        let mut in1: Vec<Tracked> = Vec::<Tracked>::new();
-        in1.push(Tracked { cell: cell });
-        in1.push(Tracked { cell: cell });
-        let mut in2: Vec<Tracked> = Vec::<Tracked>::new();
-        in2.push(Tracked { cell: cell });
-        in2.push(Tracked { cell: cell });
-        in2.push(Tracked { cell: cell });
-        let mut outer: Vec<Vec<Tracked>> = Vec::<Vec<Tracked>>::new();
+        let mut in1: Vec<VecDropTracked> = Vec::<VecDropTracked>::new();
+        in1.push(VecDropTracked { cell: cell });
+        in1.push(VecDropTracked { cell: cell });
+        let mut in2: Vec<VecDropTracked> = Vec::<VecDropTracked>::new();
+        in2.push(VecDropTracked { cell: cell });
+        in2.push(VecDropTracked { cell: cell });
+        in2.push(VecDropTracked { cell: cell });
+        let mut outer: Vec<Vec<VecDropTracked>> = Vec::<Vec<VecDropTracked>>::new();
         outer.push(in1);
         outer.push(in2);
         outer.drop();

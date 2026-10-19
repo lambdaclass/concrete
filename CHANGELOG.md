@@ -348,7 +348,10 @@ Round 3: `Destroy::destroy` consumes its receiver whichever form the impl declar
 so it was destroyed twice; it is now E0290 outside trusted drop glue, and an owned
 `t.destroy()` moves `t`. A `&mut self` method called through a shared reference is E0237 (Elab had
 built a `&mut &T` and the callee wrote out of bounds), and an implicit receiver borrow obeys
-the explicit borrow's mutability (E0233) and aliasing (E0232/E0231) rules.
+the explicit borrow's mutability (E0233) and aliasing (E0232/E0231) rules. Bug 052's destructor
+dispatch (and ordinary `T$m` dispatch) no longer picks between two modules' same-named types:
+a top-level `Tracked`'s destructor had run for a nested `Tracked`. Both backends refuse an
+ambiguous type name or impl set (E0814/E0815) until type identity survives into Core.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

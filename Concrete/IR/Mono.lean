@@ -108,6 +108,22 @@ end
 -- function names like "T_method" to "Point_method" in all call nodes.
 -- This is needed because the elaborator emits `TypeVar_method` for
 -- trait method calls on generic type parameters.
+
+/-- Reserved spelling of a per-instantiation trait-method call on concrete type `c`
+    (`T$m` with `T := c`). `$` is not an identifier character, so no definition can be
+    selected by it; `monoExpr` resolves it through the trait-impl table
+    (`resolveTraitDispatch`) — never by re-spelling `c_m`, which picked whichever
+    same-named type's method the alias pool listed first (bug 052 round 3). -/
+def traitDispatchPrefix : String := "$dispatch$"
+def traitDispatchSpelling (c m : String) : String := traitDispatchPrefix ++ c ++ "$" ++ m
+def splitTraitDispatchSpelling (s : String) : Option (String × String) :=
+  if s.startsWith traitDispatchPrefix then
+    let rest := (s.drop traitDispatchPrefix.length).toString
+    match rest.splitOn "$" with
+    | [c, m] => some (c, m)
+    | _ => none
+  else none
+
 mutual
 private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr → CExpr
   | .call callee targs args ty =>
@@ -129,7 +145,7 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
       | .direct name => Callee.direct (match splitTraitParamCallee name with
           | some (p, m) => match nameMap.lookup p with
             | some c =>
-              if c.isEmpty then name else mangledMethodName c m
+              if c.isEmpty then name else traitDispatchSpelling c m
             | none => name
           | none => name)
     .call callee' targs (args.map (rewriteCallNames nameMap)) ty
@@ -389,6 +405,13 @@ structure MonoState where
       re-spelled `Type_destroy` reached it only through a linker alias, which the post-mono
       capability verifier could not see through (Codex round 2, bug 091). -/
   destroyImpls : List (String × String) := []
+  /-- Every trait impl method as (type name, method, resolved definition): the
+      per-instantiation `T$m` dispatch calls exactly these definitions. -/
+  traitImplMethods : List (String × String × String) := []
+  /-- Type names Core cannot tell apart: two modules define a struct/enum of that bare
+      name (Core and runtime values carry no module path).
+      Trait dispatch on such a name is refused, never guessed (bug 052 round 3). -/
+  ambiguousTypeNames : List String := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
@@ -475,6 +498,18 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
     return .call (.indirect binding) typeArgs args' ty
   | .call (.direct fn) typeArgs args ty =>
     if fn == destroyDispatchCallee then return ← monoDestroyDispatch args ty
+    if let some (c, m) := splitTraitDispatchSpelling fn then
+      let st ← get
+      let candidates := (st.traitImplMethods.filter fun (t, mm, _) => t == c && mm == m).map
+        (fun (_, _, d) => d) |>.eraseDups
+      if candidates.length > 1 || st.ambiguousTypeNames.contains c then
+        throw [{ severity := .error, pass := "mono", span := none, code := "E0815"
+                 message := s!"trait method call '{m}' on '{c}': several types of that name are defined ({String.intercalate ", " candidates}) and Core cannot tell which one this is (bug 052 round 3)"
+                 hint := some "rename one of the types so the call is unambiguous. Tracking: docs/bugs/052_array_element_destroy_noop.md" }]
+      let resolved := match candidates with
+        | [d] => d
+        | _ => mangledMethodName c m
+      return ← monoExpr (.call (.direct resolved) typeArgs args ty)
     let args' ← args.mapM monoExpr
     if typeArgs.isEmpty then
       -- Even with no explicit typeArgs, the callee might be generic.
@@ -623,13 +658,14 @@ partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := d
     -- bare `Type_destroy` definition — the one the exact-name rule always selected — and wins;
     -- otherwise the impl must be unique, and an ambiguous choice is refused, never guessed.
     let candidates := (st.destroyImpls.filter (·.1 == tn)).map (·.2) |>.eraseDups
-    let chosen? : Option String :=
-      if tn.isEmpty then none
-      else if candidates.contains (destroyFnNameFor tn) then some (destroyFnNameFor tn)
-      else candidates.head?
-    if candidates.length > 1 && !candidates.contains (destroyFnNameFor tn) then
-      return ← refuseDestroy s!"destructor call on '{tn}': several modules implement Destroy for a type of that name ({String.intercalate ", " candidates}) and Core cannot tell which one this is (bug 052)"
+    -- Core names types by their bare name, so several modules' types can share one. The
+    -- destructor is chosen only when the name identifies ONE type and ONE impl; any other
+    -- candidate set is refused, a top-level definition included (bug 052 round 3: a
+    -- top-level `Tracked`'s destructor ran for a nested `Tracked`, 101 instead of 2).
+    if !tn.isEmpty && (candidates.length > 1 || st.ambiguousTypeNames.contains tn) then
+      return ← refuseDestroy s!"destructor call on '{tn}': several types of that name are defined ({String.intercalate ", " candidates}) and Core cannot tell which one this is (bug 052)"
         "rename one of the types so the destructor is unambiguous."
+    let chosen? : Option String := if tn.isEmpty then none else candidates.head?
     if let some dfn := chosen? then
       -- The impl's own method. Re-enter the ordinary call path with the ORIGINAL argument so
       -- a generic impl (`impl<T: Destroy> Destroy for Vec<T>`) is specialized as usual.
@@ -1035,6 +1071,10 @@ private partial def collectAllModuleNewtypes (m : CModule) : List NewtypeDef :=
 private partial def collectAllModuleTraitImpls (m : CModule) : List CTraitImpl :=
   m.traitImpls ++ m.submodules.foldl (fun acc s => acc ++ collectAllModuleTraitImpls s) []
 
+/-- Every struct/enum name a module (or a submodule) DEFINES, one entry per definition. -/
+private partial def collectAllOwnTypeNames (m : CModule) : List String :=
+  m.ownTypeNames ++ m.submodules.foldl (fun acc s => acc ++ collectAllOwnTypeNames s) []
+
 /-- Recursively collect all enum defs from a module and its submodules. -/
 private partial def collectAllModuleEnums (m : CModule) : List CEnumDef :=
   let own := m.enums
@@ -1304,9 +1344,18 @@ def monoProgram (modules : List CModule)
   let destroyImpls := (modules.foldl (fun acc m => acc ++ collectAllModuleTraitImpls m) []).filterMap
     fun ti => if ti.traitName == destroyTraitName
       then some (ti.typeName, ti.implMethodFnName destroyMethodName) else none
+  let allTraitImpls := modules.foldl (fun acc m => acc ++ collectAllModuleTraitImpls m) []
+  let traitImplMethods := allTraitImpls.flatMap fun ti =>
+    (ti.methodNames ++ ti.methodSigs.map (·.name)).eraseDups.map fun mn =>
+      (ti.typeName, mn, ti.implMethodFnName mn)
+  let ownNames := modules.foldl (fun acc m => acc ++ collectAllOwnTypeNames m) []
+  let ambiguousTypeNames :=
+    (ownNames.filter fun n => (ownNames.filter (· == n)).length > 1).eraseDups
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap,
                                  structs := allStructs, enums := allEnums,
-                                 newtypes := allNewtypes, destroyImpls := destroyImpls }
+                                 newtypes := allNewtypes, destroyImpls := destroyImpls,
+                                 traitImplMethods := traitImplMethods,
+                                 ambiguousTypeNames := ambiguousTypeNames }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms0 =>

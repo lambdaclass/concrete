@@ -566,6 +566,12 @@ bug 052 legs of COLLECTIONS-DROP-GLUE, compiled and under `--interp`.
 Remaining limit: Elab can still instantiate a generic call at `Placeholder`
 when an argument is a field access; a destroy reaching Mono that way is
 refused (E0814), not guessed, and needs a turbofish.
+Second limit (round 3): Core and runtime values name a type by its bare name,
+so two modules' same-named types are one Core name. Trait dispatch on such a
+name — destructor or any `T$m` — is refused in both backends (E0814/E0815,
+--interp a runtime error) rather than choosing either impl; qualified type
+identity in Core would lift the refusal. Check's trait-bound satisfaction still
+reads the bare name, which is why the refusal sits in Mono and the interpreter.
 
 This does **not** authorize implicit scope-end destruction. Concrete stays
 linear, not affine: the outer disposal remains a source-visible consuming

@@ -156,3 +156,23 @@ E0241, and 0 destructions with the user `T_destroy`) and `reinterpret_cast.con` 
   `interp_destroy_table.con` (1 2, compiled and --interp; old --interp printed 999, 0, 1).
   Both legs are in `check_collections_copy_only.sh`. Mono's dispatch also names the RESOLVED
   destructor definition now (bug 091 round 2).
+
+## Codex round 3
+
+* **Name collisions still selected another type's impl (P1).** Core names types by their bare
+  name. Mono's destructor dispatch explicitly preferred a top-level `Tracked_destroy` over a
+  nested type's, and the interpreter keyed impls by bare type name with top-level impls first:
+  with a top-level `Tracked` (+100) and a nested `Tracked` (+1), generic destruction of the
+  nested value printed 101 instead of 2, compiled and --interp. Ordinary trait dispatch had
+  the same shape (`T$score` re-spelled `P_score`, which the alias pool answered with the
+  top-level impl: 100 instead of 1). Until the defining module survives into Core and runtime
+  values, every ambiguous candidate set is refused, a top-level definition included: a type
+  name defined by more than one module (new `CModule.ownTypeNames`), or more than one impl
+  definition for (type, method). Mono refuses destructor dispatch with E0814 and trait-method
+  dispatch with E0815 (Mono now resolves `T$m` through the trait-impl table, never by
+  re-spelling `Type_m`); the interpreter registers the ambiguous key and fails at dispatch.
+  std's private vec test helper `Tracked` is now `VecDropTracked`, so a user `Tracked` beside
+  std's `Vec` is not ambiguous. Fixtures `collision_destroy.con` and `collision_trait.con`
+  (both refused compiled and --interp; before: 101 and 100 100) in
+  `check_collections_copy_only.sh` and `run_tests.sh`.
+

@@ -145,19 +145,42 @@ partial def collectTraitImpls : List CModule → List CTraitImpl
   | [] => []
   | m :: ms => m.traitImpls ++ collectTraitImpls m.submodules ++ collectTraitImpls ms
 
+partial def collectOwnTypeNames : List CModule → List String
+  | [] => []
+  | m :: ms => m.ownTypeNames ++ collectOwnTypeNames m.submodules ++ collectOwnTypeNames ms
+
+/-- Reserved marker of a dispatch key (or a type name) that does not identify one definition. -/
+def ambiguousKey (key : String) : String := "$ambiguous$" ++ key
+
 /-- Trait-impl methods under their reserved keys, resolved through the impl's own record
     (`CTraitImpl.implMethodFnName`) — never a `Type_method` spelling guessed from a name, which
     selected an unrelated `P_destroy` function for a Copy `P` with no Destroy impl and missed
-    a nested module's `sub_Type_destroy` entirely (Codex round 2, bug 052). A top-level impl
-    is listed first, matching Mono's choice among same-named types. -/
+    a nested module's `sub_Type_destroy` entirely (Codex round 2, bug 052).
+
+    Runtime values carry a type's BARE name, so two modules' same-named types are one key.
+    Such a key is never resolved to either definition (round 3: a top-level `Tracked`'s
+    destructor ran for a nested `Tracked`, 101 instead of 2): it is registered under
+    `ambiguousKey` and dispatch through it fails loudly, as Mono refuses it (E0814/E0815).
+    A type NAME defined by two modules is marked the same way, impls or not. -/
 def implMethodFns (modules : List CModule) (fns : List CFnDef) : List CFnDef :=
   let impls := collectTraitImpls modules
-  let ordered := impls.filter (·.fnPrefix.isEmpty) ++ impls.filter (!·.fnPrefix.isEmpty)
-  ordered.flatMap fun ti =>
+  let entries : List (String × CFnDef) := impls.flatMap fun ti =>
     ti.methodSigs.filterMap fun ms =>
       (findFn fns (ti.implMethodFnName ms.name)).map fun f =>
-        { f with name := if ti.traitName == destroyTraitName && ms.name == destroyMethodName
-                         then destroyImplKey ti.typeName else traitImplKey ti.typeName ms.name }
+        (if ti.traitName == destroyTraitName && ms.name == destroyMethodName
+         then destroyImplKey ti.typeName else traitImplKey ti.typeName ms.name, f)
+  let keys := (entries.map (·.1)).eraseDups
+  let ownNames := collectOwnTypeNames modules
+  let ambiguousTypes :=
+    (ownNames.filter fun n => (ownNames.filter (· == n)).length > 1).eraseDups
+  let marker : String → CFnDef := fun k =>
+    { name := ambiguousKey k, params := [], retTy := .unit, body := [] }
+  (keys.map fun k =>
+    let defs := (entries.filter (·.1 == k)).map (·.2)
+    match defs.head?, (defs.map (·.name)).eraseDups.length with
+    | some f, 1 => { f with name := k }
+    | _, _ => marker k)
+  ++ ambiguousTypes.map marker
 
 def findEnum (enums : List CEnumDef) (name : String) : Option CEnumDef :=
   enums.find? (fun e => e.name == name)
@@ -884,6 +907,8 @@ partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
       env ← destroyValue fns enums env elemArg
     return env
   | .struct_ n _ | .enum_ n _ _ =>
+    if (findFn fns (ambiguousKey n)).isSome || (findFn fns (ambiguousKey (destroyImplKey n))).isSome then
+      throw s!"interp: destructor call on '{n}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
     match findFn fns (destroyImplKey n) with
     | some fdef =>
       let outerLen := env.length
@@ -904,6 +929,9 @@ partial def evalTraitParamCall (fns : List CFnDef) (enums : List CEnumDef) (env 
     let tn := match target with
       | .struct_ n _ | .enum_ n _ _ => n
       | _ => ""
+    if !tn.isEmpty && ((findFn fns (ambiguousKey tn)).isSome
+        || (findFn fns (ambiguousKey (traitImplKey tn m))).isSome) then
+      throw s!"interp: trait method call '{m}' on '{tn}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
     match (if tn.isEmpty then none else findFn fns (traitImplKey tn m)) with
     | some fdef =>
       if fdef.params.length != argVals.length then

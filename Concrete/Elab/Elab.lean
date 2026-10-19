@@ -2995,6 +2995,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     callTargets := (fns.flatMap fun cfn => collectCallsStmts cfn.body).eraseDups.filterMap fun n =>
       (resolveContractCall n).map (n, ·)
     structs := cStructs ++ cImportedStructs
+    ownTypeNames := m.structs.map (·.name) ++ m.enums.map (·.name)
     enums := allEnums.map fun ed =>
       { name := ed.name, typeParams := ed.typeParams,
         variants := ed.variants.map fun v =>

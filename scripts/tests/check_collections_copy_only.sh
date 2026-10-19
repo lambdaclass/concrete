@@ -224,6 +224,25 @@ for leg in "unrelated_destroy_trait:7 1 0 " "interp_destroy_table:1 2 0 "; do
     no "bug 052 $f fixture failed to compile"; sed 's/^/        /' "$TMP/b52_$f.out" | head -5
   fi
 done
+# Codex round 3 of bug 052: two modules' same-named types (Core and runtime values carry the
+# bare name). Generic dispatch on the nested one picked the TOP-LEVEL impl in both backends
+# (destroy: 101 instead of 2; Score: 100 instead of 1). Both backends now refuse the ambiguous
+# dispatch -- compiled E0814 (destructor) / E0815 (trait method), --interp a runtime error.
+for leg in "collision_destroy:E0814:destructor call on 'Tracked'" "collision_trait:E0815:trait method call 'score' on 'P'"; do
+  f="${leg%%:*}"; rest="${leg#*:}"; code="${rest%%:*}"; what="${rest#*:}"
+  cout="$("$C" "$B52/$f.con" -o "$TMP/b52_$f" 2>&1)"; crc=$?
+  iout="$("$C" "$B52/$f.con" --interp 2>&1)"; irc=$?
+  if [ "$crc" -ne 0 ] && grep -q "($code)" <<<"$cout" && grep -qF "several types of that name" <<<"$cout"; then
+    ok "$f: compiled build refuses the ambiguous dispatch ($code)"
+  else
+    no "$f: compiled build did not refuse with $code (rc $crc): $(printf '%s' "$cout" | awk 'NR<=2')"
+  fi
+  if [ "$irc" -ne 0 ] && grep -qF "$what" <<<"$iout" && grep -qF "several types of that name" <<<"$iout"; then
+    ok "$f: --interp refuses the ambiguous dispatch"
+  else
+    no "$f: --interp did not refuse (rc $irc): $(printf '%s' "$iout" | awk 'NR<=2')"
+  fi
+done
 # Interp-vs-compiled control: a reinterpreting pointer cast (`&mut u64 as *mut u8`) is refused
 # by the interpreter with a clear error (it stores typed values, not bytes) instead of
 # overwriting the whole value (old interp: 3; compiled: 259).
