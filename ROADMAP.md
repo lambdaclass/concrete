@@ -24,15 +24,16 @@ state or queue.
 
 ## Roadmap at a glance
 
-The execution queue below has eighteen rows. They group into seven stages; stages 2 – 4 run side by side
-under the capacity rule, and new soundness defects always enter stage 1 first.
+The execution queue below has eighteen rows, grouped into seven stages. After stage 1, stage 3 runs alongside
+the proof track, which progresses from stage 2 into stage 4; the shared-front-end work overlaps proof
+development. All checkpoints share the capacity rule. New soundness defects take priority.
 
 | stage | rows | what it delivers |
 |---|---|---|
 | **1. Stabilize** | 0 – 2 | Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates |
 | **2. Verified foundation** | 3 – 4 | The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language |
 | **3. Usable language** | 5, 7, 8 | Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance |
-| **4. Verified growth** | 6 | Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and every claim migrated onto compiler-generated Core statements |
+| **4. Verified growth** | 6 | Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved |
 | **5. Evidence as a product** | 9 – 11 | Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze |
 | **6. Richer verification** | 12 – 15 | Typed contracts and exact contract identity, two-state (`old`, frames) contracts, the ninth-table conversion, and totality with a specification library |
 | **7. Release and ecosystem** | 16 – 17 | External-user workflow and three graduated flagships, then package-level evidence and typed policy |
