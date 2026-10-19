@@ -110,6 +110,10 @@ link	tests/programs/adversarial_spec_identity/test_spec.con	pure_add	v2:40abbb4c
 link	tests/programs/adversarial_spec_identity/test_spec.con	pure_mul	v2:8fa79500f4deac6fa02ddbf8f74baea8
 link	tests/programs/proof_registry_stale/test_proof_registry.con	pure_add	v2:deadbeefdeadbeefdeadbeefdeadbeef
 link	tests/programs/proof_registry_test/test_proof_registry.con	pure_add	v2:47394250fca010d361f59cb719c404ed
+link	tests/programs/spec_in_hypothesis_only/test_spec_hyp.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+link	tests/programs/spec_in_irrelevant_disjunction/test_spec_disj.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 reference	combineFns_@_combine	examples/proof_patterns/composition/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_trusted_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_unlinked_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42

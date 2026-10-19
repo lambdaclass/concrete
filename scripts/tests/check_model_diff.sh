@@ -26,7 +26,7 @@
 #      (exit 22 = 5+5+5+7), so "runtime" is not only the interpreter.
 #   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
 #      agree, each pinned to its runtime value; a branch- or body-local `let` named by what follows its
-#      scope (bug 087) is not extracted, while a local nothing after it names still is.
+#      scope (bug 101) is not extracted, while a local nothing after it names still is.
 #   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
 #      extracted; a tail match/if whose arms return agrees.
 #
@@ -63,26 +63,33 @@ UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | 
 # legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
 # at all; only the functions named here may be, each for a stated reason, and each must still be all
 # ERROR (so an entry cannot outlive its reason silently).
-ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate "
+ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer std.time.time_test_duration_from_millis "
 #   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
 #   cn.violation      is ratio(10, 0): the same trap, nullary;
 #   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
-#                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement).
+#                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement);
+#   calls.middle, calls.outer (proof_patterns/composition_deep_trust) call the `trusted fn leaf`, which
+#                     deliberately has no model: the model is stuck on every input by design;
+#   std.time.time_test_duration_from_millis  is a nullary std test whose callee has no model.
+# Each entry must still be compared on nothing, so an entry cannot outlive its reason silently.
 ERR="$(grep -c '^ERROR' "$TMP/rows" || true)"
 NOVAL=""
 for fn in $(sort -u "$TMP/elig"); do
   r="$(grep -P "\t\Q$fn\E\t" "$TMP/rows")"
-  if ! grep -qv '^ERROR' <<<"$r"; then
+  # A COMPARED value means BOTH sides produced one (agree or MISMATCH). A function whose every row is
+  # partial, model_stuck or ERROR was never compared, and a regression making it model_stuck on every
+  # input would otherwise stay green (Codex land1 confirmation review).
+  if ! grep -qE '^(agree|MISMATCH)' <<<"$r"; then
     case "$ALL_ERROR_OK" in *" $fn "*) ;; *) NOVAL="$NOVAL $fn";; esac
   fi
 done
 STALE=""
 for fn in $ALL_ERROR_OK; do
   r="$(grep -P "\t\Q$fn\E\t" "$TMP/rows")"
-  { [ -z "$r" ] || grep -qv '^ERROR' <<<"$r"; } && STALE="$STALE $fn"
+  { [ -z "$r" ] || grep -qE '^(agree|MISMATCH)' <<<"$r"; } && STALE="$STALE $fn"
 done
 [ -z "$NOVAL" ] && [ -z "$STALE" ] \
-  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the 3 named ones has a compared value" \
+  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the 6 named ones has a compared value" \
   || no "C: functions compared on nothing:${NOVAL:- none}; stale all-ERROR entries:${STALE:- none}"
 MM="$(grep -c '^MISMATCH' "$TMP/rows" || true)"
 [ "$MM" -eq 0 ] && ok "C: no input where the model and the runtime produce different values" \
@@ -209,7 +216,7 @@ want "$TMP/s" reloop 1 6 S               # a later for re-declares the branch's 
 want "$TMP/s" reloop 0 4 S
 for fn in twice seq seq_assign assign_then_let use_i_after if_fallthrough ifthen if_else_step \
           ret_after_assign ret_pending branch_let_returns fresh_branch_let reloop; do allagree "$TMP/s" "$fn" S; done
-# Bug 087: a local named by what follows its scope. Before the fix scoped(1) read 10 in the model and 1
+# Bug 101: a local named by what follows its scope. Before the fix scoped(1) read 10 in the model and 1
 # at runtime; scoped_flat(0) likewise; body_local_assigned read 6 for 1. Not extracted at all now.
 for fn in scoped scoped_flat body_local_assigned; do
   grep -qP "\tmain\.$fn\t" "$TMP/s" && no "S: $fn is extracted: $(grep -m1 -P "\tmain\.$fn\t" "$TMP/s" | tr '\t' ' ')" \

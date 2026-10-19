@@ -82,6 +82,7 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.spec_in_hypothesis_only,
     `Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction,
     `Examples.TestFixtures.Proofs.spec_in_nested_implication,
+    `Examples.TestFixtures.Proofs.spec_in_proof_argument,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
   ]
@@ -115,6 +116,27 @@ partial def closedSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
 def isPropSort (α : Lean.Expr) : MetaM Bool := do
   return (← whnfR α).isProp
 
+/-- The specifications ONE operand of a recognized conclusion equation is about. Only two shapes
+    count, recognized structurally (Codex land1 confirmation review): the operand IS a closed spec
+    term (a spec's defining equation `spec = e`), or the operand is a direct application of the
+    model's evaluator (`Proof.eval` / `Proof.evalAssigns`), whose PExpr-typed arguments are the
+    program it evaluates. Anything else yields nothing: mining an arbitrary operand bound
+    `ignoreProof (eval … spec = none) h = 0`, whose conclusion says only that `ignoreProof` is 0. -/
+def operandSpecTerms (o : Lean.Expr) : MetaM (List Lean.Expr) := do
+  let o := o.consumeMData
+  if let some c := o.getAppFn.constName? then
+    if c == ``Concrete.Proof.eval || c == ``Concrete.Proof.eval.evalAssigns then
+      let specTy := mkConst ``Concrete.Proof.PExpr
+      let mut acc : List Lean.Expr := []
+      for a in o.getAppArgs.toList do
+        if (← try isDefEq (← inferType a) specTy catch _ => pure false) then
+          acc := acc ++ (← closedSpecTerms a)
+      return acc
+  -- The operand itself is a spec term (defining equation): `closedSpecTerms` returns it only when
+  -- the WHOLE operand is one closed spec-valued term, never something found inside it.
+  let whole ← closedSpecTerms o
+  return if whole == [o] then whole else []
+
 /-- The specifications a theorem's CONCLUSION evaluates (bug 079, Codex land1 review).
 
     Only RECOGNIZED evaluation conclusions bind: an equation (`eval T env fuel spec = v`, or a
@@ -136,7 +158,7 @@ partial def conclusionSpecTerms (e : Lean.Expr) : MetaM (List Lean.Expr) := do
     match e.getAppFn.constName?, e.getAppArgs.toList with
     | some ``Eq, [α, lhs, rhs] =>
       if (← isProp α) || (← isPropSort α) then return []
-      return (← closedSpecTerms lhs) ++ (← closedSpecTerms rhs)
+      return (← operandSpecTerms lhs) ++ (← operandSpecTerms rhs)
     | some ``And, [a, b] => return (← conclusionSpecTerms a) ++ (← conclusionSpecTerms b)
     | _, _ => return []
 

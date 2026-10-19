@@ -99,6 +99,11 @@ fi
 # digest, not by package symbol, so a change here means the migration reached further than intended.
 for pair in "examples:43" "tests:11" "std:11"; do
   c="${pair%%:*}"; want="${pair##*:}"
+  # A link ADDED after the freeze (a new fixture, explained as an `A` row in the amendments that
+  # check_identity_rows.sh verifies) is not a migrated subject: the frozen count plus the explained
+  # additions under this corpus is what must hold.
+  added="$(grep -cE "^A	link	$c/" docs/verification/identity-rows-amendments.tsv 2>/dev/null || true)"
+  want=$(( want + ${added:-0} ))
   got="$(grep -rhoE 'proof_fingerprint\("[^"]*"\)' "$c" --include='*.con' 2>/dev/null | grep -c . || true)"
   if [ "$got" = "$want" ]; then ok "stored links in $c/: $got (frozen)"
   else no "stored links in $c/ moved to $got (frozen at $want) — the identity migration must not touch stored subjects"; fi

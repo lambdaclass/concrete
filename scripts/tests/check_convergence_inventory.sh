@@ -101,10 +101,12 @@ fp_v1="$(printf '%s\n' "$FP_ALL" | grep -vc '"v2:' || true)"
 fp_v2=$(( fp_tot - fp_v1 ))
 if [ "${fp_tot:-0}" -eq 0 ]; then
   no "no stored proof links found in examples/, tests/ or std/ — the migration check is vacuous, not satisfied"
-elif [ "$fp_v2" -eq 55 ] && [ "$fp_v1" -eq 10 ]; then
+# 55 -> 59 on 2026-10-19: the four bug 079 negative subject-binding fixtures (tests/programs/spec_in_*),
+# each a v2 stored link explained as an added identity row.
+elif [ "$fp_v2" -eq 59 ] && [ "$fp_v1" -eq 10 ]; then
   ok "CLOSED: $fp_v2 of $fp_tot stored links carry the v2 discriminator; the $fp_v1 that do not have no computable v2 subject"
 else
-  no "stored-link migration moved: $fp_v2 v2 / $fp_v1 v1 of $fp_tot (expected 55/10). If a link became migratable, migrate it; if one regressed to v1, the activation is being undone"
+  no "stored-link migration moved: $fp_v2 v2 / $fp_v1 v1 of $fp_tot (expected 59/10). If a link became migratable, migrate it; if one regressed to v1, the activation is being undone"
 fi
 
 # 4. constRef names a constant without binding its MEANING.

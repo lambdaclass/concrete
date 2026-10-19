@@ -97,6 +97,7 @@ private def classificationTable : List (String × String × String × List (Stri
   ("Examples.TestFixtures.Proofs.spec_in_hypothesis_only", "body", "1c67fe78219bfe68834299c69b5417bb", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
   ("Examples.TestFixtures.Proofs.spec_in_irrelevant_disjunction", "body", "965ff272ca078c0697b60c858bd1511f", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
   ("Examples.TestFixtures.Proofs.spec_in_nested_implication", "body", "c29343f575ea4dd81dcff2980acde5e1", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
+  ("Examples.TestFixtures.Proofs.spec_in_proof_argument", "body", "972b867a2a9c7760e8cd06723810dcf2", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
   ("PureAdd.add_comm", "body", "1f64d1eca5de8c866eb02e9a15db0aa2", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["PureAdd.spec_add"])
 -- END GENERATED CLASSIFICATION ROWS
 ]

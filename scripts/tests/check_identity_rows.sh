@@ -66,7 +66,10 @@ else
   fi
   for k in subject dependency reference selection link; do
     a="$(grep -c "^$k	" "$RAW" || true)"; b="$(grep -c "^$k	" "$FROZEN" || true)"
-    [ "$a" = "$b" ] && ok "raw and normalized agree on $k rows ($a)" || no "raw has $a $k rows, normalized $b"
+    # Rows ADDED after the baseline (explained `A` amendments) are in the frozen rows but not the raw.
+    add="$(grep -c "^A	$k	" docs/verification/identity-rows-amendments.tsv 2>/dev/null || true)"
+    a=$(( a + ${add:-0} ))
+    [ "$a" = "$b" ] && ok "raw (plus $add explained additions) and normalized agree on $k rows ($a)" || no "raw has $a $k rows (with $add explained additions), normalized $b"
   done
   # The two files describe ONE population: the normalized rows must be exactly the raw rows' projection.
   # The bijection the projection needs is a property of this BASELINE only; it is not imposed on trees
@@ -84,15 +87,27 @@ minus, plus = [], []
 for line in open(sys.argv[2]).read().splitlines():
     if line.startswith("-\t"): minus.append(line[2:])
     elif line.startswith("+\t"): plus.append(line[2:])
+added = [l[2:] for l in open(sys.argv[2]).read().splitlines() if l.startswith("A\t")]
 if len(minus) != len(plus): sys.exit("amendments must pair each - row with a + row")
 for old, new in zip(minus, plus):
     if proj.count(old) != 1: sys.exit(f"amended row is not exactly once in the baseline projection: {old}")
     proj[proj.index(old)] = new
+# An ADDED row (`A`) is a subject the baseline never had — a new fixture, not a migrated subject. It
+# must be absent from the baseline and listed once; the frozen rows are sorted (C order), so it is
+# merged in sorted.
+for row in added:
+    if row in proj: sys.exit(f"added row is already in the baseline projection: {row}")
+    if added.count(row) != 1: sys.exit(f"added row listed more than once: {row}")
+if added:
+    # The leading `#` header lines stay first and in order; only the rows are merged, sorted.
+    head = [l for l in proj if l.startswith("#")]
+    rows = [l for l in proj if not l.startswith("#")]
+    proj = head + sorted(rows + added)
 open(sys.argv[3], "w").write("\n".join(proj) + ("\n" if proj else ""))
 PY
   then
     if cmp -s "$TMP/amended.tsv" "$FROZEN"; then
-      ok "the raw baseline projects onto the frozen rows, with $(grep -c '^+' "$AMEND") explained amendment(s)"
+      ok "the raw baseline projects onto the frozen rows, with $(grep -c '^+' "$AMEND") explained amendment(s) and $(grep -c '^A' "$AMEND") explained addition(s)"
     else
       no "the raw baseline, amended, does not equal the frozen rows: $(diff "$TMP/amended.tsv" "$FROZEN" | grep -c '^[<>]') unexplained diff lines"
     fi

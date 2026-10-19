@@ -91,4 +91,15 @@ theorem spec_in_irrelevant_disjunction :
     (eval FnTable.empty Env.empty 1 add_commutativity = some (.int 7)) ∨ True :=
   Or.inr trivial
 
+/-- A function that ignores a proof argument. -/
+def ignoreProof (P : Prop) (_ : P) : Nat := 0
+
+/-- The specification inside an arbitrary function's PROPOSITION ARGUMENT, in a conclusion that is an
+    equation of values: it says only that `ignoreProof` is 0, so it must bind nothing — only a direct
+    evaluator application (or a whole spec term) is a recognized operand (Codex land1 confirmation
+    review; check_subject_binding.sh, H). -/
+theorem spec_in_proof_argument
+    (h : eval FnTable.empty Env.empty 1 add_commutativity = none) :
+    ignoreProof (eval FnTable.empty Env.empty 1 add_commutativity = none) h = 0 := rfl
+
 end Examples.TestFixtures.Proofs

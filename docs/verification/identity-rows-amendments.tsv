@@ -8,3 +8,15 @@
 # attribute now names the specification its theorem evaluates, which moves its subject digest.
 -	link	examples/proof_pressure/src/main.con	check_nonce	v2:4955d6cc09961305512d96a7a054a0f2
 +	link	examples/proof_pressure/src/main.con	check_nonce	v2:e83f888fed44f06537168062486f4da1
+#
+# `A` = a row ADDED after the baseline: a subject the baseline never had, so nothing migrated. It must
+# be absent from the baseline projection; the frozen rows include it, sorted.
+#
+# 2026-10-19, bug 079 follow-ups (Codex land1 review): three negative subject-binding fixtures whose
+# theorem mentions `add`'s specification only in a hypothesis (top-level, nested implication, irrelevant
+# disjunction). Each carries a stored link so the claim exists to be refused; none binds.
+A	link	tests/programs/spec_in_hypothesis_only/test_spec_hyp.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+A	link	tests/programs/spec_in_irrelevant_disjunction/test_spec_disj.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+A	link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+# 2026-10-19, Codex land1 confirmation review: the spec inside an arbitrary function's proof argument.
+A	link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad

@@ -259,7 +259,8 @@ grep -q "^-- spec not bound to body" <<<"$B" && grep -q "spec_in_hypothesis_only
 # hypotheses and still searched nested implication domains, so `True ∧ ((eval … = none) → True)`
 # bound. Only recognized evaluation conclusions bind; a disjunct never established binds nothing.
 for case in "spec_in_nested_implication:test_spec_nested.con:a nested implication's domain" \
-            "spec_in_irrelevant_disjunction:test_spec_disj.con:an irrelevant disjunction"; do
+            "spec_in_irrelevant_disjunction:test_spec_disj.con:an irrelevant disjunction" \
+            "spec_in_proof_argument:test_spec_arg.con:an arbitrary function's proof argument"; do
   thm="${case%%:*}"; rest="${case#*:}"; file="${rest%%:*}"; why="${rest#*:}"
   grep -q "^  (\"Examples.TestFixtures.Proofs.$thm\", \"body\"" "$TBL" \
     && ok "H: $thm was processed (it has a classification row)" \

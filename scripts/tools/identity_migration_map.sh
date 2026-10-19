@@ -25,6 +25,8 @@
 # legitimately re-frozen after the baseline is listed there as its baseline value (`-`) and its new
 # value (`+`). Each `-` row must appear exactly once in the baseline or the tool refuses; it is
 # replaced before pairing and reported as an `amended` line. Anything not listed still has to pair.
+# A row listed as `A` is a subject the baseline never had (a new fixture, not a migrated subject):
+# it must be absent from the baseline, is entered as if the baseline had it, and is reported `added`.
 # Without the argument nothing is amended, which is how the committed R-0482 map was produced.
 #
 # Usage: scripts/tools/identity_migration_map.sh BASELINE_RAW NEW_RAW [AMENDMENTS]
@@ -61,6 +63,16 @@ if len(sys.argv) > 3:
         rows = old[o[0]]
         rows[rows.index(o[1:])] = n[1:]
         amended_lines.append("\t".join(["amended", o[0], "\t".join(o[1:]), "->", "\t".join(n[1:])]))
+    # ADDED rows (`A`): subjects the baseline never had (new fixtures, not migrated subjects). Each must
+    # be absent from the baseline; it is entered as if the baseline had it, so it must still pair.
+    for line in open(sys.argv[3], encoding="utf-8"):
+        line = line.rstrip("\n")
+        if not line.startswith("A\t"): continue
+        a = line[2:].split("\t")
+        if a[1:] in old.get(a[0], []):
+            print("FATAL: added row is already a baseline row: " + "\t".join(a), file=sys.stderr); sys.exit(2)
+        old.setdefault(a[0], []).append(a[1:])
+        amended_lines.append("\t".join(["added", a[0], "\t".join(a[1:])]))
 
 def emit(kind, verdict, *parts):
     out.append("\t".join((verdict, kind) + parts))
