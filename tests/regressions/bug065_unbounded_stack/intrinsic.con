@@ -1,0 +1,11 @@
+// Bug 065 follow-up, positive control: a compiler intrinsic (`print_int`) is lowered
+// by the compiler itself and never calls back into program code, so it does not
+// make its caller unbounded.
+fn show(n: i64) with(Console) {
+    print_int(n);
+}
+
+fn main() with(Console) -> i32 {
+    show(7);
+    return 0;
+}

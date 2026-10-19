@@ -169,6 +169,7 @@ tests/programs/adversarial_policy_empty/adversarial_policy_empty
 tests/regressions/*/*/*
 !tests/regressions/*/*/
 !tests/regressions/*/*/Concrete.toml
+!tests/regressions/*/*/assumptions.toml
 !tests/regressions/*/*/src/
 !tests/regressions/*/src/*.con
 !tests/regressions/*/*/src/*.con

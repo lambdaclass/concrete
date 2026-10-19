@@ -1,0 +1,22 @@
+# Bug 065 fixture, driven by scripts/tests/check_stack_budget.sh.
+schema_version = 1
+
+[arithmetic]
+overflow       = "trap"
+divide_by_zero = "trap"
+shift_oversize = "trap"
+
+[allocation]
+heap            = "none"
+stack_max_bytes = 100000   # generous on purpose: an unbounded stack must be refused at ANY budget
+
+[authority]
+required  = []
+forbidden = []
+
+[ffi]
+externs = []
+
+[trusted]
+functions = []
+shells    = []

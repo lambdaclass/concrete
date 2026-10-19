@@ -16,6 +16,8 @@
 #   3. positive control: the fully bounded program reports its exact maximum, passes a budget of
 #      exactly that, and fails one byte less.
 #   4. one reader: no other script scrapes a number out of the summary line.
+#   5. an extern or unresolved direct edge is not a leaf: its callers are unbounded; a compiler
+#      intrinsic edge is (positive control).
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
@@ -93,6 +95,26 @@ echo "=== 4. one reader of the summary line ==="
 scrapers="$(grep -rlE 'Max stack bound:[^|]*\[0-9\]' scripts/ | grep -vE 'scripts/tests/(lib/stack_bound|check_stack_budget)\.sh$' || true)"
 [ -z "$scrapers" ] && ok "no script but lib/stack_bound.sh scrapes a number from 'Max stack bound:'" \
                    || no "scripts scrape the summary number directly: $scrapers"
+
+echo "=== 5. an edge with no target frame is not a leaf ==="
+# Codex review of 19e2ab9a: depth computation FILTERED callees with no frame, so a function calling
+# an extern (or a callee resolving to no unique definition) published a finite bound.
+for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main"; do
+  f="${leg%%:*}"; want="${leg#*:}"
+  out="$("$CC" "$FIX/$f.con" --report stack-depth 2>&1)"
+  line="$(grep -E '^Max stack bound:' <<<"$out")"
+  [[ "$line" == "Max stack bound: unbounded ("*"have no bound: $want)" ]] \
+    && ok "$f: the callers of a frameless edge have no bound: $line" \
+    || no "$f: expected unbounded naming $want, got '${line:-<no summary line>}'"
+  v="$(stack_max_bound <<<"$out")"; rc=$?
+  [ "$rc" -eq 3 ] && ok "$f: lib/stack_bound.sh reads it as unbounded" || no "$f: stack_max_bound read '$v' (rc $rc)"
+done
+grep -A1 -E '^  Sq_area$' <<<"$("$CC" "$FIX/unresolved.con" --report stack-depth 2>&1)" | grep -q 'stack: 16 bytes' \
+  && ok "unresolved: the resolved leaf keeps its exact row" || no "unresolved: the resolved leaf lost its row"
+line="$("$CC" "$FIX/intrinsic.con" --report stack-depth 2>&1 | grep -E '^Max stack bound:')"
+[ "$line" = "Max stack bound: 24 bytes (main)" ] \
+  && ok "positive control: a compiler intrinsic edge (print_int) keeps the bound: $line" \
+  || no "intrinsic control changed: '${line:-<no summary line>}'"
 
 echo
 echo "STACK-BUDGET: PASS=$PASS FAIL=$FAIL"

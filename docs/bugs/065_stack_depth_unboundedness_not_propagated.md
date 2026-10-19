@@ -226,3 +226,21 @@ recursion, and assert `check_policy.sh` REFUSES it. Assert the same for
 other than a number for `evidence.max_stack_bytes` — its fallback is already
 `"?"`, so confirm consumers of the bundle tolerate it, or give the field an
 explicit `"unbounded"` value rather than a punctuation mark.
+
+## Follow-up: frameless direct edges (Codex review of 19e2ab9a)
+
+The first fix propagated recursion and indirect calls, but `computeCallDepths` still
+FILTERED any callee with no frame in the report. An extern, or a direct callee the call
+graph left bare because it resolved to no unique definition (an unknown or ambiguous
+spelling; in the pre-mono report, a trait-method call on a type parameter), therefore read
+as a leaf, and a function calling an externally implemented recursive routine published a
+finite bound that all three budget consumers accepted. `stackDepthReport` now seeds every
+caller of such an edge as "no bound established" and closes it backwards like recursion.
+No stack bound is ever validated for those targets; compiler intrinsics are the only
+exception, since the compiler lowers them and they never call back into program code.
+
+Controls in `check_stack_budget.sh` section 5: `extern.con` and `unresolved.con` report
+`unbounded` naming exactly their callers (the resolved leaf keeps its row), and
+`intrinsic.con` (a `print_int` edge) keeps its exact 24-byte bound. The two
+`assumptions.toml` fixtures the gate reads are now committed; a `.gitignore` rule for
+compiled outputs under `tests/regressions/*/*/` had hidden them.

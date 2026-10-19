@@ -1,0 +1,17 @@
+// Bug 065 follow-up: the report reads pre-mono Core, where a trait-method call on a
+// type parameter (`x.area()` -> `T_area`) resolves to no definition. An edge with
+// no target frame is not a leaf: `total` and its caller have no bound established.
+trait Shape {
+    fn area(&self) -> i32;
+}
+struct Copy Sq { s: i32 }
+impl Shape for Sq {
+    fn area(&self) -> i32 { return self.s * self.s; }
+}
+fn total<T: Shape>(x: &T) -> i32 {
+    return x.area();
+}
+fn main() -> i32 {
+    let q: Sq = Sq { s: 2 };
+    return total::<Sq>(&q) - 4;
+}

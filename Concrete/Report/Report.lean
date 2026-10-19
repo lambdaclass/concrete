@@ -706,8 +706,19 @@ def stackDepthReport (modules : List CModule) (locMap : FnLocMap := [])
   let frameSizes := allFns.map fun (qn, _, frame, _, _) => (qn, frame)
   -- Compute call depths
   let depths := computeCallDepths frameSizes callGraph recMap
+  -- A DIRECT EDGE WHOSE TARGET HAS NO FRAME IN THIS REPORT IS NOT A LEAF. An extern, or a callee
+  -- the call graph left bare because it resolved to no unique definition (unknown or ambiguous
+  -- spelling), has no stack figure here: `computeCallDepths` drops such edges, so a function
+  -- calling an externally implemented recursive routine published a finite bound that every
+  -- budget consumer accepted (bug 065 follow-up). No stack bound is ever validated for those
+  -- targets, so their callers are seeded as "no bound established". Compiler intrinsics are the
+  -- one exception: the compiler lowers them itself and they never call back into program code.
+  let framed := frameSizes.map (·.1)
+  let opaqueCallers := callGraph.filterMap fun (n, cs) =>
+    if cs.any (fun c => !framed.contains c && (resolveIntrinsic c).isNone) then some n else none
   -- Anything that can REACH a function with no bound has no bound either.
   let seed := (allFns.filter (fun (_, _, _, isRec, _) => isRec)).map (fun (qn, _, _, _, _) => qn)
+    ++ opaqueCallers
   let unbounded := closeUnbounded callGraph seed (frameSizes.length + 1)
   -- Build FnStackInfo records
   let infos := allFns.map fun (qn, name, frame, isRec, loc) =>

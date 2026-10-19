@@ -1,0 +1,11 @@
+// Bug 065 follow-up: a direct call to an EXTERN has no stack figure in the report,
+// so its callers have no bound established (never a finite number).
+trusted extern fn abs(x: i32) with() -> i32;
+
+fn wrap(n: i32) -> i32 {
+    return abs(n);
+}
+
+fn main() -> i32 {
+    return wrap(0 - 3) - 3;
+}
