@@ -1467,6 +1467,7 @@ run_err "$TESTDIR/error_091_mut_receiver_in_ref_self.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable.con"              "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable_concrete.con"     "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_deref.con"            "(E0237)"
 run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0
 for r091m in "trait_mut_receiver_forms:8" "trait_generic_receiver_forms:4030412"; do
     r091m_f="${r091m%%:*}"; r091m_want="${r091m#*:}"
@@ -1496,6 +1497,13 @@ run_err "$TESTDIR/error_091_destroy_mut_receiver.con" "(E0587)"
 run_err "$TESTDIR/error_091_destroy_through_ref.con" "(E0290)"
 run_err "$TESTDIR/error_091_destroy_concrete_through_ref.con" "(E0290)"
 run_err "$TESTDIR/error_091_destroy_method_then_destroy.con" "(E0205)"
+# Codex review of round 3: parentheses, `*r`, the static `T::destroy(&x)` spelling and the
+# definition name `T_destroy` (also as a function value) reach the same contract.
+run_err "$TESTDIR/error_091_destroy_paren_then_destroy.con" "(E0205)"
+run_err "$TESTDIR/error_091_destroy_static_borrowed.con"    "(E0290)"
+run_err "$TESTDIR/error_091_destroy_deref_ref.con"          "(E0290)"
+run_err "$TESTDIR/error_091_destroy_defname_borrowed.con"   "(E0290)"
+run_err "$TESTDIR/error_091_receiver_deref_moved.con"       "(E0290)"
 r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_owned_receiver.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091d_interp" = "11111" ]; then
     echo "  ok  bug 091: Destroy consumes its receiver — interp == binary (11111)"

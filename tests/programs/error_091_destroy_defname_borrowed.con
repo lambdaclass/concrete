@@ -1,0 +1,20 @@
+// Bug 091 round 3: naming a `&self` destructor by its DEFINITION name (`ByRef_destroy`),
+// here as a function value, ran it through a borrow and left the owner live (--interp
+// printed 2 for one owner). Outside trusted drop glue: E0290.
+mod m {
+    struct ByRef { cell: *mut u64 }
+    trusted impl Destroy for ByRef {
+        fn destroy(&self) { *self.cell = *self.cell + 1; }
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let u: ByRef = ByRef { cell: cell };
+        let f: fn(&ByRef) = ByRef_destroy; f(&u);
+        destroy(u);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

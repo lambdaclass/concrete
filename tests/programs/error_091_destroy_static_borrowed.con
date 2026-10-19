@@ -1,0 +1,38 @@
+// Bug 091 round 3 (Codex review): the static spelling `ByRef::destroy(&u)` of a
+// `&self` destructor ran it through a borrow and left `u` live for `destroy(u)`
+// (--interp printed 12111). Outside trusted drop glue: E0290.
+mod m {
+    struct ByVal { cell: *mut u64, step: u64 }
+    trusted impl Destroy for ByVal {
+        fn destroy(self) {
+            let ByVal { cell, step } = self;
+            *cell = *cell + step;
+        }
+    }
+    struct ByRef { cell: *mut u64, step: u64 }
+    trusted impl Destroy for ByRef {
+        fn destroy(&self) {
+            *self.cell = *self.cell + self.step;
+        }
+    }
+    fn kill<T: Destroy>(x: T) with(Alloc) {
+        x.destroy();
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        kill::<ByVal>(ByVal { cell: cell, step: 1 });
+        kill::<ByRef>(ByRef { cell: cell, step: 10 });
+        let t: ByVal = ByVal { cell: cell, step: 100 };
+        t.destroy();
+        let u: ByRef = ByRef { cell: cell, step: 1000 };
+        ByRef::destroy(&u);
+        destroy(u);
+        let v: ByVal = ByVal { cell: cell, step: 10000 };
+        destroy(v);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

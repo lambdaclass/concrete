@@ -1,0 +1,21 @@
+// Bug 091 round 3 (Codex review): `(*t).destroy()` with `t: &Tracked` destroys through
+// the reference exactly as `t.destroy()` does. Expected: E0290.
+mod m {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    fn kill(t: &Tracked) with(Alloc) {
+        (*t).destroy();
+    }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = Tracked { cell: cell };
+        kill(&t);
+        destroy(t);
+        return 0;
+    }
+}

@@ -1,0 +1,9 @@
+// Bug 091 round 3: a by-value `self` method called on `(*r)` with `r: &R` moves the value
+// out through the reference exactly as `r.take()` does (E0290); the owner was still
+// destructured afterwards (duplication).
+mod m {
+    struct R { v: i64 }
+    impl R { fn take(self) -> i64 { let R { v } = self; return v; } }
+    fn bad(r: &R) -> i64 { return (*r).take(); }
+    fn main() -> Int { let r: R = R { v: 1 }; let n: i64 = bad(&r); let R { v } = r; return n + v; }
+}

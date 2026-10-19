@@ -223,3 +223,14 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   (through_ref, through_ref_concrete, through_ref_projection, in_ref_self: E0237; immutable,
   immutable_concrete: E0233; borrowed: E0232) and `trait_mut_receiver_forms.con` (8, compiled
   and --interp; `trait_generic_receiver_forms.con` now also agrees under --interp).
+* **Codex review of round 3: other spellings of the same two holes (P1).** `(u).destroy()`
+  did not consume `u` and `(*t).destroy()` / `(*r).take()` moved out through `&T`
+  (`consumeReceiver` now strips parentheses and refuses a dereference of a reference);
+  `ByRef::destroy(&u)`, `ByRef_destroy(&u)` and a function value of `ByRef_destroy` ran a
+  `&self` destructor through a borrow (`checkDirectDestroyImplUse`: E0290 outside trusted
+  code); `(*(w)).p.bump()` escaped E0237 because the place walk recognized only `*ident`
+  (`placeVia` now looks through parentheses, projections and dereferences alike). Fixtures
+  `error_091_destroy_paren_then_destroy.con` (E0205), `error_091_destroy_static_borrowed.con`,
+  `error_091_destroy_deref_ref.con`, `error_091_destroy_defname_borrowed.con`,
+  `error_091_receiver_deref_moved.con` (E0290), `error_091_mut_receiver_paren_deref.con` (E0237).
+

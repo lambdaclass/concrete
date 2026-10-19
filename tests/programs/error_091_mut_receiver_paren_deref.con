@@ -1,0 +1,8 @@
+// Bug 091 round 3 (Codex review): a parenthesized dereference `(*(w)).p.bump()` with
+// `w: &W` mutated through the shared reference (the place walk only saw `*ident`).
+// Expected: E0237, as for `w.p.bump()`.
+struct P { v: i64 }
+impl P { fn bump(&mut self) { self.v = self.v + 1; } }
+struct W { p: P }
+fn bad(w: &W) { (*(w)).p.bump(); }
+fn main() -> Int { let w: W = W { p: P { v: 1 } }; bad(&w); let W { p } = w; let P { v } = p; return v; }

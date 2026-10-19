@@ -79,6 +79,40 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) : List ((Strin
   | some .refMut => (match borrowPathOf obj with | some p => [(p, true)] | none => [])
   | _ => []
 
+/-- An expression with its enclosing parentheses removed. -/
+partial def stripParens : Expr → Expr
+  | .paren _ inner => stripParens inner
+  | e => e
+
+/-- What a receiver PLACE is reached through (bug 091 round 3). Field/index projections and
+    `*` look through one layer of their base exactly as Check types them (field access
+    auto-derefs), so the walk ends at the binding the place is rooted at:
+      * `owned root`: an owned binding (its mutability and live borrows govern the place);
+      * `shared desc`: a `&T` binding — the place is reached through a shared reference;
+      * `exclusive`: a `&mut T` binding or a raw pointer;
+      * `temp`: no binding (a call result, a cast), so nothing to check. -/
+inductive PlaceVia where
+  | owned (root : String)
+  | shared (desc : String)
+  | exclusive
+  | temp
+
+partial def placeVia (e : Expr) : CheckM PlaceVia := do
+  match e with
+  | .paren _ inner => placeVia inner
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some info =>
+      match info.ty with
+      | .ref _ => return .shared s!"'{n}' is a `&` reference"
+      | .refMut _ | .ptrMut _ | .ptrConst _ => return .exclusive
+      | _ => return .owned n
+    | none => return .temp
+  | .fieldAccess _ obj _ => placeVia obj
+  | .arrayIndex _ arr _ => placeVia arr
+  | .deref _ inner => placeVia inner
+  | _ => return .temp
+
 /-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed
     by a trait-bounded type parameter (Codex round 2 of bug 091: the bound path never applied
     the receiver form, so `x.consume(); return x;` returned an owner its impl had destroyed):
@@ -87,8 +121,10 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) : List ((Strin
       * `self`: MOVES the receiver. An owned binding is consumed; a projection, or a
         reference, leaves the place owning the same value, so a non-Copy receiver there is
         refused (H11) — moving out through `&T` destroyed a value its owner still held. -/
-def consumeReceiver (selfKind : Option SelfKind) (obj : Expr) (objTy innerTy : Ty)
+def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : Ty)
     (methodName : String) (span : Option Span) : CheckM Unit := do
+  -- `(x).m()` is `x.m()`: parentheses never hide the receiver place (Codex round 3).
+  let obj := stripParens obj0
   match selfKind with
   | some .refMut =>
     match objTy, obj with
@@ -112,19 +148,16 @@ def consumeReceiver (selfKind : Option SelfKind) (obj : Expr) (objTy innerTy : T
         if f != newtypeFieldName && !(← isCopyType innerTy) then refused
       | .fieldAccess .. | .arrayIndex .. =>
         if !(← isCopyType innerTy) then refused
+      | .deref _ inner =>
+        -- `(*r).m()` with `r: &T` moves out through the reference exactly as `r.m()` does.
+        match ← placeVia inner with
+        | .shared _ | .exclusive =>
+          if !(← isCopyType innerTy) then
+            throwCheck (.nonCopyProjection (tyToString innerTy)
+              s!"a dereference of a reference (by-value `self` receiver of '{methodName}')") span
+        | _ => pure ()
       | _ => pure ()
   | _ => pure ()
-
-/-- The binding a receiver place is rooted at, looking through field / index projections and
-    parentheses; `deref` marks a root reached through `*r`. `none`: a temporary (call result,
-    cast), which no binding owns. -/
-partial def receiverRoot : Expr → Option (String × Bool)
-  | .ident _ n => some (n, false)
-  | .fieldAccess _ obj _ => receiverRoot obj
-  | .arrayIndex _ arr _ => receiverRoot arr
-  | .paren _ inner => receiverRoot inner
-  | .deref _ (.ident _ n) => some (n, true)
-  | _ => none
 
 /-- Bug 091 round 3: a method call's IMPLICIT receiver borrow obeys the rules of the explicit
     `&place` / `&mut place` it stands for (one rule for concrete and trait-bound receivers):
@@ -145,39 +178,27 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
     | .ref _ =>
       throwCheck (.mutReceiverThroughSharedRef methodName "the receiver is a `&` reference") span
     | _ =>
-      match receiverRoot obj with
-      | none => pure ()
-      | some (root, viaDeref) =>
+      match ← placeVia obj with
+      | .shared desc => throwCheck (.mutReceiverThroughSharedRef methodName desc) span
+      | .exclusive | .temp => pure ()
+      | .owned root =>
         match ← lookupVarInfo root with
         | none => pure ()
         | some info =>
-          match info.ty with
-          | .ref _ =>
-            throwCheck (.mutReceiverThroughSharedRef methodName s!"'{root}' is a `&` reference") span
-          | .refMut _ | .ptrMut _ | .ptrConst _ => pure ()
-          | _ =>
-            if !viaDeref then
-              let env ← getEnv
-              let activeRefs := activeBorrowRefs env root
-              if info.borrowCount > 0 || !activeRefs.isEmpty then
-                throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
-              if !info.mutable then
-                throwCheck (.cannotMutBorrowImmutable root) span
+          let activeRefs := activeBorrowRefs (← getEnv) root
+          if info.borrowCount > 0 || !activeRefs.isEmpty then
+            throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+          if !info.mutable then
+            throwCheck (.cannotMutBorrowImmutable root) span
   | some .ref =>
     match objTy with
     | .ref _ | .refMut _ => pure ()
     | _ =>
-      match receiverRoot obj with
-      | some (root, false) =>
-        match ← lookupVarInfo root with
-        | some info =>
-          match info.ty with
-          | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => pure ()
-          | _ =>
-            let activeRefs := activeBorrowRefs (← getEnv) root
-            if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
-              throwCheck (.cannotBorrowMutablyBorrowed root) span
-        | none => pure ()
+      match ← placeVia obj with
+      | .owned root =>
+        let activeRefs := activeBorrowRefs (← getEnv) root
+        if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
+          throwCheck (.cannotBorrowMutablyBorrowed root) span
       | _ => pure ()
   | _ => pure ()
 
@@ -189,13 +210,41 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
     destroyed again (double free for a resource-releasing destructor). A reference receiver
     is admitted only in `trusted` code — internal drop glue (std's collections destroying an
     element through `(p as &T)`) whose owner was already consumed by the container. -/
-def consumeDestroyReceiver (obj : Expr) (objTy innerTy : Ty) (span : Option Span) : CheckM Unit := do
+def destroyThroughRefRefused (innerTy : Ty) (span : Option Span) : CheckM Unit := do
+  if !(← getEnv).currentFnTrusted then
+    throwCheck (.nonCopyProjection (tyToString innerTy)
+      "a reference (`Destroy::destroy` consumes its receiver; destroying through a reference is reserved for trusted drop glue whose owner was already consumed)") span
+
+def consumeDestroyReceiver (obj0 : Expr) (objTy innerTy : Ty) (span : Option Span) : CheckM Unit := do
+  let obj := stripParens obj0
   match objTy with
-  | .ref _ | .refMut _ =>
-    if !(← getEnv).currentFnTrusted then
-      throwCheck (.nonCopyProjection (tyToString innerTy)
-        "a reference (`Destroy::destroy` consumes its receiver; destroying through a reference is reserved for trusted drop glue whose owner was already consumed)") span
-  | _ => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+  | .ref _ | .refMut _ => destroyThroughRefRefused innerTy span
+  | _ =>
+    match obj with
+    | .deref _ inner =>
+      -- `(*r).destroy()` destroys through `r` exactly as `r.destroy()` does.
+      match ← placeVia inner with
+      | .shared _ | .exclusive => destroyThroughRefRefused innerTy span
+      | _ => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+    | _ => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+
+/-- A Destroy impl's `&self` destructor named DIRECTLY — `Type::destroy(&x)`, its definition
+    name `Type_destroy(&x)`, or a function reference to it — runs the destructor through a
+    borrow and leaves the owner live (Codex round 3: printed 12111 for 11111). Outside trusted
+    drop glue that is refused like a borrowed `x.destroy()`; a by-value impl's definition takes
+    its argument by value and is an ordinary consuming call. -/
+def checkDirectDestroyImplUse (fnName : String) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  if env.currentFnTrusted then return
+  match env.traitImpls.find? fun (t, tr) => tr == destroyTraitName && destroyFnNameFor t == fnName with
+  | none => pure ()
+  | some (t, _) =>
+    match ← lookupFn fnName with
+    | some sig =>
+      match sig.params.head? with
+      | some (_, .ref _) | some (_, .refMut _) => destroyThroughRefRefused (tyFromName t) span
+      | _ => pure ()
+    | none => pure ()
 
 -- LEAN 4.34.1 `do` ELABORATOR (R-0208 upgrade). 4.34.1 elaborates `do` blocks with a new elaborator
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
@@ -262,6 +311,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Check if it's a function name (first-class function reference)
       match ← lookupFn name with
       | some sig =>
+        checkDirectDestroyImplUse name (some e.getSpan)
         let paramTys := sig.params.map fun (_, t) => t
         return .fn_ paramTys sig.capSet sig.retTy
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
@@ -419,6 +469,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | .call _sp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
+    checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
     | some nt =>
@@ -1556,6 +1607,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
+    checkDirectDestroyImplUse mangledName (some e.getSpan)
     match ← lookupFn mangledName with
     | some sig =>
       let mapping := sig.typeParams.zip typeArgs
@@ -1575,6 +1627,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .fnRef _ fnName =>
+    checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Look up the function signature to build the fn pointer type
     let env ← getEnv
     match env.allFnSummarys.lookup fnName with
