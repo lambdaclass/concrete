@@ -37,6 +37,10 @@ while_step_exit
 length_set
 lookupIndex_set_ne
 lookupIndex_set_self
+# Bug 080: `PExpr.wrapCast` evaluates through `wrapInt`; these say an in-range value wraps to itself,
+# which the pure-core and SHA proofs use after a narrowing cast of a value known to fit.
+wrapInt_unsigned_of_lt
+wrapInt_bv_toNat
 
 # --- Live: the hardcoded `provedFunctions` proof path. These prove the
 #     parse_byte / check_length / decode_header (+ validate) functions correct

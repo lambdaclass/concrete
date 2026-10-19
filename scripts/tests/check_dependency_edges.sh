@@ -830,7 +830,7 @@ mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
 EXPECTED_ORDINARY_PROBES=247
-EXPECTED_ORDINARY_MANIFEST_SHA256="81f3f3926194fa824ba59edfb915b52a9acc40b2a00df878d635101ce5d398cf"
+EXPECTED_ORDINARY_MANIFEST_SHA256="7f61bd95edab57fb7a760cdf05e1c3935377c52564b6f403ce150f0c4be44593"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
@@ -838,7 +838,9 @@ EXPECTED_TOTAL_ASSERTIONS=321
 # Re-pinned 2026-10-17 (bug 079) for exactly three relabelled assertions, each explained where it is
 # made: the corpus-wide proved count (35 -> 32), the corpus split (164 -> 169 body), and the dispatch
 # leg, which now passes with pureCoreFns dispatched. The ordinary manifest moved for the split's label.
-EXPECTED_ASSERTION_LABELS_SHA256="7ac62e6e6589e7f960655b1a9c36727afeb3751478b590a23510f04a1a946863"
+# Re-pinned 2026-10-18 for exactly one relabelled assertion, the corpus split (113/169 -> 114/173, the
+# five theorems named at the probe); the ordinary manifest moved for that label alone.
+EXPECTED_ASSERTION_LABELS_SHA256="7e0bc6584dc2c3c1cc3fbfb0324312c7b2ac4639c4e9e3420981c04209255c3c"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -1082,7 +1084,13 @@ echo "=== corpus split, pinned ==="
 # the test programs' plumbing theorems, real now instead of names nothing defined. Each evaluates its
 # specification over `FnTable.empty`, so the classifier counts it as `body`. (`PureAdd.add_comm` is the
 # sixth, outside the counted prefixes.)
-probe "the corpus splits 113 contract / 169 body" "113/169" \
+# 113/169 -> 114/173 on 2026-10-18 (bug 080 and its review), and the five are named. Contract +1:
+# `Concrete.Proof.eval.eq_19`, the equation lemma of `eval`'s new `wrapCast` arm. Body +4:
+# `Concrete.ProofSoundness.wrapCast_300_u8` (bug 080's wrap pin) and the three subject-binding
+# negative fixtures `Examples.TestFixtures.Proofs.spec_in_hypothesis_only`,
+# `spec_in_nested_implication` and `spec_in_irrelevant_disjunction` — each evaluates over
+# `FnTable.empty`, so it classifies `body` even though none binds a claim.
+probe "the corpus splits 114 contract / 173 body" "114/173" \
 '#eval show MetaM Unit from do
    let env ← getEnv
    let mut nc := 0; let mut nb := 0
