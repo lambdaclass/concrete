@@ -2336,10 +2336,10 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
         else
           let e := CheckError.importBindingCollision local_
             s!"is already bound to '{m0}.{o0}' by another import (here: '{modName}.{orig}')"
-          (seen, ds ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
-                          hint := e.hint, code := e.code }])
+          (seen, { severity := .error, message := e.message, pass := "check", span := some sp,
+                   hint := e.hint, code := e.code } :: ds)
       | none => ((local_, modName, orig) :: seen, ds)
-  vsLocal ++ dups
+  vsLocal ++ dups.reverse
 
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=

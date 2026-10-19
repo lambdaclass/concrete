@@ -55,7 +55,10 @@ check Concrete/Check/CheckHelpers.lean   8
 # for-loop's evidence block. `initEv` holds at most one statement and the append runs
 # once per for-loop, not once per element of anything.
 check Concrete/Elab/Elab.lean            58
-check Concrete/Interp/Interp.lean        6
+# 6->7 (2026-10-19, bug 052): destroyValue extends an element reference's path by one
+# `.index i` step per array element. The path is as long as the access nesting, not the
+# array, so each append is O(depth) and the loop stays linear in the elements.
+check Concrete/Interp/Interp.lean        7
 
 echo
 echo "check_no_quadratic_append: PASS=$PASS FAIL=$FAIL"

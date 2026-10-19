@@ -1450,7 +1450,7 @@ run_ok  "$TESTDIR/trait_impl_generic_self_return.con" 42
 # (canonical terminal consumer) as well as `&self`; `&mut self` is still E0587.
 run_ok  "$TESTDIR/trait_destroy_by_value_receiver.con" "2" 0
 run_err "$TESTDIR/error_091_destroy_mut_receiver.con" "(E0587)"
-r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_by_value_receiver.con" --interp 2>&1 | head -1 || true)
+r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_by_value_receiver.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091d_interp" = "2" ]; then
     echo "  ok  bug 091: by-value Destroy receiver — interp == binary (2)"
     PASS=$((PASS + 1))
