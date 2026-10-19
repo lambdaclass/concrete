@@ -26,9 +26,12 @@ fn via_indirect() -> i32 { return apply(local_only, 1); }
 fn via_indirect2() -> i32 { return via_indirect() + 1; }
 
 // REFUSED: a method call on a type parameter; its target is chosen per instantiation.
-fn show<T: Describe + Copy>(p: T) -> i32 { return p.describe(); }
+// The receiver is a reference: `describe(&self)` on an OWNED `p: T` is elaborated as a
+// borrow (Codex round 2 of bug 091), a shape extraction does not support, and this fixture
+// is about admission, not extraction.
+fn show<T: Describe + Copy>(p: &T) -> i32 { return p.describe(); }
 
 fn main() -> i32 {
     let p: Point = Point { x: 1, y: 2 };
-    return plain() + via_foreign() + via_indirect2() + show(p) - 3 - 1 - 3 - 3;
+    return plain() + via_foreign() + via_indirect2() + show(&p) - 3 - 1 - 3 - 3;
 }

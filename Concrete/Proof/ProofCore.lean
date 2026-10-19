@@ -1543,7 +1543,7 @@ inductive ExclusionKind where
       authority a handle supplies — are not visible in any header.
     - `unresolvedCall`: it may reach a call naming no analysed definition (a dependency that was
       not loaded, e.g. std in single-file mode). Missing information, not absence of effects.
-    - `typeParamDispatch`: it may reach a method call on a type parameter (`T_describe`), whose
+    - `typeParamDispatch`: it may reach a method call on a type parameter (`T$describe`), whose
       target is chosen per instantiation. A generic body's effects are those of every
       instantiation's impl, which no single definition determines.
     - `foreignAssumption`: it may reach a foreign binding. Its effects are DECLARED, and the
@@ -1637,8 +1637,8 @@ private def probeForeign : Assumptions.AssumptionId :=
         == [.indirectCall "m.apply" "f"]
 -- Method call on a type parameter.
 #guard admissionProbeFor (admissionProbe [{ probeFn "m.show" with
-          gaps := #[{ site := "m.show", siteKey := "m.show", binding := "T_describe", typeParam := some "T" }] }]) "m.show"
-        == [.typeParamDispatch "m.show" "T_describe" "T"]
+          gaps := #[{ site := "m.show", siteKey := "m.show", binding := "T$describe", typeParam := some "T" }] }]) "m.show"
+        == [.typeParamDispatch "m.show" "T$describe" "T"]
 -- A reached foreign binding, with its facts present...
 #guard admissionProbeFor (admissionProbe [{ probeFn "m.f" with
           reaches := #[{ key := probeForeign.key, via := .throughCall "m.wrap" }] }]

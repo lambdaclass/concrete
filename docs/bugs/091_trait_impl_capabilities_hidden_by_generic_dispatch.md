@@ -174,3 +174,11 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   was rejected. Destroy admits `self` and `&self` (std's collections use `&self`); `&mut self`
   stays E0587. Fixtures `trait_destroy_by_value_receiver.con` (2, compiled and --interp,
   through generic `x.destroy()` and `destroy(t)`) and `error_091_destroy_mut_receiver.con`.
+* **Gate regression: admission lost its typeParamDispatch reason.** The assumption summary
+  recognized a method call on a type parameter by the old `T_` prefix; with the reserved
+  `T$m` spelling `main.show` was refused as an UNRESOLVED call. The summary now classifies
+  `T$m` (`splitTraitParamCallee`, the type parameter checked against the function's own) and
+  the builtin destructor dispatch in a generic body as `typeParamDispatch`
+  (`check_proof_admission.sh`: was 15/17, now 17/17). The fixture's `show` takes `p: &T`: an
+  owned `p: T` calling `describe(&self)` is now elaborated as a borrow (round 2 receiver fix),
+  which extraction does not support, and that leg is about admission, not extraction.

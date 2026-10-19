@@ -353,7 +353,16 @@ def build (modules : List CModule)
       -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
       -- not an empty one: what it reaches is unknown.
       if bs.isEmpty && ts.isEmpty && !isIntrinsic name then
-        let tp := nd.typeParams.find? fun p => name.startsWith (p ++ "_")
+        -- A method call on a type parameter is spelled `T$m` in Core (`traitParamCallee`, bug
+        -- 052/091); the builtin destructor's dispatch is `destroyDispatchCallee`, chosen from the
+        -- type argument. Both are per-instantiation dispatch, not a missing dependency. The old
+        -- `T_` prefix test stopped matching when the spelling changed, so `main.show` was
+        -- refused as an unresolved call instead (batch 2 gate regression).
+        let tp : Option String := match splitTraitParamCallee name with
+          | some (p, _) => if nd.typeParams.contains p then some p else none
+          | none =>
+            if name == destroyDispatchCallee && !nd.typeParams.isEmpty
+            then some (", ".intercalate nd.typeParams) else none
         unloadedGaps := unloadedGaps.push { site := nd.fn, siteKey := nd.fnKey, binding := name,
                                             unloaded := tp.isNone, typeParam := tp }
       for b in bs do
