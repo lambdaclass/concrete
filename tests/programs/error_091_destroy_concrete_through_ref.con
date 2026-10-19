@@ -1,0 +1,22 @@
+// Bug 091 round 3: the concrete spelling of the same hole. A `&self` Destroy impl
+// called as `t.destroy()` through `&Tracked` ran the destructor without consuming
+// the owner, which `destroy(t)` then destroyed again. Expected: E0290.
+mod m {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    fn kill(t: &Tracked) with(Alloc) {
+        t.destroy();
+    }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = Tracked { cell: cell };
+        kill(&t);
+        destroy(t);
+        return 0;
+    }
+}

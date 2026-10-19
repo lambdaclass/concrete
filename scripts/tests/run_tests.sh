@@ -1448,14 +1448,21 @@ run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42
 run_ok  "$TESTDIR/trait_impl_generic_self_return.con" 42
 # Gate regression of batch 2: builtin Destroy admits the by-value `destroy(self)` form
 # (canonical terminal consumer) as well as `&self`; `&mut self` is still E0587.
-run_ok  "$TESTDIR/trait_destroy_by_value_receiver.con" "2" 0
+# Round 3 (Codex): `Destroy::destroy` CONSUMES its receiver whichever form the impl
+# declares — each owner is destroyed exactly once (11111); destroying through a
+# reference outside trusted drop glue is E0290 (generic and concrete), and an owned
+# `t.destroy()` moves `t` (a later `destroy(t)` is E0205).
+run_ok  "$TESTDIR/trait_destroy_owned_receiver.con" "11111" 0
 run_err "$TESTDIR/error_091_destroy_mut_receiver.con" "(E0587)"
-r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_by_value_receiver.con" --interp 2>&1 | awk "NR<=1" || true)
-if [ "$r091d_interp" = "2" ]; then
-    echo "  ok  bug 091: by-value Destroy receiver — interp == binary (2)"
+run_err "$TESTDIR/error_091_destroy_through_ref.con" "(E0290)"
+run_err "$TESTDIR/error_091_destroy_concrete_through_ref.con" "(E0290)"
+run_err "$TESTDIR/error_091_destroy_method_then_destroy.con" "(E0205)"
+r091d_interp=$($COMPILER "$TESTDIR/trait_destroy_owned_receiver.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r091d_interp" = "11111" ]; then
+    echo "  ok  bug 091: Destroy consumes its receiver — interp == binary (11111)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  bug 091: by-value Destroy receiver — interp gave '$r091d_interp', want 2"
+    echo "FAIL  bug 091: Destroy consumes its receiver — interp gave '$r091d_interp', want 11111"
     FAIL=$((FAIL + 1))
 fi
 run_err "$TESTDIR/error_091_generic_self_return_mismatch.con" "(E0582)"

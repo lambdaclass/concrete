@@ -1,9 +1,9 @@
-// Bug 091 gate regression (batch 2): E0587 required the builtin Destroy method's
-// receiver to be exactly `&self`, refusing the canonical by-value terminal form
-// `fn destroy(self) { let T { .. } = self; }` (OWNERSHIP_MODEL.md H17) used by
-// fixtures and gates. Both receivers are admitted; a by-value destructor runs
-// through generic `x.destroy()` and through `destroy(t)`. Expect 2 (compiled and
-// --interp).
+// Bug 091 round 3 (Codex): admitting Destroy's by-value receiver (0aacb889) left
+// generic `x.destroy()` checked against a BORROWED receiver, so this program
+// consumed an owner through `&T` while the owner stayed live and was destroyed
+// again (compiled and --interp printed 2: one owner, two destructor runs).
+// `Destroy::destroy` consumes its receiver; through a reference it is E0290
+// outside trusted drop glue.
 mod m {
     struct Tracked { cell: *mut u64 }
     trusted impl Destroy for Tracked {

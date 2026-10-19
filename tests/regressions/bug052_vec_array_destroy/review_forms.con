@@ -19,7 +19,9 @@ mod review {
     fn T_destroy(x: &[Tracked; 2]) -> u64 {
         return 0;
     }
-    fn kill<T: Destroy>(x: &T) with(Alloc) {
+    // Borrowed destruction is trusted drop glue: the caller (a Destroy impl run by
+    // `destroy(owner)`) already consumed the owner (bug 091 round 3).
+    trusted fn kill<T: Destroy>(x: &T) with(Alloc) {
         x.destroy();
     }
     fn outer<T: Destroy>(x: &[T; 2]) with(Alloc) {

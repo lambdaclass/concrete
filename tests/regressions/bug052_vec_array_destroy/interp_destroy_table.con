@@ -21,19 +21,20 @@ mod m {
         print_int(999);
         print_char(10);
     }
-    fn kill<T: Destroy>(x: &T) with(Alloc) {
+    // `Destroy::destroy` consumes its receiver (bug 091 round 3): kill takes ownership.
+    fn kill<T: Destroy>(x: T) with(Alloc) {
         x.destroy();
     }
     trusted fn count(p: *mut u64) -> u64 { return *p; }
     fn main() with(Std, Unsafe) -> Int {
         let p: P = P { v: 1 };
-        kill::<P>(&p);
+        kill::<P>(p);
         let mut c: u64 = 0;
         let cell: *mut u64 = &mut c as *mut u64;
-        let t: Tracked = track(cell);
-        kill::<Tracked>(&t);
+        kill::<Tracked>(track(cell));
         print_int(count(cell) as i64);
         print_char(10);
+        let t: Tracked = track(cell);
         destroy(t);
         print_int(count(cell) as i64);
         print_char(10);

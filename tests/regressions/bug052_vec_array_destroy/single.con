@@ -9,7 +9,9 @@ mod single {
             *self.cell = *self.cell + 1;
         }
     }
-    fn kill<T: Destroy>(x: &T) with(Alloc) {
+    // Borrowed destruction is trusted drop glue: the caller (a Destroy impl run by
+    // `destroy(owner)`) already consumed the owner (bug 091 round 3).
+    trusted fn kill<T: Destroy>(x: &T) with(Alloc) {
         x.destroy();
     }
     struct Pair { items: [Tracked; 2] }

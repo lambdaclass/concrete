@@ -343,6 +343,11 @@ The trait-bound charge found two instances of the same shape in std. `HashMap::r
 Both now declare `with(Alloc)`, and so does `OrderedSet::remove`. See
 [docs/bugs/091](docs/bugs/091_trait_impl_capabilities_hidden_by_generic_dispatch.md).
 
+Round 3: `Destroy::destroy` consumes its receiver whichever form the impl declares. A borrowed
+`x.destroy()` (generic or concrete) had run an owner's destructor while the owner stayed live,
+so it was destroyed twice; it is now E0290 outside trusted drop glue, and an owned
+`t.destroy()` moves `t`.
+
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
 A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:

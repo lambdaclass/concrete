@@ -1,0 +1,19 @@
+// Bug 091 round 3: a concrete `t.destroy()` on an OWNED value is the public
+// destructor, so it consumes `t` even when the impl's receiver is `&self`; a
+// second `destroy(t)` is a use after move (it ran the destructor twice).
+mod m {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let t: Tracked = Tracked { cell: cell };
+        t.destroy();
+        destroy(t);
+        return 0;
+    }
+}

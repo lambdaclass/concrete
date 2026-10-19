@@ -15,16 +15,14 @@ mod outer {
         pub fn make(v: i64) -> Noisy { return Noisy { v: v }; }
     }
     import inner.{Noisy, make};
-    fn kill<T: Destroy>(x: &T) with(Alloc) {
+    fn kill<T: Destroy>(x: T) with(Alloc) {
         x.destroy();
     }
-    fn quiet(n: Noisy) with(Alloc) -> Noisy {
-        kill::<Noisy>(&n);
-        return n;
+    fn quiet(n: Noisy) with(Alloc) {
+        kill::<Noisy>(n);
     }
     fn main() with(Std) -> Int {
-        let n: Noisy = quiet(make(7));
-        destroy(n);
+        quiet(make(7));
         return 0;
     }
 }

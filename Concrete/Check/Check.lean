@@ -115,6 +115,22 @@ def consumeReceiver (selfKind : Option SelfKind) (obj : Expr) (objTy innerTy : T
       | _ => pure ()
   | _ => pure ()
 
+/-- Bug 091 round 3: `Destroy::destroy` is the PUBLIC destruction entry point, and its
+    ownership contract is CONSUMING whichever receiver an impl declares (`&self` or `self`):
+    calling it ends the receiver's life exactly as `destroy(x)` does. Admitting a borrowed
+    receiver let `kill<T: Destroy>(x: &T) { x.destroy(); }` (or a concrete `t.destroy()`
+    through `&T`) run an owner's destructor while that owner stayed live, so it was later
+    destroyed again (double free for a resource-releasing destructor). A reference receiver
+    is admitted only in `trusted` code — internal drop glue (std's collections destroying an
+    element through `(p as &T)`) whose owner was already consumed by the container. -/
+def consumeDestroyReceiver (obj : Expr) (objTy innerTy : Ty) (span : Option Span) : CheckM Unit := do
+  match objTy with
+  | .ref _ | .refMut _ =>
+    if !(← getEnv).currentFnTrusted then
+      throwCheck (.nonCopyProjection (tyToString innerTy)
+        "a reference (`Destroy::destroy` consumes its receiver; destroying through a reference is reserved for trusted drop glue whose owner was already consumed)") span
+  | _ => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+
 -- LEAN 4.34.1 `do` ELABORATOR (R-0208 upgrade). 4.34.1 elaborates `do` blocks with a new elaborator
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
 -- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
@@ -1383,11 +1399,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         -- Find the method in one of the bound traits
         let mut foundSig : Option FnSigDef := none
         let mut foundTrait : String := ""
+        let mut foundBuiltin : Option BuiltinTraitId := none
         for traitName in bounds do
           match env.traits.find? fun td => td.name == traitName with
           | some td =>
             match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundTrait := traitName; break
+            | some ms => foundSig := some ms; foundTrait := traitName; foundBuiltin := td.builtinId; break
             | none => pure ()
           | none => pure ()
         match foundSig with
@@ -1422,7 +1439,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             match arg with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
             | _ => pure ()
-          consumeReceiver sig.selfKind obj objTy innerTy methodName (some e.getSpan)
+          if foundBuiltin == some .destroy && methodName == destroyMethodName then
+            consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
+          else
+            consumeReceiver sig.selfKind obj objTy innerTy methodName (some e.getSpan)
           return retTy
       | _ => throwCheck .methodCallOnNonNamedType (some e.getSpan)
     else
@@ -1455,7 +1475,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
-      consumeReceiver (selfKindOfParams sig.params) obj objTy innerTy methodName (some e.getSpan)
+      -- A concrete call of a type's Destroy impl is the same public destruction as the
+      -- bound call: it consumes (bug 091 round 3).
+      if methodName == destroyMethodName &&
+          (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName) then
+        consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
+      else
+        consumeReceiver (selfKindOfParams sig.params) obj objTy innerTy methodName (some e.getSpan)
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>
@@ -2718,9 +2744,12 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
+    -- A method of a `trusted impl` is trusted (as Elab records it): the trusted-only
+    -- rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
-              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
+              , typeBounds := ib.typeBounds ++ f.typeBounds
+              , isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -2728,7 +2757,8 @@ def checkModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
-              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
+              , typeBounds := tb.typeBounds ++ f.typeBounds
+              , isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>

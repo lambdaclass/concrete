@@ -174,6 +174,7 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   was rejected. Destroy admits `self` and `&self` (std's collections use `&self`); `&mut self`
   stays E0587. Fixtures `trait_destroy_by_value_receiver.con` (2, compiled and --interp,
   through generic `x.destroy()` and `destroy(t)`) and `error_091_destroy_mut_receiver.con`.
+  **Superseded in round 3:** that fixture's `2` was one owner destroyed twice (see below).
 * **Gate regression: admission lost its typeParamDispatch reason.** The assumption summary
   recognized a method call on a type parameter by the old `T_` prefix; with the reserved
   `T$m` spelling `main.show` was refused as an UNRESOLVED call. The summary now classifies
@@ -182,3 +183,25 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   (`check_proof_admission.sh`: was 15/17, now 17/17). The fixture's `show` takes `p: &T`: an
   owned `p: T` calling `describe(&self)` is now elaborated as a borrow (round 2 receiver fix),
   which extraction does not support, and that leg is about admission, not extraction.
+
+## Round 3 (Codex review of batch 2)
+
+* **`Destroy::destroy` consumed through a shared borrow (P1).** Admitting the by-value
+  receiver left generic `x.destroy()` checked against the builtin trait's `&self`, so
+  `kill<T: Destroy>(x: &T) { x.destroy(); }` ran an owner's destructor while the owner stayed
+  live; `destroy(t)` then ran it again (`trait_destroy_by_value_receiver.con` printed 2 for
+  ONE owner — a double free for a resource-releasing destructor). The same hole existed for a
+  concrete `t.destroy()` through `&T`, and an owned `t.destroy()` on a `&self` impl did not
+  consume `t` at all. `Destroy::destroy` is now the public destruction entry point with a
+  CONSUMING ownership contract whichever receiver the impl declares (`consumeDestroyReceiver`
+  in Check, both the bound and the concrete path): an owned receiver is moved; a reference
+  receiver is E0290, except in `trusted` code — internal drop glue such as std's
+  `(p as &T).destroy()`, whose owner the container already consumed. Methods of a `trusted
+  impl` now count as trusted in Check (as Elab already recorded them). Dispatch is unchanged:
+  Elab passes `&x` and Mono adapts to either impl receiver. Fixtures: the old fixture is now
+  `error_091_destroy_through_ref.con` (E0290), plus `error_091_destroy_concrete_through_ref.con`
+  (E0290), `error_091_destroy_method_then_destroy.con` (E0205) and
+  `trait_destroy_owned_receiver.con` (11111: five owners, each destroyed exactly once, through
+  both impl receivers, generic and concrete, compiled and --interp). The bug-052 fixtures whose
+  `kill(x: &T)` is drop glue of an already-consumed owner mark it `trusted`;
+  `interp_destroy_table.con` and `error_091_nested_destroy_caps.con` pass ownership instead.

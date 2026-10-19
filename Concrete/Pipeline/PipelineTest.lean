@@ -316,9 +316,9 @@ def testMonoTrait : IO UInt32 := do
 def nestedDestroySource : String :=
   "mod outer { mod inner { pub struct Noisy { v: i64 } impl Destroy for Noisy { " ++
   "pub fn destroy(&self) with(Alloc) { } } pub fn make(v: i64) -> Noisy { return Noisy { v: v }; } } " ++
-  "import inner.{Noisy, make}; fn kill<T: Destroy>(x: &T) with(Alloc) { x.destroy(); } " ++
-  "fn quiet(n: Noisy) with(Alloc) -> Noisy { kill::<Noisy>(&n); return n; } " ++
-  "fn main() with(Std) -> Int { let n: Noisy = quiet(make(7)); destroy(n); return 0; } }"
+  "import inner.{Noisy, make}; fn kill<T: Destroy>(x: T) with(Alloc) { x.destroy(); } " ++
+  "fn quiet(n: Noisy) with(Alloc) { kill::<Noisy>(n); } " ++
+  "fn main() with(Std) -> Int { quiet(make(7)); return 0; } }"
 
 partial def widenFnCaps (target : String) (cs : CapSet) (m : CModule) : CModule :=
   { m with functions := m.functions.map (fun f => if f.name == target then { f with capSet := cs } else f)
