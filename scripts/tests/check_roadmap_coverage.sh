@@ -15,8 +15,8 @@
 #      line — a task cannot be scheduled by the queue in a stage its own record contradicts.
 #
 # Run with no argument it checks ROADMAP.md and then runs its negative controls against temporary
-# copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task, and a stage that
-# contradicts its queue row must each fail. With an argument it checks that file only.
+# copies: a removed Stage line, a bogus ledger id, a queue row naming a missing task or no task, and a
+# stage that contradicts its queue row must each fail; a crashed or silent checker must fail too. With an argument it checks that file only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -127,7 +127,12 @@ for order, work in qrows:
     stage = row_stage.get(order)
     if stage is None:
         no(f'queue row {order} has no stage in "Roadmap at a glance"'); qbad += 1; continue
-    for tid in expand(work):
+    tids = expand(work)
+    if not tids:
+        no(f'queue row {order} names no owning task')
+        qbad += 1
+        continue
+    for tid in tids:
         named += 1
         if tid not in active:
             no(f'queue row {order} names nonexistent task {tid}'); qbad += 1; continue
@@ -140,9 +145,16 @@ print('\n'.join(out))
 PY
 }
 
-run_on() { # path -> sets RESULT lines, returns 0 iff no FAIL
-  RESULT="$(check_file "$1")"
-  ! printf '%s\n' "$RESULT" | grep -q '^FAIL '
+run_on() { # path -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
+  if ! RESULT="$(check_file "$1")"; then
+    RESULT="FAIL checker execution failed for $1"
+    return 1
+  fi
+  if [ -z "$RESULT" ]; then
+    RESULT="FAIL checker produced no results for $1"
+    return 1
+  fi
+  ! printf '%s\n' "$RESULT" | grep '^FAIL ' >/dev/null
 }
 
 echo "=== 1. roadmap task coverage ($TARGET) ==="
@@ -189,6 +201,20 @@ PY
   neg stage_contradicts_queue \
     "h='### Task R-0511\n\n**Stage:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Stage:** 6')" \
     "R-0511: queue row 3 schedules it in stage 2"
+  neg queue_row_no_owner \
+    "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\`** |')" \
+    "queue row 9 names no owning task"
+  # The wrapper itself must not read a crashed or silent checker as a pass.
+  if ( check_file() { return 17; }; run_on "$TARGET" ); then
+    no "control checker_exit_failure: a nonzero checker exit passed"
+  else
+    ok "control checker_exit_failure is rejected (checker execution failed)"
+  fi
+  if ( check_file() { :; }; run_on "$TARGET" ); then
+    no "control checker_empty_output: a checker with no output passed"
+  else
+    ok "control checker_empty_output is rejected (checker produced no results)"
+  fi
 fi
 
 echo ""
