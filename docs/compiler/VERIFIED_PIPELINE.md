@@ -296,9 +296,16 @@ contracts are fixed at this boundary (S7 with R-0502).
 - **V1b** carries the subset to native AArch64 through Concrete's BIR → LCB-IR adapter and the Lean
   Compiler Backend's restricted certified path (R-0517): the native theorem composes V1a, the adapter's
   refinement and LCB's preservation theorem for its exact domain (LCB's Stage 1, C01 – C03), carrying
-  LCB's named trust boundaries, with final-image correspondence checked by R-0505. The 0.2 native claim
-  is gated on LCB's Stage 1 exit; otherwise 0.2 ships V1a proved with the native step validated,
-  tested and labelled.
+  LCB's named trust boundaries, with final-image correspondence checked by R-0505. LCB’s Stage 1 exit
+  is necessary but insufficient: V1b requires a pinned certified LCB domain covering every reachable
+  operation and behaviour of the declared V1 subset, including checked-arithmetic trap paths, direct
+  calls and the `print_int` external-event contract, together with the proved adapter, semantic bridges,
+  final-image correspondence and native-exit obligations (R-0517). A smaller leaf-function intersection
+  may ship as a separately named intermediate theorem with explicit admission restrictions; it does not
+  complete V1b. C01 – C03 end at LCB's certified typed-assembly endpoint; rendering and encoding remain
+  named assumptions until separately covered. Until the composed native exit passes, R-0517’s
+  experimental fallback may ship under a narrower R-0333 candidate scope; it does not graduate V1b or
+  the verified preview.
   Intermediate assembly-level results name their trusted assembler/linker boundary and are not labelled
   native-image proofs. `print_int` has a specified observable trace and implementation or
   external-service contract; internal calling conventions, startup, stack requirements and trap
