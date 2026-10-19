@@ -458,11 +458,11 @@ Wrapper arm:
     | (.ifElse cond thenBranch none) :: rest, k => do
         let pc ← cExprToPExpr cond
         let pkRest ← cStmtsToPExprK rest k
-        if !cBranchComposes thenBranch pkRest then none  -- bug 087
+        if !cBranchComposes thenBranch pkRest then none  -- bug 101
         let pt ← cStmtsToPExprK thenBranch (some pkRest)
         some (.ifThenElse pc pt pkRest)
 
-`h_scope` is the bug 087 side condition: the branch's own `let`s that reach its end are not named by
+`h_scope` is the bug 101 side condition: the branch's own `let`s that reach its end are not named by
 the continuation nested inside them.
 
 Lean accepts the structural recursion on the nested

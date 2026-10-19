@@ -1,4 +1,4 @@
-# Bug 087 — a branch- or body-local `let` captured the code after its scope in the model
+# Bug 101 — a branch- or body-local `let` captured the code after its scope in the model
 
 **Status:** FIXED (branch `land-batch1`)
 **Found:** 2026-10-18 by the Codex review of the bug 085 change (land1).
