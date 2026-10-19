@@ -725,7 +725,8 @@ prevented it; if none would, the plan gains one.
   compiler/runtime identities and final-image bindings. A supported production branch, a verification
   development track, migration guidance and rollback procedures. Real application acceptance,
   diagnostics, compile time and runtime performance are tracked alongside proof coverage. Breaking
-  language changes are versioned with migration support.
+  language changes are versioned with migration support. The release rhythm (nightlies, release trains)
+  and the milestone scopes are defined once, in the roadmap's [Releases](../../ROADMAP.md#releases).
 - **Review.** Every slice is reviewed by Codex (`codex exec -s read-only` on the commit, with the
   stage's section as specification); findings are fixed or answered in the commit message before
   publication. Review complements the gates.

@@ -32,14 +32,16 @@
 #      task is not, unless it carries a **Kept in backlog:** reason.
 #   9. every backlog task has a **Pull trigger:** line, no two live backlog tasks share one trigger
 #      text, and the backlog's latest review-log row names the current active phases.
+#  10. the queue summary table in "Phases and releases" lists exactly the queue's rows, each with the
+#      same task IDs as its queue row.
 #
 # Run with no argument it checks ROADMAP.md and the backlog with the reconciliation record and then runs
 # its negative controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row
 # naming a missing task or no task, a phase that contradicts its queue row, an archived body without its
 # stub, a stub without its archived body, a removed inheritance entry and a fabricated one, a dropped pull
 # trigger, a task in both files, a lost task, a bad or missing Active phases value, a misplaced task in
-# either direction, a queued task in the backlog and a stale review log must each fail; a crashed or
-# silent checker must fail too.
+# either direction, a queued task in the backlog, a stale review log and a drifted or incomplete queue
+# summary must each fail; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -192,6 +194,31 @@ if qm:
         m = re.match(r'^\| (\d+) \| (.*?) \| (.*)\|$', line)
         if m: qrows.append((int(m.group(1)), m.group(2)))
 if not qrows: no('no queue rows found')
+# The queue summary in "Phases and releases" (| row | tasks | goal |) restates each row's task IDs; it
+# must list exactly the queue's rows, each naming exactly the tasks its queue row names.
+summary = {}
+if gm:
+    in_sum = False
+    for line in road[gm.end():].split('\n'):
+        if line.startswith('## '): break
+        cells = [c.strip() for c in line.strip().strip('|').split('|')] if line.startswith('|') else []
+        if cells[:3] == ['row', 'tasks', 'goal']: in_sum = True; continue
+        if not cells: in_sum = False; continue
+        if in_sum and re.fullmatch(r'\d+', cells[0]):
+            summary[int(cells[0])] = set(expand(cells[1]))
+sbad = 0
+if not summary:
+    no('"Phases and releases" has no queue summary table (| row | tasks | goal |)'); sbad += 1
+else:
+    qmap = {o: set(expand(w)) for o, w in qrows}
+    for o in sorted(set(qmap) | set(summary)):
+        if o not in summary:
+            no(f'queue row {o} is missing from the queue summary'); sbad += 1
+        elif o not in qmap:
+            no(f'the queue summary lists row {o}, which the queue does not have'); sbad += 1
+        elif qmap[o] != summary[o]:
+            no(f'queue summary row {o} names {sorted(summary[o])}, the queue row names {sorted(qmap[o])}'); sbad += 1
+    if not sbad: ok(f'the queue summary lists the {len(summary)} queue rows with the same task IDs')
 qbad = 0; named = 0
 for order, work in qrows:
     for tid in expand(work):
@@ -458,6 +485,12 @@ PY
   neg phase_table_row_moved \
     "old='| 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 4 | V1a and V1b')" \
     "queue row 3 has no phase"
+  neg queue_summary_drift \
+    "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Compiler provenance')" \
+    "queue summary row 9 names \['R-0522'\], the queue row names \['R-0521'\]"
+  neg queue_summary_missing_row \
+    "import re; s,n=re.subn(r'^\| 17 \| R-0440 \| [^\n]*\n', '', s, flags=re.M); assert n==1" \
+    "queue row 17 is missing from the queue summary"
   neg queue_row_no_owner \
     "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\`** |')" \
     "queue row 9 names no owning task"

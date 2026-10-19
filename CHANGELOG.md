@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Roadmap Is A Scheduled Plan Plus A Backlog With Pull Rules (2026-10-19, roadmap only)
+
+ROADMAP.md now keeps the phases, the execution queue and the tasks a queue row names or an active or
+next phase schedules; the other 154 of its 527 tasks moved unchanged to
+[docs/project/ROADMAP_BACKLOG.md](docs/project/ROADMAP_BACKLOG.md), each with a task-specific
+**Pull trigger:** line. The backlog defines when a task is pulled (its trigger fires, a phase needs it,
+or a release checkpoint does), a review of every backlog task at each phase entry and release, and a
+review log. ROADMAP.md opens with one entry point (aim, current state, **Active phases:** /
+**Next phases:**, what is next, where everything lives), short phase and queue-summary tables, a
+glossary, and a single Releases section for the release rhythm and milestone scopes.
+`check_roadmap_coverage.sh` now reads both files and gates one home per task, no lost ID, placement
+against the active and next phases, pull triggers, the backlog review for the current phase and the
+queue summary against the queue, each with negative controls; `check_roadmap_linear.sh` spans both files.
+This is a planning change: no task's scope, phase or obligations changed.
+
 ### The Claim Inventory Replays Locally (R-0208)
 
 The frozen claim inventory was judged only by CI's checker-acceptance step, which the local gate

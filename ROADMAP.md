@@ -1,73 +1,113 @@
 # Concrete Roadmap
 
-This document is the active execution plan. It answers one question: **what
-should happen next, in what order?** Completed milestones live in
-[CHANGELOG.md](CHANGELOG.md); dated execution history and the bodies of retired tasks live under
-[`docs/archive/`](docs/archive/) (see [Archived history](#archived-history)). The plan reads top-down:
-the seven **phases** and the releases they produce, the one execution queue, where each topical
-**area** of the task catalog fits, the standing decisions, and then the task catalog itself, filed by
-area. Phases schedule work; areas only file it.
+**What Concrete is aiming at.** Concrete is a systems language with linear ownership, second-class
+references and explicit capabilities whose compiler is to be verified end to end: CompCert/CakeML-class
+theorems that accepted programs are memory- and ownership-safe, that the native binary only does what
+the program's Core semantics allows, and that supported claims about Core transport to the native image.
+Its evidence (proofs, receipts, trust and assumptions) is to be compositional, transferable and
+independently replayable ([verified-compiler decision](#decisions), [product north star](#product-north-star-compositional-transferable-evidence)).
 
-> **Start here for the plan:** [Phases and releases](#phases-and-releases), then
-> [the current execution queue](#the-current-execution-queue), the authoritative scheduling section.
-> **Start here for release acceptance:** [Release map](#release-map) — bounded deliverables,
-> candidate acceptance and compatibility; not another execution queue.
-> **Start here for direction:** [Capability unlocks](#capability-unlocks--the-stable-product-map)
-> and [North star](#north-star-compositional-fail-visible-verification) — the product boundary,
-> the dimensions along which proof support grows, and the limits that must remain visible.
-> **Remaining design scope:** [Language baseline and bounded verification milestone](#language-baseline-and-bounded-verification-milestone)
-> — the settled systems-language shape, remaining semantic decisions, and the first
-> compositional subset to validate on a real workload.
-> **Normative architecture:** [Evidence Architecture](docs/verification/EVIDENCE_ARCHITECTURE.md) defines the
-> five authoritative evidence objects; [Verification IR](docs/verification/VERIFICATION_IR.md) defines the
-> target portable proposition boundary. This roadmap sequences their implementation and must not
-> invent competing definitions.
-
-## Phases and releases
-
-The work runs in seven phases. Each groups rows of the [execution queue](#the-current-execution-queue),
-has an exit, and produces a release scope from the [release map](#release-map). After Phase 1, Phase 3
-runs alongside the proof track, which progresses from Phase 2 into Phase 4; the shared-front-end work
-overlaps proof development. All checkpoints share the capacity rule, and new soundness defects take
-priority over every phase.
-
-| phase | goal | queue rows | exit | release it produces |
-|---|---|---|---|---|
-| **Phase 1 — Stabilize** | Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates | 0 – 2 | each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced | **0.1 Experimental systems preview**, with the usability onboarding path and first pilot |
-| **Phase 2 — Verified foundation** | The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language | 3 – 4 | V1a and V1b theorems with explicit boundaries; the Core checker authoritative for every program | **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins |
-| **Phase 3 — Usable language** | Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance | 5, 7, 8 | the four-adapter interop checkpoint; continuing workloads and pilots; each usability checkpoint's exit | no release of its own: it runs alongside and feeds every release from 0.1 on (onboarding, pilots, tooling, the minimal editor path for beta) |
-| **Phase 4 — Verified growth** | Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved | 6 | each slice's cumulative theorem; V7 covers the maintained feature inventory | **0.3 – 0.8 Verified-subset milestones** (a slice may span several releases); V7 is required for 1.0 |
-| **Phase 5 — Evidence as a product** | Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze | 9 – 11 | receipt v1 frozen after producer and independent consumer agree on hostile fixtures | **0.9 Verified-component alpha**, together with Phases 4 and 6 for the admitted component |
-| **Phase 6 — Richer verification** | Typed contracts and exact contract identity, two-state (`old`, frames) contracts, the ninth-table conversion, and totality with a specification library | 12 – 15 | typed contracts with exact identity, `old`/frames, the ninth table converted, checked totality and the spec library | **0.9 Verified-component alpha** (its typed-contract, two-state and required totality increments) |
-| **Phase 7 — Release and ecosystem** | External-user workflow and three graduated flagships, then package-level evidence and typed policy | 16 – 17 | a non-author replays and upgrades with exact diffs; three flagships graduate; package evidence composes under typed policy | **0.10 Project beta**, then **1.0 Stable supported subset** (V7 with source correspondence, Phases 5 – 7's acceptance, release-bar compatibility and post-release readiness) and **1.x** feature releases |
+**Where we are (2026-10-19).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
+079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). The next release is the
+experimental systems preview; its [blockers](#next-release-blockers) are listed under
+[Releases](#releases).
 
 **Active phases:** 1
 
 **Next phases:** 2, 3
 
-**Where we are now (2026-10-19):** Phase 1 is in progress — the soundness repairs for bugs 079 – 101 are
-landing (queue row 0) and R-0482's P1 closures follow (row 1). The next release is the experimental
-systems preview; its [blockers](#next-release-blockers) are listed in the release map.
+**What is next.** Rows 0 – 2 finish Phase 1. Then the proof track (Phase 2: V1a/V1b and the
+authoritative Core checker, rows 3 – 4) and the usable-language track (Phase 3: interop, workloads and
+usability, rows 5, 7 and 8) run alongside each other. New soundness defects take priority over every
+phase.
 
-**Release rhythm (proposed 2026-10-19):** nightlies publish the newest fully qualified main commit with
-its qualification record and no support promise; release trains target a release every 4–6 weeks after
-the systems preview when the applicable candidate acceptance passes (security and soundness fixes may
-ship out of band; a skipped train records its reason); milestones — preview, verified preview,
-verified-subset growth, component alpha, project beta and stable — are acceptance scopes, not a fixed
-allocation of version numbers. Version labels are illustrative; a milestone ships when its scope's
-acceptance holds, not on a date. Allowing alpha before V7 would require an explicit queue amendment
-pulling its bounded evidence/contract prerequisites alongside slice growth. Release automation (R-0516)
-is a prerequisite for automated trains and nightlies. R-0333 records compatibility and numbering policy
-for each release.
+**Where things live.** This file answers *what happens next, in what order*: the phases, the one
+execution queue, the release plan, the standing decisions, and the tasks a queue row names or an active
+or next phase schedules.
+
+- [Roadmap backlog](docs/project/ROADMAP_BACKLOG.md): every other task, each with its pull trigger
+  ([pull rules](#backlog-and-pull-rules)).
+- [Verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md): Phases 2 and 4 in detail.
+- [Reconciliation record](docs/project/ROADMAP_RECONCILIATION.md): the 2026-10-19 task dispositions and
+  transferred obligations.
+- Archives: [roadmap history](docs/archive/ROADMAP_HISTORY.md) and
+  [retired task bodies](docs/archive/ROADMAP_RETIRED_TASKS.md); completed work is in
+  [CHANGELOG.md](CHANGELOG.md).
+- Normative architecture: [Evidence Architecture](docs/verification/EVIDENCE_ARCHITECTURE.md) defines
+  the five authoritative evidence objects and [Verification IR](docs/verification/VERIFICATION_IR.md)
+  the target portable proposition boundary. This roadmap sequences their implementation and must not
+  invent competing definitions.
+- Direction and scope: [Capability unlocks](#capability-unlocks--the-stable-product-map),
+  [North star](#north-star-compositional-fail-visible-verification) and the
+  [language baseline](#language-baseline-and-bounded-verification-milestone).
+- Terms: [Glossary](#glossary).
+
+## Phases and releases
+
+Seven phases each group rows of the [execution queue](#the-current-execution-queue), have an exit, and
+produce a release scope (see [Releases](#releases)). After Phase 1, Phase 3 runs alongside the proof
+track, which progresses from Phase 2 into Phase 4; the shared-front-end work overlaps proof development.
+All checkpoints share the capacity rule, and new soundness defects take priority over every phase.
+
+| phase | goal | queue rows | exit | release |
+|---|---|---|---|---|
+| **Phase 1 — Stabilize** | Land the 2026-10-18 soundness repairs, close R-0482, put the immediate protections in place | 0 – 2 | repairs gated; R-0482 qualified; one `Verdict` authority; language rules enforced | 0.1 Experimental systems preview |
+| **Phase 2 — Verified foundation** | First proved end-to-end slice (V1a, V1b) and the authoritative Core checker for the whole language | 3 – 4 | V1a and V1b theorems; Core checker authoritative | 0.2 Verified preview |
+| **Phase 3 — Usable language** | Interop, application workloads and the usability track | 5, 7, 8 | four-adapter interop checkpoint; usability checkpoints | none of its own; feeds every release |
+| **Phase 4 — Verified growth** | Cumulative slices V2 – V7 and claim migration to Core | 6 | each slice's theorem; V7 covers the feature inventory | 0.3 – 0.8 Verified-subset milestones |
+| **Phase 5 — Evidence as a product** | Compiler provenance, canonical task, independent consumer, receipt v1 | 9 – 11 | receipt v1 frozen | 0.9 Verified-component alpha (with Phases 4 and 6) |
+| **Phase 6 — Richer verification** | Typed contracts, `old`/frames, ninth table, totality and spec library | 12 – 15 | typed contracts with exact identity; `old`/frames; ninth table converted; checked totality | 0.9 alpha increments |
+| **Phase 7 — Release and ecosystem** | External-user workflow, three flagships, package evidence and policy | 16 – 17 | non-author replay and upgrade; flagships graduate; package evidence composes | 0.10 Project beta; 1.0 Stable; 1.x |
+
+| row | tasks | goal |
+|---|---|---|
+| 0 | R-0482 | Land the active soundness repairs (bugs 079 – 101) and qualify R-0482 |
+| 1 | R-0482 | Make R-0482's cross-package (P1) controls permanent |
+| 2 | R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513 | Immediate protections: one verdict authority, prevention harness, axiom policy, one `IntArith`, language rules |
+| 3 | R-0511, R-0517 | First cumulative verified releases: design proofs, V1a and V1b |
+| 4 | R-0492, R-0497, R-0499, R-0514 | Shared front end: identities and the authoritative Core checker for the whole language |
+| 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: the four-adapter checkpoint |
+| 6 | R-0491–R-0510, R-0512 | Slices V2 – V7 and evidence migration to generated Core statements |
+| 7 | R-0490 | Continuous application feedback toward the ethlambda port |
+| 8 | R-0515 | Usability track alongside the proofs: onboarding, pilots, diagnostics, editor, performance |
+| 9 | R-0521 | Compiler provenance and one canonical `VerificationTask` |
+| 10 | R-0353 | Independent evidence consumer and schema conformance |
+| 11 | R-0338, R-0353, R-0521 | Receipt v1 freeze |
+| 12 | R-0473, R-0474 | Typed contracts and exact contract identity |
+| 13 | R-0524 | Two-state mutation contracts (`old`, frames, ghosts) |
+| 14 | R-0525 | Ninth-table conversion of the fail-closed `proofFnsExt` links |
+| 15 | R-0526, R-0270, R-0060 | Totality and the specification library |
+| 16 | R-0486, R-0119 | External-user workflow and the three public flagships |
+| 17 | R-0440 | Package evidence and typed policy |
+
+The detailed exits are in [the current execution queue](#the-current-execution-queue); the summary
+above names the same task IDs per row (checked by `scripts/tests/check_roadmap_coverage.sh`).
+
+### Phase details
+
+- **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
+- **Phase 2 — Verified foundation** (rows 3 – 4). **Goal:** The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language. **Exit:** V1a and V1b theorems with explicit boundaries; the Core checker authoritative for every program. **Release:** **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins.
+- **Phase 3 — Usable language** (rows 5, 7, 8). **Goal:** Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance. **Exit:** the four-adapter interop checkpoint; continuing workloads and pilots; each usability checkpoint's exit. **Release:** no release of its own: it runs alongside and feeds every release from 0.1 on (onboarding, pilots, tooling, the minimal editor path for beta).
+- **Phase 4 — Verified growth** (row 6). **Goal:** Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved. **Exit:** each slice's cumulative theorem; V7 covers the maintained feature inventory. **Release:** **0.3 – 0.8 Verified-subset milestones** (a slice may span several releases); V7 is required for 1.0.
+- **Phase 5 — Evidence as a product** (rows 9 – 11). **Goal:** Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze. **Exit:** receipt v1 frozen after producer and independent consumer agree on hostile fixtures. **Release:** **0.9 Verified-component alpha**, together with Phases 4 and 6 for the admitted component.
+- **Phase 6 — Richer verification** (rows 12 – 15). **Goal:** Typed contracts and exact contract identity, two-state (`old`, frames) contracts, the ninth-table conversion, and totality with a specification library. **Exit:** typed contracts with exact identity, `old`/frames, the ninth table converted, checked totality and the spec library. **Release:** **0.9 Verified-component alpha** (its typed-contract, two-state and required totality increments).
+- **Phase 7 — Release and ecosystem** (rows 16 – 17). **Goal:** External-user workflow and three graduated flagships, then package-level evidence and typed policy. **Exit:** a non-author replays and upgrades with exact diffs; three flagships graduate; package evidence composes under typed policy. **Release:** **0.10 Project beta**, then **1.0 Stable supported subset** (V7 with source correspondence, Phases 5 – 7's acceptance, release-bar compatibility and post-release readiness) and **1.x** feature releases.
 
 The [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) holds Phases 2 and 4 in detail; the
 task sections below hold every row's exit.
 
 ## The current execution queue
 
-This is the only current queue. It is intentionally not padded to a fixed number: rows exist only
-for work whose ordering is presently decided. A newly reproduced authority defect enters ahead of
-the next transition; completed milestones move to the changelog rather than accumulating here.
+This is the only current queue and the authoritative scheduling section; execution starts here. It
+is intentionally not padded to a fixed number: rows exist only for work whose ordering is presently
+decided. A newly reproduced authority defect enters ahead of the next transition; completed milestones
+move to the changelog rather than accumulating here. When the queue is exhausted, execution resumes at
+the first active `Task R-NNNN` in file order unless the table is refreshed in the same change that
+exhausts it. The `R-NNNN` value is immutable identity, not priority: existing IDs are never renumbered
+or reused, and a newly confirmed urgent defect receives the next unused ID before entering the queue.
+Area headings and task position are topical filing only. There are no area-local queues, hidden
+priority overlays or separate stop-the-line lists; a reproduced urgent defect must be placed in this
+queue explicitly.
 
 | order | work | exit before advancing |
 |---|---|---|
@@ -90,12 +130,175 @@ the next transition; completed milestones move to the changelog rather than accu
 | 16 | **External-user workflow and productization (R-0486, R-0119)** | a non-author receives evidence, replays it, upgrades a dependency, and sees exact machine/human diffs; graduate exactly three deep public flagships—HMAC-SHA256, a secure update-bundle verifier that absorbs bounded parsing and file-integrity work, and a small protocol state machine—plus IDE/CI lenses and recurring ergonomics audits. Compiler regressions, hostile inputs and benchmarks remain fixtures, adversarial cases and workloads rather than additional public flagships |
 | 17 | **R-0440/package evidence and typed policy** | compose partial dependency evidence, revocation/advisories, trust and release requirements without turning receipt validity into policy acceptance |
 
+## Releases
+
+This is the one place that describes how releases happen and what each milestone accepts; other
+sections link here. R-0333 owns this section's release map and each candidate checklist; the
+release-bar area retains the detailed release bars.
+
+### Release rhythm
+
+Proposed 2026-10-19:
+
+- **Nightlies** publish the newest fully qualified main commit with its qualification record and no
+  support promise.
+- **Release trains** target a release every 4–6 weeks after the systems preview, when the applicable
+  candidate acceptance passes. Security and soundness fixes may ship out of band; a skipped train
+  records its reason. [Patch releases](#release-increments-and-candidate-records) repair an already
+  published scope.
+- **Milestones are acceptance scopes**, not dates and not a fixed allocation of version numbers: the
+  experimental systems preview, the verified preview, the verified-subset milestones (V2 – V7), the
+  verified-component alpha, the project beta and the 1.0 stable supported subset. The
+  [phase table](#phases-and-releases) names the phase that produces each; its version labels are
+  illustrative and are not phase numbers. A milestone ships when its scope's acceptance holds, not on a
+  date. Allowing alpha before V7 would require an explicit queue amendment pulling its bounded
+  evidence/contract prerequisites alongside slice growth.
+- Release automation (R-0516) is a prerequisite for automated trains and nightlies. R-0333 records
+  compatibility and numbering policy for each release.
+
+### Release map
+
+Release scopes below are provisional, not dates or claims that a release is ready. The execution queue
+remains the sole scheduling authority. No release requires finishing the entire task catalog. This
+subsection holds each release scope's acceptance; the candidate-record rules follow.
+
+| release scope | user-visible outcome | required increments / owners | explicitly deferred |
+|---|---|---|---|
+| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Rows 0–2 qualified for the advertised scope; R-0333's exact candidate/subset record; R-0335/R-0336/R-0337 reference and honest claims; bounded R-0334/R-0346/R-0352/R-0354 installation/tutorial/distribution acceptance; R-0515 onboarding, first pilot and before-public-release checkpoint; R-0343/R-0345 security and threat disclosures; R-0357 supply-chain lock/license inventory; R-0358 compatibility/deprecation policy; preview-scoped R-0426/R-0427/R-0428 support, repair and response readiness. The preview checklist explicitly states which evidence-verifier/replay artifacts ship; unsupported proof replay cannot satisfy or advertise a verification release claim. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
+| Verified preview | Obtain V1a checked Core → BIR proof evidence. Native-image proof evidence is available only when the separately recorded V1b gate passes; otherwise native output is explicitly tested and `backend_trusted`, and the candidate ships under R-0333’s narrower recorded scope without graduating this one (R-0517’s fallback). The authoritative Core checker guards every program. | R-0511’s V1a exit and R-0514’s whole-language checker; R-0515’s applicable tooling checkpoints; R-0333’s candidate record states the theorem start and endpoint, V1b status, assumptions and fallback mode. Native claims additionally require the complete R-0517/R-0505/R-0508 gate. | Everything outside the certified subset; native transport in fallback mode; claims beyond the transported example. |
+| Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | The verified-pipeline plan's cumulative V2–V7 exits, delivered by R-0491–R-0510 as coordinated under queue row 6; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
+| Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing release-bar-area alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
+| Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing release-bar-area beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
+| Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
+
+The systems preview is a separate, narrower deliverable, **not** a weakening or
+renaming of the existing verification alpha. It may expose experimental proof
+features only with their actual evidence classes, assumptions and coverage.
+The preview cannot advertise alpha graduation. Each later scope inherits the
+applicable earlier acceptance checks, rerun on its own candidate.
+
+### Next-release blockers
+
+The next proposed release is the experimental systems preview. This is an
+acceptance checklist, not an alternate priority list. It does not move release
+packaging ahead of current queue work or mark any in-flight branch as complete.
+
+- [x] R-0484 meets its closure criteria (closed 2026-10-08 at `245cd51c`, main CI 37771982899);
+  its accepted limits are listed in its task section and its mutation campaign is
+  incompletely qualified at that revision; the campaign later qualified on `670ec85a`
+  (2026-10-11, run 38104755470).
+- [x] R-0483 rejects mismatched owners for parsed results with retained controls (closed
+  2026-10-09 at `4f005715`; `check_view_lifetime.sh` 28/0 in main CI 37917463687).
+- [ ] R-0333 names the exact preview subset, supported target/OS/toolchain matrix,
+  known limitations and the validation required for every advertised feature.
+- [ ] R-0335/R-0336/R-0337 publish a versioned description and consistent claims for
+  that subset; examples and migration guidance are checked against the candidate.
+- [ ] R-0334/R-0346/R-0352/R-0354 demonstrate clean installation, build/run/test and
+  the tutorial on every claimed platform. Record external-user failures and fixes.
+- [ ] R-0515's onboarding path, first pilot and before-public-release checkpoint
+  (published inventory, named reviewers) are complete for the preview scope; the first
+  pilot does not wait for R-0515's two-quarter continuing-feedback checkpoint.
+- [ ] R-0343/R-0345 publish the security disclosure policy and threat model; R-0357
+  locks the toolchain/dependencies and publishes the license inventory; R-0358 publishes
+  the compatibility/deprecation policy; R-0426/R-0427/R-0428 are ready at preview scope.
+- [ ] The preview checklist states exactly which evidence-verifier/replay artifacts ship
+  (bounded R-0354 distribution); unsupported replay advertises no verification claim.
+- [ ] R-0333 records a reproducible candidate and its validation result using the
+  common candidate record below. Unresolved queue prerequisites remain blockers
+  unless an explicit, scoped release disposition permits a narrower claim.
+
+Finishing the first two items alone does not ship the preview. The mutation
+campaign exception that permitted a development checkpoint does not authorize a
+release exception. Qualification remains owned by its existing queue milestone;
+a candidate must satisfy its applicable requirements or obtain a separately
+recorded release decision that narrows the claims without concealing failures.
+
+### Release increments and candidate records
+
+Assign a **bounded increment** of a task to a release, not the whole task when its
+objective spans several releases. Each R-0333 checklist entry names its existing
+owner ID, delivered behavior, acceptance artifact and deferred remainder. For
+example, alpha needs the three-family R-0182/R-0183 change-and-repair diff; their
+broader reporting dimensions can remain open. Beta needs local package evidence,
+not the whole package ecosystem. Completing an increment does not close its owner.
+Research and workload-gated expansions remain in their existing sections until
+pulled. Historical execution logs belong in the archive, not candidate checklists.
+
+For each candidate, retain one versioned record under R-0333 containing:
+
+- Exact source commit, compiler/toolchain identity and released artifact identities;
+  supported language/std subset, platforms, backends and runtime profile.
+- Required checks and retained results for that exact candidate, including positive
+  and rejecting controls, applicable mutation qualification and clean installation.
+  A timeout, skipped job or incomplete report is never a passing result.
+- Source, std API/ABI and evidence-schema compatibility stated separately; migration,
+  invalidation and revalidation requirements for changes to any of them.
+- Open blockers, accepted limitations and deferred increments as separate lists,
+  with owners and rationale. An accepted limitation cannot contradict an advertised
+  guarantee; unresolved soundness failures inside the claimed scope block release.
+- Matching reference, claims matrix, tutorial/examples and release notes. Distinguish
+  enforced properties, checked proofs, assumptions, tests and incomplete coverage.
+- Supported lifetime and patch procedure, with security reporting, rollback and
+  evidence revocation/rechecking where affected (R-0343, R-0426–R-0429).
+
+Patch releases repair an already published scope without waiting for the next
+feature release. They have their own candidate commit and validation record;
+compatibility breaks or changed evidence identities require an explicit migration
+or invalidation notice. Stabilization must not silently expand the claimed subset.
+
+## Glossary
+
+Each term is defined once, here; the linked documents hold the full definitions.
+
+- **Phase / area / milestone / release.** A *phase* (1 – 7) groups queue rows, has an exit and
+  schedules work. An *area* (`## Area: …`) is a topical filing heading for tasks and schedules nothing.
+  A *milestone* is an acceptance scope (systems preview, verified preview, verified-subset milestones,
+  component alpha, project beta, 1.0 stable). A *release* is a published candidate (nightly, train or
+  milestone) that passes its scope's acceptance. See [Releases](#releases).
+- **Active / next phases; backlog.** The phases in progress and those that start next, named at the top
+  of this file. Tasks scheduled in neither live in the [backlog](docs/project/ROADMAP_BACKLOG.md) until
+  a pull trigger fires.
+- **Core.** The language definition: the typed IR elaboration produces, with an executable semantics.
+  Claims and the authoritative checker work on it.
+- **CheckedCore.** The immutable artifact the authoritative Core checker emits, bound to the exact
+  program and its imported interfaces (R-0499, R-0514).
+- **CheckedMonoCore.** CheckedCore after checked specialization (monomorphization), bound to its
+  CheckedCore; the only input to lowering.
+- **Place MIR.** The first lowering IR: a typed non-SSA control-flow graph with fixed evaluation order,
+  match decision trees, cleanup edges and explicit runtime checks (R-0501).
+- **Memory CFG.** The lowering IR where layout, offsets, loads, stores and allocation become explicit
+  over block–offset memory (R-0502).
+- **BIR.** The backend IR: a control-flow graph with block arguments and overflow-flagged operations.
+  LLVM is printed from it and the LCB adapter consumes it (R-0503).
+- **LCB.** The Lean Compiler Backend: a separately developed Lean 4 port of QBE 1.3 with a certified
+  path to AArch64; Concrete's native backend and QBE path, reached through a proved adapter (R-0517).
+- **Slices V1a, V1b, V2 – V7.** Cumulative verified subsets carried through the whole compiler, each
+  with its own theorem. V1a: checked Core → BIR for a minimal scalar subset. V1b: that subset to native
+  AArch64 through LCB. V2 – V7 add aggregates and downward references, heap and linear resources, full
+  reference/resource interactions, generics/traits/capabilities, raw pointers/FFI/separate compilation,
+  and the rest of the maintained feature inventory. *S1 – S16* are the verified-compiler plan's
+  implementation stages.
+- **Assurance profile and mode.** `verified` is a versioned admission and assurance profile: a stated
+  language subset, target, environment contracts and theorem boundary, rejecting unsupported code and
+  never silently falling back. The existing LLVM profile stays supported and unverified. A native
+  *assurance mode* is selected explicitly: certified output, or R-0517's experimental fallback.
+- **Claim.** A proposition about a program's behaviour, stated over Core semantics from a typed
+  `ClaimSpec`, with its scope, evidence, assumptions and status.
+- **Subject binding.** What ties a claim to the exact body and parameters its theorem evaluates. Since
+  bug 079 a claim is proved only when its subject is the specification its theorem is about.
+- **Receipt.** A `ReplayReceipt`: an immutable record that exact retained material (subject,
+  proposition, checker, dependencies, toolchain) was replayed. It is distinct from the time-relative
+  policy decision that interprets it.
+- **Proof model / PExpr.** The legacy proof-model expression language (`PExpr`, evaluated by
+  `Proof.eval`) that claims were stated over. It is being retired in favour of claims on Core (R-0495,
+  R-0496).
+
 ## Where every area fits
 
 The task catalog below is filed by topical **area**; areas are filing locations, not scheduling units.
 Until 2026-10-19 they were numbered "Phase 7" to "Phase 20"; the *old phase* column maps those numbers,
-which older documents and the changelog still use, to the area. Old Phases 1 – 6E are complete and
-recorded in [CHANGELOG.md](CHANGELOG.md). Task counts include retained completed and retired stubs; they
+which older documents and the changelog still use, to the area. Old Phases 1 – 6E, and the completed stdlib-area foundations and
+workloads 1 – 8, are complete and recorded in [CHANGELOG.md](CHANGELOG.md). Task counts include retained completed and retired stubs; they
 are not counts of unfinished work. The second number counts the tasks of that area in the
 [backlog](docs/project/ROADMAP_BACKLOG.md): tasks no active or next phase schedules (see
 [Backlog and pull rules](#backlog-and-pull-rules)). Each task increment follows its explicit queue assignment or the
@@ -134,12 +337,13 @@ controls transfer to named owners even if QBE is retired. QBE is not a prerequis
 for R-0505's native backend. Any retained backend has an explicit maintenance budget.
 **Decision recorded 2026-10-19:** the Lean Compiler Backend, a separate Lean 4 port of QBE 1.3, is
 Concrete's QBE path and native backend (R-0517); R-0505 integrates it and R-0297 is delegated to it.
+The QBE backend that the QBE backend-validation area specified was never started.
 
 ## Backlog and pull rules
 
 ROADMAP.md holds the phases, the queue, and every task that a queue row names or whose **Phase:** line
-includes an active or next phase (the **Active phases:** and **Next phases:** lines in
-[Phases and releases](#phases-and-releases)). Every other task lives, with its full text, ID and
+includes an active or next phase (the **Active phases:** and **Next phases:** lines at the top of
+this file). Every other task lives, with its full text, ID and
 **Phase:** line, in the [roadmap backlog](docs/project/ROADMAP_BACKLOG.md), which owns the pull rules:
 
 - **Pull triggers.** Each backlog task carries a **Pull trigger:** line: the workload, bug or user need
@@ -324,99 +528,6 @@ nothing in the archive schedules work or overrides the queue. The bodies of done
 retired and delegated tasks are archived in
 [docs/archive/ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md); each keeps a stub in its
 area with its **Phase:**, **Disposition:** and **Objective:** lines.
-
-## Release map
-
-Release scopes below are provisional, not dates or claims that a release is ready. The execution queue above remains the sole scheduling
-authority; [Phases and releases](#phases-and-releases) maps each release to the phase that produces it
-and gives the release rhythm. Version labels are not phase numbers. R-0333 owns
-this map and each candidate checklist; the release-bar area retains the detailed release bars.
-No release requires finishing the entire task catalog. This section holds each release scope's acceptance
-and the candidate-record rules.
-
-| release scope | user-visible outcome | required increments / owners | explicitly deferred |
-|---|---|---|---|
-| Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Rows 0–2 qualified for the advertised scope; R-0333's exact candidate/subset record; R-0335/R-0336/R-0337 reference and honest claims; bounded R-0334/R-0346/R-0352/R-0354 installation/tutorial/distribution acceptance; R-0515 onboarding, first pilot and before-public-release checkpoint; R-0343/R-0345 security and threat disclosures; R-0357 supply-chain lock/license inventory; R-0358 compatibility/deprecation policy; preview-scoped R-0426/R-0427/R-0428 support, repair and response readiness. The preview checklist explicitly states which evidence-verifier/replay artifacts ship; unsupported proof replay cannot satisfy or advertise a verification release claim. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
-| Verified preview | Obtain V1a checked Core → BIR proof evidence. Native-image proof evidence is available only when the separately recorded V1b gate passes; otherwise native output is explicitly tested and `backend_trusted`, and the candidate ships under R-0333’s narrower recorded scope without graduating this one (R-0517’s fallback). The authoritative Core checker guards every program. | R-0511’s V1a exit and R-0514’s whole-language checker; R-0515’s applicable tooling checkpoints; R-0333’s candidate record states the theorem start and endpoint, V1b status, assumptions and fallback mode. Native claims additionally require the complete R-0517/R-0505/R-0508 gate. | Everything outside the certified subset; native transport in fallback mode; claims beyond the transported example. |
-| Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | The verified-pipeline plan's cumulative V2–V7 exits, delivered by R-0491–R-0510 as coordinated under queue row 6; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
-| Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing release-bar-area alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
-| Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing release-bar-area beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
-| Stable supported subset | Rely on a named, versioned language/std/platform subset with compatibility, reproducible distribution and maintenance commitments. | R-0335/R-0425 reference and conformance, R-0337 claim freeze, R-0338–R-0341 compatibility, R-0351 migration, R-0352/R-0356/R-0357 distribution and provenance, R-0358 deprecation, and R-0426–R-0429 support/repair readiness. | Stability or verification guarantees for anything outside the published subset. |
-
-The systems preview is a separate, narrower deliverable, **not** a weakening or
-renaming of the existing verification alpha. It may expose experimental proof
-features only with their actual evidence classes, assumptions and coverage.
-The preview cannot advertise alpha graduation. Each later scope inherits the
-applicable earlier acceptance checks, rerun on its own candidate.
-
-### Next-release blockers
-
-The next proposed release is the experimental systems preview. This is an
-acceptance checklist, not an alternate priority list. It does not move release
-packaging ahead of current queue work or mark any in-flight branch as complete.
-
-- [x] R-0484 meets its closure criteria (closed 2026-10-08 at `245cd51c`, main CI 37771982899);
-  its accepted limits are listed in its task section and its mutation campaign is
-  incompletely qualified at that revision; the campaign later qualified on `670ec85a`
-  (2026-10-11, run 38104755470).
-- [x] R-0483 rejects mismatched owners for parsed results with retained controls (closed
-  2026-10-09 at `4f005715`; `check_view_lifetime.sh` 28/0 in main CI 37917463687).
-- [ ] R-0333 names the exact preview subset, supported target/OS/toolchain matrix,
-  known limitations and the validation required for every advertised feature.
-- [ ] R-0335/R-0336/R-0337 publish a versioned description and consistent claims for
-  that subset; examples and migration guidance are checked against the candidate.
-- [ ] R-0334/R-0346/R-0352/R-0354 demonstrate clean installation, build/run/test and
-  the tutorial on every claimed platform. Record external-user failures and fixes.
-- [ ] R-0515's onboarding path, first pilot and before-public-release checkpoint
-  (published inventory, named reviewers) are complete for the preview scope; the first
-  pilot does not wait for R-0515's two-quarter continuing-feedback checkpoint.
-- [ ] R-0343/R-0345 publish the security disclosure policy and threat model; R-0357
-  locks the toolchain/dependencies and publishes the license inventory; R-0358 publishes
-  the compatibility/deprecation policy; R-0426/R-0427/R-0428 are ready at preview scope.
-- [ ] The preview checklist states exactly which evidence-verifier/replay artifacts ship
-  (bounded R-0354 distribution); unsupported replay advertises no verification claim.
-- [ ] R-0333 records a reproducible candidate and its validation result using the
-  common candidate record below. Unresolved queue prerequisites remain blockers
-  unless an explicit, scoped release disposition permits a narrower claim.
-
-Finishing the first two items alone does not ship the preview. The mutation
-campaign exception that permitted a development checkpoint does not authorize a
-release exception. Qualification remains owned by its existing queue milestone;
-a candidate must satisfy its applicable requirements or obtain a separately
-recorded release decision that narrows the claims without concealing failures.
-
-### Release increments and candidate records
-
-Assign a **bounded increment** of a task to a release, not the whole task when its
-objective spans several releases. Each R-0333 checklist entry names its existing
-owner ID, delivered behavior, acceptance artifact and deferred remainder. For
-example, alpha needs the three-family R-0182/R-0183 change-and-repair diff; their
-broader reporting dimensions can remain open. Beta needs local package evidence,
-not the whole package ecosystem. Completing an increment does not close its owner.
-Research and workload-gated expansions remain in their existing sections until
-pulled. Historical execution logs belong in the archive, not candidate checklists.
-
-For each candidate, retain one versioned record under R-0333 containing:
-
-- Exact source commit, compiler/toolchain identity and released artifact identities;
-  supported language/std subset, platforms, backends and runtime profile.
-- Required checks and retained results for that exact candidate, including positive
-  and rejecting controls, applicable mutation qualification and clean installation.
-  A timeout, skipped job or incomplete report is never a passing result.
-- Source, std API/ABI and evidence-schema compatibility stated separately; migration,
-  invalidation and revalidation requirements for changes to any of them.
-- Open blockers, accepted limitations and deferred increments as separate lists,
-  with owners and rationale. An accepted limitation cannot contradict an advertised
-  guarantee; unresolved soundness failures inside the claimed scope block release.
-- Matching reference, claims matrix, tutorial/examples and release notes. Distinguish
-  enforced properties, checked proofs, assumptions, tests and incomplete coverage.
-- Supported lifetime and patch procedure, with security reporting, rollback and
-  evidence revocation/rechecking where affected (R-0343, R-0426–R-0429).
-
-Patch releases repair an already published scope without waiting for the next
-feature release. They have their own candidate commit and validation record;
-compatibility breaks or changed evidence identities require an explicit migration
-or invalidation notice. Stabilization must not silently expand the claimed subset.
 
 ## How To Read This Roadmap
 
@@ -792,19 +903,6 @@ roadmap is a hypothesis list, not a build list; a task that survives its probe
 is built with evidence, and a task killed by one is a success recorded in the
 changelog, not a failure.
 
-### Where Execution Starts
-
-Execution starts at **[The current execution queue](#the-current-execution-queue)**.
-That table is the one current queue. When it is exhausted, execution resumes at the first active
-`Task R-NNNN` in file order unless the table is refreshed in the same change that exhausts it.
-The `R-NNNN` value is immutable identity, not priority: existing IDs are never renumbered or
-reused, and a newly confirmed urgent defect receives the next unused ID before entering the
-queue. Area headings and task position are topical filing only. There are no area-local queues,
-hidden priority overlays or separate stop-the-line lists; a reproduced urgent defect must be
-placed in the current queue explicitly.
-Old phases 1–6E and the completed stdlib-area foundations and workloads 1–8 are historical and
-live in [CHANGELOG.md](CHANGELOG.md). The QBE backend that the QBE backend-validation area specified was never
-started; since 2026-10-19 the Lean Compiler Backend (R-0517) is the QBE path (R-0113).
 ## Product north star: compositional, transferable evidence
 
 The canonical product direction is
