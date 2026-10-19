@@ -7236,6 +7236,11 @@ run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "E0208"
 # (the positive alias rows are tests/codegen/import_alias_binding.con).
 run_err "$TESTDIR/error_082_import_alias_shadows_local.con" "E0299"
 run_err "$TESTDIR/error_082_import_duplicate_binding.con" "E0299"
+# Codex review of bug 082: the namespace includes impl methods (`Type_method`), and the
+# program-level spelling an import is emitted under (`a_f`) may not name an unrelated
+# definition, or the backends would call that one.
+run_err "$TESTDIR/error_082_import_alias_shadows_method.con" "E0299"
+run_err "$TESTDIR/error_082_import_spelling_collision.con" "E0299"
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

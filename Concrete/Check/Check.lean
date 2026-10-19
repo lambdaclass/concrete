@@ -2291,7 +2291,14 @@ private partial def specBodyCalls : Expr → List String
     aliased call by the definition it names, so no global table is consulted
     with the alias spelling (see `Elab.importCallSpellings`). -/
 def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnostics :=
-  let localFnNames := m.functions.map (·.name) ++ m.externFns.map (·.name)
+  -- The module's whole lowered callable namespace: free functions, externs, AND impl
+  -- methods (inherent and trait), which Core spells `Type_method`. An import aliased to
+  -- `S_value` beside a local `impl S { fn value }` bound one name twice: the call took the
+  -- import's signature and spelling while the proof's callee identity took the local method
+  -- (Codex review of bug 082).
+  let methodNames := m.implBlocks.flatMap (fun ib => ib.methods.map fun f => mangledMethodName ib.typeName f.name)
+    ++ m.traitImpls.flatMap (fun tb => tb.methods.map fun f => mangledMethodName tb.typeName f.name)
+  let localFnNames := m.functions.map (·.name) ++ m.externFns.map (·.name) ++ methodNames
   -- `imports.functions` is keyed by local name and covers functions AND externs.
   let importedFnNames := imports.functions.map (·.1)
   let syms : List (String × String × String × Span) := m.imports.flatMap fun imp =>
@@ -2299,8 +2306,10 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
   let fnSyms := syms.filter fun (local_, _, _, _) => importedFnNames.contains local_
   let vsLocal : Diagnostics := fnSyms.filterMap fun (local_, modName, orig, sp) =>
     if localFnNames.contains local_ then
+      let what := if methodNames.contains local_ then "an impl method defined in this module"
+        else "a function defined in this module"
       let e := CheckError.importBindingCollision local_
-        s!"is also a function defined in this module (import of '{modName}.{orig}')"
+        s!"is also {what} (import of '{modName}.{orig}')"
       some { severity := .error, message := e.message, pass := "check", span := some sp,
              hint := e.hint, code := e.code }
     else none

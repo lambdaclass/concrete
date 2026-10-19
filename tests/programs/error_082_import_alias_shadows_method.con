@@ -1,0 +1,20 @@
+// Bug 082 (Codex review): E0299's local namespace covered free functions and
+// externs only. An import aliased to `S_value` beside `impl S { fn value }` bound
+// one lowered name twice: the call took the import's signature and spelling, the
+// proof's callee identity took the local method.
+mod a { pub fn h(c: Int) -> Int { return 1; } }
+mod b {
+    import a.{ h as S_value };
+    struct Copy S { v: Int }
+    impl S {
+        pub fn value(&self) -> Int { return self.v; }
+    }
+    pub fn probe(c: Int) -> Int {
+        let s: S = S { v: 7 };
+        return S_value(c) + s.value();
+    }
+}
+mod main {
+    import b.{ probe };
+    fn main() -> Int { return probe(2) - 8; }
+}

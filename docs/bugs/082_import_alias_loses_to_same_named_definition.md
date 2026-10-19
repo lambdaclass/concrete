@@ -96,3 +96,20 @@ The same flat lookup misrouted two unaliased shapes:
   modules specializes whichever was inserted last. This predates this fix and is untouched by it.
 - Two imports under one name are refused across all import kinds (types included), not only
   functions.
+
+## Follow-up: Codex review of c5a32a82
+
+* **The emitted spelling could name another definition.** `import a.{f as g}` is emitted
+  as `a_f`. When an unrelated module defines `fn a_f`, Mono, the backends and the
+  interpreter resolve that exact definition first, so the alias silently called it while
+  the evidence still named `a.f`. `importSpellingCollisions` (Elab) now refuses, before any
+  Core is emitted, an import whose spelling is also the Core name of any definition other
+  than the one it imports (top-level, submodule and impl-method names, as
+  `prefixModuleFnNames` spells them): E0299. Fixture
+  `tests/programs/error_082_import_spelling_collision.con`.
+* **E0299 omitted impl methods.** The module's local callable namespace now includes the
+  lowered names of inherent and trait impl methods (`Type_method`), so an import aliased to
+  `S_value` beside `impl S { fn value }` is refused. Fixture
+  `tests/programs/error_082_import_alias_shadows_method.con`.
+* The interpreter finding (module-local calls inside qualified entries) is tracked as
+  bug 097.

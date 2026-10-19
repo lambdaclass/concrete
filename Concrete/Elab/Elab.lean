@@ -129,6 +129,8 @@ inductive ElabError where
   | inSubmodule (subName : String) (innerError : String)
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
+  -- Bug 082 review: the Core spelling an import is emitted under is also an unrelated definition
+  | importSpellingCollision (localName : String) (spelling : String) (target : String) (other : String)
 
 def ElabError.message : ElabError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
@@ -151,11 +153,14 @@ def ElabError.message : ElabError → String
   | .inSubmodule subName innerError => s!"in submodule '{subName}': {innerError}"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .importSpellingCollision localName spelling target other =>
+    s!"import binds '{localName}' to '{target}', whose program-level spelling '{spelling}' is also the name of '{other}'"
 
 def ElabError.hint : ElabError → Option String
   | .fieldAccessNonStruct => some "field access requires a struct type"
   | .arrayLiteralEmpty => some "provide at least one element"
   | .methodCallOnNonNamedType => some "method calls require a named type"
+  | .importSpellingCollision _ spelling _ other => some s!"two definitions would be one callee '{spelling}' after elaboration, and the backends would pick '{other}' for the import; rename '{other}'. Tracking: docs/bugs/082_import_alias_loses_to_same_named_definition.md"
   | .ghostInRuntime _ => some "ghost bindings are proof-only and erased before codegen; reference them only in contracts (#[ensures]/#[invariant]) or other ghost code"
   | _ => none
 
@@ -180,6 +185,7 @@ def ElabError.code : ElabError → String
   | .inSubmodule _ _ => "E0417"
   | .unknownModule _ => "E0418"
   | .notPublicInModule _ _ => "E0419"
+  | .importSpellingCollision _ _ _ _ => "E0299"
 
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
@@ -2400,6 +2406,43 @@ def importCallSpellingsFor (m : Module) (summary : FileSummary)
               then some (localName, imp.moduleName ++ "_" ++ orig) else none
           | none => none
 
+/-- Every Core function name a program's top-level modules define, with the definition it
+    belongs to: `(coreName, modulePath, definitionName)`. Top-level definitions keep bare
+    names; submodule definitions (and impl methods, `Type_method`) are prefixed by the
+    submodule chain, as `prefixModuleFnNames` spells them. -/
+private partial def coreDefinitionSpellings (pfx path : String) (ts : FileSummary) :
+    List (String × String × String) :=
+  let spell := fun (n : String) => if pfx.isEmpty then n else pfx ++ "_" ++ n
+  let own := (ts.functions.map (·.1) ++ ts.implMethodSigs.map (·.1)).eraseDups.map
+    fun n => (spell n, path, n)
+  own ++ ts.submoduleSummaries.flatMap fun (sn, ss) =>
+    coreDefinitionSpellings (spell sn) (path ++ "." ++ sn) ss
+
+/-- Bug 082 (Codex review): the spelling `importCallSpellingsFor` gives an import must name
+    ONLY the definition the import means. `import a.{f as g}` is emitted as `a_f`; when some
+    unrelated module defines `fn a_f`, every Core consumer resolves the exact definition
+    first, so the alias silently calls that function while the elaboration evidence still
+    names `a.f`. Refused here, before any Core is emitted. A definer is the import's own
+    target when its definition name is the imported one and its module path is the import's
+    module path (or ends with it, for a relative submodule import). -/
+def importSpellingCollisions (m : Module) (spellings : List (String × String))
+    (topLevel : List (String × FileSummary)) : Diagnostics :=
+  let defs := topLevel.flatMap fun (n, ts) => coreDefinitionSpellings "" n ts
+  m.imports.flatMap fun imp =>
+    imp.symbols.filterMap fun sym =>
+      match spellings.lookup sym.effectiveName with
+      | none => none
+      | some spelling =>
+        let isTarget := fun (path defName : String) =>
+          defName == sym.name && (path == imp.moduleName || path.endsWith ("." ++ imp.moduleName))
+        match defs.find? fun (c, path, dn) => c == spelling && !isTarget path dn with
+        | none => none
+        | some (_, path, dn) =>
+          let e := ElabError.importSpellingCollision sym.effectiveName spelling
+            s!"{imp.moduleName}.{sym.name}" s!"{path}.{dn}"
+          some { severity := .error, message := e.message, pass := "elab", span := some imp.span,
+                 hint := e.hint, code := e.code }
+
 partial def elabModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {})
     (summaryTable : List (String × FileSummary) := [])
@@ -2560,6 +2603,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- Functions, externs and impl methods all, because the hole was never specific
   -- to one of them: four of the six measured escapes were free functions.
   let callSpellings := importCallSpellingsFor m summary summaryTable topLevel siblingSubs
+  let spellingCollisions := importSpellingCollisions m callSpellings topLevel
+  if !spellingCollisions.isEmpty then .error spellingCollisions else
   let importedFnCaps : List (String × CapSet) := m.imports.flatMap fun imp =>
     let summary? := match summary.submoduleSummaries.find? fun (n, _) => n == imp.moduleName with
       | some (_, s) => some s

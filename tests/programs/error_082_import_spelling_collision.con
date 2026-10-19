@@ -1,0 +1,15 @@
+// Bug 082 (Codex review): `import a.{ f as g }` is emitted in Core as `a_f`, the
+// spelling `a::f` elaborates to. When an unrelated module defines `fn a_f`, every
+// Core consumer resolves that exact definition first, so the alias silently
+// called it (5) while the evidence named `a.f` (1). Refused before Core (E0299).
+mod a { pub fn f(c: Int) -> Int { return 1; } }
+mod c { pub fn a_f(c: Int) -> Int { return 5; } }
+mod b {
+    import a.{ f as g };
+    pub fn probe(c: Int) -> Int { return g(c); }
+}
+mod main {
+    import b.{ probe };
+    import c.{ a_f };
+    fn main() -> Int { return probe(2) + a_f(0) - 5; }
+}
