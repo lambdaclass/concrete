@@ -198,6 +198,34 @@ authority. Phase numbers group subjects; they are not release numbers. R-0333 ow
 this map and each candidate checklist; Phase 17 retains the detailed release bars.
 No release requires finishing the entire task catalog.
 
+### Release rhythm (proposed 2026-10-19)
+
+Three layers, so users and pilots get something regularly without weakening any release bar:
+
+- **Nightly builds:** every main commit whose qualification passed becomes a downloadable build with its
+  candidate record. No support promise.
+- **A release train every 4 – 6 weeks (`0.x.y`), starting after the systems preview:** each train ships
+  whatever is qualified on main at that point — fixes, diagnostics, `std` additions, tooling, performance.
+  Nothing waits for a train if it is ready; nothing ships in one that is not qualified.
+- **Milestone releases (`0.n`):** the train that carries something new in kind. Each maps to a stage of
+  the [roadmap at a glance](#roadmap-at-a-glance):
+
+| label | scope (table below) | stage that produces it |
+|---|---|---|
+| 0.1 | Experimental systems preview | 1. Stabilize, with the usability onboarding path and first pilot |
+| Verified preview | Compile the V1 subset through the `verified` profile and obtain a native image covered by the compiler-correctness theorem; the authoritative checker on Core guards every program. | R-0511's V1a/V1b exits; R-0514's whole-language checker; R-0515's V1 editor and debugging checkpoints; candidate record under R-0333 stating the theorem boundary (`CheckedCore` or source). | Everything outside V1; claims beyond the transported example. |
+| Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | R-0511's slice exits as extended in the plan; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
+| 0.2 | Verified preview | 2. Verified foundation (V1a, V1b; the whole-language Core checker) |
+| 0.3 – 0.8 | Verified-subset milestones | 4. Verified growth, one per slice V2 – V6 plus V7, interleaved with stage 3's interop and usability work |
+| 0.9 | Verified-component alpha | 4 complete for the alpha's components, with 5. Evidence as a product |
+| 0.10 | Project beta | 7. Release and ecosystem (local packages and policy) |
+| 1.0 | Stable supported subset | V7 complete with source correspondence, 5 complete, and 7's stability commitments |
+| 1.x | feature releases | 6. Richer verification and the rest of 7 |
+
+Labels stay provisional (the paragraph above): a milestone ships when its scope's acceptance holds, not
+on a date. Release automation (R-0516) is a prerequisite for the train: without it, frequent releases
+would consume the capacity the proof track needs.
+
 | release scope | user-visible outcome | required increments / owners | explicitly deferred |
 |---|---|---|---|
 | Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | R-0484 and R-0483 are closed; publish the supported subset and claims (R-0335/R-0336/R-0337); exercise the install/tutorial/distribution path (R-0334/R-0346/R-0352/R-0354); retain candidate validation under R-0333. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
@@ -16350,6 +16378,24 @@ builds, incremental edits and runtime are measured separately, CI rejects a deli
 threshold violation, and unsupported comparisons are reported explicitly and do not count as covered;
 *before public release* — the stability policy, `std` coverage inventory and named reviewers are
 published.
+
+### Task R-0516
+
+**Objective:** Release automation, so that nightly builds, the release train and milestone releases cost
+minutes of attention instead of days.
+
+**Status (2026-10-19): planned; prerequisite for the release train after the systems preview.**
+
+Work: one command produces, from an exact main commit whose full tier passed (R-0513), the R-0333
+candidate record (source and toolchain identities, artifact identities, supported subset and profiles,
+retained check results, compatibility statements, open blockers and accepted limitations), the release
+artifacts for every declared platform, a changelog section and migration notes drafted from merged
+changes, and the claims matrix for the release. Nightly builds publish automatically with their records;
+train and milestone releases add the human review of notes and claims.
+
+**Exit:** a dry-run release of the current main produces a complete candidate record and artifacts with
+no hand-edited fields; a deliberately failing qualification prevents publication; two consecutive
+nightly builds publish unattended.
 
 ### Task R-0286
 
