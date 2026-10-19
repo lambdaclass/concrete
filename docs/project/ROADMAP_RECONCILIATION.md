@@ -7,8 +7,9 @@ The 2026-10-19 reconciliation mapped every task heading and every open-work pros
 [ROADMAP.md](../../ROADMAP.md) onto the seven stages, the
 [verified-compiler plan](../compiler/VERIFIED_PIPELINE.md) and the Lean Compiler Backend decision
 (R-0517). It was produced from four slice audits of ROADMAP.md at commit `7b134645`; the line numbers
-below refer to that revision. Nothing was deleted: superseded task bodies remain in the roadmap as
-historical rationale, each carries a **Disposition:** line beside it, and the acceptance obligations,
+below refer to that revision. Nothing was deleted. The historical sections it inventoried were later
+moved verbatim to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md); superseded task bodies
+remain in the roadmap as historical rationale, each carries a **Disposition:** line beside it, and the acceptance obligations,
 regression cases and controls of a superseded task survive under its named owner unless its row
 records why they were retired. The roadmap's current queue and live task records own scheduling and
 acceptance; this file schedules nothing. The binding architectural dispositions stay in the roadmap's
@@ -361,7 +362,7 @@ now carries the requirement; *done* items are closure records; *historical* item
 | A | MIN negation trap VC, 2455–2456, 3090 | duplicate of R-0460/R-0493 | 1, 4 | Merge semantics and VC obligations separately |
 | A | Float→int trap VC, 2455–2456, 3090 | duplicate of R-0460/R-0493 | 1, 4 | Merge |
 | A | Real non-arithmetic corpus coverage, 2457–2458, 2905–2992 | duplicate of R-0459/R-0486 | 4, 7 | Merge; retain anti-tautology controls |
-| A | Nonlinear tier/Mathlib decision, 2459–2460, 2707, 2763–2776, 2894–2898 | live | after-1.0/research | Keep workload-gated; retire “two kernels is inherently misleading” |
+| A | Nonlinear tier/Mathlib decision, 2459–2460, 2707, 2763–2776, 2894–2898 | live | after-1.0/research | Keep workload-gated; retire “two kernels is inherently misleading”; owner **R-0448** (recorded when the section was archived) |
 | A | Unannotated-let types, 2461, 3091–3093, 3306–3308 | superseded by R-0495 Core claims | 4 | Merge with exact coverage controls |
 | A | Bare-name FFI closure, 2462–2463, 3094–3097 | superseded by R-0492/R-0514 | 2 | Merge |
 | A | Stack report versus enforcement, 2464, 2635, 3100 | duplicate of R-0445/R-0469 | 4, 7 | Merge |

@@ -258,18 +258,21 @@ else
   no "the subject-digest cross-check caveat is gone from ObligationCore — if the cross-check now EXISTS, say so; if the comment was merely deleted, restore it"
 fi
 
-# 9. The roadmap must carry the post-R-0004 multi-prover list.
-if grep -q "Multi-prover work that remains AFTER R-0004" ROADMAP.md; then
-  ok "GAP OPEN: the post-R-0004 multi-prover work is recorded in the roadmap"
+# 9. The post-R-0004 multi-prover list must stay recorded. Since 2026-10-19 it lives in the roadmap
+#    history archive, and its open items are owned by roadmap tasks (`solver_error` is R-0520).
+HIST=docs/archive/ROADMAP_HISTORY.md
+if grep -q "Multi-prover work that remains AFTER R-0004" ROADMAP.md "$HIST" 2>/dev/null \
+   && grep -q '^### Task R-0520$' ROADMAP.md; then
+  ok "GAP OPEN: the post-R-0004 multi-prover work is recorded (roadmap history) and owned (R-0520)"
 else
-  no "the post-R-0004 multi-prover section is missing from ROADMAP.md"
+  no "the post-R-0004 multi-prover section is missing from ROADMAP.md and $HIST, or its owner R-0520 is gone"
 fi
 
 # 10. The spike pin must be a fixed SHA, never a branch name.
-if grep -qE "spike/multi-prover-evidence @ 80be5368|pin \`?80be5368" ROADMAP.md; then
+if grep -qE "spike/multi-prover-evidence @ 80be5368|pin \`?80be5368" ROADMAP.md "$HIST" 2>/dev/null; then
   ok "the spike is pinned to an immutable SHA, not a moving head"
 else
-  no "the pinned spike SHA is absent from ROADMAP.md — later deltas must integrate as new PINNED epochs"
+  no "the pinned spike SHA is absent from ROADMAP.md and $HIST — later deltas must integrate as new PINNED epochs"
 fi
 
 # 11. `solver_error` is never produced. Three independent sites expected it — absent
