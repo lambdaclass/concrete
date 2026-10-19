@@ -75,7 +75,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -105,7 +125,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -138,7 +178,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -166,6 +226,21 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Lean (via lean-action, caches disabled)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+          use-github-cache: false
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action, caches disabled) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -209,7 +284,27 @@ jobs:
           path: ~/.cache/concrete-ext
           key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/tests/external_checker.pins', 'lean-toolchain') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -230,7 +325,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -313,7 +428,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -404,7 +539,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -432,7 +587,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -468,7 +643,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -609,7 +804,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1135,7 +1350,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1223,7 +1458,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1247,7 +1502,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1277,7 +1552,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1319,7 +1614,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
@@ -1371,7 +1686,27 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-elan-${{ hashFiles('lean-toolchain') }}
+
       - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
