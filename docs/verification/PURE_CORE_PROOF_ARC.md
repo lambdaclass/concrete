@@ -3,7 +3,7 @@
 **Status:** Scope pinned 2026-07-16. Slice 1 not started.
 This document is the arc's contract, written BEFORE the first theorem (the
 open-ended item that can sprawl gets its Definition-of-Done first). It is the
-Phase 7 exit obligation: convert the pure core from "well-gated and
+old Phase 7 exit obligation: convert the pure core from "well-gated and
 workload-tested" to "machine-checked against its documented contracts."
 
 ## Why now

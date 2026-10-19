@@ -1,4 +1,4 @@
-# ProofCore Pass Contracts and Phase 10 Obligations Register
+# ProofCore Pass Contracts and old Phase 10 Obligations Register
 
 Status: contract document (compiler soundness bridge input; see ROADMAP old Phase 14).
 
@@ -10,33 +10,33 @@ and trust gate, it records:
 - What assumptions it introduces
 - What it explicitly rejects
 - Which example / regression forced it
-- What Phase 10 preservation / soundness theorem will
+- What old Phase 10 preservation / soundness theorem will
   eventually justify it
 
 The purpose is **load-bearing transparency**.  Today the
 compiler extracts source to PExpr and the Lean kernel checks
 theorems against extracted forms.  That chain is only sound if
 every link's contract is honored.  This document is the link
-inventory.  When Phase 10 starts proving preservation, every
+inventory.  When old Phase 10 starts proving preservation, every
 entry here gets a corresponding Lean theorem (or an explicit
 "this entry is unsoundable as stated; rethink").
 
 ## Reading the table
 
 Each rule has a stable identifier `R-<NN>` referenced from
-commit messages and Phase 10 obligations.  Entries are
+commit messages and old Phase 10 obligations.  Entries are
 chronological (earliest extension first); the register is
 append-only — a removed rule is marked `(retired YYYY-MM-DD)`
 in place, not deleted.
 
-The Phase 10 obligation field names the theorem Concrete owes
+The old Phase 10 obligation field names the theorem Concrete owes
 the user.  A blank field means the obligation is unstated
 (should never be blank for a landed rule); `TBD` means stated
 informally below the table but not yet a Lean theorem name.
 
 ## Register
 
-| ID | PExpr shape | Concrete source | Forcing example | Phase 10 obligation |
+| ID | PExpr shape | Concrete source | Forcing example | old Phase 10 obligation |
 |---:|---|---|---|---|
 | R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; non-partial wrapper landed same day |
 | R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` |
@@ -66,21 +66,21 @@ These are verification layers on top of the extraction rules.
 They don't add PExpr constructs but do constrain what "proved"
 means.
 
-| ID | Gate | What it verifies | Phase 12 obligation |
+| ID | Gate | What it verifies | old Phase 12 obligation |
 |---:|---|---|---|
 | G-01 | Body fingerprint check | `hash` of the source `CExpr/CStmt` fingerprint matches the in-source `#[proof_fingerprint]`. Drift downgrades obligation status to `stale`; a source proof link with no stored hash is `unbound` (E0810), never proved. This is body-level containment, not the full signature/contract/dependency subject (R-0004). | `fingerprint_determinism`: source produces a single canonical fingerprint string; equivalent source produces same fingerprint. |
 | G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr and parameters equal a specification value the linked theorem's statement evaluates (`subjectBindingOf`, bug 079; values generated into `specBindingTable`). Before bug 079 this compared only functions whose source name keyed `Concrete.Proof.specs`, and skipped the rest.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`.  Regression: `tests/programs/adversarial_spec_drift/test_drift.con` with `driftTestSpec` deliberately differing from source; CI asserts the gate fires and status downgrades. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
 | G-03 | Linked-proof attachment | The in-source `#[proof_by]` references a Lean theorem by name; the Lean module containing the theorem is part of `make build` (Lean kernel rejection fails the build). | `theorem_lookup_completeness`: every `#[proof_by]` resolves to a Lean theorem; theorem statement uses the `#[spec]` symbol. |
 | G-04 | Eligibility profile | Functions can only be registered if they pass `predictable` (no recursion, bounded loops, no alloc, no FFI).  Restricts what shapes ever reach extraction. | `eligibility_preservation`: a proof-eligible function's source semantics agrees with PExpr semantics within the modeled fragment. |
 | G-05 | FnTable completeness check (commit 2026-05-30 landing) | For every (registered spec, FnTable) pair, every `.call X` site in the spec resolves to `some _` in the FnTable.  A missing entry makes `eval` silently return `none` and the theorem becomes vacuous.  Enforced by `decide`-checked `example` blocks in `Concrete.ProofSoundness`; failure surfaces as a Lean build error. | `fntable_completeness_completeness`: no false negatives — if the assertion fires, the gap is real. |
-| G-06 | Proof coverage classification (Phase 1 items 3+4, landed 2026-05-30) | Every registered proof carries a `coverage` field naming what KIND of theorem it is: `point` / `one_direction` / `iff` / `invariant` / `runtime_error` / `full_contract`.  Surfaced in `--report proof-status` and in `tests/showcase/manifest.toml`'s `[flagship.evidence].proof_coverage` per-flagship table.  A reviewer reading "X is proved" now sees the classification, so a single-instance point proof cannot pose as a universal claim.  Registry parser warns on unclassified entries. | `coverage_consistency`: every registered proof has a well-formed coverage tag and the displayed tag matches the actual theorem shape (no Lean-level enforcement; relies on author honesty + reviewer cross-check). |
+| G-06 | Proof coverage classification (old Phase 1 items 3+4, landed 2026-05-30) | Every registered proof carries a `coverage` field naming what KIND of theorem it is: `point` / `one_direction` / `iff` / `invariant` / `runtime_error` / `full_contract`.  Surfaced in `--report proof-status` and in `tests/showcase/manifest.toml`'s `[flagship.evidence].proof_coverage` per-flagship table.  A reviewer reading "X is proved" now sees the classification, so a single-instance point proof cannot pose as a universal claim.  Registry parser warns on unclassified entries. | `coverage_consistency`: every registered proof has a well-formed coverage tag and the displayed tag matches the actual theorem shape (no Lean-level enforcement; relies on author honesty + reviewer cross-check). |
 
 ## Per-rule notes
 
-### R-01, R-02 (literal preservation — Phase 12 first batch)
+### R-01, R-02 (literal preservation — old Phase 12 first batch)
 
 `Concrete.ProofSoundness.lit_int_preservation` and
-`lit_bool_preservation` establish the Phase 12 proof
+`lit_bool_preservation` establish the old Phase 12 proof
 pattern: a tiny source semantics (`evalSourceLit`) for the
 literal fragment of `CExpr`, a non-partial literal
 extractor (`cExprLitToPExpr`), and a preservation theorem
@@ -123,7 +123,7 @@ Rules whose extraction logic genuinely lives inside the
 mutual block (binops with sub-expressions, structLit
 with mapM over fields, etc.) still need the harder
 mapM-to-structural-recursion lift — that's the next
-Phase 12 architectural piece.
+old Phase 12 architectural piece.
 
 ### R-06 (let preservation — first rule via `cStmtsToPExprK` wrapper)
 
@@ -160,7 +160,7 @@ wrapper rules to `cStmtsToPExprK` wrapper rules.
 
 ### R-04 (binop preservation — first compositional rule, all three views)
 
-R-04 is the FIRST Phase 12 rule whose preservation depends
+R-04 is the FIRST old Phase 12 rule whose preservation depends
 on sub-rule preservation (R-01 / R-03 for the operands).
 Discharged across all three views by three theorems:
 
@@ -254,7 +254,7 @@ narrower to wider preserves value.  **Narrowing** casts
 truncates would be wrong here.  The eligibility profile is
 expected to keep narrowing casts out of proof-eligible code,
 or to attach an explicit `narrow_int` side-condition the
-extractor preserves.  Phase 12 obligation
+extractor preserves.  Old Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
@@ -509,7 +509,7 @@ Adding a new width (e.g. i64 srem) means:
   1. Add the corresponding `evalBinOp` case.
   2. Add the `binOpToPBinOp` mapping (`.i64` / `.u64` / etc.).
   3. Append a row to this register naming the new obligation.
-The Phase 10 obligations `mod_width_preservation` and
+The old Phase 10 obligations `mod_width_preservation` and
 `bitxor_width_preservation` are parameterized over width and
 signedness — one preservation theorem per supported width
 combination.
@@ -523,7 +523,7 @@ a shadowing let that rebinds the array variable.  OOB
 (i < 0 or i ≥ length) returns `none` (stuck), matching the
 state-model decision in `docs/verification/PROOF_STATE_MODEL.md` § 5
 ("failure is `none`").  Theorems pass hypotheses to rule out
-the stuck case.  Phase 12 obligation
+the stuck case.  Old Phase 12 obligation
 `array_set_preservation` will state: source's mutation of
 `arr[i]` after `i` is in bounds produces an array whose `j`th
 element is `v` if `j = i` and the original `j`th otherwise.
@@ -539,7 +539,7 @@ named values) or `Break [("value", v)]` to early-return.
 The factoring of `eval.evalWhileStep` (commit `7743579`) is
 the durable proof surface: every future while_step proof uses
 the three lemmas `while_step_break` / `_cont` / `_exit`
-rather than expanding the full eval pattern.  Phase 12
+rather than expanding the full eval pattern.  Old Phase 12
 obligations `while_step_preservation` and
 `while_step_early_break` will state preservation against
 `eval.evalWhileStep`, not the monolithic `eval`.
@@ -629,7 +629,7 @@ but not yet implemented:
   field update.  Source `obj.f = v` extracts to `letIn name
   (structSet (var name) "f" val) rest`.  No flagship yet
   forces it; ring_push only mutates an array field.
-- **Multi-width PBinOp at non-32 / non-u8 widths** (Phase 10 compiler
+- **Multi-width PBinOp at non-32 / non-u8 widths** (old Phase 10 compiler
   soundness bridge): all width-sensitive constructors are
   parameterized (`.mod width signed` / `.bitxor width signed`
   / `.bitor width signed`).  evalBinOp currently supports
@@ -653,18 +653,18 @@ Each will get a register entry when it lands.
 
 **When you land a new extraction rule.** Add a row to the
 table.  Pick the next R-NN.  Name the forcing example and the
-Phase 12 obligation.  Don't leave the obligation field blank.
+old Phase 12 obligation.  Don't leave the obligation field blank.
 
 **When you land a new trust gate.** Add a row to the gates
 table.  Pick the next G-NN.  Name the verification surface
-and the corresponding Phase 12 completeness theorem.
+and the corresponding old Phase 12 completeness theorem.
 
-**When Phase 12 starts.** Each obligation field is a TODO for
-a Lean theorem.  Implementing them is the Phase 12 plan.  The
+**When old Phase 12 starts.** Each obligation field is a TODO for
+a Lean theorem.  Implementing them is the old Phase 12 plan.  The
 absence of an obligation entry would be the bug — every rule
 that affects what "proved" means needs one.
 
-**When reviewing a Phase 4 commit.** Cross-reference: does
+**When reviewing an old Phase 4 commit.** Cross-reference: does
 the commit's changes match a register entry?  If new, was a
 row added?  If the rule changed (e.g., a softening of
 assumptions), was the row updated?  Stale rows are a real

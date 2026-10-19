@@ -108,7 +108,7 @@ area-level assignment does not override an individual task's prerequisites.
 | Provable and predictable subsets | 12 | 22 | 2, 4 — **reconcile** | The verified slices define the admitted subsets from now on |
 | Runtime safety obligations | 13 | 27 | 1, 2, 4, 6 — **reconcile** | Immediate soundness repairs precede release; R-0460 proves Core-to-VC rules; contract-dependent obligations follow Phase 6 |
 | Compiler soundness bridge | 14 | 22 | 2, 4–6 — **reconcile** | Refinement and evidence soundness follow the verified plan; spec/ghost totality follows its contract prerequisites; R-0460, filed in the runtime-safety area, remains the Core-to-VC owner |
-| Verified-compiler pipeline, stabilization and usability | — | 48 | 1–7 and every release, plus after-1.0/research (exhaustive) | R-0491–R-0517 follow their queue, slice and release checkpoints. R-0518–R-0538 follow their individual Stage lines: stabilization, provenance and tooling, Phase 6 contracts/totality/equivalence, compatibility, and explicitly deferred research. |
+| Verified-compiler pipeline, stabilization and usability | — | 48 | 1–7 and every release, plus after-1.0/research (exhaustive) | R-0491–R-0517 follow their queue, slice and release checkpoints. R-0518–R-0538 follow their individual Phase lines: stabilization, provenance and tooling, Phase 6 contracts/totality/equivalence, compatibility, and explicitly deferred research. |
 | Backend, target and stdlib contracts | 15 | 28 | 2–4 and every release — **reconcile** | Backend/target contracts reconcile with S10 – S13; interop (R-0285, ABI/export tasks) and applications (R-0490) follow Phase 3; QBE-derived tasks follow R-0113's decision |
 | WebAssembly | 15.25 | 7 | after 1.0 | A later target profile; research-gated |
 | Unsafe Concrete and trusted systems profile | 15.5 | 10 | 4 | V6 (raw pointers, `Unsafe`, FFI) and the trusted-base inventory |
@@ -260,7 +260,7 @@ is not part of this strict queue. Why3 remains comparative prior art, never a ba
 
 The [2026-10-19 reconciliation](docs/project/ROADMAP_RECONCILIATION.md) records historical task dispositions and the four prose inventories, including their source revision. The current queue and live task records own scheduling and acceptance. Transferred obligations remain binding unless explicitly retired with a recorded reason.
 
-Every `### Task R-NNNN` carries a **Phase:** line; a superseded, merged, delegated, retired or done task also carries a **Disposition:** line naming its owner, and its row in the record's task-disposition table. `scripts/tests/check_roadmap_coverage.sh` reads that table and checks that every task has a stage or a disposition, that every disposition row and queue row names an existing task, that every queue row names an owner, and that no task's stage contradicts its queue row.
+Every `### Task R-NNNN` carries a **Phase:** line; a superseded, merged, delegated, retired or done task also carries a **Disposition:** line naming its owner, and its row in the record's task-disposition table. `scripts/tests/check_roadmap_coverage.sh` reads that table and checks that every task has a phase or a disposition, that every disposition row and queue row names an existing task, that every queue row names an owner, and that no task's phase contradicts its queue row.
 
 ### Binding reconciliation dispositions
 

@@ -1,6 +1,6 @@
 # LLM-Guided Proof Synthesis
 
-Status: design target / Phase 9 product bet
+Status: design target / old Phase 9 product bet
 
 This document defines the target shape for LLM-guided proof synthesis in
 Concrete. The core rule is simple:

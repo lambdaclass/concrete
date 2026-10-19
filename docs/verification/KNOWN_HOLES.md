@@ -874,7 +874,7 @@ low-level/unsafe access. No lifetimes, regions, or `from()`. Locked by
 rejected) + the blanket signature rule in `Concrete/Check/Check.lean` (`checkFn`) +
 the fn-type / generic-instantiation rules in `resolveType` / call sites. The
 `from(param)` escape valve remains deeply deferred and evidence-gated (ROADMAP
-Phase 7 #8e).
+old Phase 7 #8e).
 Follow-on CLOSED 2026-07-06: `with_value_mut`/`modify` landed (HashMap,
 OrderedMap; `Vec::with_at_mut`) once the container-not-in-context obligation
 became a checker rule — **E0293** rejects overlapping borrows within one call
@@ -893,7 +893,7 @@ that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut
 - **Disclosed:** `CLAIMS_TODAY.md` — "No dangling safe reference" now covers the
   whole safe surface (borrow-block refs *and* the absence of any returned ref).
 - **Deferred (evidence-gated):** `from(param)` returned references (ROADMAP
-  Phase 7 #8e); the
+  old Phase 7 #8e); the
   mutable scoped callback `with_value_mut`/`modify` — parked, nothing pulls it
   (the surface is covered by `update` for single-key mutation, `for_each_ctx` for
   mutable-context traversal, `with_value`/`with_at` for borrowed reads).
@@ -1083,7 +1083,7 @@ reflection over a *natively executed* certificate check, a larger TCB than
 
 ---
 
-## Open design decisions that gate the Phase 5/6/7 freeze
+## Open design decisions that gate the old Phase 5/6/7 freeze
 
 These are not holes (no current unsoundness) but are unmade decisions that must
 land before the relevant freeze. Full text in ROADMAP; listed here so the
@@ -1095,15 +1095,15 @@ whole picture is in one place.
   governs). What remains is implementation only when workloads pull it:
   `with_value_mut`/`modify` need the container-not-in-context gate, stored
   `BoundFn` values need a storage workload, and `from(param)` stays deferred
-  (Phase 7 #8e) and is explicitly NOT the H1 fix.
-- **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a. DONE (2026-06-21):
+  (old Phase 7 #8e) and is explicitly NOT the H1 fix.
+- **Owned `ByteView` zero-copy stored idiom** — old Phase 5 #5a. DONE (2026-06-21):
   `docs/language/BYTE_VIEW.md` design + `std.numeric` `ByteView { off, len, buf_len }`
   (reference-free Copy, checked Option-returning access, overflow / bounds /
   wrong-buffer-length brand) + the explicit UTF-8-validated raw→`Text` step
   (`std.text` `try_from_raw`/`validate_utf8`, `ByteView::try_text`) +
   `examples/byte_view/*` + gated by `scripts/tests/check_byte_view.sh`. No open
   hole.
-- **Narrow const generics** (`[T; N]`) — Phase 7 #8f. DESIGN DECIDED, BUILD
+- **Narrow const generics** (`[T; N]`) — old Phase 7 #8f. DESIGN DECIDED, BUILD
   DEFERRED (2026-06-21): `docs/language/CONST_GENERICS_V1.md` fixes the V1 boundary
   (`struct Buf<T, const N: u64>`, integer params, literal/const-foldable args,
   per-N monomorphization recording N in name/layout/obligations; type-level
@@ -1112,13 +1112,13 @@ whole picture is in one place.
   a single-use domain constant, none instantiate one container at multiple
   capacities, and the single-fixed-capacity workaround is clean. Workload-driven:
   build only when the doc's forcing conditions appear. No open soundness hole.
-- **Pattern completeness** (ranges/guards/or/nested) — Phase 6 #5.
-- **Explicit-dictionary coherence** — Phase 7 #8c.
-- **Arena/index safety** (stale-index use-after-remove) — Phase 7 #8b.
+- **Pattern completeness** (ranges/guards/or/nested) — old Phase 6 #5.
+- **Explicit-dictionary coherence** — old Phase 7 #8c.
+- **Arena/index safety** (stale-index use-after-remove) — old Phase 7 #8b.
 - **Interpreter structured diagnostics** (prereq for the differential harness)
-  — Phase 4 #18a.
+  — old Phase 4 #18a.
 - **Declaration-span remainders** (extern-fn, module-file-not-found) —
-  Phase 4 #13e.
+  old Phase 4 #13e.
 
 ---
 

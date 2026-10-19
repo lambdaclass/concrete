@@ -177,7 +177,7 @@ Every named compiler boundary should eventually have a contract:
 - verifier or report that checks it
 - examples/regressions that forced the boundary
 
-This is the practical bridge from today's compiler to later Phase 12
+This is the practical bridge from today's compiler to later old Phase 12
 compiler proofs. Before proving a pass correct, Concrete needs each
 pass to say what correctness would mean.
 

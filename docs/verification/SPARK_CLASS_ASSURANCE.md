@@ -214,12 +214,12 @@ Agents should follow these rules when writing or reviewing Concrete code:
 
 ## Roadmap Hooks
 
-- Phase 9: loop invariant/variant authoring UX, proof stubs, and proof repair
+- the proof-authoring area: loop invariant/variant authoring UX, proof stubs, and proof repair
   plans.
-- Phase 12: named SPARK-class contract layer for frame/dependency facts and
+- the provable-subsets area: named SPARK-class contract layer for frame/dependency facts and
   proof classes.
-- Phase 13: runtime-safety obligations discharged by loop/frame facts.
-- Phase 17: certification-style assurance bundle and release claim discipline.
-- Phase 18: package/import evidence summaries and authority/evidence budgets.
-- Phase 19: editor/LSP diagnostics for failed invariants, frame facts,
+- the runtime-safety area: runtime-safety obligations discharged by loop/frame facts.
+- the release-bar area: certification-style assurance bundle and release claim discipline.
+- the packages area: package/import evidence summaries and authority/evidence budgets.
+- the editor area: editor/LSP diagnostics for failed invariants, frame facts,
   dependency facts, and proof obligations.

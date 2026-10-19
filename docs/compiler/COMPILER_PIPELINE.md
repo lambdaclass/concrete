@@ -306,7 +306,7 @@ codegen(function)
 release_bundle(project)
 ```
 
-The Phase 6B/6C implementation may recompute everything while recording and
+The old phases 6B/6C implementation may recompute everything while recording and
 shadow-checking dependencies. Roadmap old Phase 8.5 is the explicit transition to a
 persistent `CompilerSession`, conservative red/green invalidation, a local
 content-addressed store, and cached codegen units after the external-validation
@@ -315,7 +315,7 @@ gate returns GO.
 The intended shape is query-first: each compiler fact has a named key, stable
 inputs, and declared dependencies. This borrows the useful discipline from
 query-based compilers without committing Concrete to a caching framework before
-the pass boundaries and diagnostics are stable. Phase 8.5 starts coarse—file,
+the pass boundaries and diagnostics are stable. The incremental-driver area starts coarse—file,
 module, function/SCC, mono instance, codegen unit, project—and narrows only when
 dependency-completeness gates justify it. A missing reuse opportunity is
 acceptable; a stale semantic hit is not.
@@ -349,11 +349,11 @@ compiler should report a pipeline bug, not silently pick one answer.
 
 An in-process stage token and a producer validation record mean that the
 compiler ran a named verifier. They do not make the compiler independently
-checked. Phase 6B defines versioned producer records so cached artifacts bind
+checked. Old phase 6B defines versioned producer records so cached artifacts bind
 their exact subject, dependencies, invariant-set version, provenance, and replay
-command. Phase 14 adds a separate small checker for the named
-`CoreCertificateV1` predicate; Phase 15 extends it only through the supported
-SSA-to-BackendIR translation relation; Phase 17 binds those receipts into an
+command. The soundness-bridge area adds a separate small checker for the named
+`CoreCertificateV1` predicate; the backend-contracts area extends it only through the supported
+SSA-to-BackendIR translation relation; the release-bar area binds those receipts into an
 offline-verifiable release evidence root.
 
 Keep proof evidence, pipeline validation, independent-certificate status, and
@@ -512,7 +512,7 @@ deliberately instead of letting tool code scrape internals.
 
 ## Why This Phase Comes Before Usability
 
-Phase 10 broadens everyday language use. That work will add modules, tests,
+Old Phase 10 broadened everyday language use. That work will add modules, tests,
 diagnostics, bytes/text/path, collections, formatting, and more examples. If
 the compiler pipeline is still ad hoc when that lands, every feature will add
 another special case.

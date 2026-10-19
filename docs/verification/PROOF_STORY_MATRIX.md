@@ -37,7 +37,7 @@ models; it must replace rather than duplicate these rows.
 
 | Construct / surface | Current story | Evidence today | Named gap / next strengthening |
 |---|---|---|---|
-| Integer and boolean literals | proved | R-01/R-02 soundness rules; PExpr eval theorems | deeper compiler-wide preservation remains Phase 8 work |
+| Integer and boolean literals | proved | R-01/R-02 soundness rules; PExpr eval theorems | deeper compiler-wide preservation remains old Phase 8 work |
 | Variables | proved | R-03 soundness rule | none for current ProofCore surface |
 | Arithmetic and comparisons | proved for admitted `PBinOp` cases | R-04/R-05; proof-status and flagship specs | richer arithmetic profiles still need `PredictableV1`/runtime obligations |
 | Width-tagged mod / div / bitxor / bitor / bitand / shr / shl / addw | proved at extraction shape; trusted for backend equivalence | R-16/R-17/R-21..R-26/R-28 register entries; BitVec eval rules | BitVec-vs-LLVM semantic agreement; more widths/ops by forcing example |
@@ -62,19 +62,19 @@ models; it must replace rather than duplicate these rows.
 | Capabilities in signatures | enforced | caller must declare superset of callee capabilities | effectful proof judgments are open |
 | Allocation | reported/enforced by policy, not proved | `--report alloc`, policies, assumptions | `PredictableV1` allocation budget and obligations |
 | Stack depth | reported | `--report stack-depth` | source-vs-target stack contract and hard gates |
-| Runtime failures: OOB/div-zero/overflow/cast | open/reported | scattered diagnostics and proof-model `none` | Phase 3 runtime safety obligations |
-| Source contracts | open | none yet | Phase 4 attributes and obligation generation |
+| Runtime failures: OOB/div-zero/overflow/cast | open/reported | scattered diagnostics and proof-model `none` | old Phase 3 runtime safety obligations |
+| Source contracts | open | none yet | old Phase 4 attributes and obligation generation |
 | Strings/text | open | interpreter coverage exists for literals; ProofCore excludes text APIs | string/text proof model |
 | Heap-owning values | open/assumed by profile | ownership checker enforces linear use; ProofCore excludes heap state | resource semantics and allocation obligations |
 | Raw pointers / `Unsafe` | trusted | visible `Unsafe` capability and trust reports | wrapper-specific assumptions; no general proof story |
 | FFI bodies | trusted/assumed | extern/trusted boundary reports, assumption files | ABI/layout and wrapper contracts |
 | `trusted fn` / trusted impl | trusted/assumed | `--report unsafe`, assumptions, policy gates | smaller wrappers and stronger audit evidence |
-| Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | Phase 14/15 compiler/backend soundness work |
+| Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | old Phase 14/15 compiler/backend soundness work |
 | Machine-level constant time | assumed | constant_time_tag assumption files and manifest limits | source-level constant-time profile, backend timing assumptions |
 | Modules *(manual stopgap)* | enforced at resolve/check boundaries | module-visibility, project-model, and submodule-check gates | stable cross-phase identity remains part of R-0008/R-0438 |
 | Imports and aliases *(manual stopgap)* | enforced for shipped forms; one rejected-valid gap open | import/module gates and bug corpus | sibling renamed import bug 055 is owned by R-0008 |
-| Concurrency / async / threads / channels | open | research notes only | Phase 13 design, simulation, and evidence model |
-| Packages/dependencies | open | single-repo evidence today | Phase 11 dependency evidence |
+| Concurrency / async / threads / channels | open | research notes only | old Phase 13 design, simulation, and evidence model |
+| Packages/dependencies | open | single-repo evidence today | old Phase 11 dependency evidence |
 
 ## How To Use The Matrix
 

@@ -23,7 +23,7 @@ Out of scope (deliberately, named for the reader):
 - references / borrows / aliasing.  `&mut` and `&` do not appear in
   PExpr.  Concrete's eligibility profile excludes references from
   proof-eligible code today; this is unchanged.
-- concurrent mutation across tasks.  Phase 3's concurrency track
+- concurrent mutation across tasks.  Old Phase 3's concurrency track
   owns this; ProofCore does not.
 - persistent state across function calls.  Each `eval` starts in a
   fresh env; calls do not mutate caller state.
@@ -41,7 +41,7 @@ in-place edits.  No heap.  This is the only encoding that keeps
 Concrete's source-level mutation (`x = e`, `arr[i] = e`,
 `obj.f = e`) extracts to functional-update PExpr shapes.  The
 semantic gap (source has true mutation; PExpr has functional
-updates) is bridged by the Phase 10 preservation obligations
+updates) is bridged by the old Phase 10 preservation obligations
 named per-section below.
 
 ## 1. Environment updates
@@ -65,7 +65,7 @@ inside a loop rebinds an already-bound `name` (does NOT introduce
 a new scope); after the loop, the binding established by the last
 iteration's last assign is what `cont` sees.
 
-### Phase 10 obligation
+### Old Phase 10 obligation
 
 `assignment_preservation`: for every source-level `x = e` in a
 proof-eligible function body, the source's mutation of `x` after
@@ -98,7 +98,7 @@ unchanged.  Source-level `arr[i] = v` (which mutates `arr`) extracts
 to `assign "arr" (arraySet (var "arr") idx_expr val_expr)` — i.e.,
 rebind `arr` to the updated array.
 
-### Phase 12 obligation
+### Old Phase 12 obligation
 
 `array_set_preservation`: for every source-level `arr[i] = v` in a
 proof-eligible function body, the source's mutation produces an
@@ -126,7 +126,7 @@ Evaluation:
 Source-level `obj.f = e` extracts to `assign "obj" (structSet
 (var "obj") "f" e_expr)`.
 
-### Phase 12 obligation
+### Old Phase 12 obligation
 
 `struct_set_preservation`: analogous to array_set.
 
@@ -163,7 +163,7 @@ The extractor can keep emitting flat-assign form for simple loops
 and step-function form for richer bodies; the eval rule unifies both
 by reading the resulting struct's fields back into the env.
 
-### Phase 12 obligation
+### Old Phase 12 obligation
 
 `while_step_preservation`: for every source-level `while cond { body
 }` in a proof-eligible function body, where `body` reads only the
@@ -194,7 +194,7 @@ The alternative (introducing a typed failure value) is a bigger
 refactor that would touch every existing theorem.  Defer until a
 candidate actually forces it.
 
-### Phase 12 obligation
+### Old Phase 12 obligation
 
 `failure_preservation`: source-level out-of-bounds is undefined
 behavior (panics in debug builds; UB in release).  PExpr's `none`
@@ -208,12 +208,12 @@ semantics.
 ## 6. What the state model does NOT decide
 
 - Width / signedness of arithmetic.  That's the multi-width PBinOp
-  item (see the Phase 10 compiler soundness bridge), independent of this doc.
+  item (see the old Phase 10 compiler soundness bridge), independent of this doc.
 - Whether `PVal` becomes typed.  PVal stays dynamically shaped; type
   discipline is enforced by Check on the source side and by the
-  Phase 10 preservation obligations above on the proof side.
+  old Phase 10 preservation obligations above on the proof side.
 - Reference semantics.  References are not in PExpr.
-- Atomics / concurrency.  Phase 3 owns concurrency.
+- Atomics / concurrency.  Old Phase 3 owns concurrency.
 
 ## 7. Applied: ring_push and ring_contains
 
@@ -299,7 +299,7 @@ with the convention that `step` evaluates to either:
 
 Reusing existing `PVal.enum_` keeps PExpr minimal.
 
-### Phase 12 obligation
+### Old Phase 12 obligation
 
 `while_step_preservation` per § 4, plus a new
 `while_step_early_break`: when the source loop returns from inside
@@ -320,7 +320,7 @@ the same returned value.
 
 ## 9. Summary contract
 
-| Source shape | PExpr shape | New eval helper | Phase 12 obligation |
+| Source shape | PExpr shape | New eval helper | old Phase 12 obligation |
 |---|---|---|---|
 | `x = e` (rebind) | `assign "x" e` (inside `while_`) | `evalAssigns` (exists) | `assignment_preservation` |
 | `let x = e` | `letIn "x" e body` (exists) | n/a | n/a (already pure) |
@@ -343,9 +343,9 @@ Before any of this lands as code:
 - [ ] Names and signatures (`PExpr.arraySet`, `PExpr.structSet`, `PExpr.while_step`) — final?
 
 Once the boxes are checked, the implementation order is:
-1. `arraySet` + Phase 12 stub for `array_set_preservation` → unblocks `ring_push`
-2. `structSet` + Phase 12 stub
-3. `while_step` + `LoopStep` enum convention + Phase 12 stubs → unblocks `ring_contains`
+1. `arraySet` + old Phase 12 stub for `array_set_preservation` → unblocks `ring_push`
+2. `structSet` + old Phase 12 stub
+3. `while_step` + `LoopStep` enum convention + old Phase 12 stubs → unblocks `ring_contains`
 
 Each step is small, additive, and self-contained.  No existing
 extraction rule changes.  Existing theorems unaffected.

@@ -195,10 +195,10 @@ items, tracked in the ROADMAP, not silently assumed here:
   (ROADMAP old Phase 12, R-01…R-28). Until complete, "the extracted body" is
   trusted to represent the Core IR.
 - **PExpr evaluator** — `partial def eval`; its agreement with the
-  interpreter and compiled code is tested, not proved (Phase 12).
+  interpreter and compiled code is tested, not proved (old Phase 12).
 - **BitVec ↔ LLVM semantics** — Lean's `BitVec` ops stand in for LLVM
-  instruction semantics with no correspondence proof (Phase 12).
+  instruction semantics with no correspondence proof (old Phase 12).
 - **Unbounded-`Int` proof model vs fixed-width runtime** — see
   `PROOF_CONTRACT.md`; proofs hold within representable ranges.
 - **The Lean toolchain itself** — pinned in `lean-toolchain`; version drift
-  is a Phase 10 #15 recheck trigger.
+  is an old Phase 10 #15 recheck trigger.

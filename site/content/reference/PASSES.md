@@ -573,15 +573,15 @@ Source Text
 
 This diagram is the current eager implementation, not the final operational
 driver. Roadmap old Phase 6C first records the same stage/fact dependencies in
-cache-free shadow manifests. Conditional Phase 8.5 then makes file/module/
+cache-free shadow manifests. The conditional incremental-driver area then makes file/module/
 function-SCC/mono/codegen-unit/project artifacts demand-driven through one
 `CompilerSession`, with a local content-addressed store and clean/incremental
 equivalence. It must schedule these same pass functions rather than introduce a
 second semantic pipeline.
 
 The current `ValidatedCore`/SSA boundaries are compiler-owned stage tokens.
-Phase 6B #14a adds structured producer validation records; Phase 14 independently
-checks `CoreCertificateV1`; Phase 15 independently checks only the supported
+Old phase 6B #14a adds structured producer validation records; the soundness-bridge area independently
+checks `CoreCertificateV1`; the backend-contracts area independently checks only the supported
 SSA-to-BackendIR translation relation. A cache hit or producer record does not
 itself strengthen evidence.
 
@@ -614,7 +614,7 @@ The following report mode is explicitly deferred — named here so its scope is 
 
 These are audit-oriented modes — they answer questions about what the program does, not what it should do. No mode should become a second semantic authority; all should consume validated artifacts from the existing pipeline.
 
-**Note:** `FileSummary` and `ResolvedImports` currently carry full impl/trait-impl blocks with method bodies (not just signatures). Check and Elab need these to type-check and elaborate imported method implementations. Splitting interface-only and body portions is scheduled in Phase 8.5 so dependency-private body edits do not invalidate importers; it is not a current implemented boundary.
+**Note:** `FileSummary` and `ResolvedImports` currently carry full impl/trait-impl blocks with method bodies (not just signatures). Check and Elab need these to type-check and elaborate imported method implementations. Splitting interface-only and body portions is scheduled in the incremental-driver area so dependency-private body edits do not invalidate importers; it is not a current implemented boundary.
 
 ---
 
