@@ -134,7 +134,7 @@ mod path {
     }
 
     pub trusted fn path_join(base: &Path, segment: &String) with(Alloc) -> PathBuf {
-        let result: PathBuf = PathBuf {
+        let mut result: PathBuf = PathBuf {
             ptr: grow::<u8>(0 as *mut u8, base.len + segment.len() + 1),
             len: 0,
             cap: base.len + segment.len() + 1,

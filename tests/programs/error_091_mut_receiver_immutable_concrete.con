@@ -1,0 +1,14 @@
+// Bug 091 round 3: an inherent `&mut self` method on an immutable binding is an
+// implicit `&mut p` of it — E0233, as the explicit borrow is.
+mod m {
+    struct P { a: i64, b: i64 }
+    impl P {
+        fn bump(&mut self) { self.b = self.b + 1; }
+    }
+    fn main() -> Int {
+        let p: P = P { a: 1, b: 2 };
+        p.bump();
+        let P { a, b } = p;
+        return a + b;
+    }
+}

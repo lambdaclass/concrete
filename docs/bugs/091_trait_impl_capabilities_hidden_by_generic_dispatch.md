@@ -205,3 +205,21 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   both impl receivers, generic and concrete, compiled and --interp). The bug-052 fixtures whose
   `kill(x: &T)` is drop glue of an already-consumed owner mark it `trusted`;
   `interp_destroy_table.con` and `error_091_nested_destroy_caps.con` pass ownership instead.
+* **`&mut self` through a shared reference built `&mut &T` (P1).** Round 2's receiver shaping
+  fell through to `borrowMut cObj` for a `&T` receiver, so `fn f<T: Bump>(x: &T) { x.bump(); }`
+  passed `P_bump` an alloca holding one pointer, and the impl's write to the second field hit
+  offset 8 of that slot (out of bounds); --interp failed with `undefined function 'T$bump'`.
+  The concrete path had the same shape (`x.bump()` on `x: &P` aborted), and neither path
+  checked the implicit borrow at all: `let p = ..; p.bump();` mutated an immutable binding.
+  Check now applies the explicit-borrow rules to every implicit receiver borrow
+  (`checkImplicitReceiverBorrow`, concrete and trait-bound alike): `&mut self` through a
+  shared reference — the receiver, `self` in a `&self` method, or the binding a projection is
+  rooted at — is the new E0237; on an immutable binding E0233; while the binding is borrowed
+  E0232; a `&self` receiver under a live `&mut` E0231. Elab refuses to build `&mut &T` as
+  containment (same code). Fourteen std bindings that were mutated through `&mut self`
+  methods without `mut` (fmt, hex, io, path, string) are now declared `let mut`. The
+  interpreter forwards a reference-typed projection base's path (`w.p` with `w: &mut W`), so
+  every legal receiver form agrees with the binary. Fixtures: `error_091_mut_receiver_*`
+  (through_ref, through_ref_concrete, through_ref_projection, in_ref_self: E0237; immutable,
+  immutable_concrete: E0233; borrowed: E0232) and `trait_mut_receiver_forms.con` (8, compiled
+  and --interp; `trait_generic_receiver_forms.con` now also agrees under --interp).

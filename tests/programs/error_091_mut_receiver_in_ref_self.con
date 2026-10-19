@@ -1,0 +1,15 @@
+// Bug 091 round 3: inside a `&self` method, `self` is a shared reference, so
+// calling a `&mut self` method on it mutates through `&Self`. Refused: E0237.
+mod m {
+    struct P { a: i64, b: i64 }
+    impl P {
+        fn bump(&mut self) { self.b = self.b + 1; }
+        fn sneaky(&self) { self.bump(); }
+    }
+    fn main() -> Int {
+        let p: P = P { a: 1, b: 2 };
+        p.sneaky();
+        let P { a, b } = p;
+        return a + b;
+    }
+}

@@ -61,7 +61,7 @@ mod hex {
     /// Decode a hex string. Odd length or a non-hex character is a DOMAIN
     /// failure -> None (was: ambiguous empty Vec — audit 2026-07-14).
     pub fn decode(s: &String) with(Alloc) -> Option<Vec<u8>> {
-        let result: Vec<u8> = Vec::<u8>::new();
+        let mut result: Vec<u8> = Vec::<u8>::new();
         if s.len() % 2 != 0 {
             result.drop();
             return Option::<Vec<u8>>::None;

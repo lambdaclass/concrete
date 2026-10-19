@@ -470,6 +470,24 @@ private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
 
 mutual
 
+/-- The path a field/index projection extends. A base that is itself a REFERENCE
+    (`w.p` with `w: &mut W` — field access auto-derefs one layer) names the place the
+    reference points at, not the binding holding the reference: the borrow forwards the
+    reference's path, as `&(*r)` does. Extending the binding's own path walked a step into a
+    `.ref` value ("ref step .field on non-struct"), so an implicit `&mut self` receiver
+    `w.p.bump()` failed under --interp while the compiled binary ran (bug 091 round 3). -/
+partial def evalProjectionBase (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (obj : CExpr)
+    (isMut : Bool) : Except String (Env × RefPath) := do
+  match obj.ty with
+  | .ref _ | .refMut _ =>
+    let (env, v) ← evalExprVal fns enums env obj
+    match v with
+    | .ref p => return (env, { p with isMut := p.isMut || isMut })
+    -- The heapless model may bind a `&T`-typed name to the value itself (a destructor's
+    -- `self` when the destroyed owner was passed by value): its own path is the place.
+    | _ => evalBorrowTarget fns enums env obj isMut
+  | _ => evalBorrowTarget fns enums env obj isMut
+
 /-- Resolve a CExpr to a reference path.
     Acceptable shapes: idents, field accesses, array indices, and
     derefs of a ref (for `&*r` collapse). The borrow target's index
@@ -481,10 +499,10 @@ partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : 
   | .ident name _ =>
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .fieldAccess obj fld _ => do
-    let (env, p) ← evalBorrowTarget fns enums env obj isMut
+    let (env, p) ← evalProjectionBase fns enums env obj isMut
     return (env, { p with steps := p.steps ++ [.field fld] })
   | .arrayIndex arr idx _ => do
-    let (env, p) ← evalBorrowTarget fns enums env arr isMut
+    let (env, p) ← evalProjectionBase fns enums env arr isMut
     let (env, iv) ← evalExprVal fns enums env idx
     match iv with
     | .int i _ =>

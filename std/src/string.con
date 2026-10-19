@@ -192,7 +192,7 @@ mod string {
 
         /// Return a new string with all ASCII uppercase letters converted to lowercase.
         pub fn to_lower(&self) with(Alloc) -> String {
-            let out: String = String::new();
+            let mut out: String = String::new();
             let mut i: u64 = 0;
             while i < self.len {
                 let c: u8 = (self.get_unchecked(i)) as u8;
@@ -208,7 +208,7 @@ mod string {
 
         /// Return a new string with all ASCII lowercase letters converted to uppercase.
         pub fn to_upper(&self) with(Alloc) -> String {
-            let out: String = String::new();
+            let mut out: String = String::new();
             let mut i: u64 = 0;
             while i < self.len {
                 let c: u8 = (self.get_unchecked(i)) as u8;

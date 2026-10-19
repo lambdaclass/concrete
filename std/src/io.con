@@ -52,7 +52,7 @@ mod io {
         }
 
         pub trusted fn read_byte(&self) with(File) -> i32 {
-            let buf: u8 = 0;
+            let mut buf: u8 = 0;
             let n: u64 = fread(&buf as *mut u8, 1, 1, self.ptr);
             if n == 0 {
                 return -1;
@@ -358,7 +358,7 @@ mod io {
     }
 
     pub trusted fn read_line() with(Console, Alloc) -> String {
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         while true {
             let ch: u8 = 0;
             let n: i64 = libc_read(0, &ch as *mut u8, 1);

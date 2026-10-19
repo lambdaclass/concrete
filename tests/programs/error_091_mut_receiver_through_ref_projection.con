@@ -1,0 +1,18 @@
+// Bug 091 round 3: a `&mut self` call on a PROJECTION of a shared reference
+// (`w.p.bump()` with `w: &W`) mutates through `&W`. Refused: E0237.
+mod m {
+    trait Bump { fn bump(&mut self); }
+    struct P { a: i64, b: i64 }
+    impl Bump for P {
+        fn bump(&mut self) { self.b = self.b + 1; }
+    }
+    struct W { p: P }
+    fn f(w: &W) { w.p.bump(); }
+    fn main() -> Int {
+        let w: W = W { p: P { a: 1, b: 2 } };
+        f(&w);
+        let W { p } = w;
+        let P { a, b } = p;
+        return a + b;
+    }
+}

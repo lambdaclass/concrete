@@ -131,6 +131,8 @@ inductive ElabError where
   | notPublicInModule (symbol : String) (moduleName : String)
   -- Bug 082 review: the Core spelling an import is emitted under is also an unrelated definition
   | importSpellingCollision (localName : String) (spelling : String) (target : String) (other : String)
+  -- Bug 091 round 3 containment (Check's E0237 decides it first): never build `&mut &T`.
+  | mutReceiverThroughSharedRef (method : String)
 
 def ElabError.message : ElabError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
@@ -153,6 +155,8 @@ def ElabError.message : ElabError → String
   | .inSubmodule subName innerError => s!"in submodule '{subName}': {innerError}"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .mutReceiverThroughSharedRef method =>
+    s!"cannot call `&mut self` method '{method}' through a shared reference"
   | .importSpellingCollision localName spelling target other =>
     s!"import binds '{localName}' to '{target}', whose program-level spelling '{spelling}' is also the name of '{other}'"
 
@@ -186,6 +190,7 @@ def ElabError.code : ElabError → String
   | .unknownModule _ => "E0418"
   | .notPublicInModule _ _ => "E0419"
   | .importSpellingCollision _ _ _ _ => "E0299"
+  | .mutReceiverThroughSharedRef _ => "E0237"
 
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
@@ -1207,6 +1212,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           -- receiver is by its method's (Codex round 2 of bug 091): an owned `x: T` calling
           -- a `&self` / `&mut self` method is borrowed, never passed by value — the impl
           -- body then mutated a copy and the caller's value never changed.
+          if sig.selfKind == some .refMut then
+            if let .ref _ := objTy then
+              throwElab (.mutReceiverThroughSharedRef methodName) (some e.getSpan)
           let selfArg := match sig.selfKind, objTy with
             | some .ref, .ref _ | some .ref, .refMut _ | some .refMut, .refMut _ => cObj
             | some .ref, _ => CExpr.borrow cObj (.ref objTy)
@@ -1275,6 +1283,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             | .refMut _, _ => some true       -- borrowMut
             | _, _ => none                    -- by-value self, pass as-is
           | none => none
+        if selfShape == some true then
+          if let .ref _ := objTy then
+            throwElab (.mutReceiverThroughSharedRef methodName) (some e.getSpan)
         let selfArg := match selfShape with
           | some false => CExpr.borrow cObj (.ref objTy)
           | some true  => CExpr.borrowMut cObj (.refMut objTy)

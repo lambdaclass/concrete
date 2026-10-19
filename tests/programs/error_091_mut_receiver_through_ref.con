@@ -1,0 +1,19 @@
+// Bug 091 round 3 (Codex): a `&mut self` trait method called through a SHARED
+// reference `x: &T` was elaborated as `&mut x` — a `&mut &P` — so the verified
+// SSA handed P_bump an alloca holding one pointer and P_bump wrote offset 8 of it
+// (out of bounds); --interp failed with "undefined function 'T$bump'". Mutation
+// through `&T` is refused before elaboration: E0237.
+mod m {
+    trait Bump { fn bump(&mut self); }
+    struct P { a: i64, b: i64 }
+    impl Bump for P {
+        fn bump(&mut self) { self.b = self.b + 1; }
+    }
+    fn f<T: Bump>(x: &T) { x.bump(); }
+    fn main() -> Int {
+        let p: P = P { a: 1, b: 2 };
+        f::<P>(&p);
+        let P { a, b } = p;
+        return a + b;
+    }
+}

@@ -1440,6 +1440,31 @@ run_err "$TESTDIR/error_091_nested_destroy_caps.con"        "(E0584)"
 run_err "$TESTDIR/error_091_generic_receiver_moved.con"     "(E0205)"
 run_err "$TESTDIR/error_091_receiver_through_ref.con"       "(E0290)"
 run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
+# Round 3 (Codex): an implicit receiver borrow obeys the explicit borrow's rules. `&mut self`
+# through a shared reference (the receiver, `self` in a `&self` method, or the binding a
+# projection is rooted at) is E0237 — for `x: &T` Elab built a `&mut &T` and the callee wrote
+# out of bounds; on an immutable binding E0233; while the binding is borrowed E0232. Every
+# legal `&mut self` receiver form still runs (8), and --interp agrees (it failed on `T$bump`
+# and on a projection through `&mut W`).
+run_err "$TESTDIR/error_091_mut_receiver_through_ref.con"            "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_through_ref_concrete.con"   "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_through_ref_projection.con" "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_in_ref_self.con"            "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_immutable.con"              "(E0233)"
+run_err "$TESTDIR/error_091_mut_receiver_immutable_concrete.con"     "(E0233)"
+run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
+run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0
+for r091m in "trait_mut_receiver_forms:8" "trait_generic_receiver_forms:4030412"; do
+    r091m_f="${r091m%%:*}"; r091m_want="${r091m#*:}"
+    r091m_got=$($COMPILER "$TESTDIR/$r091m_f.con" --interp 2>&1 | awk "NR<=1" || true)
+    if [ "$r091m_got" = "$r091m_want" ]; then
+        echo "  ok  bug 091: $r091m_f — interp == binary ($r091m_want)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 091: $r091m_f — interp gave '$r091m_got', want $r091m_want"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 091 self-review: an impl spelling its own type `Self` in a parameter or return
 # conforms to the trait (was a false E0587 / E0582).
 run_ok  "$TESTDIR/trait_impl_self_spelling.con" 42

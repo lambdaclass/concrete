@@ -105,7 +105,7 @@ mod fmt {
             return s;
         }
 
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         let negative: bool = value < 0;
         let mut n: i64 = value;
         if negative {
@@ -145,7 +145,7 @@ mod fmt {
             return s;
         }
 
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         let mut n: u64 = value;
 
         while n > 0 {
@@ -218,7 +218,7 @@ mod fmt {
             return s;
         }
 
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         let mut n: u64 = value;
 
         while n > 0 {
@@ -253,7 +253,7 @@ mod fmt {
             return s;
         }
 
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         let mut n: u64 = value;
 
         while n > 0 {
@@ -288,7 +288,7 @@ mod fmt {
             return s;
         }
 
-        let buf: String = String::new();
+        let mut buf: String = String::new();
         let mut n: u64 = value;
 
         while n > 0 {
@@ -329,7 +329,7 @@ mod fmt {
     pub fn pad_left(s: &String, width: u64, fill: char) with(Alloc) -> String {
         if s.len() >= width {
             // Copy the string as-is
-            let result: String = String::new();
+            let mut result: String = String::new();
             let mut i: u64 = 0;
             while i < s.len() {
                 result.push_char(s.get_unchecked(i));
@@ -338,7 +338,7 @@ mod fmt {
             return result;
         }
 
-        let result: String = String::new();
+        let mut result: String = String::new();
         let pad: u64 = width - s.len();
 
         let mut i: u64 = 0;
@@ -357,7 +357,7 @@ mod fmt {
     }
 
     pub fn pad_right(s: &String, width: u64, fill: char) with(Alloc) -> String {
-        let result: String = String::new();
+        let mut result: String = String::new();
 
         let mut i: u64 = 0;
         while i < s.len() {

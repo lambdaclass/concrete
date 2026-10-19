@@ -1,0 +1,38 @@
+// Bug 091 round 3: every LEGAL receiver of a `&mut self` method, through a trait
+// bound and concretely, with types from a nested module: an owned `let mut`
+// binding (implicitly borrowed), a `&mut T` parameter (passed as-is), and a field
+// of a `&mut W` (a projection through an exclusive reference). b goes 2 -> 7.
+// Expected (compiled AND --interp): 8, exit 0.
+mod m {
+    mod inner {
+        pub struct P { pub a: i64, pub b: i64 }
+        impl P {
+            pub fn inc(&mut self) { self.b = self.b + 1; }
+        }
+    }
+    import inner.{P};
+    trait Bump { fn bump(&mut self); }
+    impl Bump for P {
+        fn bump(&mut self) { self.b = self.b + 1; }
+    }
+    struct W { p: P }
+    fn own<T: Bump>(x: T) -> T {
+        let mut y: T = x;
+        y.bump();
+        return y;
+    }
+    fn via<T: Bump>(r: &mut T) { r.bump(); }
+    fn field(w: &mut W) { w.p.bump(); w.p.inc(); }
+    fn main() with(Std) -> Int {
+        let mut p: P = own::<P>(P { a: 1, b: 2 });
+        via::<P>(&mut p);
+        p.inc();
+        let mut w: W = W { p: p };
+        field(&mut w);
+        let W { p } = w;
+        let P { a, b } = p;
+        print_int(a + b);
+        print_char(10);
+        return 0;
+    }
+}

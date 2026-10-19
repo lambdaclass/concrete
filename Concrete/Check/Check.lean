@@ -115,6 +115,72 @@ def consumeReceiver (selfKind : Option SelfKind) (obj : Expr) (objTy innerTy : T
       | _ => pure ()
   | _ => pure ()
 
+/-- The binding a receiver place is rooted at, looking through field / index projections and
+    parentheses; `deref` marks a root reached through `*r`. `none`: a temporary (call result,
+    cast), which no binding owns. -/
+partial def receiverRoot : Expr → Option (String × Bool)
+  | .ident _ n => some (n, false)
+  | .fieldAccess _ obj _ => receiverRoot obj
+  | .arrayIndex _ arr _ => receiverRoot arr
+  | .paren _ inner => receiverRoot inner
+  | .deref _ (.ident _ n) => some (n, true)
+  | _ => none
+
+/-- Bug 091 round 3: a method call's IMPLICIT receiver borrow obeys the rules of the explicit
+    `&place` / `&mut place` it stands for (one rule for concrete and trait-bound receivers):
+      * `&mut self` through a shared reference — the receiver itself (`x: &T`, `self` in a
+        `&self` method) or the binding a projection is rooted at (`w.p` with `w: &W`) — is
+        E0237. For `x: &T` Elab built a `&mut &T`, so the callee read and wrote the pointer's
+        slot as if it held the value (out of bounds);
+      * `&mut self` on an owned place needs a `mut` binding (E0233) with no live borrow of it
+        (E0232), exactly as `&mut x` does;
+      * `&self` on an owned place cannot overlap a live `&mut` of it (E0231), as `&x` cannot.
+    A receiver that already is `&mut T` is passed as-is; a temporary has no binding to check. -/
+def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty)
+    (methodName : String) (span : Option Span) : CheckM Unit := do
+  match selfKind with
+  | some .refMut =>
+    match objTy with
+    | .refMut _ => pure ()
+    | .ref _ =>
+      throwCheck (.mutReceiverThroughSharedRef methodName "the receiver is a `&` reference") span
+    | _ =>
+      match receiverRoot obj with
+      | none => pure ()
+      | some (root, viaDeref) =>
+        match ← lookupVarInfo root with
+        | none => pure ()
+        | some info =>
+          match info.ty with
+          | .ref _ =>
+            throwCheck (.mutReceiverThroughSharedRef methodName s!"'{root}' is a `&` reference") span
+          | .refMut _ | .ptrMut _ | .ptrConst _ => pure ()
+          | _ =>
+            if !viaDeref then
+              let env ← getEnv
+              let activeRefs := activeBorrowRefs env root
+              if info.borrowCount > 0 || !activeRefs.isEmpty then
+                throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+              if !info.mutable then
+                throwCheck (.cannotMutBorrowImmutable root) span
+  | some .ref =>
+    match objTy with
+    | .ref _ | .refMut _ => pure ()
+    | _ =>
+      match receiverRoot obj with
+      | some (root, false) =>
+        match ← lookupVarInfo root with
+        | some info =>
+          match info.ty with
+          | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => pure ()
+          | _ =>
+            let activeRefs := activeBorrowRefs (← getEnv) root
+            if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
+              throwCheck (.cannotBorrowMutablyBorrowed root) span
+        | none => pure ()
+      | _ => pure ()
+  | _ => pure ()
+
 /-- Bug 091 round 3: `Destroy::destroy` is the PUBLIC destruction entry point, and its
     ownership contract is CONSUMING whichever receiver an impl declares (`&self` or `self`):
     calling it ends the receiver's life exactly as `destroy(x)` does. Admitting a borrowed
@@ -1433,6 +1499,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
           checkCallBorrowConflicts (receiverBorrowParts sig.selfKind obj ++ (← borrowArgParts args)) (some e.getSpan)
+          checkImplicitReceiverBorrow sig.selfKind obj objTy methodName (some e.getSpan)
           for (arg, p) in args.zip params do
             let argTy ← checkExpr arg (some p.ty) .callArg
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
@@ -1455,6 +1522,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- (container-not-in-context, #18 §5.1).
       checkCallBorrowConflicts (receiverBorrowParts (selfKindOfParams sig.params) obj
         ++ (← borrowArgParts args)) (some e.getSpan)
+      checkImplicitReceiverBorrow (selfKindOfParams sig.params) obj objTy methodName (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
       let objTypeArgs := match innerTy with
         | .generic _ args _ => args

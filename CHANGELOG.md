@@ -346,7 +346,9 @@ Both now declare `with(Alloc)`, and so does `OrderedSet::remove`. See
 Round 3: `Destroy::destroy` consumes its receiver whichever form the impl declares. A borrowed
 `x.destroy()` (generic or concrete) had run an owner's destructor while the owner stayed live,
 so it was destroyed twice; it is now E0290 outside trusted drop glue, and an owned
-`t.destroy()` moves `t`.
+`t.destroy()` moves `t`. A `&mut self` method called through a shared reference is E0237 (Elab had
+built a `&mut &T` and the callee wrote out of bounds), and an implicit receiver borrow obeys
+the explicit borrow's mutability (E0233) and aliasing (E0232/E0231) rules.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 
