@@ -32,9 +32,9 @@ the next transition; completed milestones move to the changelog rather than accu
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair |
-| 2 | **Immediate protections and semantic decisions (R-0491, R-0494, R-0498, R-0500, R-0513)** | repair known authority and safety defects; one `Verdict` authority renders every evidence surface; permanent reproducer controls for 080 – 101 and trustworthy gate execution (checked inventories instead of incidental count pins, minimum completed comparisons, a fast push tier separate from full qualification); the axiom-policy gate on today's evidence; one `IntArith` for the existing pipeline; the rules the next slice needs — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals, and the other disputed rules (statement vs value position, sequential assignment within a loop iteration, literal range, cast semantics per width, evaluation order, short-circuiting) — written down and enforced with versioned migration diagnostics. Broader prevention coverage continues throughout and does not block isolated proof development |
+| 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | repair known authority and safety defects; one `Verdict` authority renders every evidence surface; permanent reproducer controls for 080 – 101 and trustworthy gate execution (checked inventories instead of incidental count pins, minimum completed comparisons, a fast push tier separate from full qualification); the axiom-policy gate on today's evidence; one `IntArith` for the existing pipeline; the rules the next slice needs — strictly second-class references, no block `let` shadowing, explicit match binders, typed literals, and the other disputed rules (statement vs value position, sequential assignment within a loop iteration, literal range, cast semantics per width, evaluation order, short-circuiting) — written down and enforced with versioned migration diagnostics. Broader prevention coverage continues throughout and does not block isolated proof development |
 | 3 | **First cumulative verified releases (R-0511)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 with final-image correspondence) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
-| 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3 once row 2 lands, the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits `CheckedCore`, and is the only input the existing lowering and the `verified` profile accept; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V3 – V5); this row makes it authoritative for every user now |
+| 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3 once row 2 lands, the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits `CheckedCore`, and is the only input the existing lowering and the `verified` profile accept; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
 | 5 | **Bounded interop and usability track (R-0285, with R-0283/R-0286/R-0287)** | after the immediate protections, deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
@@ -15813,7 +15813,13 @@ diagnostic-path bypass.
 
 **Objective:** Typed operations — stage S6 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned.**
+**Status (2026-10-18): planned; the immediate checkpoint is queue row 2.**
+
+**Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
+evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
+specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width
+and operation family, including casts and defined traps. This checkpoint does not wait for S5; the
+typed-operation migration below does.
 
 Depends on S5. Integer ops typed by `IntTy` with
 checked/wrapping/saturating as distinct op kinds and signedness on the op; pointer arithmetic its
@@ -15850,16 +15856,17 @@ and clause.
 Depends on S2, S7, S8. Typed `ClaimSpec`; statements generated against
 Core's semantics on the exact checked term; ProofKit's symbolic-evaluation simp set; existing
 `PExpr` theorems ported (through an explicitly proved bridge where cheaper), keeping weaker coverage
-where that is what was proved; `Proof.eval` and extraction deleted; Core-proved vs
-binary-transported status.
+where that is what was proved; Core-proved and binary-transported status remain distinct. Legacy
+issuance and replay retirement follow R-0512's inventory, compatibility and deprecation conditions.
 
 R-0495 checks coverage relation and domain against the exact generated proposition; author
 annotations confer no authority. Loop claims bind the exact checked Core loop and its
 initialization, preservation and exit obligations; missing binding remains `spec_unbound`.
-**Exit:** every positive claim replays against its generated statement; negative fixtures refuse;
-`PExpr`, its evaluator and the classification theorem scan are deleted; wrong-coverage,
-narrowed-domain and substituted-loop controls are refused through status, issuance, consumption and
-independent replay.
+**Exit for each migration cohort:** every migrated positive claim replays against its exact generated
+statement; negative fixtures refuse; wrong-coverage, narrowed-domain and substituted-loop controls are
+refused through status, issuance, consumption and independent replay. Unmigrated supported claims
+retain their declared maintenance and replay path. Legacy issuance code is removed only under R-0512's
+final retirement conditions; historical replay remains available.
 
 ### Task R-0496
 
@@ -16040,7 +16047,13 @@ premises.
 
 **Objective:** Stated obligations and totality — stage S12a of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned; starts now.**
+**Status (2026-10-18): planned; the immediate checkpoint is queue row 2.**
+
+**Immediate row-2 checkpoint:** enforce the transitive axiom policy on today's authoritative evidence
+at status, issuance and consumption. Reject `sorryAx` and unregistered axioms; kernel-only evidence
+permits only `propext`, `Classical.choice` and `Quot.sound`; registered native-evaluation and float
+axioms require distinct trust labels. Positive controls and forbidden-transitive-dependency mutations
+qualify this checkpoint independently of S5 and the new pass ledger.
 
 Starts with S5 and grows as each boundary lands
 — including S13 and linking — rather than after the lower pipeline: every pass's `Refines` and
@@ -16103,9 +16116,9 @@ implementations verified against contracts or listed with audit (the list only s
 published trusted-base inventory. R-0353 independently checks retained evidence — decoding,
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
-correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may
-proceed beside queue rows 3 – 7; authoritative use stays queue row 9, after row 8 and R-0004's
-prerequisites. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
+correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile
+consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked
+retained-artifact consumer is required for every publicly authoritative V1 claim. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while
 native-evaluation and float axioms stay separately labelled. R-0413 dogfoods the evidence model onto
@@ -16153,8 +16166,8 @@ native AArch64 through a deliberately simple code generator with proved or valid
 handling, encoding and final-image correspondence; restricted-source correspondence (syntax,
 resolution, elaboration judgments specified independently, then proved or certificate-checked); a
 minimal canonical task identity and an independent retained-artifact consumer for every published slice
-claim. Stages exercised, restricted to the admitted subset: R-0492, R-0493, R-0496, R-0497, R-0499,
-R-0495, R-0501 – R-0503, R-0505, R-0506, R-0508.
+claim. Stages exercised, restricted to the admitted subset: R-0492 – R-0493, R-0495 – R-0497, R-0499,
+R-0501 – R-0510, with minimal task identity and independent replay delivered under the V1 requirements.
 
 **Exit:** for successful compilation of an admitted `CheckedCore` program to an identified image, under
 related initial states, admissible environments and recorded resource premises, a Lean proof of S15's
@@ -16219,24 +16232,29 @@ artifacts; a fast-tier pass is never presented as full qualification.
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
 `verified` profile.
 
-**Status (2026-10-19): planned; queue row 4, after slice V1.** The source-tree checker returns `Unit`
+**Status (2026-10-19): planned; queue row 4, alongside R-0511 after the immediate protections in rows 0 – 2.** Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
 and elaboration rebuilds the program independently, so the program checked is not the program compiled;
 bugs 087 (borrow-block use-after-free), 090 and 092 – 094 lived in that gap, and name-keyed
 environments produced 082, 087, 093, 094 and 096 – 098. The slices prove these rules only as they reach
-them (V3 – V5), years out; this task makes the checker authoritative for the whole language before then.
+them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions), years out; this task makes the checker authoritative for the whole language before then.
 
-Work: R-0492's identities and R-0497's immutable artifacts across the whole front end, including the
-source checker's environments; R-0499's declarative rules implemented once over Core for the whole
-language, run as a shadow beside the source checker with a disagreement gate and a migration manifest
-for intended acceptance changes, then made authoritative; `CheckedCore` the only input to the existing
-lowering and the `verified` profile; capabilities re-checked after Mono (R-0510's checked
-specialization for the whole language).
+Work: deliver R-0492's identities and R-0497's immutable, payload-bound artifacts across the shared
+front end. Implement R-0499's declarative rules once over Core, extending coverage to the whole
+supported language through shadow checking, qualified disagreement gates and an explicit migration
+manifest. Both profiles consume the exact `CheckedCore` payload; specialization consumes that artifact
+and produces payload-bound `CheckedMonoCore`, which is the only input to lowering. R-0510 supplies
+whole-language specialization validation and post-Mono capability checks. V1 uses the same
+implementation restricted by its admission predicate, with a proved trivial specialization instance
+where applicable. R-0514 depends on the Core representation and rule specifications needed for its
+checks, not on whole-language compiler-correctness proofs; S7/S14/S15 proof coverage stays recorded per
+subset.
 
 **Exit:** `check_ir_no_string_identity.sh` covers the shared front end and the source checker; the Core
 checker is authoritative for the whole language and the source checker holds no ownership, borrow,
 reference, capability or `Unsafe` rule; 087's borrow-block case, 090 – 094 and 096 – 098 are rejected or
-compiled correctly through it; R-0499's rule-violation fuzzer rejects every mutant and accepts every
-well-formed program on the whole language.
+compiled correctly through it; R-0499's rule-violation fuzzer rejects every rule-breaking mutant in the
+qualified suite and accepts its well-formed positive controls, with minimum completed counts per rule
+and feature combination.
 
 ### Task R-0286
 
@@ -17270,7 +17288,7 @@ flagships.
 
 ### Task R-0353
 
-**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Prototypes may proceed beside queue rows 3 – 4; authoritative use stays queue row 6.
+**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
 
 **Objective:** Define the canonical release-evidence DAG and offline independent bundle verifier before packaging or benchmarking it.
 
@@ -17278,8 +17296,10 @@ flagships.
 subjects, exact dependency roots and replay receipts. It is a separate product boundary, not an
 extra R-0004 slice: R-0004 makes evidence production honest; R-0353 lets a stranger check the
 result without trusting the Concrete compiler or its report pipeline. Codec, hostile-decoder and
-root-recomputation prototypes may start earlier in shadow, but no verifier result is authoritative
-until R-0004's replay, migration and adversarial boundaries close.
+root-recomputation prototypes may start earlier in shadow. R-0353's complete consumer becomes
+authoritative only after R-0004's replay, migration and adversarial boundaries close. The minimal V1
+consumer has its own explicitly qualified subset and cannot claim authority over unsupported legacy or
+cross-profile evidence.
 
 **Trust promise.** Given hostile bundle bytes, an externally supplied expected root or an accepted
 signing key, and a verification policy, independently decide whether the bundle is internally

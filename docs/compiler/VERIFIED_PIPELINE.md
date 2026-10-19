@@ -349,6 +349,11 @@ checker are shared by both profiles; only lowering differs. So the authoritative
 whole-language alongside the first verified releases — closing the checked-is-not-compiled gap (087,
 090, 092 – 094) for every user — while the slices prove its rules as they reach them.
 
+R-0514 and V1 share one checker implementation and payload-bound artifact chain: `CheckedCore` →
+checked specialization → `CheckedMonoCore` → lowering. Whole-language checker implementation coverage
+does not imply whole-language soundness proofs. V1 proves the admitted fragment of that same checker;
+later slices extend the proof coverage.
+
 **Protections in the meantime (queue row 2).** S1 (prevention harness), S2 (one verdict authority),
 S3 (demonstrated enforcement) and S4 (written language rules) protect users of the existing profile.
 The rules the next slice needs are decided and enforced in the existing compiler first, with versioned
@@ -423,7 +428,13 @@ correctly; targeted mutations show checker consumption/block-local accounting, `
 theorem-table identity checks load-bearing; compile-fail controls cover artifact forgery and
 diagnostic-path bypass.
 
-**S6 Typed operations (R-0493).** Depends on S5. Integer ops typed by `IntTy` with
+**S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
+evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
+specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width
+and operation family, including casts and defined traps. This checkpoint does not wait for S5; the
+typed-operation migration below does.
+
+Depends on S5. Integer ops typed by `IntTy` with
 checked/wrapping/saturating as distinct op kinds and signedness on the op; pointer arithmetic its
 own op; boolean, float and pointer ops distinct; signed literals canonicalized before range
 checking; contextual literal types resolved before construction and re-validated after Mono; typed
@@ -485,15 +496,16 @@ differential tests and a proved substitution/dispatch example.
 **S9 Claims on Core (R-0495).** Depends on S2, S7, S8. Typed `ClaimSpec`; statements generated against
 Core's semantics on the exact checked term; ProofKit's symbolic-evaluation simp set; existing
 `PExpr` theorems ported (through an explicitly proved bridge where cheaper), keeping weaker coverage
-where that is what was proved; `Proof.eval` and extraction deleted; Core-proved vs
-binary-transported status.
+where that is what was proved; Core-proved and binary-transported status remain distinct. Legacy
+issuance and replay retirement follow R-0512's inventory, compatibility and deprecation conditions.
 R-0495 checks coverage relation and domain against the exact generated proposition; author
 annotations confer no authority. Loop claims bind the exact checked Core loop and its
 initialization, preservation and exit obligations; missing binding remains `spec_unbound`.
-**Exit:** every positive claim replays against its generated statement; negative fixtures refuse;
-`PExpr`, its evaluator and the classification theorem scan are deleted; wrong-coverage,
-narrowed-domain and substituted-loop controls are refused through status, issuance, consumption and
-independent replay.
+**Exit for each migration cohort:** every migrated positive claim replays against its exact generated
+statement; negative fixtures refuse; wrong-coverage, narrowed-domain and substituted-loop controls are
+refused through status, issuance, consumption and independent replay. Unmigrated supported claims
+retain their declared maintenance and replay path. Legacy issuance code is removed only under R-0512's
+final retirement conditions; historical replay remains available.
 
 ### Track C — the lower pipeline
 
@@ -530,7 +542,13 @@ admitted-subset, mismatch, unsupported and substitution controls; the emitted-LL
 the retained `.ll` bytes including helper bodies; LLVM optimization, emission, linking and
 runtime/ABI behaviour remain explicitly trusted for that profile.
 
-**S12a Stated obligations and totality (R-0506).** Starts with S5 and grows as each boundary lands
+**S12a Stated obligations and totality (R-0506).** **Immediate row-2 checkpoint:** enforce the transitive axiom policy on today's authoritative evidence
+at status, issuance and consumption. Reject `sorryAx` and unregistered axioms; kernel-only evidence
+permits only `propext`, `Classical.choice` and `Quot.sound`; registered native-evaluation and float
+axioms require distinct trust labels. Positive controls and forbidden-transitive-dependency mutations
+qualify this checkpoint independently of S5 and the new pass ledger.
+
+Starts with S5 and grows as each boundary lands
 — including S13 and linking — rather than after the lower pipeline: every pass's `Refines` and
 every validator's soundness are type-checked Lean `Prop`s in `PassObligations.lean`, with explicit
 premises and a ledger (stated / differentially tested / proved); `sorryAx` and unregistered axioms
@@ -590,9 +608,9 @@ implementations verified against contracts or listed with audit (the list only s
 published trusted-base inventory. R-0353 independently checks retained evidence — decoding,
 authenticated roots, subject/dependency binding, exact propositions, replay and policy — without
 trusting stored verdicts; it does not by itself establish source-to-model or native-code
-correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may
-proceed beside queue rows 3 – 7; authoritative use stays queue row 9, after row 8 and R-0004's
-prerequisites. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
+correspondence, which carry their own recorded assurance. Codec and hostile-input prototypes may proceed beside queue rows 3 – 7. R-0353's complete cross-profile
+consumer remains at row 9, after row 8 and R-0004's prerequisites; a minimal independently checked
+retained-artifact consumer is required for every publicly authoritative V1 claim. Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition
 binding, authoritative verdict aggregation and retained-artifact checking; audit exact elaborated
 axiom dependencies, so kernel-only verdicts admit only the named standard logical axioms while
 native-evaluation and float axioms stay separately labelled. R-0413 dogfoods the evidence model onto
@@ -624,7 +642,8 @@ independent replay for claims already issued.
 
 Stage order above is the dependency order *within* each slice. Queue row 2 delivers Track A's
 protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 4
-makes the shared front end (identities, the authoritative checker on Core) sound for the whole language;
+makes identities and Core checking authoritative across the supported language (soundness proofs remain
+scoped to the admitted subsets);
 row 6 grows the slices and retires the legacy evidence layer. New soundness defects still enter at row 0, and each fix names the stage that would have
 prevented it; if none would, the plan gains one.
 
@@ -632,10 +651,18 @@ prevented it; if none would, the plan gains one.
 
 - **Feature freeze on the proof surface** (no new claim kinds, proof attributes, coverage labels or
   statuses) until S2 and S9 land.
-- **No big-bang rewrite.** Every slice builds, passes the full CI gate set locally (including the
-  claim-inventory step otherwise run only on Linux CI), is reviewed by Codex, and is published to
-  both remotes before the next builds on it. New boundaries arrive as shadow paths with
-  disagreement gates.
+- **No big-bang rewrite.** Each increment builds and passes R-0513's required affected checks. Before
+  qualification or release, the full tier passes on the exact candidate commit, locally or on a
+  recorded remote runner, including the claim-inventory step; local reproduction remains supported.
+  Qualified slices receive review and are published to both remotes before dependent releases rely on
+  them. New boundaries arrive as shadow paths with disagreement gates.
+- **Capacity and priority.** Known authority and memory-safety defects preempt planned work and are
+  repaired or explicitly rejected before affected releases. For the one-maintainer team, at most one
+  shared-compiler migration checkpoint and one bounded proof checkpoint are active for integration at a
+  time; proof progress is reserved in each planning cycle; interop and application-feedback checkpoints
+  are scheduled within the same work-in-progress limit. The next checkpoint, its accountable maintainer
+  and its required reviewer are recorded before it starts. Agents assist implementation and
+  investigation but do not replace independent semantic review.
 - **Stage completion.** A stage closes when its stated proof obligations, compatibility requirements and
   qualified regression gates pass. Hunts and mutations supplement these exits; a hunt that finds nothing
   is not proof of completeness.
