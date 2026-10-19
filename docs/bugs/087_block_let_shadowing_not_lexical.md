@@ -126,3 +126,21 @@ and that ban is not enforced yet; this fix makes the semantics that are accepted
 on every consumer. Function-level `freshBinder` numbering is shared across a module, so adding
 a shadow renumbers later `.bN` names in the same module. The normalizer is unaffected because
 it compares suffix-free names where that is injective.
+
+## Follow-up: Codex review of 19bf9543
+
+* **Sibling promoted aggregates.** `bindLocal` deliberately keeps a name reused in a
+  sibling scope (the earlier binder is dead). Lower, however, kept branch-local
+  `promotedAllocas` entries and APPENDED new ones, and lookups take the first match: with
+  `let mut x: [i32; 1]` in both arms of an `if`, the else arm read the then arm's
+  entry-block storage, never written on that path (pre-fix 41 for an expected 42). The
+  newest declaration of a name now wins (prepend). Fixture
+  `tests/programs/regress_087_sibling_promoted.con` (compiled and `--interp`, 42).
+* **Field labels are not locals.** `alphaCanon` counted ordinary struct/enum field labels
+  as locals, so `Option.map`'s payload label `value` collided with its pattern binder
+  `value.bN`, the suffix was kept, and the shipped `Option.map`, `Result.map` and
+  `Result.map_err` spec digests moved (`check_purecore_proofs`: 8/3 bound). Only the
+  synthetic `LoopStep::Cont` payload, whose labels ARE the carried locals, is counted and
+  renamed now; the spec binding is back to 11/0.
+* The `regress_087_let_block_shadow` model assertion is now a property (the loop body
+  binds `k.bN = 1000` and reads `k.bN`), not the exact pre-bug-085 statement layout.

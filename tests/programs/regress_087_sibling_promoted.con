@@ -1,0 +1,26 @@
+// Bug 087 (Codex review): sibling branches may each declare a dead-name-reusing
+// `let mut x: [i32; 1]` (no shadowing, so Elab keeps the spelling `x`). Lower
+// promotes such aggregates to entry-block storage, and its table APPENDED, so
+// the else branch's reads found the then-branch's storage — never written on
+// that path. The newest declaration of a name must win. Expect 42 compiled and
+// interpreted (else branch: 40 + 2).
+fn pick(c: bool) -> i32 {
+    let mut result: i32 = 0;
+    if c {
+        let mut x: [i32; 1] = [1];
+        x[0] = x[0] + 10;
+        result = x[0];
+    } else {
+        let mut x: [i32; 1] = [2];
+        x[0] = x[0] + 40;
+        result = x[0];
+    }
+    return result;
+}
+
+fn main() -> i32 {
+    let a: i32 = pick(false);
+    let b: i32 = pick(true);
+    if b != 11 { return 1; }
+    return a;
+}

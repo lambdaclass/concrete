@@ -350,10 +350,15 @@ private def isPromoted (name : String) : LowerM (Option (String × Ty)) := do
   | some (_, reg, ty) => return some (reg, ty)
   | none => return none
 
-/-- Add a promoted alloca for a variable. -/
+/-- Add a promoted alloca for a variable. The NEWEST declaration of a name wins: Elab
+    renames every binding that shadows a VISIBLE name (bug 087), so a Core name declared
+    again is a sibling scope reusing a DEAD name — `if c { let mut x: [i32; 1] = [1]; .. }
+    else { let mut x: [i32; 1] = [2]; .. }`. Appending made `find?` return the then-branch's
+    storage inside the else branch, which on that path was never written (Codex review of
+    bug 087). Prepending makes every lookup resolve the declaration in scope. -/
 private def addPromotedAlloca (name : String) (allocaReg : String) (ty : Ty) : LowerM Unit := do
   let s ← getState
-  setState { s with promotedAllocas := s.promotedAllocas ++ [(name, allocaReg, ty)] }
+  setState { s with promotedAllocas := (name, allocaReg, ty) :: s.promotedAllocas }
 
 /-- Remove promoted allocas by name (at loop exit). -/
 private def removePromotedAllocas (names : List String) : LowerM Unit := do

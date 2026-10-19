@@ -7150,6 +7150,18 @@ run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # interpreter and binary disagreed (1 vs 100, 3 vs 7) and both leaked a loop
 # body's shadow; Elab now alpha-renames shadowing lets (x -> x.bN).
 run_ok "$TESTDIR/regress_087_let_block_shadow.con" 42
+# Codex review: sibling branches reusing a DEAD name for a promoted aggregate
+# (`let mut x: [i32; 1]` in both arms) must each read their own storage; Lower's
+# promoted table appended, so the else arm read the then arm's (pre-fix 41).
+run_ok "$TESTDIR/regress_087_sibling_promoted.con" 42
+r087s_interp=$($COMPILER "$TESTDIR/regress_087_sibling_promoted.con" --interp 2>&1 || true)
+if [ "$r087s_interp" = "42" ]; then
+    echo "  ok  bug 087: sibling promoted aggregates — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 087: sibling promoted aggregates — interp gave '$r087s_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Same fixture, the other two consumers: the interpreter must agree with the
 # binary (pre-fix it returned 2), and the extracted proof model must be the
 # lexical one — no branch `let` leaking into the continuation (pre-fix
@@ -7160,7 +7172,7 @@ r087_ext=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --report extrac
 if [ "$r087_interp" = "42" ] \
    && grep -qF 'ProofCore: let x = 1; if (a > 0) then x else x' <<<"$r087_ext" \
    && grep -qF 'ProofCore: if (a > 0) then a else a' <<<"$r087_ext" \
-   && grep -E 'ProofCore: let s = 0; let k = 5;.*\{ let k[.a-z0-9]* = 1000; LoopStep::Cont \{ s: \(k[.a-z0-9]* \+ s\)' <<<"$r087_ext" | grep -qvE 's: \(k \+ s\)'; then
+   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let k\.b[0-9]+ = 1000; [^}]*\(k\.b[0-9]+ \+ s\)' <<<"$r087_ext"; then
     echo "  ok  bug 087: interp == binary == lexical model (shadow_if/param/loop)"
     PASS=$((PASS + 1))
 else

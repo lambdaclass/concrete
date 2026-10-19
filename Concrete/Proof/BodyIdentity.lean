@@ -186,12 +186,18 @@ private partial def normalizeCanon : Proof.PExpr → Proof.PExpr
       (normalizeCanon cont)
 
 
+/-- The one payload whose field LABELS are locals: the extraction's synthetic
+    `LoopStep::Cont { carried := value, .. }` (ProofCore's loop step). -/
+private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
+
 /-- Every LOCAL name a PExpr mentions, in binder or reference position: variables,
     `let` binders, pattern bindings, applied bindings, loop-carried names, assigned
-    names, and literal field labels (a `LoopStep::Cont` payload labels its fields with
-    carried locals; a real field name never contains '.', so including field labels
-    can only add names `alphaCanon` leaves alone). Definition names (`.call`) and
-    projected fields are not locals and are excluded. -/
+    names, and the field labels of a `LoopStep::Cont` payload, which the extraction
+    labels with the CARRIED LOCALS themselves. Ordinary struct/enum field labels are NOT
+    locals: counting them made a payload label `value` collide with a pattern binder
+    `value.bN`, so `alphaCanon` kept the suffix and the shipped `Option.map`,
+    `Result.map` and `Result.map_err` spec digests moved (Codex review of bug 087).
+    Definition names (`.call`) and projected fields are excluded too. -/
 private partial def pexprLocalNames : Proof.PExpr → List String
   | .lit _ => []
   | .var n => [n]
@@ -200,8 +206,10 @@ private partial def pexprLocalNames : Proof.PExpr → List String
   | .ifThenElse c t e => pexprLocalNames c ++ pexprLocalNames t ++ pexprLocalNames e
   | .call _ args => args.flatMap pexprLocalNames
   | .applyVar binding args => binding :: args.flatMap pexprLocalNames
-  | .structLit _ fields => fields.flatMap fun (f, e) => f :: pexprLocalNames e
-  | .enumLit _ _ fields => fields.flatMap fun (f, e) => f :: pexprLocalNames e
+  | .structLit _ fields => fields.flatMap fun (_, e) => pexprLocalNames e
+  | .enumLit en v fields =>
+    fields.flatMap fun (f, e) =>
+      (if isLoopCarriedLabel en v then [f] else []) ++ pexprLocalNames e
   | .fieldAccess obj _ => pexprLocalNames obj
   | .arrayIndex arr idx => pexprLocalNames arr ++ pexprLocalNames idx
   | .match_ scrutinee arms =>
@@ -230,8 +238,10 @@ private partial def pexprRenameLocals (f : String → String) : Proof.PExpr → 
     .ifThenElse (pexprRenameLocals f c) (pexprRenameLocals f t) (pexprRenameLocals f e)
   | .call fn args => .call fn (args.map (pexprRenameLocals f))
   | .applyVar binding args => .applyVar (f binding) (args.map (pexprRenameLocals f))
-  | .structLit name fields => .structLit name (fields.map fun (k, e) => (f k, pexprRenameLocals f e))
-  | .enumLit en v fields => .enumLit en v (fields.map fun (k, e) => (f k, pexprRenameLocals f e))
+  | .structLit name fields => .structLit name (fields.map fun (k, e) => (k, pexprRenameLocals f e))
+  | .enumLit en v fields =>
+    .enumLit en v (fields.map fun (k, e) =>
+      (if isLoopCarriedLabel en v then f k else k, pexprRenameLocals f e))
   | .fieldAccess obj field => .fieldAccess (pexprRenameLocals f obj) field
   | .arrayIndex arr idx => .arrayIndex (pexprRenameLocals f arr) (pexprRenameLocals f idx)
   | .match_ scrutinee arms =>
