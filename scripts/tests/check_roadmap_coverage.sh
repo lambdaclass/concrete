@@ -197,6 +197,7 @@ if not qrows: no('no queue rows found')
 # The queue summary in "Phases and releases" (| row | tasks | goal |) restates each row's task IDs; it
 # must list exactly the queue's rows, each naming exactly the tasks its queue row names.
 summary = {}
+sbad_dup = False
 if gm:
     in_sum = False
     for line in road[gm.end():].split('\n'):
@@ -205,8 +206,12 @@ if gm:
         if cells[:3] == ['row', 'tasks', 'goal']: in_sum = True; continue
         if not cells: in_sum = False; continue
         if in_sum and re.fullmatch(r'\d+', cells[0]):
-            summary[int(cells[0])] = set(expand(cells[1]))
+            if int(cells[0]) in summary:
+                no(f'the queue summary lists row {cells[0]} more than once'); sbad_dup = True
+            summary.setdefault(int(cells[0]), set(expand(cells[1])))
 sbad = 0
+for o in sorted(set(o for o, _ in qrows if [x for x, _ in qrows].count(o) > 1)):
+    no(f'the queue has more than one row {o}'); sbad += 1
 if not summary:
     no('"Phases and releases" has no queue summary table (| row | tasks | goal |)'); sbad += 1
 else:
@@ -218,7 +223,7 @@ else:
             no(f'the queue summary lists row {o}, which the queue does not have'); sbad += 1
         elif qmap[o] != summary[o]:
             no(f'queue summary row {o} names {sorted(summary[o])}, the queue row names {sorted(qmap[o])}'); sbad += 1
-    if not sbad: ok(f'the queue summary lists the {len(summary)} queue rows with the same task IDs')
+    if not sbad and not sbad_dup: ok(f'the queue summary lists the {len(summary)} queue rows with the same task IDs')
 qbad = 0; named = 0
 for order, work in qrows:
     for tid in expand(work):
@@ -488,6 +493,12 @@ PY
   neg queue_summary_drift \
     "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Compiler provenance')" \
     "queue summary row 9 names \['R-0522'\], the queue row names \['R-0521'\]"
+  neg queue_summary_duplicate_row \
+    "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Wrong owner |\n'+old)" \
+    "the queue summary lists row 9 more than once"
+  neg queue_duplicate_row \
+    "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Wrong owner (R-0522)** | control |\n'+old)" \
+    "the queue has more than one row 9"
   neg queue_summary_missing_row \
     "import re; s,n=re.subn(r'^\| 17 \| R-0440 \| [^\n]*\n', '', s, flags=re.M); assert n==1" \
     "queue row 17 is missing from the queue summary"
