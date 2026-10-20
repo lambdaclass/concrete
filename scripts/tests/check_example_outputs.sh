@@ -265,7 +265,7 @@ while IFS= read -r line; do
       ;;
     fails:*)
       marker="${interp#fails:}"
-      marker="${marker//\~/ }"   # `~` stands for a space (rules are whitespace-split)
+      marker="${marker//\~/ }"   # '~' stands for a space (rules are whitespace-split)
       if [ -z "$marker" ]; then no "$label: interp=fails: needs a marker"; continue; fi
       if [ "$irc" -eq 0 ]; then
         no "$label: interp=fails:$marker but the interpreter now runs it (exit 0) — promote the rule to interp=yes"
