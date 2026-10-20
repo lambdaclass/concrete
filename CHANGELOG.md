@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### One Qualification Verdict, Generated Candidate Record, Structural Bug Classes, Bug 104 (2026-10-20)
+
+Stage (c) qualification is now one verdict over every required job at one candidate SHA:
+`scripts/ci/qualification_record.py` derives the required set from every job of the CI workflow (plus
+the scheduled multi-kernel mutation step) and emits `verdict=qualified` only when all succeeded at
+that SHA; the mutation aggregate's `qualified=1` is one component and can no longer stand for the
+verdict. `check_qualification_record.sh` (CI, campaign-publisher job; gate commands 251 → 252) refuses
+cancelled, failed, skipped, missing, in-progress, other-SHA and mutation-only run records. The roadmap
+now separates starting from accepting: RocksDB slice 1, V1a and V1b may be implemented and
+experimented with now, and their prerequisite exits gate acceptance and any safety claim. The
+"Implemented, not yet accepted" table is generated from `docs/project/candidates.tsv` (candidate SHA,
+exits, stage (a)/(b)/(c) results at that SHA, what acceptance unlocks) by
+`scripts/gen/candidate_table.py`; `check_docs_drift.sh` fails on a hand-edited or stale table or a
+malformed record. Bug records from 102 on must state a structural cause and owner
+(`check_bug_filing_complete.sh`), and [docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md)
+groups bugs 039 – 106 into fourteen classes with their owning tasks. Bug 104 is filed (OPEN, exit 0b):
+a reference assigned from an inner block into an outer reference variable records no borrow, so its
+source can be freed while the reference is read; batch 2's normalized place rule rejects both
+reproducers.
+
 ### Targeted Examples And Scaled Differential Fuzzing Join The Plan (2026-10-20, roadmap only)
 
 [ROADMAP.md](ROADMAP.md) gains an example rule (every example has a behaviour-asserting gate; new
