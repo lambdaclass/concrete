@@ -30,6 +30,9 @@ shipped inside the package.
   `Concrete/Resolve/Project.lean`). The final link receives them in order: the root package's
   first, then each dependency's in declaration order, so a library precedes the libraries it uses
   when they are static archives.
+- **Single-file mode.** `concrete <file> -o out` and `concrete <file> --test` inside a package
+  link that package's own declarations, refused on the same terms. File mode loads no dependency
+  package, so no dependency's library is linked or needed.
 - **Link only.** Resolution happens at the link step. `check`, the reports and `build --emit-llvm`
   read the declarations but do not run pkg-config, so they work without the library installed.
 - **Directories.** Each `lib-dirs` entry and each `-L` directory pkg-config emits is canonicalised
@@ -44,7 +47,9 @@ what G1 recorded.
 
 | condition | refused at |
 |---|---|
-| unknown key, malformed or multi-line array, escape sequence, `[native.x]` or `[[native]]` table | load (every command) |
+| unknown or repeated key, malformed or multi-line array, escape sequence, a second `[native]` | load (every command) |
+| any other spelling of the table: `["native"]`, `[ native ]`, `[native.x]`, `[[native]]`, a top-level `native = {...}` or `native.libs = [...]` (the line reader reads only the plain form, so it refuses the rest instead of skipping them) | load |
+| a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
 | a `lib-dirs` entry that is empty, starts with `-`, or contains `,` or a control character | load |
 | pkg-config not on `PATH` | link |
