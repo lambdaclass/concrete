@@ -125,7 +125,7 @@ kernel. Replay: `bash scripts/tests/check_external_checker.sh` (CI job `External
 - **[nanoda](https://github.com/ammkrn/nanoda_lib)** — an independent checker in Rust, with no code
   shared with the Lean kernel or con-leche. No consistency proof: it adds implementation diversity.
 
-**Population.** Every theorem the `Concrete` and `Examples` libraries declare, read from the
+**Population.** Every theorem the `Concrete`, `Examples` and `DesignExamples` libraries declare, read from the
 elaborated environment (`scripts/tools/proof_layer_theorems.lean`), not grepped from source; the
 `#[proof_by]` evidence theorems are a subset. Measured at `ab01f856`: 3869 theorems, 48 of them
 evidence; 3834 on the three standard axioms, 35 on native trust; no `sorryAx`.

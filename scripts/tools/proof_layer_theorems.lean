@@ -26,13 +26,14 @@ first (measured on this tree: 185 statements differ in binder names, 32 in `nond
 -/
 import Concrete
 import Examples
+import DesignExamples
 
 open Lean
 
 def inProofLayer (env : Environment) (n : Name) : Bool :=
   match env.getModuleIdxFor? n with
   | some i => match env.header.moduleNames[i.toNat]?.map (·.getRoot) with
-    | some `Concrete | some `Examples => true
+    | some `Concrete | some `Examples | some `DesignExamples => true
     | _ => false
   | none => false
 

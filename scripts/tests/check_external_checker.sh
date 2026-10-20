@@ -2,7 +2,7 @@
 # EXTERNAL CHECKER — every theorem in Concrete's Lean sources re-checked outside the Lean kernel that
 # produced it.
 #
-# The population is every theorem the `Concrete` and `Examples` libraries declare, read from the
+# The population is every theorem the `Concrete`, `Examples` and `DesignExamples` libraries declare, read from the
 # elaborated environment by scripts/tools/proof_layer_theorems.lean (the #[proof_by] evidence
 # theorems are a subset). It is exported with lean4export and re-checked by two checkers that share
 # no code with the Lean kernel or with each other:
@@ -158,7 +158,7 @@ cmp -s "$TMP/native-evidence.txt" "$TMP/native-listed.txt" \
 echo "=== A: export ==="
 EXPORT="$TMP/standard.ndjson"; NATIVE_EXPORT="$TMP/native.ndjson"
 # shellcheck disable=SC2046
-"$LAKE" env "$EXPORTER" Concrete Examples -- $(cat "$TMP/standard.txt") > "$EXPORT" 2> "$TMP/export.err" \
+"$LAKE" env "$EXPORTER" Concrete Examples DesignExamples -- $(cat "$TMP/standard.txt") > "$EXPORT" 2> "$TMP/export.err" \
   || { no "lean4export failed on the standard set: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <(python3 "$INV" meta "$EXPORT")
 [ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
@@ -174,7 +174,7 @@ EXTRA=$(comm -23 "$TMP/axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS))
   || no "the standard export declares non-standard axioms: $(echo $EXTRA)"
 if [ "$NNAT" -gt 0 ]; then
   # shellcheck disable=SC2046
-  "$LAKE" env "$EXPORTER" Concrete Examples -- $(cat "$TMP/native.txt") > "$NATIVE_EXPORT" 2> "$TMP/export.err" \
+  "$LAKE" env "$EXPORTER" Concrete Examples DesignExamples -- $(cat "$TMP/native.txt") > "$NATIVE_EXPORT" 2> "$TMP/export.err" \
     || { no "lean4export failed on the native set: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 fi
 
