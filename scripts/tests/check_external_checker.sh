@@ -142,7 +142,14 @@ UNSEEN=$(sort -u "$TMP/env-modules.txt" | comm -13 - "$TMP/src-modules.txt")
 # source-module leg above only scans Concrete/ and proofs/, so this leg is what catches a library
 # whose srcDir is anywhere else.
 POP_LIBS="Concrete Examples DesignExamples"
-LAKE_LIBS=$(awk '/^\[\[lean_lib\]\]/{f=1; next} /^\[/{f=0} f && /^name *=/{gsub(/^name *= *"|"$/, ""); print}' lakefile.toml | sort -u)
+LAKE_LIBS=$(python3 -c '
+import tomllib
+with open("lakefile.toml", "rb") as f:
+    libs = tomllib.load(f)["lean_lib"]
+names = [lib["name"] for lib in libs]
+assert names and all(isinstance(n, str) and n and not any(c.isspace() for c in n) for n in names)
+print("\n".join(sorted(set(names))))
+') || { no "cannot enumerate lakefile lean_libs"; finish; }
 MISSING_LIBS=$(comm -23 <(echo "$LAKE_LIBS") <(printf '%s\n' $POP_LIBS | sort -u))
 EXPORTED_LIBS=$(grep -c "\"\$EXPORTER\" $POP_LIBS --" "$0")
 UNIMPORTED=""
