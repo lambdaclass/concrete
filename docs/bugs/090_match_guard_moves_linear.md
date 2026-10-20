@@ -52,3 +52,12 @@ VALUE_FLOW_SPEC and PATTERN_ERGONOMICS now state the rule.
 `error_090_guard_moves_binder.con` must fail with E0300 (both compiled on the previous compiler);
 `regress_090_guard_reads.con` (guards that borrow, each arm moving once) must still compile and
 return 42.
+
+## Follow-up (Codex review of the landing batch)
+
+The first fix compared the guard's final binding states, so a move hidden by a `defer` inside a guard
+block (the binding ends `reserved`) or by reassigning the moved binding (it ends live) passed, and the
+fallback arm freed the value again. The guard now freezes every non-Copy binding live at its start
+(`TypeEnv.guardUids`), and `consumeVar` rejects moving one with E0300 at the move itself; the
+final-state comparison also counts `reserved`. Fixtures `error_090_guard_defer_moves.con` and
+`error_090_guard_move_then_reassign.con` (both compiled before).

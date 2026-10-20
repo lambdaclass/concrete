@@ -1472,7 +1472,14 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
   | none => pure ()
   | some g =>
     let before ← getEnv
+    -- Every non-Copy binding live here is frozen for the guard: consumeVar
+    -- rejects moving it (also inside nested blocks and `defer`).
+    let live := before.vars.filterMap fun (_, vi) =>
+      if !vi.isCopy && vi.state != .consumed then some vi.uid else none
+    setEnv { before with guardUids := live ++ before.guardUids }
     discard (checkExpr g (some .bool))
+    let after0 ← getEnv
+    setEnv { after0 with guardUids := before.guardUids }
     let after ← getEnv
     match guardMovedName? before.vars after.vars with
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)

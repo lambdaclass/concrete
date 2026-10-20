@@ -91,6 +91,11 @@ structure TypeEnv where
   -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
   -- an id a sibling branch already used.
   nextVarUid : Nat := 1
+  -- Bug 090: non-Copy bindings live at the start of the match guard being
+  -- checked. A guard is read-only: consuming one of them (directly, or through
+  -- a `defer` that reserves it) is E0300 at the consumption itself, so no later
+  -- state (reserved, reassigned) can hide the move. Transient, like rebindingVar.
+  guardUids : List Nat := []
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds

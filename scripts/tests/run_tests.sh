@@ -7130,6 +7130,10 @@ run_ok "$TESTDIR/regress_088_range_pattern_u64.con" 42
 run_err "$TESTDIR/error_090_guard_moves_linear.con" "E0300"
 run_err "$TESTDIR/error_090_guard_moves_binder.con" "E0300"
 run_ok "$TESTDIR/regress_090_guard_reads.con" 42
+# A guard move hidden by `defer` (reserved) or by reassignment is E0300 at the
+# move itself (both compiled and double-freed before).
+run_err "$TESTDIR/error_090_guard_defer_moves.con" "E0300"
+run_err "$TESTDIR/error_090_guard_move_then_reassign.con" "E0300"
 # Bug 092: a reference stored in an aggregate outlived its source (only a bare
 # `let r = &s` froze it). References are never stored in an aggregate (E0239);
 # references flowing down (arguments, bare borrows, fn-pointer fields) stay legal.

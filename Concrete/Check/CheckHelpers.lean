@@ -404,6 +404,9 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
   | none => throwCheck (.undeclaredVariable name) span
   | some info =>
     if info.isCopy then return ()  -- Copy types are never consumed
+    -- Bug 090: a match guard may not move a binding that was live at its start.
+    if env.guardUids.contains info.uid then
+      throwCheck (.guardMovesLinear name) span
     let activeRefs := activeBorrowRefs env name
     if activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
       throwCheck (.cannotMoveLinearBorrowed name) span
@@ -597,7 +600,8 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     same entries in the same order and are compared position by position. -/
 def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
   (before.zip after).findSome? fun ((n, vb), (_, va)) =>
-    if !vb.isCopy && vb.state != .consumed && va.state == .consumed then some n else none
+    if !vb.isCopy && vb.state != .consumed && vb.state != .reserved
+        && (va.state == .consumed || va.state == .reserved) then some n else none
 
 /-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
     `after`, absent from `before` — must be consumed before the block exits. Skipped

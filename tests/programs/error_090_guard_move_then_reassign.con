@@ -1,0 +1,11 @@
+// Bug 090 follow-up: a guard that moves a value and reassigns it ends with the
+// binding live again, which the final-state comparison read as untouched. A
+// guard is read-only: the move itself is E0300.
+fn main() with(Std) -> Int {
+    let mut h: Heap<Int> = alloc(5);
+    match 1 {
+        1 if (if true { free(h); h = alloc(6); false } else { false }) => { free(h); return 1; },
+        _ => { free(h); return 0; },
+    }
+    return 0;
+}

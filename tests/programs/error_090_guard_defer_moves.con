@@ -1,0 +1,17 @@
+// Bug 090 follow-up: a guard that frees a value through `defer` inside a block
+// left it `reserved`, not `consumed`, so the final-state comparison missed the
+// move; the fallback arm freed `h` again (double free). E0300 at the move.
+fn main() with(Std) -> Int {
+    let h: Heap<Int> = alloc(5);
+    match 1 {
+        1 if (if true {
+            defer free(h);
+            false
+        } else {
+            defer free(h);
+            false
+        }) => { return 1; },
+        _ => { free(h); return 0; },
+    }
+    return 0;
+}
