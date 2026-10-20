@@ -18,7 +18,7 @@ lemma" before Core freezes. This file is that lemma in miniature:
 
 Proved for every well-typed value, not just examples: `decode_encode` (scalars),
 `decodeStruct_encodeStruct` (every struct of scalar fields) and `load_store` (block memory).
-The examples then pin the decisions those theorems leave open: padding is not observable,
+The examples then pin the decisions those theorems leave open: typed decoding ignores padding,
 pointer bytes are not integers, integer bytes are not pointers, a torn pointer is no pointer,
 invalid `bool` bytes and uninitialized bytes decode to nothing.
 
@@ -347,8 +347,9 @@ theorem S_bytes :
       [.byte 254, .byte 255, .byte 255, .byte 255, .byte 255, .byte 255, .byte 255, .byte 255] ++
       [.byte 1] ++ pad 3 ++ [.byte 255, .byte 255, .byte 255, .byte 255] := by decide
 
-/-- Padding is not observable: any bytes in the padding decode to the same value. The
-representation relation is therefore many-to-one (design question R2). -/
+/-- Typed struct decoding ignores padding: this alternate image (concrete bytes, a pointer
+fragment and undef in the padding) decodes to the same value, so the representation relation is
+many-to-one (design question R2). Raw byte loads of the padding still see what is there. -/
 theorem S_padding_unobservable :
     decodeStruct S
       ([.byte 7] ++ List.replicate 7 (.byte 0xAA) ++

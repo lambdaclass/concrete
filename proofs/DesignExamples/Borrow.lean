@@ -224,28 +224,38 @@ def checkE (e : Env) : Expr → Bool
     | none => false
   | .add a b => checkE e a && checkE e b
 
+/-- Which rules the checker enforces. `strict` is the model's checker; each permissive variant
+drops exactly one rule, so a program it accepts shows what that one rule prevents. -/
+structure Rules where
+  /-- allow storing a reference into a longer-lived slot (drops the second-class rule) -/
+  stash : Bool := false
+  /-- allow releasing an owner while it is borrowed (drops the S8 liveness rule) -/
+  releaseBorrowed : Bool := false
+  deriving Repr, DecidableEq
+
+def strict : Rules := {}
+
 /-- Returns the environment after the statement, or `none` when rejected. -/
-def check : Stmt → Env → Option Env
+def check (R : Rules) : Stmt → Env → Option Env
   | .own x e body, env =>
     if !checkE env e || env.owners.contains x then none
     else do
-      let env1 ← check body { env with owners := x :: env.owners }
+      let env1 ← check R body { env with owners := x :: env.owners }
       pure { env1 with owners := env1.owners.erase x }
   | .assign x e, env =>
     if checkE env e && env.owners.contains x && !sHasLoan x env then some env else none
   | .release x, env =>
     -- an owner may not be destroyed or moved while a reference to it is live (S8)
-    if env.owners.contains x && !sHasLoan x env then some { env with owners := env.owners.erase x }
+    if env.owners.contains x && (R.releaseBorrowed || !sHasLoan x env) then
+      some { env with owners := env.owners.erase x }
     else none
   | .borrow k x r body, env =>
     let conflict := match k with | .excl => sHasLoan x env | .shr => sHasExcl x env
     if !env.owners.contains x || conflict || (get r env.refs).isSome then none
     else do
-      let env1 ← check body { env with loans := (x, k) :: env.loans,
-                                       refs := put r (k, .full) env.refs }
-      if env1.owners.contains x then
-        pure { env1 with loans := env1.loans.erase (x, k), refs := del r env1.refs }
-      else none
+      let env1 ← check R body { env with loans := (x, k) :: env.loans,
+                                         refs := put r (k, .full) env.refs }
+      pure { env1 with loans := env1.loans.erase (x, k), refs := del r env1.refs }
   | .reborrow k r r2 body, env =>
     match get r env.refs with
     | none => none
@@ -260,7 +270,8 @@ def check : Stmt → Env → Option Env
           | .shr, .excl => .readOnly
           | .shr, .shr => u
         do
-          let env1 ← check body { env with refs := put r2 (k, .full) (put r (rk, pu) env.refs) }
+          let env1 ← check R body
+            { env with refs := put r2 (k, .full) (put r (rk, pu) env.refs) }
           pure { env1 with refs := del r2 (put r (rk, u) env1.refs) }
   | .write r e, env =>
     match get r env.refs with
@@ -274,18 +285,32 @@ def check : Stmt → Env → Option Env
       else
         let k : Kind := if u = .readOnly then .shr else rk
         -- the callee is checked on its own: it sees only its parameter
-        match check callee { owners := [], loans := [], refs := [(p, (k, .full))] } with
+        match check R callee { owners := [], loans := [], refs := [(p, (k, .full))] } with
         | some _ => some env
         | none => none
   | .out e, env => if checkE env e then some env else none
-  | .declRef _ body, env => check body env
-  | .stashRef _ _, _ => none   -- second-class: a reference is never stored or returned
+  | .declRef y body, env =>
+    -- the slot starts empty, as in `exec`; it may not shadow a live reference
+    if (get y env.refs).isSome then none
+    else do
+      let env1 ← check R body env
+      pure { env1 with refs := del y env1.refs }
+  | .stashRef y r, env =>
+    -- second-class: a reference is never stored or returned
+    if R.stash then
+      match get r env.refs with
+      | some b => some { env with refs := put y b env.refs }
+      | none => none
+    else none
   | .seq a b, env => do
-    let env1 ← check a env
-    check b env1
+    let env1 ← check R a env
+    check R b env1
   | .skip, env => some env
 
-def checkProg (p : Stmt) : Bool := (check p { owners := [], loans := [], refs := [] }).isSome
+def checkWith (R : Rules) (p : Stmt) : Bool :=
+  (check R p { owners := [], loans := [], refs := [] }).isSome
+
+def checkProg (p : Stmt) : Bool := checkWith strict p
 
 /-! ## Accepted: reborrowing, downward exclusive borrow across calls, shared borrows -/
 
@@ -366,13 +391,20 @@ def escapeEx : Stmt :=
 theorem escapeEx_rejected : checkProg escapeEx = false := by decide
 /-- A genuine memory error: the dereference reads freed storage. -/
 theorem escapeEx_dangles : run escapeEx = none := by decide
+/-- Rule isolation: dropping only the second-class rule, the checker accepts the escape — so
+that rule alone is what rejects it. -/
+theorem escapeEx_needs_second_class : checkWith { stash := true } escapeEx = true := by decide
 
-/-- The same escape inside a callee — storing its parameter — is rejected too.
-`fn keep(p: &i64) { stash = p; }` -/
-def escapeViaCallee : Stmt :=
+/-- A callee cannot store its parameter either. This is the blanket storage rule: the model has
+no slot that outlives a call (no globals, and the caller's environment is invisible to the
+callee), which is why second-class references make escape across a call impossible rather
+than merely checked. Even the permissive variant's stored copy dies with the callee.
+`fn keep(p: &i64) { let slot: &i64; slot = p; }` -/
+def storeParamInCallee : Stmt :=
   own 0 (lit 1) <| borrow .shr 0 1 (call 9 (declRef 5 (stashRef 5 9)) 1)
 
-theorem escapeViaCallee_rejected : checkProg escapeViaCallee = false := by decide
+theorem storeParamInCallee_rejected : checkProg storeParamInCallee = false := by decide
+theorem storeParamInCallee_harmless : run storeParamInCallee = some [] := by decide
 
 /-- Destroying the owner while a reference to it is live: `borrow x as r { destroy(x); *r }`. -/
 def releaseWhileBorrowed : Stmt :=
@@ -380,6 +412,17 @@ def releaseWhileBorrowed : Stmt :=
 
 theorem releaseWhileBorrowed_rejected : checkProg releaseWhileBorrowed = false := by decide
 theorem releaseWhileBorrowed_dangles : run releaseWhileBorrowed = none := by decide
+/-- Rule isolation: dropping only the owner-liveness rule, the checker accepts it. -/
+theorem releaseWhileBorrowed_needs_liveness :
+    checkWith { releaseBorrowed := true } releaseWhileBorrowed = true := by decide
+
+/-- A reference slot may not shadow a live reference: the slot starts empty in `exec`, so
+accepting this would let the checker approve a stuck program (Codex round 1). -/
+def slotShadowsRef : Stmt :=
+  own 0 (lit 1) <| borrow .shr 0 1 (declRef 1 (out (deref 1)))
+
+theorem slotShadowsRef_rejected : checkProg slotShadowsRef = false := by decide
+theorem slotShadowsRef_stuck : run slotShadowsRef = none := by decide
 
 /-- Using the parent while an exclusive reborrow of it is live. -/
 def parentDuringReborrow : Stmt :=

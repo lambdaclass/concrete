@@ -211,9 +211,17 @@ says how to regenerate this file.
 #guard_msgs (whitespace := lax) in
 #print axioms DesignExamples.Borrow.escapeEx_dangles
 
-/-- info: 'DesignExamples.Borrow.escapeViaCallee_rejected' depends on axioms: [propext] -/
+/-- info: 'DesignExamples.Borrow.escapeEx_needs_second_class' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in
-#print axioms DesignExamples.Borrow.escapeViaCallee_rejected
+#print axioms DesignExamples.Borrow.escapeEx_needs_second_class
+
+/-- info: 'DesignExamples.Borrow.storeParamInCallee_rejected' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Borrow.storeParamInCallee_rejected
+
+/-- info: 'DesignExamples.Borrow.storeParamInCallee_harmless' does not depend on any axioms -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Borrow.storeParamInCallee_harmless
 
 /-- info: 'DesignExamples.Borrow.releaseWhileBorrowed_rejected' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in
@@ -222,6 +230,18 @@ says how to regenerate this file.
 /-- info: 'DesignExamples.Borrow.releaseWhileBorrowed_dangles' does not depend on any axioms -/
 #guard_msgs (whitespace := lax) in
 #print axioms DesignExamples.Borrow.releaseWhileBorrowed_dangles
+
+/-- info: 'DesignExamples.Borrow.releaseWhileBorrowed_needs_liveness' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Borrow.releaseWhileBorrowed_needs_liveness
+
+/-- info: 'DesignExamples.Borrow.slotShadowsRef_rejected' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Borrow.slotShadowsRef_rejected
+
+/-- info: 'DesignExamples.Borrow.slotShadowsRef_stuck' does not depend on any axioms -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Borrow.slotShadowsRef_stuck
 
 /-- info: 'DesignExamples.Borrow.parentDuringReborrow_rejected' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in
@@ -283,6 +303,10 @@ says how to regenerate this file.
 #guard_msgs (whitespace := lax) in
 #print axioms DesignExamples.Cleanup.deferPrint_exit_time
 
+/-- info: 'DesignExamples.Cleanup.trapCleanupEx_fatal' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Cleanup.trapCleanupEx_fatal
+
 /-- info: 'DesignExamples.Cleanup.normalEx_lowered' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in
 #print axioms DesignExamples.Cleanup.normalEx_lowered
@@ -298,6 +322,10 @@ says how to regenerate this file.
 /-- info: 'DesignExamples.Cleanup.abortEx_lowered' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in
 #print axioms DesignExamples.Cleanup.abortEx_lowered
+
+/-- info: 'DesignExamples.Cleanup.trapCleanupEx_lowered' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms DesignExamples.Cleanup.trapCleanupEx_lowered
 
 /-- info: 'DesignExamples.Cleanup.deferPrint_lowered' depends on axioms: [propext] -/
 #guard_msgs (whitespace := lax) in

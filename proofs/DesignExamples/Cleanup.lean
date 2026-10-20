@@ -8,11 +8,13 @@ miniature:
 
 * `exec`  — the Core-level meaning: each block keeps its own deferred list; on fall-through,
             `break`, `continue` and `return` the list runs newest-first (LIFO), inner scopes
-            before outer ones; a fatal `abort` runs nothing (plan, "Resources and failure").
+            before outer ones; a fatal `abort` runs nothing (plan, "Resources and failure"),
+            and a cleanup that traps is fatal too: the cleanups after it do not run.
 * `lower` — a Place-MIR-like expansion with **no defer and no scopes**: every exit edge is
             prefixed with the cleanup calls it must run, computed statically.
-* theorems — the Core meaning on normal, early-return, break and continue paths, for every
-            input; and agreement of `lower` with `exec` on every example and input.
+* theorems — the Core meaning on normal, early-return, break, continue, abort and
+            trapping-cleanup paths, for every input; and agreement of `lower` with `exec` on
+            every example and input.
 
 The lowering is possible as a *static* expansion only because a `defer` statement registers
 in its enclosing block, so the pending cleanups at every program point are known from the
@@ -26,10 +28,12 @@ This is a design model, not Core: it imports nothing from the compiler.
 
 namespace DesignExamples.Cleanup
 
-/-- A deferred call: `cleanup(n)` or `print_int(i)` (reads the counter when it runs). -/
+/-- A deferred call: `cleanup(n)`, `print_int(i)` (reads the counter when it runs), or a
+cleanup call that traps. -/
 inductive Deferred where
   | call (n : Nat)
   | printI
+  | trap
   deriving Repr, DecidableEq
 
 inductive Cond where
@@ -86,9 +90,20 @@ def evalC (inp : List Bool) (s : St) : Cond → Bool
 def runDeferred (s : St) : Deferred → St
   | .call n => { s with trace := s.trace ++ [.call n] }
   | .printI => { s with trace := s.trace ++ [.print s.i] }
+  | .trap => s
 
-/-- Run a deferred list, stored newest-first, in that order (LIFO). -/
-def runDefers (ds : List Deferred) (s : St) : St := ds.foldl runDeferred s
+/-- Run a deferred list, stored newest-first, in that order (LIFO). A trapping cleanup is
+fatal: the cleanups after it do not run (`true` = trapped). -/
+def runDefers : List Deferred → St → Bool × St
+  | [], s => (false, s)
+  | .trap :: _, s => (true, s)
+  | d :: rest, s => runDefers rest (runDeferred s d)
+
+/-- Unwind a scope: run its cleanups, then continue with `o` unless a cleanup trapped. -/
+def unwind (o : Outcome) (ds : List Deferred) (s : St) : Outcome × St :=
+  match runDefers ds s with
+  | (true, s') => (.abort, s')
+  | (false, s') => (o, s')
 
 mutual
 /-- The Core-level meaning, clock-indexed. -/
@@ -98,7 +113,7 @@ def exec (inp : List Bool) : Nat → Stmt → St → Outcome × St
   | _ + 1, .printI, s => (.normal, { s with trace := s.trace ++ [.print s.i] })
   | _ + 1, .incr, s => (.normal, { s with i := s.i + 1 })
   -- a `defer` that is a whole branch or loop body is a block of one statement
-  | _ + 1, .defer d, s => (.normal, runDeferred s d)
+  | _ + 1, .defer d, s => unwind .normal [d] s
   | f + 1, .block ss, s => execBlock inp f ss [] s
   | f + 1, .ite c a b, s => if evalC inp s c then exec inp f a s else exec inp f b s
   | f + 1, .loop body, s =>
@@ -114,14 +129,14 @@ def exec (inp : List Bool) : Nat → Stmt → St → Outcome × St
 /-- A block: `ds` is its deferred list, newest first. -/
 def execBlock (inp : List Bool) : Nat → List Stmt → List Deferred → St → Outcome × St
   | 0, _, _, s => (.fuel, s)
-  | _ + 1, [], ds, s => (.normal, runDefers ds s)
+  | _ + 1, [], ds, s => unwind .normal ds s
   | f + 1, .defer d :: rest, ds, s => execBlock inp f rest (d :: ds) s
   | f + 1, st :: rest, ds, s =>
     match exec inp f st s with
     | (.normal, s') => execBlock inp f rest ds s'
     | (.abort, s') => (.abort, s')          -- fatal: no cleanup
     | (.fuel, s') => (.fuel, s')
-    | (o, s') => (o, runDefers ds s')        -- break / continue / return unwind this scope
+    | (o, s') => unwind o ds s'              -- break / continue / return unwind this scope
 end
 
 /-! ## The lowered form: explicit cleanup on every exit edge -/
@@ -140,7 +155,7 @@ inductive LStmt where
   deriving Repr
 
 def cleanupCode (ds : List Deferred) : List LStmt :=
-  ds.map fun | .call n => .emit n | .printI => .printI
+  ds.map fun | .call n => .emit n | .printI => .printI | .trap => .abort
 
 /-- Pending cleanups at a program point: all of them up to the function boundary (for
 `return`) and those registered since the innermost loop body began (for `break`/`continue`). -/
@@ -279,6 +294,17 @@ def deferPrint : Stmt := block [defer .printI, incr, incr]
 
 theorem deferPrint_exit_time : run [] 20 deferPrint = (.normal, [.print 2]) := by decide
 
+/-- A trap inside a cleanup during an early return is fatal: earlier cleanup effects remain,
+later pending cleanups (here the outer `c10`) do not run.
+```
+{ defer c10();
+  { defer trapping_cleanup(); defer c20(); return; } }   // c20, then the trap: abort
+``` -/
+def trapCleanupEx : Stmt :=
+  block [defer (.call 10), block [defer .trap, defer (.call 20), ret]]
+
+theorem trapCleanupEx_fatal : run [] 20 trapCleanupEx = (.abort, [.call 20]) := by decide
+
 /-! ## The static expansion agrees with the scoped meaning -/
 
 theorem normalEx_lowered : runL [] 40 normalEx = run [] 20 normalEx := by decide
@@ -289,6 +315,8 @@ theorem earlyReturnEx_lowered :
 theorem loopEx_lowered : ∀ b : Bool, runL [b] 120 loopEx = run [b] 60 loopEx := by decide
 
 theorem abortEx_lowered : runL [] 40 abortEx = run [] 20 abortEx := by decide
+
+theorem trapCleanupEx_lowered : runL [] 40 trapCleanupEx = run [] 20 trapCleanupEx := by decide
 
 theorem deferPrint_lowered : runL [] 40 deferPrint = run [] 20 deferPrint := by decide
 
