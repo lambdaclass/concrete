@@ -355,7 +355,10 @@ ambiguous type name or impl set (E0814/E0815) until type identity survives into 
 provenance and overlap checks now share ONE normalized place rule (`(*r).p` and `r.p` are one
 place); an expression it cannot trace is E0238 — a deliberate, documented restriction (KNOWN_HOLES
 H28, owned by R-0499) that rejects e.g. `if`-produced references and temporaries as `&mut self`
-receivers.
+receivers. It fixes bug 104 (a reference re-pointed by assignment at block-local
+storage is refused) and bug 107 (shadowing a binding a live reference borrows is refused); bug 105
+(a reference-valued `if` miscompiles) is contained at the checker and bug 106 (a hung model-diff
+report the gate swallowed) is fixed.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

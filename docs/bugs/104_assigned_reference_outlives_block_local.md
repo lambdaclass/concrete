@@ -1,6 +1,6 @@
 # Bug 104 — a reference assigned to an outer variable outlives its block-local source
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-20 (batch 2, bug 091 normalized place rule)
 **Found:** 2026-10-20 by the V1 design examples (branch `v1-design-examples`, design question B6:
 alias propagation through assignment).
 **Severity:** critical. Use after free in safe code, silent wrong code. Assigning a reference to a
@@ -81,6 +81,17 @@ re-points a reference binding at different storage is refused ("provenance is no
 branches; use a new binding"), a deliberate restriction until R-0499. Verified by building that
 branch: `esc4` and the stack variant are both E0238 at `leaked = &h` / `leaked = &q`. The bug closes
 when batch 2 lands with both programs as permanent rejection fixtures.
+
+## Fix
+
+Bug 091's round-3 normalized place rule (`land2-fix`): `recordRefProvenance` runs at every `let` and
+reassignment of a reference binding, recording the normalized source place, and a reassignment that
+re-points a reference at different storage is refused (E0238; provenance is not joined across
+branches). Both reproducers above are rejected at `leaked = &h` / `leaked = &q`. Permanent rejection
+fixtures: `tests/programs/error_104_assigned_ref_heap_block.con`,
+`tests/programs/error_104_assigned_ref_stack_block.con` (run_tests.sh, `r091_table`'s neighbours).
+The rejection is a deliberate restriction (KNOWN_HOLES H28) that R-0499 lifts with flow-sensitive
+loans.
 
 ## Structural cause
 

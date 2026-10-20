@@ -130,10 +130,14 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
       throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span
     let parent := match parent? with | some q => if q != name then some q else none | none => none
+    -- the binding in scope under `name` only (binding identity, bug 094) — a shadowed entry of
+    -- the same name keeps its own provenance
+    let uid? := ((← getEnv).vars.lookup name).map (·.uid)
     modify fun env =>
       { env with vars := env.vars.map fun (n, info) =>
-          if n == name then (n, { info with borrowedFrom := newSrc, refParent := parent,
-                                            borrowedPath := path, borrowedExact := exact })
+          if n == name && some info.uid == uid? then
+            (n, { info with borrowedFrom := newSrc, refParent := parent,
+                            borrowedPath := path, borrowedExact := exact })
           else (n, info) }
   | _ => pure ()
 
@@ -2379,9 +2383,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       addVar ref refTy true
       let envWithRef ← getEnv
       -- The scoped reference's conflict key is its source binding.
+      let refUid? := (envWithRef.vars.lookup ref).map (·.uid)
       setEnv { envWithRef with borrowRefs := ref :: envWithRef.borrowRefs,
                                vars := envWithRef.vars.map fun (n, vi) =>
-                                 if n == ref then (n, { vi with borrowedFrom := some var, borrowedExact := true }) else (n, vi) }
+                                 if n == ref && some vi.uid == refUid? then
+                                   (n, { vi with borrowedFrom := some var, borrowedExact := true })
+                                 else (n, vi) }
       -- Check body
       checkStmts body env.currentRetTy
       -- Clean up: remove ref from borrowRefs and unfreeze original variable

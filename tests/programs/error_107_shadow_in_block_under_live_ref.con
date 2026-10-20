@@ -1,0 +1,12 @@
+// Bug 107, nested-block variant (interp 15, compiled 55): the shadowing `let x` in the block is
+// refused while `r = &x` is live: E0238.
+fn get(r: &Int) -> Int { return *r; }
+fn main() -> Int {
+    let x: Int = 1;
+    let r: &Int = &x;
+    if true {
+        let x: Int = 5;
+        return get(r) * 10 + x;
+    }
+    return 0;
+}

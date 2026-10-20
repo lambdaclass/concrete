@@ -1,0 +1,13 @@
+// Bug 104, stack variant: a reference to a block-local value survived the block through
+// assignment (the binary read `q`'s dead slot and exited 30). Re-pointing is refused: E0238.
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let mut leaked: &Point = &p;
+    if true {
+        let q: Point = Point { x: 30, y: 40 };
+        leaked = &q;
+    }
+    return leaked.x;
+}

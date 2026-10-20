@@ -1,0 +1,9 @@
+// Bug 107: shadowing `x` while `r = &x` is live made the binary read the shadowing binding's slot
+// (interp 1, compiled 2). Shadowing a name a live reference borrows is refused (normalized place
+// rule, provenance is recorded by name): E0238.
+fn main() -> Int {
+    let x: Int = 1;
+    let r: &Int = &x;
+    let x: Int = 2;
+    return *r + x * 0;
+}

@@ -1534,6 +1534,13 @@ run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 run_err "$TESTDIR/error_091_norm_heap_deref_payload.con"        "(E0290)"
 # Bug 105 (OPEN, contained): a reference-valued `if`/`match` miscompiles; Check refuses it.
 run_err "$TESTDIR/error_105_ref_valued_if_arg.con"   "(E0238)"
+# Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
+# block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
+# reference borrows is refused (E0238); the binary read the shadowing binding's slot.
+run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
+run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
+run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
+run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0238)"
 run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
 run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"

@@ -1,0 +1,25 @@
+// Bug 104: a reference assigned from an inner block into an outer reference variable recorded no
+// borrow, so `free(h)` and the later read of `leaked.v` were a use after free (binary exited 0).
+// The normalized place rule records provenance on assignment and refuses re-pointing a reference
+// binding at different storage: E0238.
+struct Copy B { v: Int }
+
+fn f(init: &Heap<B>) with(Alloc) -> Int {
+    let mut leaked: &Heap<B> = init;
+    if true {
+        let h: Heap<B> = alloc(B { v: 77 });
+        leaked = &h;
+        free(h);
+    }
+    let h2: Heap<B> = alloc(B { v: 99 });
+    let out: Int = leaked.v;
+    free(h2);
+    return out;
+}
+
+fn main() with(Alloc) -> Int {
+    let h0: Heap<B> = alloc(B { v: 1 });
+    let r: Int = f(&h0);
+    free(h0);
+    return r;
+}

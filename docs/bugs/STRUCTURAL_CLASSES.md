@@ -151,8 +151,9 @@ expressions their own way; ten review passes each found another spelling of the 
 **Design cause.** Every check that needs "which place does this expression denote" computed it
 itself, so the checks disagreed on parentheses, dereferences, projections and branch values. Bug
 091 converged only after one normalized-place rule (`normPlace` / `normRef` in `CheckHelpers.lean`
-on `land2-fix`) replaced them, with E0238 refusing what it cannot normalize, including re-pointing a
-reference by reassignment, which also rejects 104's reproducers.
+with batch 2) replaced them, with E0238 refusing what it cannot normalize, including re-pointing a
+reference by reassignment (which fixes 104) and shadowing a name a live reference borrows (which
+fixes 107's reference reproducers); the deliberate restrictions are listed in KNOWN_HOLES H28.
 
 **Structural fix.** Places are a representation, not a per-check walk: Core places with projections
 and dereferences, consumed by every ownership and borrow rule.

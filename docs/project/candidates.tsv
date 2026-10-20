@@ -15,7 +15,6 @@
 #   unlocks    the next deliverable or exit its acceptance unlocks
 #   remaining  the remaining acceptance step
 id	bugs	deliverable	branch	sha	exits	stage_a	stage_b	stage_c	unlocks	remaining
-batch2	052,065,082,087,091,104,105,106	-	land2-fix	69254623243ea5734ee8b6449ef75dfd73a8adf7	0a (065), 0b	not-run	not-run	not-run	exits 0a/0b progress toward RocksDB slice 1, V1a and V1b acceptance	Codex round 3; add bug 104's two reproducers as rejection fixtures (E0238 already rejects them at this SHA); 105 is contained at the checker (E0238), its lowering defect stays open; then stage (b) and stage (c) on the integrated candidate
 type-identity	096,097,098	-	bug096-type-identity	dd651baa7c0a25e99d1bfc7f426a2f197cfd78a3	0b	not-run	not-run	not-run	exit 0b progress	partial; finish after batch 2 lands, then Codex review and stages (b) and (c)
 generic-destroy	099,100	-	bug099-generic-destroy	c745f795c6f702cc730833689aaacc86df054556	0b	not-run	not-run	not-run	exit 0b progress	partial; finish after batch 2 lands, then Codex review and stages (b) and (c)
 rocksdb-slice1	-	RocksDB slice 1 groundwork (R-0285)	rocksdb-slice1	094e51bf3258111031e56ee4462f4dc43421503d	blocked by 0b (incl. bugs 102, 103), 2i	not-run	not-run	not-run	RocksDB slice 1 acceptance, then the four-adapter checkpoint	landed on main at 094e51bf but not accepted: exits 0b (bugs 102, 103) and 2i, and G1 (declaring the native library, so it builds with no manual flags)
