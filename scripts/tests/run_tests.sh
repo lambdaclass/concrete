@@ -1595,6 +1595,10 @@ error_091_norm_if_projection:E0238
 error_091_norm_if_local_binding:E0238
 error_091_norm_if_local_chain:E0238
 error_091_norm_match_owned_binder:E0238
+error_091_norm_cast_arg_overlap:E0293
+error_091_norm_parent_arg_under_reborrow:E0232
+error_091_norm_copied_mut_ref:E0232
+error_091_norm_double_deref_heap:E0290
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok

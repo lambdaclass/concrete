@@ -30,8 +30,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 ||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
-||||||| parent of a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
->>>>>>> d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 ||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 >>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 =======
@@ -61,6 +59,17 @@ def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
 =======
 def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 >>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of 08943830 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+=======
+||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+=======
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+>>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+=======
+>>>>>>> 08943830 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 ||||||| parent of 88ed8312 (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
 ||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
@@ -135,6 +144,14 @@ def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 ||||||| parent of a2bb78a4 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 =======
+||||||| parent of 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+=======
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+>>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 ||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
 ||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
@@ -284,14 +301,35 @@ def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
 =======
 ||||||| parent of 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 =======
+||||||| parent of 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+=======
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+>>>>>>> 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+>>>>>>> 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 ||||||| parent of f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
 =======
 def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
 >>>>>>> f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
->>>>>>> 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 >>>>>>> d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
->>>>>>> 33383d3a (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+||||||| parent of 08943830 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+||||||| parent of 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+>>>>>>> 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+=======
+||||||| parent of 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+||||||| parent of 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+=======
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+>>>>>>> 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+>>>>>>> 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+>>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+>>>>>>> 08943830 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 
 /-- How many source files the identity above was computed over.
 

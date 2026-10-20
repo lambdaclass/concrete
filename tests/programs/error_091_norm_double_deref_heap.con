@@ -1,0 +1,24 @@
+// Normalized place rule (Codex review): `(**r).p` does not normalize, and an untraceable base
+// must never take the owned-heap exemption (fail closed): moving the payload out is E0290.
+// Bug 091 round 3, normalized place rule: `(**r).p` with `r: & &Heap<W>` is the place `r.p`
+// reached through `&` — the explicit `*` must not restore the owned-heap exemption that a
+// `Heap<W>`-typed base gets. Moving the non-Copy payload out is E0290.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl Destroy for P {
+        fn destroy(self) { let P { n } = self; }
+    }
+    fn f(r: & &Heap<W>) with(Alloc) {
+        let p: P = (**r).p;
+        p.destroy();
+    }
+    fn main() with(Alloc) -> Int {
+        let h: Heap<W> = alloc(W { p: P { n: 1 } });
+        if true { let r: &Heap<W> = &h; f(&r); }
+        let w: W = *h;
+        let W { p } = w;
+        p.destroy();
+        return 0;
+    }
+}

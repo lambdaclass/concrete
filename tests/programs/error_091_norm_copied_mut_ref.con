@@ -1,0 +1,19 @@
+// Normalized place rule (Codex review): `t = r` copies an exclusive reference; using `t` while
+// the reborrow `s = &mut *r` is live aliases `s` (E0232). Aliases are told apart by the
+// reborrow/copy ancestry (refParent), not creation order.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        if true {
+            let r: &mut P = &mut p;
+            let s: &mut P = &mut *r;
+            let t: &mut P = r;
+            t.bump();
+            P::bump(s);
+        }
+        let P { n } = p;
+        return n;
+    }
+}

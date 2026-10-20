@@ -114,9 +114,9 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
   match ty with
   | .ref _ | .refMut _ =>
     let subject := s!"what reference '{name}' borrows"
-    let src? : Option String ← match ← normRef value with
-      | .place p => pure p.root
-      | .temp => pure none
+    let (src?, parent?) : Option String × Option String ← match ← normRef value with
+      | .place p => pure (p.root, p.viaRef)
+      | .temp => pure (none, none)
       | .reject why => throwCheck (.untraceablePlace subject why) span
     let current := ((← getEnv).vars.lookup name).bind (·.borrowedFrom)
     let newSrc : Option String := match src? with
@@ -124,42 +124,54 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
       | none => none
     if reassign && newSrc != current then
       throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span
+    let parent := match parent? with | some q => if q != name then some q else none | none => none
     modify fun env =>
       { env with vars := env.vars.map fun (n, info) =>
-          if n == name then (n, { info with borrowedFrom := newSrc }) else (n, info) }
+          if n == name then (n, { info with borrowedFrom := newSrc, refParent := parent }) else (n, info) }
   | _ => pure ()
 
-/-- Using an exclusive reference binding `r` (`&mut T`) mutably while another live reference
-    borrows the same storage — a reborrow of `r` (`let s = &*r`) or another borrow of `r`'s
-    source — is the aliasing E0232 forbids for an owned binding. Only references created AFTER
-    `r` (newer bindings come first in `vars`) count: an older one sharing the root is `r`'s own
-    ancestor (`let r = &mut p; let s = &mut *r; s.bump()` uses the child, not the parent). -/
+/-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
+def refAncestors (r : String) : CheckM (List String) := do
+  let env ← getEnv
+  let mut out : List String := []
+  let mut cur := r
+  for _ in env.vars do
+    match (env.vars.lookup cur).bind (·.refParent) with
+    | some q => if out.contains q || q == r then break else out := q :: out; cur := q
+    | none => break
+  return out.reverse
+
+/-- The live references other than `r` and `r`'s own ancestors that borrow the same storage
+    (`r` itself, or its recorded source). Using `r` while one of them is live aliases it: a
+    reborrow `s = &mut *r` (child), a copy `t = r` (sibling), or another borrow of the source.
+    Ancestors do not count — using a reborrow while its parent is merely held is valid. -/
+def liveAliasesOf (r : String) (info : VarInfo) (onlyExclusive : Bool) : CheckM (List String) := do
+  let roots := r :: info.borrowedFrom.toList
+  let anc ← refAncestors r
+  let env ← getEnv
+  return (env.vars.filter fun (n, vi) =>
+      n != r && !anc.contains n && vi.state != .consumed &&
+      (!onlyExclusive || (match vi.ty with | .refMut _ => true | _ => false)) &&
+      (match vi.borrowedFrom with | some src => roots.contains src | none => false)).map (·.1)
+
+/-- Using an exclusive reference binding `r` (`&mut T`) while another live reference shares its
+    storage is the aliasing E0232 forbids for an owned binding. -/
 def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo r with
   | some info =>
     match info.ty with
     | .refMut _ =>
-      let env ← getEnv
-      let roots := r :: info.borrowedFrom.toList
-      let newer := env.vars.takeWhile (·.1 != r)
-      let others := newer.filter fun (n, vi) =>
-        n != r && vi.state != .consumed &&
-          (match vi.borrowedFrom with | some src => roots.contains src | none => false)
-      if !others.isEmpty then
+      if !(← liveAliasesOf r info false).isEmpty then
         throwCheck (.cannotMutBorrowAlreadyBorrowed r) span
     | _ => pure ()
   | none => pure ()
 
-/-- A shared access through a reference binding `r` while a newer exclusive reborrow of its
-    storage (`let s = &mut *r`) is live aliases that reborrow (E0231). -/
+/-- A shared access through a reference binding `r` while a live exclusive alias of its storage
+    (`let s = &mut *r`) exists is E0231. -/
 def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo r with
   | some info =>
-    let roots := r :: info.borrowedFrom.toList
-    let newer := (← getEnv).vars.takeWhile (·.1 != r)
-    if newer.any (fun (n, vi) => n != r && vi.state != .consumed &&
-        (match vi.ty with | .refMut _ => true | _ => false) &&
-        (match vi.borrowedFrom with | some src => roots.contains src | none => false)) then
+    if !(← liveAliasesOf r info true).isEmpty then
       throwCheck (.cannotBorrowMutablyBorrowed r) span
   | none => pure ()
 
@@ -235,11 +247,12 @@ def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : Check
 /-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
     yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
 def checkRefArg (arg : Expr) (argTy : Ty) (span : Option Span) : CheckM Unit := do
+  -- A reference argument is an ACCESS through its normalized place, checked like any other:
+  -- passing an exclusive reference while an alias of it is live is E0232, a shared one under a
+  -- live exclusive alias E0231 (Codex review of the normalized rule).
   match argTy with
-  | .ref _ | .refMut _ =>
-    match ← normRef arg with
-    | .reject why => throwCheck (.untraceablePlace "a reference argument" why) span
-    | _ => pure ()
+  | .ref _ => checkSharedAccess (← normRef arg) "a reference argument" span
+  | .refMut _ => checkMutAccess (← normRef arg) "a reference argument" span
   | _ => pure ()
 
 /-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed
@@ -1163,7 +1176,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- `(*r).p` with `r: &Heap<W>` has a `Heap<W>`-typed base yet is reached through `&`.
     let baseThroughRef ← match ← normProjBase obj with
       | .place p => pure p.reach.throughRef
-      | _ => pure false
+      | .temp => pure false
+      | .reject _ => pure true   -- untraceable: never exempt (fail closed)
     let isHeapShell := !baseThroughRef && match objTy with
       | .heap _ | .heapArray _ => true
       | _ => false

@@ -369,3 +369,11 @@ earlier positive fixtures for owned temporaries / `if` receivers are now the rej
 `run_tests.sh` carries a table of every bug-091 fixture with its expected outcome
 (`r091_table`), so a change to the rule shows up as a changed row.
 
+Codex review of the rule as a whole (first pass) found four entry points that bypassed it, now
+closed: a cast-to-reference argument contributed no E0293 key (`r.bump(r as &P)`); a reference
+argument was not checked as an access (passing the parent `r` while its reborrow is live);
+aliasing was decided by creation order, so a copied exclusive reference (`t = r`) escaped it
+(now by reborrow/copy ancestry, `refParent`, with the valid nested reborrow still accepted);
+and an untraceable projection base (`(**r).p`) took the owned-heap exemption (now fail
+closed). Fixtures `error_091_norm_{cast_arg_overlap,parent_arg_under_reborrow,copied_mut_ref,double_deref_heap}.con`.
+

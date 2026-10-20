@@ -44,6 +44,10 @@ structure VarInfo where
   loopDepth : Nat
   borrowCount : Nat := 0
   borrowedFrom : Option String := none
+  -- Bug 091 round 3: the reference binding this reference was made from (a reborrow `&mut *r`
+  -- or a copy `let t = r`), so the aliasing checks can tell a reference's ancestors from its
+  -- live siblings and children.
+  refParent : Option String := none
   mutable : Bool := true  -- whether the variable was declared with mut
   movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
   declSpan : Option Span := none  -- where it was declared (locates unconsumed-linear E0208)
