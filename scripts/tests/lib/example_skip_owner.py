@@ -10,12 +10,10 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            common word does not count.
   runs <owner> <workflow>  some INLINE `run:` value of the workflow is exactly the
                            owner's path, optionally behind bash/sh/python3 with a few
-                           allowed options (see INVOCATION) -- no arguments,
-                           assignments, quoting, expansions, redirections or
-                           operators -- in a step and job with no `if:`, no `env:`,
-                           no custom shell and no working-directory, at any
-                           indentation (see run_commands). Block scalars, step names
-                           and comments are never read as invocations.
+                           allowed options (see INVOCATION), in a workflow, job and
+                           step that use only allowlisted, plainly spelled keys (see
+                           run_commands): no if:, env:, shell:, working-directory:,
+                           defaults:, continued scalars or anything else unexpected.
 
 Exit status: 0 holds, 1 does not, 2 usage error.
 """
@@ -48,46 +46,38 @@ def indent(line):
     return len(line) - len(line.lstrip())
 
 
-EXECUTING_SHELLS = {"bash", "sh"}
+# ALLOWLISTS, not denylists. Every way found so far to keep a listed gate from running
+# was a key the checker did not expect (if:, env:, shell:, working-directory:,
+# defaults:, a quoted or spaced spelling of one of them, a continued scalar). So an
+# owner run counts only inside a workflow, job and step that use NOTHING beyond these
+# keys, spelled plainly (`key:` with no quoting and no space before the colon).
+WORKFLOW_KEYS = {"name", "on", "concurrency", "jobs", "permissions"}
+JOB_KEYS = {"name", "runs-on", "needs", "steps", "timeout-minutes", "permissions"}
+STEP_KEYS = {"name", "run", "timeout-minutes"}
+PLAIN_KEY = re.compile(r"^\s*(?:-\s+)?([A-Za-z0-9_-]+):(?:\s|$)")
 
 
-def shell_values(block_lines):
-    """Values of every `shell:` key in these lines; a `working-directory:` counts as a
-    non-executing shell value, so the same checks refuse it (a relative owner path
-    does not resolve from another directory)."""
-    out = []
-    for l in block_lines:
-        m = re.match(r"^\s*(?:-\s+)?shell:\s*(.*?)\s*(#.*)?$", l)
-        if m:
-            out.append(m.group(1).strip().strip("\"'"))
-        if re.match(r"^\s*(?:-\s+)?working-directory:", l):
-            out.append("<working-directory>")
-    return out
+def plain_key(line):
+    m = PLAIN_KEY.match(line)
+    return m.group(1) if m else None
 
 
 def run_commands(path):
-    """The shell text of every INLINE `run:` value (`run: <command>` on one line)
-    of an UNCONDITIONAL step in an UNCONDITIONAL job.
+    """The shell text of every inline `run:` value that CI is certain to execute:
 
-    Block scalars of ANY key (`run: |`, `script: >-`, ...) are skipped together with
-    their bodies, so a heredoc or quoted text that happens to contain "run: ..."
-    is never read as a key. Block-style `run:` values are not read at all: their
-    lines share quote, heredoc and continuation state, and reading them line by
-    line took printed text for commands. A step or job carrying any `if:` is
-    excluded (`if: false` disables it; no condition is evaluated here), and so is
-    any run whose step `shell:` is not plain bash/sh (a custom template such as
-    `bash -n {0}` would only syntax-check it) or that sets working-directory. Any
-    `defaults:` (in any form) at workflow or job scope, any `env:` at workflow, job
-    or step scope, and a `run:` value continued on a deeper line also disqualify (SHELLOPTS: noexec, BASH_ENV, PATH ... can keep the
-    script from running; rather than vet values, environments are refused). An owner
-    must therefore be invoked by an inline `run:` of an unconditional step --
-    fail-closed, and every CI owner today is spelled that way."""
+    - the workflow's top-level keys are all in WORKFLOW_KEYS;
+    - the run's job is found from the structure (the jobs' column is that of the first
+      entry under `jobs:`; the nearest line at or left of it above the step must be a
+      plain `<id>:` header at exactly that column), and the job's own keys are all in
+      JOB_KEYS;
+    - the run's step consists only of single-line STEP_KEYS at one column (no nested
+      or continued lines).
+
+    Block scalars of ANY key are skipped with their bodies, and comment-only lines are
+    blanked first, so neither can be read as structure."""
     lines = open(path).read().split("\n")
-    block = re.compile(r"^(\s*(?:-\s+)?)[^\s#:][^:]*:\s*[|>][-+0-9]*\s*(#.*)?$")
-    # Pass 1: blank out block-scalar bodies so nothing inside them is a key.
-    # Comment-only lines are not structure: blank them first, so a comment cannot set
-    # a job's property column or end a block.
     lines = ["" if l.strip().startswith("#") else l for l in lines]
+    block = re.compile(r"^(\s*(?:-\s+)?)[^\s#:][^:]*:\s*[|>][-+0-9]*\s*(#.*)?$")
     visible, i = list(lines), 0
     while i < len(lines):
         b = block.match(lines[i])
@@ -97,65 +87,44 @@ def run_commands(path):
             while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > col):
                 visible[i] = ""
                 i += 1
-    # Workflow-wide `defaults:` (any form: block, flow, commented) or `env:`: nothing
-    # qualifies. Their contents are not vetted; their presence is refused.
-    if any(re.match(r"^(defaults|env)\s*:", l) for l in visible):
+    if any(plain_key(l) not in WORKFLOW_KEYS for l in visible if l.strip() and indent(l) == 0):
         return []
     jobs_at = next((n for n, l in enumerate(visible) if re.match(r"^jobs:\s*$", l)), None)
-    jcol = None
-    if jobs_at is not None:
-        jcol = next((indent(l) for l in visible[jobs_at + 1:] if l.strip()), None)
-        if not jcol:
-            jobs_at = None
+    if jobs_at is None:
+        return []
+    jcol = next((indent(l) for l in visible[jobs_at + 1:] if l.strip()), 0)
+    if not jcol:
+        return []
     cmds = []
     for n, line in enumerate(visible):
-        m = re.match(r"^(\s*)(-\s+)?run:\s*(.*)$", line)
-        if not m or not m.group(3).strip() or block.match(line):
+        m = re.match(r"^(\s*)(-\s+)?run:\s+(.*)$", line)
+        if not m or not m.group(3).strip() or block.match(line) or n <= jobs_at:
             continue
-        key_col = len(m.group(1)) + len(m.group(2) or "")
-        # A plain scalar continues on deeper-indented lines (YAML folds them into the
-        # value): only a value that ends on its own line is read.
-        nxt = next((l for l in visible[n + 1:] if l.strip()), None)
-        if nxt is not None and indent(nxt) > key_col:
-            continue
-        # The step: from its `- ` line down to the next line at or left of the dash.
+        # The step: from its `- ` line to the next line at or left of the dash.
         start = n
         if not m.group(2):
-            while start > 0 and not (re.match(r"^\s*-\s", visible[start])
-                                     and indent(visible[start]) < key_col):
+            while start > jobs_at and not re.match(r"^\s*-\s", visible[start]):
                 start -= 1
         dash = indent(visible[start])
-        end = n + 1
+        kcol = dash + len(re.match(r"^\s*(-\s+)", visible[start]).group(1))
+        end = start + 1
         while end < len(visible) and (not visible[end].strip() or indent(visible[end]) > dash):
             end += 1
-        step = [visible[start][dash + 2:]] + [l for l in visible[start + 1:end]]
-        if any(re.match(r"^\s*if:", l) for l in step):
+        step = [l for l in visible[start:end] if l.strip()]
+        if any((l is not step[0] and indent(l) != kcol) or plain_key(l) not in STEP_KEYS for l in step):
             continue
-        if any(v not in EXECUTING_SHELLS for v in shell_values(step)):
-            continue
-        if any(re.match(r"^\s*(?:-\s+)?env:", l) for l in step):
-            continue
-        # The job, from the structure: the nearest header at the jobs' own column
-        # (derived from the first entry under `jobs:`, any indentation width) above
-        # the step; its properties sit at the column of the job's first property.
-        # A run whose job cannot be established does not count.
-        if jobs_at is None or n <= jobs_at:
-            continue
-        j = start
-        while j > jobs_at and not (indent(visible[j]) == jcol and visible[j].strip()
-                                   and re.match(r"^\s*[A-Za-z0-9_-]+:\s*$", visible[j])):
+        # The job: the nearest line at or left of the jobs' column above the step.
+        j = start - 1
+        while j > jobs_at and not (visible[j].strip() and indent(visible[j]) <= jcol):
             j -= 1
-        if j <= jobs_at:
+        if j <= jobs_at or indent(visible[j]) != jcol or not re.match(r"^\s*[A-Za-z0-9_-]+:\s*$", visible[j]):
             continue
         k = j + 1
         while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > jcol):
             k += 1
-        body = visible[j + 1:k]
-        props = [l for l in body if l.strip()]
-        if not props:
-            continue
-        pcol = indent(props[0])
-        if any(indent(l) == pcol and re.match(r"^\s*(if|env|defaults)\s*:", l) for l in props):
+        props = [l for l in visible[j + 1:k] if l.strip()]
+        pcol = indent(props[0]) if props else None
+        if pcol is None or any(plain_key(l) not in JOB_KEYS for l in props if indent(l) == pcol):
             continue
         cmds.append(strip_shell_comment(m.group(3)))
     return cmds

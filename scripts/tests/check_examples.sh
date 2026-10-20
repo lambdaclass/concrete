@@ -493,7 +493,17 @@ PY
   printf 'jobs:\n  a:\n    steps:\n      - run: bash %s $(exit 1)\n' "$real_owner" > "$fwf"
   unit_control runs_command_substitution 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash %s\n        shell: bash\n' "$real_owner" > "$fwf"
-  unit_control runs_plain_bash_shell 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  # Steps and jobs are allowlisted: even a harmless key outside the list (shell: bash)
+  # disqualifies, so an unexpected spelling of a harmful one cannot slip through.
+  unit_control runs_unlisted_step_key 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - name: x\n        if : false\n        run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_spaced_if_key 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - name: x\n        "if": false\n        run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_quoted_if_key 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  ok:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo fine\n  owner: # gate job\n    if: false\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_commented_job_header 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    "if": false\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_quoted_job_if 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: SHELLOPTS=noexec bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_shellopts_noexec 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: BASH_ENV=/dev/null bash %s\n' "$real_owner" > "$fwf"
