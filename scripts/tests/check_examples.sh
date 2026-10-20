@@ -174,7 +174,12 @@ check_skip() { # src, rest-of-line
       no "$src: '$owner' cannot own a skip — it is the gate the skip exempts the file from"
       return ;;
   esac
-  if ! workflow_runs "$owner"; then
+  workflow_runs "$owner"
+  local wr=$?
+  if [ "$wr" -eq 2 ]; then
+    no "$src: cannot read $WORKFLOW to check its skip owner (PyYAML missing? install python3-yaml)"
+    return
+  elif [ "$wr" -ne 0 ]; then
     no "$src: skip owner '$owner' is not run by $WORKFLOW (an owner CI never runs checks nothing)"
     return
   fi
@@ -512,6 +517,10 @@ PY
   unit_control runs_needs_missing_job 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo b\n  owner:\n    runs-on: ubuntu-latest\n    needs: build\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_needs_unconditional_build 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'name: T\non: push\njobs:\n  owner:\n    name: "Display text\n      - run: bash %s\n      "\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo harmless\n' "$real_owner" > "$fwf"
+  unit_control runs_multiline_double_quoted 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf "name: T\non: push\njobs:\n  owner:\n    name: 'Display text\n      - run: bash %s\n      '\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo harmless\n" "$real_owner" > "$fwf"
+  unit_control runs_multiline_single_quoted 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: SHELLOPTS=noexec bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_shellopts_noexec 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: BASH_ENV=/dev/null bash %s\n' "$real_owner" > "$fwf"
