@@ -140,61 +140,11 @@ project_root_of() {
   return 1
 }
 
-# Skip-owner checks, in Python so they read whole files (no grep -q under pipefail)
-# and compare whole TOKENS. A path token is a maximal run of [A-Za-z0-9_./-].
-#   ref  <owner> <src>: the owner names <src> as a complete token, or, for a
-#        .../src/main.con, the example directory as a complete token. A longer
-#        name (<dir>.backup, main.con.disabled, another file under <dir>) or a
-#        top-level directory plus a common word does not count.
-#   runs <owner> <workflow>: the owner is invoked by a `run:` command of the
-#        workflow — inline or block — as a complete token after shell comments
-#        are stripped. A step name, a YAML comment or an inline `# ...` does not.
-OWNER_PY='
-import re, sys
-TOK = re.compile(r"[A-Za-z0-9_./-]+")
-def tokens(text):
-    return set(t.rstrip(".") for t in TOK.findall(text)) | set(TOK.findall(text))
-def strip_shell_comment(line):
-    out, q = [], None
-    for i, c in enumerate(line):
-        if q:
-            if c == q: q = None
-        elif c in "\"'"'"'": q = c
-        elif c == "#" and (i == 0 or line[i - 1] in " \t;|&("): break
-        out.append(c)
-    return "".join(out)
-def run_commands(path):
-    lines = open(path).read().split("\n")
-    cmds, i = [], 0
-    while i < len(lines):
-        m = re.match(r"^(\s*)(?:-\s+)?run:\s*(.*)$", lines[i])
-        if not m:
-            i += 1; continue
-        indent, rest = len(m.group(1)), m.group(2)
-        if rest.strip() and rest.strip()[0] in "|>":
-            i += 1
-            while i < len(lines) and (not lines[i].strip() or len(lines[i]) - len(lines[i].lstrip()) > indent):
-                cmds.append(lines[i]); i += 1
-        else:
-            cmds.append(rest); i += 1
-    return [strip_shell_comment(c) for c in cmds]
-mode, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
-if mode == "ref":
-    toks = tokens(open(a).read())
-    if b in toks: sys.exit(0)
-    if b.endswith("/src/main.con"):
-        d = b[: -len("/src/main.con")]
-        if d in toks or d + "/" in toks: sys.exit(0)
-    sys.exit(1)
-if mode == "runs":
-    for c in run_commands(b):
-        t = tokens(c)
-        if a in t or "./" + a in t: sys.exit(0)
-    sys.exit(1)
-sys.exit(2)
-'
-owner_references() { python3 -c "$OWNER_PY" ref "$1" "$2"; }
-workflow_runs() { python3 -c "$OWNER_PY" runs "$1" "$WORKFLOW"; }
+# Skip-owner checks (whole path tokens; workflow `run:` invocations, not mentions).
+# See the helper's docstring for the exact rules.
+OWNER_PY_FILE="$ROOT_DIR/scripts/tests/lib/example_skip_owner.py"
+owner_references() { python3 "$OWNER_PY_FILE" ref "$1" "$2"; }
+workflow_runs() { python3 "$OWNER_PY_FILE" runs "$1" "$WORKFLOW"; }
 
 check_skip() { # src, rest-of-line
   local src="$1" rest="$2" owner reason
@@ -417,21 +367,31 @@ PY
     if [ "$rc" = "$want" ]; then echo "  ok   control $name"; ok; else no "control $name: exit $rc, wanted $want"; fi
   }
   printf 'cd examples/known_holes/returned_ref_provenance_map.backup && build\n' > "$fake"
-  unit_control ref_backup_directory 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  unit_control ref_backup_directory 1 python3 "$OWNER_PY_FILE" ref "$fake" "$real_src"
   printf 'run examples/known_holes/returned_ref_provenance_map/src/main.con.disabled\n' > "$fake"
-  unit_control ref_disabled_file 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  unit_control ref_disabled_file 1 python3 "$OWNER_PY_FILE" ref "$fake" "$real_src"
   printf 'run xexamples/known_holes/returned_ref_provenance_map\n' > "$fake"
-  unit_control ref_prefixed_path 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  unit_control ref_prefixed_path 1 python3 "$OWNER_PY_FILE" ref "$fake" "$real_src"
   printf 'cd examples/known_holes/returned_ref_provenance_map && build\n' > "$fake"
-  unit_control ref_exact_directory 0 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
-  unit_control ref_real_owner 0 python3 -c "$OWNER_PY" ref "$real_owner" "$real_src"
+  unit_control ref_exact_directory 0 python3 "$OWNER_PY_FILE" ref "$fake" "$real_src"
+  unit_control ref_real_owner 0 python3 "$OWNER_PY_FILE" ref "$real_owner" "$real_src"
   printf 'jobs:\n  a:\n    steps:\n      - name: %s\n        run: true # %s\n' "$real_owner" "$real_owner" > "$fwf"
-  unit_control runs_name_and_inline_comment 1 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
+  unit_control runs_name_and_inline_comment 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: |\n          # bash %s\n          echo %s.bak\n' "$real_owner" "$real_owner" > "$fwf"
-  unit_control runs_block_comment_and_longer_name 1 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
+  unit_control runs_block_comment_and_longer_name 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo start\n          bash ./%s\n' "$real_owner" > "$fwf"
-  unit_control runs_block_command 0 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
-  unit_control runs_real_workflow 0 python3 -c "$OWNER_PY" runs "$real_owner" "$WORKFLOW"
+  unit_control runs_block_command 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  unit_control runs_real_workflow 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$WORKFLOW"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo harmless\n        name: %s\n' "$real_owner" > "$fwf"
+  unit_control runs_name_after_block_run 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: echo %s\n' "$real_owner" > "$fwf"
+  unit_control runs_echo_argument 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: printf "%%s" "bash %s"\n' "$real_owner" > "$fwf"
+  unit_control runs_printf_quoted 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: GATE=%s true\n' "$real_owner" > "$fwf"
+  unit_control runs_assignment_value 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: X=1 timeout 60 bash -e ./%s 2>&1 | tee log\n' "$real_owner" > "$fwf"
+  unit_control runs_prefixed_invocation 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
 
   # The owner is mentioned in the workflow only inside a comment: it runs nothing.
   local owner wf="$dir/workflow_commented.yml"
