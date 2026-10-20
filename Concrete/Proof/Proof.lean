@@ -773,6 +773,18 @@ def FnTable.dispatchResolves (t : FnTable) : Bool :=
     | some d' => d'.identityKey == d.identityKey
     | none    => false
 
+/-- Does the DISPATCH answer each entry's key with EXACTLY that entry — parameters and body, not
+    only its identity (Codex, land3)?
+
+    `dispatchResolves` compares identity keys because it must kernel-reduce inside the generated
+    `example : … isEvidenceBearing := by decide`, and `PFnDef`'s derived `BEq` does not (the full
+    equality is asserted per entry by the generated `rfl` examples instead). But a table whose
+    dispatch returns a model with the right identity and a different body or parameter list
+    evaluates something its entries do not describe. Every RUNTIME evidence consumer — `root` and
+    `tableEntryEvidence` — therefore also requires this. -/
+def FnTable.dispatchExact (t : FnTable) : Bool :=
+  t.entries.toList.all fun d => t.globals d.operationalKey == some d
+
 /-- Every entry's identity says WHICH callable it means.
 
     A generic declaration whose instantiation was erased fails this. One
@@ -810,7 +822,7 @@ def FnTable.isEvidenceBearing (t : FnTable) : Bool :=
     than a root over whatever happens to be present. The schema version is
     inside the root, so roots from different encodings cannot collide. -/
 def FnTable.root (t : FnTable) : Option String :=
-  if !t.isEvidenceBearing then none
+  if !t.isEvidenceBearing || !t.dispatchExact then none
   else
     -- LENGTH-PREFIXED, not delimiter-joined. `a;b` and `a` + `;b` are different
     -- entry lists that a plain join renders identically, so a delimiter-only
@@ -830,9 +842,10 @@ def FnTable.root (t : FnTable) : Option String :=
     -- Each pair records whether the DISPATCH actually answers that key with that
     -- entry, so the root cannot claim a mapping evaluation does not implement.
     let idx := t.keyIndex.map fun (k, v) =>
-      let resolves := match t.globals k with
-        | some d => if d.identityKey == v then "1" else "0"
-        | none   => "0"
+      -- The SAME comparison as `dispatchExact`: the dispatched model must be the entry itself.
+      let resolves := match t.globals k, t.entries.toList.find? (·.operationalKey == k) with
+        | some d, some e => if d.identityKey == v && d == e then "1" else "0"
+        | _, _   => "0"
       lp "k" k ++ lp "v" v ++ lp "d" resolves
     some (s!"tblv{t.schemaVersion}:" ++ lp "E" (String.join parts) ++ lp "K" (String.join idx))
 

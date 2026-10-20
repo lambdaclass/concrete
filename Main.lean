@@ -3134,14 +3134,12 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- 0 failed", so the counts and the exit code disagreed about the same run.
       let refs := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .refinement)
       let enss := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .ensures)
-      -- A theorem the kernel accepts verifies a claim only when the claim's own verdict lets it: a
-      -- claim refused by its call keys (bug 081), its subject binding (bug 079) or its dependency
-      -- closure is TYPE-CHECKED, NOT PROVED. `stale` keeps its own rendering below, as before.
+      -- A theorem the kernel accepts verifies a claim only when the claim's own verdict is `proved`:
+      -- a claim that is stale, or refused by its call keys (bug 081), its subject binding (bug 079)
+      -- or its dependency closure, is TYPE-CHECKED, NOT PROVED (Codex, land3 rounds 3-4).
       let claimStatus := fun (fn : String) =>
         (statusBySubject.find? (·.1 == fn)).map (·.2) |>.getD "unknown"
-      let isRefused := fun (fn : String) =>
-        let st := claimStatus fn
-        st != "proved" && st != "stale"
+      let isRefused := fun (fn : String) => claimStatus fn != "proved"
       let refused := (refs res.accepted).filter (fun c => isRefused c.target.subject)
         |>.map (fun c => (c.target.subject, c.target.theoremName, claimStatus c.target.subject))
       let verified := ((refs res.accepted).filter (fun c => !isRefused c.target.subject)).map (·.target.subject)

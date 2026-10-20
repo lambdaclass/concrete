@@ -356,6 +356,8 @@ inductive EntryEvidenceRefusal where
   | bodyMismatch (callee : CallableId) (stored : String) (recomputed : String)
   /-- One callable appears twice, so a static lookup cannot say which implementation it selects. -/
   | duplicateIdentity
+  /-- The table's dispatch does not answer this entry's key with exactly this entry (Codex, land3). -/
+  | dispatchMismatch (callee : CallableId) (key : String)
 deriving Repr, BEq
 
 def EntryEvidenceRefusal.explain : EntryEvidenceRefusal → String
@@ -366,6 +368,8 @@ def EntryEvidenceRefusal.explain : EntryEvidenceRefusal → String
   | .bodyMismatch c st rc =>
       s!"'{c.render}' stores body digest {st} but its body recomputes to {rc}"
   | .duplicateIdentity => "one callable appears twice in the table"
+  | .dispatchMismatch c k =>
+      s!"'{c.render}' is listed under key `{k}`, but the table's dispatch does not answer `{k}` with that entry"
 
 /-- Entry evidence for a table, or a NAMED refusal.
 
@@ -376,8 +380,18 @@ def EntryEvidenceRefusal.explain : EntryEvidenceRefusal → String
     WHOLE table, not most of it. -/
 def tableEntryEvidence (t : FnTable) : Except EntryEvidenceRefusal (List TableEntryEvidence) := do
   let rows ← t.canonicalEntries.toList.foldlM (init := ([] : List TableEntryEvidence)) fun rows d =>
-    match d.identity.id?, d.sourceBodyDigest with
-    | some cid, some stored =>
+    -- The entry must be what evaluation reaches (Codex, land3): `eval` dispatches through `globals`,
+    -- so an entry its key does not dispatch to — a substituted body or parameter list under the same
+    -- identity — is evidence about a model no call evaluates.
+    let dispatched := t.globals d.operationalKey == some d
+    match d.identity.id? with
+    | some cid =>
+      if !dispatched then .error (.dispatchMismatch cid d.operationalKey) else
+      match d.sourceBodyDigest with
+      -- An entry with NO recorded provenance is refused rather than carried: evidence that cannot
+      -- be checked against a body must not stand in for evidence that was.
+      | none => .error (.provenanceMissing cid)
+      | some stored =>
         -- RECOMPUTED FROM THE BODY, not copied from the metadata beside it. Copying is what made
         -- the acceptance mutation survive: replace `d.body`, keep `d.identity` and keep
         -- `d.sourceBodyDigest`, and every downstream comparison still agreed, because the stored
@@ -395,10 +409,7 @@ def tableEntryEvidence (t : FnTable) : Except EntryEvidenceRefusal (List TableEn
           if stored.value != recomputed then
             .error (.bodyMismatch cid stored.value recomputed)
           else .ok (rows ++ [{ callee := cid, sourceBodyDigestV1 := stored.value }])
-    -- An entry with NO recorded provenance is refused rather than carried: evidence that cannot be
-    -- checked against a body must not stand in for evidence that was.
-    | some cid, none => .error (.provenanceMissing cid)
-    | none, _ => .error .noIdentity
+    | none => .error .noIdentity
   -- UNIQUE IDENTITIES, or nothing. A table holding one callable twice cannot say which
   -- implementation a static lookup selects, and `entryEvidenceContains` answering "at least one"
   -- would let a `body` edge be justified by an entry that is not the one dispatch reaches.

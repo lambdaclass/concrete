@@ -162,11 +162,21 @@ import json,sys; d=json.loads(sys.argv[1]); c={x['function']:x for x in d['check
 e=c.get(sys.argv[2],{}); m=c.get('main.check_magic',{})
 print(e.get('status'), e.get('discharged'), m.get('status'), m.get('discharged'), d['summary'].get('refused'))" "$CPJ" "$EV" 2>/dev/null)"
 CPT="$("$C" "$FX" --report check-proofs 2>&1)"
-[ "$CPV" = "correspondence_unjustified False checked True 1" ] \
+# 2 refused: the aliased claim and the fixture's stale check_class_orig (a stale claim is not verified).
+[ "$CPV" = "correspondence_unjustified False checked True 2" ] \
   && grep -qF "? $EV — Examples.ElfHeader.Proofs.validate_header_correct (claim verdict: correspondence_unjustified)" <<<"$CPT" \
   && ! grep -qF "✓ $EV" <<<"$CPT" \
   && ok "X: check-proofs reports the aliased claim refused (not checked, not kernel-verified); check_magic stays checked" \
-  || no "X: check-proofs on the aliased claim reads '$CPV' (want correspondence_unjustified False checked True 1)"
+  || no "X: check-proofs on the aliased claim reads '$CPV' (want correspondence_unjustified False checked True 2)"
+# A STALE claim is not verified either (Codex, land3 round 4): stale_missing_partial links one theorem to
+# a proved claim (states.partial) and a stale one (states.stale); only the proved one is kernel-verified.
+SMP="$("$C" examples/proof_patterns/stale_missing_partial/src/main.con --report check-proofs 2>&1)"
+grep -qF "✓ states.partial — Examples.ProofPatterns.Proofs.add_three_correct" <<<"$SMP" \
+  && grep -qF "? states.stale — Examples.ProofPatterns.Proofs.add_three_correct (claim verdict: stale)" <<<"$SMP" \
+  && ! grep -qF "✓ states.stale" <<<"$SMP" \
+  && grep -qF "Summary: 1 verified, 0 failed; 1 refused (type-checked, NOT proved)" <<<"$SMP" \
+  && ok "check-proofs: the stale claim sharing a theorem with a proved one is refused, not verified" \
+  || no "check-proofs counts the stale claim as verified: $(grep -m1 'Summary' <<<"$SMP")"
 # THE TABLE SIDE OF THE KEY (Codex, land3). A specification's `.call key` evaluates whatever the
 # table's `globals` dispatch returns, while scoped evidence was read from `attested`/`entries` alone: a
 # table attesting checkClassFn under `check_class` while dispatching `check_class` to checkVersionFn
@@ -187,6 +197,20 @@ def verdict (t : FnTable) : String :=
 #eval IO.println s!"CONTROL {verdict elfFns}"
 #eval IO.println s!"SWAP {verdict swapped}"
 #eval IO.println s!"PARAM {verdict reparam}"
+-- The other evidence APIs (Codex, land3 round 4): a dispatch returning the SAME IDENTITY with another
+-- body or parameter list. isEvidenceBearing stays identity-level (it must kernel-reduce in generated
+-- `by decide` examples); root and tableEntryEvidence compare the whole model.
+def tv (t : FnTable) : String :=
+  let te := match tableEntryEvidence t with
+    | .ok rows => s!"ok:{rows.length}"
+    | .error (.dispatchMismatch c k) => s!"refused:{c.render}:{k}"
+    | .error _ => "other"
+  s!"root={t.root.isSome} entries={te}"
+def subBody (k : String) (m : PFnDef) : PFnDef :=
+  if k == "check_class" then { m with body := checkVersionFn.body } else m
+#eval IO.println s!"TCONTROL {tv elfFns}"
+#eval IO.println s!"TBODY {tv { elfFns with globals := fun k => (elfFns.globals k).map (subBody k) }}"
+#eval IO.println s!"TPARAM {tv reparam}"
 LEAN
 DOUT="$(lake env lean "$TMP/dispatch.lean" 2>&1)"
 grep -q "^CONTROL ok:5$" <<<"$DOUT" \
@@ -198,6 +222,13 @@ grep -q "^SWAP refused:main.check_class:check_class$" <<<"$DOUT" \
 grep -q "^PARAM refused:main.check_class:check_class$" <<<"$DOUT" \
   && ok "X: a dispatch to the same body under other parameters is refused (whole-model equality)" \
   || no "X: a same-body, other-parameters dispatch was not refused: $(grep -m1 '^PARAM' <<<"$DOUT")"
+grep -q "^TCONTROL root=true entries=ok:5$" <<<"$DOUT" \
+  && ok "X: control — elfFns has a root and five entry-evidence rows" \
+  || no "X: control — elfFns root/entry evidence: $(grep -m1 '^TCONTROL' <<<"$DOUT")"
+grep -q "^TBODY root=false entries=refused:v1:user:main.check_class:check_class$" <<<"$DOUT" \
+  && grep -q "^TPARAM root=false entries=refused:v1:user:main.check_class:check_class$" <<<"$DOUT" \
+  && ok "X: a same-identity dispatch with another body or parameters gets no root and refuses entry evidence" \
+  || no "X: same-identity substitution: $(grep -m1 '^TBODY' <<<"$DOUT") / $(grep -m1 '^TPARAM' <<<"$DOUT")"
 # The same attack where `check_class` IS defined. The call graph then resolves the spelling to the
 # definition, not the import, so the edge set it reports is not what the elaborator resolved.
 FC=tests/programs/bug081_alias_key_collide/src/main.con
