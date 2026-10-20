@@ -923,8 +923,13 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   is consumed (`acc = f(acc, x)`); assigning over a live linear value stays E0219.
 - Names in other namespaces: field labels, type names, traits and modules.
 
-Status: **main**; all accepted. *`regress_087_sibling_promoted.con`* and
-*`regress_087_unpromoted_sibling.con`* pin sibling reuse of a name with promoted storage.
+Status: the checker accepts all of these on **main**. Correct execution of sibling reuse is
+**main** for scalars, but **land2** where the name has promoted storage (an aggregate such as
+`let mut x: [i32; 1]` in both branches): on `main` Lower appends promoted entries and never drops
+a dead one at a new declaration, so the else branch read the then branch's storage (41 for 42)
+and an unpromoted re-declaration failed to build. The bug 087 follow-ups on `land2-fix` repair
+both (`Concrete/IR/Lower.lean`), pinned by *`regress_087_sibling_promoted.con`* and
+*`regress_087_unpromoted_sibling.con`*.
 
 #### SCOPE-3. Blocks are lexical on every consumer
 
@@ -985,7 +990,7 @@ accepted fixtures, with the diagnostic text updated.
 
 | rule | version | code | since |
 |---|---|---|---|
-| REF-1 | 1 | E0236 (to be attached at the front end, G2) | H1 closure, 2026-06-13; post-mono re-assertion, class 6 |
+| REF-1 | 1 | E0236 (to be attached at the front end, G2); E0575 for an `extern fn` signature (FFI safety, which then also carries the `rule` evidence and a rewrite) | H1 closure, 2026-06-13; post-mono re-assertion, class 6 |
 | REF-2 | 1 | E0236 (proposed; no code today) | H1 closure, 2026-06-13 |
 | REF-3 | 1 | E0239 | bug 092 (`df0215f0`; batch 4 follow-ups `fc34504e` to `7f4ae423`); bare-reference constants once G1 is repaired |
 | REF-4 | 1 | E0236 (a), E0239 (b), E0238 (c) | (a) 2026-06-13; (b) batch 4; (c) batch 2 |
@@ -1021,13 +1026,18 @@ the rewrite and the related span are required.
 The implementer adds a manifest `tests/rules/exit_2i.tsv` (new) with one row per fixture and five
 columns: `rule`; `fixture`; `expected`, either `reject:<code>:<rule@version>` or
 `run:<exit code>`; `pair`, an identifier shared by a reject row and the run row of its rewritten
-program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `model` (the extracted
-model of the named function agrees) and `fmt` (formatter round-trip). A gate
+program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `model:<id>` and
+`fmt` (formatter round-trip). `binary` and `interp` compare the exit code with `expected`.
+`model:<id>` names a row of a sidecar `tests/rules/exit_2i_model.tsv` (new) that gives the
+function to extract (`--report extraction`) and a structural assertion on its extracted body
+(for bug 087: the inner binder is a distinct `x.bN` and the read after the block is the outer
+`x`, as the `run_tests.sh` leg on `land2-fix` checks today); it is a structural check, not an
+evaluation of the model, and does not compare against `expected`. A gate
 `scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For every reject row it
 checks, in both the human and the JSON rendering, the code, the `rule` evidence with the exact
 rule and version, the `spec` evidence, and a non-empty `next` / `next_action`; for a SCOPE-1 row,
 also a related span. These diagnostic checks are mandatory and do not depend on `modes`, which
-lists only the execution modes of run rows (`binary`, `interp`, `model`, `fmt`). For each run row
+lists only the execution modes of run rows (`binary`, `interp`, `model:<id>`, `fmt`). For each run row
 it runs every listed mode and requires the expected result from each. It fails
 when a rejection rule (REF-1 to REF-8, SCOPE-1) has no reject row, no run row or a reject row
 without a pair, when a run row of a semantic guarantee (SCOPE-2, SCOPE-3) lacks mode `interp`
@@ -1088,7 +1098,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 today) |
 | SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
 | SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
-| SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model`: run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in the same modes |
+| SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model:087-lexical` (the sidecar row asserts lexical binders for `shadow_if`, `shadow_param` and `shadow_loop`): run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in the same modes |
 | SCOPE-3 | `regress_087_borrow_shadow_uaf/` (a project fixture; success is exit 0) | modes `binary,interp` if the interpreter runs the project, otherwise `binary,interp-exempt:<the interpreter's refusal>`: run 0 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 0 in the same modes |
 | G4 | `regress_2i_renamed_pattern_binder.con` (new; `match`, `if let`, `while let`, destructuring `let`) | run 42, binary = `--interp`, formatter round-trip |
 
@@ -1128,7 +1138,7 @@ manifest row:
   scopes (killed by the SCOPE-2 sibling rows);
 - for SCOPE-3, the mutations bug 087's repair carries (removing `exitBlock`'s restoration of the
   visible variables, or `bindLocal`'s renaming) are killed by `regress_087_let_block_shadow.con`
-  in modes `binary,interp,model` while shadowing is accepted; once SCOPE-1 makes shadowing
+  in modes `binary,interp,model:087-lexical` while shadowing is accepted; once SCOPE-1 makes shadowing
   unreachable from source they move, like the 093 and 094 rows, to a leg that disables E0301.
 
 ### 15.7 Gaps and owners
