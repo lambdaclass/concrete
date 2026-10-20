@@ -1527,6 +1527,7 @@ run_ok  "$TESTDIR/trait_destroy_newtype_payload_paren.con" "1" 0
 # receiver read through a reference under a live exclusive reborrow.
 run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0293)"
 run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0231)"
+run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

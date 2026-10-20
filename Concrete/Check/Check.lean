@@ -334,7 +334,11 @@ def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
     | .refMut _ =>
       let env ← getEnv
       let roots := r :: info.borrowedFrom.toList
-      let others := env.vars.filter fun (n, vi) =>
+      -- Only references created AFTER `r` (newer bindings come first in `vars`) can be
+      -- reborrows of it; an older one sharing the root is `r`'s own ancestor
+      -- (`let r = &mut p; let s = &mut *r; s.bump()` uses the child, not the parent).
+      let newer := env.vars.takeWhile (·.1 != r)
+      let others := newer.filter fun (n, vi) =>
         n != r && vi.state != .consumed &&
           (match vi.borrowedFrom with | some src => roots.contains src | none => false)
       if !others.isEmpty then

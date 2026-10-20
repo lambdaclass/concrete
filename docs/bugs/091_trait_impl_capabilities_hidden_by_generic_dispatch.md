@@ -317,4 +317,12 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_ref_receiver_under_mut_reborrow.con` (E0231). Found while testing, NOT fixed here
   (pre-existing, separate): the compiled binary of `bump(if true { &mut p } else { &mut p })`
   segfaults while --interp prints 2 — a reference-valued `if` expression miscompiles.
+* **Codex review of round 3, tenth pass (partial).** `checkExclusiveRefUse` counted an exclusive
+  reference's own older parent as a conflicting borrow, so using a nested reborrow
+  (`let r = &mut p; let s = &mut *r; s.bump()`) was a false E0232 introduced by the fifth pass;
+  only references created after it count now. Fixture `trait_mut_receiver_nested_reborrow.con`
+  (4). Still OPEN from this pass (not fixed): `(*r).p` through `r: &Heap<W>` (an explicit `*`
+  restores the owned-heap exemption), a conditional `&mut` receiver
+  (`(if c { &mut *r } else { &mut *r }).bump(&*r)`) contributes no receiver path to E0293, and
+  `(*r).read()` skips the live-exclusive-reborrow check that `r.read()` gets.
 

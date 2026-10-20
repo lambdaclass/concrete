@@ -1,0 +1,23 @@
+// Bug 091 round 3 (Codex review, tenth pass): using an exclusive reborrow `s = &mut *r` while
+// its parent `r` is merely held (not used) is valid; d105bc7c counted the older parent as a
+// conflicting borrow (false E0232). Expected (compiled AND --interp): 4.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        let mut p: P = P { n: 1 };
+        if true {
+            let r: &mut P = &mut p;
+            let s: &mut P = &mut *r;
+            s.bump();
+            P::bump(s);
+            P::bump(r);
+        }
+        let P { n } = p;
+        print_int(n);
+        print_char(10);
+        return 0;
+    }
+}
