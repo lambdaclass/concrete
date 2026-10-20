@@ -25,7 +25,7 @@ exits, stage (a)/(b)/(c) results at that SHA, what acceptance unlocks) by
 `scripts/gen/candidate_table.py`; `check_docs_drift.sh` fails on a hand-edited or stale table or a
 malformed record. Bug records from 102 on must state a structural cause and owner
 (`check_bug_filing_complete.sh`), and [docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md)
-groups bugs 039 – 106 into fourteen classes with their owning tasks. Bug 104 is filed (OPEN, exit 0b):
+groups bugs 039 – 106 into fifteen classes with their owning tasks. Bug 104 is filed (OPEN, exit 0b):
 a reference assigned from an inner block into an outer reference variable records no borrow, so its
 source can be freed while the reference is read; batch 2's normalized place rule rejects both
 reproducers.

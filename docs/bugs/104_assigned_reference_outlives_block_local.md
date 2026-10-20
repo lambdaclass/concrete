@@ -87,9 +87,9 @@ when batch 2 lands with both programs as permanent rejection fixtures.
 The source checker has no reference-provenance model. Borrow facts are attached to the syntactic
 form that created them (`let x = &y`), keyed by a source name, rather than derived from where a
 reference value flows: an assignment, a branch merge or a reborrow moves a reference without moving
-its provenance. Each such path has been patched one form at a time (087 borrow blocks, 092
-aggregates, 093 shadowing, 094 name-keyed state), and this is the assignment form of the same
-missing model. It is also an instance of borrow tracking by syntax: each check recognizes the forms
+its provenance. Each such path has been patched one form at a time (092 aggregates, 091 receivers
+and arguments, 105 references chosen between branches), and this is the assignment form of the
+same missing model. It is also an instance of borrow tracking by syntax: each check recognizes the forms
 it was written for, and bug 091 converged only once one normalized-place rule replaced them
 ([structural classes](STRUCTURAL_CLASSES.md) 4 and 5).
 

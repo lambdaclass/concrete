@@ -18,11 +18,12 @@ aggregate-reference programs), 096 – 098 from exit 0b and the reproducer probe
 `bug096-type-identity` (same-named types, private functions and generic functions in two modules
 resolved to one definition), 099 – 100 from exit 0b and the probes behind `bug099-generic-destroy` (a
 user generic `Destroy` impl called by its unspecialized name: on main the program fails LLVM
-validation with `use of undefined value '@Holder_destroy'`). **Record pending** for 105 and 106,
-which are being filed on `land2-fix`: 105, a reference-valued `if` expression miscompiles (the
-binary segfaults while `--interp` prints 2; first noted in bug 091's round-3 record), and 106,
-`--report model-diff` on `thesis_demo` never terminates and `check_model_diff.sh` swallows it with
-`|| true`.
+validation with `use of undefined value '@Holder_destroy'`). Bug 105's record is on `land2-fix`
+(`105_reference_valued_if_miscompiles.md`): a reference-valued `if` expression miscompiles (the
+binary segfaults while `--interp` prints 2); the branch CONTAINS it at the checker (E0238 refuses
+every reference-valued `if`/`match`, with permanent fixtures) while the lowering defect itself stays
+open. **Record pending** for 106, being filed on `land2-fix`: `--report model-diff` on `thesis_demo`
+never terminates and `check_model_diff.sh` swallows it with `|| true`.
 
 ## Summary
 
@@ -31,17 +32,18 @@ binary segfaults while `--interp` prints 2; first noted in bug 091's round-3 rec
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098 | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
-| 4. No reference-provenance model in the source checker | 087 (borrow block), 090, 091 (receiver cases), 092, 093, 104 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
+| 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment) | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
-| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 076, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105 (pending) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (pending) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
-| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106 (pending) | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts; R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
+| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106 (pending) | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
 | 12. One fact kept in two places | 042, 057, 064, 070 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092 | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
+| 15. Ownership state not modeled along control-flow paths | 090 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -110,11 +112,12 @@ R-0492's `DefId`; cleanup edges move to Place MIR under R-0501 (S10).
 
 ## 4. No reference-provenance model in the source checker
 
-**Bugs.** 087's borrow-block use after free, 090 (a match guard's move recorded as its arm's move,
-so a later arm moved the value again), 091's receiver cases (a by-value or `&mut self` receiver
-reached through a shared reference), 092 (a reference stored in an aggregate did not freeze its
-source), 093 (scope-exit accounting), 104 (a reference assigned from an inner block outlives its
-source).
+**Bugs.** 091's receiver cases (a by-value or `&mut self` receiver reached through a shared
+reference), 092 (a reference stored in an aggregate did not freeze its source), 104 (a reference
+assigned from an inner block outlives its source), and 105's checker side (a reference chosen at run
+time between branches cannot be traced, so it is refused). 087's borrow-block use after free is
+not in this class: the checker had assumed the right binding and the compiled program read a
+different one, a binder-identity defect (class 2).
 
 **Design cause.** Borrow facts are attached to the syntactic form that created them (`let x = &y`
 records `borrowedFrom`), keyed by a source name; a reference that flows by assignment, through a
@@ -126,7 +129,7 @@ compiled.
 checked by declarative rules (borrow validity, no escaping or stored reference, use-once) in one
 checker over Core whose output is the only input to lowering.
 
-**Owner.** R-0499 (S8, queue row 4; its exit names 087's borrow-block case and 090 – 094), with the
+**Owner.** R-0499 (S8, queue row 4; its exit names 090 – 094 and 087's borrow-block case), with the
 reference rules written and enforced by exit 2i (R-0500). The immediate repairs stay under exit 0b.
 
 ## 5. Borrow tracking by syntax instead of normalized places
@@ -150,9 +153,10 @@ restrictions; Place MIR (R-0501, S10) carries the same places into lowering.
 ## 6. Capability facts not carried across dispatch, specialization or package boundaries
 
 **Bugs.** 063 (cap-variable inference read an unknown argument type as no capabilities), 071 (a
-capability declared in a dependency did not bind on its caller), 076 (proof admission could not see
-into dependencies or through a type parameter), 091 (a trait impl's extra capabilities were hidden by
-generic dispatch, and nothing re-checked after Mono).
+capability declared in a dependency did not bind on its caller), 091 (a trait impl's extra
+capabilities were hidden by generic dispatch, and nothing re-checked after Mono). 076 is not in this
+class: its proof admission ignored dependency effects, unresolved generic calls and foreign
+assumptions, an evidence decision (class 11).
 
 **Design cause.** Capability requirements are checked once, before specialization, against the
 signatures a pass can see; dispatch through a trait bound, a function pointer or a package boundary
@@ -172,7 +176,7 @@ by name, the program by position), 085 (a loop step read the pre-iteration envir
 discarded statement modeled as the block's value), 088 (an unhinted literal unchecked, and the
 folder compared it unwrapped), 101 (a branch-local `let` captured the continuation in the model),
 102 (the interpreter refuses a raw-pointer cast the backend miscompiles, so the differential gates
-are blind to it), 105 (pending: the binary and the interpreter disagree on a reference-valued `if`).
+are blind to it), 105 (the binary and the interpreter disagree on a reference-valued `if`).
 104's heap reproducer also cannot run under `--interp` (`alloc` is undefined there).
 
 **Design cause.** The language's meaning lives in `Proof.eval`'s `PExpr`, the interpreter, the SSA
@@ -191,7 +195,7 @@ Core: 084 – 086, 101); the harness R-0491 (S1, exit 2c) detects the class mean
 
 **Bugs.** 078 (an `if`/`else` whose arms both diverge left its merge block open), 095 (no record:
 stale storage of aggregate references, "requires correct storage aliasing during lowering"), 102 (a
-pointer-typed local whose address is taken got no stack slot), 105 (pending: a reference-valued `if`
+pointer-typed local whose address is taken got no stack slot), 105 (a reference-valued `if`
 expression miscompiles).
 
 **Design cause.** `Lower` performs sequencing, `defer`, match compilation, promotion, layout and
@@ -240,8 +244,8 @@ activation) and 062 (slice 3).
 **Bugs.** 049 (an unevaluable crash predicate stubbed to parse-only), 052 (`destroyable` accepted any
 unmatched type), 058 (a missing fingerprint compared with itself), 063 (unknown capabilities read as
 none), 065 (recursive callees dropped, so unbounded stack read as bounded), 067 (a cap lost to
-attestation), 075 (policy gates that never saw a capability passed), 076 (admission blind to
-dependencies), 103 (an unresolved `_destroy` filled with an empty body), 106 (pending: a
+attestation), 075 (policy gates that never saw a capability passed), 076 (proof admission treated
+unseen dependency effects, unresolved generic calls and foreign assumptions as effect-free), 103 (an unresolved `_destroy` filled with an empty body), 106 (pending: a
 non-terminating model-diff swallowed by `|| true`).
 
 **Design cause.** An unknown, uncomputed or unresolved value defaults to empty, pure, fresh, bounded
@@ -252,7 +256,9 @@ or successful, and nothing downstream can tell it from a measurement
 verdict; gates count completed work and fail below a minimum.
 
 **Owner.** The absence rule and `check_absence_not_fact.sh`; R-0494 (S2) for verdicts; R-0513
-(exits 2d and 2e) for gates (075, 106); R-0510 (S8a) for synthesized definitions (052, 103).
+(exits 2d and 2e) for gates (075, 106); R-0510 (S8a) for synthesized definitions (052, 103); proof
+admission over complete dependency and foreign-assumption summaries (076) belongs to the evidence
+owners R-0494 (S2) and R-0495 (S9).
 
 ## 12. One fact kept in two places
 
@@ -298,3 +304,19 @@ binding descriptions and checked.
 
 **Owner.** R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) and R-0285's binding descriptions
 for the C boundary.
+
+## 15. Ownership state not modeled along control-flow paths
+
+**Bugs.** 090 (a match guard's move was recorded as its arm's move; when the guard was false a later
+arm moved the value again).
+
+**Design cause.** The checker computes each arm from the pre-match environment and folds effects
+into the construct it is checking, instead of following ownership state along the program's actual
+control-flow paths, so an effect on a path that does not commit (a failed guard) is attributed to a
+path that does.
+
+**Structural fix.** Use-once and conservation as rules over Core's control flow, with the state
+threaded along every reachable path, including guard failure.
+
+**Owner.** R-0499 (S8: use-once and conservation at reachable exits; its exit names 090), queue
+row 4.
