@@ -5,6 +5,13 @@
 identity-precise accepted a program that exposed it; the plain shape below needs no checker change.
 **Severity:** critical. Silent wrong code in safe code on main: the binary and the interpreter
 disagree, and no gate compares them on this shape.
+**Relation to 087:** the same Elab/Lower defect as bug 087 (a shadowing `let` keeps its Core name and
+shares the shadowed binding's slot), seen through a reference while both bindings are live instead
+of through a read after the inner block closes. Batch 2 (`land2-fix`) repairs 087 with `bindLocal`,
+which alpha-renames every shadowing `let` (same block or outer), and its checker additionally
+refuses shadowing a binding that live references borrow: the `land2-fix` build at `91003b79` rejects
+both reproducers below with E0238. This record stays OPEN on main until that lands, and adds the two
+reference reproducers as regression legs the repair must carry.
 
 ## Reproducer
 
@@ -55,8 +62,8 @@ name matches, with no notion of which binding a reference was taken from.
 
 R-0492 (S5): a `LocalId` for every binder from Resolve on, so the two `x` bindings are different
 locals with different storage; R-0501 (S10 Place MIR) gives each local its own place. Until then the
-repair belongs to queue exit 0b (wrong code in safe code): give a shadowing `let` a fresh Core name
-in Elab (as bug 045 did for match binders), with both programs above as permanent gate legs
-comparing the binary with `--interp`.
+repair belongs to queue exit 0b (wrong code in safe code): batch 2's 087 repair (`bindLocal` on
+`land2-fix` gives a shadowing `let` a fresh Core name, as bug 045 did for match binders), extended
+with both programs above as permanent gate legs comparing the binary with `--interp`.
 
 **Repair owner:** queue exit 0b.
