@@ -53,7 +53,9 @@
 # summary must each fail; so must an exit missing its class or acceptance test, an exit owned outside
 # its row, a queue row that omits an exit, a continues-alongside exit that blocks a deliverable, a
 # blocks-features exit that blocks none, a prerequisite list that drops an exit or drifts from its queue
-# row, and an implemented-bug row that lists a fixed bug or lacks its branch or remaining step; a
+# row (or a deliverable deleted, duplicated, weakened alone or relabelled to another row), and an
+# implemented-bug row that lists a fixed bug (fixed in the ledger README alone, or by a bold or a plain
+# Status line alone) or lacks its branch or remaining step; a
 # crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
 set -uo pipefail
@@ -296,7 +298,8 @@ pbad2 = 0
 blocked_any = set(); row_blocked = {}
 # The first feature deliverables, each with its own row in the table and its own comparison against its
 # queue row's "prerequisite exits:" list: a union per row would let one deliverable mask another.
-REQUIRED_DELIVERABLES = ('RocksDB slice 1', 'V1a', 'V1b')
+# Each is bound to the queue row that schedules it, so relabelling a row cannot borrow another's list.
+REQUIRED_DELIVERABLES = {'RocksDB slice 1': 5, 'V1a': 3, 'V1b': 3}
 seen_deliv = set()
 if not prows:
     no('ROADMAP.md has no "### Feature prerequisites" table (| deliverable | blocked by | not blocked by |)'); pbad2 += 1
@@ -320,7 +323,11 @@ for cells in prows:
     if not rm:
         no(f'deliverable "{d}" names no queue row'); pbad2 += 1
     else:
-        row_blocked.setdefault(int(rm.group(1)), []).append((dname, set(b)))
+        drow = int(rm.group(1))
+        if dname in REQUIRED_DELIVERABLES and drow != REQUIRED_DELIVERABLES[dname]:
+            no(f'deliverable {dname} is labelled row {drow}, but queue row {REQUIRED_DELIVERABLES[dname]} schedules it'); pbad2 += 1
+            drow = REQUIRED_DELIVERABLES[dname]
+        row_blocked.setdefault(drow, []).append((dname, set(b)))
 for e, cls in sorted(exits.items()):
     if cls == 'blocks features' and e not in blocked_any:
         no(f'exit {e} is blocks features but no deliverable lists it as a prerequisite'); pbad2 += 1
@@ -343,9 +350,11 @@ if prows and not pbad2:
 irows = table_rows('Implemented, not yet accepted', 'bugs')
 ibad2 = 0
 import os, glob
-ledger_dir = 'docs/bugs'
+ledger_dir = os.environ.get('BUG_LEDGER_DIR', 'docs/bugs')
 readme = open(os.path.join(ledger_dir, 'README.md'), encoding='utf-8').read() if os.path.exists(os.path.join(ledger_dir, 'README.md')) else ''
 fm = re.search(r'^## Fixed Bugs$', readme, re.M)
+if not fm:
+    no(f'the bug ledger {ledger_dir}/README.md has no "## Fixed Bugs" list to check against'); ibad2 += 1
 fixed_list = ''
 if fm:
     nx = re.compile(r'^## ', re.M).search(readme, fm.end())
@@ -365,7 +374,8 @@ for cells in irows:
         seen_bug[n] = cells[0]
         fixed = re.search(r'\(' + n + r'_', fixed_list) is not None
         for f in glob.glob(os.path.join(ledger_dir, n + '_*.md')):
-            st = re.search(r'^\*\*Status:\*\*\s*(\S+)', open(f, encoding='utf-8').read(), re.M)
+            # both ledger spellings: `**Status:** Fixed ...` and `Status: fixed`
+            st = re.search(r'^(?:\*\*Status:\*\*|Status:)\s*(\S+)', open(f, encoding='utf-8').read(), re.M | re.I)
             if st and st.group(1).lower().startswith('fixed'): fixed = True
         if fixed:
             no(f'bug {n} is listed as not yet accepted but the bug ledger records it fixed; remove it from the table'); ibad2 += 1
@@ -703,6 +713,9 @@ PY
   neg prerequisites_one_deliverable_weakened \
     "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j | 0a, 0c,')" \
     "for V1b"
+  neg prerequisites_row_relabelled \
+    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l |')" \
+    "deliverable V1b is labelled row 5, but queue row 3 schedules it"
   neg implemented_bug_already_fixed \
     "old='| 088 (batch 4) |'; assert s.count(old)==1; s=s.replace(old,'| 080, 088 (batch 4) |')" \
     "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
@@ -712,6 +725,35 @@ PY
   neg implemented_bug_no_step \
     "import re; s,n=re.subn(r'^\| 099, 100 \|[^\n]*$', '| 099, 100 | \`bug099-generic-destroy\` |  |', s, flags=re.M); assert n==1" \
     "implemented-bug row \"099, 100\" has no remaining acceptance step"
+  # Bug-ledger controls: the same roadmap against a mutated copy of docs/bugs, one way of recording a
+  # fix at a time (README's Fixed list alone, a bold Status line alone, a plain Status line alone).
+  bugneg() { # name, python-edit over s (file named in $3, relative to docs/bugs), file, expected-substring
+    local d="$TMPD/$1.bugs"
+    cp -R docs/bugs "$d"
+    if ! python3 - "$d/$3" "$2" <<'PY'
+import sys, re
+p = sys.argv[1]; s = open(p, encoding='utf-8').read()
+exec(sys.argv[2])
+open(p, 'w', encoding='utf-8').write(s)
+PY
+    then no "control $1: could not build its mutated ledger"; return; fi
+    if BUG_LEDGER_DIR="$d" run_on "$TARGET"; then
+      no "control $1: the mutated ledger passed"
+    elif printf '%s\n' "$RESULT" | grep -q -- "$4"; then
+      ok "control $1 is rejected ($4)"
+    else
+      no "control $1 failed for an unexpected reason"
+    fi
+  }
+  bugneg ledger_fixed_in_readme_only \
+    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [052_array_element_destroy_noop.md](052_array_element_destroy_noop.md)\n')" \
+    README.md "bug 052 is listed as not yet accepted but the bug ledger records it fixed"
+  bugneg ledger_fixed_bold_status \
+    "import re; s,n=re.subn(r'^\*\*Status:\*\* Open', '**Status:** FIXED 2026-10-20', s, flags=re.M); assert n==1" \
+    052_array_element_destroy_noop.md "bug 052 is listed as not yet accepted but the bug ledger records it fixed"
+  bugneg ledger_fixed_plain_status \
+    "import re; s,n=re.subn(r'^\*\*Status:\*\* Open', 'Status: fixed', s, flags=re.M); assert n==1" \
+    065_stack_depth_unboundedness_not_propagated.md "bug 065 is listed as not yet accepted but the bug ledger records it fixed"
   # The wrapper itself must not read a crashed or silent checker as a pass.
   if ( check_file() { return 17; }; run_on "$TARGET" ); then
     no "control checker_exit_failure: a nonzero checker exit passed"
