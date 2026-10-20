@@ -13,7 +13,9 @@ module that prints `getelementptr`-computed sizes, alignments and field offsets 
 datalayout and triple, compiles it with the C compiler and compares the numbers.
 
 usage: layout_probe.py <compiler> <cc> <workdir> <file.con>...
-Prints one line per program: "ok <file> <n> checks", "skip <file> <why>" or
+Prints one line per program: "ok <file> <n> checks", "skip <file> <why>" (the program has no
+concrete struct or enum), "REJECTED <file> <stage>" (the compiler refused `--report layout` or
+`--emit-llvm`; the caller pins which programs may be rejected) or
 "MISMATCH <file> <type> <what> compiler=<n> llvm=<m>"; exits 1 when any MISMATCH or probe
 failure occurs, 2 on usage errors.
 """
@@ -23,7 +25,8 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-HEADER = re.compile(r'^(struct|enum) (\S+)\s+\(size: (\d+), align: (\d+)')
+# `struct Name  #[repr(C)]  #[packed]  (size: N, align: A)` — annotations are optional.
+HEADER = re.compile(r'^(struct|enum) (\S+)(?:\s+#\[[^\]]*\])*\s+\(size: (\d+), align: (\d+)')
 FIELD = re.compile(r'^\s+offset\s+(\d+)\s+size\s+(\d+)\s+align\s+(\d+)\s+(\S+?):\s')
 TYPEDEF = re.compile(r'^%[\w.$-]+ = type ')
 
@@ -51,13 +54,13 @@ def probe_one(compiler, cc, workdir, src, idx):
 
     rep = run([compiler, src, '--report', 'layout'])
     if rep.returncode != 0:
-        return [f'skip {src} report-failed']
+        return [f'REJECTED {src} report']
     types = parse_report(rep.stdout)
     if not types:
         return [f'skip {src} no-types']
     ll = run([compiler, src, '--emit-llvm'])
     if ll.returncode != 0:
-        return [f'skip {src} emit-failed']
+        return [f'REJECTED {src} emit']
     lines = ll.stdout.splitlines()
     header = [l for l in lines if l.startswith('target datalayout') or l.startswith('target triple')]
     typedefs = [l for l in lines if TYPEDEF.match(l)]

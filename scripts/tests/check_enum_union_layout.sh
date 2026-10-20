@@ -122,6 +122,29 @@ tests/programs/wildcard_pattern.con Result align
 tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec size
 tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec field#1 offset
 tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec field#2 offset"
+# Programs in the corpus the compiler rejects by design (run_err / rejected-report fixtures in
+# run_tests.sh). Pinned exactly: a program that newly fails to report or emit is lost coverage
+# and fails the leg, and one listed here that now compiles must be removed.
+KNOWN_REJECTED="tests/programs/adversarial_linear_array.con
+tests/programs/adversarial_linear_borrow_and_move.con
+tests/programs/adversarial_linear_branch_consume.con
+tests/programs/adversarial_linear_double_use.con
+tests/programs/adversarial_linear_leak.con
+tests/programs/adversarial_neg_borrow_outlives_owner.con
+tests/programs/adversarial_neg_double_move_branch.con
+tests/programs/adversarial_neg_enum_variant_type_mismatch.con
+tests/programs/adversarial_neg_move_loop_body.con
+tests/programs/adversarial_neg_private_struct_field.con
+tests/programs/bug_int_match_disagree.con
+tests/programs/pressure_err_branch_leak.con
+tests/programs/pressure_err_defer_then_move.con
+tests/programs/pressure_err_destroy_then_use.con
+tests/programs/pressure_err_linear_no_destroy.con
+tests/programs/report_interface_check.con"
+# Annotated layouts the probe must reach (their report headers carry #[repr(C)] / #[packed]).
+MUST_PROBE="tests/programs/regress_bug121_enum_field_layout.con
+tests/programs/repr_packed.con
+tests/programs/repr_c_basic.con"
 if ! command -v python3 >/dev/null 2>&1 || [ -z "$CC" ]; then
   no "layout agreement: needs python3 and clang/cc — the LLVM-vs-compiler leg did NOT run"
 else
@@ -137,10 +160,18 @@ else
   new_mis=$(comm -23 "$TMP/mis.txt" "$TMP/known.txt")
   gone=$(comm -13 "$TMP/mis.txt" "$TMP/known.txt")
   failed=$(grep '^PROBE-FAILED' "$TMP/probe.out" || true)
+  grep '^REJECTED ' "$TMP/probe.out" | awk '{print $2}' | sort -u > "$TMP/rej.txt"
+  printf '%s\n' "$KNOWN_REJECTED" | sort -u > "$TMP/known_rej.txt"
+  rej_diff=$(diff "$TMP/known_rej.txt" "$TMP/rej.txt" || true)
+  unprobed=""
+  while IFS= read -r f; do
+    grep -q "^ok $f " "$TMP/probe.out" || unprobed="$unprobed $f"
+  done <<< "$MUST_PROBE"
   if [ -n "$failed" ]; then no "layout agreement: probe failures:"; printf '%s\n' "$failed" | awk 'NR<=5'
+  elif [ -n "$rej_diff" ]; then no "layout agreement: the rejected programs differ from KNOWN_REJECTED (< pinned, > now):"; printf '%s\n' "$rej_diff" | awk 'NR<=10'
+  elif [ -n "$unprobed" ]; then no "layout agreement: not probed clean:$unprobed"
   elif [ -n "$new_mis" ]; then no "layout agreement: LLVM and the compiler disagree:"; grep -F -f <(printf '%s\n' "$new_mis") "$TMP/probe.out" | awk 'NR<=10'
   elif [ -n "$gone" ]; then no "layout agreement: bug 122 entries no longer disagree — fixed? update docs/bugs/122 and KNOWN_122:"; printf '%s\n' "$gone"
-  elif ! grep -q '^ok tests/programs/regress_bug121_enum_field_layout.con ' "$TMP/probe.out"; then no "layout agreement: the bug 121 fixture was not probed"
   elif [ "$n_ok" -lt 200 ]; then no "layout agreement: only $n_ok programs probed clean (expected >= 200) — the corpus or the report format changed"
   else ok "layout agreement: LLVM matches the compiler on $n_ok programs (bug 122's $(wc -l < "$TMP/known.txt" | tr -d ' ') known disagreements pinned)"
   fi

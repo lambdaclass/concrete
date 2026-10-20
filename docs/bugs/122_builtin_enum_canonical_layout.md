@@ -32,7 +32,7 @@ A user enum named `Option` or `Result` (generic or not) is also emitted as the c
 (`emittedTypes` marks the names as taken). In `tests/programs/match_expr_linear.con`, the user's
 `enum Result { Ok { value: String }, Err { code: i32 } }` is 32 bytes to the compiler and the
 canonical `%enum.Result` is 16: the 24-byte `memcpy` of the `String` into the payload at offset 8
-writes 8 bytes past the alloca, and `load %enum.Result` drops the string's length and capacity. The
+writes 16 bytes past the 16-byte alloca, and `load %enum.Result` drops the string's length and capacity. The
 test passes by accident. `let_else.con`, `test_defer_result_nested.con` and `wildcard_pattern.con`
 show the size/alignment disagreement without an observed failure.
 
