@@ -146,6 +146,19 @@ def interpreter_script(name, args):
     return args[k] if k < len(args) else None
 
 
+ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=")
+# Variables that change what the shell or interpreter executes (SHELLOPTS=noexec
+# runs nothing; BASH_ENV/ENV source a file first; PATH/IFS/PS4 and friends change
+# resolution). An assignment to one of these makes the invocation not count.
+UNSAFE_PREFIXES = ("BASH", "SHELL", "PYTHON", "LD_", "DYLD_")
+UNSAFE_NAMES = {"ENV", "PATH", "IFS", "PS4", "CDPATH", "GLOBIGNORE", "POSIXLY_CORRECT"}
+
+
+def safe_assignment(word):
+    name = ASSIGN.match(word).group(1)
+    return name not in UNSAFE_NAMES and not name.startswith(UNSAFE_PREFIXES)
+
+
 def invoked_scripts(command):
     """The script an inline run: value invokes, when the WHOLE value is one simple
     command: [VAR=value ...] [env [VAR=value ...]] [timeout N] <script> [args...]
@@ -158,12 +171,16 @@ def invoked_scripts(command):
         return []
     words = pieces[0]
     k = 0
-    while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
+    while k < len(words) and ASSIGN.match(words[k]):
+        if not safe_assignment(words[k]):
+            return []
         k += 1
     while k < len(words):
         if words[k] == "env":
             k += 1
-            while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
+            while k < len(words) and ASSIGN.match(words[k]):
+                if not safe_assignment(words[k]):
+                    return []
                 k += 1
         elif words[k] == "timeout" and k + 1 < len(words):
             k += 2
