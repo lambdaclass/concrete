@@ -9,7 +9,10 @@ For the full safety model (capabilities, trusted, Unsafe, proof boundary), see [
 The planned package workflow for C, Rust and Zig is described in
 [FFI_GLUE.md](FFI_GLUE.md): applications declare a dependency and use normal imports;
 tooling generates wrappers and builds/links the native library. That automation is not
-implemented yet. The declarations below describe the current language boundary.
+implemented yet. The declarations below describe the current language boundary. A package
+names the C library its `extern fn`s resolve against in `Concrete.toml` `[native]`, and the
+build links it into every program that depends on the package: see
+[NATIVE_LIBRARIES.md](NATIVE_LIBRARIES.md).
 
 ## Core Principles
 

@@ -145,7 +145,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   interpreter), which replaces the inline "Run compiled examples (smoke test)" step; that step ran no
 #   scripts/ command, so removing it changes nothing here. Pinned in the same commit.
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
-EXPECTED_GATE_COMMANDS=254
+# 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
+#   pinned in the same commit.
+EXPECTED_GATE_COMMANDS=255
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

@@ -1058,6 +1058,9 @@ jobs:
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
         run: bash scripts/tests/check_project_model.sh
 
+      - name: "Native libraries (G1 — Concrete.toml [native] links, propagates, fails closed, is a listed trust dependency)"
+        run: bash scripts/tests/check_native_libs.sh
+
       - name: "`concrete test` gate (Phase 5 #3 — project test runner)"
         run: bash scripts/tests/check_concrete_test.sh
 

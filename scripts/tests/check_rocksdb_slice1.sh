@@ -7,9 +7,10 @@
 # It must build "with the normal commands and no manual flags".
 #
 # WHAT EACH LEG ESTABLISHES
-#   A  `concrete build` in the fresh clone, nothing else. This is the acceptance leg. It FAILS today:
-#      the compiler has no way to declare a native library, so the link of the RocksDB symbols
-#      fails (gap G1 in docs/platform/ROCKSDB_SLICE1.md). The gate stays red until it passes.
+#   A  `concrete build` in the fresh clone, nothing else. This is the acceptance leg. It links
+#      librocksdb because the binding package declares it (`[native] pkg-config = ["rocksdb"]`,
+#      docs/platform/NATIVE_LIBRARIES.md); before that declaration existed it failed (gap G1 in
+#      docs/platform/ROCKSDB_SLICE1.md, closed). The gate stays red whenever it fails.
 #   B  Interim harness, NOT acceptance evidence: when A fails, the same IR (`concrete build
 #      --emit-llvm`) is linked by this script with pkg-config's flags so the behaviour legs can run.
 #      Every behaviour result below says which binary it ran.

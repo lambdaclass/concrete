@@ -10,3 +10,6 @@ Start with [ABI.md](ABI.md), [FFI.md](FFI.md), [LAYOUT_CONTRACT.md](LAYOUT_CONTR
 
 RocksDB slice 1 (R-0285) groundwork, its acceptance gate and the gaps blocking it:
 [ROCKSDB_SLICE1.md](ROCKSDB_SLICE1.md).
+
+Declaring the native (C) libraries a package's `extern fn`s link against, `[native]` in
+`Concrete.toml`: [NATIVE_LIBRARIES.md](NATIVE_LIBRARIES.md).

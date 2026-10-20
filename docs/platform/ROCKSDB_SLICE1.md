@@ -12,7 +12,7 @@ fails today.
 | piece | path |
 |---|---|
 | example (application) | `examples/rocksdb_kv/` — `Concrete.toml` declares `rocksdb = { path = "rocksdb" }`; `src/main.con` uses `import rocksdb.{...}` |
-| binding package | `examples/rocksdb_kv/rocksdb/src/lib.con` — hand-written declarations of the RocksDB C API and trusted linear wrappers |
+| binding package | `examples/rocksdb_kv/rocksdb/src/lib.con` — hand-written declarations of the RocksDB C API and trusted linear wrappers; its `Concrete.toml` declares the C library, `[native] pkg-config = ["rocksdb"]` ([NATIVE_LIBRARIES.md](NATIVE_LIBRARIES.md)) |
 | acceptance gate | `scripts/tests/check_rocksdb_slice1.sh` |
 | compile-fail fixtures | `tests/regressions/rocksdb_slice1/handle_never_destroyed`, `tests/regressions/rocksdb_slice1/handle_used_after_close` |
 | release observer (gate only) | `tests/regressions/rocksdb_slice1/release_observer.c` |
@@ -70,20 +70,26 @@ reproducible setup is the distribution package that ships `rocksdb.pc`, for exam
 CI yet: `check_gate_registration.sh` lists it as a declared skip until acceptance is unblocked,
 and the CI job will need that install step.
 
-Gate result at the time of writing (macOS arm64, devshell): 28 legs pass, 5 fail. The failures
-are exactly G1 (the no-flags build) and G3 (the compiler-defined `_destroy` symbols and the three
-leaked options objects the observer reports). Everything else — the typed error, the value read
-back, the absent key, the database on disk, exactly-once release of the database, value buffer
-and error message, the observer's own mutation control, and both compile-fail fixtures with
-their repaired controls — passes, running a binary the gate links itself (leg B, labelled as not
-acceptance evidence).
+Gate result when the groundwork landed (macOS arm64, devshell): 28 legs pass, 5 fail, exactly
+G1 (the no-flags build) and G3. Since G1 closed (2026-10-21, `[native]`): 29 pass, 4 fail. Leg A,
+plain `concrete build` in the fresh clone, now produces the binary, so leg B's manual link is not
+used and every behaviour leg runs the normally built binary. The four failures are exactly G3: the
+compiler-defined `_destroy` symbols, and the three options objects the observer reports never
+released. Everything else — the typed error, the value read back, the absent key, the database on
+disk, exactly-once release of the database, value buffer and error message, the observer's own
+mutation control, and both compile-fail fixtures with their repaired controls — passes.
 
 ## Gaps
 
-Each gap names what failed, a minimal reproducer and the observed result. None was repaired here:
-compiler sources were out of scope for this work.
+Each gap names what failed, a minimal reproducer and the observed result. None was repaired by the
+groundwork, for which compiler sources were out of scope; G1 has since closed, as its entry says.
 
-### G1. No way to declare a native library (blocks "no manual flags")
+### G1. No way to declare a native library (blocks "no manual flags") — closed 2026-10-21
+
+**Closed** by the `[native]` section ([NATIVE_LIBRARIES.md](NATIVE_LIBRARIES.md), gate
+`scripts/tests/check_native_libs.sh`): the binding package declares `pkg-config = ["rocksdb"]`,
+and the driver resolves it and adds the flags to the final link of every application that depends
+on the package. Leg A passes. The record below is the gap as found.
 
 `concrete build` links with a fixed clang command (`clangArgs` in `Main.lean`); `Concrete.toml`
 has no section for native libraries (`validateToml` knows `[package]`, `[dependencies]`,
@@ -193,12 +199,12 @@ roadmap allows.
 
 | roadmap requirement | state |
 |---|---|
-| declare the RocksDB C library as a dependency | binding package declared under `[dependencies]`; the native library itself cannot be declared (G1) |
+| declare the RocksDB C library as a dependency | done: binding package under `[dependencies]`; the binding declares the C library, `[native] pkg-config = ["rocksdb"]` (G1 closed) |
 | import it with a normal Concrete import | done (`import rocksdb.{...}`) |
 | open a database, write a key and read it back | done (behaviour legs pass, leg-B binary) |
 | invalid path returns a typed error, not an abort | done (`DbError { kind: Open }` with RocksDB's message naming the path) |
 | each linear handle destroyed exactly once | `Db`, value buffer and error message: observed once each; the three options objects: never released (G3) |
-| builds and runs from a clean checkout, normal commands, no manual flags | fails (G1) |
+| builds and runs from a clean checkout, normal commands, no manual flags | builds and runs with plain `concrete build` in the devshell (leg A, G1 closed); the run still leaks the three options objects (G3) |
 | compile-fail: handle never destroyed | rejected, E0208 naming `db`; compiles once repaired |
 | compile-fail: handle used after close | rejected, E0205 naming `db`; compiles once repaired |
 | gate in the full gate set | not wired; declared skip in `check_gate_registration.sh` until 0b and 2i hold |
