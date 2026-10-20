@@ -1,0 +1,15 @@
+// Normalized place rule (Codex static review): a reference spelled through a type alias
+// (`type R = &P`) is still a reference: `w.r.f = 5` writes through an untraced reference. E0238.
+mod m {
+    struct P { f: i64 }
+    type R = &P;
+    struct W { r: R }
+    fn main() -> Int {
+        let p: P = P { f: 1 };
+        let w: W = W { r: &p };
+        w.r.f = 5;
+        let W { r } = w;
+        let P { f } = p;
+        return f;
+    }
+}

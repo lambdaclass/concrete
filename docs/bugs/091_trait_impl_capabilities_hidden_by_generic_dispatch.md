@@ -439,3 +439,8 @@ untraceable unless it is a fresh temporary (fail closed); an intrinsic's place a
 normalize whatever their peeked type; a matched reference must normalize even when the arms
 bind Copy values. Fixtures `error_091_norm_{heap_ref_field_write,match_untraced_ref}.con`.
 
+Ninth (static) pass: the rule reads types with aliases resolved (`peekResolved`, `resolvedOr`),
+so a reference spelled `type R = &P` is recognized in fields, casts, destructuring and intrinsic
+arguments; a value-pattern binder that loads a reference out of a referenced place (`r: & &T`
+binding `&T`) is E0238. Fixtures `error_091_norm_{alias_ref_field,nested_ref_binder}.con`.
+

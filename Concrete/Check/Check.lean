@@ -682,7 +682,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           if let .reject why := (← normPlace arg) then
             throwCheck (.untraceablePlace "an intrinsic argument" why) (some e.getSpan)
         | _ => pure ()
-        checkRefArg arg (← peekExprType arg) (some e.getSpan)
+        checkRefArg arg (← peekResolved arg) (some e.getSpan)
     -- Intercept sizeof::<T>() and alignof::<T>() builtins
     if intrinsic == some .sizeof || intrinsic == some .alignof then
       if args.length != 0 then throwCheckMsg s!"{fnName} takes no value arguments"
@@ -1551,6 +1551,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
             let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
+            -- binding a REFERENCE loaded out of the referent (`r: & &T` binds the inner `&T`)
+            -- is an untraced reference read out of storage (normalized place rule, E0238)
+            if isRefScrutinee then
+              match ← resolvedOr bindTy with
+              | .ref _ | .refMut _ =>
+                if bindTy != scrTy then
+                  throwCheck (.untraceablePlace s!"what '{binding}' borrows"
+                    "a reference loaded out of a referenced place is not traced; bind the outer reference instead") (some e.getSpan)
+              | _ => pure ()
             guardShadowedSource binding (some e.getSpan)
             addVar binding bindTy
             if isRefScrutinee then
@@ -2440,7 +2449,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for b in bindings do
       match ← lookupStructField structName b with
       | some fieldTy =>
-        let bTy := substTy mapping fieldTy
+        let bTy ← resolvedOr (substTy mapping fieldTy)
         -- H16 for destructure binders too (bug 094).
         checkNoLiveShadow b (some stmt.getSpan)
         guardShadowedSource b (some stmt.getSpan)

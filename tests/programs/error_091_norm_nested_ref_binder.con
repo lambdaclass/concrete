@@ -1,0 +1,13 @@
+// Normalized place rule (Codex static review): a value-pattern binder over `r: & &i64` binds the
+// inner `&i64` loaded out of the referent — an untraced reference. E0238.
+mod m {
+    fn f(r: & &i64) -> i64 {
+        let n: i64 = match r { x => { *x } };
+        return n;
+    }
+    fn main() -> Int {
+        let v: i64 = 3;
+        let a: &i64 = &v;
+        return f(&a);
+    }
+}

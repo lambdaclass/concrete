@@ -1100,6 +1100,14 @@ private def Norm.reachedThrough : Norm → Reach → Norm
   | .place p, r => .place { p with reach := p.reach.join r, binding := none }
   | n, _ => n
 
+/-- `peekExprType` with type aliases (and `Self`) resolved, so the place rule recognizes a
+    reference spelled through an alias (`type R = &P`). -/
+def peekResolved (e : Expr) : CheckM Ty := do
+  let t ← peekExprType e
+  tryCatch (resolveType t) (fun _ => pure t)
+
+def resolvedOr (t : Ty) : CheckM Ty := tryCatch (resolveType t) (fun _ => pure t)
+
 mutual
 /-- The storage the place expression `e` names. -/
 partial def normPlace (e : Expr) : CheckM Norm := do
@@ -1136,7 +1144,7 @@ partial def normProjBase (base : Expr) : CheckM Norm := do
       | _ => normPlace base
     | none => normPlace base
   | b =>
-    match ← peekExprType b with
+    match ← peekResolved b with
     | .ref _ | .refMut _ => normRef b
     | .placeholder | .typeVar _ =>
       -- the base's type is not known here, so it might be a reference: only a fresh
@@ -1169,7 +1177,8 @@ partial def normRef (e : Expr) : CheckM Norm := do
       | .heap _ | .heapArray _ => return .place { root := some n, heapLoad := true }
       | _ => return .reject s!"'{n}' is not a reference"
     | none => return .reject s!"'{n}' is not a local binding"
-  | .cast _ inner ty =>
+  | .cast _ inner ty0 =>
+    let ty ← resolvedOr ty0
     match ty with
     | .ref _ | .refMut _ =>
       let r : Reach := match ty with
@@ -1186,7 +1195,7 @@ partial def normRef (e : Expr) : CheckM Norm := do
       | .reject why =>
         -- a reference cast from a computed ADDRESS (trusted raw code): untracked storage;
         -- anything else that does not normalize stays refused
-        match ← peekExprType inner with
+        match ← peekResolved inner with
         | .ptrMut _ | .ptrConst _ | .int | .uint | .u32 | .i32 | .u16 | .i16 | .u8 | .i8 =>
           return .place { root := none, reach := r }
         | _ => return .reject why
@@ -1194,7 +1203,7 @@ partial def normRef (e : Expr) : CheckM Norm := do
     | _ => return .place { root := none, reach := .raw }
   | .fieldAccess .. | .arrayIndex .. =>
     -- a pointer or heap shell stored in a field (`*self.ptr`)
-    match ← peekExprType e with
+    match ← peekResolved e with
     -- the pointee of a raw pointer READ out of a place is raw storage, however that place
     -- was reached (copying a pointer out of `&self` does not make its target shared)
     | .ptrMut _ | .ptrConst _ => return .place { root := none, reach := .raw }
@@ -1205,7 +1214,7 @@ partial def normRef (e : Expr) : CheckM Norm := do
     return .reject "a reference produced by an `if`/`match` cannot be traced; borrow a named place in each branch's caller instead"
   | other =>
     -- pointer arithmetic and other raw-pointer-valued expressions name raw storage
-    match ← peekExprType other with
+    match ← peekResolved other with
     | .ptrMut _ | .ptrConst _ => return .place { root := none, reach := .raw }
     | _ => return .reject "the reference's source cannot be traced; bind it to a name first"
 end
