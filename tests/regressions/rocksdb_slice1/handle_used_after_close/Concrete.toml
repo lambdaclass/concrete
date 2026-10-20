@@ -1,0 +1,6 @@
+[package]
+name = "handle_used_after_close"
+version = "0.1.0"
+
+[dependencies]
+rocksdb = { path = "../../../../examples/rocksdb_kv/rocksdb" }

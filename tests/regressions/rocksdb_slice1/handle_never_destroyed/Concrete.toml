@@ -1,0 +1,6 @@
+[package]
+name = "handle_never_destroyed"
+version = "0.1.0"
+
+[dependencies]
+rocksdb = { path = "../../../../examples/rocksdb_kv/rocksdb" }

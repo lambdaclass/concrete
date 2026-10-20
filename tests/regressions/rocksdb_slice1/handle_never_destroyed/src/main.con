@@ -1,0 +1,26 @@
+// RocksDB slice 1 compile-fail fixture (ROADMAP R-0285): a database handle
+// that is opened and never closed must be REJECTED (E0208), because a Db is
+// a linear value whose only release is the consuming `close`.
+// scripts/tests/check_rocksdb_slice1.sh asserts the rejection names `db`,
+// and that inserting `db.close();` at the FIX line makes this compile.
+mod handle_never_destroyed {
+    import rocksdb.{Db, DbError, Options};
+
+    fn main() with(Std) -> u8 {
+        let mut opts: Options = Options::create();
+        opts.set_create_if_missing(true);
+        let path: String = "never_destroyed.db";
+        match Db::open(&opts, &path) {
+            Result::Err { error } => {
+                error.drop();
+            },
+            Result::Ok { value } => {
+                let db: Db = value;
+                // FIX: db.close();
+            },
+        }
+        path.drop();
+        opts.destroy();
+        return 0;
+    }
+}
