@@ -806,7 +806,11 @@ with parentheses removed (`unparenDeep`). A reborrow `&*r` is not an E0234 case 
 revision. On `land2-fix` it is a traced reference to the borrowed owner, so assigning it to an
 outer binding is refused by the re-pointing rule unless that binding already borrowed the same
 owner place, which is harmless because the owner outlives both; on `main`
-`out = &*r;` inside the block is accepted whatever `out` pointed at (gap G14).
+`out = &*r;` inside the block is accepted whatever `out` pointed at (gap G14). An identity cast
+`let s: &Int = r as &Int;` copies the reference into a new binding inside the block on both
+revisions (E0234 looks for an identifier, and `unparenDeep` keeps casts); on `land2-fix` the copy
+is traced to the owner, so it cannot leave the block by re-pointing, but the no-copy rule itself
+is unenforced for that spelling (gap G14).
 
 - Accepted: `let mut r: &P = &p; r = &p;`.
 - Rejected: `let mut leaked: &Point = &p; if true { let q: Point = ..; leaked = &q; }` (bug 104,
@@ -1099,7 +1103,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
 | REF-5 | `error_091_norm_if_projection.con` | reject E0238 REF-5@1 |
 | REF-5 | `regress_2i_ref5_bind_branch_first.con` (new; `let w = if c { a } else { b }; w.f`) | run 42 |
-| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`), `error_2i_ref6_borrow_block_paren_copy.con` (new; `= (r)`) | reject E0234 REF-6@1 |
+| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`), `error_2i_ref6_borrow_block_paren_copy.con` (new; `= (r)`), `error_2i_ref6_borrow_block_cast_copy.con` (new; `= r as &Int`, G14) | reject E0234 REF-6@1 |
 | REF-6 | `error_2i_ref6_borrow_block_reborrow_escape.con` (new; `out = &*r` where `out` borrowed another place) | reject E0238 REF-6@1 (G14 on `main`) |
 | REF-6 | `regress_2i_ref6_reborrow_same_owner.con` (new; `out` borrowed `x`, then `out = &*r` inside `borrow x as r`) | run 42 |
 | REF-5 | `error_2i_ref5_borrow_literal.con`, `error_2i_ref5_borrow_call_result.con`, `error_2i_ref5_borrow_aggregate_literal.con` (new; `&42`, `&mk()`, `&P { n: 1 }`) | reject E0238 REF-5@1 (G12) |
@@ -1172,7 +1176,7 @@ manifest row:
 | G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule |
 | G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)` and temporary `&mut self` receivers are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
-| G14 | REF-6 on `main`: E0234 sees only a bare identifier, so `(r)` copies a borrow-block reference out, and `out = &*r` re-points an outer reference at the borrowed owner | exit 0b (batch 2 closes both: `unparenDeep` and the re-pointing rule) |
+| G14 | REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; R-0500 for the cast (E0234 must recognize a reference copy through parentheses and casts) |
 | G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
 | G16 | REF-2: a reference-returning function type is accepted as a type alias target and as a struct or enum field type (no value of it can be made) | R-0500: validate function types after alias expansion and in declarations |
 | G11 | ROADMAP exit 2i's deliverable reads "none stored in an aggregate"; "strictly second-class" also covers REF-6 (never assigned or aliased into a binding that outlives its source; design example G8) | the roadmap owner (wording) |
