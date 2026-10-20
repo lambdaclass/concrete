@@ -8,22 +8,18 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            token. A longer name (<dir>.backup, main.con.disabled,
                            another file under <dir>) or a top-level directory plus a
                            common word does not count.
-  runs <owner> <workflow>  some INLINE `run:` value of the workflow is exactly one
-                           simple command invoking the owner (block scalars are not
-                           read; see run_commands and invoked_scripts): after shell comments are stripped and
-                           the command is split on UNQUOTED ; && || | ( ), the owner
-                           is the executable of a simple command, or the script
-                           operand of bash/sh/python3, after optional VAR=value
-                           assignments (no env/timeout wrappers). A step name, a
-                           comment, quoted text, the path as an ordinary argument
-                           (echo, printf, an assignment), or an interpreter option
-                           outside a small allowlist (-n, -o noexec, -c, -s, -m ...)
-                           does not count.
+  runs <owner> <workflow>  some INLINE `run:` value of the workflow is exactly the
+                           owner's path, optionally behind bash/sh/python3 with a few
+                           allowed options (see INVOCATION) -- no arguments,
+                           assignments, quoting, expansions, redirections or
+                           operators -- in a step and job with no `if:`, no `env:`,
+                           no custom shell and no working-directory, at any
+                           indentation (see run_commands). Block scalars, step names
+                           and comments are never read as invocations.
 
 Exit status: 0 holds, 1 does not, 2 usage error.
 """
 import re
-import shlex
 import sys
 
 TOK = re.compile(r"[A-Za-z0-9_./-]+")
@@ -56,9 +52,17 @@ EXECUTING_SHELLS = {"bash", "sh"}
 
 
 def shell_values(block_lines):
-    """Values of every `shell:` key in these lines."""
-    return [m.group(1).strip().strip("\"'") for m in
-            (re.match(r"^\s*(?:-\s+)?shell:\s*(.*?)\s*(#.*)?$", l) for l in block_lines) if m]
+    """Values of every `shell:` key in these lines; a `working-directory:` counts as a
+    non-executing shell value, so the same checks refuse it (a relative owner path
+    does not resolve from another directory)."""
+    out = []
+    for l in block_lines:
+        m = re.match(r"^\s*(?:-\s+)?shell:\s*(.*?)\s*(#.*)?$", l)
+        if m:
+            out.append(m.group(1).strip().strip("\"'"))
+        if re.match(r"^\s*(?:-\s+)?working-directory:", l):
+            out.append("<working-directory>")
+    return out
 
 
 def defaults_shells(lines, key_indent):
@@ -174,130 +178,23 @@ def norm(p):
     return p[2:] if p.startswith("./") else p
 
 
-def simple_commands(command):
-    """Split the raw text at UNQUOTED, UNESCAPED operator characters ; & | ( ),
-    tracking quote and backslash state, then word-split each piece with shlex.
-    (Splitting shlex's output instead would see a quoted ";" as an operator.)"""
-    pieces, cur, quote, i = [], [], None, 0
-    while i < len(command):
-        c = command[i]
-        if quote == "'":
-            if c == "'":
-                quote = None
-            cur.append(c)
-        elif c == "\\" and i + 1 < len(command):
-            cur.append(c + command[i + 1])
-            i += 1
-        elif quote == '"':
-            if c == '"':
-                quote = None
-            cur.append(c)
-        elif c in "'\"":
-            quote = c
-            cur.append(c)
-        elif c in ";&|()":
-            pieces.append("".join(cur))
-            cur = []
-        else:
-            cur.append(c)
-        i += 1
-    if quote:
-        return                  # unbalanced quotes: nothing in it counts
-    pieces.append("".join(cur))
-    for p in pieces:
-        try:
-            words = shlex.split(p, posix=True)
-        except ValueError:
-            continue
-        if words:
-            yield words
-
-
-SHELL_FLAGS = set("eux")                     # errexit, nounset, xtrace
-SHELL_O_NAMES = {"errexit", "nounset", "pipefail", "xtrace"}
-PYTHON_FLAGS = {"-I", "-u", "-B", "-E"}
-
-
-def interpreter_script(name, args):
-    """The script a bash/sh/python3 invocation runs, or None. Options are an
-    ALLOWLIST: anything else (-n / -o noexec syntax checks, -c command strings,
-    -s stdin scripts, -m modules, long options) means no script operand is run."""
-    k = 0
-    while k < len(args) and args[k].startswith(("-", "+")) and args[k] not in ("-", "+"):
-        opt = args[k]
-        if name in ("bash", "sh"):
-            if opt in ("-o", "+o"):
-                if k + 1 < len(args) and args[k + 1] in SHELL_O_NAMES:
-                    k += 2
-                    continue
-                return None
-            if opt.startswith("--") or not set(opt[1:]) <= SHELL_FLAGS:
-                return None
-        elif opt not in PYTHON_FLAGS:
-            return None
-        k += 1
-    return args[k] if k < len(args) else None
-
-
-ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=")
-# Variables that change what the shell or interpreter executes (SHELLOPTS=noexec
-# runs nothing; BASH_ENV/ENV source a file first; PATH/IFS/PS4 and friends change
-# resolution). An assignment to one of these makes the invocation not count.
-UNSAFE_PREFIXES = ("BASH", "SHELL", "PYTHON", "LD_", "DYLD_")
-UNSAFE_NAMES = {"ENV", "PATH", "IFS", "PS4", "CDPATH", "GLOBIGNORE", "POSIXLY_CORRECT"}
-
-
-def safe_assignment(word):
-    name = ASSIGN.match(word).group(1)
-    return name not in UNSAFE_NAMES and not name.startswith(UNSAFE_PREFIXES)
+# The ONLY accepted spelling of an owner invocation: the whole inline value is the
+# script path, optionally behind bash/sh (with -e/-u/-x clusters or -o errexit|nounset|
+# pipefail|xtrace) or python3 (with -I/-u/-B/-E). No arguments, assignments, quoting,
+# expansions, redirections or operators -- every one of those has a way to keep the
+# script from running ($((1/0)), ${UNSET:?}, < /missing, true ||, ...), and the CI
+# workflow invokes its gates this way.
+INVOCATION = re.compile(
+    r"(?:(?:bash|sh)(?:\s+-[eux]+|\s+-o\s+(?:errexit|nounset|pipefail|xtrace))*\s+"
+    r"|python3(?:\s+-[IuBE])*\s+)?"
+    r"(?P<script>(?:\./)?[A-Za-z0-9_][A-Za-z0-9_./-]*)")
 
 
 def invoked_scripts(command):
-    """The script an inline run: value invokes, when the WHOLE value is one simple
-    command: [VAR=value ...] <script> [args...] or [VAR=value ...] bash|sh|python3
-    [allowed options] <script> [args...] -- no wrapper command (env, timeout). Any unquoted
-    operator (; & | ( ) -- a list, a pipeline, a subshell, a function), any
-    redirection (< >: a failed open stops the command before it starts) or command
-    substitution (` or $( ) makes it not count: execution context such as
-    `true || <owner>` is not modelled, so it is refused."""
-    pieces = list(simple_commands(command))
-    if len(pieces) != 1 or re.search(r"[;&|()<>`]|\$\(", unquoted_text(command)):
-        return []
-    words = pieces[0]
-    k = 0
-    while k < len(words) and ASSIGN.match(words[k]):
-        if not safe_assignment(words[k]):
-            return []
-        k += 1
-    # No wrapper commands (env, timeout, nice, ...): each has its own options that can
-    # keep the script from running (timeout --help exits 0), and no owner needs one.
-    if k >= len(words):
-        return []
-    if words[k] in ("bash", "sh", "python3"):
-        script = interpreter_script(words[k], words[k + 1:])
-        return [norm(script)] if script is not None else []
-    return [norm(words[k])]
-
-
-def unquoted_text(command):
-    """The command with quoted and escaped characters removed."""
-    out, quote, i = [], None, 0
-    while i < len(command):
-        c = command[i]
-        if quote == "'":
-            if c == "'":
-                quote = None
-        elif c == "\\":
-            i += 1
-        elif quote == '"':
-            if c == '"':
-                quote = None
-        elif c in "'\"":
-            quote = c
-        else:
-            out.append(c)
-        i += 1
-    return "".join(out)
+    """The script an inline run: value invokes, when the WHOLE value is exactly
+    [bash|sh|python3 <allowed options>] <script> (see INVOCATION); else nothing."""
+    m = INVOCATION.fullmatch(command.strip())
+    return [norm(m.group("script"))] if m else []
 
 
 def main(argv):
