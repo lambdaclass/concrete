@@ -1,0 +1,12 @@
+// Bug 091 round 3: `&mut (p)` on an immutable binding escaped E0233 because the explicit
+// rule matched only a bare identifier. Expected: E0233.
+mod m {
+    struct P { n: i64 }
+    fn bump(q: &mut P) { q.n = q.n + 1; }
+    fn main() -> Int {
+        let p: P = P { n: 1 };
+        bump(&mut (p));
+        let P { n } = p;
+        return n;
+    }
+}

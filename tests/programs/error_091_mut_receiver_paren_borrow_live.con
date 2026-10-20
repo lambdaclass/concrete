@@ -1,0 +1,15 @@
+// Bug 091 round 3 (Codex review): `&(p)` recorded no borrow of `p`, so `p.bump()` ran
+// while the shared reference `r` was live (--interp returned 2). Parentheses keep the
+// provenance: E0232.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let r: &P = &(p);
+        p.bump();
+        let out: i64 = r.n;
+        let P { n } = p;
+        return out;
+    }
+}

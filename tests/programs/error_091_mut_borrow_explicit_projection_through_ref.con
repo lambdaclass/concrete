@@ -1,0 +1,15 @@
+// Bug 091 round 3: `&mut w.p` with `w: &W` mutated through the shared reference.
+// Expected: E0237.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    fn bump(q: &mut P) { q.n = q.n + 1; }
+    fn bad(w: &W) { bump(&mut w.p); }
+    fn main() -> Int {
+        let w: W = W { p: P { n: 1 } };
+        bad(&w);
+        let W { p } = w;
+        let P { n } = p;
+        return n;
+    }
+}

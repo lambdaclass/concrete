@@ -1,0 +1,18 @@
+// Bug 091 round 3 (Codex review): `w.0.destroy()` with `w: &W` took the owned-newtype
+// whole-owner exemption, so the destructor ran twice through the borrow and once more
+// for the owner. A value reached through a reference: E0290.
+mod m {
+    struct R { n: i64 }
+    newtype W = R;
+    impl Destroy for R { fn destroy(&self) {} }
+    fn kill(w: &W) {
+        w.0.destroy();
+        w.0.destroy();
+    }
+    fn main() -> Int {
+        let w: W = W(R { n: 7 });
+        kill(&w);
+        destroy(w.0);
+        return 0;
+    }
+}

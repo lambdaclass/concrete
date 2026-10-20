@@ -166,7 +166,7 @@ inductive CheckError where
   -- Bug 091 round 3: a `&mut self` method called on a receiver reached through a SHARED
   -- reference (`x: &T`, `self` in a `&self` method, `w.p` with `w: &W`) would mutate through
   -- `&T`; for `x: &T` Elab built a `&mut &T` and the callee wrote past the pointer.
-  | mutReceiverThroughSharedRef (method : String) (desc : String)
+  | mutReceiverThroughSharedRef (subject : String) (desc : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -319,7 +319,7 @@ def CheckError.message : CheckError → String
   | .cannotMutBorrowImmutable name => s!"cannot take mutable borrow of immutable variable '{name}'"
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
-  | .mutReceiverThroughSharedRef method desc => s!"cannot call `&mut self` method '{method}' through a shared reference ({desc})"
+  | .mutReceiverThroughSharedRef subject desc => s!"cannot mutably borrow {subject} through a shared reference ({desc})"
   -- Slice 4
   | .missingCapability callee cap caller => s!"function '{callee}' requires capability '{cap}' but '{caller}' does not declare it"
   | .traitBoundNotSatisfied typeName traitName context => s!"type '{typeName}' does not implement trait '{traitName}' required by {context}"

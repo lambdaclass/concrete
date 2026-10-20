@@ -1,0 +1,17 @@
+// Bug 091 round 3 (Codex review): an owned temporary is a legal `&mut self` receiver —
+// an `if` value, a struct literal, a call result. The place walk must not mistake the
+// `if` for a possible reference, and --interp must give each temporary storage (it
+// failed with "unsupported borrow target shape"). Expected (compiled AND --interp): 7.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn make() -> P { return P { n: 5 }; }
+    fn main() with(Std) -> Int {
+        (if true { P { n: 1 } } else { P { n: 2 } }).bump();
+        (P { n: 1 }).bump();
+        make().bump();
+        print_int(7);
+        print_char(10);
+        return 0;
+    }
+}

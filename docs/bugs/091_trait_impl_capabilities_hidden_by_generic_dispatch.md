@@ -242,4 +242,19 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   only bindings, projections, dereferences, borrows, casts and owned temporaries (calls,
   literals) are classified. `error_091_destroy_deref_if_ref.con` (E0290),
   `error_091_mut_receiver_deref_if_ref.con` (E0237).
+* **Codex review of round 3, second pass.** `w.0.destroy()` with `w: &W` took the owned-newtype
+  whole-owner exemption; `&mut (*r)` manufactured exclusivity through `r: &P`; `&(p)` lost its
+  borrow provenance; and the EXPLICIT `&mut` rule matched only a bare identifier, so `&mut (*r)`,
+  `&mut (p)` (immutable) and `&mut w.p` (`w: &W`) were accepted. One place rule now serves
+  explicit and implicit borrows (`checkMutBorrowPlace` / `checkSharedBorrowPlace` over
+  `placeVia`, where a `&mut e` is only as exclusive as `e`); by-value receivers refuse any
+  value reached through a reference (`receiverVia`); `&(x)` records provenance like `&x`.
+  An `if`/`match` RECEIVER whose type is a value is an owned temporary (not a possible
+  reference), and the interpreter gives a temporary receiver storage (`make().bump()`).
+  Fixtures `error_091_destroy_newtype_through_ref.con` (E0290),
+  `error_091_mut_receiver_reborrow_shared.con`, `error_091_mut_borrow_explicit_through_ref.con`,
+  `error_091_mut_borrow_explicit_projection_through_ref.con` (E0237),
+  `error_091_mut_borrow_explicit_paren_immutable.con` (E0233),
+  `error_091_mut_receiver_paren_borrow_live.con` (E0232), `trait_mut_receiver_temporaries.con`
+  (7, compiled and --interp).
 

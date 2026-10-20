@@ -552,7 +552,14 @@ partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : 
     let env := envBind env name (.int (Int.ofNat c.toNat) .char)
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .floatLit _ _ => .error "interp: float literals not yet supported"
-  | _ => .error "interp: unsupported borrow target shape"
+  -- Any other borrow target is an owned TEMPORARY (a call result, a struct literal, an
+  -- `if`): Check admits `make().bump()` / `(P { .. }).bump()` (the implicit receiver borrow
+  -- of a value). Materialize it like a literal so the borrow has a place (bug 091 round 3).
+  | other => do
+    let (env, v) ← evalExprVal fns enums env other
+    let name := s!"__interp_tmp_{env.length}"
+    let env := envBind env name v
+    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
 
 partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × Flow) := do
   match e with

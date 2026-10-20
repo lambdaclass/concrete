@@ -1472,6 +1472,25 @@ run_err "$TESTDIR/error_091_mut_receiver_deref_borrow.con"           "(E0237)"
 run_err "$TESTDIR/error_091_receiver_deref_borrow_moved.con"         "(E0290)"
 run_err "$TESTDIR/error_091_destroy_deref_if_ref.con"               "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_if_ref.con"           "(E0237)"
+# Codex review of round 3 (second pass): a newtype projection through `&W`, a `&mut` reborrow
+# of a shared reference, a parenthesized `&(p)` that lost its provenance, and the EXPLICIT
+# `&mut` forms (through `&`, parenthesized immutable, projection through `&`). Owned
+# temporaries remain legal `&mut self` receivers, compiled and under --interp.
+run_err "$TESTDIR/error_091_destroy_newtype_through_ref.con"               "(E0290)"
+run_err "$TESTDIR/error_091_mut_receiver_reborrow_shared.con"              "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E0232)"
+run_err "$TESTDIR/error_091_mut_borrow_explicit_through_ref.con"           "(E0237)"
+run_err "$TESTDIR/error_091_mut_borrow_explicit_paren_immutable.con"       "(E0233)"
+run_err "$TESTDIR/error_091_mut_borrow_explicit_projection_through_ref.con" "(E0237)"
+run_ok  "$TESTDIR/trait_mut_receiver_temporaries.con" "7" 0
+r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r091t_got" = "7" ]; then
+    echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 091: trait_mut_receiver_temporaries — interp gave '$r091t_got', want 7"
+    FAIL=$((FAIL + 1))
+fi
 run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0
 for r091m in "trait_mut_receiver_forms:8" "trait_generic_receiver_forms:4030412"; do
     r091m_f="${r091m%%:*}"; r091m_want="${r091m#*:}"

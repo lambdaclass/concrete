@@ -1,0 +1,9 @@
+// Bug 091 round 3 (Codex review): `&mut (*r)` with `r: &P` manufactured an exclusive
+// borrow through a shared reference, so `(*(&mut (*r))).bump()` mutated the caller's
+// immutable owner (--interp printed 2). A `&mut e` is only as exclusive as `e`: E0237.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn bad(r: &P) { (*(&mut (*r))).bump(); }
+    fn main() -> Int { let p: P = P { n: 1 }; bad(&p); let P { n } = p; return n; }
+}
