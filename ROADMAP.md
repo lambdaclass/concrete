@@ -18,14 +18,16 @@ experimental systems preview; its [blockers](#next-release-blockers) are listed 
 **Next phases:** 2, 3
 
 **What is next.** Rows 0 – 2 finish Phase 1 through individually closable
-[Phase 1 exits](#phase-1-exits). Features do not wait for all of them. The usable-language track
-(Phase 3: interop, workloads and usability, rows 5, 7 and 8) begins with its first deliverable,
-**RocksDB slice 1** (row 5), as soon as that deliverable's
-[prerequisite checklist](#feature-prerequisites) is satisfied, not when all of row 2 closes. The proof
-track (Phase 2: V1a/V1b and the authoritative Core checker, rows 3 – 4) runs alongside it, and V1a and
-V1b are accepted once their own checklists are satisfied. The remaining exits continue alongside both
-tracks and still close Phase 1. New soundness defects take priority over every phase; other new work
-enters the queue only under the [entry rule](#the-current-execution-queue).
+[Phase 1 exits](#phase-1-exits). Features do not wait for them to start. The usable-language track
+(Phase 3: interop, workloads and usability, rows 5, 7 and 8) is working on its first deliverable,
+**RocksDB slice 1** (row 5), and the proof track (Phase 2: V1a/V1b and the authoritative Core checker,
+rows 3 – 4) runs alongside it. Implementation and experiments on both may proceed now: early executable
+feedback is how defects surface (the RocksDB groundwork already found bugs 102 and 103). What a
+deliverable's [prerequisite checklist](#feature-prerequisites) controls is **acceptance**: RocksDB
+slice 1, V1a and V1b are not accepted, and their safety is not advertised, until their prerequisite
+exits hold. The remaining exits continue alongside both tracks and still close Phase 1. New soundness
+defects take priority over every phase; other new work enters the queue only under the
+[entry rule](#the-current-execution-queue).
 
 **Where things live.** This file answers *what happens next, in what order*: the phases, the one
 execution queue, the release plan, the standing decisions, and the tasks a queue row names or an active
@@ -91,7 +93,7 @@ All checkpoints share the capacity rule, and new soundness defects take priority
 | 2 | R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513 | Immediate protections (exits 2a – 2l): one verdict authority, prevention harness, trustworthy gates, axiom policy, one `IntArith`, language rules, demonstrated enforcement |
 | 3 | R-0511, R-0517 | First cumulative verified releases: design proofs, V1a and V1b, each accepted when its [prerequisites](#feature-prerequisites) hold |
 | 4 | R-0492, R-0497, R-0499, R-0514 | Shared front end: identities and the authoritative Core checker for the whole language |
-| 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: RocksDB slice 1 once its [prerequisites](#feature-prerequisites) hold, then the four-adapter checkpoint |
+| 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: RocksDB slice 1 (work proceeds now; accepted when its [prerequisites](#feature-prerequisites) hold), then the four-adapter checkpoint |
 | 6 | R-0491–R-0510, R-0512 | Slices V2 – V7 and evidence migration to generated Core statements |
 | 7 | R-0490 | Continuous application feedback toward the ethlambda port |
 | 8 | R-0515 | Usability track alongside the proofs: onboarding, pilots, diagnostics, editor, performance |
@@ -110,7 +112,7 @@ above names the same task IDs per row (checked by `scripts/tests/check_roadmap_c
 
 ### Phase details
 
-- **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** every [Phase 1 exit](#phase-1-exits): each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. Features start earlier, when their [prerequisites](#feature-prerequisites) hold. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
+- **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** every [Phase 1 exit](#phase-1-exits): each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. Feature work starts now and is accepted when its [prerequisites](#feature-prerequisites) hold. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
 - **Phase 2 — Verified foundation** (rows 3 – 4). **Goal:** The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language. **Exit:** V1a and V1b theorems with explicit boundaries; the Core checker authoritative for every program. **Release:** **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins.
 - **Phase 3 — Usable language** (rows 5, 7, 8). **Goal:** Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance. **Exit:** the four-adapter interop checkpoint; continuing workloads and pilots; each usability checkpoint's exit. **Release:** no release of its own: it runs alongside and feeds every release from 0.1 on (onboarding, pilots, tooling, the minimal editor path for beta).
 - **Phase 4 — Verified growth** (row 6). **Goal:** Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved. **Exit:** each slice's cumulative theorem; V7 covers the maintained feature inventory. **Release:** **0.3 – 0.8 Verified-subset milestones** (a slice may span several releases); V7 is required for 1.0.
@@ -154,10 +156,10 @@ test or bug corpus and are invoked by the example's gate.
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration. Closes through exits 0a, 0b and 0c ([Phase 1 exits](#phase-1-exits)) |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair. Closes through exit 1a |
-| 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | closes through the individually closable exits listed in [Phase 1 exits](#phase-1-exits), each with its owner, acceptance test and class: one `Verdict` authority renders every evidence surface (2a); permanent reproducer controls for 080 – 101 (2b) and the prevention harness (2c); trustworthy gate execution — checked inventories instead of incidental count pins (2d), minimum completed comparisons (2e), a fast push tier separate from full qualification (2f); the axiom-policy gate on today's evidence (2g); one `IntArith` for the existing pipeline (2h); the rules the next slice needs written down and enforced with versioned migration diagnostics — strictly second-class references and no block `let` shadowing (2i); typed literals, literal range, statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting (2j); explicit match binders and cast semantics per width (2k); demonstrated enforcement (2l). Known authority and safety defects are repaired under row 0. An exit classed *blocks features* holds back only the deliverables whose [prerequisites](#feature-prerequisites) name it; the others continue alongside feature work. Broader prevention coverage continues throughout and does not block isolated proof development |
+| 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | closes through the individually closable exits listed in [Phase 1 exits](#phase-1-exits), each with its owner, acceptance test and class: one `Verdict` authority renders every evidence surface (2a); permanent reproducer controls for 080 – 101 (2b) and the prevention harness (2c); trustworthy gate execution — checked inventories instead of incidental count pins (2d), minimum completed comparisons (2e), a fast push tier separate from full qualification (2f); the axiom-policy gate on today's evidence (2g); one `IntArith` for the existing pipeline (2h); the rules the next slice needs written down and enforced with versioned migration diagnostics — strictly second-class references and no block `let` shadowing (2i); typed literals, literal range, statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting (2j); explicit match binders and cast semantics per width (2k); demonstrated enforcement (2l). Known authority and safety defects are repaired under row 0. An exit classed *blocks features* holds back the acceptance of only the deliverables whose [prerequisites](#feature-prerequisites) name it; the others continue alongside feature work. Broader prevention coverage continues throughout and does not block isolated proof development |
 | 3 | **First cumulative verified releases (R-0511, with R-0517)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 through the Lean Compiler Backend, R-0517, with final-image correspondence; LCB's Stage 1 exit is necessary but insufficient — V1b needs a pinned certified LCB domain covering every reachable V1 operation and behaviour, including checked-arithmetic trap paths, direct calls and `print_int`, plus Concrete's proved adapter and semantic bridges; a smaller leaf-function intersection ships only as a separately named intermediate theorem; R-0517's explicitly selected fallback does not complete this row) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. The design examples and isolated proof development start now; V1a and V1b are accepted only when their prerequisite exits hold (prerequisite exits: 0a, 0b, 2a, 2g, 2h, 2i, 2j; the programs each must compile and the independently checked artifact are under [feature prerequisites](#feature-prerequisites)). See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
 | 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3: the parts V1a's subset exercises proceed with V1a, and the whole-language rollout starts once row 2 lands; the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
-| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | first deliver **RocksDB slice 1**, the first executable feature deliverable, once its prerequisites hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
+| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | first deliver **RocksDB slice 1**, the first executable feature deliverable: implementation and experiments proceed now (its groundwork on main already found bugs 102 and 103), and it is accepted, and its safety advertised, only when its prerequisite exits hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
 | 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
@@ -177,7 +179,7 @@ Rows 0 – 2 close through these exits, each closable on its own. The **class** 
 back:
 
 - **blocks features**: the exit repairs or permanently guards a known false-proof, unsound-claim or
-  memory-safety defect, or a feature deliverable names it as a dependency. It holds back exactly the
+  memory-safety defect, or a feature deliverable names it as a dependency. It holds back the acceptance of exactly the
   deliverables whose [prerequisites](#feature-prerequisites) list it.
 - **continues alongside**: consolidation or prevention without a reproduced defect or a named
   dependency. It proceeds next to feature work, with a finite acceptance test, and still closes Phase 1.
@@ -209,8 +211,12 @@ agree with the classes.
 
 ### Feature prerequisites
 
-The first feature deliverables wait only for the exits listed against them. Isolated proof development
-(the reviewed design examples, proof libraries) waits for none. Every *blocks features* exit appears in
+Implementation and experiments on the first feature deliverables proceed now: early executable
+feedback is how defects surface, and the RocksDB slice 1 groundwork already found bugs 102 and 103. The
+exits listed against a deliverable are required before it is **accepted** or its safety is advertised;
+none of them is removed or weakened by starting early, and a defect the early work finds enters the
+queue under the entry rule. Isolated proof development (the reviewed design examples, proof libraries)
+waits for none. Every *blocks features* exit appears in
 at least one *blocked by* list and no *continues alongside* exit appears in any.
 
 | deliverable | blocked by | not blocked by |
@@ -504,7 +510,7 @@ this file). Every other task lives, with its full text, ID and
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
-**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: it starts once RocksDB slice 1's [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
@@ -3281,7 +3287,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
 `verified` profile.
 
-**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout follows the immediate protections in rows 0 – 2. Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
+**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout follows the immediate protections in rows 0 – 2. Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
 and elaboration rebuilds the program independently, so the program checked is not the program compiled;
 bugs 087 (borrow-block use-after-free), 090 and 092 – 094 lived in that gap, and name-keyed
 environments produced 082, 087, 093, 094 and 096 – 098. The slices prove these rules only as they reach
@@ -10474,8 +10480,9 @@ bindings and one build command, before the bulk ethlambda port.
 
 **Scheduling (2026-10-17; amended 2026-10-20):** promoted into the current execution queue after the
 active soundness and R-0482 work. Its first deliverable is **RocksDB slice 1**, defined with its
-acceptance and its prerequisite checklist under [feature prerequisites](#feature-prerequisites): it
-starts when Phase 1 exits 0b and 2i hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
+acceptance and its prerequisite checklist under [feature prerequisites](#feature-prerequisites): its
+implementation and experiments proceed now, and it is accepted, and its safety advertised, when Phase 1
+exits 0b and 2i hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
 R-0283/R-0287 own ABI checks, R-0286 owns exports/library artifacts and R-0289 owns sanitizer
 validation. The later full BackendIR, independent verifier and functional-proof milestones are
 not prerequisites for a tested foreign-library integration. Changes to evidence formats still
