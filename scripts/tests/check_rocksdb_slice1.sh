@@ -197,8 +197,11 @@ put: ok bytes=30
 get: linear handles, destroyed once
 get-absent: none
 done: all handles released"
-[ "$(sed -n '2,$p' "$TMP/run.out")" = "$EXPECT_REST" ] \
-  && ok "stdout: open ok, put 30 bytes, the written value read back, absent key is None, done" \
+# Byte-for-byte, through files: a command substitution would strip trailing blank lines.
+printf '%s\n' "$EXPECT_REST" > "$TMP/expected-rest.out"
+sed -n '2,$p' "$TMP/run.out" > "$TMP/actual-rest.out"
+cmp -s "$TMP/actual-rest.out" "$TMP/expected-rest.out" \
+  && ok "stdout: open ok, put 30 bytes, the written value read back, absent key is None, done (byte-exact)" \
   || { no "stdout differs from the expected transcript"; sed 's/^/       /' "$TMP/run.out"; }
 [ ! -s "$TMP/run.err" ] && ok "stderr empty" || no "stderr: $(head -3 "$TMP/run.err" | tr '\n' ' ')"
 [ -f "$DB/CURRENT" ] && ok "the database exists on disk ($DB/CURRENT)" || no "no RocksDB database at $DB"
