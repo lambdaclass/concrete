@@ -48,32 +48,66 @@ def strip_shell_comment(line):
     return "".join(out)
 
 
+def indent(line):
+    return len(line) - len(line.lstrip())
+
+
 def run_commands(path):
-    """The shell text of every INLINE `run:` value (`run: <command>` on one line).
+    """The shell text of every INLINE `run:` value (`run: <command>` on one line)
+    of an UNCONDITIONAL step in an UNCONDITIONAL job.
 
     Block scalars of ANY key (`run: |`, `script: >-`, ...) are skipped together with
     their bodies, so a heredoc or quoted text that happens to contain "run: ..."
     is never read as a key. Block-style `run:` values are not read at all: their
     lines share quote, heredoc and continuation state, and reading them line by
-    line took printed text for commands. An owner must therefore be invoked by an
-    inline `run:` -- fail-closed, and every CI owner today is spelled that way."""
+    line took printed text for commands. A step or job carrying any `if:` is
+    excluded (`if: false` disables it; no condition is evaluated here). An owner
+    must therefore be invoked by an inline `run:` of an unconditional step --
+    fail-closed, and every CI owner today is spelled that way."""
     lines = open(path).read().split("\n")
-    cmds, i = [], 0
     block = re.compile(r"^(\s*(?:-\s+)?)[^\s#:][^:]*:\s*[|>][-+0-9]*\s*(#.*)?$")
+    # Pass 1: blank out block-scalar bodies so nothing inside them is a key.
+    visible, i = list(lines), 0
     while i < len(lines):
-        line = lines[i]
-        b = block.match(line)
+        b = block.match(lines[i])
+        i += 1
         if b:
             col = len(b.group(1))
-            i += 1
-            while i < len(lines) and (not lines[i].strip()
-                                      or len(lines[i]) - len(lines[i].lstrip()) > col):
+            while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > col):
+                visible[i] = ""
                 i += 1
+    cmds = []
+    for n, line in enumerate(visible):
+        m = re.match(r"^(\s*)(-\s+)?run:\s*(.*)$", line)
+        if not m or not m.group(3).strip() or block.match(line):
             continue
-        m = re.match(r"^\s*(?:-\s+)?run:\s*(.*)$", line)
-        if m and m.group(1).strip():
-            cmds.append(strip_shell_comment(m.group(1)))
-        i += 1
+        key_col = len(m.group(1)) + len(m.group(2) or "")
+        # The step: from its `- ` line down to the next line at or left of the dash.
+        start = n
+        if not m.group(2):
+            while start > 0 and not (re.match(r"^\s*-\s", visible[start])
+                                     and indent(visible[start]) < key_col):
+                start -= 1
+        dash = indent(visible[start])
+        end = n + 1
+        while end < len(visible) and (not visible[end].strip() or indent(visible[end]) > dash):
+            end += 1
+        step = [visible[start][dash + 2:]] + [l for l in visible[start + 1:end]]
+        if any(re.match(r"^\s*if:", l) for l in step):
+            continue
+        # The job: the nearest `jobs.<id>:` header (indent 2) above the step.
+        j = start
+        while j > 0 and not re.match(r"^  [A-Za-z0-9_-]+:\s*$", visible[j]):
+            j -= 1
+        k = j + 1
+        job_conditional = False
+        while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > 2):
+            if re.match(r"^    if:", visible[k]):
+                job_conditional = True
+            k += 1
+        if job_conditional:
+            continue
+        cmds.append(strip_shell_comment(m.group(3)))
     return cmds
 
 
