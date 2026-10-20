@@ -843,9 +843,10 @@ EXPECTED_TOTAL_ASSERTIONS=322
 # five theorems named at the probe); the ordinary manifest moved for that label alone.
 # Re-pinned 2026-10-19 for the same assertion, 114/173 -> 114/174 (spec_inside_evaluated_term, named at
 # the probe); the ordinary manifest moved for that label alone.
-# Re-pinned for bug 083 (land3) for the relabelled corpus pins (proved, root refusals, scoped identities,
-# correspondence, non-current edges) and one added assertion (crypto_verify_drifted's verify_tag refusal, by name).
-EXPECTED_ASSERTION_LABELS_SHA256="TBD"
+# Re-pinned 2026-10-20 (bug 083, landed on the 114/174 base) for its relabelled corpus pins (proved
+# 32 -> 35, root refusals -> 3, scoped identities, correspondence 8/10, non-current edges -> 14) and
+# one added assertion (crypto_verify_drifted's verify_tag refusal, by name); the split is unchanged.
+EXPECTED_ASSERTION_LABELS_SHA256="40005619e5e8e20f6148ba18f08c04378fea45509f02fdc47fb10650c5440105"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then

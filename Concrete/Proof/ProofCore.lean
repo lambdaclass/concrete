@@ -2819,12 +2819,17 @@ inductive StoredFreshness where
   | notComparable
   deriving BEq, Repr
 
+/-- The stored `#[proof_fingerprint]` value a v2 subject digest pins. The one rendering: the
+    freshness rule below compares against it and the stale-fingerprint warning prints it, so the
+    value a warning tells an author to pin is the value the rule accepts. -/
+def storedV2Pin (subjectDigestV2 : String) : String := "v2:" ++ shortHash subjectDigestV2
+
 def storedFreshness (stored : String) (subjectDigestV2 : Option String) : StoredFreshness :=
   if !("v2:".isPrefixOf stored) then .notComparable
   else match subjectDigestV2 with
     -- No computable digest is not agreement: incomplete facts must never read as freshness.
     | none => .moved
-    | some d => if ("v2:" ++ shortHash d) == stored then .current else .moved
+    | some d => if storedV2Pin d == stored then .current else .moved
 
 /-- Does this entry CLAIM a proof at all?
 
@@ -2995,7 +3000,7 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
       | some h =>
         let sd := (pc.entries.find? fun e => e.qualName == re.function).bind (·.subjectDigest)
         if storedFreshness h sd == StoredFreshness.moved
-        then some (.staleFingerprint re currentFp (sd.map fun d => "v2:" ++ shortHash d))
+        then some (.staleFingerprint re currentFp (sd.map storedV2Pin))
         else none
       | none   =>
         -- No stored short hash. What that means depends on where the entry came

@@ -105,10 +105,11 @@ if [ "${fp_tot:-0}" -eq 0 ]; then
 # each a v2 stored link explained as an added identity row.
 # 60 -> 80 v2: bug 083 (2026-10-18) added 20 v2 pins when the name-keyed `provedFunctions` table's
 # claims moved into source — 7 in examples/, 13 in tests/programs/.
-elif [ "$fp_v2" -eq 80 ] && [ "$fp_v1" -eq 10 ]; then
+# 80 -> 85 v2: bug 081's tests/programs/bug081_alias_key pins its five elf_header claims in source.
+elif [ "$fp_v2" -eq 85 ] && [ "$fp_v1" -eq 10 ]; then
   ok "CLOSED: $fp_v2 of $fp_tot stored links carry the v2 discriminator; the $fp_v1 that do not have no computable v2 subject"
 else
-  no "stored-link migration moved: $fp_v2 v2 / $fp_v1 v1 of $fp_tot (expected 80/10). If a link became migratable, migrate it; if one regressed to v1, the activation is being undone"
+  no "stored-link migration moved: $fp_v2 v2 / $fp_v1 v1 of $fp_tot (expected 85/10). If a link became migratable, migrate it; if one regressed to v1, the activation is being undone"
 fi
 
 # 4. constRef names a constant without binding its MEANING.
