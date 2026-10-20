@@ -57,7 +57,10 @@ if ! pkg-config --exists rocksdb; then
   finish
 fi
 ok "rocksdb $(pkg-config --modversion rocksdb) found through pkg-config"
-command -v clang >/dev/null 2>&1 && ok "clang found" || { no "clang not found"; finish; }
+command -v clang >/dev/null 2>&1 && ok "clang found (links the emitted IR, as the compiler does)" || { no "clang not found"; finish; }
+# The observer is C, compiled with the platform C compiler: the clang the compiler links with may be
+# Lean's bundled one, which ships no resource headers (stdbool.h), and c.h needs them.
+command -v cc >/dev/null 2>&1 && ok "cc found (builds the observer)" || { no "cc not found"; finish; }
 SYSROOT=()
 if [ "$(uname -s)" = "Darwin" ]; then SYSROOT=("--sysroot=$(xcrun --show-sdk-path)"); fi
 read -r -a RLIBS <<<"$(pkg-config --libs rocksdb)"
@@ -128,7 +131,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
 else
   OBS="$TMP/release_observer.so"; OBS_FLAGS=(-shared -fPIC); PRELOAD=LD_PRELOAD
 fi
-if clang "${OBS_FLAGS[@]}" -O1 -Wall -Werror "${SYSROOT[@]}" "${RCFLAGS[@]}" "$OBS_SRC" -o "$OBS" \
+if cc "${OBS_FLAGS[@]}" -O1 -Wall -Werror "${RCFLAGS[@]}" "$OBS_SRC" -o "$OBS" \
      "${RLIBS[@]}" -Wl,-rpath,"$RLIBDIR" -ldl > "$TMP/obs.err" 2>&1; then
   ok "observer built against rocksdb/c.h (also checks the binding's size_t/u8/pointer width assumptions)"
 else
@@ -136,11 +139,16 @@ else
 fi
 
 # run_observed <binary> <tag> <db-dir> <invalid-path>
+# The preload variable is set by `env`, which execs the program, AFTER the watchdog: a `timeout`
+# that inherited it would load the observer too and append a second (empty) record at its own exit.
 run_observed(){ local bin="$1" tag="$2"
-  env "$PRELOAD=$OBS" ROCKSDB_OBSERVER_OUT="$TMP/$tag.obs" $TO "$bin" "$3" "$4" \
+  rm -f "$TMP/$tag.obs"
+  $TO env "$PRELOAD=$OBS" ROCKSDB_OBSERVER_OUT="$TMP/$tag.obs" "$bin" "$3" "$4" \
     > "$TMP/$tag.out" 2> "$TMP/$tag.err"
   echo $? > "$TMP/$tag.rc"
 }
+# one_record <tag>: the observer wrote exactly one record (one process observed).
+one_record(){ [ -s "$TMP/$1.obs" ] && [ "$(grep -cx record "$TMP/$1.obs")" = "1" ]; }
 
 echo "=== C: behaviour ($HOW binary) ==="
 touch "$TMP/a_regular_file"
@@ -171,8 +179,8 @@ done: all handles released"
 [ ! -e "$BAD" ] && ok "nothing was created at the invalid path" || no "something exists at $BAD"
 
 echo "=== D: each handle released exactly once (observed outside the program) ==="
-if [ -s "$TMP/run.obs" ]; then
-  ok "observer wrote its record"
+if one_record run; then
+  ok "observer wrote exactly one record (the program's)"
   for cls in options writeoptions readoptions db value errmsg; do
     line="$(grep -E "^$cls " "$TMP/run.obs")"
     [ "$line" = "$cls acquired=1 released=1 live=0 bad=0" ] \
@@ -181,7 +189,7 @@ if [ -s "$TMP/run.obs" ]; then
   done
   grep -qx "overflow=0" "$TMP/run.obs" && ok "observer table did not overflow" || no "observer overflowed"
 else
-  no "observer wrote no record (was it loaded? $PRELOAD=$OBS)"
+  no "observer record missing or not exactly one (was it loaded? $PRELOAD=$OBS): $(grep -c . "$TMP/run.obs" 2>/dev/null) lines"
 fi
 
 echo "=== E: the observer has teeth (binding that never frees a value) ==="
@@ -199,7 +207,7 @@ PYEOF
 if [ $? -eq 0 ] && build_example "$MUT" "$TMP/mut_kv" mut; then
   run_observed "$TMP/mut_kv" mutrun "$TMP/mutdb" "$BAD"
   mline="$(grep -E '^value ' "$TMP/mutrun.obs" 2>/dev/null)"
-  [ "$mline" = "value acquired=1 released=0 live=1 bad=0" ] \
+  one_record mutrun && [ "$mline" = "value acquired=1 released=0 live=1 bad=0" ] \
     && ok "a leaked value buffer is reported live (observer is not vacuous)" \
     || no "mutated binding not caught: [$mline]"
 else

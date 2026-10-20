@@ -15,8 +15,8 @@
  *   errmsg       *errptr set by open/put/get  -> rocksdb_free
  *
  * A release of a pointer that is not live in its class (double release, wrong
- * deallocator, foreign pointer) is counted as `bad`. At exit it writes one line
- * per class to $ROCKSDB_OBSERVER_OUT:
+ * deallocator, foreign pointer) is counted as `bad`. At exit it appends a
+ * `record` line and then one line per class to $ROCKSDB_OBSERVER_OUT:
  *   <class> acquired=<n> released=<n> live=<n> bad=<n>
  *
  * macOS: loaded with DYLD_INSERT_LIBRARIES, replacing calls through the
@@ -69,8 +69,12 @@ static void note_err(char **errptr) {
 
 __attribute__((destructor)) static void observer_report(void) {
     const char *out = getenv("ROCKSDB_OBSERVER_OUT");
-    FILE *f = out ? fopen(out, "w") : NULL;
+    /* Append, with a header per process: any other process that loads the
+     * observer (a wrapper such as timeout) adds a second record instead of
+     * silently overwriting the program's, and the gate requires exactly one. */
+    FILE *f = out ? fopen(out, "a") : NULL;
     if (!f) return;
+    fprintf(f, "record\n");
     for (int c = 0; c < C_COUNT; c++) {
         long n = 0;
         for (int i = 0; i < MAX_LIVE; i++) if (live[c][i]) n++;
