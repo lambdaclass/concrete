@@ -124,6 +124,23 @@ case "$HOW" in
   *)           no "neither build path produced a binary"; sed 's/^/       /' "$TMP/kv.emit.err" "$TMP/kv.buildB" 2>/dev/null | head -20; finish ;;
 esac
 
+echo "=== B2: every foreign declaration stays foreign in the emitted IR ==="
+# A binding's `extern fn` must reach LLVM as a `declare`. A `define` of the same symbol means the
+# compiler substituted its own body for the C function — gap G3: Mono's drop-glue synthesizes an
+# empty body for any unresolved call whose name ends in `_destroy`, so rocksdb_*_destroy never runs.
+( cd "$EX" && $TO "$C" build --emit-llvm ) > "$TMP/ir.ll" 2> "$TMP/ir.err" \
+  || { no "concrete build --emit-llvm failed: $(head -3 "$TMP/ir.err" | tr '\n' ' ')"; finish; }
+EXTERNS="$(sed -nE 's/^[[:space:]]*extern fn ([A-Za-z_][A-Za-z0-9_]*)\(.*/\1/p' "$EX/rocksdb/src/lib.con")"
+[ -n "$EXTERNS" ] || { no "found no extern fn declarations in the binding package"; finish; }
+n_ext=0; shadowed=""
+for f in $EXTERNS; do
+  n_ext=$((n_ext+1))
+  grep -qE "^define [^@]*@$f\(" "$TMP/ir.ll" && shadowed="$shadowed $f"
+done
+[ -z "$shadowed" ] \
+  && ok "all $n_ext extern fns are declared, none defined by the compiler" \
+  || no "the compiler DEFINED foreign symbols with its own body (gap G3):$shadowed"
+
 echo "=== D setup: the release observer ==="
 OBS_SRC="$CL/tests/regressions/rocksdb_slice1/release_observer.c"
 if [ "$(uname -s)" = "Darwin" ]; then
