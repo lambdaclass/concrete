@@ -155,7 +155,7 @@ Because borrow blocks freeze the owner for the entire duration of the block, Con
 
 ### Borrow escape prevention
 
-If a reference created by a borrow block is assigned to a variable outside the block, the checker rejects it with `referenceEscapesBorrowBlock`. The escape check works by tracking all borrow-created reference names and checking assignments.
+If a reference created by a borrow block is assigned to a variable outside the block, the checker rejects it with `referenceEscapesBorrowBlock`. The escape check works by tracking all borrow-created reference names and checking assignments. This is one case of the reference rules in §15 (REF-6), which also cover references made by `let` borrows.
 
 ### What borrows do NOT do
 
@@ -507,3 +507,488 @@ These invariants hold for all safe Concrete code that passes the checker:
 8. **No skip-past-linear.** Break and continue cannot skip unconsumed linear variables in the current loop scope.
 9. **No defer-body escape.** Break and continue are forbidden inside defer bodies.
 10. **No assign-through-immutable.** Only `mut` variables can be assigned.
+
+Invariant 4 is one case of the reference rules in §15, which state the whole second-class
+discipline and its current enforcement.
+
+---
+
+## 15. Second-class references and lexical binding (normative; exit 2i)
+
+**Status:** normative specification for ROADMAP exit 2i (owner R-0500, stage S4 of
+[VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)), written 2026-10-21. This section is the
+single normative statement of the reference and binding rules. The narrative in
+[VALUE_MODEL.md](VALUE_MODEL.md) ("References are second-class"), the summary in
+[MEMORY_MODEL.md](MEMORY_MODEL.md), and the decision records in
+[LANGUAGE_INVARIANTS.md](LANGUAGE_INVARIANTS.md) §4 and [DECISIONS.md](../project/DECISIONS.md)
+("No lexical value shadowing") explain the rules. Where they disagree with this section, this
+section governs and the other text is corrected.
+
+Every rule has a stable identifier and a version (`REF-3@1`). Its status is one of:
+
+- **main**: enforced on `main` at `d967b4f2`;
+- **land2**: enforced only on branch `land2-fix` at `74f7284a` (batch 2: the bug 091 normalized
+  place rule and the bug 087 repair), which lands under exit 0b;
+- **gap**: enforced on neither. §15.7 gives each gap an owner.
+
+Statuses were read from the source at those SHAs and checked by compiling every rejected and
+accepted example below with binaries built from them (2026-10-21). Exit 2i closes when every rule
+is **main**, carries its versioned migration diagnostic (§15.5), and its acceptance rows (§15.6)
+pass.
+
+### 15.1 Definitions
+
+- A **reference type** is `&T` or `&mut T`, including one spelled through a type alias. Raw
+  pointers (`*const T`, `*mut T`) are not references; they are the trusted escape and are outside
+  these rules.
+- A type **holds a reference** when it is a reference type, or an array, `Heap`, heap array or
+  generic instantiation one of whose element or argument types holds a reference (`tyStoresRef`
+  in `Concrete/Check/CheckHelpers.lean`). A function-pointer type does not hold one (a
+  `fn(&T) -> U` value stores no reference), and a raw pointer is not looked through. A named
+  struct or enum can hold one only through its type arguments, because REF-3 forbids reference
+  fields.
+- A **canonical place** is a binding followed by any number of field (`.f`), index (`[i]`) and
+  newtype (`.0`) projections, where each dereference `*e` is of a reference or raw pointer whose
+  own source is traced. Parentheses and identity dereferences normalize away: `(*r).f` and `r.f`
+  are one place, and `&*r` names `r`'s source (`normPlace` / `normRef`, `land2-fix`, bug 091
+  round 3). The **root** of a canonical place is its binding.
+- A **reference binding** is a local (parameter, `let`, pattern binder or borrow-block binder)
+  whose type is a reference type. Its **source** is the canonical place it was made from, recorded
+  once per binding: root binding, projection path, and whether the path is exact. A reference
+  parameter's source is the caller's argument place, outside the callee.
+- A binding is **visible** at a program point from its declaration to the end of the block that
+  declares it, nested blocks included, whatever its state (live, used, consumed, reserved,
+  frozen). A parameter is visible in the whole body; a match-arm, `if let` or `while let` binder
+  in its arm or body; a `for` header binder in the header and the body; a borrow-block binder and
+  region name in the block.
+- A reference binding is **live** from its declaration to the end of its block, unless it is
+  consumed first. There are no non-lexical lifetimes.
+
+### 15.2 What the rules guarantee
+
+The rules establish two invariants, which are the proof targets for S8 and V1:
+
+- **INV-REF (references only flow down).** In safe code a reference value is held only by a local
+  binding or a call argument of some activation `F`, and it denotes a canonical place whose root
+  binding belongs to `F` or to an activation below `F` on the stack. Wherever the reference can be
+  used, that root binding is in scope, is the binding the reference was made from, and has not
+  been moved, consumed, freed or destroyed. No reference resides in an aggregate, a heap cell, a
+  constant, the return channel, or storage behind another reference.
+- **INV-SCOPE (one lexical name, one binding).** Within a function body a name denotes at most one
+  visible local value binding at every program point, so a rule keyed by name is keyed by binding.
+
+REF-1 to REF-8 imply INV-REF: a reference originates only from a canonical place (REF-5), so its
+root is visible where it is made; it is never re-pointed (REF-6), so the root's scope encloses the
+reference's; it never leaves its frame upward or into storage (REF-1 to REF-4, REF-7); and its
+root stays the same live binding while it lives (REF-8; SCOPE-1 makes "the same binding" a
+property of the name). SCOPE-1 implies INV-SCOPE. The scope argument also uses two facts the
+compiler already gives: a callee cannot retain a reference argument (REF-1, REF-3, REF-7), and a
+borrow-block reference cannot be assigned outside its block (E0234). The rules marked "deliberate
+restriction" are what keep INV-REF a lexical argument rather than a flow analysis (KNOWN_HOLES H28
+on `land2-fix`); R-0499 may relax them as new rule versions.
+
+### 15.3 Reference rules
+
+Each rule gives the statement, examples, the diagnostic and its enforcing site, the fixtures that
+pin it, and its status. Fixtures are under `tests/programs/`. A fixture in *italics* exists only on
+`land2-fix`.
+
+#### REF-1. No function returns a reference
+
+No function, method or trait method, `trusted` included, has a return type that holds a reference
+or a function type that does (REF-2), and a return type may not contain a raw pointer to a
+reference type either; the trusted escape is a raw pointer to the referent.
+
+- Accepted: `fn get(v: &Vec<Int>, i: Int) -> Option<Int>` (a copy-out value); returning a raw
+  pointer `*const T`.
+- Rejected: `fn id(x: &i64) -> &i64`, `fn f() -> &i64 { return &local; }`,
+  `fn f(x: &i64) -> Option<&i64>`, `fn f() -> fn(&i64) -> i64`, `fn f(x: *const &i64) -> *const &i64`.
+- Diagnostic: front end, `checkFn` in `Concrete/Check/Check.lean` (`tyContainsRef` on the return
+  type, "function '…' may not return a reference", **no code**); after monomorphization,
+  `verifyNoReturnedRefs` in `Concrete/Check/Verify.lean` (E0236, `tyExposesRef`).
+- Fixtures: `error_escape_return.con` (matched by message text in `run_tests.sh`);
+  `scripts/tests/check_returned_ref_provenance.sh` legs `bare_ref_return`, `ref_to_local`,
+  `aggregate_ref_return`.
+- Status: **main**. Gap G2: the front-end rejection has no code, E0236 is missing from the
+  `--report diagnostic-codes` ledger, and the post-mono predicate `tyExposesRef` is weaker than the
+  front end's `tyContainsRef` (it does not look into function or raw-pointer types). The normative
+  rule is the front end's: it is conservative and no program needs the other form. A returned
+  function pointer whose parameters are references is rejected today; admitting it would be a
+  REF-1@2 relaxation.
+
+#### REF-2. No function type returns a reference
+
+A function-pointer type whose return type holds a reference cannot be written, so no callback can
+hand a borrowed element back (this keeps `with_value` sound). Parameters of reference type are
+allowed.
+
+- Accepted: `fn apply(x: &i64, f: fn(&i64) -> i64) -> i64`.
+- Rejected: `fn apply(x: &i64, f: fn(&i64) -> &i64) -> i64`.
+- Diagnostic: `resolveType` (`.fn_` case) in `Concrete/Check/CheckHelpers.lean`, "function type may
+  not return a reference", **no code**.
+- Fixture: `check_returned_ref_provenance.sh` leg `ref_returning_fn_type`.
+- Status: **main**; no code (G2).
+
+#### REF-3. No reference is stored
+
+The only storage a reference may occupy is a local reference binding (and an argument slot for
+the duration of a call). A reference may not be held in: a struct or enum field type, or a
+newtype's inner type (each also through a type alias); a struct literal field, an enum payload or
+an array literal element; a binding or parameter whose type holds a reference inside an array,
+`Heap` or generic argument, also behind an outer `&`; or a module constant.
+
+- Accepted: `struct H { f: fn(&Int) -> Int }`; a bare `let r: &Int = &x`; a reference parameter.
+- Rejected: `struct W { t: &String }`; `Option::Some { value: &s }`; `[&a, &b]`;
+  `let h: Heap<&Int> = alloc(&x)`; `fn f(v: &Vec<&Int>)`; `const A: [&Int; 1] = [&X]`;
+  `const R: &Int = &X;` (G1).
+- Diagnostic: E0239 (`refStoredInAggregate`). Sites: the declaration check in `checkModule`
+  (fields, payloads and newtypes, through `expandAliasDeep`); the struct-literal, enum-literal and
+  array-literal cases of `checkExpr`; `addVar` (`tyHoldsRefInAggregate`, every binding); `checkFn`
+  (parameters), all in `Concrete/Check/`; and after monomorphization `verifyNoStoredRefs`
+  (instantiated fields, function types, constants), run as `monoProgram (preTypeCheck :=
+  verifyNoStoredRefs)` in `Concrete/Pipeline/Pipeline.lean`.
+- Fixtures (E0239): `error_092_ref_struct_field.con`, `error_092_ref_in_option.con`,
+  `error_092_ref_in_array.con`, `error_092_newtype_ref.con`, `error_092_alias_newtype_ref.con`,
+  `error_092_alias_struct_field_ref.con`, `error_092_const_ref_array.con`,
+  `error_092_phantom_ref_type_arg.con`, `error_escape_field.con`. Accepted:
+  `regress_092_refs_flow_down.con`, `regress_092_type_param_shadows_ref_alias.con`.
+- Status: **main** except G1: a constant whose type is a reference is accepted on both revisions,
+  because `tyHoldsRefInAggregateV` looks through the outer reference. On `main`,
+  `const X: Int = 42; const R: &Int = &X; fn get(r: &Int) -> Int { return *r; }` with
+  `return get(R);` builds a binary that exits 0, while `--interp` reports `undefined variable 'R'`:
+  silent wrong code in safe code. `land2-fix` refuses every use of `R` (E0238, "'R' is not a local
+  binding") but still accepts the declaration.
+
+#### REF-4. Generic instantiation preserves REF-1 and REF-3
+
+A type parameter may be instantiated with a type that holds a reference only when every occurrence
+of the parameter in the generic's parameter types is at top level (`x: T`) or as a by-value
+parameter of a function type (`f: fn(T) -> U`). The instantiation is refused when the parameter
+occurs (a) in the return type, (b) in an aggregate the generic stores it in (`Box<T>`, `[T; N]`,
+`Heap<T>`; seen after monomorphization), or (c) behind a reference or pointer in a parameter type,
+including inside a function type (`w: &W<T>`, `r: &T`, `p: *mut T`, `f: fn(&mut T)`), because the
+generic body is checked once at its opaque `T`.
+
+- Accepted: `fn ignore<T: Copy>(x: T, k: Int) -> Int` at `T = &Int`;
+  `fn apply<T>(x: T, f: fn(T) -> Int) -> Int` at `T = &Int`; *`trait_generic_fn_value_param.con`*.
+- Rejected: `wrap::<&i64>(&x)` with `fn wrap<R>(r: R) -> R`; a `Box<T>` built at `T = &Int`;
+  `forward::<&P>(w: &W<T>, ..)`; a generic passing its own opaque `T` on to a `&mut U` parameter
+  (`relay` calling `update::<T>`).
+- Diagnostic and site: (a) the call cases of `checkExpr` and `inferMethodParamAndRetTys`
+  (`tyParamOccursIn` on the return type; "instantiated to a reference", **no code**), and E0236
+  after monomorphization; (b) E0239, `verifyNoStoredRefs`; (c) E0238,
+  `refuseNestedRefInstantiation` (`Concrete/Check/CheckHelpers.lean`) at every call form and
+  `refuseNestedRefSpecialization` (`Concrete/IR/Mono.lean`) at every specialization.
+- Fixtures: `check_returned_ref_provenance.sh` leg `generic_ref_in_return`;
+  `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con` (E0239);
+  *`error_091_norm_generic_nested_ref.con`*, *`error_091_norm_generic_nested_alias_ref.con`*,
+  *`error_091_norm_generic_fn_mut_param.con`*, *`error_091_norm_generic_transitive_ref.con`*. The
+  `r091_table` in *`run_tests.sh`* records the code each bug-091 fixture reports.
+- Status: (a) and (b) **main**, (a) without a front-end code (G2); (c) **land2**.
+
+#### REF-5. A reference originates only from a canonical place
+
+A reference value is created only by: a borrow `&p` / `&mut p` of a canonical place `p`; a
+reference parameter; a borrow-block binder; a copy, reborrow, projection or cast of a reference
+binding whose source is traced (`let s = r`, `&*r`, `&mut *r`, `&r.f`, `r as &U`); or a pattern
+binder that binds through such a reference. A reference may be used as the initializer of a `let`
+of reference type, a call argument or receiver, the operand of `*`, a field or index base, or the
+right-hand side of a reassignment REF-6 allows. Each of the following is refused as the source of
+a reference:
+
+- an `if` or `match` whose value is a reference (`let r = if c { &a } else { &b };`,
+  `f(if c { &a } else { &b })`) — a deliberate restriction; the backend also miscompiles the form
+  (bug 105);
+- a borrow of a temporary (`&(40 + 2)`; `make().bump()` for a `&mut self` method): bind the value
+  to a `let` first;
+- a call whose result is a reference (REF-1 makes this unwritable for user functions; the rule
+  covers intrinsics);
+- a read of a reference out of storage: a field, element, heap cell or referenced place whose type
+  is a reference (`*w.r`, `**r`, `(**r).f`).
+
+- Accepted: `let r: &P = &w.p; f(r); f(&w.p); let s: &P = r;`.
+- Diagnostic: E0238 (`untraceablePlace`). Sites (`land2-fix`, `Concrete/Check/Check.lean`):
+  `checkExpr` (the single entry that refuses a reference-typed call result or storage read),
+  `refuseRefValuedBranch`, `checkImplicitReceiverBorrow`, `checkRefArg` and `recordRefProvenance`,
+  over `normPlace` / `normRef`.
+- Fixtures (E0238): *`error_105_ref_valued_if_arg.con`*, *`error_105_ref_valued_if_field.con`*,
+  *`error_091_norm_temporaries.con`*, *`error_091_norm_if_local_binding.con`*,
+  *`error_091_norm_if_local_chain.con`*, *`error_091_norm_double_deref_read.con`*,
+  *`error_091_norm_nested_ref_binder.con`*.
+- Status: **land2**. On `main` a reference-valued `if` is accepted and its binary segfaults (bug
+  105), and `&(40 + 2)` is accepted.
+
+#### REF-6. A reference binding is never re-pointed
+
+A reassignment `r = e` of a reference binding is allowed only when `e`'s source has the same root
+and path as `r`'s recorded source. A reassignment that would point `r` at different storage is
+refused: provenance is one place per binding and is not joined across branches. This is the rule
+that keeps a reference out of any binding that outlives its source (design example B6, finding
+G8): a reference binding declared in an outer block can only point at a place whose root was
+visible at its declaration. A borrow-block reference may not be assigned to a variable outside its
+block.
+
+- Accepted: `let mut r: &P = &p; r = &p;`.
+- Rejected: `let mut leaked: &Point = &p; if true { let q: Point = ..; leaked = &q; }` (bug 104,
+  stack variant), its heap variant, `leaked = r2` where `r2` borrows a block local, and a reference
+  parameter re-pointed at a local (`fn f(r: &mut Int) { let mut x = 1; r = &mut x; }`).
+- Diagnostic: E0238 at the assignment, `recordRefProvenance (reassign := true)` (`land2-fix`);
+  E0234 (`referenceEscapesBorrowBlock`) for a borrow-block reference, in the `let` and assignment
+  cases of `checkStmt` (`main`).
+- Fixtures: *`error_104_assigned_ref_heap_block.con`*, *`error_104_assigned_ref_stack_block.con`*,
+  *`error_091_ref_repointed_in_branch.con`*, *`error_091_mut_receiver_reassigned_ref.con`* (E0238);
+  `error_borrow_escape.con` (E0234).
+- Status: **land2** for re-pointing; **main** for the borrow-block case only. On `main` both bug
+  104 reproducers are accepted, and the stack variant exits 30 by reading a dead slot. On `main`
+  re-pointing a `&mut` parameter is refused only as E0219 (the parameter is linear), and
+  re-pointing a `&T` binding that started from a parameter at a block local is accepted and reads
+  the dead slot (`fn f(r: &P) -> Int { let mut out: &P = r; if true { let q: P = ..; out = &q; }
+  return out.n; }` returns `q`'s value).
+  A deliberate restriction: R-0499's flow-sensitive loans may admit re-pointing at a place that
+  outlives the binding, as REF-6@2.
+
+#### REF-7. No reference is written through a reference
+
+An assignment whose target lies behind a reference and whose value type holds a reference
+(`*slot = &local` with `slot: &mut &T`) is refused: the borrow would land in storage the writer
+does not own and leave the caller holding a reference to the callee's local.
+
+- Rejected: `fn set(slot: &mut & Int) { let local: Int = 7; *slot = &local; }`.
+- Diagnostic: E0238, the deref-assignment case of `checkStmt` (`land2-fix`, bug 091 integration
+  review).
+- Fixture: *`error_091_norm_ref_write_through_ref.con`*.
+- Status: **land2**. On `main` the program above, called from `main`, compiles and segfaults.
+
+#### REF-8. A reference's source stays the same live binding
+
+While a reference binding is live, its source root may not be moved or consumed (E0204,
+`consumeVar`), accessed while a borrow block freezes it (E0203), mutably borrowed or written while
+a shared reference to it is live or used while an exclusive one is (E0231 / E0232), or shadowed by
+a new binding of the same name (E0238, `guardShadowedSource`, `land2-fix`, bug 107). A reference's
+own uses obey the same exclusivity through its ancestry of reborrows and copies (`refParent`,
+`land2-fix`).
+
+- Rejected: `let r: &Heap<B> = &h; let s: &Heap<B> = r; free(h);` (E0204, `main`);
+  `let x: Int = 1; let r: &Int = &x; let x: Int = 2;` (E0238 on `land2-fix`; on `main` the binary
+  returns 2 where `--interp` returns 1).
+- Fixtures: `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232);
+  *`error_107_shadow_under_live_ref.con`*, *`error_107_shadow_in_block_under_live_ref.con`*,
+  *`error_091_norm_assign_under_shared_ref.con`*, *`error_091_norm_copied_mut_ref.con`*.
+- Status: moving, freeing, freezing and let-borrow conflicts **main**; shadowing and ancestry
+  **land2**. Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
+  `guardShadowedSource` stays as defense in depth.
+
+### 15.4 Lexical binding rules
+
+#### SCOPE-1. One lexical name, one binding
+
+A binder may not reuse the spelling of a local value binding visible at its declaration (§15.1).
+Binders are: function parameters (two parameters of one function included), `let` binders, `let`
+destructuring binders, match-arm payload and value binders, `if let` and `while let` binders,
+`for` header binders, and borrow-block reference and region names. The visible binding's state and
+type do not matter: `let s = transform(s)` is rejected although the right-hand side consumed `s`,
+and a Copy binding is protected like a linear one. This is the rule ratified for R-0435 on
+2026-07-25 and inherited by R-0500.
+
+- Accepted: the shapes of SCOPE-2.
+- Rejected: `let x: Int = 1; let x: Int = x + 41;`; `if a > 0 { let a: Int = 7; }` with a
+  parameter `a`; `for (let mut i: Int = 0; ..)` under an outer `i`;
+  `let value = 1; match o { Option::Some { value } => .. }`; `let P { v } = p;` under an outer `v`;
+  `fn f(a: Int, a: Int)`; `borrow x as x in R { }`.
+- Diagnostic: **E0301, proposed** (`shadowsVisibleBinding`; confirm the number is unused on every
+  branch when it is allocated), with the earlier binding as a related span. It runs at binder
+  introduction, before E0292, in Check: the `let` and destructuring cases of `checkStmt`, the
+  parameters in `checkFn`, the pattern binders of `match`, `if let` and `while let`, the `for`
+  header and `.borrowIn`. Elab's `bindLocal` alpha-renaming (bug 087, `land2-fix`) stays mandatory
+  as defense in depth ([PRINCIPLES.md](../project/PRINCIPLES.md) #12).
+- Partial enforcement on `main`: E0292 rejects shadowing a live non-Copy binding by `let` or
+  destructuring (`checkNoLiveShadow`; `error_094_destructure_shadows_live.con`, the "live shadow"
+  leg of `scripts/tests/check_linear_discard.sh`); E0214 and E0215 reject a borrow-block reference
+  or region name that is already bound (`.borrowIn` in `checkStmt`; `error_borrow_shadow.con`; E0215
+  has no fixture). `land2-fix` adds E0238 for a name a live reference borrows (REF-8).
+- Status: **gap** (G3). Every other rejected shape above is accepted on both revisions. Duplicate
+  parameter names pass the checker on both and then fail in `llvm-as` ("redefinition of
+  argument"), a loud failure that also breaks LANGUAGE_INVARIANTS §19.
+- Prerequisite (G4): the renamed pattern binder `Variant { value: inner }`, in `match`, `if let`,
+  `while let` and destructuring `let`. It does not parse today ("expected identifier, got :").
+  Without it a nested `Option` / `Result` match cannot be written under SCOPE-1, because both
+  payload fields are named `value`.
+
+#### SCOPE-2. What is not a collision
+
+- Bindings in sibling scopes: the two branches of an `if`, consecutive blocks, sibling match arms,
+  consecutive loops. Neither binding is visible from the other.
+- A declaration in a loop body: it is one lexical binding however many times it executes.
+- Assignment: `x = e` introduces no binding. A `mut` linear place may be assigned after its value
+  is consumed (`acc = f(acc, x)`); assigning over a live linear value stays E0219.
+- Names in other namespaces: field labels, type names, traits and modules.
+
+Status: **main**; all accepted. *`regress_087_sibling_promoted.con`* and
+*`regress_087_unpromoted_sibling.con`* pin sibling reuse of a name with promoted storage.
+
+#### SCOPE-3. Blocks are lexical on every consumer
+
+A binding declared in a block is not visible after it, and every consumer (Check, Elab, the
+interpreter, Lower, extraction, evidence frames) resolves a name to the innermost visible binding.
+Once SCOPE-1 lands only sibling reuse reaches the renaming path; until then programs that shadow
+must at least mean the lexical thing.
+
+- Status: **land2** (the bug 087 repair: `bindLocal`, `enterBlock` / `exitBlock` in
+  `Concrete/Elab/Elab.lean`; fixtures *`regress_087_let_block_shadow.con`*,
+  *`regress_087_sibling_promoted.con`*, *`regress_087_unpromoted_sibling.con`*,
+  *`regress_087_borrow_shadow_uaf/`*). On `main`, shadowing inside a block, a loop body or a
+  borrow-block body miscompiles: `let x: Int = 1; if true { let x: Int = 100; } return x + 41;`
+  exits 141, and the `for`-header shadow above exits 4 where 42 is lexical.
+
+#### SCOPE-4. Namespace boundary (open, outside exit 2i)
+
+Whether a local may reuse the name of a top-level function, an import alias or an intrinsic is a
+separate namespace decision that SCOPE-1 does not make (DECISIONS.md). Today it may: `fn value()`
+and `let value: Int` coexist. Contract and specification binders (`result`, quantifier binders)
+are not local value bindings.
+
+### 15.5 Versioned migration diagnostics
+
+**What exists.** The repository has no language edition or language-version mechanism.
+`Concrete.toml` has `[package]`, `[policy]` and `[profile]` sections and no edition key, and a
+standalone file has no manifest at all. The nearest precedent is the targeted diagnostics for
+removed syntax, which carry no version (E0289 for `let _ = …;`, the `?` operator, `while` as an
+expression). Every check diagnostic has a stable code (`CheckError.code`); `--report
+diagnostic-codes` (`Concrete/Report/Report.lean`) is the code ledger, kept complete by
+`scripts/tests/check_diagnostic_codes_complete.sh`. The `Diagnostic` structure
+(`Concrete/Report/Diagnostic.lean`) already has `reason`, `nextAction`, `related` and `evidence`
+fields, which the human and the JSON renderers both print.
+
+**Definition.** A diagnostic that enforces rule `R` is a *versioned migration diagnostic* when:
+
+1. it has a stable E-code, and the ledger row for that code names every rule it enforces with its
+   version (`E0238: REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1`);
+2. the rendered diagnostic, human and JSON, names the rule, its version and this section
+   (`evidence = [("rule", "REF-6@1")]`, rendered as
+   `= rule: REF-6@1 (docs/language/MEMORY_SEMANTICS.md §15)`);
+3. it gives the mechanical rewrite for the rejected shape (`nextAction`, rendered as
+   `= migrate: …`), and for a binding conflict the earlier binding as a related span;
+4. each rejected shape has a fixture asserting the code, the rule tag and the presence of the
+   rewrite, paired with an accepted fixture that is the rewritten program (a migration pair).
+
+**Versioning policy.** A rule's version increments whenever its accepted set changes, by
+tightening or by relaxing. The table below is the record, and each change cites the commit that
+changed the compiler. There is no edition switch and no opt-out: these are soundness and identity
+rules, and a mode that kept the old behavior would keep the unsound programs compilable. The
+corpus that breaks is the repository's own and is migrated in the same change. A relaxation (for
+example R-0499 lifting an H28 restriction) is a new version whose formerly rejected fixtures become
+accepted fixtures, with the diagnostic text updated.
+
+| rule | version | code | since |
+|---|---|---|---|
+| REF-1 | 1 | E0236 (to be attached at the front end, G2) | H1 closure, 2026-06-13; post-mono re-assertion, class 6 |
+| REF-2 | 1 | E0236 (proposed; no code today) | H1 closure, 2026-06-13 |
+| REF-3 | 1 | E0239 | bug 092 (`df0215f0`; batch 4 follow-ups `fc34504e` to `7f4ae423`); bare-reference constants once G1 is repaired |
+| REF-4 | 1 | E0236 (a), E0239 (b), E0238 (c) | (a) 2026-06-13; (b) batch 4; (c) batch 2 |
+| REF-5 | 1 | E0238 | batch 2, landing under exit 0b |
+| REF-6 | 1 | E0238; E0234 | batch 2; E0234 earlier |
+| REF-7 | 1 | E0238 | batch 2 (`a4ceab04`) |
+| REF-8 | 1 | E0204, E0203, E0231, E0232; E0238 | E0238 case batch 2 |
+| SCOPE-1 | 1 | E0301 (proposed) | the change that closes G3 |
+| SCOPE-3 | 1 | none: a semantics rule, pinned by fixtures comparing `--interp`, the binary and the extracted model | bug 087, batch 2 |
+
+**Diagnostic text.** For SCOPE-1:
+
+```text
+error[check]: (E0301) 'value' is already bound in an enclosing scope; a new binding may not reuse a visible name
+  = rule: SCOPE-1@1 (docs/language/MEMORY_SEMANTICS.md §15)
+  = note: the earlier binding is here: src/main.con:3:9
+  = migrate: give the new binding its own name; for a pattern field write `Variant { value: inner }`;
+             to replace the value of a `mut` binding, assign instead (`value = ...`)
+```
+
+The rewrites for the other rules: REF-1, "return a value or an owned view, use a scoped callback
+(`with_value`), or return a raw pointer from trusted code"; REF-3, "store an owned value, an index
+or a `ByteView` instead, or pass the reference down as an argument"; REF-5 (branch value), "borrow
+inside each branch and use the reference there, or choose the value first and borrow a named
+place"; REF-5 (temporary), "bind the value to a `let` and borrow that"; REF-6, "declare a new
+reference binding for the new place (`let r2 = &q;`)"; REF-7, "pass the reference down as an
+argument instead of storing it through `&mut &T`". The wording is the implementer's; the rule tag,
+the rewrite and the related span are required.
+
+### 15.6 Acceptance list
+
+The implementer adds a manifest `tests/rules/exit_2i.tsv` (new), one row per fixture: `rule`,
+`fixture`, `expected`, where `expected` is `reject:<code>:<rule@version>` or `run:<exit code>`;
+and a gate `scripts/tests/check_rules_2i.sh` (new, in the full gate set). For each reject row the
+gate checks the code, the rule tag and the presence of `= migrate:`; for each run row it runs the
+binary and `--interp` and requires both to give the expected result. It fails when a rule of this
+section has no reject row or no run row, when a row names a missing fixture, or when the ledger's
+rule and version for a code disagree with §15.5. Existing fixtures are referenced, not copied.
+Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
+`trait_generic_fn_value_param.con` need batch 2 on `main`.
+
+| rule | fixture | expected |
+|---|---|---|
+| REF-1 | `error_escape_return.con` | reject E0236 REF-1@1 (today matched by text) |
+| REF-1 | `error_2i_ref1_return_bare.con`, `error_2i_ref1_return_option.con`, `error_2i_ref1_return_fnptr_ref_param.con` (new; the last returns `fn(&Int) -> Int`) | reject E0236 REF-1@1 |
+| REF-1 | `escape_return.con`, `regress_092_refs_flow_down.con` | run (their current expected values) |
+| REF-2 | `error_2i_ref2_fn_type_returns_ref.con` (new) | reject E0236 REF-2@1 |
+| REF-2 | `regress_2i_ref2_callback_takes_ref.con` (new; `apply(&x, g)`, `g: fn(&Int) -> Int`) | run 42 |
+| REF-3 | the nine E0239 fixtures listed under REF-3 | reject E0239 REF-3@1 |
+| REF-3 | `error_2i_ref3_const_bare_ref.con` (new; `const R: &Int = &X;`, G1) | reject E0239 REF-3@1 |
+| REF-3 | `regress_2i_ref3_fnptr_field.con` (new; `struct H { f: fn(&Int) -> Int }`) | run 42 |
+| REF-4 | `error_2i_ref4_generic_return.con` (new; `wrap::<&i64>`) | reject E0236 REF-4@1 |
+| REF-4 | `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con` | reject E0239 REF-4@1 |
+| REF-4 | `error_091_norm_generic_nested_ref.con`, `error_091_norm_generic_nested_alias_ref.con`, `error_091_norm_generic_fn_mut_param.con`, `error_091_norm_generic_transitive_ref.con` | reject E0238 REF-4@1 |
+| REF-4 | `trait_generic_fn_value_param.con`; `regress_2i_ref4_top_level_ref_arg.con` (new; `ignore::<&Int>` and `apply::<&Int>` above) | run |
+| REF-5 | `error_105_ref_valued_if_arg.con`, `error_105_ref_valued_if_field.con`, `error_091_norm_temporaries.con`, `error_091_norm_if_local_binding.con`, `error_091_norm_double_deref_read.con`, `error_091_norm_nested_ref_binder.con` | reject E0238 REF-5@1 |
+| REF-5 | `error_2i_ref5_borrow_temporary.con` (new; `&(40 + 2)`) | reject E0238 REF-5@1 |
+| REF-5 | `regress_2i_ref5_canonical_places.con` (new; `&w.p`, `&a[i]`, `let s = r`, `&*r`) | run 42 |
+| REF-6 | `error_104_assigned_ref_heap_block.con`, `error_104_assigned_ref_stack_block.con`, `error_091_ref_repointed_in_branch.con` | reject E0238 REF-6@1 |
+| REF-6 | `error_2i_ref6_alias_into_outer.con` (new; `leaked = r2`), `error_2i_ref6_param_repointed.con` (new; `&T` and `&mut T` parameters) | reject E0238 REF-6@1 |
+| REF-6 | `error_borrow_escape.con` | reject E0234 REF-6@1 |
+| REF-6 | `regress_2i_ref6_same_source.con` (new) | run 42 |
+| REF-7 | `error_091_norm_ref_write_through_ref.con` | reject E0238 REF-7@1 |
+| REF-8 | `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232), `error_091_norm_copied_mut_ref.con` (E0231), `error_091_norm_assign_under_shared_ref.con` (E0232) | reject, code as given, REF-8@1 |
+| REF-8 | `error_2i_ref8_free_while_aliased.con` (new; `free(h)` under `let s = r`) | reject E0204 REF-8@1 |
+| REF-8 / SCOPE-1 | `error_107_shadow_under_live_ref.con`, `error_107_shadow_in_block_under_live_ref.con` | reject E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before |
+| SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
+| SCOPE-1 | `regress_2i_scope1_<shape>_renamed.con` (new), the migration twin of each fixture in the row above | run, binary = `--interp` |
+| SCOPE-1 | `error_borrow_shadow.con` | reject E0301 SCOPE-1@1 (E0214 today) |
+| SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 today) |
+| SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
+| SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
+| SCOPE-3 | `regress_087_let_block_shadow.con`, `regress_087_borrow_shadow_uaf/` | run 42 with binary = `--interp` = model until SCOPE-1 lands; then reject E0301 SCOPE-1@1, each with a renamed twin that runs 42 |
+| G4 | `regress_2i_renamed_pattern_binder.con` (new; `match`, `if let`, `while let`, destructuring `let`) | run 42, binary = `--interp`, formatter round-trip |
+
+The 092 and 093 reproducers stay rejected, the 093 ones by SCOPE-1 instead of E0208. 087's
+shadowing reproducers become rejected by SCOPE-1, and their lexical-semantics controls survive as
+renamed positive twins. Once SCOPE-1 lands, source programs can no longer reach the identity-keyed
+checks bugs 093 and 094 repaired; they stay as defense in depth, and their mutation rows move to a
+leg that disables E0301 or to a Core-level test (R-0498 decides).
+
+**Generator coverage (S1).** The prevention harness (R-0491) generates, for each rule, the rejected
+shapes above with the expected outcome "rejection with this code and rule tag", and their accepted
+near misses with the outcome "value", compared between the interpreter and the binary. The
+existing shadow shape of `fuzz_differential.py` (`k == 11`) splits into a rejection leg and a
+renamed value leg, and the live-shadow case of `fuzz_linearity.py` expects E0301. Each feature key
+(`ref.return`, `ref.fn_type`, `ref.store`, `ref.generic`, `ref.origin`, `ref.repoint`,
+`ref.write_through`, `ref.owner_live`, `scope.binder.<kind>` for each SCOPE-1 binder kind,
+`scope.sibling`) gets a minimum completed-comparison count in exit 2e's inventory. The proposed
+starting minimum is 20 completed comparisons per key per qualification run; 2e owns the number.
+
+**Mutations.** For each rule, deleting its check (the `throwCheck` at its site, or the
+`verifyNoStoredRefs` / `verifyNoReturnedRefs` call) must turn at least one reject row of the
+manifest into an acceptance; R-0498's claim manifest records the row.
+
+### 15.7 Gaps and owners
+
+| gap | what is missing | proposed owner |
+|---|---|---|
+| G1 | REF-3: a constant of bare reference type is accepted on both revisions; on `main` its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. A candidate defect, not yet filed | row 0, exit 0b: file the bug, reject the declaration with E0239 in `checkModule` and `verifyNoStoredRefs` |
+| G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
+| G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
+| G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
+| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107 and the write-through-reference shape, and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
+| G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
+| G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`), and E0215 has no fixture | R-0500, with R-0513 for the inventory |
+| G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
+| G9 | `&mut` usage modes are inconsistent and partly unspecified: a borrow-block `&mut` is consumed when passed to a call (MUT_REF_SEMANTICS §3) yet may lapse unused; a parameter `&mut` is reborrowed at every call; a `let`-bound `&mut` (`let r: &mut Int = &mut x;`) is linear with no discharging use, since writing through it, passing it to a call, reborrowing it or moving it into another `let` all end in E0208 | an R-0500 decision with R-0511 (design examples B1, B2 and G1); not a 2i restriction, but the V1 model may not model a looser rule than the compiler enforces |
+| G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule |
+| G11 | ROADMAP exit 2i's deliverable reads "none stored in an aggregate"; "strictly second-class" also covers REF-6 (never assigned or aliased into a binding that outlives its source; design example G8) | the roadmap owner (wording) |

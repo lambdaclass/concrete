@@ -51,7 +51,8 @@ Each phase that adds a new consumption form must update this list.
 **Status:** decided language invariant; enforcement pending
 [ROADMAP R-0435](../../ROADMAP.md). Until that task lands, this section distinguishes
 the target rule from current compiler behavior rather than claiming the ban is
-already enforced.
+already enforced. The normative statement (SCOPE-1 to SCOPE-4), its proposed diagnostic, the
+acceptance list and the enforcement status are in [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md).
 
 **Target rule:** a new local value binding may not reuse the spelling of another
 local value binding visible along its lexical scope chain. Parameters, `let`,

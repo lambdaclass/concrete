@@ -33,6 +33,10 @@ For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 
 ## References are second-class: they flow down, never up through returns
 
+The normative statement of these rules, with each rule's diagnostic, enforcing site, fixtures and
+current enforcement status, is [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) (REF-1 to REF-8).
+This section explains the design.
+
 **Invariant (language-level).** References (`&T`, `&mut T`) are *scoped access*,
 not values you return and carry around. They may flow **downward** — into
 function/method calls, into callback parameters, and into borrow blocks — but

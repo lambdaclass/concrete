@@ -152,10 +152,11 @@ not parse; MUT_REF_SEMANTICS §10), but the plan requires "permitted reborrowing
 under a shared one. *Recommendation:* Core has an explicit scoped reborrow. Elaboration produces
 it for implicit call-argument reborrows (B1). Surface syntax waits for a workload.
 
-**B6. Escape through assignment, not just aggregates. Found while writing the model; a candidate
-defect.** Second-class must also forbid storing a reference into a *longer-lived local*. The
-model's `stashRef` is that case, and it dangles. Bug 092's fix (E0237, on branch
-`bug090-checker-ownership`) covers aggregates and leaves "bare reference bindings … unchanged".
+**B6. Escape through assignment, not just aggregates. Found while writing the model; filed as
+[bug 104](../../docs/bugs/104_assigned_reference_outlives_block_local.md).** Second-class must
+also forbid storing a reference into a *longer-lived local*. The model's `stashRef` is that case,
+and it dangles. Bug 092's fix (E0239, now on `main`) covers aggregates and leaves "bare reference
+bindings … unchanged".
 Today's checker catches only a bare borrow-block identifier (E0234, `Check.lean` `.assign`). The
 following compiles with the main checkout's binary (built 2026-10-18; `Concrete/Check` and
 `Concrete/Elab` are unchanged on `origin/main` since), and `f` returns 0 instead of 77: it reads
