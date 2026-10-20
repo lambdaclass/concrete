@@ -436,6 +436,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/patterns/byte_ranges/ byte_ranges exit=0 ret=0 interp=yes
 @run examples/png_chunks/ tiny exit=0 interp=fails:E0110 -- testdata/tiny.png
 @run examples/png_chunks/ bad_crc exit=1 interp=fails:E0110 -- testdata/bad_crc.png
+@run examples/png_chunks/ bad_sig exit=1 interp=fails:E0110 stdout=empty -- testdata/bad_sig.png
 @run examples/project/ project exit=18 interp=fails:undefined~function~'test' stdout=empty
 @run examples/tar_list/ sample exit=0 interp=fails:E0110 -- testdata/sample.tar
 @run examples/tar_list/ truncated exit=1 interp=fails:E0110 -- testdata/truncated.tar

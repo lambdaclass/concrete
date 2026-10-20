@@ -58,6 +58,7 @@ def sourceLinkedThms : List Name :=
     `Examples.ParseValidate.Proofs.parse_header_too_short,
     `Examples.ParseValidate.Proofs.validate_header_fields_success,
     `Examples.ParseValidate.Proofs.validate_version_correct,
+    `Examples.PngChunks.Proofs.png_sig_ok_correct,
     `Examples.ProofPatterns.Proofs.add_three_correct,
     `Examples.ProofPatterns.Proofs.add_three_not_yet_proved,
     `Examples.ProofPatterns.Proofs.combine_correct,

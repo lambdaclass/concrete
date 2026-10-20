@@ -15,12 +15,34 @@ mod png_chunks {
     import std.checksum.{crc32};
     import std.fmt.{write_uint};
 
+    // Pure core of the signature check: the eight bytes are the PNG file
+    // signature (PNG spec section 5.2: 89 50 4E 47 0D 0A 1A 0A). Capability-
+    // free and scalar-only, so it carries a Lean proof
+    // (Examples.PngChunks.Proofs.png_sig_ok_correct). Written as an
+    // early-return chain: the proof extractor does not model boolean `&&`
+    // (docs/verification/PROOF_EXTRACTION_GAPS.md).
+    #[spec(Examples.PngChunks.Proofs.pngSigOkExpr)]
+    #[proof_by(Examples.PngChunks.Proofs.png_sig_ok_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:560bf1629eeb7e9a0128e38af6e42add")]
+    fn png_sig_ok(b0: u8, b1: u8, b2: u8, b3: u8,
+                  b4: u8, b5: u8, b6: u8, b7: u8) -> bool {
+        if b0 != 137 { return false; }
+        if b1 != 80 { return false; }
+        if b2 != 78 { return false; }
+        if b3 != 71 { return false; }
+        if b4 != 13 { return false; }
+        if b5 != 10 { return false; }
+        if b6 != 26 { return false; }
+        return b7 == 10;
+    }
+
     fn is_png_sig(b: &Bytes) -> bool {
         if b.len() < 8 { return false; }
-        return b.get_unchecked(0) == 137 && b.get_unchecked(1) == 80
-            && b.get_unchecked(2) == 78  && b.get_unchecked(3) == 71
-            && b.get_unchecked(4) == 13  && b.get_unchecked(5) == 10
-            && b.get_unchecked(6) == 26  && b.get_unchecked(7) == 10;
+        return png_sig_ok(b.get_unchecked(0), b.get_unchecked(1),
+                          b.get_unchecked(2), b.get_unchecked(3),
+                          b.get_unchecked(4), b.get_unchecked(5),
+                          b.get_unchecked(6), b.get_unchecked(7));
     }
 
     fn w_str(w: &Writer<Console>, s: String) with(Alloc, Console) {
