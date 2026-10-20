@@ -22,7 +22,9 @@ trusted fn main() with(Alloc) -> Int {
 `--emit-llvm` shows `declare ptr @widget_create()` but `define void @widget_destroy(ptr %x0)` with an
 empty body. In the RocksDB example the release observer records the options, write-options and
 read-options objects acquired once and released zero times, although the program calls each
-`destroy`. There is no language-level workaround (no link-name attribute).
+`destroy`. There is no link-name attribute. A function-pointer local with explicit `Unsafe`
+capability bypasses the faulty synthesis (Mono leaves indirect calls unchanged); ordinary direct
+calls remain broken.
 
 **Repair owner:** queue exit 0b. Restrict the synthesis to destroy calls the drop-glue rewrite itself
 produced (by identity, not by name suffix) and never shadow a declared extern; regression: this

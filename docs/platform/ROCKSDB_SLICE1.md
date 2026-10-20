@@ -156,8 +156,9 @@ trusted fn main() with(Alloc) -> Int {
 `--emit-llvm` shows `declare ptr @widget_create()` but `define void @widget_destroy(ptr %x0)`
 with an empty body. In the example, the observer reports `options`, `writeoptions` and
 `readoptions` acquired once and released zero times, although the program calls each `destroy`.
-No language-level workaround exists (there is no link-name attribute); the gate fails until the
-synthesis is restricted to calls the drop-glue rewrite itself produced, or externs are excluded.
+There is no link-name attribute. A function-pointer local with explicit `Unsafe` capability
+bypasses the faulty synthesis; ordinary direct calls remain broken, and the binding keeps direct
+calls so the gate tracks bug 103. The gate fails until the synthesis is restricted to calls the drop-glue rewrite itself produced, or externs are excluded.
 
 ### G4. No opaque foreign types
 
