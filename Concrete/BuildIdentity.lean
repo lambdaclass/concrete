@@ -26,10 +26,6 @@ def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 =======
-def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-=======
->>>>>>> 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
-=======
 >>>>>>> 88ed8312 (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
 =======
 ||||||| parent of f2a9285d (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
@@ -152,6 +148,12 @@ def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 ||||||| parent of d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 =======
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+||||||| parent of bed5510f (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
+||||||| parent of d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+=======
+>>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+>>>>>>> bed5510f (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
 =======
 >>>>>>> d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 ||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
@@ -998,7 +1000,14 @@ def buildIdentity : String := "9a21f7736ab49a61954d370175788182"
 =======
 def buildIdentity : String := "cbda038ea329c0e3036a4298b94040c9"
 >>>>>>> 7a6a394e (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
->>>>>>> 784bc531 (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
+||||||| parent of bed5510f (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
+=======
+||||||| parent of 9d9d6c1e (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
+def buildIdentity : String := "cbda038ea329c0e3036a4298b94040c9"
+=======
+def buildIdentity : String := "2daffd19d8fc5c39f7874f66c34f28d6"
+>>>>>>> 9d9d6c1e (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
+>>>>>>> bed5510f (fix: bug 091 integration review — no reference is written through a reference; fn(&mut T) is a nested occurrence)
 
 /-- How many source files the identity above was computed over.
 

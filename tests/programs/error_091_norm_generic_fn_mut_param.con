@@ -1,0 +1,14 @@
+// Bug 091 normalized place rule (integration review): a generic body is checked once at
+// its opaque T, so `change: fn(&mut T)` instantiated at T = &Int would let the callback
+// write a reference into `x` that the rule never traced. The instantiation is refused
+// (E0238) even though this callback is harmless; `fn(T)` alone stays allowed.
+fn keep(slot: &mut &Int) { }
+fn read(x: &Int) -> Int { return *x; }
+fn relay<T>(x: T, change: fn(&mut T), consume: fn(T) -> Int) -> Int {
+    change(&mut x);
+    return consume(x);
+}
+fn main() -> Int {
+    let original: Int = 7;
+    return relay::<&Int>(&original, keep, read);
+}

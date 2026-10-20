@@ -215,6 +215,9 @@ partial def tyParamOccursNested (name : String) : Ty → Bool
   | .generic _ args _ => args.any (tyParamOccursNested name)
   | .array elem _ => tyParamOccursNested name elem
   | .heap inner | .heapArray inner => tyParamOccursNested name inner
+  -- a callback parameter or result: `fn(&mut T)` lets the callee write a `name` into the
+  -- body's storage, so the reference/pointer rule applies inside the function type too
+  | .fn_ params _ ret => params.any (tyParamOccursNested name) || tyParamOccursNested name ret
   | _ => false
 
 /-- Bug 091 round 3 (normalized place rule): the place rule checks a generic body ONCE, at its

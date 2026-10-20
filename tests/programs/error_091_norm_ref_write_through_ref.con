@@ -1,0 +1,14 @@
+// Bug 091 normalized place rule (integration review): writing a reference THROUGH a
+// reference (`*slot = &local`, `slot: &mut &Int`) parks a borrow of `local` in the
+// caller's storage; `local` dies at return and the caller reads a dangling reference.
+// Refused (E0238), as storing a reference in an aggregate is (E0239).
+fn replace(slot: &mut &Int) {
+    let local: Int = 42;
+    *slot = &local;
+}
+fn main() -> Int {
+    let original: Int = 0;
+    let mut r: &Int = &original;
+    replace(&mut r);
+    return *r;
+}

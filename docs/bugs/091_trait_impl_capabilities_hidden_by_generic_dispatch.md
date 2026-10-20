@@ -366,6 +366,8 @@ programs rejected today with E0238:
 - instantiating a type parameter with a reference type where the parameter occurs behind a
   reference or pointer in a parameter type of the generic function or method
   (`forward::<&P>(w: &W<T>, ..)`), since the generic body is checked once at its opaque `T`;
+- writing a reference through a reference (`*slot = &local` with `slot: &mut &Int`), since the
+  borrow lands in storage the writer does not own and its source is no longer traced;
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
@@ -481,5 +483,12 @@ a reference or pointer (`w: &W<T>`, `r: &T`, `p: *mut T`). A `T` stored directly
 array or heap cell (`Box<T>`, `[T; N]`, `Heap<T>`) is batch 4's E0239 domain (the declaration, and
 `verifyNoStoredRefs` after monomorphization), so its fixtures `error_092_generic_box_ref.con` and
 `error_092_generic_array_ref.con` keep reporting E0239; and a `fn(T)` parameter cannot hand a
-reference back (E0236 holds after monomorphization), so it is not storage.
+reference back (E0236 holds after monomorphization), so it is not storage — but a function type
+is searched like any other: `fn(&mut T)` puts `T` behind a reference and is refused
+(`error_091_norm_generic_fn_mut_param.con`; `trait_generic_fn_value_param.con` runs). The
+integration review also found that writing a reference through a reference
+(`*slot = &local`, `slot: &mut &Int`) was accepted with no generics at all, on main as well,
+leaving the caller a dangling reference; the `&mut` deref-assignment now refuses a pointee type
+that holds a reference (E0238, `error_091_norm_ref_write_through_ref.con`). Raw-pointer stores
+stay the trusted escape.
 

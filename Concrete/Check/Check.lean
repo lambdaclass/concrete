@@ -2261,6 +2261,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- for writing uninitialized slots.
       if !(← isCopyType inner) then
         throwCheck (.cannotOverwriteLinearPlace "pointee (through &mut)" (tyToString inner)) (some stmt.getSpan)
+      -- Normalized place rule (bug 091, integration review): a reference written THROUGH a
+      -- reference (`*slot = &local` with `slot: &mut &Int`) leaves the borrow in storage the
+      -- writer does not own, where its source is no longer traced — `local` dies while the
+      -- caller's reference still points at it. Refused, as storing one in an aggregate is
+      -- (E0239); raw-pointer stores below stay the trusted escape.
+      if tyStoresRef (← resolveType inner) then
+        throwCheck (.untraceablePlace "what a reference written through a reference borrows"
+          s!"'*r = ..' with 'r: &mut {tyToString inner}' stores a '{tyToString inner}' in storage behind a reference, where its source is not traced; pass the reference down as an argument instead") (some stmt.getSpan)
       let valTy ← checkExpr value (some inner)
       expectTy inner valTy "deref assignment" (some stmt.getSpan)
     | .ptrMut inner =>

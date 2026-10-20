@@ -1544,7 +1544,7 @@ for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_throug
     r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
     r119_n=""
     if $COMPILER "$r119_src" -o "$TESTDIR/.r119_bin" >/dev/null 2>&1; then
-        "$TESTDIR/.r119_bin" >/dev/null 2>&1; r119_n=$?
+        "$TESTDIR/.r119_bin" >/dev/null 2>&1 && r119_n=0 || r119_n=$?
     fi
     rm -f "$TESTDIR/.r119_bin"
     if [ -n "$r119_n" ] && [ "$r119_i" = "$r119_n" ]; then
@@ -1646,6 +1646,9 @@ error_091_norm_intrinsic_ref_result:E0239
 error_091_norm_temp_projection_ref:E0239
 error_091_norm_generic_nested_ref:E0239
 error_091_norm_generic_nested_alias_ref:E0239
+error_091_norm_ref_write_through_ref:E0238
+error_091_norm_generic_fn_mut_param:E0238
+trait_generic_fn_value_param:ok
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok
@@ -1672,6 +1675,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0
+run_ok  "$TESTDIR/trait_generic_fn_value_param.con" "7" 0
 for r091m in "trait_mut_receiver_forms:8" "trait_generic_receiver_forms:4030412"; do
     r091m_f="${r091m%%:*}"; r091m_want="${r091m#*:}"
     r091m_got=$($COMPILER "$TESTDIR/$r091m_f.con" --interp 2>&1 | awk "NR<=1" || true)
