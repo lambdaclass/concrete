@@ -29,3 +29,24 @@ interpreter-vs-native differential testing does not see it.
 **Repair owner:** queue exit 0b. The fix lands with this program as a permanent regression, and
 with interpreter support for the cast so the differential gates cover it. The RocksDB binding's
 heap out-slot workaround (`new_err_slot` / `take_err_slot`) can then be removed.
+
+## Structural cause
+
+Two design facts, one per symptom. First, `Lower` decides which locals get storage by recognizing
+syntactic address-taking shapes per type (the same promotion logic behind 029, 031, 034 and 038),
+rather than lowering from an explicit place representation in which `&mut x` is a place whatever
+`x`'s type; a pointer-typed local falls outside the recognized shapes, so its address is its value.
+Second, the language's meaning is implemented several times and the interpreter implements less of
+it than the backend: it refuses the raw-pointer cast, so the differential gates, which compare the
+interpreter with the binary, are blind to exactly the operations the backend handles alone
+(structural classes "storage and places decided ad hoc in Lower" and "semantics implemented several
+times", [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)).
+
+## Structural owner
+
+R-0501 (verified-pipeline stage S10, Place MIR): places, address-taking and storage are explicit
+Place MIR constructs consumed by lowering, with a per-pass differential against Core's semantics;
+R-0502 (S11) makes layout and memory one authority. R-0496 (S7) makes the interpreter Core's
+semantics for every construct the checker accepts, so an unsupported cast is a coverage gap the
+differential gate counts (R-0491, exit 2c), not a silent skip. The immediate repair stays under
+exit 0b.

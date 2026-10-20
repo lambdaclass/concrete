@@ -87,5 +87,51 @@ else
   no "a SKIP_BUGS entry names no fixture, gate or OPEN status ($n_vague > baseline $VAGUE_BASELINE):$vague"
 fi
 
+# STRUCTURAL CAUSE AND OWNER (docs/bugs/README.md, "Filing a bug"). From bug 102 on, a record must
+# say which design fact let the bug exist and which roadmap task removes it for the whole class:
+# a "## Structural cause" and a "## Structural owner" heading, each followed by text. Earlier
+# records are classified in docs/bugs/STRUCTURAL_CLASSES.md instead.
+STRUCT_FROM=102
+structural_missing() { # file -> prints the missing sections, empty when complete
+  awk '
+    /^## Structural cause[[:space:]]*$/ { sec="cause"; next }
+    /^## Structural owner[[:space:]]*$/ { sec="owner"; next }
+    /^#/ { sec=""; next }
+    sec != "" && NF > 0 { seen[sec]=1 }
+    END { if (!seen["cause"]) printf " cause"; if (!seen["owner"]) printf " owner" }
+  ' "$1"
+}
+nostruct=""; nstruct=0
+for f in docs/bugs/[0-9][0-9][0-9]_*.md; do
+  [ -e "$f" ] || continue
+  n="$(basename "$f" | cut -c1-3)"
+  [ "$((10#$n))" -ge "$STRUCT_FROM" ] || continue
+  nstruct=$((nstruct+1))
+  m="$(structural_missing "$f")"
+  [ -z "$m" ] || nostruct="$nostruct $n(missing:$m)"
+done
+if [ "$nstruct" -eq 0 ]; then
+  no "no bug record numbered >= $STRUCT_FROM found — the structural-section leg is vacuous"
+elif [ -z "$nostruct" ]; then
+  ok "all $nstruct bug records numbered >= $STRUCT_FROM state a structural cause and owner"
+else
+  no "bug records without a non-empty '## Structural cause' / '## Structural owner' section:$nostruct (docs/bugs/README.md, Filing a bug)"
+fi
+# Controls: the section check must refuse a record missing either section, or with an empty one,
+# and accept a complete one.
+STMP="$(mktemp -d)"; trap 'rm -rf "$STMP"' EXIT
+printf '# Bug 999\n\n## Cause\nx\n\n## Structural owner\nrow 4\n' > "$STMP/no_cause.md"
+printf '# Bug 999\n\n## Structural cause\nnames\n\n## Fix\ny\n' > "$STMP/no_owner.md"
+printf '# Bug 999\n\n## Structural cause\n\n## Structural owner\nrow 4\n' > "$STMP/empty_cause.md"
+printf '# Bug 999\n\n## Structural cause\nnames\n\n## Structural owner\nrow 4\n' > "$STMP/complete.md"
+[ "$(structural_missing "$STMP/no_cause.md")" = " cause" ] && ok "control: a record without a structural cause is refused" \
+  || no "control: a record without a structural cause was accepted"
+[ "$(structural_missing "$STMP/no_owner.md")" = " owner" ] && ok "control: a record without a structural owner is refused" \
+  || no "control: a record without a structural owner was accepted"
+[ "$(structural_missing "$STMP/empty_cause.md")" = " cause" ] && ok "control: an empty structural cause is refused" \
+  || no "control: an empty structural cause was accepted"
+[ -z "$(structural_missing "$STMP/complete.md")" ] && ok "control: a complete record is accepted" \
+  || no "control: a complete record was refused"
+
 echo "BUG-FILING-COMPLETE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

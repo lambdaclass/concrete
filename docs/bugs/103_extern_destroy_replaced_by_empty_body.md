@@ -30,3 +30,21 @@ calls remain broken.
 produced (by identity, not by name suffix) and never shadow a declared extern; regression: this
 program, checked by `--emit-llvm` (the extern stays a `declare`) and by a linked C stub that counts
 the call.
+
+## Structural cause
+
+Destruction is dispatched by a synthesized NAME (`<Type>_destroy`), resolved late by string lookup,
+and an unresolved name falls back to a default (an empty body) instead of a refusal. Two design facts
+compose: identity by spelled name rather than a resolved definition (an extern and a generated
+destructor are indistinguishable by name), and absence read as a fact (no definition found is
+treated as nothing to do). Bugs 052, 099 and 100 and 091's nested-module `Destroy` case are the same
+class ([STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md), "destruction dispatched by synthesized
+names").
+
+## Structural owner
+
+R-0510 (verified-pipeline stage S8a, checked specialization): a destroy call resolves to the
+`DefId` of the exact `Destroy` impl instance, and a missing or substituted instance is rejected by
+the specialization validator rather than synthesized; R-0492 (S5) supplies `DefId`s that keep
+externs, intrinsics and generated definitions distinct, with no `String → identity` coercion. The
+immediate repair stays under exit 0b.

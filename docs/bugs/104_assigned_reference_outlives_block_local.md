@@ -69,7 +69,18 @@ never returned (E0236) or stored in an aggregate (bug 092, E0239 on `bug090-chec
 `land4`), but they can still be stored, by assignment, in a longer-lived local.
 
 The bug 092 fix covers aggregates only (struct fields, enum payloads, array elements and types that
-hold a reference); a bare reference local reassigned from an inner scope is outside it.
+hold a reference); a bare reference local reassigned from an inner scope is outside it. Binding the
+borrow first (`let r2: &Heap<B> = &h; leaked = r2; free(h);`) is already refused on main (E0204,
+`h` is borrowed), because `let` records the source; only the direct assignment form escapes.
+
+## Candidate repair
+
+Batch 2 (`land2-fix` at `0b897854`, bug 091's round-3 normalized place rule) rejects both
+reproducers with E0238: `recordRefProvenance` runs at reassignment, and a reassignment that
+re-points a reference binding at different storage is refused ("provenance is not joined across
+branches; use a new binding"), a deliberate restriction until R-0499. Verified by building that
+branch: `esc4` and the stack variant are both E0238 at `leaked = &h` / `leaked = &q`. The bug closes
+when batch 2 lands with both programs as permanent rejection fixtures.
 
 ## Structural cause
 
@@ -78,15 +89,17 @@ form that created them (`let x = &y`), keyed by a source name, rather than deriv
 reference value flows: an assignment, a branch merge or a reborrow moves a reference without moving
 its provenance. Each such path has been patched one form at a time (087 borrow blocks, 092
 aggregates, 093 shadowing, 094 name-keyed state), and this is the assignment form of the same
-missing model (structural class "no reference-provenance model in the source checker").
+missing model. It is also an instance of borrow tracking by syntax: each check recognizes the forms
+it was written for, and bug 091 converged only once one normalized-place rule replaced them
+([structural classes](STRUCTURAL_CLASSES.md) 4 and 5).
 
 ## Structural owner
 
 Queue row 4 (R-0499, the authoritative checker on Core): references carry provenance (a loan on a
 normalized place, by `LocalId`) through every assignment and merge, and a loan's place must outlive
 every variable that can hold it; exit 2i states the second-class reference rule this must enforce.
-Until the Core checker is authoritative, the repair under exit 0b records the borrow on assignment
-(freezing the source and rejecting a source whose scope ends before the target's), with both
-programs above as permanent rejection fixtures.
+Until the Core checker is authoritative, the repair under exit 0b is batch 2's normalized place
+rule (provenance recorded on assignment, re-pointing refused), with both programs above as
+permanent rejection fixtures.
 
 **Repair owner:** queue exit 0b (memory safety in safe code).

@@ -22,6 +22,37 @@ Those belong in:
 - [research/workloads/phase-h-findings.md](../../research/workloads/phase-h-findings.md)
 - the relevant research note under `research/`
 
+## Filing a bug
+
+A bug record is `docs/bugs/NNN_short_name.md` (the next unused number), an entry in
+`scripts/tests/audit_bug_corpus.sh` (`BUG_TEST_MAP` with a fixture, or `SKIP_BUGS` with a rationale
+naming the coverage), and a line in the open or fixed list below. Every time a bug is found, ask
+whether an underlying problem in the compiler's design produced it, and record the answer: a fix
+that repairs one spelling of a recurring cause leaves the next spelling open. The record has these
+parts:
+
+```
+# Bug NNN — one-line statement of the defect
+
+**Status:** OPEN | FIXED (branch, commit)
+**Found:** date, by what (workload, hunt, review, example)
+**Severity:** what goes wrong for a user (wrong code, unsound claim, crash, refusal)
+
+## Reproducer        the smallest program or command, its observed and expected result
+## Cause             the code that produces it (file, function)
+## Fix               (when fixed) what changed, and the permanent regression leg
+## Structural cause  the design fact that let this bug exist: which missing model, duplicated
+                     authority, name-based join or fail-open default it is an instance of, and
+                     the other bugs of that class
+## Structural owner  the roadmap task, exit or verified-pipeline stage that removes the cause
+                     for the whole class (not only this spelling), or a proposed owner
+```
+
+`Structural cause` and `Structural owner` are required for every bug numbered 102 or higher
+(`scripts/tests/check_bug_filing_complete.sh` fails without them). The classes found so far, with
+their owners, are in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md); a new bug either joins a class
+there or adds one.
+
 ## Fixed Bugs
 
 - [001_cross_module_struct_field_offset.md](001_cross_module_struct_field_offset.md)

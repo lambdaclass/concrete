@@ -27,7 +27,9 @@ deliverable's [prerequisite checklist](#feature-prerequisites) controls is **acc
 slice 1, V1a and V1b are not accepted, and their safety is not advertised, until their prerequisite
 exits hold. The remaining exits continue alongside both tracks and still close Phase 1. New soundness
 defects take priority over every phase; other new work enters the queue only under the
-[entry rule](#the-current-execution-queue).
+[entry rule](#the-current-execution-queue). Every bug record states the design fact behind it and
+its structural owner; the recurring [structural classes](docs/bugs/STRUCTURAL_CLASSES.md) of bugs
+039 – 106 map each class to the task that removes it.
 
 **Where things live.** This file answers *what happens next, in what order*: the phases, the one
 execution queue, the release plan, the standing decisions, and the tasks a queue row names or an active
@@ -70,7 +72,7 @@ SHA, never the mutation aggregate alone.
 <!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->
 | candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
 |---|---|---|---|---|---|---|---|---|---|---|
-| batch2 | 052, 065, 082, 087, 091 | — | `land2-fix` | `4b14e5406e72` | 0a (065), 0b | not run | not run | not run | exits 0a/0b progress toward RocksDB slice 1, V1a and V1b acceptance | Codex round 3, then stage (b) and stage (c) on the integrated candidate |
+| batch2 | 052, 065, 082, 087, 091, 104 | — | `land2-fix` | `0b8978545b75` | 0a (065), 0b | not run | not run | not run | exits 0a/0b progress toward RocksDB slice 1, V1a and V1b acceptance | Codex round 3; add bug 104's two reproducers as rejection fixtures (E0238 already rejects them at this SHA); then stage (b) and stage (c) on the integrated candidate |
 | batch3 | 081, 083, 089 | — | `land3` | `7826e0fcb79e` | 0a | not run | not run | not run | exit 0a progress toward V1a and V1b acceptance | finish integrating bug081-callee-key, bug083-hardcoded-proved and bug089-ensures-proof on land3, then Codex review and stages (b) and (c) |
 | batch4 | 088, 090, 092, 093, 094 | — | `land4` | `0cd2037fcfe5` | 0b | not run | not run | not run | exit 0b progress toward RocksDB slice 1, V1a and V1b acceptance | Codex review, then stages (b) and (c) |
 | type-identity | 096, 097, 098 | — | `bug096-type-identity` | `dd651baa7c0a` | 0b | not run | not run | not run | exit 0b progress | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
@@ -2472,6 +2474,13 @@ at 2^63/2^64, every cast width pair). Outcomes classified (value, trap, rejectio
 exhaustion, crash), never skipped. model-diff for zero-argument, `bool` and aggregate signatures
 plus a binary leg, with a pinned claimed-function inventory. The four 2026-10-18 hunts and the
 checker hunt run before every release candidate.
+
+**Structural classes (2026-10-20).** Prevention covers causes, not only spellings. This task keeps
+[docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md): every bug record from 102 on
+states its structural cause and owner (`check_bug_filing_complete.sh` refuses one without them), and
+each new bug joins a class there, with the owning task, exit or verified-pipeline stage, or adds a
+class with a proposed owner in the same change. A class whose owner is not yet scheduled is raised in
+the queue under the entry rule when a new bug of that class is reproduced.
 
 **Exit:** each of 080 – 095 has a checked-in bug record, reproducer, expected outcome and
 pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084 – 088;
