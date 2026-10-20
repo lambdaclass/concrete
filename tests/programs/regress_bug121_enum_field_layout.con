@@ -1,0 +1,77 @@
+// Bug 121: an enum field moved the struct fields after it.
+//
+// Field reads and writes use the compiler's byte offsets (Layout.tySize /
+// tyAlign / fieldOffset), while aggregate loads, stores and allocas use LLVM's
+// layout of the declared type. The two disagreed for enums:
+//   * a payload-less enum (`Tag`) was declared `{ i32, [1 x i8] }` — 8 bytes in
+//     LLVM, 4 in tySize — so in `Narrow` the compiler put `x` at 4 and `y` at 8
+//     while every whole-struct copy moved them to 8 and 16;
+//   * an enum with an 8-aligned payload (`Wide`) was declared with 4-byte
+//     alignment, so in `Aligned` the compiler put `e` at 8 and LLVM at 4.
+// `pass` forces a whole-struct copy. Before the fix this exited 2 (Narrow.y
+// read back garbage) and, for Aligned, trapped on the garbage tag; in
+// examples/conlog the same shape moved a String's pointer into padding and the
+// binary freed a corrupted pointer (SIGSEGV on Linux).
+// Expected: exit 42.
+mod regress_bug121 {
+    enum Copy Tag { A {}, B {} }
+    struct Copy Narrow { t: Tag, x: i32, y: i64 }
+
+    enum Copy Wide { X { v: i64 }, Y {} }
+    struct Copy Aligned { a: i32, e: Wide, z: i32 }
+
+    // The conlog shape: an owned String after a payload-less enum and an i32.
+    struct Entry { ts: i64, level: Tag, status: i32, path: String }
+
+    fn mk_narrow(v: i32, w: i64) -> Narrow {
+        return Narrow { t: Tag::B {}, x: v, y: w };
+    }
+
+    fn pass_narrow(r: Narrow) -> Narrow {
+        return r;
+    }
+
+    fn mk_aligned(a: i32, v: i64, z: i32) -> Aligned {
+        return Aligned { a: a, e: Wide::X { v: v }, z: z };
+    }
+
+    fn pass_aligned(r: Aligned) -> Aligned {
+        return r;
+    }
+
+    fn mk_entry(status: i32) with(Alloc) -> Result<Entry, Tag> {
+        let p: String = "/api/user";
+        return Result::<Entry, Tag>::Ok { value: Entry { ts: 7, level: Tag::A {}, status: status, path: p } };
+    }
+
+    fn entry_status(e: &Entry) -> i32 {
+        return e.status;
+    }
+
+    pub fn main() with(Alloc) -> Int {
+        let n: Narrow = pass_narrow(mk_narrow(7, 100000000000));
+        if n.x != 7 { return 1; }
+        if n.y != 100000000000 { return 2; }
+
+        let a: Aligned = pass_aligned(mk_aligned(3, 100000000000, 9));
+        if a.a != 3 { return 3; }
+        if a.z != 9 { return 4; }
+        match a.e {
+            Wide::X { v } => { if v != 100000000000 { return 5; } }
+            Wide::Y {} => { return 6; }
+        }
+
+        match mk_entry(404) {
+            Result::Ok { value } => {
+                let st: i32 = entry_status(&value);
+                let Entry { ts, level, status, path } = value;
+                let len: Int = string_length(&path);
+                drop_string(path);
+                if st != 404 { return 7; }
+                if len != 9 { return 8; }
+            }
+            Result::Err { error } => { return 9; }
+        }
+        return 42;
+    }
+}

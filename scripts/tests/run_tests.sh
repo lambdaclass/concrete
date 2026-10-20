@@ -7211,6 +7211,10 @@ run_ok "$TESTDIR/regress_intrinsic_shadowing.con" 31
 # Enum canonical union (audit 2026-07-16): align-8 payload reads back through
 # the shared union; class gate is check_enum_union_layout.sh.
 run_ok "$TESTDIR/regress_enum_canonical_align.con" 42007
+# Bug 121: enum LLVM types carry exactly tySize/tyAlign (payload-less enums were
+# 8 bytes, align-8 payload enums 4-aligned), so an enum field no longer moves the
+# struct fields after it on a whole-struct copy; class gate check_enum_union_layout.sh.
+run_ok "$TESTDIR/regress_bug121_enum_field_layout.con" 42
 run_err "$TESTDIR/error_030_nonmut_array_write.con" "cannot assign to immutable"
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42

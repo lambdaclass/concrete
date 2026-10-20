@@ -281,13 +281,14 @@ while IFS= read -r line; do
 done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
-# Bugs the examples exposed (docs/bugs/108-120) and the exit 2i specification found
+# Bugs the examples exposed (docs/bugs/108-120, 122) and the exit 2i specification found
 # (123-124), pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
 # Modes: compile-fails:<text> (alternatives ` || `), compiles (the bug is that it is
 # accepted), interp-fails:<text> (the binary runs; the interpreter rejects it),
+# runs-exit:<status> (wrong code: the binary builds and exits with this wrong status),
 # wrong-exit:<code> (silent wrong code: the binary builds and runs, and its exit is NOT the
 # correct <code>; the wrong value itself is not pinned, since it may be an uninitialized read).
 open_bug_reproducers() {
@@ -323,6 +324,13 @@ open_bug_reproducers() {
         elif [ "$rc" -eq "$text" ]; then no "$label now exits $text, the correct value — fixed? update docs/bugs/$num, the corpus entry and this table"
         else ok "$label still exits $rc where $text is correct"; fi
         ;;
+      runs-exit)
+        # Wrong code: the binary builds and exits with the recorded WRONG status.
+        if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
+        timeout "$RUN_TIMEOUT" "$TMP/bugrepro_$num" < /dev/null > /dev/null 2>&1; rc=$?
+        if [ "$rc" = "$text" ]; then ok "$label still exits $text (wrong code)"
+        else no "$label exits $rc, not the recorded wrong $text — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
+        ;;
       interp-fails)
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
         out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
@@ -347,6 +355,7 @@ open_bug_reproducers() {
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 119|bug119_interp_generic_trait_method/repro.con|interp-fails|undefined function 'U_v'
 120|bug120_interp_field_borrow_through_ref/repro.con|interp-fails|ref step .field on non-struct
+122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 123|bug123_const_borrow_uninitialized_slot/repro.con|wrong-exit|42
 124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
 TABLE

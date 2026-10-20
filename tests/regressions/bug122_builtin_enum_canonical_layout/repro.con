@@ -1,0 +1,37 @@
+// Bug 122: the builtin Option/Result are emitted as ONE canonical LLVM union
+// sized for the program's largest instantiation, while the compiler lays out
+// each instantiation by its own size. Here `Option<i64>` makes %enum.Option 16
+// bytes, `Option<i32>` is 8 bytes to the compiler, so in `Rec` the compiler
+// reads `x` at 8 and `y` at 16 while a whole-struct copy (`pass`) moves them to
+// 16 and 24. Expected: exit 0. Actual: exit 2 (`y` reads back garbage).
+mod bug122 {
+    struct Copy Rec { o: Option<i32>, x: i32, y: i64 }
+
+    fn mk(v: i32, x: i32, y: i64) -> Rec {
+        return Rec { o: Option::<i32>::Some { value: v }, x: x, y: y };
+    }
+
+    fn pass(r: Rec) -> Rec {
+        return r;
+    }
+
+    fn big(n: i64) -> Option<i64> {
+        return Option::<i64>::Some { value: n };
+    }
+
+    pub fn main() -> Int {
+        let b: Option<i64> = big(5);
+        let r: Rec = pass(mk(3, 9, 100000000000));
+        if r.x != 9 { return 1; }
+        if r.y != 100000000000 { return 2; }
+        match r.o {
+            Option::Some { value } => { if value != 3 { return 3; } }
+            Option::None => { return 4; }
+        }
+        match b {
+            Option::Some { value } => { if value != 5 { return 5; } }
+            Option::None => { return 6; }
+        }
+        return 0;
+    }
+}

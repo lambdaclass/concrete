@@ -10,8 +10,9 @@
 # The byte-array storage itself is deliberate: aggregate load/store of a
 # partially-initialized union is poison-safe only at byte granularity.
 #
-# Locks the class: footprint coverage, alloca alignment, and no align bloat
-# for align-1-only programs.
+# Locks the class: footprint coverage, alloca alignment, no align bloat for
+# align-1-only programs, and (bug 121) that LLVM's layout of every emitted
+# struct/enum type equals the compiler's (leg 5, scripts/tests/lib/layout_probe.py).
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
@@ -42,11 +43,12 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 FIX="$ROOT_DIR/tests/programs/regress_enum_canonical_align.con"
 "$C" "$FIX" --emit-llvm > "$TMP/fix.ll" 2>"$TMP/fix.err" || { no "fixture compiles ($(head -1 "$TMP/fix.err"))"; echo "ENUM-UNION-LAYOUT: PASS=$PASS FAIL=$FAIL"; exit 1; }
 
-# 1. Footprint coverage: worst end is Option<[i64;3]> at 8+24=32 → [28 x i8].
-if grep -q '%enum.Option = type { i32, \[28 x i8\] }' "$TMP/fix.ll"; then
-  ok "union covers worst footprint ({ i32, [28 x i8] })"
+# 1. Footprint coverage: worst end is Option<[i64;3]> at 8+24=32 → [28 x i8], and the
+#    zero-length [0 x i64] member gives the union the payload's 8-byte alignment (bug 121).
+if grep -q '%enum.Option = type { \[0 x i64\], i32, \[28 x i8\] }' "$TMP/fix.ll"; then
+  ok "union covers worst footprint ({ [0 x i64], i32, [28 x i8] })"
 else
-  no "union footprint (want { i32, [28 x i8] }, got: $(grep '%enum.Option = type' "$TMP/fix.ll"))"
+  no "union footprint (want { [0 x i64], i32, [28 x i8] }, got: $(grep '%enum.Option = type' "$TMP/fix.ll"))"
 fi
 
 # 2. Every %enum.Option alloca carries align 8 (payloads need it here).
@@ -100,6 +102,48 @@ if grep -q '%enum.Option = type { i32, \[24 x i8\] }' "$TMP/lo.ll" \
   ok "align-1-only: byte-exact union, no align attribute"
 else
   no "align-1-only shape ($(grep '%enum.Option = type' "$TMP/lo.ll"); $(grep 'alloca %enum.Option' "$TMP/lo.ll" | head -1))"
+fi
+
+# 5. LLVM agrees with the compiler's layout model (bug 121). Field access is a byte GEP at the
+#    compiler's offset; aggregate loads, stores and allocas use LLVM's layout of the emitted type.
+#    For every struct and enum `--report layout` lists, a compiled probe asks LLVM itself (GEP
+#    arithmetic under the module's datalayout) for size, alignment and each field offset. Before
+#    bug 121's fix this found 99 disagreements in tests/programs; conlog's was a String pointer
+#    copied into padding and freed (SIGSEGV on Linux). The remaining ones are bug 122 (the
+#    canonical builtin Option/Result union), listed below so a NEW disagreement fails and a FIXED
+#    one fails too until the ledger is updated.
+KNOWN_122="tests/programs/let_else.con Result size
+tests/programs/let_else.con Result align
+tests/programs/match_expr_linear.con Result size
+tests/programs/test_defer_result_nested.con Result size
+tests/programs/test_defer_result_nested.con Result align
+tests/programs/wildcard_pattern.con Result size
+tests/programs/wildcard_pattern.con Result align
+tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec size
+tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec field#1 offset
+tests/regressions/bug122_builtin_enum_canonical_layout/repro.con Rec field#2 offset"
+if ! command -v python3 >/dev/null 2>&1 || [ -z "$CC" ]; then
+  no "layout agreement: needs python3 and clang/cc — the LLVM-vs-compiler leg did NOT run"
+else
+  mkdir -p "$TMP/probe"
+  probe_files=$(grep -l '^[[:space:]]*\(pub \)\?\(struct\|enum\) ' tests/programs/*.con | grep -v '/error_')
+  # shellcheck disable=SC2086
+  python3 -I "$ROOT_DIR/scripts/tests/lib/layout_probe.py" "$C" "$CC" "$TMP/probe" $probe_files \
+    tests/programs/regress_bug121_enum_field_layout.con \
+    tests/regressions/bug122_builtin_enum_canonical_layout/repro.con > "$TMP/probe.out" 2>&1
+  n_ok=$(grep -c '^ok ' "$TMP/probe.out" || true)
+  grep '^MISMATCH ' "$TMP/probe.out" | sed -E 's/^MISMATCH //; s/ compiler=[0-9]+ llvm=[0-9]+$//' | sort -u > "$TMP/mis.txt"
+  printf '%s\n' "$KNOWN_122" | sort -u > "$TMP/known.txt"
+  new_mis=$(comm -23 "$TMP/mis.txt" "$TMP/known.txt")
+  gone=$(comm -13 "$TMP/mis.txt" "$TMP/known.txt")
+  failed=$(grep '^PROBE-FAILED' "$TMP/probe.out" || true)
+  if [ -n "$failed" ]; then no "layout agreement: probe failures:"; printf '%s\n' "$failed" | awk 'NR<=5'
+  elif [ -n "$new_mis" ]; then no "layout agreement: LLVM and the compiler disagree:"; grep -F -f <(printf '%s\n' "$new_mis") "$TMP/probe.out" | awk 'NR<=10'
+  elif [ -n "$gone" ]; then no "layout agreement: bug 122 entries no longer disagree — fixed? update docs/bugs/122 and KNOWN_122:"; printf '%s\n' "$gone"
+  elif ! grep -q '^ok tests/programs/regress_bug121_enum_field_layout.con ' "$TMP/probe.out"; then no "layout agreement: the bug 121 fixture was not probed"
+  elif [ "$n_ok" -lt 200 ]; then no "layout agreement: only $n_ok programs probed clean (expected >= 200) — the corpus or the report format changed"
+  else ok "layout agreement: LLVM matches the compiler on $n_ok programs (bug 122's $(wc -l < "$TMP/known.txt" | tr -d ' ') known disagreements pinned)"
+  fi
 fi
 
 echo "ENUM-UNION-LAYOUT: PASS=$PASS FAIL=$FAIL"
