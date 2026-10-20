@@ -138,7 +138,10 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 250 (unchanged): check_roadmap_coverage.sh (2026-10-19 roadmap reconciliation) runs inside
 #   check_docs_drift.sh, exactly as check_roadmap_linear.sh does, so it adds no workflow command.
 # 250 -> 251: check_claim_inventory.sh (R-0208 claim inventory, the local twin of the acceptance step), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=251
+# 251 -> 252: check_qualification_record.sh (stage (c) is one verdict over every required job; the
+#   mutation aggregate is one component), pinned in the same commit. The record tool itself,
+#   scripts/ci/qualification_record.py, reads CI run records and is not a workflow command.
+EXPECTED_GATE_COMMANDS=252
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
