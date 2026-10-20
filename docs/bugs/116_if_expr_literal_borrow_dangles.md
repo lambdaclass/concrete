@@ -29,7 +29,7 @@ fn main() with(Std) -> Int {
 
 ## Expected
 
-Either reject the borrow (it escapes the arm) or extend the temporary to the enclosing statement.
+Either reject the borrow (it escapes the arm) or extend the temporary through the binding's last use (for example to the end of its enclosing scope); extending it only to the end of the `let` statement would still leave `label` dangling at `print_string`.
 
 ## Where it showed up
 

@@ -84,8 +84,10 @@ else
 fi
 
 echo "=== the obsolete hole-repro examples no longer compile (hole closed) ==="
-for h in returned_ref_provenance_map returned_ref_provenance_vec; do
-  d="examples/known_holes/$h"
+# Full paths, spelled out: check_examples.sh accepts this gate as the owner of these
+# two manifest `skip` entries only because it names their directories literally.
+for d in examples/known_holes/returned_ref_provenance_map examples/known_holes/returned_ref_provenance_vec; do
+  h=$(basename "$d")
   [ -d "$d" ] || { ok "$h removed"; continue; }
   if (cd "$d" && "$COMPILER" build >/dev/null 2>&1); then
     no "$h still builds — its unsound returned-ref read should now be rejected"

@@ -36,7 +36,8 @@
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST (manifest path),
 # EXAMPLES_STRUCTURE_ONLY=1 (validate the manifest without compiling),
-# EXAMPLES_IS_CONTROL=1 (do not recurse into the controls).
+# EXAMPLES_IS_CONTROL=1 (do not recurse into the controls), EXAMPLES_WORKFLOW
+# (workflow path).
 
 set -uo pipefail
 
@@ -45,7 +46,7 @@ cd "$ROOT_DIR"
 
 COMPILER=".lake/build/bin/concrete"
 MANIFEST="${EXAMPLE_MANIFEST:-scripts/tests/example_manifest.txt}"
-WORKFLOW=".github/workflows/lean_action_ci.yml"
+WORKFLOW="${EXAMPLES_WORKFLOW:-.github/workflows/lean_action_ci.yml}"
 STRUCTURE_ONLY="${EXAMPLES_STRUCTURE_ONLY:-0}"
 
 if [ "$STRUCTURE_ONLY" != 1 ] && [ ! -x "$COMPILER" ]; then
@@ -139,19 +140,26 @@ project_root_of() {
   return 1
 }
 
-# Does owner script $1 reference example $2? Either the full path appears, or the
-# example's top-level directory (examples/<x>) AND its leaf name both appear —
-# gates commonly build paths as "$DIR/$name/src/main.con". The leaf is the
-# directory above src/ for .../src/main.con, else the file's stem.
+# Does owner script $1 name example $2? Its full path must appear literally, or,
+# for a .../src/main.con, the example's own directory (the parent of src/) —
+# gates commonly `cd` there to build. Nothing looser: a top-level directory plus
+# a short word matched shell keywords (`for`) and would let any gate own anything.
 owner_references() {
-  local owner="$1" src="$2" top leaf
+  local owner="$1" src="$2" exdir
   grep -qF -- "$src" "$owner" && return 0
-  top=$(echo "$src" | cut -d/ -f1-2)
   case "$src" in
-    */src/main.con) leaf=$(basename "$(dirname "$(dirname "$src")")") ;;
-    *) leaf=$(basename "$src" .con) ;;
+    */src/main.con)
+      exdir=$(dirname "$(dirname "$src")")
+      # the directory, not a longer name it prefixes (..._map vs ..._mapX)
+      python3 -c 'import re, sys; s = open(sys.argv[1]).read(); sys.exit(0 if re.search(re.escape(sys.argv[2]) + r"(?![A-Za-z0-9_-])", s) else 1)' "$owner" "$exdir" ;;
+    *) return 1 ;;
   esac
-  grep -qF -- "$top" "$owner" && grep -qw -- "$leaf" "$owner"
+}
+
+# Is gate $1 invoked by an executable (non-comment) line of the workflow, by its
+# full scripts/tests/ path? A mention in a YAML comment runs nothing.
+workflow_runs() {
+  grep -v '^[[:space:]]*#' "$WORKFLOW" | grep -qF -- "$1"
 }
 
 check_skip() { # src, rest-of-line
@@ -174,7 +182,12 @@ check_skip() { # src, rest-of-line
     no "$src: skip owner '$owner' does not exist"
     return
   fi
-  if ! grep -qF -- "$(basename "$owner")" "$WORKFLOW"; then
+  case "$owner" in
+    scripts/tests/check_examples.sh|scripts/tests/check_example_outputs.sh)
+      no "$src: '$owner' cannot own a skip — it is the gate the skip exempts the file from"
+      return ;;
+  esac
+  if ! workflow_runs "$owner"; then
     no "$src: skip owner '$owner' is not run by $WORKFLOW (an owner CI never runs checks nothing)"
     return
   fi
@@ -344,10 +357,37 @@ PY
     "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r'owner=[^ ]*', 'owner=scripts/tests/check_gate_hygiene.sh', l), 1)"
   control unlisted_con "is not listed in" \
     "import os; l = os.environ['COMPILE_LINE'] + '\n'; assert l in s; s = s.replace(l, '', 1)"
+  control circular_owner "cannot own a skip" \
+    "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r'owner=[^ ]*', 'owner=scripts/tests/check_example_outputs.sh', l), 1)"
+  # The review's bypass: a runnable example skipped to the outputs gate (which names
+  # examples/snippets and contains the word `for`) and its @run deleted.
+  control outputs_gate_owner "cannot own a skip" \
+    "s = s.replace('examples/snippets/for.con compile', 'examples/snippets/for.con skip owner=scripts/tests/check_example_outputs.sh reason=covered', 1)"
+  # An owner that names only a LONGER directory the example's is a prefix of.
+  control prefix_directory "does not reference this file" \
+    "import os; l = os.environ['SKIP_LINE']; p = l.split()[0]; assert p.endswith('_map/src/main.con'); s = s.replace(l, l.replace(p, p.replace('_map/src/main.con', '_ma/src/main.con')), 1); s += '\\n'"
   control known_bug_fixed "is not an open bug" \
     "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 001 anything', 1)"
   control known_bug_no_doc "has no docs/bugs/" \
     "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 999 anything', 1)"
+  # The owner is mentioned in the workflow only inside a comment: it runs nothing.
+  local owner wf="$dir/workflow_commented.yml"
+  owner=$(echo "$skip_line" | sed -n 's/^.*owner=\([^[:space:]]*\).*$/\1/p')
+  OWNER="$owner" WF_IN="$WORKFLOW" WF_OUT="$wf" python3 - <<'PY'
+import os
+o = os.environ['OWNER']
+lines = open(os.environ['WF_IN']).read().split('\n')
+out = [('# ' + l) if (o in l and not l.lstrip().startswith('#')) else l for l in lines]
+assert out != lines, 'owner not in the workflow'
+open(os.environ['WF_OUT'], 'w').write('\n'.join(out))
+PY
+  if EXAMPLES_WORKFLOW="$wf" EXAMPLES_STRUCTURE_ONLY=1 EXAMPLES_IS_CONTROL=1 bash "$0" > "$dir/wf.log" 2>&1; then
+    no "control owner_only_in_comment: the gate PASSED an owner the workflow never runs"
+  elif grep -qF "is not run by" "$dir/wf.log"; then
+    echo "  ok   control owner_only_in_comment fails as it must (is not run by)"; ok
+  else
+    no "control owner_only_in_comment failed, but not for the expected reason:"; awk 'NR<=5' "$dir/wf.log"
+  fi
   # Positive control: the real manifest's structure passes.
   if EXAMPLE_MANIFEST="$real" EXAMPLES_STRUCTURE_ONLY=1 EXAMPLES_IS_CONTROL=1 bash "$0" > "$dir/positive.log" 2>&1; then
     echo "  ok   positive control: the real manifest's structure passes"
