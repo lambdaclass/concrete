@@ -538,8 +538,9 @@ Exit 2i closes over the **rejection rules** REF-1 to REF-8 and SCOPE-1 and the *
 guarantees** SCOPE-2 and SCOPE-3; SCOPE-4 is recorded but outside the exit. Each rejection rule
 must be **main**, carry its versioned migration diagnostic (§15.5) and pass its reject and run rows
 and its mutation rows (§15.6). Each semantic guarantee must be **main** and pass its run rows,
-which compare the binary with `--interp` (and with the extracted model where a row says so), and
-its positive-control mutations (§15.6); it has no diagnostic of its own.
+which compare the binary with `--interp` (and with the extracted model where a row says so; a row
+the interpreter cannot run carries an explicit exemption with its reason, §15.6), and its
+positive-control mutations (§15.6); it has no diagnostic of its own.
 
 ### 15.1 Definitions
 
@@ -628,7 +629,11 @@ reference).
 - Fixtures: `error_escape_return.con` (matched by message text in `run_tests.sh`);
   `scripts/tests/check_returned_ref_provenance.sh` legs `bare_ref_return`, `ref_to_local`,
   `aggregate_ref_return`.
-- Status: **main**. Gap G2: the front-end rejection has no code, E0236 is missing from the
+- Status: **main** for function, method and trait-impl definitions. A trait method *declaration*
+  (`trait T { fn get(&self) -> &Int; }`) is accepted on both revisions: `checkFn` visits
+  definitions only and `verifyNoReturnedRefs` scans module functions (gap G13; no unsound program
+  results, because every implementation is a definition and is rejected). Gap G2: the front-end
+  rejection has no code, E0236 is missing from the
   `--report diagnostic-codes` ledger, and the post-mono predicate `tyExposesRef` is weaker than the
   front end's `tyContainsRef` (it does not look into function or raw-pointer types). The normative
   rule is the front end's: it is conservative and no program needs the other form. A returned
@@ -725,8 +730,10 @@ a reference:
 - an `if` or `match` whose value is a reference (`let r = if c { &a } else { &b };`,
   `f(if c { &a } else { &b })`) — a deliberate restriction; the backend also miscompiles the form
   (bug 105);
-- a borrow of a temporary (`&(40 + 2)`; `make().bump()` for a `&mut self` method): bind the value
-  to a `let` first;
+- a borrow of a temporary, that is of any operand that is not a canonical place: a literal
+  (`&42`), a call result (`&mk()`), an aggregate literal, an operator expression (`&(40 + 2)`),
+  and an owned temporary as a `&mut self` receiver (`make().bump()`): bind the value to a `let`
+  first. INV-REF's root argument needs every reference to have a binding root;
 - a call whose result is a reference (REF-1 makes this unwritable for user functions; the rule
   covers intrinsics);
 - a read of a reference out of storage: a field, element, heap cell or referenced place whose type
@@ -750,8 +757,14 @@ R-0499 may lift it as REF-5@2.
   *`error_091_norm_temporaries.con`*, *`error_091_norm_if_local_binding.con`*,
   *`error_091_norm_if_local_chain.con`*, *`error_091_norm_double_deref_read.con`*,
   *`error_091_norm_nested_ref_binder.con`*.
-- Status: **land2**. On `main` a reference-valued `if` is accepted and its binary segfaults (bug
-  105), and `&(40 + 2)` is accepted.
+- Status: **land2**, except temporaries. On `main` a reference-valued `if` is accepted and its
+  binary segfaults (bug 105), and every borrow of a temporary is accepted (the interpreter
+  rejects `&42` and `&mk()` with "unsupported borrow target shape" while the binary runs them).
+  `land2-fix` rejects an operator operand (`&(40 + 2)`) and a temporary `&mut self` receiver, but
+  classifies literals, call results and aggregate literals as `.temp` (`normPlace`) and accepts
+  borrowing them (`checkSharedAccess`, `recordRefProvenance` record no root): gap G12. The
+  alternative to closing G12 by rejection is to specify a temporary as an anonymous local of the
+  enclosing block and extend INV-REF to such roots, as REF-5@2.
 
 #### REF-6. A reference binding is never re-pointed
 
@@ -763,9 +776,15 @@ one lifetime), and `r = &b` is not. This is the rule
 that keeps a reference out of any binding that outlives its source (design example B6, finding
 G8): a reference binding declared in an outer block can only point at a place whose root was
 visible at its declaration. A borrow-block reference binder is stricter: it may not be copied or
-assigned into any other binding at all, inside the block or outside it
-(`borrow x as r in R { let s: &Int = r; }` is E0234 on both revisions); it may be passed as a call
-argument, dereferenced and projected.
+assigned into any other binding at all, inside the block or outside it, however the copy is
+spelled; it may be passed as a call argument, dereferenced and projected. The E0234 checks test
+for a bare identifier: `borrow x as r in R { let s: &Int = r; }` is E0234 on both revisions, but
+`let s: &Int = (r);` is accepted on `main` and E0234 only on `land2-fix`, which checks each body
+with parentheses removed (`unparenDeep`). A reborrow `&*r` is not an E0234 case on either
+revision. On `land2-fix` it is a traced reference to the borrowed owner, so assigning it to an
+outer binding is refused by the re-pointing rule unless that binding already borrowed the same
+owner place, which is harmless because the owner outlives both; on `main`
+`out = &*r;` inside the block is accepted whatever `out` pointed at (gap G14).
 
 - Accepted: `let mut r: &P = &p; r = &p;`.
 - Rejected: `let mut leaked: &Point = &p; if true { let q: Point = ..; leaked = &q; }` (bug 104,
@@ -983,8 +1002,8 @@ also a related span. These diagnostic checks are mandatory and do not depend on 
 lists only the execution modes of run rows (`binary`, `interp`, `model`, `fmt`). For each run row
 it runs every listed mode and requires the expected result from each. It fails
 when a rejection rule (REF-1 to REF-8, SCOPE-1) has no reject row, no run row or a reject row
-without a pair, when a semantic guarantee (SCOPE-2, SCOPE-3) has no run row in modes
-`binary,interp`, when a row names a missing fixture, or when the ledger's rule and version for a
+without a pair, when a run row of a semantic guarantee (SCOPE-2, SCOPE-3) lacks mode `interp`
+without an `interp-exempt:<reason>` entry in `modes`, when a row names a missing fixture, or when the ledger's rule and version for a
 code disagree with §15.5. Existing fixtures are referenced, not copied. Every new reject row in
 the table below has a `pair` whose run row is its rewritten program; existing fixtures get one
 when the manifest is written.
@@ -1024,7 +1043,11 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
 | REF-5 | `error_091_norm_if_projection.con` | reject E0238 REF-5@1 |
 | REF-5 | `regress_2i_ref5_bind_branch_first.con` (new; `let w = if c { a } else { b }; w.f`) | run 42 |
-| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`) | reject E0234 REF-6@1 |
+| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`), `error_2i_ref6_borrow_block_paren_copy.con` (new; `= (r)`) | reject E0234 REF-6@1 |
+| REF-6 | `error_2i_ref6_borrow_block_reborrow_escape.con` (new; `out = &*r` where `out` borrowed another place) | reject E0238 REF-6@1 (G14 on `main`) |
+| REF-6 | `regress_2i_ref6_reborrow_same_owner.con` (new; `out` borrowed `x`, then `out = &*r` inside `borrow x as r`) | run 42 |
+| REF-5 | `error_2i_ref5_borrow_literal.con`, `error_2i_ref5_borrow_call_result.con`, `error_2i_ref5_borrow_aggregate_literal.con` (new; `&42`, `&mk()`, `&P { n: 1 }`) | reject E0238 REF-5@1 (G12) |
+| REF-1 | `error_2i_ref1_trait_decl_returns_ref.con` (new; `trait T { fn get(&self) -> &Int; }`) | reject E0236 REF-1@1 (G13) |
 | REF-6 | `regress_2i_ref6_index_same_array.con` (new; `r = &a[1]` after `&a[0]`) | run 42 |
 | REF-8 / SCOPE-1 | `error_107_shadow_under_live_ref.con`, `error_107_shadow_in_block_under_live_ref.con` | reject E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before |
 | SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
@@ -1034,7 +1057,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
 | SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
 | SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model`: run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in the same modes |
-| SCOPE-3 | `regress_087_borrow_shadow_uaf/` (a project fixture; success is exit 0) | modes `binary`: run 0 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 0 |
+| SCOPE-3 | `regress_087_borrow_shadow_uaf/` (a project fixture; success is exit 0) | modes `binary,interp` if the interpreter runs the project, otherwise `binary,interp-exempt:<the interpreter's refusal>`: run 0 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 0 in the same modes |
 | G4 | `regress_2i_renamed_pattern_binder.con` (new; `match`, `if let`, `while let`, destructuring `let`) | run 42, binary = `--interp`, formatter round-trip |
 
 The 092 and 093 reproducers stay rejected, the 093 ones by SCOPE-1 instead of E0208. 087's
@@ -1090,4 +1113,7 @@ manifest row:
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
 | G9 | `&mut` usage modes are inconsistent and partly unspecified: a borrow-block `&mut` is consumed when passed to a call (MUT_REF_SEMANTICS §3) yet may lapse unused; a parameter `&mut` is reborrowed at every call; a `let`-bound `&mut` (`let r: &mut Int = &mut x;`) is linear with no discharging use, since writing through it, passing it to a call, reborrowing it or moving it into another `let` all end in E0208 | an R-0500 decision with R-0511 (design examples B1, B2 and G1); not a 2i restriction, but the V1 model may not model a looser rule than the compiler enforces |
 | G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule |
+| G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)` and temporary `&mut self` receivers are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
+| G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
+| G14 | REF-6 on `main`: E0234 sees only a bare identifier, so `(r)` copies a borrow-block reference out, and `out = &*r` re-points an outer reference at the borrowed owner | exit 0b (batch 2 closes both: `unparenDeep` and the re-pointing rule) |
 | G11 | ROADMAP exit 2i's deliverable reads "none stored in an aggregate"; "strictly second-class" also covers REF-6 (never assigned or aliased into a binding that outlives its source; design example G8) | the roadmap owner (wording) |
