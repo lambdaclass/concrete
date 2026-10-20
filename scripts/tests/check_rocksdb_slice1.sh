@@ -233,12 +233,12 @@ PYEOF
 if [ $? -eq 0 ] && build_example "$MUT" "$TMP/mut_kv" mut; then
   run_observed "$TMP/mut_kv" mutrun "$TMP/mutdb" "$BAD"
   mline="$(grep -E '^value ' "$TMP/mutrun.obs" 2>/dev/null)"
-  # The mutant must complete exactly like the baseline (same exit, transcript modulo the
-  # path-bearing error line, empty stderr) and its record may differ from the baseline's ONLY in
+  # The mutant must complete exactly like the baseline (same exit, byte-identical transcript —
+  # both runs get the same invalid path —, empty stderr) and its record may differ from the baseline's ONLY in
   # the value line: the control then shows the observer sees this one leak and nothing else moved.
   same_run=false
   [ "$(cat "$TMP/mutrun.rc")" = "$(cat "$TMP/run.rc")" ] && [ ! -s "$TMP/mutrun.err" ] \
-    && [ "$(sed -n '2,$p' "$TMP/mutrun.out")" = "$(sed -n '2,$p' "$TMP/run.out")" ] && same_run=true
+    && cmp -s "$TMP/mutrun.out" "$TMP/run.out" && same_run=true
   same_rest=false
   one_record run && one_record mutrun \
     && [ "$(grep -v '^value ' "$TMP/mutrun.obs")" = "$(grep -v '^value ' "$TMP/run.obs")" ] && same_rest=true

@@ -42,10 +42,10 @@ mod rocksdb_kv {
         e.drop();
     }
 
-    fn fail(msg: String) with(Console, Alloc) -> u8 {
+    fn usage(msg: String) with(Console, Alloc) -> u8 {
         eprintln(&msg);
         msg.drop();
-        return 1;
+        return 2;
     }
 
     // Step 1: the invalid path must produce Err { kind: Open }.
@@ -156,7 +156,7 @@ mod rocksdb_kv {
 
     fn main() with(Std) -> u8 {
         if count() != 3 {
-            return fail("usage: rocksdb_kv <db-dir> <invalid-db-path>");
+            return usage("usage: rocksdb_kv <db-dir> <invalid-db-path>");
         }
         let dir: String = get(1);
         let bad: String = get(2);
