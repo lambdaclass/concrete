@@ -111,21 +111,58 @@ def joinVia : PlaceVia → PlaceVia → PlaceVia
 
 mutual
 /-- The classification of the VALUE a block yields: its trailing value expression, where a
-    moved owned binding is an owned temporary. A block without a value tail diverges (or
-    yields `()`), contributing nothing; one this walk cannot read fails closed. -/
+    moved owned binding is an owned temporary. A tail naming a binding the block itself
+    declared is classified by that `let` (its declared type, else its value). A block without
+    a value tail diverges, contributing nothing; one this walk cannot read fails closed. -/
 partial def tailVia (stmts : List Stmt) : CheckM PlaceVia := do
+  let unclassified : PlaceVia :=
+    .shared "the place is reached through a block the checker does not classify; bind it to a name first"
   match stmts.getLast? with
   | some (.expr _ e true) =>
-    match ← placeVia e with
-    | .owned _ => return .temp
-    | v => return v
+    let local? := match stripParens e with
+      | .ident _ n => (stmts.filterMap fun (st : Stmt) => match st with
+          | .letDecl _ m _ ty v _ => if m == n then some ((ty : Option Ty), v) else none
+          | _ => none).getLast?
+      | _ => none
+    match local? with
+    | some (some ty, _) =>
+      match ty with
+      | .ref _ => return .shared "a branch yields a `&` binding"
+      | .refMut _ => return .exclusiveRef
+      | .ptrMut _ | .ptrConst _ => return .rawPtr
+      | _ => return .temp
+    | some (none, v) =>
+      match ← placeVia v with
+      | .owned _ => return .temp
+      | r => return r
+    | none =>
+      match ← placeVia e with
+      | .owned _ => return .temp
+      | v => return v
   | some (.return_ ..) | some (.break_ ..) | some (.continue_ ..) => return .temp
   | some (.expr _ e false) =>
     match e with
-    | .call _ fn _ _ => if resolveIntrinsic fn == some .abort then return .temp
-                        else return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
-    | _ => return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
-  | _ => return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
+    | .call _ fn _ _ => if resolveIntrinsic fn == some .abort then return .temp else return unclassified
+    | _ => return unclassified
+  | _ => return unclassified
+
+/-- What the REFERENCE (or pointer) an expression yields points through: the operand of `*`.
+    A `&mut e` / `&e` / cast is that reference itself; a binding by its type; a field or
+    element holding a pointer by its peeked type (fail closed when unknown). -/
+partial def refVia (e : Expr) : CheckM PlaceVia := do
+  match stripParens e with
+  | .ident .. => placeVia e
+  | .borrow .. => return .shared "the place is reached through a `&` borrow"
+  | .borrowMut .. => return .exclusiveRef
+  | .cast .. | .ifExpr .. | .match_ .. => placeVia e
+  | inner@(.fieldAccess ..) | inner@(.arrayIndex ..) =>
+    match ← peekExprType inner with
+    | .ref _ => return .shared "the place is reached through a `&` stored in a field"
+    | .refMut _ => return .exclusiveRef
+    | .ptrMut _ | .ptrConst _ => return .rawPtr
+    | .heap _ | .heapArray _ => placeVia inner
+    | _ => return .shared "the place is reached through a dereference the checker does not classify; bind the reference to a name first"
+  | _ => return .shared "the place is reached through a dereference the checker does not classify; bind the reference to a name first"
 
 partial def placeVia (e : Expr) : CheckM PlaceVia := do
   match e with
@@ -138,14 +175,18 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
       | .refMut _ => return .exclusiveRef
       | .ptrMut _ | .ptrConst _ => return .rawPtr
       | _ => return .owned n
-    -- A name the walk cannot see here (a match-arm binder or a block-local `let` in a
-    -- branch tail) may be a reference: fail closed.
+    -- A name the walk cannot see here (a match-arm binder in a branch tail) may be a
+    -- reference: fail closed.
     | none => return .shared s!"'{n}' is bound inside the expression; bind the value to a name first"
   | .fieldAccess _ obj _ => placeVia obj
   | .arrayIndex _ arr _ => placeVia arr
-  | .deref _ inner => placeVia inner
+  -- `*x` is reached through whatever reference `x` is — never "owned" because `x` names an
+  -- owned root behind a borrow (`*(&mut p)` traverses a reference; Codex review).
+  | .deref _ inner => refVia inner
+  -- A borrow expression as a place's base is a temporary reference; the borrow itself was
+  -- checked where it was written (explicit `&mut` follows `checkMutBorrowPlace`).
   | .borrow _ _ => return .shared "the place is reached through a `&` borrow"
-  | .borrowMut _ inner => placeVia inner
+  | .borrowMut _ _ => return .exclusiveRef
   | .cast _ _ ty =>
     match ty with
     | .ref _ => return .shared "the place is reached through a cast to `&`"
@@ -166,6 +207,47 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
       acc := joinVia acc (← tailVia body)
     return acc
   | _ => return .shared "the place is reached through an expression that may be a `&` reference; bind it to a name first"
+end
+
+/-- What a reference's storage belongs to, for borrow provenance (bug 091 round 3):
+    a local owned ROOT binding, storage outside this function's bindings (a parameter's
+    pointee, a raw pointer, a temporary), or unknown. -/
+inductive BorrowProv where
+  | root (name : String)
+  | external
+  | unknown
+
+mutual
+/-- The root of a PLACE. -/
+partial def placeProv (e : Expr) : CheckM BorrowProv := do
+  match e with
+  | .paren _ inner => placeProv inner
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some info =>
+      match info.ty with
+      | .ref _ | .refMut _ =>
+        -- a place reached through a reference belongs to whatever that reference borrows
+        return match info.borrowedFrom with | some s => .root s | none => .external
+      | .ptrMut _ | .ptrConst _ => return .external
+      | _ => return .root n
+    | none => return .unknown
+  | .fieldAccess _ obj _ => placeProv obj
+  | .arrayIndex _ arr _ => placeProv arr
+  | .deref _ inner => refProv inner
+  | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
+  | .arrayLit .. => return .external
+  | _ => return .unknown
+
+/-- The root of the storage a REFERENCE-valued expression points to. -/
+partial def refProv (e : Expr) : CheckM BorrowProv := do
+  match e with
+  | .paren _ inner => refProv inner
+  | .borrow _ inner | .borrowMut _ inner => placeProv inner
+  | .ident .. | .fieldAccess .. | .arrayIndex .. => placeProv e
+  | .deref _ inner => refProv inner
+  | .cast .. | .call .. | .methodCall .. | .staticMethodCall .. => return .external
+  | _ => return .unknown
 end
 
 /-- A RECEIVER's place. At the top level an unclassified expression (`if`/`match`) whose
@@ -1214,10 +1296,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
     | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
   | .match_ _ scrutinee arms =>
-    -- `match *r { .. }` inspects the pointee in place (arms auto-deref), as before.
-    let scrTy ← match stripParens scrutinee with
-      | .deref .. => checkExpr scrutinee none .place
-      | _ => checkExpr scrutinee
+    -- `match *r` reads the pointee BY VALUE: a non-Copy pointee is E0290 (its payloads
+    -- would bind as owned values the owner still holds); `match r` matches through the
+    -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
+    let scrTy ← checkExpr scrutinee
     -- Auto-deref through references for match
     let innerTy := match scrTy with
       | .ref t => t
@@ -1780,27 +1862,27 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
       checkNoLiveShadow name (some stmt.getSpan)
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      -- A `&place` / `&mut place` binding is a live borrow of the place's ROOT binding:
-      -- `(&p)`, `&(p)` and `&w.p` record provenance as `&p` does (bug 091 round 3), so a
-      -- later `&mut` of the root — explicit or an implicit receiver — sees it.
-      let source? : Option (String × Bool) := match stripParens value with
-        | .borrow _ inner | .borrowMut _ inner =>
-          (borrowPathOf inner).map fun (root, steps) => (root, steps.isEmpty)
-        | _ => none
-      match source? with
-      | some (sourceName, whole) =>
-        -- A projection records only an OWNED root: `&r.f` through a reference borrows the
-        -- pointee, which `r`'s own provenance already tracks.
-        match ← lookupVarInfo sourceName with
-        | some srcInfo =>
-          match whole, srcInfo.ty with
-          | false, .ref _ | false, .refMut _ | false, .ptrMut _ | false, .ptrConst _ => pure ()
-          | _, _ =>
-            modify fun env =>
-              { env with vars := env.vars.map fun (n, info) =>
-                  if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-        | none => pure ()
-      | none => pure ()
+      -- A binding of reference type is a live borrow of its source's ROOT binding:
+      -- `&p`, `(&p)`, `&(p)`, `&w.p`, `&*(&p)` and a copy of a tracked reference all record
+      -- provenance (bug 091 round 3), so a later `&mut` of the root — explicit or an implicit
+      -- receiver — sees it. A reference whose source cannot be traced (an `if` choosing
+      -- between borrows) is refused rather than left untracked (E0238).
+      match finalTy with
+      | .ref _ | .refMut _ =>
+        let prov ← match stripParens value with
+          | .borrow _ inner | .borrowMut _ inner =>
+            match stripParens inner with
+            | .ident _ n => pure (BorrowProv.root n)  -- the binding itself, whatever its type
+            | _ => placeProv inner
+          | v => refProv v
+        match prov with
+        | .root sourceName =>
+          modify fun env =>
+            { env with vars := env.vars.map fun (n, info) =>
+                if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+        | .external => pure ()
+        | .unknown => throwCheck (.borrowProvenanceUnknown name) (some stmt.getSpan)
+      | _ => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv

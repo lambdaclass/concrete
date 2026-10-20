@@ -1,0 +1,17 @@
+// Bug 091 round 3: `let r = if c { &a } else { &b };` is a live borrow of `a` or `b` the
+// aliasing rules could not see (`a.bump()` ran under it). An untraceable reference
+// binding is refused: E0238.
+mod m {
+    struct P { n: i64 }
+    impl P { fn bump(&mut self) { self.n = self.n + 1; } }
+    fn main() with(Std) -> Int {
+        let mut a: P = P { n: 0 };
+        let b: P = P { n: 5 };
+        let r: &P = if true { &a } else { &b };
+        a.bump();
+        print_int(r.n);
+        let P { n } = a;
+        let P { n } = b;
+        return 0;
+    }
+}

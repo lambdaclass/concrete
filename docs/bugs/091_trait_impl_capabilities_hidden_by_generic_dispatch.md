@@ -268,4 +268,14 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_destroy_defname_paren_arg.con`, `error_091_paren_call_arg_not_consumed.con` (E0205),
   `error_091_mut_receiver_paren_borrow_outer.con`,
   `error_091_mut_receiver_projection_borrow_live.con` (E0232), `trait_mut_receiver_if_projection.con` (7).
+* **Codex review of round 3, fourth pass.** `(*(&mut p)).destroy()` classified the place by the
+  owned root behind the borrow (`*e` is now classified by the reference `e` yields, `refVia`);
+  `match *r` bound a non-Copy payload as owned (a by-value read of the pointee: E0290; `match r`
+  binds borrowed views); `let r = &*(&p)` lost provenance (provenance now follows `*`, borrows
+  and copies of tracked references, `placeProv`/`refProv`), and a reference binding whose
+  source cannot be traced (`if c { &a } else { &b }`) is the new E0238; an `if` branch
+  yielding a block-local owned binding is an owned temporary. Fixtures
+  `error_091_destroy_deref_borrow_mut.con`, `error_091_match_deref_ref_payload.con` (E0290),
+  `error_091_mut_receiver_deref_borrow_provenance.con` (E0232),
+  `error_091_borrow_provenance_unknown.con` (E0238), `trait_mut_receiver_if_local_binding.con` (7).
 

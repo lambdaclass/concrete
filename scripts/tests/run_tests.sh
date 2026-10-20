@@ -1492,6 +1492,14 @@ run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0232)"
 run_err "$TESTDIR/error_091_deref_ref_by_value.con"                 "(E0290)"
 run_err "$TESTDIR/error_091_paren_call_arg_not_consumed.con"        "(E0205)"
 run_ok  "$TESTDIR/trait_mut_receiver_if_projection.con" "7" 0
+# Codex review of round 3 (fourth pass): `*` of a borrow is through a reference, `match *r`
+# reads the pointee by value, provenance follows `*` and borrows, untraceable reference
+# bindings are refused, and a block-local owned tail is an owned temporary.
+run_err "$TESTDIR/error_091_destroy_deref_borrow_mut.con"              "(E0290)"
+run_err "$TESTDIR/error_091_match_deref_ref_payload.con"               "(E0290)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0232)"
+run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0238)"
+run_ok  "$TESTDIR/trait_mut_receiver_if_local_binding.con" "7" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

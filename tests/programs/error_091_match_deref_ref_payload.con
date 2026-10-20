@@ -1,0 +1,21 @@
+// Bug 091 round 3 (Codex review, fourth pass): `match *r` bound a non-Copy payload of the
+// pointee as an OWNED value (destroyed through the borrow, then again by the owner).
+// Reading a non-Copy pointee by value is E0290; `match r` binds borrowed views.
+mod m {
+    struct P { n: i64 }
+    enum E { V { p: P } }
+    impl Destroy for P { fn destroy(&self) {} }
+    fn kill(r: &E) {
+        match *r {
+            E::V { p } => { p.destroy(); }
+        }
+    }
+    fn main() -> Int {
+        let e: E = E::V { p: P { n: 1 } };
+        kill(&e);
+        match e {
+            E::V { p } => { p.destroy(); }
+        }
+        return 0;
+    }
+}

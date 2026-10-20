@@ -1,0 +1,13 @@
+// Bug 091 round 3 (Codex review, fourth pass): `(*(&mut p)).destroy()` classified the place
+// by the owned root behind the borrow, so the destructor ran through the `&mut` and
+// `p.destroy()` ran it again. `*` of a borrow is reached through a reference: E0290.
+mod m {
+    struct P { n: i64 }
+    impl Destroy for P { fn destroy(&self) {} }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        (*(&mut p)).destroy();
+        p.destroy();
+        return 0;
+    }
+}
